@@ -55,11 +55,12 @@ pub(super) fn check_seq(
             if !SeqArity::of(prefix.len(), tail).admits(list.len()) {
                 return seq_length_fail(len_code, kind_word, prefix, tail, value, frame);
             }
-            if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
-                return scalar_list_matches(list, kind, value, frame);
+            if let Some((kind, schema)) = homogeneous_scalar(prefix, tail, ctx) {
+                return scalar_list_matches(list, kind, schema, value, frame);
             }
-            if let Some(Schema::Union(members)) = tail
-                && let Some(ok) = scalar_union_list_matches(list, prefix, members, value, frame)
+            if let Some(union @ Schema::Union(members)) = tail
+                && let Some(ok) =
+                    scalar_union_list_matches(list, prefix, union, members, value, frame)
             {
                 return ok;
             }
@@ -149,14 +150,17 @@ fn json_array_matches(
 ) -> bool {
     let ctx = frame.ctx;
     // The homogeneous shape over a parsed array: one scalar kind at every
-    // position, and nothing per element but the test.
-    if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
+    // position, and nothing per element but the test. A document is never
+    // explained, so this loop records nothing.
+    if let Some((kind, _)) = homogeneous_scalar(prefix, tail, ctx).filter(|_| !ctx.mode.explains())
+    {
         return items
             .iter()
             .all(|item| scalar_admits(kind, &Value::Json(py, item)));
     }
     if let Some(Schema::Union(members)) = tail
-        && let Some(members) = homogeneous_scalar_union(prefix, members, ctx)
+        && let Some(members) =
+            homogeneous_scalar_union(prefix, members, ctx).filter(|_| !ctx.mode.explains())
     {
         return items
             .iter()
@@ -174,10 +178,9 @@ fn json_array_matches(
 
 /// Match one element at position `i`: the prefix schema at `i`, or the repeated
 /// tail past the prefix. The index segment is pushed only in explain mode, and
-/// only for an element [`admitted_quietly`] does not answer: `validate` reads a
-/// `list[int]` that belongs through here, and each element was a location
-/// pushed and popped and a dispatch around one type test, six times what
-/// `is_valid` pays.
+/// only for an element [`admitted_quietly`] does not answer: an explaining walk
+/// reaches here with the elements no sequence reading takes, and each was a
+/// location pushed and popped and a dispatch around what can be one type test.
 ///
 /// Inlined into the one loop that calls it. It sits between that loop and
 /// [`member`], so leaving it out of line put a second call frame on every
@@ -238,14 +241,15 @@ fn seq_length_fail(
     false
 }
 
-/// Membership for a list whose every element is one scalar kind.
+/// Membership for a list whose every element is one scalar kind, `schema`.
 ///
 /// A list of one scalar kind -- `list[int]`, `list[str]` -- is the shape whose
 /// per-element cost is almost all bookkeeping: the walk's depth guard, its
 /// fatal-signal check and its dispatch, around a single type test. None of the
 /// three is needed per element here: a scalar cannot recurse, cannot run
 /// Python, and is the same schema at every position, so they are paid once for
-/// the list.
+/// the list. An explaining walk reads it the same way, and walks only the
+/// elements that fail: see [`list_explained`].
 ///
 /// Out of line, so the loop's code is its own: held inside [`check_seq`], its
 /// register allocation follows every arm beside it, and `scripts/perf_gate.py
@@ -255,15 +259,107 @@ fn seq_length_fail(
 fn scalar_list_matches(
     list: &Bound<'_, PyList>,
     kind: Scalar,
+    schema: &Schema,
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
+    if frame.ctx.mode.explains() {
+        return list_explained(list, schema, |item| scalar_admits(kind, item), value, frame);
+    }
     scalar_list_loop(list, |item| scalar_admits(kind, item), value, frame)
+}
+
+/// A list read in an explaining walk as its readers read it outside one: each
+/// element is the test `admits` makes of it, and one that fails is walked
+/// against `schema` at its own location, which records what the walk records of
+/// it.
+///
+/// `validate` explains as it decides, so this is how it reads a `list[int]`
+/// that belongs. The general scan asks the same of each element, through a
+/// call and a read of the element's schema a position: a thousand integers
+/// cost it 89 instructions each, against 22 for `is_valid`. An element that
+/// passes records nothing -- a scalar records only a mismatch, and a union of
+/// them returns at the first branch that matches -- and no element can raise
+/// before the one that fails: a test runs no Python, and only a failing
+/// element's summary can, which fails the list before a signal it raises is
+/// read. The scan and its count are the general walk's, so a list that moves
+/// reports the move as the general walk does.
+///
+/// Out of line, beside the deciding loop rather than inside it: inlined into
+/// [`scalar_list_matches`], it moved the PGO wheel's layout of that loop, and
+/// `is_valid` on ten thousand integers took 5% longer.
+#[inline(never)]
+fn list_explained(
+    list: &Bound<'_, PyList>,
+    schema: &Schema,
+    admits: impl Fn(&Value<'_, '_>) -> bool,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let ctx = frame.ctx;
+    let mut ok = true;
+    let scan = scan_list(list, |at, item| {
+        if admits(&Value::Py(item)) {
+            return ControlFlow::Continue(());
+        }
+        ok &= element_explained(schema, at, &Value::Py(item), frame);
+        if !ok && stop(ctx) {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    }
+}
+
+/// [`list_explained`] for a tuple, whose elements are read borrowed and cannot
+/// move: `admits` is asked of each position, and one that fails is walked
+/// against the schema [`seq_element`] would read there.
+#[inline(never)]
+fn tuple_explained(
+    tuple: &Bound<'_, PyTuple>,
+    prefix: &[Schema],
+    tail: Option<&Schema>,
+    admits: impl Fn(usize, &Value<'_, '_>) -> bool,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let ctx = frame.ctx;
+    let mut ok = true;
+    for (at, item) in tuple.iter_borrowed().enumerate() {
+        let item = Value::Py(&item);
+        if admits(at, &item) {
+            continue;
+        }
+        ok &= seq_element(prefix, tail, at, &item, frame);
+        if !ok && stop(ctx) {
+            return false;
+        }
+    }
+    ok
+}
+
+/// Walk an element at its own location in an explaining walk: what
+/// [`seq_element`] does with an element it cannot answer quietly.
+fn element_explained(
+    schema: &Schema,
+    at: usize,
+    item: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    frame.path.push(PathSegment::Index(at));
+    let ok = member(schema, item, frame);
+    frame.path.pop();
+    ok
 }
 
 /// Membership for a list whose every element is a union of scalars --
 /// `list[int | None]` -- where [`homogeneous_scalar_union`] reads it so, and
-/// `None` where it does not.
+/// `None` where it does not. An explaining walk reads it through
+/// [`list_explained`], and walks `union` at an element that fails.
 ///
 /// [`scalar_list_matches`]'s loop with a test per branch. The question is asked
 /// here rather than in [`check_seq`], which pays only the test of the tail's
@@ -273,17 +369,17 @@ fn scalar_list_matches(
 pub(super) fn scalar_union_list_matches(
     list: &Bound<'_, PyList>,
     prefix: &[Schema],
+    union: &Schema,
     members: &[Schema],
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
     let members = homogeneous_scalar_union(prefix, members, frame.ctx)?;
-    Some(scalar_list_loop(
-        list,
-        |item| scalar_union_admits(members, item),
-        value,
-        frame,
-    ))
+    let admits = |item: &Value<'_, '_>| scalar_union_admits(members, item);
+    if frame.ctx.mode.explains() {
+        return Some(list_explained(list, union, admits, value, frame));
+    }
+    Some(scalar_list_loop(list, admits, value, frame))
 }
 
 /// The loop [`scalar_list_matches`] and [`scalar_union_list_matches`] share,
@@ -385,17 +481,20 @@ fn tuple_matches(
     // walk by the caller's own handle, so an element cannot be removed or freed
     // underneath the borrow -- which is why `PyO3` offers this iterator for a
     // tuple and for no mutable container.
-    if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
+    // An explaining walk reads a homogeneous tuple through the positions reader
+    // below, which walks a position that fails.
+    if let Some((kind, _)) = homogeneous_scalar(prefix, tail, ctx).filter(|_| !ctx.mode.explains())
+    {
         return tuple
             .iter_borrowed()
             .all(|item| scalar_admits(kind, &Value::Py(&item)));
     }
-    if let Some(Schema::Union(members)) = tail
-        && let Some(ok) = scalar_union_tuple_matches(tuple, prefix, members, ctx)
+    if let Some(union @ Schema::Union(members)) = tail
+        && let Some(ok) = scalar_union_tuple_matches(tuple, prefix, union, members, frame)
     {
         return ok;
     }
-    if let Some(ok) = scalar_positions_tuple_matches(tuple, prefix, tail, ctx) {
+    if let Some(ok) = scalar_positions_tuple_matches(tuple, prefix, tail, frame) {
         return ok;
     }
     let mut ok = true;
@@ -416,10 +515,15 @@ fn tuple_matches(
 pub(super) fn scalar_union_tuple_matches(
     tuple: &Bound<'_, PyTuple>,
     prefix: &[Schema],
+    union: &Schema,
     members: &[Schema],
-    ctx: Ctx<'_>,
+    frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
-    let members = homogeneous_scalar_union(prefix, members, ctx)?;
+    let members = homogeneous_scalar_union(prefix, members, frame.ctx)?;
+    if frame.ctx.mode.explains() {
+        let admits = |_: usize, item: &Value<'_, '_>| scalar_union_admits(members, item);
+        return Some(tuple_explained(tuple, &[], Some(union), admits, frame));
+    }
     Some(
         tuple
             .iter_borrowed()
@@ -439,6 +543,9 @@ pub(super) fn scalar_union_tuple_matches(
 /// The level is read as [`homogeneous_scalar`] reads it, and for the same
 /// reason: the walk would refuse each element where none is free.
 ///
+/// An explaining walk reads it through [`tuple_explained`], and walks a
+/// position that fails.
+///
 /// Out of line, and asked of every tuple the two readings above decline: a
 /// tuple holding a record pays a call and a type test of its first position.
 #[inline(never)]
@@ -446,9 +553,10 @@ pub(super) fn scalar_positions_tuple_matches(
     tuple: &Bound<'_, PyTuple>,
     prefix: &[Schema],
     tail: Option<&Schema>,
-    ctx: Ctx<'_>,
+    frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
-    if ctx.mode.explains() || !ctx.room_to_descend() {
+    let ctx = frame.ctx;
+    if !ctx.room_to_descend() {
         return None;
     }
     if !prefix.iter().all(|schema| scalar_of(schema).is_some()) {
@@ -458,12 +566,21 @@ pub(super) fn scalar_positions_tuple_matches(
         Some(schema) => Some(scalar_of(schema)?),
         None => None,
     };
-    Some(tuple.iter_borrowed().enumerate().all(|(at, item)| {
+    let admits = |at: usize, item: &Value<'_, '_>| {
         prefix
             .get(at)
             .map_or(repeated, scalar_of)
-            .is_some_and(|kind| scalar_admits(kind, &Value::Py(&item)))
-    }))
+            .is_some_and(|kind| scalar_admits(kind, item))
+    };
+    if ctx.mode.explains() {
+        return Some(tuple_explained(tuple, prefix, tail, admits, frame));
+    }
+    Some(
+        tuple
+            .iter_borrowed()
+            .enumerate()
+            .all(|(at, item)| admits(at, &Value::Py(&item))),
+    )
 }
 
 /// Whether `PyPy`'s C accessors read this tuple's storage, so the walk can read

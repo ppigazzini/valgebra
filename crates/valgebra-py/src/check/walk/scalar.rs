@@ -110,14 +110,15 @@ pub(super) fn scalar_member(
     Some(room && !ctx.fatal_seen.get() && scalar_admits(kind, value))
 }
 
-/// The scalar kind every position of a sequence takes, where the walk of it
-/// needs no path and reports no violation.
+/// The scalar kind every position of a sequence takes, with the schema it is
+/// the kind of.
 ///
 /// The shape a homogeneous list or tuple of a builtin type takes -- `list[int]`,
 /// `tuple[str, ...]` -- and the one whose per-element cost is almost all
 /// bookkeeping: a depth guard, a fatal-signal check and a dispatch around a
-/// single type test. An explaining walk is not this shape, since it records the
-/// position of each element it rejects.
+/// single type test. An explaining walk takes it too: an element that passes
+/// its test records nothing, and a reader walks the schema at the position of
+/// an element that fails, which is what the walk records.
 ///
 /// **The depth is read, and the level is not held.** Every element sits one
 /// level below the container, and the explaining walk reaches each through
@@ -126,21 +127,22 @@ pub(super) fn scalar_member(
 /// available and lets that path refuse. Holding one is what a caller that can
 /// descend needs, and a scalar cannot.
 #[inline]
-pub(super) fn homogeneous_scalar(
+pub(super) fn homogeneous_scalar<'s>(
     prefix: &[Schema],
-    tail: Option<&Schema>,
+    tail: Option<&'s Schema>,
     ctx: Ctx<'_>,
-) -> Option<Scalar> {
-    if !prefix.is_empty() || ctx.mode.explains() || !ctx.room_to_descend() {
+) -> Option<(Scalar, &'s Schema)> {
+    if !prefix.is_empty() || !ctx.room_to_descend() {
         return None;
     }
-    scalar_of(tail?)
+    let tail = tail?;
+    Some((scalar_of(tail)?, tail))
 }
 
-/// The branches of a union of scalars every position of a sequence takes, where
-/// the walk of it needs no path and reports no violation: [`homogeneous_scalar`]
-/// for `list[int | None]`, which [`check_union`](super::check_union) answers a
-/// test per branch.
+/// The branches of a union of scalars every position of a sequence takes:
+/// [`homogeneous_scalar`] for `list[int | None]`, which
+/// [`check_union`](super::check_union) answers a test per branch. An explaining
+/// walk takes it too, and walks an element that fails.
 ///
 /// A branch sits a level below the union, and the union a level below the
 /// sequence, so two levels must be free: the union's is held while the
@@ -152,7 +154,7 @@ pub(super) fn homogeneous_scalar_union<'s>(
     members: &'s [Schema],
     ctx: Ctx<'_>,
 ) -> Option<&'s [Schema]> {
-    if !prefix.is_empty() || ctx.mode.explains() {
+    if !prefix.is_empty() {
         return None;
     }
     let _union = ctx.descend()?;

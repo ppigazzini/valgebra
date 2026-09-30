@@ -4324,10 +4324,11 @@ fn a_mapping_of_one_scalar_clause_is_read_entry_by_entry() {
 
 /// A sequence whose repeated element is a scalar is read as its type test where
 /// one level is free under it, and one whose element is a union of scalars as
-/// a test per branch where two are -- the union's and its branch's -- and
-/// nowhere else: not in an explaining walk, not behind a fixed prefix, not for
+/// a test per branch where two are -- the union's and its branch's -- whether
+/// the walk explains or not; neither is read so behind a fixed prefix, nor for
 /// a union holding a container. Its verdict is the walk's, for a list, a tuple
-/// and a parsed array.
+/// and a parsed array, and an explaining reading records one violation for an
+/// element that fails and none for a sequence that belongs.
 #[test]
 fn a_sequence_of_a_union_of_scalars_is_read_as_its_tests() {
     use super::scalar::{Scalar, homogeneous_scalar, homogeneous_scalar_union};
@@ -4361,14 +4362,23 @@ fn a_sequence_of_a_union_of_scalars_is_read_as_its_tests() {
             homogeneous_scalar_union(prefix, members, ctx(mode)).map(<[Schema]>::len)
         };
         let kind = |tail: &Schema, prefix: &[Schema], mode| {
-            homogeneous_scalar(prefix, Some(tail), ctx(mode))
+            homogeneous_scalar(prefix, Some(tail), ctx(mode)).map(|(kind, schema)| {
+                assert!(
+                    std::ptr::eq(schema, tail),
+                    "the kind comes with its own schema"
+                );
+                kind
+            })
         };
         assert_eq!(union(branches, &[], WalkMode::Fast), Some(2));
-        assert_eq!(union(branches, &[], WalkMode::Explain), None);
+        assert_eq!(union(branches, &[], WalkMode::Explain), Some(2));
         assert_eq!(union(branches, &[Schema::Int], WalkMode::Fast), None);
         assert_eq!(union(holding_a_list, &[], WalkMode::Fast), None);
         assert_eq!(kind(&Schema::Int, &[], WalkMode::Fast), Some(Scalar::Int));
-        assert_eq!(kind(&Schema::Int, &[], WalkMode::Explain), None);
+        assert_eq!(
+            kind(&Schema::Int, &[], WalkMode::Explain),
+            Some(Scalar::Int)
+        );
         assert_eq!(kind(&Schema::Int, &[Schema::Int], WalkMode::Fast), None);
         assert_eq!(kind(&of_lists, &[], WalkMode::Fast), None);
         assert_eq!(kind(&nullable, &[], WalkMode::Fast), None);
@@ -4399,19 +4409,23 @@ fn a_sequence_of_a_union_of_scalars_is_read_as_its_tests() {
             let value = eval(source);
             let (mut path, mut out) = (Vec::new(), Vec::new());
             let mut frame = Frame::new(&mut path, &mut out, ctx(mode));
-            if let Ok(list) = value.cast::<PyList>() {
-                scalar_union_list_matches(list, &[], branches, &Value::Py(&value), &mut frame)
+            let answer = if let Ok(list) = value.cast::<PyList>() {
+                let value = Value::Py(&value);
+                scalar_union_list_matches(list, &[], &nullable, branches, &value, &mut frame)
             } else {
                 let tuple = value.cast::<PyTuple>().expect("a list or a tuple");
-                scalar_union_tuple_matches(tuple, &[], branches, ctx(mode))
-            }
+                scalar_union_tuple_matches(tuple, &[], &nullable, branches, &mut frame)
+            };
+            (answer, out.len())
         };
-        assert_eq!(direct("[1, None, 2]", WalkMode::Fast), Some(true));
-        assert_eq!(direct("[1, 'x']", WalkMode::Fast), Some(false));
-        assert_eq!(direct("[1, None]", WalkMode::Explain), None);
-        assert_eq!(direct("(None, 3)", WalkMode::Fast), Some(true));
-        assert_eq!(direct("(None, 1.5)", WalkMode::Fast), Some(false));
-        assert_eq!(direct("(None, 3)", WalkMode::Explain), None);
+        assert_eq!(direct("[1, None, 2]", WalkMode::Fast), (Some(true), 0));
+        assert_eq!(direct("[1, 'x']", WalkMode::Fast), (Some(false), 0));
+        assert_eq!(direct("[1, None]", WalkMode::Explain), (Some(true), 0));
+        assert_eq!(direct("[1, 'x']", WalkMode::Explain), (Some(false), 1));
+        assert_eq!(direct("(None, 3)", WalkMode::Fast), (Some(true), 0));
+        assert_eq!(direct("(None, 1.5)", WalkMode::Fast), (Some(false), 0));
+        assert_eq!(direct("(None, 3)", WalkMode::Explain), (Some(true), 0));
+        assert_eq!(direct("(None, 1.5)", WalkMode::Explain), (Some(false), 1));
         let json = |source: &str| {
             let parsed = JsonValue::parse(source.as_bytes(), false).expect("the JSON parses");
             holds_json(py, &list, &parsed)
@@ -4497,9 +4511,10 @@ fn the_constant_itself_is_its_literal() {
 }
 
 /// A tuple whose every position is a scalar is read as a type test a position
-/// where a level is free under it, and nowhere else: not in an explaining walk,
-/// not at the bound, not where a position or the tail holds a container. Its
-/// verdict is the walk's, for a fixed tuple and for a prefix before a tail.
+/// where a level is free under it, whether the walk explains or not, and
+/// nowhere else: not at the bound, not where a position or the tail holds a
+/// container. Its verdict is the walk's, for a fixed tuple and for a prefix
+/// before a tail.
 #[test]
 fn a_tuple_of_scalar_positions_is_read_as_its_tests() {
     use super::sequence::scalar_positions_tuple_matches;
@@ -4537,7 +4552,9 @@ fn a_tuple_of_scalar_positions_is_read_as_its_tests() {
         let read = |source: &str, prefix: &[Schema], tail: Option<&Schema>, mode| {
             let value = eval(source);
             let tuple = value.cast::<PyTuple>().expect("a tuple");
-            scalar_positions_tuple_matches(tuple, prefix, tail, ctx(mode))
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx(mode));
+            scalar_positions_tuple_matches(tuple, prefix, tail, &mut frame)
         };
         assert_eq!(
             read("(1, 'a', 1.5)", &fixed, None, WalkMode::Fast),
@@ -4547,7 +4564,14 @@ fn a_tuple_of_scalar_positions_is_read_as_its_tests() {
             read("(1, 'a', 'x')", &fixed, None, WalkMode::Fast),
             Some(false)
         );
-        assert_eq!(read("(1, 'a', 1.5)", &fixed, None, WalkMode::Explain), None);
+        assert_eq!(
+            read("(1, 'a', 1.5)", &fixed, None, WalkMode::Explain),
+            Some(true)
+        );
+        assert_eq!(
+            read("(1, 'a', 'x')", &fixed, None, WalkMode::Explain),
+            Some(false)
+        );
         let tail = Schema::Int;
         let head = [Schema::Str];
         assert_eq!(
@@ -4667,7 +4691,16 @@ fn an_admitted_scalar_element_is_answered_quietly_when_explaining() {
         assert!(!admitted_quietly(&Schema::Int, &one, ctx));
         assert!(!admitted_quietly(&nullable, &one, ctx));
         state.fatal_seen.set(false);
+    });
+}
 
+/// An explaining walk of a sequence or a set of one scalar kind, or of a union
+/// of scalars, reports each failing element at its own index -- a set's in the
+/// order of what they say -- whole or fail-fast, and a passing element names
+/// nothing.
+#[test]
+fn an_explaining_walk_reports_each_failing_element_of_one_kind() {
+    Python::attach(|py| {
         let eval = |source: &str| {
             py.eval(&std::ffi::CString::new(source).expect("no nul"), None, None)
                 .expect("the value evaluates")
@@ -4678,7 +4711,8 @@ fn an_admitted_scalar_element_is_answered_quietly_when_explaining() {
             (ok, at)
         };
         let index_at = |i: usize| vec![PathSegment::Index(i)];
-        let ints = of_ints;
+        let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let nullable = Schema::union([Schema::Int, Schema::NoneType]);
         assert_eq!(
             located(&ints, "[1, 'x', 2, 'y']", WalkMode::Explain),
             (false, vec![index_at(1), index_at(3)])
@@ -4700,6 +4734,40 @@ fn an_admitted_scalar_element_is_answered_quietly_when_explaining() {
         assert_eq!(
             located(&pairs, "(1, 2)", WalkMode::Explain),
             (false, vec![index_at(1)])
+        );
+        // A document is never explained by an entry point, and its readings
+        // refuse the mode: explained, a parsed array reports as a list does.
+        let parsed_at = |schema: &Schema, source: &str| {
+            let parsed = JsonValue::parse(source.as_bytes(), false).expect("the JSON parses");
+            let (ok, violations) = explain_json(py, schema, &parsed);
+            let at: Vec<Vec<PathSegment>> = violations.into_iter().map(|v| v.path).collect();
+            (ok, at)
+        };
+        assert_eq!(
+            parsed_at(&ints, "[1, \"x\", 2, \"y\"]"),
+            (false, vec![index_at(1), index_at(3)])
+        );
+        assert_eq!(
+            parsed_at(&nullables, "[1, null, \"x\"]"),
+            (false, vec![index_at(2)])
+        );
+        let nullable_tuple = Schema::tuple(SeqShape::homogeneous(nullable.clone()));
+        assert_eq!(
+            located(&nullable_tuple, "(None, 'x', 1, 1.5)", WalkMode::Explain),
+            (false, vec![index_at(1), index_at(3)])
+        );
+        let int_tuple = Schema::tuple(SeqShape::homogeneous(Schema::Int));
+        assert_eq!(
+            located(&int_tuple, "(1, 'x', 2, 'y')", WalkMode::Explain),
+            (false, vec![index_at(1), index_at(3)])
+        );
+        assert_eq!(
+            located(&int_tuple, "(1, 'x', 2, 'y')", WalkMode::ExplainFailFast),
+            (false, vec![index_at(1)])
+        );
+        assert_eq!(
+            located(&int_tuple, "(1, 2)", WalkMode::Explain),
+            (true, vec![])
         );
         // A set's failures carry no index, and are ordered by what they say.
         let int_set = Schema::set(Schema::Int);
