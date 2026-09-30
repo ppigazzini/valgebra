@@ -917,6 +917,72 @@ fn a_builtin_number_bound_is_placed_without_asking_the_abc() {
     });
 }
 
+/// A dataclass declares the attributes `dataclasses.fields` returns, in its
+/// order, however its fields were declared: a class variable and an init-only
+/// parameter are no attribute of an instance, a field kept out of `__init__` is
+/// one, and a subclass declares its bases' fields first. A table that is not
+/// exactly a `dict` is left to the call, and reads the same.
+#[test]
+fn a_dataclass_declares_what_fields_returns() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"import dataclasses\n\
+              from typing import ClassVar\n\
+              @dataclasses.dataclass\n\
+              class Plain:\n\
+              \x20   a: int\n\
+              \x20   b: str = ''\n\
+              @dataclasses.dataclass\n\
+              class Mixed:\n\
+              \x20   a: int\n\
+              \x20   shared: ClassVar[int] = 0\n\
+              \x20   seed: dataclasses.InitVar[int] = 0\n\
+              \x20   later: int = dataclasses.field(init=False, default=1)\n\
+              @dataclasses.dataclass\n\
+              class Derived(Mixed):\n\
+              \x20   c: bytes = b''\n\
+              @dataclasses.dataclass(frozen=True, slots=True)\n\
+              class Slotted:\n\
+              \x20   x: float\n\
+              class Table(dict):\n\
+              \x20   pass\n\
+              @dataclasses.dataclass\n\
+              class Rebound:\n\
+              \x20   a: int\n\
+              \x20   seed: dataclasses.InitVar[int] = 0\n\
+              Rebound.__dataclass_fields__ = Table(Rebound.__dataclass_fields__)\n\
+              def names(cls):\n\
+              \x20   return [f.name for f in dataclasses.fields(cls)]\n",
+            c"declared.py",
+            c"declared",
+        )
+        .expect("the module compiles");
+        for (class, wanted) in [
+            ("Plain", vec!["a", "b"]),
+            ("Mixed", vec!["a", "later"]),
+            ("Derived", vec!["a", "later", "c"]),
+            ("Slotted", vec!["x"]),
+            ("Rebound", vec!["a"]),
+        ] {
+            let ty = module.getattr(class).expect("the class is defined");
+            let ty = ty.cast::<PyType>().expect("a class");
+            let declared: Vec<String> = declared_fields(ty)
+                .expect("a dataclass declares its fields")
+                .iter()
+                .map(|name| name.extract().expect("a name is text"))
+                .collect();
+            let called: Vec<String> = module
+                .getattr("names")
+                .and_then(|names| names.call1((ty,)))
+                .and_then(|names| names.extract())
+                .expect("the call answers");
+            assert_eq!(declared, wanted, "{class}");
+            assert_eq!(declared, called, "{class} reads as the call does");
+        }
+    });
+}
+
 /// A class whose fields are declared builds the record beside the class,
 /// and one whose are not is the class alone.
 ///

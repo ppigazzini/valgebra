@@ -36,12 +36,22 @@ use crate::errors::{summarize, unless_fatal};
 /// trigger.
 static IS_DATACLASS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
-/// `dataclasses.fields`, held beside [`IS_DATACLASS`] and for its reason.
+/// What [`declared_fields`] reads a dataclass through, held beside
+/// [`IS_DATACLASS`] and for its reason.
 ///
 /// Reached only from [`declared_fields`], which asks it after `is_dataclass`
 /// has answered yes -- so the module is already imported by the time this cell
 /// is filled, and a program that compiles no dataclass still never imports it.
-static DATACLASS_FIELDS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static DATACLASS_READING: PyOnceLock<DataclassReading> = PyOnceLock::new();
+
+/// `dataclasses.fields`, and the marker it keeps a field by.
+struct DataclassReading {
+    /// `dataclasses.fields`, the call [`fields_as_declared`] stands in for.
+    fields: Py<PyAny>,
+    /// `dataclasses._FIELD`, the `_field_type` of a field an instance keeps;
+    /// `None` where the module has no such name, and the call answers alone.
+    kept: Option<Py<PyAny>>,
+}
 
 /// `dataclasses.is_dataclass`, imported on first use.
 pub(super) fn is_dataclass(ty: &Bound<'_, PyType>) -> PyResult<bool> {
@@ -676,17 +686,67 @@ pub(super) fn declared_fields<'py>(ty: &Bound<'py, PyType>) -> PyResult<Vec<Boun
     // decoded three names per class node -- and asked `is_dataclass` a second
     // time, the caller having just had its answer.
     if is_dataclass(ty)? {
-        return DATACLASS_FIELDS
-            .get_or_try_init(py, || {
-                Ok::<_, PyErr>(py.import("dataclasses")?.getattr("fields")?.unbind())
-            })?
-            .bind(py)
-            .call1((ty,))?
-            .try_iter()?
-            .map(|field| field?.getattr(intern!(py, "name")))
+        let reading = DATACLASS_READING.get_or_try_init(py, || {
+            let module = py.import("dataclasses")?;
+            Ok::<_, PyErr>(DataclassReading {
+                fields: module.getattr("fields")?.unbind(),
+                kept: module.getattr_opt("_FIELD")?.map(Bound::unbind),
+            })
+        })?;
+        let fields = match fields_as_declared(ty, reading)? {
+            Some(fields) => fields,
+            None => reading
+                .fields
+                .bind(py)
+                .call1((ty,))?
+                .try_iter()?
+                .collect::<PyResult<_>>()?,
+        };
+        return fields
+            .iter()
+            .map(|field| field.getattr(intern!(py, "name")))
             .collect();
     }
     ty.getattr(intern!(py, "_fields"))?.try_iter()?.collect()
+}
+
+/// A dataclass's fields as `dataclasses.fields(ty)` returns them, or `None`
+/// where that call should answer.
+///
+/// The call is `tuple(f for f in ty.__dataclass_fields__.values() if
+/// f._field_type is _FIELD)` on every interpreter the matrix runs, 3.10 to 3.15
+/// and `PyPy`, and running that generator in Python is 15% of compiling a
+/// fifty-field dataclass. The same steps are taken here, in its order -- the
+/// table's values, each asked its `_field_type` and kept by identity with the
+/// marker -- and where one does not read as the call's own, the call answers: a
+/// table that is not exactly a `dict`, whose `values` could be anyone's, and a
+/// module with no marker to compare against.
+/// `a_dataclass_declares_what_fields_returns` in `build/interpreter.rs` holds
+/// the reading to the call.
+fn fields_as_declared<'py>(
+    ty: &Bound<'py, PyType>,
+    reading: &DataclassReading,
+) -> PyResult<Option<Vec<Bound<'py, PyAny>>>> {
+    let py = ty.py();
+    let Some(kept) = &reading.kept else {
+        return Ok(None);
+    };
+    let Some(table) = ty.getattr_opt(intern!(py, "__dataclass_fields__"))? else {
+        return Ok(None);
+    };
+    let Ok(table) = table.cast_exact::<PyDict>() else {
+        return Ok(None);
+    };
+    // A snapshot of the values, taken once per class: a live iteration panics if
+    // the table changes size under it, and a field is asked for an attribute.
+    let values = table.values();
+    let mut fields = Vec::with_capacity(values.len());
+    for field in values.iter() {
+        if field.getattr(intern!(py, "_field_type"))?.is(kept.bind(py)) {
+            fields.push(field);
+        }
+    }
+    Ok(Some(fields))
 }
 
 /// Build the schema of a class with declared attributes: the meet of its

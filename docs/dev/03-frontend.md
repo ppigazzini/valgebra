@@ -237,6 +237,16 @@ interpreter the matrix runs.
 uv run --no-sync python scripts/perf_gate.py --against HEAD~1 --binding-annotated --binding-object
 ```
 
+**A dataclass's fields are read as `dataclasses.fields` reads them.** The call
+is `tuple(f for f in cls.__dataclass_fields__.values() if f._field_type is
+_FIELD)` on every supported interpreter, PyPy included, and running that
+generator in Python is 15% of compiling a fifty-field dataclass.
+`fields_as_declared` in `build/classes.rs` takes the same steps in
+the same order -- the table's values, each kept by identity with the marker
+before any name is read -- and the call answers wherever a step does not read as
+its own: a table that is not exactly a `dict`, a `dataclasses` with no marker.
+`a_dataclass_declares_what_fields_returns` holds the reading to the call.
+
 **A module is a handle too.** `dataclasses.is_dataclass` and `dataclasses.fields`
 are asked of handles held after the first class that asks and *only* after one
 asks: importing `dataclasses` pulls `inspect`, `copy` and `functools` in with
