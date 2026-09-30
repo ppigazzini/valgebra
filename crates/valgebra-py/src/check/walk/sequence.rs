@@ -14,11 +14,12 @@ use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyFrozenSet, PyIterator, PyList, PySet, PyTuple};
 use valgebra_core::{PathSegment, Schema, SeqKind, SeqShape, Violation};
 
+#[cfg(PyPy)]
+use super::reads_its_length;
 use super::scalar::{Scalar, homogeneous_scalar_union, scalar_union_admits};
 use super::{
     Base, Frame, Scan, held_iter, homogeneous_scalar, is_fatal, member, mutated,
-    reads_its_elements, reads_its_length, record_fatal, record_if_fatal, scalar_admits, scalar_of,
-    stop,
+    reads_its_elements, record_fatal, record_if_fatal, scalar_admits, scalar_of, stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::violation::{summarize_value, type_fail};
@@ -348,8 +349,12 @@ fn tuple_matches(
 ) -> bool {
     let ctx = frame.ctx;
     // A tuple the C accessors read the storage of is read where it lies; any
-    // other is copied. See `reads_where_it_lies` and `storage_of`.
+    // other is copied. `CPython`'s accessors read the storage whatever a
+    // subclass overrides, so there every tuple is read where it lies and its
+    // type is asked nothing. See `reads_where_it_lies` and `storage_of`.
+    #[cfg(PyPy)]
     let copied;
+    #[cfg(PyPy)]
     let tuple = if reads_where_it_lies(tuple, ctx) {
         tuple
     } else {
@@ -412,26 +417,26 @@ pub(super) fn scalar_union_tuple_matches(
     )
 }
 
-/// Whether the C accessors read this tuple's storage, so the walk can read it
-/// where it lies.
+/// Whether `PyPy`'s C accessors read this tuple's storage, so the walk can read
+/// it where it lies.
 ///
 /// An exact tuple overrides nothing, and a subclass that inherits
 /// `tuple.__len__` -- every `NamedTuple` does -- reports its storage's length.
-/// On `PyPy` it must inherit `tuple.__iter__` too: `cpyext` fills a subclass's
-/// C-level items from its own `__iter__`, so one that overrides it hands the
-/// borrowed walk items that are not its storage, fewer than the length beside
-/// them, and the walk read past their end -- a subclass whose `__iter__` yields
-/// one item over two took `validate` down on `PyPy` 3.11. `CPython` reads the
-/// storage whatever `__iter__` says, and asks the type nothing more.
+/// It must inherit `tuple.__iter__` too: `cpyext` fills a subclass's C-level
+/// items from its own `__iter__`, so one that overrides it hands the borrowed
+/// walk items that are not its storage, fewer than the length beside them, and
+/// the walk read past their end -- a subclass whose `__iter__` yields one item
+/// over two took `validate` down on `PyPy` 3.11.
+///
+/// `PyPy` alone. `CPython`'s `PyTuple_GET_SIZE` and `PyTuple_GET_ITEM` read the
+/// storage whatever the type overrides, so the question has one answer there,
+/// and asking it cost a `NamedTuple` an attribute read of its type per value --
+/// a quarter of walking a list of them.
+#[cfg(PyPy)]
 fn reads_where_it_lies(tuple: &Bound<'_, PyTuple>, ctx: Ctx<'_>) -> bool {
-    if tuple.is_exact_instance_of::<PyTuple>() {
-        return true;
-    }
-    #[cfg(PyPy)]
-    if !reads_its_elements(tuple, Base::Tuple, ctx) {
-        return false;
-    }
-    reads_its_length(tuple, Base::Tuple, ctx)
+    tuple.is_exact_instance_of::<PyTuple>()
+        || (reads_its_elements(tuple, Base::Tuple, ctx)
+            && reads_its_length(tuple, Base::Tuple, ctx))
 }
 
 /// What a tuple *subclass* holds, as a tuple of its own.
@@ -451,8 +456,8 @@ fn reads_where_it_lies(tuple: &Bound<'_, PyTuple>, ctx: Ctx<'_>) -> bool {
 /// `PyTuple_GetItem` reads the same C-level items the borrowed walk does, which
 /// `cpyext` filled from an overridden `__iter__`. The elements are the ones the
 /// value holds, which is what the sequence walk promises and what `CPython`
-/// gave all along. An exact tuple overrides nothing and is read where it lies,
-/// as before: this path costs the common case nothing.
+/// reads in place. An exact tuple overrides nothing and is read where it lies:
+/// this path costs the common case nothing.
 ///
 /// `None` where the copy cannot be made, which the caller reports as a value it
 /// could not read rather than as a membership answer. A fatal signal the copy
@@ -461,6 +466,7 @@ fn reads_where_it_lies(tuple: &Bound<'_, PyTuple>, ctx: Ctx<'_>) -> bool {
 ///
 /// Cold and out of line: an exact tuple and a `NamedTuple` are read where they
 /// lie, and only a subclass [`reads_where_it_lies`] refuses is copied.
+#[cfg(PyPy)]
 #[cold]
 #[inline(never)]
 fn storage_of<'py>(tuple: &Bound<'py, PyTuple>, ctx: Ctx<'_>) -> Option<Bound<'py, PyTuple>> {

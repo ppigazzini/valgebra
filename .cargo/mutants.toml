@@ -84,7 +84,7 @@ exclude_re = [
     # a key swapped mid-scan in `tests/test_mutation.py` takes the process down.
     "check/walk/record\\.rs:.*: (replace stored(_copy)? -> .*|.* in stored(_copy)?)$",
     "check/walk\\.rs:.*: (replace (held_dict|reads_its_values) -> .*|.* in (held_dict|reads_its_values))$",
-    "check/walk/sequence\\.rs:.*: delete ! in reads_where_it_lies$",
+    "check/walk/sequence\\.rs:.*: (replace (reads_where_it_lies|storage_of) -> .*|.* in (reads_where_it_lies|storage_of))$",
     # The explain pass over a keyed map runs only where the map did not match.
     # Running it always reports nothing extra -- a value that matched has no
     # violation to find -- and in the fast mode the violations go to a buffer

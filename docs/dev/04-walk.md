@@ -239,23 +239,24 @@ directions `is_valid` returned `True` for a value that is not a member. A
 is owned by the parser and cannot move at all.
 
 **A tuple's length comes from the storage, and which reading gives it depends
-on the type.** `PyTuple_Size` reads the storage on CPython and goes through the
-object's own `__len__` on PyPy's `cpyext`, so a subclass that *overrides*
-`__len__` answers the C accessor with whatever it likes — and a walk that
-indexed against that read past the end of the allocation and took the process
-down. Such a value is copied through the base type's own slot and the copy is
+on the interpreter.** CPython's `PyTuple_GET_SIZE` and `PyTuple_GET_ITEM` read
+the storage whatever the type overrides, so there every tuple, subclass or not,
+is read where it lies and its type is asked nothing. PyPy's `cpyext` goes
+through the object's own `__len__`, so a subclass that *overrides* `__len__`
+answers the C accessor with whatever it likes — and a walk that indexed
+against that read past the end of the allocation and took the process down.
+There such a value is copied through the base type's own slot and the copy is
 walked.
 
-A subclass that **inherits** `tuple.__len__` is not copied, because there is
-nothing to distrust: the overridden answer and the base's answer are the same
-function, so the accessor reads the storage on every interpreter. That is every
-`NamedTuple`, which is the tuple subclass a program is most likely to hold. The
-walk tells the two apart by asking the type whether its `__len__` *is* the
-base's, which costs one type-attribute lookup per validation — about 10 ns on a
-three-field `NamedTuple`, where copying cost 45. Telling them apart by "is this
-exactly a tuple" instead copied every `NamedTuple`: on CPython 3.14 that was
-100 ns against the 57 a plain tuple takes, which is what the repair above cost
-before this one was found.
+On PyPy a subclass that **inherits** `tuple.__len__` is not copied, because
+there is nothing to distrust: the overridden answer and the base's answer are
+the same function. That is every `NamedTuple`, which is the tuple subclass a
+program is most likely to hold, and the walk tells the two apart by asking the
+type whether its `__len__` *is* the base's. Telling them apart by "is this
+exactly a tuple" instead copied every `NamedTuple`. CPython asked the same
+question, whose answer changes nothing it reads: the lookup was a quarter of
+walking a list of `NamedTuple`s, 798 instructions an element against 581
+without it.
 
 **On PyPy a subclass's contents come through its own methods too.** `cpyext`
 fills a tuple subclass's C-level items from its own `__iter__`, and answers a
@@ -268,7 +269,7 @@ subclass whose `__iter__` yielded one item over two took `validate` down, and a
 dict subclass overriding `__len__` was refused by a closed record it belongs
 to. One whose `__iter__` yields *more* than it stores never reaches the walk:
 `cpyext` refuses it at the call. CPython reads the storage in every case, and
-asks the type nothing more. `scan_dict` reads its entries from a copy on PyPy
+asks the type nothing. `scan_dict` reads its entries from a copy on PyPy
 for a reason of the same kind: a key swapped for another while the scan runs
 Python makes `cpyext`'s `PyDict_Next` fail fatally rather than report it, and
 the copy is a dict nothing else can reach.

@@ -256,7 +256,10 @@ fn held_iter<'py>(value: &Bound<'py, PyAny>, base: Base) -> PyResult<Bound<'py, 
 /// So the question is not "is this exactly a tuple" but "is this type's
 /// `__len__` the base's own", asked by identity. A `NamedTuple` answers yes,
 /// which is what makes the common tuple subclass cost what a tuple costs; the
-/// subclass that returns ten over one element answers no, and is copied.
+/// subclass that returns ten over one element answers no, and is copied. A
+/// length read through `PyObject_Size` asks it on every interpreter; the tuple
+/// walk reads `PyTuple_GET_SIZE`, which is the storage on `CPython`, and asks it
+/// on `PyPy` alone.
 ///
 /// Asked of the type on every walk that reaches a subclass, and **not
 /// remembered**: a map from type to answer was built and measured beside this,
