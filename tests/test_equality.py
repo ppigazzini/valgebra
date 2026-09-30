@@ -346,3 +346,49 @@ def test_the_rendered_order_still_rebuilds_the_schema() -> None:
     for spelling in (Literal[3, 1, 2], str | Literal[2, 1], {"k": Literal["b", "a"]}):
         validator = Validator(spelling)
         assert Validator(eval(repr(validator), environment)) == validator  # noqa: S307
+
+
+def test_a_validator_hashes_its_constants_once() -> None:
+    """The digest is kept, as a `frozenset` keeps its hash.
+
+    A registry keyed by validators hashes a key on every lookup, and the digest
+    reads every pooled constant. Kept, the constants are asked once.
+    """
+    asked: list[int] = []
+
+    class Counted:
+        def __hash__(self) -> int:
+            asked.append(1)
+            return 7
+
+    validator = Validator(Literal[Counted()])  # ty: ignore[invalid-type-form]
+    asked.clear()  # `typing` hashes a `Literal`'s arguments to cache the form
+    first = hash(validator)
+    assert hash(validator) == first
+    assert {validator: 1}[validator] == 1
+    assert len(asked) == 1
+
+
+def test_validators_built_alike_ask_each_constant_once() -> None:
+    """Two tables built the same way match member for member, in order.
+
+    Equality matches members as sets, and a search that skips the members
+    already matched asks a constant's `__eq__` only of a candidate: built
+    alike, each member meets its match first and is asked once.
+    """
+    asked: list[int] = []
+
+    class Counted(int):
+        def __eq__(self, other: object) -> bool:
+            asked.append(1)
+            return int.__eq__(self, other)
+
+        __hash__ = int.__hash__
+
+    # Built through `union` rather than one `Literal`, whose cache would hand
+    # both sides the same constants and answer every pair by identity.
+    left = union(*[Validator(Counted(i)) for i in range(200)])
+    right = union(*[Validator(Counted(i)) for i in range(200)])
+    asked.clear()
+    assert left == right
+    assert len(asked) == 200

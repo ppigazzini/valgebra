@@ -362,6 +362,12 @@ alike from different pools compare equal only if what the indices *name* is
 equal. It is one of the binding's swept surfaces, and it decides `==` and
 nothing else -- `is_equivalent` is the decision procedure, a different question
 with a different answer, and [04-algebra.md](../04-algebra.md) is about why.
+A union's members, a map's clauses and a refinement's constraints are matched as
+the sets they are, each taking the first untaken equal member of the other list;
+the search starts where the untaken members begin, so two validators built alike
+compare in one pass, and `the_search_asks_what_a_search_from_the_front_asks`
+holds it to a search from the front. The digest `__hash__` reads is kept on the
+validator once computed.
 
 **Both sides or neither.** A law folded in `union` and left standing in
 `intersection` is two answers to one question, and the simplifier already folded

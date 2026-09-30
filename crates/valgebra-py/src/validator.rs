@@ -146,6 +146,9 @@ pub struct Validator {
     /// side of and shared by every relation after it. Lazy for the reason
     /// `index` is, and never copied: a copy reads its own.
     pub(crate) keys: PyOnceLock<Arc<PoolKeys>>,
+    /// The digest `__hash__` computed, kept once it has been: the validator is
+    /// immutable, so its hash is too.
+    hash: OnceLock<u64>,
 }
 
 impl Validator {
@@ -159,6 +162,7 @@ impl Validator {
             definitions,
             index: OnceLock::new(),
             keys: PyOnceLock::new(),
+            hash: OnceLock::new(),
         }
     }
 
@@ -962,15 +966,23 @@ impl Validator {
     /// part of the schema, and a constant with no hash contributes nothing:
     /// that is a collision, so a validator stays usable as a key whatever it
     /// pools.
+    ///
+    /// The digest is kept once computed, the way a `frozenset` keeps its own:
+    /// a registry keyed by validators hashes a key on every lookup, and the
+    /// digest reads every constant. A fatal signal raised while computing it
+    /// propagates, and nothing is kept.
     fn __hash__(&self, py: Python<'_>) -> PyResult<u64> {
         use std::hash::{Hash, Hasher};
+        if let Some(&digest) = self.hash.get() {
+            return Ok(digest);
+        }
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         crate::equality::hash_shape(py, &self.schema, &self.literals, &mut hasher)?;
         self.definitions.len().hash(&mut hasher);
         for definition in &self.definitions {
             crate::equality::hash_shape(py, definition, &self.literals, &mut hasher)?;
         }
-        Ok(hasher.finish())
+        Ok(*self.hash.get_or_init(|| hasher.finish()))
     }
 }
 

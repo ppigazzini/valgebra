@@ -93,9 +93,11 @@ fn objects_equal(
 /// The lists are a union's members, a map's clauses or a refinement's
 /// constraints: each is a *set* written as a list, and construction sorts them
 /// by a key that reads a pool slot, so equal sets can be written in different
-/// orders. Quadratic in the member count and paid only by `==`, which is not on
-/// any hot path; the lists a schema builds are short, and the long ones -- a
-/// wide `Literal` -- are the case this exists for.
+/// orders. Quadratic in the member count where the two are written in
+/// different orders, and one pass where they are written alike, which two
+/// validators built the same way are; paid only by `==`, which is not on any
+/// hot path, and the long lists -- a wide `Literal` -- are the case this exists
+/// for.
 fn same_multiset<T>(
     items: &[T],
     others: &[T],
@@ -105,9 +107,17 @@ fn same_multiset<T>(
         return Ok(false);
     }
     let mut taken = vec![false; others.len()];
+    // Where the untaken members begin. Every member before it is taken, and a
+    // taken member is never compared, so starting there asks the same
+    // questions in the same order as starting at the front -- and two lists
+    // built alike, whose members match in place, are one pass rather than a
+    // walk over the taken prefix per member.
+    let mut untaken = 0;
     for item in items {
         let mut found = None;
-        for (at, other) in others.iter().enumerate() {
+        for (at, other) in others.iter().enumerate().skip(untaken) {
+            #[cfg(test)]
+            tests::scanned();
             if !taken.get(at).copied().unwrap_or(true) && equal_item(item, other)? {
                 found = Some(at);
                 break;
@@ -119,6 +129,7 @@ fn same_multiset<T>(
         if let Some(slot) = taken.get_mut(at) {
             *slot = true;
         }
+        untaken += taken.iter().skip(untaken).take_while(|&&done| done).count();
     }
     Ok(true)
 }
