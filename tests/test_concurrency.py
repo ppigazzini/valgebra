@@ -14,6 +14,7 @@ under concurrency.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import sysconfig
 import threading
@@ -188,3 +189,69 @@ def test_markers_compile_in_parallel_without_the_gil() -> None:
     """The same, where the contention is real rather than interleaved."""
     assert not _gil_enabled()
     assert not _run_marker_threads()
+
+
+# A fresh interpreter, since the race needs `annotationlib` not yet imported: a
+# thread holds it mid-import -- its module lock taken, its body not yet run --
+# while the main thread builds the first validator.
+_FIRST_BUILD_BESIDE_AN_IMPORT = """
+import importlib.machinery
+import sys
+import threading
+
+from valgebra import Validator
+
+assert "annotationlib" not in sys.modules, "imported before the race is set"
+entered = threading.Event()
+release = threading.Event()
+
+
+class Held:
+    def find_spec(self, name, path, target=None):
+        if name != "annotationlib":
+            return None
+        spec = importlib.machinery.PathFinder.find_spec(name, path)
+        run = spec.loader.exec_module
+
+        def exec_module(module):
+            entered.set()
+            release.wait()
+            run(module)
+
+        spec.loader.exec_module = exec_module
+        return spec
+
+
+sys.meta_path.insert(0, Held())
+importer = threading.Thread(target=__import__, args=("annotationlib",))
+importer.start()
+entered.wait()
+threading.Timer(0.5, release.set).start()
+Validator(int)
+importer.join()
+print("built")
+"""
+
+
+@pytest.mark.skipif(sys.version_info < (3, 14), reason="annotationlib arrives in 3.14")
+def test_the_first_validator_builds_beside_a_thread_importing_annotationlib() -> None:
+    """Building the first validator does not wait on an import in another thread.
+
+    The first build reads the special forms out of `typing`, and on 3.15
+    `typing.ForwardRef` reaches `annotationlib` through a lazy import, which
+    holds the global import lock while it waits for the module. The thread
+    importing the module needs that lock to finish, so read that way the two
+    wait on each other for good. The build imports `annotationlib` itself
+    first, which waits on the module's own lock and nothing else.
+    """
+    try:
+        done = subprocess.run(  # noqa: S603 -- fixed interpreter, in-repo program
+            [sys.executable, "-c", _FIRST_BUILD_BESIDE_AN_IMPORT],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail("the first build and the import waited on each other")
+    assert done.stdout.strip() == "built", done.stderr

@@ -277,12 +277,25 @@ answer with code.
 
 Dispatch step 6 takes anything with a typing origin, and reads the origin
 before the arguments. The origins are compared by identity against the forms
-resolved once at import — `typing` is imported once, not once per node — and a
-form this frontend does not know is a refusal rather than a guess. One unknown
-origin is refused by name: `Validator[int]` is the alias the class's
+resolved once, at the first build — `typing` is imported once, not once per
+node — and a form this frontend does not know is a refusal rather than a guess.
+One unknown origin is refused by name: `Validator[int]` is the alias the class's
 `__class_getitem__` builds for a static checker, and its origin is `Validator`
 itself, which no schema reads. The arm is the last before the fallthrough, so
 a form that builds never reaches it.
+
+**The forms are resolved without waiting on another thread's import.** On 3.15
+`typing` serves `ForwardRef` through its module `__getattr__`, which reaches
+`annotationlib` through a lazy import, and the interpreter resolves a lazy
+import holding its global import lock while it waits for the module. A thread
+importing `annotationlib` at that moment -- `dataclasses` and `inspect` both do
+-- needs that lock for the imports the module's body makes, so the two wait on
+each other for good, and the process hangs at its first build. `forms` imports
+`annotationlib` itself before it reads `typing`, where the release has it, and
+reads `ForwardRef` out of it: an ordinary import waits on the module's own lock
+alone, and once it returns every lazy import of the module finds it loaded.
+`test_the_first_validator_builds_beside_a_thread_importing_annotationlib` holds
+the import open in a fresh interpreter while the first validator builds.
 
 `Union` and `X | Y` are the same origin in two spellings and build the same
 node. `Literal` interns each argument as a constant, and refuses a list, a dict

@@ -47,6 +47,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a record below the complement of two records is decided
 - fix: equality, hash, repr and a build refusal carry a fatal signal out
 - fix: the complement of an empty refinement is above every subject
+- fix: the first build imports annotationlib before it reads typing
 
 -->
 
@@ -265,6 +266,13 @@ answer of its own, or a repair to a change not yet released.
   pattern only by lowering the subject too, and that union is past what it
   lowers. The complement rule asks the refinement's own emptiness where
   disjointness declines.
+- **Building the first validator does not hang beside an import on Python
+  3.15.** There `typing` reaches `annotationlib` through a lazy import, and
+  resolving one holds the interpreter's global import lock while it waits for
+  the module. The first build read `typing.ForwardRef` that way, so a thread
+  importing `annotationlib` at that moment -- `dataclasses` and `inspect` both
+  do -- and the build waited on each other for good. The build imports
+  `annotationlib` itself first, where the release has it.
 
 ## [0.0.14] - 2026-09-26
 

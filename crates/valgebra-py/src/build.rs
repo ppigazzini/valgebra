@@ -203,8 +203,22 @@ static FORMS: PyOnceLock<Forms> = PyOnceLock::new();
 
 /// The special-form cache for this interpreter, built once. `PyOnceLock` makes
 /// the one-time initialization safe under free-threading.
+///
+/// **`annotationlib` is imported before `typing` is read**, and `ForwardRef` is
+/// read out of it. On 3.15 `typing` serves `ForwardRef` through its module
+/// `__getattr__`, which reaches `annotationlib` through a lazy import, and
+/// resolving a lazy import holds the interpreter's global import lock while it
+/// waits for the module. A thread importing `annotationlib` at that moment --
+/// through `dataclasses` or `inspect`, say -- needs that lock for the imports
+/// its body makes, so read through `typing` the two wait on each other for
+/// good, and building the first validator hangs the process. An ordinary
+/// import waits on the module's own lock alone, and once it returns every lazy
+/// import of the module finds it loaded and waits on nothing. The module exists
+/// from 3.14, where the two `ForwardRef`s are one class; a release without it
+/// reads `typing`'s, as every optional form here is read.
 fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
     FORMS.get_or_try_init(py, || {
+        let annotationlib = py.import("annotationlib").ok();
         let typing = py.import("typing")?;
         let builtins = py.import("builtins")?;
         let optional_form = |module: &Bound<'_, PyModule>, name: &str| -> Option<Py<PyAny>> {
@@ -221,7 +235,7 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             literal: typing.getattr("Literal")?.unbind(),
             get_origin: typing.getattr("get_origin")?.unbind(),
             get_args: typing.getattr("get_args")?.unbind(),
-            forward_ref: optional_form(&typing, "ForwardRef"),
+            forward_ref: optional_form(annotationlib.as_ref().unwrap_or(&typing), "ForwardRef"),
             type_variables: ["TypeVar", "ParamSpec", "TypeVarTuple", "_SpecialForm"]
                 .iter()
                 .filter_map(|name| optional_form(&typing, name))
