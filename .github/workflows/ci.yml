@@ -614,7 +614,7 @@ jobs:
       - name: Install what the suite reads
         run: |
           VIRTUAL_ENV=.pypy uv pip install \
-            "annotated-types>=0.8" "hypothesis>=6.168.1" "pytest>=9.1.1" \
+            "annotated-types>=0.8" "hypothesis>=6.168.3" "pytest>=9.1.1" \
             "pyyaml>=6.0.3" "syrupy>=6.1.1" "typing-extensions>=4.16.0"
       - name: pytest
         env:

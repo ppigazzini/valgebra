@@ -350,7 +350,7 @@ jobs:
         run: |
           for py in $PYTHONS; do
             uv pip install --python ".venv-$py" \
-              "annotated-types>=0.8" "hypothesis>=6.168.1" "pytest>=9.1.1" \
+              "annotated-types>=0.8" "hypothesis>=6.168.3" "pytest>=9.1.1" \
               "pyyaml>=6.0.3" "syrupy>=6.1.1" "typing-extensions>=4.16.0"
             bin=".venv-$py/bin"; [ -d "$bin" ] || bin=".venv-$py/Scripts"
             "$bin/python" -m pytest -q -m "not repository" tree/tests
@@ -403,7 +403,7 @@ jobs:
           HYPOTHESIS_PROFILE: ci
         run: |
           uv pip install \
-            "annotated-types>=0.8" "hypothesis>=6.168.1" "pytest>=9.1.1" \
+            "annotated-types>=0.8" "hypothesis>=6.168.3" "pytest>=9.1.1" \
             "pyyaml>=6.0.3" "syrupy>=6.1.1" "typing-extensions>=4.16.0"
           .venv/bin/python -m pytest -q -m "not repository" tree/tests
 
