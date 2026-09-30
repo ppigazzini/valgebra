@@ -9,7 +9,9 @@ use pyo3::exceptions::PyValueError;
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyBytes, PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple, PyType};
+use pyo3::types::{
+    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
+};
 use valgebra_core::{
     Carries, Constraint, Kind, OperandIx, OrderGroup, Schema, carries_division, carries_length,
     carries_pattern,
@@ -21,6 +23,26 @@ use crate::validator::Validator;
 /// `numbers.Number`, the register a remainder's comparison and an order bound's
 /// both follow, resolved once per process.
 static NUMBER: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+
+/// Whether `operand` is in [`NUMBER`]'s register, asked of the register only
+/// where the operand's type does not already say.
+///
+/// `numbers` registers `int` and `float`, `bool` derives from `int`, and an ABC
+/// keeps what it registers, so a value of exactly one of those types is a
+/// number. Asking the ABC costs a call to `ABCMeta.__instancecheck__`, a Python
+/// function, which is about a sixth of compiling `Annotated[int, Ge(0)]`. The
+/// types are exact because the ABC also reads a value's `__class__`, which a
+/// subclass may answer with code of its own.
+fn is_a_number(operand: &Bound<'_, PyAny>) -> PyResult<bool> {
+    if operand.is_exact_instance_of::<PyInt>()
+        || operand.is_exact_instance_of::<PyFloat>()
+        || operand.is_exact_instance_of::<PyBool>()
+    {
+        return Ok(true);
+    }
+    let number = NUMBER.import(operand.py(), "numbers", "Number")?;
+    operand.is_instance(number)
+}
 use crate::errors::{is_fatal, summarize, unless_fatal};
 use crate::oracle::kind_of;
 
@@ -84,17 +106,14 @@ pub(super) fn build_refine(
 
 /// The group Python orders `operand` within, or `None` for a value of no group.
 ///
-/// The register is read through [`NUMBER`], the same handle
+/// The register is read through [`is_a_number`], the question
 /// [`refuse_unnumbered_step`] asks, rather than by importing `numbers` and
 /// decoding `Number` again. Spelled as an import this ran the module lookup and
 /// two attribute names per order bound, and a fifty-field record of
 /// `Annotated[int, Ge(0)]` carries fifty of them.
 fn order_group(operand: &Bound<'_, PyAny>) -> PyResult<Option<OrderGroup>> {
     let py = operand.py();
-    let number = NUMBER
-        .import(py, "numbers", "Number")
-        .and_then(|class| operand.is_instance(class));
-    Ok(if unless_fatal(number, py, false)? {
+    Ok(if unless_fatal(is_a_number(operand), py, false)? {
         Some(OrderGroup::Number)
     } else if operand.is_instance_of::<PyString>() {
         Some(OrderGroup::Text)
@@ -565,9 +584,7 @@ const MAX_GROUPING_DEPTH: u32 = 8;
 /// comparison follows: `Decimal` and `Fraction` are in it and divide as a caller
 /// expects, and a type that is not is one whose remainder has no zero to equal.
 fn refuse_unnumbered_step(operand: &Bound<'_, PyAny>) -> PyResult<()> {
-    let py = operand.py();
-    let number = NUMBER.import(py, "numbers", "Number")?;
-    if operand.is_instance(number)? {
+    if is_a_number(operand)? {
         return Ok(());
     }
     Err(PyValueError::new_err(format!(

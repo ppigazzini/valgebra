@@ -850,6 +850,73 @@ fn the_build_descends_one_level_past_the_construction_bound() {
     });
 }
 
+/// A bound of exactly `int`, `float` or `bool` is placed in `numbers.Number`'s
+/// register without asking the ABC, whose question is a Python function called
+/// once a bound; a bound of any other type is asked. The count is of this
+/// thread's questions, so a test running beside it asks nothing it reads.
+#[test]
+fn a_builtin_number_bound_is_placed_without_asking_the_abc() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"import abc, decimal, numbers, threading\n\
+              asked = []\n\
+              armed = [None]\n\
+              _original = abc.ABCMeta.__instancecheck__\n\
+              def _counting(cls, instance):\n\
+              \x20   if cls is numbers.Number and armed[0] == threading.get_ident():\n\
+              \x20       asked.append(type(instance).__name__)\n\
+              \x20   return _original(cls, instance)\n\
+              abc.ABCMeta.__instancecheck__ = _counting\n\
+              class Ge:\n\
+              \x20   def __init__(self, ge):\n\
+              \x20       self.ge = ge\n\
+              def arm():\n\
+              \x20   asked.clear()\n\
+              \x20   armed[0] = threading.get_ident()\n\
+              def disarm():\n\
+              \x20   armed[0] = None\n\
+              \x20   return list(asked)\n\
+              BOUNDS = [0, 1.5, True, decimal.Decimal(2)]\n",
+            c"numbers_asked.py",
+            c"numbers_asked",
+        )
+        .expect("the module compiles");
+        let annotated = py
+            .import("typing")
+            .and_then(|typing| typing.getattr("Annotated"))
+            .expect("typing has Annotated");
+        let marker = module.getattr("Ge").expect("the marker is defined");
+        let bounds = module.getattr("BOUNDS").expect("the bounds are defined");
+        for (bound, wanted) in bounds.try_iter().expect("a list").zip([
+            vec![],
+            vec![],
+            vec![],
+            vec!["Decimal".to_owned()],
+        ]) {
+            let bound = bound.expect("a bound");
+            let spelling = annotated
+                .get_item((
+                    py.get_type::<PyInt>(),
+                    marker.call1((&bound,)).expect("a marker"),
+                ))
+                .expect("the annotation builds");
+            module
+                .getattr("arm")
+                .and_then(|arm| arm.call0())
+                .expect("armed");
+            let built = build_schema(&spelling, &mut Pool::default(), &mut Vec::new());
+            let asked: Vec<String> = module
+                .getattr("disarm")
+                .and_then(|disarm| disarm.call0())
+                .and_then(|asked| asked.extract())
+                .expect("disarmed");
+            built.expect("an ordered bound builds");
+            assert_eq!(asked, wanted, "the ABC asked of {bound}");
+        }
+    });
+}
+
 /// A class whose fields are declared builds the record beside the class,
 /// and one whose are not is the class alone.
 ///
