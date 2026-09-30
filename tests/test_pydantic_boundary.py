@@ -22,9 +22,9 @@ What it pins down is the fragment where the difference is observable, so that
 
 A fourth group states valgebra's own limit in the same currency, because a page
 that only lists what the other tool cannot do is an advertisement:
-``test_basemodel_is_an_isinstance_check`` records that a ``BaseModel`` reaches
-valgebra as a bare class and is *not* deep-checked, and shows the mapping view
-that is the actual bridge.
+``test_basemodel_is_an_isinstance_check`` and ``test_struct_is_an_isinstance_check``
+record that a ``BaseModel`` and a ``Struct`` reach valgebra as bare classes and
+are *not* deep-checked, and show the mapping view that is the actual bridge.
 """
 
 from __future__ import annotations
@@ -361,6 +361,26 @@ def test_basemodel_is_an_isinstance_check() -> None:
         steps: int
 
     assert not Validator(ModelFields).is_valid(model.__dict__)
+
+
+def test_struct_is_an_isinstance_check() -> None:
+    """A msgspec ``Struct`` is not deep-checked either, and this records it.
+
+    A ``Struct`` is none of the forms valgebra reads structurally, so it reaches
+    the frontend as a bare class, as a ``BaseModel`` does, and the wrong-typed
+    field is admitted. The mapping view is the same bridge. This is a gap, not a
+    design.
+    """
+    held = MsgConfig(lr=0.1, steps="ten")  # ty: ignore[invalid-argument-type]
+
+    assert repr(Validator(MsgConfig)) == "MsgConfig"
+    assert Validator(MsgConfig).is_valid(held)  # isinstance only
+
+    class MsgConfigFields(TypedDict):
+        lr: float
+        steps: int
+
+    assert not Validator(MsgConfigFields).is_valid(msgspec.structs.asdict(held))
 
 
 def test_dataclass_and_typeddict_are_deep_checked() -> None:
