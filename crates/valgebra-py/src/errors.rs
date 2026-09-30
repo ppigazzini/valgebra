@@ -373,22 +373,35 @@ pub(crate) fn into_pyerr(py: Python<'_>, violations: Vec<Violation>) -> PyErr {
     // The message is built here because it is the exception's `args`, which is
     // what `str(error)` reads and what pickling carries. Everything else waits
     // for an access -- see `Failures`.
-    let err = ValidationError::new_err(summary_message(&first.to_string(), first, rest));
-    // Attaching the failures is one attribute write, and the violations are
-    // **moved** into it: cloning them here copies a string per message and a
-    // path per violation, which is the work this whole change exists not to do.
-    // If the write ever fails, surface that rather than shipping an error whose
-    // `.errors` is silently empty while `str(error)` still summarises real
-    // failures.
-    match attach_failures(py, &err, violations) {
-        Ok(()) => err,
-        Err(err) => err,
-    }
+    let message = summary_message(&first.to_string(), first, rest);
+    // If building the instance or attaching the failures fails, surface that
+    // rather than shipping an error whose `.errors` is silently empty while
+    // `str(error)` still summarises real failures.
+    raised(py, message, violations).unwrap_or_else(|err| err)
 }
 
-fn attach_failures(py: Python<'_>, err: &PyErr, violations: Vec<Violation>) -> PyResult<()> {
-    let carried = Bound::new(py, Failures { violations })?;
-    err.value(py).setattr(intern!(py, "_failures"), carried)
+/// The exception a failure raises, built as the instance it is.
+///
+/// A lazy `ValidationError::new_err` is normalized by the first read of its
+/// value, and attaching the failures is such a read. `PyO3` normalizes by
+/// detaching from the interpreter and attaching again, which hands the lock to
+/// any thread waiting for it, once per failing call. The instance is made here
+/// instead and handed to `PyO3` as its type's argument, so the raise is
+/// `PyErr_SetObject(ValidationError, instance)` -- which chains the exception
+/// being handled as `__context__`, as normalizing the lazy error did -- and
+/// nothing normalizes it.
+///
+/// The failures are attached with one attribute write, and the violations are
+/// **moved** into it: cloning them copies a string per message and a path per
+/// violation, which is the work `Failures` exists not to do.
+fn raised(py: Python<'_>, message: String, violations: Vec<Violation>) -> PyResult<PyErr> {
+    let ty = py.get_type::<ValidationError>();
+    let instance = ty.call1((message,))?;
+    instance.setattr(
+        intern!(py, "_failures"),
+        Bound::new(py, Failures { violations })?,
+    )?;
+    Ok(PyErr::from_type(ty, instance.unbind()))
 }
 
 /// The five keys of an error item, and the six attributes of the exception.

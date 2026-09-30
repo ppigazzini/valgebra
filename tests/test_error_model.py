@@ -307,3 +307,30 @@ def test_copying_an_error_keeps_the_model() -> None:
     error = info.value
     assert copy.copy(error).errors == error.errors
     assert copy.deepcopy(error).code == error.code
+
+
+def test_a_failure_raised_while_handling_another_chains_it() -> None:
+    """A failure is raised the way a Python `raise` inside a handler is.
+
+    The exception being handled is the failure's `__context__`, and no
+    `__cause__` is claimed; outside a handler there is no context at all.
+    """
+    validator = Validator({"a": int})
+    handled = KeyError("outer")
+
+    def validate_while_handling() -> None:
+        try:
+            raise handled
+        except KeyError:
+            validator.validate({"a": "x"})
+
+    with pytest.raises(ValidationError) as info:
+        validate_while_handling()
+    assert info.value.__context__ is handled
+    assert info.value.__cause__ is None
+    assert not info.value.__suppress_context__
+    assert info.value.code == "int_type"
+
+    with pytest.raises(ValidationError) as info:
+        validator.validate({"a": "x"})
+    assert info.value.__context__ is None

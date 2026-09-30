@@ -253,6 +253,10 @@ Nothing about the model depends on it -- the same attributes, the same values,
 the same `str()` -- and pickling carries the plain data, because crossing a
 process boundary builds the model first.
 
+A failure raised while another exception is being handled carries that
+exception as its `__context__`, the way a `raise` inside the `except` block
+would, and claims no `__cause__`.
+
 ## When a value changes while it is checked
 
 Membership reads a container entry by entry and runs Python at almost every one,

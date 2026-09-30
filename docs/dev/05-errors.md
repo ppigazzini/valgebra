@@ -41,6 +41,17 @@ tables instead, and `tests/test_code_table.py` holds the arrangement in both
 directions: a name the table declares is one some site writes, and a violation
 built with a code spelled out fails.
 
+**A failure is raised as the instance it is.** `into_pyerr` in `errors.rs` builds
+the `ValidationError`, attaches the failures, and hands the instance to `PyO3` as
+its type's argument, so the raise is `PyErr_SetObject` with the instance: the
+exception being handled is chained as `__context__`, as a Python `raise` would
+chain it. A lazy `PyErr` would have to be normalized to take the failures, and
+`PyO3` normalizes by detaching from the interpreter and attaching again -- a
+hand-off of the lock, once per failing call, which is 5% of a failing
+fifty-field `validate`. `PyErr::from_value` avoids the hand-off and loses the
+chaining, since it raises through `PyErr_SetRaisedException`;
+`test_a_failure_raised_while_handling_another_chains_it` holds the chaining.
+
 ## The path is segments, not a string
 
 `PathSegment` in `crates/valgebra-core/src/ir.rs` is one step of a location, and
