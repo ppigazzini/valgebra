@@ -4788,3 +4788,48 @@ fn an_explaining_walk_reports_each_failing_element_of_one_kind() {
         assert_eq!(summaries("{1, 2, 3}", WalkMode::Explain), (true, vec![]));
     });
 }
+
+/// An explaining walk reads a list that belongs as the deciding walk does,
+/// through a snapshot where one pays, and a list holding an element that fails
+/// in place: the report names each failure at its index, and a subclass is read
+/// for what it holds, whatever its `__iter__` yields -- one that yields
+/// integers over a storage of strings is refused.
+#[test]
+fn an_explaining_walk_reads_a_list_that_belongs_through_its_snapshot() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Flatterer(list):\n\
+              \x20   def __iter__(self):\n\
+              \x20       return iter([0] * len(self))\n",
+            c"flatterer.py",
+            c"flatterer",
+        )
+        .expect("the module compiles");
+        let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let wide: Vec<i64> = (0..40).collect();
+        let (ok, violations) = explain(
+            py,
+            &ints,
+            &PyList::new(py, &wide).expect("a list"),
+            &[],
+            &[],
+        );
+        assert!(ok && violations.is_empty(), "{violations:?}");
+
+        let failing = py
+            .eval(c"[*range(30), 'x', *range(9)]", None, None)
+            .expect("the list builds");
+        let (ok, violations) = explain(py, &ints, &failing, &[], &[]);
+        let at: Vec<Vec<PathSegment>> = violations.into_iter().map(|v| v.path).collect();
+        assert_eq!((ok, at), (false, vec![vec![PathSegment::Index(30)]]));
+
+        let flatterer = module
+            .getattr("Flatterer")
+            .expect("the class")
+            .call1((vec!["x"; 40],))
+            .expect("the subclass builds");
+        let (ok, violations) = explain(py, &ints, &flatterer, &[], &[]);
+        assert!(!ok && violations.len() == 40, "{violations:?}");
+    });
+}

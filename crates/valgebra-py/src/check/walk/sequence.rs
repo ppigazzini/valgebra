@@ -285,6 +285,17 @@ fn scalar_list_matches(
 /// read. The scan and its count are the general walk's, so a list that moves
 /// reports the move as the general walk does.
 ///
+/// **A list that belongs is read through the deciding walk's snapshot.** Where
+/// a snapshot pays ([`snapshot_pays`]), an exact list is copied to a tuple and
+/// its elements read borrowed, as [`scalar_list_loop`] reads them: an element
+/// that passes records nothing, so a snapshot every element passes, over a
+/// count that did not move, is the whole answer. Read in place, each element
+/// was an owned handle, and on 3.12 `validate` took twice the time `is_valid`
+/// took over a thousand integers, for fewer instructions. A list holding an
+/// element that fails is read in place from its start instead: the failing
+/// element's summary runs Python, which may move the list, and the in-place
+/// scan reads it as the general walk does.
+///
 /// Out of line, beside the deciding loop rather than inside it: inlined into
 /// [`scalar_list_matches`], it moved the PGO wheel's layout of that loop, and
 /// `is_valid` on ten thousand integers took 5% longer.
@@ -297,6 +308,26 @@ fn list_explained(
     frame: &mut Frame<'_, '_>,
 ) -> bool {
     let ctx = frame.ctx;
+    if snapshot_pays(list.len()) && list.is_exact_instance_of::<PyList>() {
+        match list.as_sequence().to_tuple() {
+            Ok(snapshot) => {
+                if snapshot
+                    .iter_borrowed()
+                    .all(|item| admits(&Value::Py(&item)))
+                {
+                    return if list.len() == snapshot.len() {
+                        true
+                    } else {
+                        mutated(value, frame)
+                    };
+                }
+            }
+            Err(err) => {
+                record_fatal(err, ctx);
+                return false;
+            }
+        }
+    }
     let mut ok = true;
     let scan = scan_list(list, |at, item| {
         if admits(&Value::Py(item)) {

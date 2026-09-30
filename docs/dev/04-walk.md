@@ -332,6 +332,14 @@ own allocation, above the second walking it costs more cache than the counts it
 avoids, and the transient stops at two mebibytes. Both are in the bounds table of
 [00-architecture.md](00-architecture.md), and neither changes an answer.
 
+The band is a rule about length, measured on distinct integers, and the walk
+asks nothing about what a list holds before choosing. A list of objects the
+interpreter keeps immortal -- `None`, a small integer -- pays the copy without
+the counts it saves: `validate` on a thousand elements two thirds `None` reads
+10% slower through the snapshot on 3.12 than in place. The explaining walk
+reads a list that belongs the way the deciding walk does, band and all, so
+`validate` and `is_valid` cost alike on the same list.
+
 The contract of the section above is kept: the copy answers about the list as it
 was when the copy was taken, so the count is compared again afterwards and a
 value that moved reports the move. The **instruction** count moves the other way
@@ -384,8 +392,13 @@ walk too: each element is its test, and one that fails is walked at its own
 location, which records what the walk records of it (`list_explained`,
 `tuple_explained`). No element can raise before the one that fails -- a test
 runs no Python, and only a failing element's summary can, which fails the
-sequence first -- and the list is read over the general walk's count, so one
-that moves reports the move. A parsed array is never explained, and its
+sequence first. A list that belongs is read through the deciding walk's
+snapshot where one pays, since a snapshot every element passes is the whole
+answer; a list holding an element that fails is read in place over the general
+walk's count, so one that moves reports the move. Read in place, the list that
+belongs cost `validate` twice what `is_valid` took on 3.12, for fewer
+instructions: an owned handle per element is a reference count written on a
+different object each time. A parsed array is never explained, and its
 readings refuse the mode.
 
 `validate` on a thousand-element `list[int]` that belongs costs 72% fewer
