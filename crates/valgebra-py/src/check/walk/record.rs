@@ -17,7 +17,7 @@ use pyo3::types::{PyDict, PyString};
 use rustc_hash::{FxHashMap, FxHashSet};
 use valgebra_core::{Field, MapClause, PathSegment, Schema};
 
-use super::scalar::scalar_member;
+use super::scalar::{admitted_quietly, scalar_member};
 #[cfg(PyPy)]
 use super::{Base, held_dict, reads_its_length, reads_its_values};
 use super::{
@@ -208,6 +208,24 @@ pub(super) fn keyed_map_matches(
     }
 }
 
+/// Whether a field's `value` belongs to its `schema`, as the deciding walk in
+/// `sub` answers: a scalar field is its type test, asked without the walk
+/// around it ([`scalar_member`]), and any other field is walked.
+///
+/// A record's fields are mostly scalars -- a `TypedDict` of `str`, `int` and
+/// `float` -- and each paid `member`'s dispatch, its level and its signal check
+/// around the one test. `room` is whether a level is free under the record,
+/// read once by the caller: the walk does not move between fields.
+#[inline]
+fn field_holds(
+    schema: &Schema,
+    value: &Value<'_, '_>,
+    room: bool,
+    sub: &mut Frame<'_, '_>,
+) -> bool {
+    scalar_member(schema, value, sub.ctx, room).unwrap_or_else(|| member(schema, value, sub))
+}
+
 /// Whether `(key, val)` is covered by some default clause: the key belongs to a
 /// clause's key schema and the value to that clause's value schema. The clauses
 /// denote a union of key×value rectangles.
@@ -365,12 +383,13 @@ fn keyed_map_asks_for_its_keys(
             }
         };
         let mut present = 0usize;
+        let room = ctx.room_to_descend();
         for (position, field) in fields.iter().enumerate() {
             let key = plan.keys.get(position)?.bind(dict.py());
             match dict.get_item(key) {
                 Ok(Some(value)) => {
                     present += 1;
-                    if !member(&field.schema, &Value::Py(&value), &mut sub) {
+                    if !field_holds(&field.schema, &Value::Py(&value), room, &mut sub) {
                         stopped(position, present - 1);
                         return Some(false);
                     }
@@ -493,6 +512,7 @@ fn keyed_map_scan(
     // hundred of them to answer one membership question.
     let (mut path, mut out) = (Vec::new(), Vec::new());
     let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
+    let room = ctx.room_to_descend();
     let scan = scan_dict(dict, |key, val| {
         // A non-string key, or a string carrying a lone surrogate (which cannot
         // equal a field name, since names are valid UTF-8 by build-time check),
@@ -507,7 +527,7 @@ fn keyed_map_scan(
         };
         match index.and_then(|i| fields.get(i)) {
             Some(field) => {
-                if !member(&field.schema, &Value::Py(val), &mut sub) {
+                if !field_holds(&field.schema, &Value::Py(val), room, &mut sub) {
                     return ControlFlow::Break(());
                 }
                 if field.required {
@@ -544,6 +564,7 @@ pub(super) fn keyed_map_matches_json(
 ) -> bool {
     let (mut path, mut out) = (Vec::new(), Vec::new());
     let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
+    let room = ctx.room_to_descend();
     // A record whose keys settle it resolves the document's keys through the
     // plan instead of searching the document once per field. The search is
     // quadratic in the width -- a fifty-field record read a fifty-entry object
@@ -592,7 +613,7 @@ pub(super) fn keyed_map_matches_json(
         for (field, value) in fields.iter().zip(found.iter().copied()) {
             match value {
                 Some(value) => {
-                    if !member(&field.schema, &Value::Json(py, value), &mut sub) {
+                    if !field_holds(&field.schema, &Value::Json(py, value), room, &mut sub) {
                         return false;
                     }
                 }
@@ -609,7 +630,7 @@ pub(super) fn keyed_map_matches_json(
             .find(|(key, _)| &*field.name == key.as_ref())
         {
             Some((_, val)) => {
-                if !member(&field.schema, &Value::Json(py, val), &mut sub) {
+                if !field_holds(&field.schema, &Value::Json(py, val), room, &mut sub) {
                     return false;
                 }
             }
@@ -906,6 +927,12 @@ pub(super) fn check_attr_record(
         };
         match attribute {
             Ok(attr) => {
+                // An attribute the walk would admit without recording anything
+                // -- a scalar that passes its test -- is answered by the test,
+                // in either mode, before its location is pushed.
+                if admitted_quietly(&field.schema, &Value::Py(&attr), ctx) {
+                    continue;
+                }
                 if ctx.mode.explains() {
                     frame.path.push(PathSegment::Key(Arc::clone(&field.name)));
                 }

@@ -343,7 +343,7 @@ carries that reading as a recorded step against the base it steps from.
 
 The walk reaches a scalar through `member`, which takes a level, reads the
 fatal-signal flag and dispatches, all around the one type test the schema is.
-Four positions ask that question often enough for the frame around it to be
+Five positions ask that question often enough for the frame around it to be
 most of what they cost, and each asks the test directly:
 
 - **A union's branch.** `int | str | None` tries its branches in order, and a
@@ -361,6 +361,12 @@ most of what they cost, and each asks the test directly:
   `NamedTuple` of builtin fields, is a type test a position
   (`scalar_positions_tuple_matches`): a thousand such tuples cost 37% fewer
   instructions.
+- **A record's field.** A field that is a scalar -- most of a `TypedDict` -- is
+  its type test in the deciding walk (`field_holds`), read by keys, by the scan
+  and in both JSON readings: the binding gate's fifty-field record costs 7%
+  fewer instructions, 10% with interned keys. A dataclass's attribute is walked
+  in the caller's mode, so it takes the explaining walk's quiet admit, below, in
+  either mode: a list of dataclasses costs 8% fewer, and 19% under `validate`.
 
 The two readings agree because the fast walk answers a scalar as three
 questions: whether a level is free under it, whether a fatal signal has been
