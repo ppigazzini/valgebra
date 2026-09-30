@@ -159,6 +159,34 @@ pub(super) fn homogeneous_scalar_union<'s>(
     (ctx.room_to_descend() && members.iter().all(|m| scalar_of(m).is_some())).then_some(members)
 }
 
+/// Whether an explaining walk would admit `value` against `schema` and record
+/// nothing, read without that walk: a scalar whose type test passes, or a union
+/// of scalars one of whose tests does, where the levels the walk would take are
+/// free and no fatal signal is recorded. `false` says only that the walk must
+/// run.
+///
+/// `validate` explains as it decides, in one walk, so it is the mode a value
+/// that belongs is read in. An admitted element of that walk leaves no
+/// violation -- a scalar records only a mismatch, and a union returns at the
+/// first branch that matches, keeping nothing of the branches before it -- so
+/// a sequence of them costs the walk's dispatch and a location pushed and
+/// popped at every element, around a test that answers alone.
+#[inline]
+pub(super) fn admitted_quietly(schema: &Schema, value: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
+    match schema {
+        Schema::Union(members) => {
+            let Some(_union) = ctx.descend() else {
+                return false;
+            };
+            ctx.room_to_descend()
+                && !ctx.fatal_seen.get()
+                && members.iter().all(|m| scalar_of(m).is_some())
+                && scalar_union_admits(members, value)
+        }
+        _ => scalar_member(schema, value, ctx, ctx.room_to_descend()) == Some(true),
+    }
+}
+
 /// Whether some member of a union of scalars admits `value`.
 #[inline]
 pub(super) fn scalar_union_admits(members: &[Schema], value: &Value<'_, '_>) -> bool {

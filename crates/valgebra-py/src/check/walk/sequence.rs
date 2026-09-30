@@ -16,7 +16,7 @@ use valgebra_core::{PathSegment, Schema, SeqKind, SeqShape, Violation};
 
 #[cfg(PyPy)]
 use super::reads_its_length;
-use super::scalar::{Scalar, homogeneous_scalar_union, scalar_union_admits};
+use super::scalar::{Scalar, admitted_quietly, homogeneous_scalar_union, scalar_union_admits};
 use super::{
     Base, Frame, Scan, held_iter, homogeneous_scalar, is_fatal, member, mutated,
     reads_its_elements, record_fatal, record_if_fatal, scalar_admits, scalar_of, stop,
@@ -173,7 +173,11 @@ fn json_array_matches(
 }
 
 /// Match one element at position `i`: the prefix schema at `i`, or the repeated
-/// tail past the prefix. The index segment is pushed only in explain mode.
+/// tail past the prefix. The index segment is pushed only in explain mode, and
+/// only for an element [`admitted_quietly`] does not answer: `validate` reads a
+/// `list[int]` that belongs through here, and each element was a location
+/// pushed and popped and a dispatch around one type test, six times what
+/// `is_valid` pays.
 ///
 /// Inlined into the one loop that calls it. It sits between that loop and
 /// [`member`], so leaving it out of line put a second call frame on every
@@ -195,6 +199,9 @@ fn seq_element(
         return false;
     };
     if ctx.mode.explains() {
+        if admitted_quietly(schema, item, ctx) {
+            return true;
+        }
         frame.path.push(PathSegment::Index(i));
     }
     let ok = member(schema, item, frame);
@@ -771,7 +778,10 @@ fn check_elements(
 /// schema and the same value report differently between runs — which the error
 /// model promises they do not. Every element is walked and the failures are
 /// ordered by what they report; fail-fast then keeps the first of *that* order,
-/// which costs a full scan of a set that is already failing.
+/// which costs a full scan of a set that is already failing. An element the
+/// walk would admit reports nothing, so one [`admitted_quietly`] answers is
+/// passed without a probe of its own: `validate` over a `set[str]` that belongs
+/// read every element that way, at three quarters again what `is_valid` pays.
 fn explain_elements(
     element: &Schema,
     container: &Bound<'_, PyAny>,
@@ -782,6 +792,9 @@ fn explain_elements(
     let where_it_is = &mut *frame.path;
     let mut failures: Vec<(String, Vec<Violation>)> = Vec::new();
     let scan = scan_set(container, ctx, |item| {
+        if admitted_quietly(element, &Value::Py(item), ctx) {
+            return ControlFlow::Continue(());
+        }
         let mut reported = Vec::new();
         let held = {
             let mut probe = Frame::new(&mut *where_it_is, &mut reported, ctx);

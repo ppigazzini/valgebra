@@ -368,7 +368,19 @@ recorded, and the type test. The direct reading asks the same three, so it
 refuses at the bound and after a fatal signal exactly where `member` does, and
 `a_scalar_is_answered_as_the_walk_answers_it` holds that for every scalar schema
 against every kind of value. An explaining walk records the position of what it
-refuses, so none of the three is taken there.
+refuses, so none of the readings above is taken there.
+
+**What an explaining walk admits, it records nothing of.** `validate` explains
+as it decides, in one walk, so it is the mode a value that belongs is read in,
+and an element it admits cost a location pushed and popped and a full dispatch
+around one type test. An element of a sequence or of a set that
+`admitted_quietly` answers -- a scalar whose test passes, a union of scalars
+one of whose tests does, at free levels and with no fatal signal recorded -- is
+passed without either: a scalar records only a mismatch, and a union returns at
+the first branch that matches, keeping nothing of the branches before it.
+`validate` on a thousand-element `list[int]` that belongs costs 38% fewer
+instructions, on a `list[int | None]` 43% and on a `set[str]` 26%; an element
+that fails is walked and reported as it was.
 
 The level is read and not held. An element sits one level below its sequence and
 a branch one below its union, so a sequence of a union of scalars needs two free

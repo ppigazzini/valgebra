@@ -4618,3 +4618,105 @@ fn an_instance_of_the_class_itself_is_read_off_its_type() {
         assert!(!decide(py, &instance, &get("BASE"), &pool, &[]));
     });
 }
+
+/// An explaining walk answers an element it would admit by the element's test
+/// alone -- a scalar, or a union of scalars -- where the levels it would take
+/// are free and no fatal signal is recorded, and walks every other element as
+/// before: the report names each failing element at its own index, whole or
+/// fail-fast, and a passing element names nothing.
+#[test]
+fn an_admitted_scalar_element_is_answered_quietly_when_explaining() {
+    use super::scalar::admitted_quietly;
+    Python::attach(|py| {
+        let index = build_index(py, &Schema::Int, &[], &[]);
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &[],
+            defs: &[],
+            records: &index.records,
+            attrs: &index.attrs,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
+            mode: WalkMode::Explain,
+        };
+        let one = PyInt::new(py, 1i64).into_any();
+        let text = PyString::new(py, "x").into_any();
+        let (one, text) = (Value::Py(&one), Value::Py(&text));
+        let nullable = Schema::union([Schema::Int, Schema::NoneType]);
+        let of_ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let holding = Schema::union([Schema::Int, of_ints.clone()]);
+        assert!(admitted_quietly(&Schema::Int, &one, ctx));
+        assert!(!admitted_quietly(&Schema::Int, &text, ctx));
+        assert!(admitted_quietly(&nullable, &one, ctx));
+        assert!(!admitted_quietly(&nullable, &text, ctx));
+        assert!(!admitted_quietly(&of_ints, &one, ctx));
+        assert!(!admitted_quietly(&holding, &one, ctx));
+        state.depth.set(MAX_WALK_DEPTH - 2);
+        assert!(admitted_quietly(&nullable, &one, ctx));
+        state.depth.set(MAX_WALK_DEPTH - 1);
+        assert!(!admitted_quietly(&nullable, &one, ctx));
+        assert!(admitted_quietly(&Schema::Int, &one, ctx));
+        state.depth.set(MAX_WALK_DEPTH);
+        assert!(!admitted_quietly(&Schema::Int, &one, ctx));
+        state.depth.set(0);
+        state.fatal_seen.set(true);
+        assert!(!admitted_quietly(&Schema::Int, &one, ctx));
+        assert!(!admitted_quietly(&nullable, &one, ctx));
+        state.fatal_seen.set(false);
+
+        let eval = |source: &str| {
+            py.eval(&std::ffi::CString::new(source).expect("no nul"), None, None)
+                .expect("the value evaluates")
+        };
+        let located = |schema: &Schema, source: &str, mode| {
+            let (ok, violations) = explain_in(py, schema, &eval(source), &[], &[], mode);
+            let at: Vec<Vec<PathSegment>> = violations.into_iter().map(|v| v.path).collect();
+            (ok, at)
+        };
+        let index_at = |i: usize| vec![PathSegment::Index(i)];
+        let ints = of_ints;
+        assert_eq!(
+            located(&ints, "[1, 'x', 2, 'y']", WalkMode::Explain),
+            (false, vec![index_at(1), index_at(3)])
+        );
+        assert_eq!(
+            located(&ints, "[1, 'x', 2, 'y']", WalkMode::ExplainFailFast),
+            (false, vec![index_at(1)])
+        );
+        assert_eq!(
+            located(&ints, "[1, 2, 3]", WalkMode::Explain),
+            (true, vec![])
+        );
+        let nullables = Schema::list(SeqShape::homogeneous(nullable.clone()));
+        assert_eq!(
+            located(&nullables, "[1, None, 'x']", WalkMode::Explain),
+            (false, vec![index_at(2)])
+        );
+        let pairs = Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Str]));
+        assert_eq!(
+            located(&pairs, "(1, 2)", WalkMode::Explain),
+            (false, vec![index_at(1)])
+        );
+        // A set's failures carry no index, and are ordered by what they say.
+        let int_set = Schema::set(Schema::Int);
+        let summaries = |source: &str, mode| {
+            let (ok, violations) = explain_in(py, &int_set, &eval(source), &[], &[], mode);
+            let said: Vec<String> = violations.into_iter().map(|v| v.value_summary).collect();
+            (ok, said)
+        };
+        let said = |items: &[&str]| items.iter().map(|&s| s.to_owned()).collect::<Vec<_>>();
+        assert_eq!(
+            summaries("{1, 'y', 2, 'x'}", WalkMode::Explain),
+            (false, said(&["'x'", "'y'"]))
+        );
+        assert_eq!(
+            summaries("{1, 'y', 2, 'x'}", WalkMode::ExplainFailFast),
+            (false, said(&["'x'"]))
+        );
+        assert_eq!(summaries("{1, 2, 3}", WalkMode::Explain), (true, vec![]));
+    });
+}
