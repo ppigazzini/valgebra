@@ -764,6 +764,58 @@ fn a_constant_pools_by_value_only_where_equality_is_pythons() {
     });
 }
 
+/// An exact builtin scalar is read as its constant before the dispatch, and
+/// only an exact one: a subclass -- an `IntEnum` member, a `str` subclass -- a
+/// container and `None` are left to the arms that read them, and a validator
+/// is composed rather than read as a constant.
+#[test]
+fn an_exact_builtin_scalar_is_its_own_constant() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"import enum\n\
+              class Color(enum.IntEnum):\n\
+              \x20   RED = 1\n\
+              class Text(str):\n\
+              \x20   pass\n\
+              SCALARS = [7, 2 ** 70, 'x', True, 1.5, float('nan'), b'y']\n\
+              OTHERS = [None, Color.RED, Text('x'), [1], (1,), {'a': 1}, int]\n",
+            c"scalars.py",
+            c"scalars",
+        )
+        .expect("the module compiles");
+        let listed = |name: &str| {
+            module
+                .getattr(name)
+                .and_then(|list| list.try_iter()?.collect::<PyResult<Vec<_>>>())
+                .expect("a list")
+        };
+        let mut pool = Pool::default();
+        for scalar in listed("SCALARS") {
+            let read = builtin_constant(&scalar, &mut pool);
+            assert!(
+                matches!(read, Some(Schema::Literal(_))),
+                "{scalar} is its own constant, not {read:?}"
+            );
+        }
+        for other in listed("OTHERS") {
+            assert!(
+                builtin_constant(&other, &mut pool).is_none(),
+                "{other} takes the walk"
+            );
+        }
+    });
+}
+
+/// A pool asked to make room for constants has it before the first arrives.
+#[test]
+fn a_pool_makes_room_for_what_it_is_told_is_coming() {
+    let mut pool = Pool::default();
+    pool.reserve(100);
+    assert!(pool.items.capacity() >= 100);
+    assert!(pool.index.capacity() >= 100);
+}
+
 /// A seeded pool carries the constants it was given, and yields them back.
 #[test]
 fn a_seeded_pool_holds_what_it_was_seeded_with() {

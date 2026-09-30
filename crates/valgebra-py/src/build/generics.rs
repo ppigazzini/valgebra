@@ -97,6 +97,7 @@ pub(super) fn build_parametrized(
         // Literal args are constant values; each becomes a literal, unioned when
         // there is more than one.
         let mut members = Vec::with_capacity(args.len());
+        lits.reserve(args.len());
         for arg in args.iter() {
             refuse_unhashable_literal(&arg)?;
             members.push(build_schema(&arg, lits, defs)?);

@@ -141,15 +141,26 @@ symmetry:
 4. **A plain type or class** — a scalar, `object`, a TypedDict, a dataclass, an
    enum, a protocol. Taken before the typing introspection below because a type
    never has a typing origin, so this skips a `get_origin` call per scalar node.
-5. `Annotated[T, ...]` — the refinement metadata.
-6. Anything with a typing origin — `list[int]`, `dict[K, V]`, `tuple[...]`,
+5. **An exact `bool`, `int`, `float`, `str` or `bytes`** — a literal of itself.
+6. **An already-compiled validator**, whose pool is interned into this one.
+   Both after the type branch, because a record's fields are types and a type
+   is answered there for a flag test.
+7. `Annotated[T, ...]` — the refinement metadata.
+8. Anything with a typing origin — `list[int]`, `dict[K, V]`, `tuple[...]`,
    `X | Y`, `Literal`.
-7. PEP 695 aliases, `NewType`, native list and dict literals.
-8. An already-compiled validator, whose pool is interned into this one.
-9. Anything else — an exact-value literal.
+9. PEP 695 aliases, `NewType`, native list and dict literals.
+10. Anything else — a literal of itself.
 
 Moving a branch earlier is a behaviour change, not a refactor. `Any` above the
-type branch is the sharp one.
+type branch is the sharp one. Steps 5 and 6 are the moves that are not, and the
+argument is what makes them safe: an exact builtin scalar's type carries no
+`__metadata__` or `__supertype__`, `get_origin` answers `None` for it, and it is
+no container and no special form, so every arm before the fallthrough passed it
+there; a validator has no subclass and matches no arm before its own. Taken
+last, both paid an attribute read, a call into `typing` and a dozen tests first:
+three quarters of compiling a two-thousand-constant `Literal`, and two thirds of
+a `union` of five hundred validators. `an_exact_builtin_scalar_is_its_own_constant`
+holds the first reading to exactly the five types.
 
 **A `typing_extensions` spelling reads as its `typing` one.** Before the release
 that adds a form to `typing`, `typing_extensions` defines it with an object of

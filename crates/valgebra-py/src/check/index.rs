@@ -280,6 +280,11 @@ fn literal_union_plan(py: Python<'_>, members: &[Schema], pool: &[Py<PyAny>]) ->
         let constant = pool.get(idx.get()).map(|obj| obj.bind(py))?;
         if constant.is_exact_instance_of::<PyInt>() {
             if let Ok(i) = constant.extract::<i64>() {
+                // Sized on its first member for the whole table, so a wide
+                // table is one allocation rather than a rehash per doubling.
+                if ints.is_empty() {
+                    ints.reserve(members.len());
+                }
                 ints.insert(i);
             }
         } else if constant.is_exact_instance_of::<PyString>()
@@ -288,6 +293,9 @@ fn literal_union_plan(py: Python<'_>, members: &[Schema], pool: &[Py<PyAny>]) ->
                 .ok()
                 .and_then(|s| s.to_str().ok())
         {
+            if strs.is_empty() {
+                strs.reserve(members.len());
+            }
             strs.insert(s.into());
         }
     }

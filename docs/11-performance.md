@@ -399,6 +399,11 @@ that remains the single source of truth. On a 32-literal union this cuts the
 per-call median several-fold; the decision is identical to the scan, locked by
 tests over the cross-type cases.
 
+Compiling one is linear too. A constant is read as itself before the frontend's
+dispatch, and the table's sets are sized once, so a `Literal` of two thousand
+string codes compiles in about three million instructions; read through the
+whole dispatch one constant at a time, it costs four times that.
+
 ## What a relation between two validators costs
 
 `is_subtype_of`, `relation_to` and `is_equivalent` are not the membership walk,

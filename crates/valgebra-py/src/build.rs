@@ -390,7 +390,6 @@ pub(crate) fn build_schema(
     if obj.is_none() {
         return Ok(Schema::NoneType);
     }
-
     let forms = forms(py)?;
 
     // `typing.Any` is a singleton special form: the gradual dynamic type. It is
@@ -415,6 +414,26 @@ pub(crate) fn build_schema(
     // `get_origin` call per scalar and class node on the common compile path.
     if let Ok(ty) = obj.cast::<PyType>() {
         return build_type_object(ty, lits, defs);
+    }
+
+    // Two readings every arm below would reach, answered before any of them,
+    // and after the type branch, because the fields of a record are types and
+    // a type is answered above for a flag test.
+    //
+    // An exact `bool`, `int`, `float`, `str` or `bytes` is a constant: its type
+    // carries no `__metadata__` or `__supertype__`, `get_origin` answers `None`
+    // for it, and it is no container and no special form, so the fallthrough
+    // interns it -- after an attribute read, a call into `typing` and a dozen
+    // tests, which were most of compiling a wide `Literal`. A validator
+    // composes in, and a validator has no subclass and matches no arm below
+    // before its own.
+    if let Some(constant) = builtin_constant(obj, lits) {
+        return Ok(constant);
+    }
+    // Asked exactly, which a class with no subclass answers as `cast` would,
+    // without the walk of the object's `__mro__` a subclass test takes.
+    if let Ok(compiled) = obj.cast_exact::<Validator>() {
+        return Ok(compose(py, compiled.get(), lits, defs));
     }
 
     // Annotated[T, m1, ...]: the base type T with refinement metadata.
@@ -521,33 +540,46 @@ pub(crate) fn build_schema(
         return build_dict(dict, lits, defs);
     }
 
-    // An already-compiled validator composes in: intern its pooled constants
-    // (so a constant shared by identity with one already present collapses to a
-    // single index, which keeps structurally-equal schemas equal across a
-    // merge), append its definitions, and remap its schema's indices.
-    if let Ok(compiled) = obj.cast::<Validator>() {
-        let inner = compiled.get();
-        // Keys a relation already read for this validator are read again from
-        // the cache rather than from the interpreter; composing validators
-        // reads them fresh and caches nothing.
-        let lit_map: Vec<usize> = match inner.keys.get(py) {
-            Some(keys) => inner
-                .literals
-                .iter()
-                .zip(&keys.keys)
-                .map(|(o, key)| lits.intern_keyed(o.bind(py), key.clone()))
-                .collect(),
-            None => inner
-                .literals
-                .iter()
-                .map(|o| lits.intern(o.bind(py)))
-                .collect(),
-        };
-        let offset = DefShift::new(place_definitions(&inner.definitions, &lit_map, defs));
-        return Ok(inner.schema.reindexed(&lit_map, offset));
-    }
-
     build_unrecognised(obj, lits, defs)
+}
+
+/// The literal an exact `bool`, `int`, `float`, `str` or `bytes` is, or `None`
+/// for any other object: a value [`build_schema`] can only read as the constant
+/// it is. A subclass is not one -- an `IntEnum` member is an `int` -- and takes
+/// the walk every other object takes.
+fn builtin_constant(obj: &Bound<'_, PyAny>, lits: &mut Pool) -> Option<Schema> {
+    let scalar = obj.is_exact_instance_of::<PyInt>()
+        || obj.is_exact_instance_of::<PyString>()
+        || obj.is_exact_instance_of::<PyBool>()
+        || obj.is_exact_instance_of::<PyFloat>()
+        || obj.is_exact_instance_of::<PyBytes>();
+    scalar.then(|| Schema::Literal(lits.intern_const(obj)))
+}
+
+/// An already-compiled validator, composed into the schema being built: its
+/// pooled constants interned (so a constant shared by identity with one already
+/// present collapses to a single index, which keeps structurally-equal schemas
+/// equal across a merge), its definitions appended, and its schema's indices
+/// remapped.
+fn compose(py: Python<'_>, inner: &Validator, lits: &mut Pool, defs: &mut Vec<Schema>) -> Schema {
+    // Keys a relation already read for this validator are read again from the
+    // cache rather than from the interpreter; composing validators reads them
+    // fresh and caches nothing.
+    let lit_map: Vec<usize> = match inner.keys.get(py) {
+        Some(keys) => inner
+            .literals
+            .iter()
+            .zip(&keys.keys)
+            .map(|(o, key)| lits.intern_keyed(o.bind(py), key.clone()))
+            .collect(),
+        None => inner
+            .literals
+            .iter()
+            .map(|o| lits.intern(o.bind(py)))
+            .collect(),
+    };
+    let offset = DefShift::new(place_definitions(&inner.definitions, &lit_map, defs));
+    inner.schema.reindexed(&lit_map, offset)
 }
 
 /// An object [`build_schema`] has no other reading for: a literal of itself,
@@ -848,6 +880,13 @@ impl Pool {
         self.items.push(obj.clone().unbind());
         self.index.insert(key, index);
         index
+    }
+
+    /// Make room for `additional` constants, so a wide `Literal` is one
+    /// allocation of the index rather than a rehash per doubling.
+    pub(crate) fn reserve(&mut self, additional: usize) {
+        self.items.reserve(additional);
+        self.index.reserve(additional);
     }
 
     /// Pool `obj` as the constant of a typed singleton.
