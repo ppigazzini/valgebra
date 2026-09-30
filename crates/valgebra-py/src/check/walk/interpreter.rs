@@ -4495,3 +4495,83 @@ fn the_constant_itself_is_its_literal() {
         ));
     });
 }
+
+/// A tuple whose every position is a scalar is read as a type test a position
+/// where a level is free under it, and nowhere else: not in an explaining walk,
+/// not at the bound, not where a position or the tail holds a container. Its
+/// verdict is the walk's, for a fixed tuple and for a prefix before a tail.
+#[test]
+fn a_tuple_of_scalar_positions_is_read_as_its_tests() {
+    use super::sequence::scalar_positions_tuple_matches;
+    Python::attach(|py| {
+        let index = build_index(py, &Schema::Int, &[], &[]);
+        let state = WalkState::new();
+        let ctx = |mode| Ctx {
+            pool: &[],
+            defs: &[],
+            records: &index.records,
+            attrs: &index.attrs,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
+            mode,
+        };
+        let eval = |source: &str| {
+            py.eval(&std::ffi::CString::new(source).expect("no nul"), None, None)
+                .expect("the value evaluates")
+        };
+        let fixed = [Schema::Int, Schema::Str, Schema::Float];
+        let tuple = Schema::tuple(SeqShape::fixed(fixed.clone()));
+        case(py, &tuple, &eval("(1, 'a', 1.5)"), true);
+        case(py, &tuple, &eval("(True, 'a', 1.5)"), true);
+        case(py, &tuple, &eval("(1, 'a', 'x')"), false);
+        case(py, &tuple, &eval("(1, 'a')"), false);
+        let headed = Schema::tuple(SeqShape::prefix_tail([Schema::Str], Schema::Int));
+        case(py, &headed, &eval("('a', 1, 2)"), true);
+        case(py, &headed, &eval("('a',)"), true);
+        case(py, &headed, &eval("('a', 1, 'x')"), false);
+
+        let read = |source: &str, prefix: &[Schema], tail: Option<&Schema>, mode| {
+            let value = eval(source);
+            let tuple = value.cast::<PyTuple>().expect("a tuple");
+            scalar_positions_tuple_matches(tuple, prefix, tail, ctx(mode))
+        };
+        assert_eq!(
+            read("(1, 'a', 1.5)", &fixed, None, WalkMode::Fast),
+            Some(true)
+        );
+        assert_eq!(
+            read("(1, 'a', 'x')", &fixed, None, WalkMode::Fast),
+            Some(false)
+        );
+        assert_eq!(read("(1, 'a', 1.5)", &fixed, None, WalkMode::Explain), None);
+        let tail = Schema::Int;
+        let head = [Schema::Str];
+        assert_eq!(
+            read("('a', 1, 2)", &head, Some(&tail), WalkMode::Fast),
+            Some(true)
+        );
+        assert_eq!(
+            read("('a', 1, 'x')", &head, Some(&tail), WalkMode::Fast),
+            Some(false)
+        );
+        let of_ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let holding = [Schema::Int, of_ints.clone()];
+        assert_eq!(read("(1, [2])", &holding, None, WalkMode::Fast), None);
+        assert_eq!(
+            read("('a', [1])", &head, Some(&of_ints), WalkMode::Fast),
+            None
+        );
+        state.depth.set(MAX_WALK_DEPTH - 1);
+        assert_eq!(
+            read("(1, 'a', 1.5)", &fixed, None, WalkMode::Fast),
+            Some(true)
+        );
+        state.depth.set(MAX_WALK_DEPTH);
+        assert_eq!(read("(1, 'a', 1.5)", &fixed, None, WalkMode::Fast), None);
+        state.depth.set(0);
+    });
+}

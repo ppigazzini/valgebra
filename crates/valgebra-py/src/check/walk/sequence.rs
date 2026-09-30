@@ -388,6 +388,9 @@ fn tuple_matches(
     {
         return ok;
     }
+    if let Some(ok) = scalar_positions_tuple_matches(tuple, prefix, tail, ctx) {
+        return ok;
+    }
     let mut ok = true;
     for (i, item) in tuple.iter_borrowed().enumerate() {
         ok &= seq_element(prefix, tail, i, &Value::Py(&item), frame);
@@ -415,6 +418,45 @@ pub(super) fn scalar_union_tuple_matches(
             .iter_borrowed()
             .all(|item| scalar_union_admits(members, &Value::Py(&item))),
     )
+}
+
+/// Membership for a tuple whose every position is a scalar --
+/// `tuple[int, str, float]`, a `NamedTuple` of builtin fields -- where the walk
+/// of it needs no path, and `None` elsewhere.
+///
+/// The fixed-arity twin of the homogeneous reading: each position is one type
+/// test, and the walk around it -- a level, the fatal-signal flag, the dispatch
+/// -- is paid once for the tuple rather than once a position. The arity is
+/// already admitted, so a position past the prefix is the tail's, and a tail
+/// that is not a scalar declines, as a prefix position that is not one does.
+/// The level is read as [`homogeneous_scalar`] reads it, and for the same
+/// reason: the walk would refuse each element where none is free.
+///
+/// Out of line, and asked of every tuple the two readings above decline: a
+/// tuple holding a record pays a call and a type test of its first position.
+#[inline(never)]
+pub(super) fn scalar_positions_tuple_matches(
+    tuple: &Bound<'_, PyTuple>,
+    prefix: &[Schema],
+    tail: Option<&Schema>,
+    ctx: Ctx<'_>,
+) -> Option<bool> {
+    if ctx.mode.explains() || !ctx.room_to_descend() {
+        return None;
+    }
+    if !prefix.iter().all(|schema| scalar_of(schema).is_some()) {
+        return None;
+    }
+    let repeated = match tail {
+        Some(schema) => Some(scalar_of(schema)?),
+        None => None,
+    };
+    Some(tuple.iter_borrowed().enumerate().all(|(at, item)| {
+        prefix
+            .get(at)
+            .map_or(repeated, scalar_of)
+            .is_some_and(|kind| scalar_admits(kind, &Value::Py(&item)))
+    }))
 }
 
 /// Whether `PyPy`'s C accessors read this tuple's storage, so the walk can read

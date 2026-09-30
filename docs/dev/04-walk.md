@@ -343,7 +343,7 @@ carries that reading as a recorded step against the base it steps from.
 
 The walk reaches a scalar through `member`, which takes a level, reads the
 fatal-signal flag and dispatches, all around the one type test the schema is.
-Three positions ask that question often enough for the frame around it to be
+Four positions ask that question often enough for the frame around it to be
 most of what they cost, and each asks the test directly:
 
 - **A union's branch.** `int | str | None` tries its branches in order, and a
@@ -357,6 +357,10 @@ most of what they cost, and each asks the test directly:
 - **A mapping's clause.** `dict[str, int]` reads both halves of each entry as
   type tests in `covered`, and reads no key as a field name, since a mapping
   declares none: 37% fewer instructions on a thousand entries.
+- **A tuple whose every position is a scalar.** `tuple[int, str, float]`, and a
+  `NamedTuple` of builtin fields, is a type test a position
+  (`scalar_positions_tuple_matches`): a thousand such tuples cost 37% fewer
+  instructions.
 
 The two readings agree because the fast walk answers a scalar as three
 questions: whether a level is free under it, whether a fatal signal has been
