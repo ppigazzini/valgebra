@@ -34,8 +34,9 @@ Apple silicon) and Windows x64 for every supported CPython, 3.10 through 3.15,
 Windows arm64 from 3.12, and free-threaded CPython 3.14 and 3.15 on Linux, macOS
 and Windows x64. musllinux (x86_64 and aarch64) gets a wheel for each
 interpreter its build image carries: in 0.0.14, CPython 3.10 through 3.14 and
-3.14t. Free-threaded support starts at 3.14t; the
-earlier 3.13 free-threaded build is not a target.
+3.14t, the set `UNNAMED` in `tests/test_release_matrix.py` records for each
+musllinux row. Free-threaded support starts at 3.14t; the earlier 3.13
+free-threaded build is not a target.
 
 **PyPy 3.11 is a target, on Linux.** Wheels are published for PyPy 7.3 and
 for PyPy 8.0 on manylinux x86_64 and aarch64 — two, because PyPy 8.0 changed
@@ -51,11 +52,13 @@ wheels are plain release builds, where the CPython wheels are profile-guided:
 a profiled extension runs out of the native stack budget `cpyext` sizes from
 the recursion limit before the walk reaches its own depth bound, and the
 process dies where the plain build reports the bound. The release runs the
-product suite on every wheel it ships but the musllinux ones -- each PyPy wheel
-on the PyPy it is built for, not only on the one the push lane builds -- and
-the musllinux wheels are built and never run
-([dev/09-releasing.md](dev/09-releasing.md)). There is no PyPy wheel for macOS
-or Windows, where the source distribution is the install.
+product suite on every wheel set it ships but the musllinux ones, on each set's
+floor, newest and free-threaded interpreters -- the `smoke` matrix in
+`.github/workflows/release.yml` names them -- and each PyPy wheel on the PyPy it
+is built for, not only on the one the push lane builds; the musllinux wheels
+are built and never run ([dev/09-releasing.md](dev/09-releasing.md)). There is
+no PyPy wheel for macOS or Windows, where the source distribution is the
+install.
 
 One promise this page makes holds differently there. A validator releases the
 classes, enums and predicates its schema names when nothing else holds them, and
@@ -91,7 +94,7 @@ Building from source additionally requires:
 ```bash
 git clone https://github.com/ppigazzini/valgebra && cd valgebra
 uv sync                 # create .venv and install the dev dependencies
-uv run maturin develop  # build the Rust extension into the venv
+uv run --no-sync maturin develop --uv  # build the Rust extension into the venv
 ```
 
 ## Verify it works

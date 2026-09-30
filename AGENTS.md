@@ -59,7 +59,9 @@ Stable Rust (edition 2024, MSRV 1.88) and `uv` must be on PATH.
 
 A change is not done until every command exits 0. Trust exit codes, not log
 text — a process can print progress and then fail. If a gate cannot run, say so
-and list what was checked instead.
+and list what was checked instead. The list is the one `CONTRIBUTING.md`
+carries under [The gate](CONTRIBUTING.md#the-gate), which owns it: a command
+added there belongs here in the same change.
 
 ```bash
 cargo fmt --check
@@ -70,6 +72,8 @@ cargo clippy --all-targets --all-features -- -D warnings
 export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
 export LD_LIBRARY_PATH="$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):${LD_LIBRARY_PATH:-}"
 cargo test
+cargo check --manifest-path fuzz/Cargo.toml --all-targets
+uv run --no-sync python scripts/docs_lint.py
 uv run --no-sync maturin develop --uv   # after any Rust change
 uv run --no-sync ruff check . && uv run --no-sync ruff format --check .
 uv run --no-sync ty check

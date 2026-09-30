@@ -1,4 +1,4 @@
-//! What a parametrized form says: dispatch step 6, the typing spec's
+//! What a parametrized form says: dispatch step 8, the typing spec's
 //! introspection, and the two native literals that spell what it cannot.
 //!
 //! The origin is read before the arguments and compared by identity against the

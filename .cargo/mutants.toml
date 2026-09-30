@@ -6,13 +6,14 @@
 # The walk is where membership is decided, the frontend is where an annotation
 # becomes the set it denotes, and equality is where two schemas are judged one,
 # so those are the binding's files whose arms are worth a mutation number rather
-# than a line count. The frontend is four files -- the dispatch and the three
+# than a line count. The frontend is five files -- the dispatch, the three
 # surfaces beside it, `build/refine.rs`, `build/classes.rs` and
-# `build/generics.rs` -- and all of them are reachable from `cargo test` because
-# the `interpreter-tests` feature links an embedded Python and each carries its
-# own corpus: `check/walk.rs` drives real values through `member`, and the
-# frontend drives real annotations through `build_schema` and compares the
-# render. The sweep is run with that feature (see the workflow) or every
+# `build/generics.rs`, and the regex dialect refusals in `build/dialect.rs` --
+# and all of them are reachable from `cargo test`: the `interpreter-tests`
+# feature links an embedded Python, `check/walk.rs` drives real values through
+# `member`, the frontend drives real annotations through `build_schema` and
+# compares the render, and `build/dialect.rs` carries tests of its own over the
+# pattern text. The sweep is run with that feature (see the workflow) or every
 # mutant reads as unviable.
 #
 # The sweep's verdict is the *embedded interpreter's*, and `ci.yml` pins CPython

@@ -20,8 +20,9 @@ Two harnesses, one per side of the boundary:
 
 - **Core micro-benchmarks** (`crates/valgebra-core/benches/core.rs`, criterion)
   time the pure-Rust schema transformations — the simplifier, the index remap
-  behind validator composition, and the recursive open/closed record transform.
-  No Python is involved.
+  behind validator composition, and the recursive open/closed record transform —
+  and the relations, a rule's answer (`subtype_*`, `is_empty_*`) beside the set
+  representation's (`lower_*`). No Python is involved.
 - **End-to-end benchmarks** (`benches/`, pytest-benchmark) time a single
   boundary-crossing validation call through the public API, over synthetic
   shapes that each stress one cost dimension.
@@ -32,14 +33,17 @@ Run them with:
 # Core micro-benchmarks (Rust):
 cargo bench --bench core
 
-# End-to-end and comparison benchmarks (Python); install the bench group first:
-uv sync --group bench
+# End-to-end and comparison benchmarks (Python); install the bench group first,
+# without the project, which the wheel below provides:
+uv sync --locked --no-install-project --group bench
 # To match the published figures, build the same PGO wheel the release ships
-# (needs the llvm-tools rustup component) and install it; a plain build is slower:
-uv run --group bench maturin build --release --pgo --out dist
-uv pip install --reinstall --no-deps dist/*.whl
-uv run --group bench pytest benches/bench_validate.py
-uv run --group bench pytest benches/bench_compare.py --benchmark-group-by=group
+# (needs the llvm-tools rustup component) and install it; a plain build is slower.
+# Every `uv run` from here on takes --no-sync: a sync reinstalls the project over
+# the wheel, and the run then times a different build from the one installed.
+uv run --no-sync --group bench maturin build --release --pgo --out dist
+uv pip install --no-deps --reinstall dist/*.whl
+uv run --no-sync --group bench pytest benches/bench_validate.py
+uv run --no-sync --group bench pytest benches/bench_compare.py --benchmark-group-by=group
 ```
 
 ## Comparison is not apples-to-apples
@@ -82,22 +86,21 @@ current one.
 check you are on it. The native tuning is the flag that matters when reproducing
 these numbers: a stock distribution interpreter is a different binary, and so is
 the one `uv sync` provisions for this repository, which is a
-python-build-standalone image rather than a source build. Point the bench run at
-the interpreter you mean --
+python-build-standalone image rather than a source build. Point the bench
+environment at the interpreter you mean -- the sync rebuilds `.venv` on it --
 
 ```bash
-uv run --python /path/to/that/python --group bench python scripts/compare_gate.py
+uv sync --locked --no-install-project --group bench --python /path/to/that/python
+uv run --no-sync --group bench maturin build --release --pgo --out dist
+uv pip install --no-deps --reinstall dist/*.whl
+uv run --no-sync --group bench python scripts/compare_gate.py
 ```
 
 -- because a figure measured against another binary is not comparable with a
 figure here.
 
 The extension is the **PGO** release build — the profile-guided, fat-LTO wheel
-the release ships:
-
-```bash
-uv run maturin build --release --pgo -i .venv/bin/python
-```
+the release ships, which the `maturin build --release --pgo` step above builds.
 
 pydantic's PyPI wheels are likewise PGO-built, so this is a release-to-release
 comparison.
@@ -110,20 +113,28 @@ slow. `scripts/compare_gate.py` refuses such a build outright, and so does
 to protect it.
 
 **Whether to add PGO is a question about your shapes**, not a setting to turn
-on. Build both and time the shapes you run:
+on. Build both, install each in turn, and time the shapes you run on it -- the
+sequence the `pgo compare` lane in `.github/workflows/ci.yml` runs:
 
 ```bash
-uv run maturin build --release --pgo -i .venv/bin/python --out profiled
-uv run maturin build --release       -i .venv/bin/python --out plain
-uv run --group bench python scripts/pgo_compare.py --record plain.json --label plain
-uv run --group bench python scripts/pgo_compare.py --record pgo.json --label pgo
-uv run --group bench python scripts/pgo_compare.py --compare plain.json pgo.json
+uv sync --locked --no-install-project --group bench
+uv run --no-sync --group bench maturin build --release --out plain
+uv run --no-sync --group bench maturin build --release --pgo --out profiled
+uv pip install --no-deps --reinstall plain/*.whl
+uv run --no-sync --group bench python scripts/pgo_compare.py \
+  --record plain.json --label plain
+uv pip install --no-deps --reinstall profiled/*.whl
+uv run --no-sync --group bench python scripts/pgo_compare.py \
+  --record profiled.json --label pgo
+uv run --no-sync --group bench python scripts/pgo_compare.py \
+  --compare plain.json profiled.json
 ```
 
-That script times the seven shapes the competitive gate judges, so the two
-tables speak of the same workloads. It refuses a reading from a debug build and
-refuses to compare two readings from different interpreters, because a ratio
-between builds cancels the machine and not the interpreter.
+That script times every shape the competitive gate judges -- it reads them from
+`scripts/compare_gate.py` -- so the two tables speak of the same workloads. It
+refuses a reading from a debug build and refuses to compare two readings from
+different interpreters, because a ratio between builds cancels the machine and
+not the interpreter.
 
 Measured that way on one box, best of nine and repeated three times, the
 direction is not one way. A `list[int]` of ten thousand comes out ahead by about
@@ -156,22 +167,21 @@ what that workload spends its time on is what the layout is arranged for. A
 change to it is measured on both sides of the comparison above, since a profile
 re-weighted toward one shape is a profile taken away from another.
 
-**A loop the profile holds no counts for is laid out by chance.** Every list
-the workload read was homogeneous, and a homogeneous list takes a loop of its
-own, so the profile held no counts for the general scan that every list of
-records and every nested list is read through. Whether that scan stayed inside
-the recursive walk was then the inliner's guess, and a change to the list
-arm's code turned it: the comparison gate's list nested twenty-five deep took
-64% longer in the PGO wheel, 245 ns against 405 on one box, while the
-instruction gate, which builds without a profile, read 0.9%. The workload
-reads a list of records and a list nested twenty-five deep, and that shape
-reads 0.14 of pydantic-core's time again, where it read 0.16 before the change
-and 0.28 after it.
+**A loop the profile holds no counts for is laid out by chance.** A homogeneous
+list takes a loop of its own, so a workload reading only homogeneous lists holds
+no counts for the general scan every list of records and every nested list is
+read through, and whether that scan stays inside the recursive walk is the
+inliner's guess. A change to the list arm's code can turn it: untrained on the
+scan, the comparison gate's list nested twenty-five deep takes 64% longer in the
+PGO wheel, 405 ns against 245 on one box, while the instruction gate, which
+builds without a profile, reads 0.9%. So the workload reads a list of records
+and a list nested twenty-five deep, and trained on them that shape reads 0.14 of
+pydantic-core's time.
 
 The same holds for a reader the workload never enters: the lists a reader of
 their own settles -- a union of literals, one class, a union of scalars -- sit
 beside the general scan, and untrained, the readers for literals and classes
-moved the PGO wheel's walk of a nested list by 6% in instructions. The workload
+move the PGO wheel's walk of a nested list by 6% in instructions. The workload
 reads a list of each kind, which takes that to 3%.
 
 **What the matrix does with the reading.** `--pgo` ships on five targets, and
@@ -209,17 +219,18 @@ their keep elsewhere, not by regressing the core.
 Each cell is the **median of five independent runs** of the comparison
 benchmark, each run reporting pytest-benchmark's own median over its rounds. The
 `+/-` is the half-range across the five runs, not a standard deviation: it states
-the observed spread rather than modelling one.
+the observed spread rather than modelling one. With the release wheel installed
+as above:
 
 ```bash
-uv run --group bench pytest benches/bench_compare.py --benchmark-json=run.json
+uv run --no-sync --group bench pytest benches/bench_compare.py --benchmark-json=run.json
 ```
 
 The **ratios** have their own gate, which measures only valgebra against
 pydantic and takes the minimum over many repeats rather than a median:
 
 ```bash
-uv run --group bench python scripts/compare_gate.py
+uv run --no-sync --group bench python scripts/compare_gate.py
 ```
 
 That script owns the per-shape ratio **ceilings** (`scripts/perf_compare.json`)
@@ -283,23 +294,28 @@ and again when it drops — and the free-threaded build takes the list's lock fo
 each one besides. A schema nested twenty-five deep is twenty-five containers of
 one element, so it is almost nothing but that cost, and it reads two and a half
 times dearer there than under a global lock. A flat array of ten thousand is
-read through a snapshot of the list instead, which pays the counts in two loops
-inside the interpreter and none in the walk, and it carries across all three.
+read through a snapshot of the list under 3.12 and the free-threaded build,
+which pays the counts in two loops inside the interpreter and none in the walk;
+CPython 3.14 with its global lock makes the counts cheap enough that the walk
+reads the list in place (`snapshot_pays` in
+`crates/valgebra-py/src/check/walk/sequence.rs`). The margin carries across all
+three.
 
 That is why the ceiling file holds a second set for the free-threaded build:
 what the project claims of that build is what that build can hold.
 
-### The two shapes this page did not show
+### The closest races
 
-The table above is the four shapes valgebra wins by a wide margin, and the
-competitive gate measures seven. The two it leaves out are the two closest, and
-leaving them out made the page a selection rather than a record. As the fraction
-of pydantic-core's time each takes, on a PGO CPython 3.12 build:
+The table above holds four of the shapes the competitive gate judges;
+`scripts/perf_compare.json` names every one with the ceiling the project claims
+for it, and `scripts/compare_gate.py` prints each beside its ceiling. A record of
+only the wide margins would be a selection, so here are the two closest, as the
+fraction of pydantic-core's time each takes, on a PGO CPython 3.12 build:
 
-| Shape | ratio | spread across runs | ceiling |
-| --- | --- | --- | --- |
-| JSON document, 200 records parsed and checked | 0.70 | 0.057 over twelve runs | 1.00 |
-| Error report, 50-field record with one wrong field | 0.86 to 1.19 | 0.33 over five runs | 1.60 |
+| Shape | ratio | spread across runs |
+| --- | --- | --- |
+| JSON document, 200 records parsed and checked | 0.70 | 0.057 over twelve runs |
+| Error report, 50-field record with one wrong field | 0.86 to 1.19 | 0.33 over five runs |
 
 The JSON document is a single pass over bytes for both libraries, which is why
 the margin is a third rather than a factor: neither is spending its time in the
@@ -323,8 +339,7 @@ the deciding walk stopped, since a field that matched has no violation to report
 ([dev/04-walk.md](dev/04-walk.md)). Resuming rather than restarting is worth
 36.8% of that walk on the instruction gate, which
 `scripts/perf_gate.py --binding-explain` measures. What is left of the gap is
-one extra walk of
-the fields *after* the failure, and the exception.
+one extra walk of the fields *after* the failure, and the exception.
 
 **What a closed record costs is the interpreter's own dict lookup.** Profiled
 under callgrind on CPython 3.12, fifty probes of a fifty-field record are about
@@ -385,23 +400,29 @@ recorded above; the probe is the floor for this shape and the walk is at it.
 
 The keys a validator probes with are interned once when it is first used, so a
 wide record rebuilds no name map per call, and a dict whose own keys are interned
-settles each field on a pointer comparison. Where the record is **open** — a
-clause covers the keys it does not declare — the entries are scanned instead,
-because the clause has to see each one. The two readings answer alike by
-construction: neither resolves a key by decoding its bytes, so a `str` subclass
-carrying a field's text is found exactly where the dict finds it
+settles each field on a pointer comparison. The keys settle a record whenever
+what its clauses say about a key it does not declare can be said without that
+key's value: a record with no clause refuses the key, the top clause admits it,
+and the `str: anything` a `TypedDict` carries admits it exactly when it is a
+`str` (`Undeclared::of` in `crates/valgebra-py/src/check/walk/record.rs`). Where
+a clause reads an undeclared key together with its value, the entries are
+scanned instead, because that clause has to see each one. The two readings
+answer alike by construction: neither resolves a key by decoding its bytes, so a
+`str` subclass carrying a field's text is found exactly where the dict finds it
 ([dev/04-walk.md](dev/04-walk.md)).
 
 A **report** on that record -- one field wrong, explained, raised -- costs about
 three accepting walks, and the count attributes the three. Two are the walks:
 the fast pass, which stops at the field that fails, and the explaining pass,
-which reads every field so the report names all of them, a hundred dict probes
-between them. The third is the raise itself, which the interpreter charges for
-building the exception and unwinding to the caller. Nothing in the three is a
-walk over what the schema already knows, so a further cut would be a cheaper
-report rather than a shorter walk. The same count reaches a shape the wall clock
-does not: an open record read by a scan costs a third more than the closed one
-beside it, which is why both are budgeted.
+which resumes there and reads every field after it so the report names all of
+them, fifty-one dict probes between them. The third is the raise itself, which
+the interpreter charges for building the exception and unwinding to the caller.
+Nothing in the three is a walk over what the schema already knows, so a further
+cut would be a cheaper report rather than a shorter walk. The same count reaches
+a shape the wall clock does not: the same fifty fields under the clause a
+`TypedDict` carries, which the walk reads by its keys as it reads the closed
+record. A shape of its own is what would see that record fall back to the scan,
+which is why both are budgeted in `scripts/perf_budget.json`.
 
 ## How large literal unions dispatch
 
@@ -454,39 +475,40 @@ pair again reads neither pool. Relating two tables of ten thousand codes costs
 reading the keys afresh for each question costs 15.0 million.
 
 There is no gate on this, and that is deliberate: the instruction budgets cover
-the three decision workloads -- the relations that hold, the ones a rule
-refutes, and the ones whose goals repeat, which `crates/valgebra-core/examples/`
-holds and which are what a change to the rules moves. A relation's wall-clock cost is a property of the
-pair, and pinning one would be pinning a number the next rule changes.
+the decision workloads `crates/valgebra-core/examples/` holds -- one for each
+path a relation takes, which `MODES` in `scripts/perf_gate.py` names -- and those
+are what a change to the rules moves. A relation's wall-clock cost is a property
+of the pair, and pinning one would be pinning a number the next rule changes.
 
 ## Regression gate
 
 The wall-clock numbers above are for humans reading results; they are too noisy
 on shared CI runners to gate a merge. The merge gate is instead a deterministic
-instruction count: fixed workloads run under cachegrind, and each
-executed-instruction count is compared against a committed budget
-(`scripts/perf_budget.json`) by `scripts/perf_gate.py`. The count is identical
-across runs of a given build, so a regression past the budget ceiling fails the
-build without flaking. The tolerance absorbs cross-environment startup and
-compiler-codegen drift while still catching algorithmic regressions, which are
-far larger than the tolerance.
+instruction count: `scripts/perf_gate.py --against` runs each fixed workload
+under cachegrind at the change and at its merge base, in one job with one
+toolchain, and fails on a rise past the band it allows a change. The count is
+identical across runs of a given build, so the gate does not flake, and
+measuring both sides in one job cancels what another machine or another
+toolchain would add, while an algorithmic regression is far larger than the
+band. The committed budgets in `scripts/perf_budget.json` are read on the
+nightly, as a record of one environment rather than as a merge gate: the same
+commit re-measures several percent away on another machine.
 
 The gate holds one workload per surface, because a gate only catches what it
 exercises. `crates/valgebra-core/examples/` holds the pure-Rust ones: the schema
-transformations (`perf_workload`), and three over the decision procedures -- the
-relations that hold, the relations that are refuted, and the relations whose
-goals repeat, since a proof, a refutation and a repeated goal walk three
-different paths and a workload that asks only one of them measures only that
-one. The binding's shapes are the membership walk over a live value, the call
-boundary alone, a wide record closed and the same record open the way a
-`TypedDict` is, the same record walked over interned keys, building a validator
-from its Python spelling, compiling one written as a `TypedDict` of refined
-integers, compiling a fifty-field dataclass, walking a `NamedTuple` against a
-tuple schema, and explaining a failure
-(`crates/valgebra-py/examples/binding_workload.rs`): the walk is the shipped
-hot path neither pure-Rust workload reaches, and construction and the open
-record are each a cost no other shape's count carries. A surface with no shape
-of its own can move by percents a release at a time with every gate green.
+transformations (`perf_workload`), and the decision procedures, one workload for
+each path a relation takes -- a proof, a refutation, a repeated goal and a shape
+only the structural readings decide each walk a different path, and a workload
+that asks only one of them measures only that one. The binding's shapes are
+`BindingShape` in `crates/valgebra-py/src/workload.rs`, run by
+`crates/valgebra-py/examples/binding_workload.rs`, and `BINDING_SHAPES` in
+`scripts/perf_gate.py` names every one the gate measures: the membership walk
+over a live value, the call boundary, the record walks closed, open and over
+interned keys, the builds, the JSON document and the explaining walk among
+them. The walk is the shipped hot path neither pure-Rust workload reaches, and
+construction and the open record are each a cost no other shape's count
+carries. A surface with no shape of its own can move by percents a release at a
+time with every gate green.
 
 Each binding shape embeds CPython, whose startup is not a fixed count, so the
 gate measures the difference between two iteration counts. **What a shape's loop
@@ -505,16 +527,16 @@ on CPython 3.14 and 45 on 3.12, on the machine class above. Compilation happens
 once per schema, so this is a startup figure rather than a per-call one -- it
 matters to a program that builds validators per request, and to nothing else.
 
-**A `NamedTuple` validates at about what a tuple does.** The walk cannot trust
-the C length accessor for a `tuple` subclass — PyPy's `cpyext` answers it
-through the object's own `__len__`, so a subclass that overrides it can send the
-walk past the end of its storage — but it can trust the accessor for a subclass
-that *inherits* the base's slot, which is every `NamedTuple`. Telling the two
-apart costs one type lookup per validation: on CPython 3.14 a three-field
-`NamedTuple` reads **69 ns against the 57 a plain tuple takes**, and with a
-length bound 77 against 58. The safe alternative that does not tell them apart
--- reading every `tuple` subclass through its own `__len__` -- reads 100 and
-117 on the same shapes, which is what the type lookup buys.
+**A `NamedTuple` validates at what a tuple does on CPython.** CPython's
+`PyTuple_GET_SIZE` and `PyTuple_GET_ITEM` read a tuple's storage whatever its
+type overrides, so the walk reads every tuple, subclass or not, where it lies
+and asks its type nothing. PyPy's `cpyext` answers those accessors through a
+subclass's own `__len__` and `__iter__`, so a subclass that overrides either can
+send the walk past the end of its storage; there the walk asks the type whether
+it inherits both -- every `NamedTuple` does -- and copies any subclass that does
+not ([dev/04-walk.md](dev/04-walk.md)). A length bound asks the type whether its
+`__len__` is the tuple's own on every interpreter, since it counts what the
+value holds rather than what an override answers.
 
 **Interned keys are the fast path, and Python interns most of them for you.** A
 validator holds an interned `str` for every declared field, and a dict probe
@@ -542,12 +564,14 @@ as a smoke test that they keep working.
 The headline claim — that valgebra is pydantic-core-class — is gated too, by
 `scripts/compare_gate.py`. For each shape in a matrix it measures the *ratio* of
 per-call time (valgebra over pydantic-core), taking the minimum over many repeats,
-and compares each ratio against a recorded baseline (`scripts/perf_compare.json`)
-with a tolerance. A ratio cancels the runner's absolute speed: if the machine is
-slow, both libraries are slow in proportion, so the comparison survives the
-shared-runner noise an absolute budget cannot. A shape fails the merge gate when
-valgebra's ratio rises materially past its baseline — a competitive regression,
-whether from valgebra slowing down or ceding ground.
+and holds it under the ceiling `scripts/perf_compare.json` states for that shape
+-- what the project claims, not what it measured -- and, where the file carries
+a ratio recorded in the same environment, within that shape's tolerance of it. A
+ratio cancels the runner's absolute speed: if the machine is slow, both
+libraries are slow in proportion, so the comparison survives the shared-runner
+noise an absolute budget cannot. A shape fails the merge gate when valgebra's
+ratio crosses its ceiling, or drifts past its recorded ratio where one is armed
+— a competitive regression, whether from valgebra slowing down or ceding ground.
 
 Re-record the budgets after an intentional change with:
 

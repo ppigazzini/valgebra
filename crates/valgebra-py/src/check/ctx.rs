@@ -32,13 +32,16 @@ pub(crate) struct Ctx<'a> {
     /// `PyString` per attribute per value.
     pub(crate) attrs: &'a AttrsIndex,
     /// Per-union value sets for unions whose members are all literals, keyed by
-    /// the address of the union's members buffer. The membership fast path
-    /// dispatches an exact int or str value through it instead of scanning every
-    /// branch; any other case (an explain walk, a non-literal union, a value of
-    /// another type, a JSON value) falls back to the linear scan.
+    /// the address of the union's members buffer. It answers only for an exact
+    /// int or str value: the deciding walk takes its answer either way instead
+    /// of scanning every branch, and the explaining walk takes only its yes, for
+    /// the elements of a list of the union, and walks every other element. Any
+    /// other case (a non-literal union, a value of another type, a JSON value)
+    /// falls back to the linear scan.
     pub(crate) unions: &'a UnionIndex,
-    /// Compiled string patterns, keyed by source pattern; the refinement walk
-    /// reads it for a `Regex(...)` constraint instead of recompiling.
+    /// Compiled string patterns, keyed by the address of the pattern's own
+    /// text in the schema; the refinement walk reads it for a `Regex(...)`
+    /// constraint instead of recompiling.
     pub(crate) regexes: &'a RegexIndex,
     pub(crate) guard: &'a RefCell<Trail>,
     /// How many walk levels are open below the entry point. Each level is a

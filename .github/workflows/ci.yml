@@ -1902,7 +1902,7 @@ jobs:
           libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           export LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}"
           set +e
-          # The same seven files the push lane sweeps, because this is where
+          # The same files the push lane sweeps, because this is where
           # their baseline comes from: a file the ratchet judges and the
           # baseline never saw has every survivor in it read as new, on
           # whichever unrelated change next touches the area.

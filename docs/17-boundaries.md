@@ -40,9 +40,11 @@ The check is a decision about a value at one moment. A value that is mutated
 afterwards is not re-checked, and nothing is frozen: validating a list says the
 list's elements belonged to the set when they were read.
 
-An observable consequence: a container that changes *during* a walk is reported
-rather than silently half-checked ([error model](08-error-model.md)), because
-the alternative is an answer about a value that never existed.
+An observable consequence: a container whose size changes while the walk is
+reading it is reported rather than silently half-checked, because the
+alternative is an answer about a value that never existed. A change that keeps
+the size is not seen, and the answer is about what the walk read
+([error model](08-error-model.md)).
 
 ## It cannot look inside a callable
 
@@ -85,14 +87,18 @@ one is choosing expressiveness over decidability.
 
 The same holds of a class whose metaclass answers `isinstance` by running code:
 what it admits is not a set that stands still, so the complement laws are not
-applied to it.
+applied to it. Telling such a class from a plain one needs the class object,
+which construction does not consult, so construction declines the two folds for
+every class (`denotes_a_set_within` in `crates/valgebra-core/src/oracle.rs`): a
+plain class's meet with its complement keeps its spelling, and `is_empty`
+decides it empty.
 
-That is why `A & ~A` is not folded to `nothing` when `A` carries a predicate,
-and `A | ~A` not to the top. The laws are about sets — a value is in `A` or it
-is not, once — and the two occurrences of `A` there are two calls. A predicate
-that does not answer from the value alone answers them differently, and a value
-then really is admitted by the meet. The fold would be a claim the schema
-contradicts, so it is refused rather than approximated; a `Regex` folds,
+That is why `A & ~A` is not folded to `nothing` when `A` carries a predicate or
+a class, and `A | ~A` not to the top. The laws are about sets — a value is in
+`A` or it is not, once — and the two occurrences of `A` there are two calls. A
+predicate that does not answer from the value alone answers them differently,
+and a value then really is admitted by the meet. The fold would be a claim the
+schema contradicts, so it is refused rather than approximated; a `Regex` folds,
 because a pattern is a function of the string.
 
 ## Your code runs inside the check, and may call back in
@@ -189,13 +195,13 @@ other side: compiling is cheap, and gated as such — building a fifty-field
 record from its Python spelling is one of the shapes
 `scripts/perf_gate.py --binding-build` holds to an instruction count, and
 `scripts/perf_budget.json` owns the figure. `repr(validator)` gives an
-expression that rebuilds every
-form except three: a class and a predicate, which are objects rather than
-syntax, and a **required record key whose name ends in `?`**, which the dict
-literal cannot spell because every trailing `?` there marks the key optional
-([schema language](03-schema-language.md)). The first two rebuild into
-something that raises; the third rebuilds quietly into the optional key, so a
-schema carrying one is a schema to send as itself rather than as its `repr`.
+expression that rebuilds the schema, except for the forms
+[the API reference](16-api.md#operators-on-a-validator) lists. One of them
+rebuilds quietly: a **required record key whose name ends in `?`**, which the
+dict literal cannot spell because every trailing `?` there marks the key
+optional ([schema language](03-schema-language.md)), so it rebuilds into the
+optional key, and a schema carrying one is a schema to send as itself rather
+than as its `repr`.
 
 ```python
 import pickle

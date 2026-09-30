@@ -12,14 +12,18 @@ a *surface* is a module beside it:
 | `build/refine.rs` | How `Annotated` metadata is read |
 | `build/classes.rs` | What a class declares |
 | `build/generics.rs` | What a parametrized form says |
+| `build/dialect.rs` | Three rejections that belong at compile time (the regex dialect) |
 
 ## How `Annotated` metadata is read
 
-`parse_constraint` reads a marker by **attribute protocol**, never by name: the
-frontend imports `typing`, `types`, `enum`, `collections.abc` and `builtins`,
-and never `annotated_types`. A marker carrying `pattern`, `min_length`,
-`max_length` or `multiple_of` contributes the matching constraint, so any
-library's marker of that shape works.
+`parse_constraint` reads the constraint a marker carries by **attribute
+protocol**, and the frontend never imports `annotated_types`. A marker carrying
+`ge`, `gt`, `le`, `lt`, `min_length`, `max_length`, `multiple_of` or `pattern`
+(with its `flags`) contributes the matching constraint, so any library's marker
+of that shape works; `Probe` in `build/refine.rs` owns the names. The one
+reading by name is the refusal of a vocabulary marker the frontend does not
+check: `is_constraint_vocabulary` compares its type's `__module__` with
+`annotated_types` and its `__name__` with `DocInfo`.
 
 **A class is never read as a marker**, and is settled before any attribute of
 it is read as a value. A marker *class* exposes descriptors where an instance
@@ -47,10 +51,16 @@ The rest are read in this order:
 
 1. a marker that is itself callable — the marker becomes the predicate;
 2. otherwise, a marker carrying a callable `func` — its `.func` becomes the
-   predicate.
+   predicate;
+3. otherwise, a marker that contributed nothing above and carries a true
+   `__is_annotated_types_grouped_metadata__` — each marker it yields is read in
+   turn, to `MAX_GROUPING_DEPTH` levels of grouping;
+4. otherwise, a marker that contributed nothing above and comes from the
+   `annotated_types` vocabulary — refused, since it was written to narrow this
+   schema and ignoring it would admit what it excludes.
 
-Metadata matching neither is ignored, which the typing spec requires of any
-consumer for metadata it does not recognise.
+Metadata matching none of these is ignored, which the typing spec requires of
+any consumer for metadata it does not recognise.
 
 **A question the frontend asks of user code carries a fatal signal out.** A
 marker's attributes, a bound's conversion to a float, a length bound's
@@ -59,9 +69,9 @@ class's protocol and unpacking flags, and the repr a refusal names each read an
 ordinary exception as a documented fallback -- a marker from somewhere else, a
 bound that is not a float or not a length, a flag that is not set, an object
 that is `<unrepresentable>`. `errors::unless_fatal` is that reading, and it
-raises a fatal signal rather than reading it: an interrupted
-`isinstance(bound, Number)` read as a bound with no order, and the build refused
-the marker with a sentence about the wrong cause.
+raises a fatal signal rather than reading it: read as a fallback, an
+interrupted `isinstance(bound, Number)` is a bound with no order, and the build
+refuses the marker with a sentence about the wrong cause.
 
 **A constraint no value of the base can answer is refused where it is
 written.** Reading a length off an `int` raises, and the walk reads a raise as
@@ -81,11 +91,13 @@ tables kept alike.
 protocol asks for is asked by an interned `PyString` the interpreter already
 holds, because text would be decoded into a fresh string and hashed before the
 lookup could begin, once per name per marker. The rule is the whole frontend's
-and not the marker protocol's: the dispatch asks `__metadata__`, `__origin__`,
-`__args__` and `__supertype__` the same way, a class node asks `_is_protocol`
-and `_is_runtime_protocol` the same way, and each is asked *optionally* --
+and not the marker protocol's: the dispatch asks `__metadata__`, `__origin__`
+and `__supertype__` the same way, a class node asks `_is_protocol` and
+`_is_runtime_protocol` the same way, and each is asked *optionally* --
 `getattr_opt` rather than `hasattr` and then `getattr`, which is one lookup
-instead of two and no exception where the answer is no. And a marker carries one or two
+instead of two and no exception where the answer is no. `__args__`, whose
+presence is all the dispatch reads, is asked by `hasattr`, one lookup through
+`PyObject_HasAttrWithError`. And a marker carries one or two
 of the ten names and not the rest, so absence is the common answer, and giving
 it by *raising* costs an exception built, thrown and dropped — four hundred of
 them to compile fifty fields. Which names a marker can carry is a property of
@@ -109,8 +121,9 @@ would leave the schema uninhabited. Every other callable — a function, a lambd
 a bound method, an object with `__call__` — is asked.
 
 No other library in the ecosystem reads a bare callable as a constraint:
-pydantic requires `AfterValidator`, beartype `Is[...]`, msgspec `Meta(...)`, and
-`annotated_types` supplies `Predicate`. The typing spec leaves the choice to the
+pydantic requires `AfterValidator`, beartype `Is[...]`, and `annotated_types`
+supplies `Predicate`; msgspec reads no callable constraint at all, since its
+`Meta` carries none. The typing spec leaves the choice to the
 consumer, so this arm is a deviation rather than a defect — and the class
 exclusion is where the deviation stops being ergonomic and starts being a trap.
 
@@ -125,8 +138,8 @@ Three markers turn on it, and the wrong order is wrong for two:
 | `annotated_types.Predicate(f)` | no | yes | `.func` — the marker raises if called |
 
 `tests/test_refinements.py` holds one row each, because a marker of a shape the
-suite never receives is a defect nothing reports: `Not` inverted every verdict
-under it while the whole suite passed.
+suite never receives is a defect nothing reports: read by its `.func`, `Not`
+inverts every verdict under it, and a suite with no `Not` row passes.
 
 ## The dispatch order is load-bearing
 
@@ -157,25 +170,27 @@ argument is what makes them safe: an exact builtin scalar's type carries no
 `__metadata__` or `__supertype__`, `get_origin` answers `None` for it, and it is
 no container and no special form, so every arm before the fallthrough passed it
 there; a validator has no subclass and matches no arm before its own. Taken
-last, both paid an attribute read, a call into `typing` and a dozen tests first:
-three quarters of compiling a two-thousand-constant `Literal`, and two thirds of
-a `union` of five hundred validators. `an_exact_builtin_scalar_is_its_own_constant`
+last, each pays an attribute read, a call into `typing` and a dozen tests
+first, which measures at three quarters of compiling a two-thousand-constant
+`Literal` and two thirds of a `union` of five hundred validators.
+`an_exact_builtin_scalar_is_its_own_constant`
 holds the first reading to exactly the five types.
 
 **A `typing_extensions` spelling reads as its `typing` one.** Before the release
 that adds a form to `typing`, `typing_extensions` defines it with an object of
 its own, and an identity check against `typing` alone reads it as something
-else: on 3.10 `Never` became a literal of the form object, `Any` a class
-nothing is an instance of, and `Required[int]` an unsupported form, and before
-3.15 a `TypeAliasType` became a literal of the alias. `Extensions` in `build.rs`
-holds those objects, looked up in `sys.modules` once the module has finished
-loading -- a module is in `sys.modules` while its body runs, and a form read
-then would be kept as absent -- and is asked only where a form would otherwise
-be misread: the class fallback
-(`Any`), the literal fallback (`Never`, `TypeAliasType`, and its own
-`_SpecialForm` for `Self` and `LiteralString`), and an origin no other arm reads
-(the three field qualifiers and `Unpack`). A schema naming none of them pays
-nothing for it.
+else: on 3.10 `Never` as a literal of the form object, `Any` as a class
+nothing is an instance of, and `Required[int]` as an unsupported form, and
+before 3.15 a `TypeAliasType` as a literal of the alias. `Extensions` in
+`build.rs` holds those objects, looked up in `sys.modules` once the module has
+finished loading -- a module is in `sys.modules` while its body runs, and a
+form read then would be kept as absent -- and is asked only where a form would
+otherwise be misread: the class fallback (`Any`), the literal fallback
+(`Never`, `TypeAliasType`, its own `TypedDict` and `NamedTuple`, and its
+`_SpecialForm` for `Self` and `LiteralString`), a `TypedDict` field's
+`Required` or `NotRequired` (`qualified_required` in `build/classes.rs`), and
+an origin no other arm reads (the three field qualifiers and `Unpack`). A
+schema naming none of them pays nothing for it.
 
 ## What a class declares
 
@@ -195,8 +210,8 @@ order of the questions, and each is asked of an attribute the runtime fills in:
 4. **A `TypedDict`** declares itself by carrying `__required_keys__`, and
    becomes a keyed map. Its fields are what `get_type_hints` returns, not the
    raw `__annotations__` (see the reading below): under `from __future__ import annotations` those are
-   strings, so a `NotRequired[...]` is invisible to the class's own key sets and
-   every optional key compiled required. A qualifier on the resolved hint wins
+   strings, so a `NotRequired[...]` is invisible to the class's own key sets,
+   which read every such key as required. A qualifier on the resolved hint wins
    over the key sets, and a qualifier may wrap another. The keys it does not
    name are what PEP 728's two attributes say, read off the class:
    `__closed__` shuts them, `__extra_items__` types them, and neither leaves
@@ -212,9 +227,12 @@ order of the questions, and each is asked of an attribute the runtime fills in:
 5. **An enum** is an instance check against the enumeration class.
 6. **A dataclass or a `NamedTuple`** is an instance check *plus* a deep check
    of each declared field, so a value of the right class with a field of the
-   wrong type is not a member. A field the hints do not carry is unannotated —
-   a `collections` namedtuple's are — and the class's own instance check is the
-   whole of it.
+   wrong type is not a member. A dataclass's fields are an attribute record; a
+   named tuple's are the fixed tuple shape of its positions instead
+   (`named_tuple_positions` in `build/classes.rs`), which carries the arity as
+   well as the types. A field the hints do not carry — a `collections`
+   namedtuple's — takes `anything` at its position, which checks the arity
+   without the types.
 7. **A `Protocol`** validates by `isinstance`, and is a schema only where
    `@runtime_checkable` was applied to the class itself; any other protocol is
    refused. A subclass protocol inherits the attribute the decorator sets, so
@@ -264,8 +282,8 @@ asks: importing `dataclasses` pulls `inspect`, `copy` and `functools` in with
 it, and the tracked objects they leave behind are walked by every later garbage
 collection. `numbers.Number` -- the register both a multiple-of's remainder and
 an order bound's comparison follow -- is held the same way, and for the ordinary
-reason rather than that one: written as an import it asked `sys.modules` and
-decoded two names **per bound**, which a fifty-field record of
+reason rather than that one: written as an import it asks `sys.modules` and
+decodes two names **per bound**, which a fifty-field record of
 `Annotated[int, Ge(0)]` pays fifty times. A bound of exactly `int`, `float` or
 `bool` is a number without asking: `numbers` registers those types and an ABC
 keeps what it registers, where the question runs `ABCMeta.__instancecheck__`, a
@@ -275,14 +293,15 @@ answer with code.
 
 ## What a parametrized form says
 
-Dispatch step 6 takes anything with a typing origin, and reads the origin
+Dispatch step 8 takes anything with a typing origin, and reads the origin
 before the arguments. The origins are compared by identity against the forms
 resolved once, at the first build — `typing` is imported once, not once per
 node — and a form this frontend does not know is a refusal rather than a guess.
 One unknown origin is refused by name: `Validator[int]` is the alias the class's
 `__class_getitem__` builds for a static checker, and its origin is `Validator`
-itself, which no schema reads. The arm is the last before the fallthrough, so
-a form that builds never reaches it.
+itself, which no schema reads. The arm sits after every container, union,
+`Literal` and `Callable` arm and before the field qualifiers, whose origins it
+never matches, so a form that builds never reaches it.
 
 **The forms are resolved without waiting on another thread's import.** On 3.15
 `typing` serves `ForwardRef` through its module `__getattr__`, which reaches
@@ -298,10 +317,11 @@ alone, and once it returns every lazy import of the module finds it loaded.
 the import open in a fresh interpreter while the first validator builds.
 
 `Union` and `X | Y` are the same origin in two spellings and build the same
-node. `Literal` interns each argument as a constant, and refuses a list, a dict
-or a set: the typing spec allows `None`, an enum member, or an `int`, `bool`,
-`str` or `bytes` value, and a container there would be read as a schema of its
-own rather than as a constant. The refusal names the spelling that was meant. A
+node. `Literal` interns each argument as a constant, and refuses a type, a list,
+a dict or a set: the typing spec allows `None`, an enum member, or an `int`,
+`bool`, `str` or `bytes` value, and a type or a container there would be read as
+a schema of its own rather than as a constant (`refuse_unhashable_literal` in
+`build/generics.rs`). The refusal names the spelling that was meant. A
 constant the spec does not admit there -- a float, an instance -- is read all
 the same, as the constant `Validator(c)` reads it: the set is the same
 singleton, and a static checker is what refuses the spelling.
@@ -315,10 +335,13 @@ the spelling that was meant.
 
 Five origins are read as containers — `list`, `set`, `frozenset`, `dict` and
 `tuple` — and their arguments become element and key types. A parametrized
-`collections.abc` generic is **refused**, not read: `Sequence[int]` names a
-protocol whose instances a check cannot enumerate without consuming them, and
-the bare abstract class is available as an `isinstance` atom instead
-([the API page](../16-api.md) records the refusal).
+`collections.abc` generic other than `Callable` is **refused**, not read:
+`Sequence[int]` names a protocol whose instances a check cannot enumerate
+without consuming them, and the bare abstract class is available as an
+`isinstance` atom instead ([the API page](../16-api.md) records the refusal).
+`Callable[...]`, from either module, is read as the bare `Callable` atom: a
+callable's parameter and return types cannot be read at runtime, so the
+arguments are dropped and the schema asks only `isinstance(x, Callable)`.
 `dict[K, V]`'s two are read by name rather than by position, because the two
 transposed is `dict[V, K]`, which typechecks and validates real values.
 
@@ -371,8 +394,9 @@ key reads the constant out of the interpreter -- for a string, a copy of its
 text. A validator keeps the keys of its own pool, as `PoolKeys`, from the first
 relation it is a side of; a pool seeded from them shares them rather than
 rebuilding them, and keeps only the constants new to it in a map of its own.
-Composition -- `union`, `|` -- reads keys fresh and keeps none, so a validator
-nobody relates carries nothing for it.
+Composition -- `union`, `|` -- reads the keys a relation has kept where there
+are some, reads the rest fresh, and keeps none (`compose` in `build.rs`), so a
+validator nobody relates carries nothing for it.
 `a_pool_seeded_by_shared_keys_pools_as_one_seeded_by_rebuilding` holds the two
 seedings to one answer.
 
@@ -395,20 +419,33 @@ key domains are a different theory from the one these maps are built on --
 Castagna's §4.5 says that with them "there would not be any difference between
 record types and an intersection of function types" -- and this library reads
 overlapping clauses disjunctively, which answers a question the two theories do
-not agree on. The narrowing is the one user-visible removal of the map work.
+not agree on.
 
 The same principle governs the regex: the pattern is compiled and anchored at
 build time, so an invalid expression fails at construction rather than at first
 validation. The pattern is parsed on its own before the anchors wrap it: `a)|(b`
 does not parse, and wrapped it closes the anchors' group and opens one they
-close, so its alternation would escape both of them.
+close, so its alternation would escape both of them. A pattern this engine
+compiles and `re` reads as a different set is refused before the compile:
+`reject_reserved_class_syntax` in `build/dialect.rs` refuses a character class
+carrying `--`, `&&`, `~~` or a nested `[` other than a POSIX class, and a space
+or a `#` inside a class under verbose mode, each named by the reading this
+engine would give it.
 
-## Recursion needs an explicit fixpoint
+## Recursion is tied by `recursive` or by an alias
 
 A class whose own type appears in its fields is recursive, and the frontend
 refuses to chase it — a depth guard bounds `build_schema` and returns a message
 naming `recursive(...)` as the way to express it. The bound exists so that case
 fails cleanly instead of overflowing the native stack.
+
+A PEP 695 alias is its own binder, so the fixpoint it names needs no call.
+`build_alias` in `build.rs` stands a token for the alias while its body is
+built -- the alias is one object, found again by its address in
+`OPEN_ALIASES` -- turns every occurrence of the token into a reference to the
+definition the body becomes, and refuses a body in which the alias occurs
+outside a structural constructor, since `type X = int | X` names no set a value
+settles. An alias that never names itself builds its body and no definition.
 
 ## The limit
 

@@ -34,19 +34,25 @@ file under `scripts/` to it.
 ## The local gate, and the contract inventory
 
 **`scripts/gate.py` runs the lane's steps, not a list that resembles them.** It
-reads every `run:` step of every job the `ci` aggregator waits for out of the
-workflow, and runs them in a fresh **shallow clone of `HEAD` with no tags** --
-which is what `actions/checkout` produces and what a developer's clone is not.
-A step that needs a runner (a PGO wheel, valgrind, a mutation sweep, a second
-operating system) is named with the reason instead, and `tests/test_local_gate.py`
-holds that list to the workflow in both directions.
+reads every `run:` step of every job the `ci` aggregator waits for and a push
+runs out of the workflow -- `SCHEDULED_ONLY` drops the nightly jobs and
+`RUNNER_ONLY_JOBS` the ones left out whole -- and runs them in a fresh
+**shallow clone of `HEAD` with no tags**, which is what `actions/checkout`
+produces and what a developer's clone is not. A step that needs a runner
+(valgrind, a base built beside the head, a mutation sweep, a second operating
+system, the bench lane's optimized wheel) is named in `NEEDS_A_RUNNER` with the
+reason instead, and `tests/test_local_gate.py` holds that list to the workflow
+in both directions. `scripts/gate.py --list` prints the plan: which steps of
+each job run and which are named. The `pgo-compare` job is in it whole, its
+profiled build included, although a push skips that job.
 
 **The instruction gate runs here, although the lane that owns it cannot.** The
 `bench` lane wants cachegrind, a profiled wheel, a second interpreter and a
-system package installed with `sudo`, so it is excused whole -- and the
-*comparison* it carries wants none of those. Two builds of one workload,
-measured against the base by the lane's own rule (the remote-tracking branch, or
-its parent where that resolves to `HEAD`), is three minutes in the caller's
+system package installed with `sudo`, so every step of it but the sync is
+excused -- and the *comparison* it carries wants none of those. Two builds of
+one workload, measured against the base by the lane's own rule (the merge base
+with the remote-tracking branch, or `HEAD`'s parent where that merge base is
+`HEAD` itself; `perf_base` in `scripts/gate.py`), is three minutes in the caller's
 tree, and the tree is where it has to run: the shallow clone holds one commit
 and a comparison needs the other. Excusing it with the rest of the lane is how a
 change that read sound and cost **seventy-one times** the instructions -- 6.45
@@ -58,18 +64,19 @@ stay with the lane. Missing valgrind is named as the reason rather than passed
 over.
 
 **The floor interpreter is built beside the caller's, and the suite runs on
-it.** The matrix runs seven releases and a developer runs one, so every
-difference between two of them is a difference the gate could not see -- and
-they are not rare: three typing members the floor does not carry passed a green
-local run and reddened nine jobs. The floor is the end of the range where that
+it.** The matrix runs every supported release -- `ci.yml` owns the list -- and
+a developer runs one, so every difference between two of them is a difference
+the gate could not see -- and they are not rare: a typing member the floor does
+not carry collects on the caller's release and fails collection on the floor,
+taking every job there with it. The floor is the end of the range where that
 lands, because the suite is written on the newest release the tree supports and
 read on the oldest. So the gate makes a second environment on the floor
 `ci.yml` names, builds the extension into it, and runs the **product** suite
 there; the repository checks read the tree and answer the same on any release,
 so they run once. Which release the floor is stays in `ci.yml`: the gate reads
-it, and `tests/test_local_gate.py` refuses a second copy of the number here,
-because a stale floor is the one kind of stale that tests less than it claims
-while staying green.
+it, and `tests/test_local_gate.py` refuses a copy of the number in
+`scripts/gate.py`, because a stale floor is the one kind of stale that tests
+less than it claims while staying green.
 
 **What the clone models, the environment does not.** A step gets the caller's
 environment plus the job's and the step's own `env:`, and the runner's own
@@ -103,7 +110,7 @@ reproduces; the count is the table's rather than this sentence's:
 | the interpreter the lane names | partly: `PYO3_PYTHON` follows the caller's, and the gate's closing line says so | the mutation and cachegrind lanes name CPython 3.12 in `ci.yml`; a local sweep on 3.14 read two mutants as survivors that the lane kills, which is half an hour spent on a difference that was the interpreter |
 | the *release* of the interpreter, not only the caller's | yes, at the floor: the gate builds it beside the caller's and runs the product suite on it | `typing.Self`, `LiteralString` and `Unpack` are 3.11 members; a test module naming them collected here on 3.14, failed to collect on the floor, and took nine jobs red with it |
 | the operating system and architecture | no | a macOS or Windows leg fails where Linux does not, and nothing local sees it |
-| the pinned tool versions | no | `uvx pip-audit==2.10.1` and `uvx zizmor==1.30.1` are the lane's; a local `uvx` takes the latest |
+| the pinned tool versions | no, for the tools `taiki-e/install-action` installs | `ci.yml` installs `cargo-deny`, `cargo-llvm-cov` and `cargo-mutants` at versions it names, and the gate runs whichever is on the caller's `PATH`; a `uvx` step carries its pin in its own command, so the gate runs the lane's version of it |
 | the build of the interpreter, not only its version | no: a rule answers it instead | `sys.stdlib_module_names` is the build's, not the release's -- this box's 3.12 lists the Windows-only `_wmi` and a runner's does not, so a table of every name reported a difference between two builds as a moved row. The floor table records the modules this tree imports, which are portable by construction |
 | the machine's own speed | not modelled, and not a gate: every merge-blocking number is an instruction count | an absolute count reads 5--8% apart between two machines on one `rustc` line, which is what the recorded budgets carry a band for |
 | secrets, tokens and the event payload | no, and the steps that need one are excused by name | the merge base comes from the event, so `--against` runs only in the lane |
@@ -127,7 +134,7 @@ after the push and its verdict reported, with a re-run, a fix, or a stated
 reason it is not the tree's. The list exists to say what a green run did not
 check; leaving the check undone afterwards spends the list on nothing.
 
-**The fourth row is the newest and it is the one to read twice.** It is not a
+**The fourth row is the one to read twice.** It is not a
 setting a developer chose: it is an *absence* on the runner that is a presence
 here. A check that writes anything -- a commit, a file, a config -- asks the
 machine for something the runner does not have, and passes locally for that
@@ -229,7 +236,7 @@ checker that reports, with the reason beside the line it covers.
 | `tests/typing/consumer.py` | the newest release, with the tree | `--strict`, floor and newest | floor and newest |
 | `tests/typing/readings/` | the floor | the floor | the floor |
 | the published examples | yes | yes | yes |
-| the rest of `tests/`, and `scripts/` | yes | no | no |
+| the rest of `tests/`, and `scripts/`, less what `[tool.ty.src] exclude` names | yes | no | no |
 
 stubtest reads the stub against the built extension besides. The readings are
 held where the checkers disagree, by `tests/test_checker_readings.py`, and the
@@ -359,23 +366,23 @@ the release lane ships:
 ```bash
 export PYO3_PYTHON="$(uv python find 3.12)"          # the interpreter the lanes pin
 cargo build --profile profiling -p valgebra-py --features pyo3/extension-module
-cp target/profiling/lib_valgebra.so \
-  "$VIRTUAL_ENV/lib/python3.12/site-packages/valgebra/_valgebra.cpython-312-x86_64-linux-gnu.so"
+pkg="$(python -c 'import valgebra, pathlib; print(pathlib.Path(valgebra.__file__).parent)')"
+cp target/profiling/lib_valgebra.so "$pkg/_valgebra.cpython-312-x86_64-linux-gnu.so"
 PYTHONHASHSEED=0 valgrind --tool=callgrind --callgrind-out-file=out.callgrind python probe.py
 callgrind_annotate --inclusive=yes out.callgrind
 ```
 
 Two things make this work and are easy to get wrong. The interpreter must be
 3.12 or valgrind aborts on an instruction it does not model in 3.14. And
-`pyproject.toml` must not set `strip`. It did, overriding both profiles, so
-`maturin build --profile profiling` produced a binary with no symbols and a
-profile that could attribute nothing — two audits worked around it by
-profiling the workload binary instead, without noticing why they had to. Stripping is the profile's
-decision, and `[profile.release]` still makes it — the shipped wheel is
+`pyproject.toml` must not set `strip`: a `strip` key under `[tool.maturin]`
+overrides both profiles, so `maturin build --profile profiling` would produce a
+binary with no symbols and a profile that attributes nothing, which reads as a
+workload with nothing to profile rather than as a build setting. Stripping is
+the profile's decision, and `[profile.release]` makes it — the shipped wheel is
 stripped, and a wheel built from `profiling` is about twelve times its size
 because it is not.
 
-Three refusals, because a measurement that did not happen must not read as a
+The rules that keep a measurement that did not happen from reading as a
 verdict:
 
 - **The band is two-sided.** A workload that stopped doing the work executes
@@ -503,14 +510,18 @@ instruction count and 64% in this gate's `deep_nesting`, because the training
 workload held no counts for the loop the branch moved out of the walk.
 
 **A ceiling a shape passes by a wide margin stops measuring it**, which is why a
-claim is not the whole of the file. The JSON document sat at 0.87 under a
-ceiling of 1.00 while a commit message published 0.78 for it, and no gate was
-red for as long as it took somebody to re-run this one for an unrelated reason.
-So beside each ceiling the file carries the ratio the shape last measured and
-the spread it was measured across -- the ratchet the mutation sweep and the
-instruction gate already have, in the one place that had only a claim. A shape
-measuring worse than `recorded + tolerance` is red while still under its
-ceiling.
+claim is not the whole of the file. The JSON document's ratio moves between
+0.78 and 0.87 under a ceiling of 1.00 with no gate red, and nothing reports the
+move until somebody re-runs this gate and reads the number. So beside each
+ceiling the file has a `recorded` block for the ratio the shape last measured
+and the spread it was measured across -- the ratchet the mutation sweep and the
+instruction gate already have. Once armed, a shape measuring worse than
+`recorded + tolerance` is red while still under its ceiling.
+
+**The ratchet is not armed.** The spreads are recorded; the ratios and the
+environment in `scripts/perf_compare.json` are empty until the first `--update`
+on the bench lane (`_how_to_arm` there says why), and until then the gate
+prints `ratchet not armed` and judges the ceilings alone.
 
 The travel problem is answered rather than avoided. The recorded block names the
 environment it was taken in -- the interpreter, whether it has a global lock,
@@ -584,19 +595,24 @@ path and measuring nothing.
 ### The mutation ratchets
 
 Three sweeps, each with its own committed baseline: the core crate, the
-binding's soundness surfaces — the membership walk with the context it carries
-and the precompute it reads, the `Value` both input paths run over, the
-frontend's four files, equality, and the oracle, and the files the shipped
-extension is the only caller of. `scripts/mutation_gate.py` fails in
-**three** directions — a survivor the baseline does not accept, an accepted
-entry that no mutant answers to, and an accepted entry naming a file the tree
-does not track. The second keeps the accepted set honest: an accepted hole the
-tree does not have silently re-accepts a future survivor with the same identity.
-The third is about the key rather than the entry: a baseline keyed by path goes
-stale when the path moves, and splitting one module into several moves every
-entry that file holds at once. The sweep reads each of its survivors as new,
-nine minutes into a shard, with the mutants listed and no hint that what changed
-was the path. Checking the path costs nothing and runs before the sweep.
+binding's soundness surfaces — the files the `--file` list of
+`mutants-diff-walk` in `ci.yml` names: the membership walk with the context it
+carries and the precompute it reads, the `Value` both input paths run over, the
+frontend and the four surfaces beside it, equality, the oracle and the failure
+codes — and the files the shipped extension is the only caller of.
+`scripts/mutation_gate.py` fails in **four** directions — a survivor the
+baseline does not accept, an accepted entry that no mutant answers to, an
+accepted entry naming a file the tree does not track, and an accepted note
+naming no survivor in the baseline. The second keeps the accepted set honest: an
+accepted hole the tree does not have silently re-accepts a future survivor with
+the same identity. The third is about the key rather than the entry: a baseline
+keyed by path goes stale when the path moves, and splitting one module into
+several moves every entry that file holds at once. The sweep reads each of its
+survivors as new, minutes into a shard, with the mutants listed and no hint that
+what changed was the path. Checking the path costs nothing and runs before the
+sweep. The fourth holds the arguments beside the set: a note whose mutant a
+test now kills, or one spelled as no survivor line spells it, is an excuse that
+outlived what it excused.
 
 **Run it on the interpreter the lane names.** The verdict is the embedded
 interpreter's: a mutant this box's 3.14 reports as a survivor is one CPython
@@ -760,16 +776,19 @@ each follows, and the floor `requires-python` claims to the oldest of them;
 the free-threading classifier has a free-threaded leg behind it.
 
 **One leg carries the history, and its name says so.** `actions/checkout`
-takes one commit and no tags, and the two checks that read `git log` back to
-the last release tag -- the changelog roll, and the reachability of every
-commit a page cites -- stand down where they cannot read. Eight of the nine
-legs are that clone. The floor leg takes `fetch-depth: 0` so those run
-somewhere, and it is *named* for it, because nine results with the same shape
-of name is a checks list nobody can read the difference off: the one that
-matters is the one that is not skipping. `tests/test_changelog_ledger.py`
-holds the depth and the name to the **same** condition, since a name that
-advertises a history the leg no longer takes answers the reader's question
-wrongly, which is worse than not answering it.
+takes one commit and no tags, and the checks that read `git log` back to the
+last release tag -- the changelog roll, the commit messages since that tag, and
+the reachability of every commit a page cites -- stand down where they cannot
+read. Every leg of the matrix but one is that clone. The floor leg takes
+`fetch-depth: 0` so those run somewhere, and it is *named* for it, because a
+column of results with the same shape of name is a checks list nobody can read
+the difference off: the one that matters is the one that is not skipping.
+`tests/test_changelog_ledger.py` holds the depth and the name to the **same**
+condition, since a name that advertises a history the leg no longer takes
+answers the reader's question wrongly, which is worse than not answering it.
+The same leg installs `cargo-mutants` at the version the sweeps pin, so the two
+checks in `tests/test_mutation_scope.py` that list the mutants a sweep is
+offered, and skip without it, run there too.
 
 **The manylinux wheel is installed on every push.** The `wheel (linux)` job
 builds the manylinux wheels from the image a release builds them in, then
@@ -782,9 +801,10 @@ wheel that builds and does not load would otherwise wait for the release smoke.
 PyPy 3.11 wheels, and a push that does not link against PyPy cannot see what
 breaks there: `cpyext` carries the limited API and not every static type object
 CPython exports, so an extension naming one links on CPython and fails at
-`import` on PyPy. The release smoke runs the suite on every wheel it ships,
-the PyPy ones included, but a release is where a break is dearest to find, so
-the push runs one first. The `pypy 3.11`
+`import` on PyPy. The release smoke runs the suite on every glibc, macOS and
+Windows wheel it ships, the PyPy ones included -- the musllinux wheels are the
+set it does not reach ([09-releasing.md](09-releasing.md)) -- but a release is
+where a break is dearest to find, so the push runs one first. The `pypy 3.11`
 job builds a release wheel against PyPy and runs `scripts/pypy_import_check.py`
 first, which imports it and builds the annotation forms whose compilation
 reaches a type object: that is the *link*, and it fails with one line naming the
@@ -797,11 +817,11 @@ smoke's, to the dev group less the tools it excuses by name: a package left
 off would not redden the lane, because a row reading an optional
 implementation skips where it is absent.
 
-The link is not the only property that differs there,
-which the lane learned the first time it ran one: `cpyext` implements
-`PyTuple_Size` through the object's own `__len__`, so a `tuple` subclass that
-overrode it walked past the end of its storage and killed the process — an
-answer, not a symbol, and an import cannot see it.
+The link is not the only property that differs there: `cpyext` implements
+`PyTuple_Size` through the object's own `__len__`, so a walk that trusts that
+accessor for a `tuple` subclass overriding it reads past the end of the storage
+and takes the process down — an answer, not a symbol, and an import cannot see
+it.
 `tests/test_lane_interpreters.py` holds the rule both ways: an implementation
 the packaging classifiers state has a lane running the suite, and a lane running
 the suite is on an implementation somebody stated. The wheel is a **plain
@@ -829,11 +849,12 @@ after them merges the slices and ratchets once, since a survivor is a survivor
 of the *sweep* and an entry that survives nothing is known to only when every
 shard has reported. A shard's ceiling (`timeout-minutes` in `ci.yml`) is twice
 the slowest shard's reading, because a job that reaches its ceiling is
-cancelled and a cancelled job is red. Every push runs the same sweeps
-restricted to the
-**whole files the change touches** — bounded by the change rather than by the
-tree — and blocks the merge. It checks the new-survivor direction alone, because
-a partial sweep never generates most of the baseline.
+cancelled and a cancelled job is red. Every push runs the core and walk sweeps
+restricted to the **whole files the change touches** — bounded by the change
+rather than by the tree — and blocks the merge; the pytest sweep costs a
+rebuild and a suite run per mutant and stays on the schedule. A push sweep
+checks the new-survivor direction alone, because a partial sweep never
+generates most of the baseline.
 
 Whole files, not the diff's lines: the miss that matters is an edit that stops an
 **existing** test from killing a mutant elsewhere in the same file, and that
@@ -859,8 +880,9 @@ fine. Every lane installs through
 `.github/actions/setup-uv` instead: it pins the uv release, which is one fewer
 thing resolved over the network, and makes a second attempt when the first one
 fails. The release workflow's two smoke jobs stay on the upstream action, because
-they deliberately never check the repository out and a local action needs its own
-files on disk.
+they install uv before the repository is on disk -- their checkout comes later,
+into `tree/`, for `tests/` alone -- and a local action needs its own files on
+disk.
 
 **A lane syncs once and runs without re-resolving.** A bare `uv run` resolves
 the environment again first, which uninstalls the editable build `maturin
@@ -884,16 +906,17 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
   that anything checked what it did. That is what the mutation sweeps are for.
 - **A crate-wide floor cannot see one file.** `--fail-under-lines` and
   `--fail-under-regions` are read against the total, so a file sits under the
-  floor for as long as the rest of the crate carries it. A module entered the
-  core reading 84.48% of lines and 85.90% of regions -- worst in a crate held
-  to 98 and 97 -- and moved the total by a hundredth of a percent, so both
-  floors, the mutation ratchet and the whole product suite stayed green on the
-  merge path while a scoped sweep of it reported 22 of 22 mutants surviving.
+  floor for as long as the rest of the crate carries it. A module reading 84%
+  of its lines and 86% of its regions, in a crate held to the floors the
+  `rust coverage` job in `ci.yml` names, moves the total by a hundredth of a
+  percent, so both floors, the mutation ratchet and the whole product suite
+  stay green on the merge path while a scoped sweep of that module reports
+  every mutant surviving.
 
-    What did report it is `scripts/branch_coverage.py`, which holds a region
-    floor per file and refuses a file the measurement carries and no floor
-    does. It runs on the **nightly** lane, on a pinned nightly toolchain, so it
-    answered after the change had merged rather than before.
+    `scripts/branch_coverage.py` holds a region floor per file and refuses a
+    file the measurement carries and no floor does. It runs on the **nightly**
+    lane, on a pinned nightly toolchain, so it answers after a change has
+    merged rather than before.
 
     So the merge path asks the same question of its own profile.
     `scripts/coverage_gate.py` carries a floor far below the crate's, because
@@ -928,8 +951,10 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
     the suite then runs against a module with no coverage map, and the lane
     reads twenty points low.
 
-- **A mutation score is a statement about one test command.** Neither sweep runs
-  pytest, so a survivor in either is a gap in the *Rust-side* corpus.
+- **A mutation score is a statement about one test command.** The core and walk
+  sweeps run `cargo test`, so a survivor in either is a gap in the *Rust-side*
+  corpus; the pytest sweep runs the Python suite, so a survivor there is a gap
+  in that suite.
 - **The walk sweep needs an embedded interpreter.** Without
   `--features interpreter-tests` every mutant reads as unviable, which is a sweep
   that measured nothing rather than a clean one.

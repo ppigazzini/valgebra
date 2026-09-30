@@ -142,14 +142,17 @@ prose is a second copy of this table, and the lint does not keep one.
 **Which interpreter reads them.** A ledger is a repository check: it reads the
 tree, the workflow and the scripts, none of which answers differently by
 release. So every leg of the python matrix runs the whole list, and the reading
-is the same nine times -- with two exceptions that can be read only once.
-`test_changelog_ledger.py` and `test_cited_commits.py` measure from the last
-release tag, and `actions/checkout` takes one commit and no tags; the **floor**
-leg takes the whole history so those run somewhere, and its name says so, since
-otherwise the one result that did not skip is indistinguishable from the eight
-that did. `scripts/gate.py` builds that same floor beside the caller's
-interpreter before a push -- and runs the *product* suite on it, not this list,
-for the reason the first sentence gives.
+is the same on each -- with exceptions that can be read only once.
+`test_changelog_ledger.py`, `test_commit_messages.py` and
+`test_cited_commits.py` read the history back to the last release tag, and
+`actions/checkout` takes one commit and no tags; the **floor** leg takes the
+whole history so those run somewhere, and its name says so, since otherwise the
+one result that did not skip is indistinguishable from the ones that did. The
+two checks in `test_mutation_scope.py` that list the mutants a sweep is offered
+need `cargo-mutants`, which the same leg alone installs. `scripts/gate.py`
+builds that same floor beside the caller's interpreter before a push -- and runs
+the *product* suite on it, not this list, for the reason the first sentence
+gives.
 
 **And two directions no runner can read at all.** The theory ledger holds the
 tracked page to the maintainer's working notes, and the citation ledger holds a
@@ -201,7 +204,7 @@ makes a bound something to tell apart from a test fixture by its indentation.
 **A screen is a hundred lines**, and `tests/test_module_placement.py` holds the
 rule to that number. It needs one: a bar stated in prose and held by nothing
 drifts a module at a time, and the file that owns the count is the test rather
-than this page. The bar is generous, and three modules sit under it and stay where they
+than this page. The bar is generous, and the modules under it stay where they
 are: a module short enough to read past is in nobody's way. What the bar catches
 is the drift, one case at a time, until a file is mostly not the thing it is
 named for.
@@ -230,20 +233,21 @@ where a mistake changes what a schema means carry their own corpus under the
 against the interpreter that leg installs, and `tests/test_feature_lanes.py`
 holds the rule that puts them there: a feature a crate declares is passed to a
 `cargo test` by some lane that is not itself a measurement, or it is excused
-there by name. For one push none was. The only lane naming `interpreter-tests`
-was `binding coverage`, so a corpus row made stale by a change to the very check
-it describes reddened the lane whose job is to print a percentage -- while
-`cargo test --workspace` stayed green on three operating systems and said
+there by name. A feature driven only by a measuring lane is one whose stale row
+reddens the lane whose job is to print a percentage, while
+`cargo test --workspace` stays green on every operating system and says
 nothing.
 
 Running them against **every** supported interpreter rather than one is what a
 corpus of live objects is for: a `typing` member arrives in a release, and the
-floor is where the tree finds out. Four rows named `Never`, `Required`,
-`NotRequired` and the star-unpack inside a subscript, each of which reaches the
-language in 3.11, and on 3.10 the interpreter answers `AttributeError` or a
-`SyntaxError` the row does not expect. So a row states the release it needs --
-`Since(11)`, which is the one spelling the corpora use for one -- and stands
-down below it, which is the `skipif` the Python suite writes one layer up.
+floor is where the tree finds out. The corpora name `Never`, `Required`,
+`NotRequired` and the star-unpack inside a subscript, which reach the language
+in 3.11, and a self-naming `type` alias, which reaches it in 3.12; below that
+release the interpreter
+answers `AttributeError` or a `SyntaxError` the row does not expect. So a row
+states the release it needs as `Since(n)` -- the one spelling the corpora use
+for one -- and stands down below it, which is the `skipif` the Python suite
+writes one layer up.
 
 A release written onto a row is a claim about the lanes, and
 `tests/test_version_gates.py` holds it to them: each release a gate names has a
@@ -255,18 +259,19 @@ since such a leg runs under `continue-on-error`. The same ledger refuses
 a corpus that compares `version_info` for itself, because a release spelled any
 other way is one it cannot read -- which would reopen the hole a file down.
 
-The **walk** carries a value corpus in `crates/valgebra-py/src/check/walk.rs`.
+The **walk** carries a value corpus in
+`crates/valgebra-py/src/check/walk/interpreter.rs`, a child module of `walk.rs`.
 Every case runs in **both** the fast and the explaining mode with the two
 required to agree, and with the violation count asserted where it distinguishes
 the modes. A corpus driven only fast leaves half of every composite unobserved.
 
 The **frontend** carries an annotation corpus in
-`crates/valgebra-py/src/build.rs`: a table of annotations as a caller writes
-them beside the schema each must build, spelled as that schema's render, plus
-the refusals and the message each carries. It exists so the frontend can be
-swept: pytest exercises that file thoroughly and a mutation harness cannot
-observe pytest, so before the corpus every mutant of it read as a survivor and
-the file sat outside the sweep by name. It reads a marker by *attribute* rather
+`crates/valgebra-py/src/build/interpreter.rs`: a table of annotations as a
+caller writes them beside the schema each must build, spelled as that schema's
+render, plus the refusals and the message each carries. It exists so the
+frontend can be swept: pytest exercises those files thoroughly and a mutation
+harness cannot observe pytest, so without the corpus every mutant of them reads
+as a survivor. It reads a marker by *attribute* rather
 than importing `annotated_types`, because an embedded interpreter starts on the
 base prefix and sees no virtual environment -- which would make the corpus depend
 on how the harness was launched.
@@ -275,10 +280,11 @@ The **oracle** carries a question corpus in
 `crates/valgebra-py/src/oracle/interpreter.rs`: one row per question
 `LeafRelations` asks, each handing the oracle two pool slots or a class and a
 kind and reading the `Option` it answers. It exists for the reason the
-frontend's does, and its number is the sharpest of the three: without a corpus
+frontend's does, and its number is the sharpest of the four: without a corpus
 the only Rust rows reaching that file build the pool and read it back, so a
-sweep reports most of `oracle.rs` as surviving. `scripts/mutation_baseline.json`
-records what survives with the corpus in place.
+sweep reports most of `oracle.rs` as surviving.
+`scripts/mutation_baseline_walk.json`, the baseline of the sweep that examines
+`oracle.rs`, records what survives with the corpus in place.
 
 What it deliberately does not do is compile a schema and ask `is_subtype_of`.
 That is what the decision suite in `tests/` does, and a Rust row shaped the same
@@ -287,6 +293,14 @@ leaving the same mutants alive. The distinction matters most for the third
 answer: `None` is "this oracle cannot read that", which the core folds
 conservatively, and `false` is a refutation it may act on — so every row that
 expects a decline says so rather than reading it as a negative.
+
+**Equality** carries a corpus in `crates/valgebra-py/src/equality/interpreter.rs`,
+for the half of `==` and `hash` a pure-Rust test cannot reach: a schema's
+leaves name their constants by pool slot, and the comparison reads through the
+slot to the pooled object. Its rows build two validators whose constants pooled
+in different orders and hold them equal, put a constant at a different slot on
+each side inside every node that holds another, and hold the hash blind to the
+slot and to an order the schema does not carry.
 
 That feature enables an embedded interpreter for the test binary and nothing
 else: all its sites are inside test modules and the shipped wheel is built
@@ -399,14 +413,13 @@ readable: five are arms no schema a caller can build reaches, and the sixth is
 from no violation at all -- a code the walk can write, however much the name
 reads like a class. The public surface has none: every name the stub ships is
 named by the suite, so a single total would have reported a gap against the
-product that does not have one. `scripts/use_case_ledger.py` prints those figures
-and `tests/test_use_case_ledger.py` holds this table to them, so the page is
-what fails on the commit that adds a name -- where the older wording,
-"seventy-odd cells", could not fail at all, being an approximation of two
-numbers added together. What the *ledger* holds is still a floor rather than a
-count: the universe grows with the tree, and a test pinning today's total would
-fail on the commit that adds a name rather than on the one that leaves it
-unreached.
+product that does not have one. `scripts/use_case_ledger.py` prints those
+figures and `tests/test_use_case_ledger.py` holds this table to them, so the
+page is what fails on the commit that adds a name -- where an approximation of
+the two figures added together could not fail at all. What the *ledger* holds is
+still a floor rather than a count: the universe grows with the tree, and a test
+pinning today's total would fail on the commit that adds a name rather than on
+the one that leaves it unreached.
 
 **The outcomes a method documents are a product of their own.**
 `tests/test_surface_outcomes.py` reads the binding's `Raises:` blocks — every
@@ -519,8 +532,8 @@ fails.
 **What a coverage figure leaves over, and why.** Reading the annotated report
 for the core's shipped scope leaves **under a hundred** statement lines no
 test executes, and they are four kinds rather than a backlog. The figure is
-rounded on purpose: an exact one is right for a day and no gate reads it, and
-this page has been wrong before by carrying a number nothing held. Take the
+rounded on purpose: an exact one is right for a day and no gate reads it, and a
+page carrying a number nothing holds is wrong the day the number moves. Take the
 reading in a fresh `CARGO_TARGET_DIR` -- a profile merged against objects
 from an earlier tree reports lines as unreached that are not -- and the
 per-file floors in `scripts/branch_coverage.json` are the figures a gate does
@@ -577,7 +590,7 @@ instrumented build per push -- buys a number for arms the matrix already drives.
 floor covers the re-export package, which is a hundred-odd lines; the extension
 the Python suite exercises is Rust and is measured by the other two lanes.
 
-Those two measure the code that **ships**, and did not always. The core's
+Those two measure the code that **ships**. The core's
 property suites and the binding's four interpreter corpora are compiled into
 their crates because they reach private items, so a coverage report counts
 them — and a corpus is a table and a loop, so it runs by construction, arrives
@@ -586,23 +599,24 @@ corpora would be nearly half the lines the binding's figure is computed over, so
 both lanes exclude them, and `tests/test_coverage_scope.py` holds that scope to the corpus
 files the tree has, in both directions.
 
-**A coverage figure read on a developer's box is not the lane's, and the
-difference can be one file.** `cargo llvm-cov` attributes a region to a source
-span, and which span it picks for a `const` initialiser or for an item inside a
-`#[cfg(test)]` module is the toolchain's business, not the tree's. On one
-machine `decision.rs` reads about half its regions covered, with seven hundred
+**A coverage figure read from a shared target directory is not the lane's, and
+the difference can be one file.** `cargo llvm-cov` merges the profile against
+every instrumented object the directory holds, and an object built from an
+earlier tree maps zero counts onto code whose body has changed since: on one
+machine `decision.rs` read about half its regions covered, with seven hundred
 of them landing on doc-comment lines, blank lines and `use` items -- lines no
-program executes -- while the lane reads the same file at 99% and the same
-commit green.
+program executes -- where a fresh `CARGO_TARGET_DIR` read the same file at 99%.
+Each lane runs `cargo llvm-cov clean --workspace` before it measures
+(`.github/workflows/ci.yml`), and a figure taken by hand is taken in a fresh
+`CARGO_TARGET_DIR`; [07-tooling-ci.md](07-tooling-ci.md) names the tell.
 
-That six-point difference in a **total** is indistinguishable from a real hole
-of the same size, which is the reading the audit could not settle from either
-figure alone. What settles it is the per-file column: a file whose zero-count
-lines are comments has a mapping artefact, and a file whose zero-count lines are
-statements has untested code. So the rule is to compare *a file's* figure
-between the two runs and read the annotated report for that file, never to
-compare totals -- a total absorbs the artefact and the hole equally well, and
-says the same number for both.
+A difference of that size in a **total** is indistinguishable from a real hole
+of the same size, and neither figure alone settles which it is. What settles it
+is the per-file column: a file whose zero-count lines are comments has a mapping
+artefact, and a file whose zero-count lines are statements has untested code.
+So the rule is to compare *a file's* figure between the two runs and read the
+annotated report for that file, never to compare totals -- a total absorbs the
+artefact and the hole equally well, and says the same number for both.
 
 **And one floor per file beside the scope-wide one.** A total absorbs a hole
 the size of a file: half of the decision procedure going unreached moves a
@@ -616,9 +630,11 @@ quietly stops measuring a file would otherwise read as a file that never
 regressed.
 
 And a nightly lane counts the **arms**. A region is a span the compiler emits,
-and a two-armed branch inside one span contributes one region — so the core reads
-98% of lines, 97% of regions and 90% of branches on the same files. Eight points
-of arms sit under a floor both other figures pass. `cargo llvm-cov` has no
+and a two-armed branch inside one span contributes one region — so the core's
+branch figure reads several points under its line and region figures on the same
+files, and those points of arms sit under a floor both other figures pass. The
+line and region floors are the `rust coverage` job's in `ci.yml`, and the branch
+floor is `scripts/branch_coverage.json`'s. `cargo llvm-cov` has no
 `--fail-under-branches`, so the number is recorded in
 `scripts/branch_coverage.json` and ratcheted the way the mutation baseline
 ratchets survivors: measured, compared, and moved up with the measurement and

@@ -21,8 +21,10 @@ Write `⟦S⟧` for the set of Python values a schema `S` denotes (its
 2. **Construction preserves meaning.** The normal form a constructor builds
    denotes the set the spelling names: `⟦union(A, B)⟧ = ⟦A⟧ ∪ ⟦B⟧` however the
    members are flattened, absorbed, ordered or folded on the way in. The
-   deprecated `simplify` method preserves meaning for the same reason, since
-   every fold it applies is a law of the same algebra.
+   deprecated `simplify` method preserves meaning because every fold it applies
+   holds of the sets: the laws, and the disjoint-kind and region-cover folds,
+   which are decisions rather than laws
+   ([the algebra](04-algebra.md#the-simplifier-is-going)).
 3. **Decisions are sound.** If `is_subtype_of(A, B)` is `True` then `⟦A⟧ ⊆ ⟦B⟧`;
    if `is_empty(S)` is `True` then `⟦S⟧ = ∅`. The converses are *not* claimed —
    the decision is deliberately conservative.
@@ -50,8 +52,9 @@ Union(A_i)       some A_i accepts x             (∃: set union)
 Intersection     every A_i accepts x            (∀: set intersection)
 Complement(A)    A does not accept x            (¬: set complement)
 Refine(B, c_j)   B accepts x and every c_j      (base ∩ constraints)
-Seq(kind, r)     x is a kind whose elements     (regular language over
-                 match the regex r                element denotations)
+Seq(kind, s)     x is a list or tuple of that   (a linear regular
+                 kind whose elements take the    language over element
+                 prefix-and-tail shape s         denotations)
 Coll{kind, A}    every element accepts A         (homogeneous container)
 KeyedMap(f, d)   fields present-and-match, and   (named fields ∩ keyed
                  every other key matches a       default clauses)
@@ -97,12 +100,16 @@ never contradicts a membership answer (see [recursion](06-recursion.md)).
 ## Why construction preserves meaning
 
 Every fold a constructor applies is a law of the Boolean algebra of sets —
-flattening associative nodes, dropping identities and duplicates, absorbing a
-member that contains another, ordering the members, and folding `X ∩ ¬X` to `⊥`
-and `X ∪ ¬X` to `⊤` — each of which holds of the *sets*, so none can change
-`⟦S⟧`. The form is held to this one invariant and to nothing stronger: it is a
-lattice normal form, not a decision, so membership relations are read off the
-decision procedures, never off the shape of a term.
+flattening associative nodes, dropping identities and duplicates, letting the
+top absorb a join and the bottom a meet, ordering the members, cancelling `¬¬X`
+to `X`, and folding `X ∩ ¬X` to `⊥` and `X ∪ ¬X` to `⊤` where `X` holds no class
+and no predicate — each of which holds of the *sets*, so none can change `⟦S⟧`.
+Absorption of a member another contains is not among them: that fold needs a
+containment, which is a decision (`Schema::union` in
+`crates/valgebra-core/src/ir.rs` says so). The form is held to this one
+invariant and to nothing stronger: it is a lattice normal form, not a decision,
+so membership relations are read off the decision procedures, never off the
+shape of a term.
 
 ## Why the decisions are sound (and only sound)
 
@@ -113,9 +120,19 @@ the meet against one (`A ⊆ ¬B` when `A ∩ B` is empty), componentwise inclus
 for the structural forms,
 and the coinductive rule for recursion (assume the goal on the current path —
 sound for inclusion at the greatest fixpoint). A leaf the rules cannot relate is
-handed to an oracle that returns `False` when it cannot prove the relation. Every
-rule preserves "the conclusion holds whenever the premises do", so a `True` is a
+handed to an oracle, which proves, refutes, or declines. Every rule preserves
+"the conclusion holds whenever the premises do", so a `True` from the rules is a
 proof.
+
+Where the rules decline, `is_subtype_of` and `is_empty` ask the **set
+representation** (`crates/valgebra-core/src/descr/`): it lowers each side to the
+set it denotes and decides `A ⊆ B` as the emptiness of `A ∧ ¬B`. A recursive
+reference is unfolded once and cut to a bound — the top on the side read
+widened, the bottom on the side read narrowed — so the difference it reads
+contains the real one: an empty difference proves the inclusion, and an
+inhabited one refutes only where no reference was cut. A schema the
+representation cannot hold, or one past its build bounds, is a decline rather
+than an answer, so a `True` from this reading is a proof too.
 
 `is_empty` is the **primitive**, not a derived relation: it decides the value
 regions, the complement and disjointness laws, and the refinement bounds
@@ -125,10 +142,11 @@ emptiness carries its own soundness and lends it upward, which is the direction 
 check the argument in. `is_equivalent` is mutual inclusion and inherits from
 subtyping.
 
-The conservatism is the price: when a rule does not fire and the oracle declines,
-the answer is `False` — "not proven", not "disproven". This is why the
-[decidability boundary](15-decidability.md) maps where `False` is exact and where it
-is conservative, and why the docs say *closed algebra, conservative decision*.
+The conservatism is the price: when no rule fires, the oracle declines and the
+set representation cannot settle the pair, the answer is `False` — "not proven",
+not "disproven". This is why the [decidability boundary](15-decidability.md)
+maps where `False` is exact and where it is conservative, and why the docs say
+*closed algebra, conservative decision*.
 
 ## How the argument is mechanized
 
@@ -184,10 +202,13 @@ The soundness is relative to a small, explicit trust base:
   **`A & ~A` does not rest on it.** That law is a law about sets, so it is
   applied only where both sides are one: an atom running a predicate, or a class
   whose metaclass overrides `__instancecheck__` or `__subclasscheck__`, is
-  declined rather than folded. An `abc.ABC` is declined by the same test, because
+  declined rather than decided. An `abc.ABC` is declined by the same test, because
   `ABCMeta` overrides both hooks -- which is how `register` changes the relation
   after a schema is built. A class whose metaclass leaves the hooks alone is a
-  set, and the law still decides it.
+  set, and the decision still reads the law of it: `intersection(C,
+  complement(C)).is_empty()` is `True`. Construction folds the pair for no
+  class, because it holds no class object to ask whether a hook answers
+  `isinstance`, so the meet keeps its spelling.
 
   **A bound conjunction still rests on it.** A contradiction between two bounds
   is decided by comparing the *bounds*, which holds only because a value ordered

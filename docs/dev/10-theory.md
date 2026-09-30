@@ -71,9 +71,11 @@ exact there ([02-decision.md](02-decision.md)).
 valgebra *is*: value sets with union, intersection and negation, where subtyping
 is `[[s ∧ ¬t]] = ∅`. **[LOAD-BEARING: semantic-subtyping]**, with a qualifier: `is_subtype_of` is
 **not** that reduction applied uniformly. It is a structural procedure whose arms
-decompose each pair by shape, and it calls `is_empty` at the three places where no
-shape is available to recurse into: the two lattice bounds, and a complement on
-the right. Everywhere else the arms decide directly.
+decompose each pair by shape, and it calls emptiness where no shape is available
+to recurse into -- the two lattice bounds, and a complement on the right -- and on
+the subject of every refutation, which the witness guard (`witnessed` in
+`decision.rs`) reads before it believes one. Everywhere else the arms decide
+directly, and the set representation answers where they decline.
 
 SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
 
@@ -108,18 +110,22 @@ implementation.
 **Hosoya, Vouillon & Pierce, "Regular Expression Types for XML" (TOPLAS 2005).**
 Regular languages are closed under union, intersection and complement, so a
 sequence type is a first-class member of the algebra rather than an ad-hoc node.
-**[GUIDING: sequences-as-a-regular-language]** — `SeqShape` is one node subsuming the homogeneous, fixed and
-prefix-plus-tail forms for exactly this reason
-([01-schema-ir.md](01-schema-ir.md)).
+**[GUIDING: sequences-as-a-regular-language]** — `Schema::Seq`, carrying a
+`SeqShape`, is one node subsuming the homogeneous, fixed and prefix-plus-tail
+forms for exactly this reason ([01-schema-ir.md](01-schema-ir.md)).
 
-It is guiding rather than load-bearing for *sequences*, and the gap is the
-point: the general form is a regular expression over element schemas, and
-deciding inclusion between two of those wants an automaton construction over
-schemas that [15-decidability.md](../15-decidability.md) records as unbuilt.
-What the IR carries is the *linear* fragment — a fixed prefix and an optional
-repeated tail — which is every shape the schema language can spell. The closure
-the paper gives is at the schema level there, through union, intersection and
-complement over the sequence node, rather than inside the sequence body.
+It is guiding rather than load-bearing for the *IR's* sequences, and the gap is
+the point: the general form is a regular expression over element schemas, and
+the IR carries only the *linear* fragment — a fixed prefix and an optional
+repeated tail — which is every shape the schema language can spell; a repeated
+heterogeneous group has no syntax, which
+[15-decidability.md](../15-decidability.md) records. The closure the paper
+gives is at the schema level there, through union, intersection and complement
+over the sequence node, rather than inside the sequence body. The automaton
+construction over element sets is built one representation over, in
+`crates/valgebra-core/src/descr/symbolic.rs`, and decides what the fragment
+spells, a sequence below a union of sequence shapes included (the row *A
+sequence is a regular language* below).
 
 The same closure argument *is* load-bearing one kind over, for strings and
 bytes. A `str` refinement's language is regular — a literal is one word, a
@@ -138,8 +144,10 @@ decomposition — Frisch, Castagna & Benzaken Lemma 6.5 for pairs, in the
 backtrack-free form Castagna gives as `Φ`, and generalised to a fixed component
 count the way Castagna & Duboc state the tuple rule for larger arities.
 **[LOAD-BEARING: a-sequence-splits-across-a-union]** — `product_subtype` in `decision/products.rs`. It applies in subtyping
-and nowhere else: emptiness does not decompose a product, so the same relation
-asked as a meet with a complement is not decided. `Φ` characterises the
+and nowhere else: emptiness's rules do not decompose a product, so the same
+relation asked as a meet with a complement is left to the set representation,
+which decides it where the difference fits the build bounds -- `tuple[int | str,
+int]` against its two corners -- and declines past them. `Φ` characterises the
 inclusion exactly, so the rule refutes as well as proves -- a product with a
 value and no branch left is outside the union -- where every member the rule
 sets aside holds none of the subject's values; and a branch that shares no value
@@ -375,9 +383,10 @@ would need for its key, which is why it read as half of one. The goals a query
 each goal where the recursion is asked it, which is past the caches that answer
 a repeat without asking, and reports how many asks were of a pair already asked.
 
-Over the older workloads' shapes, and over a record of thirty-two fields sharing
-one inner schema, the count is **zero**: the trail absorbs recursion and the
-per-rule caches absorb the shape where one goal is asked once per field
+Over the shapes of the `--decision`, `--decision-refute` and `--decision-repeat`
+workloads of `scripts/perf_gate.py`, and over a record of thirty-two fields
+sharing one inner schema, the count is **zero**: the trail absorbs recursion and
+the per-rule caches absorb the shape where one goal is asked once per field
 ([02-decision.md](02-decision.md#the-budget-and-what-exhausting-it-means)).
 
 Over the relation matrix it is **not**. A meet against a union repeats **four**
@@ -590,7 +599,7 @@ HELD-BY: the_complement_laws_hold_of_the_top_however_it_is_spelled, no_relation_
 **Each kind's representation is closed under the three operations, and its top
 denotes what the table says.** Union, intersection and complement stay inside
 each kind's representation -- interval sets with a residue class per step for
-integers, closed intervals of floats with the three special points held apart, a
+integers, closed intervals of floats with `nan` held apart in a bit of its own, a
 minimal automaton per word kind, a symbolic automaton for sequences, a union of
 lines for sets, labelled fields with a default per key kind for dicts, a class
 lattice for instances -- and the lattice laws hold of each against membership.
@@ -746,9 +755,10 @@ next reader rediscovers as a bug.
 **The decision is structural, not the emptiness reduction applied uniformly.**
 The cost is a hole wherever an arm is missing, and the boundary is
 [15-decidability.md](../15-decidability.md); what a missing arm costs is a
-decline the descriptor answers, so the completeness ledger enumerates no
-relation neither decides, and the two deciders are measured against each other
-over a corpus. **[DEVIATION: structural-rather-than-reduction]**
+decline the descriptor answers, so every relation the completeness ledger
+records as decided by neither is one past a build or decision bound, each a
+strict row, and the two deciders are measured against each other over a
+corpus. **[DEVIATION: structural-rather-than-reduction]**
 
 SOURCE: §13.1 "`is_subtype_of` is not that reduction applied uniformly"
 

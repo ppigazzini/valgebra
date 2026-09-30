@@ -11,24 +11,26 @@ direction their dependencies run, and the two invariants the compiler holds.
 | `crates/valgebra-core/src/kind.rs`, `verdict.rs` | the value-universe partition, its region summary, and the two three-valued answers — the frame both deciders read | [02-decision.md](02-decision.md) |
 | `crates/valgebra-core/src/decision.rs`, `decision/` | the structural rules: subtyping, equivalence and disjointness in the file, emptiness and the constructor rules one module each beside it | [02-decision.md](02-decision.md) |
 | `crates/valgebra-core/src/descr/` | the set representation: one component per kind, each closed under the three operations. `lower.rs` maps a term to a set and holds the build's `Bounds`; the components are `integers.rs` and its span arithmetic (`interval.rs`), `floats.rs`, `regular.rs` for the two word kinds, `records.rs`, `maps.rs`, `sets.rs` and `symbolic.rs` for the sequence automaton, `classes.rs` for the class atoms; `lines.rs` is the per-kind normal form they share, `values.rs` the `T⊥` a key or attribute holds, and `budget.rs` what a build may spend | [02-decision.md](02-decision.md) |
-| `crates/valgebra-py/src/build.rs`, `build/` | typing annotations and native forms into the IR: the dispatch, the pool and the guard in the file, the marker protocol in `build/refine.rs`, what a class declares in `build/classes.rs`, and the typing introspection in `build/generics.rs` | [03-frontend.md](03-frontend.md) |
-| `crates/valgebra-py/src/check.rs`, `check/` | the membership walk: the aggregator that re-exports it in `check.rs`, the dispatcher in `walk.rs`, the leaves in `walk/scalar.rs`, the containers in `walk/record.rs` and `walk/sequence.rs`, and the per-validator precompute in `check/index.rs`. `check/ctx.rs` holds the read-only context a walk threads, its two depth bounds and the trail that refuses a cyclic value; `check/violation.rs` is the structured failure a walk records | [04-walk.md](04-walk.md) |
+| `crates/valgebra-py/src/build.rs`, `build/` | typing annotations and native forms into the IR: the dispatch, the pool and the guard in the file, the marker protocol in `build/refine.rs`, what a class declares in `build/classes.rs`, the typing introspection in `build/generics.rs`, and the regex forms the two engines read as two languages, refused in `build/dialect.rs` | [03-frontend.md](03-frontend.md) |
+| `crates/valgebra-py/src/check.rs`, `check/` | the membership walk: the aggregator that re-exports it in `check.rs`, the dispatcher in `walk.rs`, the leaves in `walk/scalar.rs`, the containers in `walk/record.rs` and `walk/sequence.rs`, and the per-validator precompute in `check/index.rs`. `check/ctx.rs` holds the read-only context a walk threads, its two depth bounds and the trail that refuses a cyclic value; `check/violation.rs` builds the structured failure a walk records, whose type is `crates/valgebra-core/src/violation.rs` | [04-walk.md](04-walk.md) |
 | `crates/valgebra-py/src/input.rs` | the `Value` the walk runs over: a borrowed Python object or a borrowed parsed JSON value, and the decoders that turn a caller's `str` or `bytes` into one — which is what keeps the two input paths membership-equivalent by construction | [04-walk.md](04-walk.md) |
 | `crates/valgebra-py/src/equality.rs` | `==` on two validators, read through the constant pools rather than slot for slot: whether two schemas *are* the same set, which is what the constructors settle and not what the decision procedures prove | [01-schema-ir.md](01-schema-ir.md) |
 | `crates/valgebra-py/src/errors.rs`, `render.rs` | the Python exception and the annotation render | [05-errors.md](05-errors.md) |
 | `crates/valgebra-py/src/oracle.rs` | the binding's half of `LeafRelations`: the questions the core cannot decide alone — whether a literal belongs to a set, whether two sets of constants share a value, how two bounds order, what an enumeration lists | [02-decision.md](02-decision.md) |
-| `python/valgebra/` | the Python half of the package: `__init__.py` re-exports the extension's names and is what `import valgebra` costs, `_markers.py` defines the refinement markers a caller writes without importing `annotated_types`, and `_valgebra.pyi` is the stub `stubtest` holds against the built extension | [03-frontend.md](03-frontend.md) |
-| `crates/valgebra-py/src/lib.rs` | the module: what the extension exports, the four set constructors, the recursive fixpoint, and the two lattice bounds | [03-frontend.md](03-frontend.md) |
+| `python/valgebra/` | the Python half of the package: `__init__.py` re-exports the extension's names and is what `import valgebra` costs, `_markers.py` defines `Regex`, the one refinement marker neither typing nor `annotated_types` provides, and `_valgebra.pyi` is the stub `stubtest` holds against the built extension | [03-frontend.md](03-frontend.md) |
+| `crates/valgebra-py/src/lib.rs` | the module: what the extension exports, the three set combinators (`union`, `intersection`, `complement`), the `recursive` fixpoint, and the two lattice bounds `anything` and `nothing` | [03-frontend.md](03-frontend.md) |
 | `crates/valgebra-py/src/workload.rs` | the instruction gate's instrument: the shapes `scripts/perf_gate.py --binding-*` measures, which no caller reaches and no suite runs, so coverage and the mutation sweep skip it by name | [07-tooling-ci.md](07-tooling-ci.md) |
-| `python/valgebra/` | the re-export package a user imports | — |
 
 `crates/valgebra-core` is pure Rust. `crates/valgebra-py` is the PyO3 binding.
-`python/valgebra/` re-exports the compiled extension and adds no logic.
+`python/valgebra/` re-exports the compiled extension and adds one marker class,
+`Regex`, beside it.
 
 ## The direction
 
-`valgebra-py` depends on `valgebra-core`. Nothing depends on `valgebra-py`, which
-is a `cdylib` and has no downstream Rust consumer.
+`valgebra-py` depends on `valgebra-core`. `valgebra-py` builds as a `cdylib`, the
+extension the wheel ships, and as an `rlib` for its own
+`crates/valgebra-py/examples/binding_workload.rs`
+(`crates/valgebra-py/Cargo.toml`); no other crate depends on it.
 
 ```mermaid
 flowchart TB
@@ -80,15 +82,19 @@ edge is allowed and used: `decision.rs` asks `descr::lower` where its own rules
 decline. `tests/test_module_direction.py` holds both halves.
 
 Within the binding, `crates/valgebra-py/src/validator.rs` and
-`crates/valgebra-py/src/build.rs` depend on each other, and that pair is the only
-cycle in either crate. It is a dependency rather than a placement: the frontend
-needs the validator because an already compiled validator is itself a schema
-description, and the validator needs the frontend to compile one. Every other
-shared type lives in a leaf module its users import directly —
+`crates/valgebra-py/src/build.rs` depend on each other, and that pair is a
+dependency rather than a placement: the frontend needs the validator because an
+already compiled validator is itself a schema description, and the validator
+needs the frontend to compile one. Two more pairs import each other, each across
+a function rather than a type: `crates/valgebra-py/src/check/walk.rs` calls the
+violation builders in `check/violation.rs`, which call back into the walk's
+`record_if_fatal`; and in the core, `ir.rs` folds the complement law through
+`oracle.rs`, which reads the `Schema` it is asked about. Every shared type lives
+in a leaf module its users import directly —
 `crates/valgebra-py/src/exception.rs`, `crates/valgebra-py/src/check/ctx.rs` —
 with the aggregator re-exporting, so no call site spells a longer path.
 
-The cycle costs nothing the build can see. rustc's compilation unit is the crate,
+No cycle costs anything the build can see. rustc's compilation unit is the crate,
 and the shipped artifact is one `.so` statically linking `valgebra-core`, so at
 the granularity the build has this is one node.
 
@@ -134,16 +140,16 @@ by four distinct index types. [06-type-design.md](06-type-design.md) owns why.
 ## What the core does not contain
 
 No Python. No coercion: validation is a membership test on the object the caller
-already holds, and no value is copied or converted on the accept path. No I/O
-except the JSON parse, which `jiter` owns and which validates in place without
-materialising Python objects first.
+already holds, and no value is copied or converted on the accept path. No I/O:
+the JSON parse is the binding's, in `crates/valgebra-py/src/input.rs` over
+`jiter`, and `crates/valgebra-core/Cargo.toml` carries no parser.
 
 ## Every bound, and what holds it
 
 Nothing here is unbounded. A schema is built under limits, a walk descends under
 one, a decision spends a budget, and every representation in the descriptor
-refuses past a size rather than returning a set it cannot hold. They live in
-eight files, so without one list a reader cannot tell a measured bound from a
+refuses past a size rather than returning a set it cannot hold. They live across
+both crates, so without one list a reader cannot tell a measured bound from a
 guessed one, and adding another costs nothing.
 
 The rule is: **no bound without a gate that measures it.** Adding one means
@@ -182,7 +188,8 @@ comment, and a `cost` carries where its termination argument is written. A
 
 A row kinded **not a bound** is possible. The scan that holds this table to the
 tree reads every file-scope integer constant in a crate's source whose value is a
-figure somebody chose, and a couple of those are arities rather than bounds. The
+figure somebody chose, and some of those are capacities rather than bounds -- how
+much a buffer reserves up front, how wide a table may be and sit on the stack. The
 table carries each with a row saying so, which is cheaper than an exclusion list
 nobody maintains and honest about what the rule can see; the kind column is where
 a reader sees it without reading to the end of the row. A width read off a

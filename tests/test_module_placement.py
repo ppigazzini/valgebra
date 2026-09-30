@@ -39,7 +39,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CRATES = ROOT / "crates"
 
 #: The longest inline test module the rule allows, in lines. `docs/dev/08-testing.md`
-#: says "a screen"; this is that, rounded up past the three modules that stay.
+#: says "a screen"; this is that, rounded up past the modules that stay.
 BAR = 100
 
 #: `#[cfg(test)] mod <name> {` -- the inline form, as against `mod <name>;`.

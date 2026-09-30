@@ -13,24 +13,28 @@ fields) is written by the developer and is trusted.
 
 ## The bounds
 
-- **Schema build depth.** The frontend descends one level past the construction
-  bound while compiling and rejects a schema that never reaches a leaf, with
-  `NotImplementedError`. A self-referential class is the shape that gets there,
-  because its field type names the class; model it with
-  [`recursive`](06-recursion.md) instead. A schema that is merely too deep is
-  refused by the construction bound below, which says so by name.
+- **Schema build depth.** The frontend descends at most one level past the
+  construction bound while compiling (`MAX_BUILD_DEPTH` in
+  `crates/valgebra-py/src/build.rs`) and refuses anything deeper with
+  `NotImplementedError`, whether or not it reaches a leaf. A self-referential
+  class is the shape that gets there, because its field type names the class;
+  model it with [`recursive`](06-recursion.md) instead. An annotation exactly one
+  level too deep is refused by the construction bound below, with a
+  `ValueError` that names it; a deeper one meets the frontend's bound first.
 - **Schema construction size.** Every way of growing a schema — the `Validator`
   constructor, the `|` operator, `union`, `intersection`, `complement`,
   `recursive`, and the record transforms — is bounded at construction, so no sequence of
   calls can build a schema that overflows the stack or exhausts memory on a later
   walk. Three bounds apply, and passing any one raises `ValueError`:
-    - **depth** — at most 128 levels of structural nesting (a chain built in a
-      loop, such as repeatedly wrapping a validator in a set or a union). Every
-      node counts one level, containers included, so a chain of 128 nested lists
-      is the bound. A refinement counts one more on top of whatever it narrows,
-      since the set it denotes is a node of its own: pinning a length on each
-      list of such a chain reaches the bound at 64. Which marker the refinement
-      carries makes no difference — the level belongs to the node;
+    - **depth** — at most `MAX_SCHEMA_DEPTH` levels of structural nesting,
+      128 (a chain built in a loop, such as repeatedly wrapping a validator in
+      a set or a union). Every node counts one level, containers and the leaf
+      they end in included, so 127 nested lists around an `int` are the deepest
+      chain it admits and the 128th list is refused. A refinement counts one
+      more on top of whatever it narrows, since the set it denotes is a node of
+      its own: pinning a length on each list of such a chain admits 63 refined
+      lists and refuses the 64th. Which marker the refinement carries makes no
+      difference — the level belongs to the node;
     - **definitions** — at most 128 recursive definitions (a chain of distinct
       `recursive` schemas, which the depth measure alone cannot see because a
       back edge counts as a leaf);

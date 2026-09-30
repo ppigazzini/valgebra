@@ -44,9 +44,11 @@ and [12-writing.md](12-writing.md) names the three classes it cannot reach.
 
 ## Two documentation surfaces
 
-- **This set, plus [../../README.md](../../README.md),
-  [../../CONTRIBUTING.md](../../CONTRIBUTING.md) and
-  [../../AGENTS.md](../../AGENTS.md), ships.** A clone carries it.
+- **This set ships**, with the rest of the surface
+  [12-writing.md](12-writing.md) names and owns: [../../README.md](../../README.md),
+  [../../CONTRIBUTING.md](../../CONTRIBUTING.md),
+  [../../AGENTS.md](../../AGENTS.md), the user guide under [../](../README.md),
+  and the comments in the source. A clone carries it.
 - **A second surface is untracked**, so a clone does not. It holds the
   engineering contract, the operator prompt, the milestone backlog, and
   user-requested analyses.

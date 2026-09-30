@@ -172,8 +172,10 @@ macro_rules! pool_index {
 /// flag out of the algebra: every rule that keys on equality, ordering or a
 /// hash — which is every rule here — is looking at two values it cannot tell
 /// apart. A direct `match` on the payload still can, and that is the one thing
-/// this type cannot stop; nothing in this crate does it, `render` in the
-/// bindings does, and it is the only thing that may.
+/// this type cannot stop. In this crate only the sharing table does it
+/// (`ir/intern.rs`), so a shared node never hands a caller back the spelling it
+/// did not write; `render` in the bindings does it to print that spelling; no
+/// relation or law may.
 #[derive(Debug, Clone, Copy)]
 pub enum Spelling {
     /// `anything`, the lattice top written as itself.

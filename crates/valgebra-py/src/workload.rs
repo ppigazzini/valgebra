@@ -275,12 +275,12 @@ impl BindingShape {
 /// ```
 ///
 /// which puts `f37` at position **31** and `f7` at position **47**. The fast
-/// pass stops at the first field that fails and the explain pass walks them
-/// all, so this shape probes *sixteen fewer* fields than the gate's, not thirty
-/// more. Read the 15% below accordingly: failing **later** is what costs more,
-/// and the profile agrees.
+/// pass stops at the first field that fails and the explain pass resumes there
+/// and reads every field after it, so both shapes probe fifty-one fields across
+/// the two passes; the failing position decides how many of them each pass
+/// reads, and so what the count is.
 ///
-/// Aligning them was tried and reverted: the count moves 15% and
+/// The two stay apart because aligning them changes the count, and
 /// `perf_gate.py --against` rebuilds the *base* to compare, so a workload whose
 /// shape changed is measured against a different workload and reads as a
 /// regression it is not. A shape is part of a workload's identity, and

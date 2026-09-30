@@ -30,8 +30,18 @@ except NotImplementedError as error:
 
 The abstract-collection generics are the ones a reader is most likely to
 reach for: `Mapping[K, V]`, `Sequence[T]`, `Set[T]`, `Iterable[T]`, and the
-subscripted concrete classes such as `deque[T]` and `OrderedDict[K, V]`. These
-are **not built**. Whether they should be is open; nothing here rules them out.
+subscripted concrete classes such as `deque[T]` and `OrderedDict[K, V]`. None
+of them builds, and not for one reason:
+
+- `Mapping[K, V]` and `Sequence[T]` are **refused**. The record and mapping
+  node denotes dicts, and giving it a carrier so these build is a change the
+  algebra does not admit, recorded with the test it fails
+  ([refused changes](dev/01-schema-ir.md#refused-and-the-test-each-one-fails)).
+- `Iterable[T]` cannot be checked: reading its elements consumes an iterator,
+  and a check that consumed one would change the value it was asked about.
+- `Set[T]`, `deque[T]` and `OrderedDict[K, V]` are **unbuilt**: nothing refuses
+  them and nothing builds them. Today writing one costs a `NotImplementedError`
+  at build, and the paragraphs below say what to write instead.
 
 `type[T]` is refused as well, and is a different question: it constrains a value
 that is itself a class, where every form above constrains a container's
@@ -82,6 +92,14 @@ assert Validator(Any).is_valid(object())
 assert Validator(Any) == Validator(object)
 assert repr(Validator(Any)) == "Any"
 ```
+
+## `Never` and `NoReturn`
+
+Both are the **bottom** of the lattice (`nothing`): the empty set, which no
+value belongs to. They build the schema `nothing` is, and print as `nothing`
+([lattice bounds](16-api.md#lattice-bounds)). `Never` is in `typing` from 3.11
+and in `typing_extensions` before; `NoReturn` is in `typing` on every supported
+release.
 
 ## Collections
 
@@ -210,9 +228,8 @@ it ([static checkers](18-static-checking.md)).
 
 **The constant `nan` denotes nothing.** Membership is equality, and a `nan` is
 equal to nothing at all — itself included — so the set has no member. That is not a
-gap in the check: the set is *decided* empty, and a `float` still admits `nan`
-as it always did. Write `float` and a predicate if what you mean is "the not-a-
-number value".
+gap in the check: the set is *decided* empty, and `float` admits `nan`. Write
+`float` and a predicate if what you mean is "the not-a-number value".
 
 ```python
 from valgebra import Validator
@@ -402,9 +419,9 @@ assert Validator(Query).is_valid({"page?": 1})
 assert not Validator(Query).is_valid({})  # required
 ```
 
-That is the one form `repr` cannot round-trip: it renders the field as
-`{'page?': int, ...}`, which reads back as the optional key `page`
-([boundaries](17-boundaries.md)).
+That is the form whose `repr` reads back quietly as a different schema: it
+renders the field as `{'page?': int, ...}`, which reads back as the optional key
+`page` ([boundaries](17-boundaries.md), and [stable repr](#stable-repr) below).
 
 Open the record with `open` (undeclared keys admitted) or re-close it with
 `close`:
@@ -839,11 +856,14 @@ assert repr(opened) == "{'name': str, anything: anything}"
 assert Validator({"name": str, anything: anything}) == opened
 ```
 
-It is a **rendering**, not a serialization. Four forms cannot be written as an
-expression and do not read back: a class, which prints as its name; a predicate,
-which prints as `Predicate(...)`; a constant too long to print, which is cut;
-and a schema deeper than the renderer's own bound, which gives up and prints
-`<...>` — a mark chosen to be a syntax error, so a render that lost something
-cannot be read back as a schema that kept it. [The API page](16-api.md) has each
-with the reason. Do not parse a repr to recover structure — see
-[inspection](09-inspection.md) for asking a schema questions instead.
+It is a **rendering**, not a serialization. A few forms cannot be written as an
+expression and do not read back, and [the API page](16-api.md) owns the list,
+each with the reason. A schema deeper than the renderer's own bound prints
+`<...>`, a mark chosen to be a syntax error, so a render that lost something
+cannot be read back as a schema that kept it. One reads back quietly as a
+different schema: a key whose name ends in `?`, which
+`TypedDict("TD", {"a?": int})` declares required and which renders as
+`{'a?': int, str: anything}`, the spelling of an optional `a`
+([above](#a-key-name-that-ends-in-a-question-mark)). Do not parse a repr to
+recover structure — see [inspection](09-inspection.md) for asking a schema
+questions instead.

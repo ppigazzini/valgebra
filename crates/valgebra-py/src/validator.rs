@@ -116,8 +116,9 @@ enum Operand {
 ///
 /// Validation is a membership test against the set the schema denotes: the value
 /// is never copied or coerced. A validator never changes after it is built and
-/// is safe to share across threads. Its `repr` is the annotation that produces
-/// it, and it can be copied with `copy.copy`/`copy.deepcopy`.
+/// is safe to share across threads. Its `repr` is an expression that builds the
+/// same schema, but for the few forms the API reference lists, and it can be
+/// copied with `copy.copy`/`copy.deepcopy`.
 ///
 /// The class names the **public** package rather than the extension underneath
 /// it, which is the path a user imports it from and the one the API reference
@@ -811,13 +812,15 @@ impl Validator {
         self.__copy__(py)
     }
 
-    /// Open every record in the schema: undeclared keys are admitted throughout,
-    /// including inside recursive definitions.
+    /// Open every record and mapping in the schema: a key no clause claims is
+    /// admitted with any value, throughout, including inside recursive
+    /// definitions.
     ///
-    /// Returns a new validator; this one is unchanged. A record that already
-    /// carries a typed catch-all clause has it widened to admit any key with any
-    /// value, so `open` and `close` are idempotent projections rather than
-    /// inverses.
+    /// Returns a new validator; this one is unchanged. A clause keeps what it
+    /// says: a record claims no key beyond its fields, so opening it admits
+    /// every other key, while `{"a": int, str: int}` opened still maps a `str`
+    /// key to an `int` and frees only the keys that are not strings.
+    /// `open` and `close` are idempotent projections rather than inverses.
     ///
     /// **These two read the schema, not the set it denotes.** Every relation on
     /// this surface answers about the set, so two spellings of one set give one
@@ -829,7 +832,8 @@ impl Validator {
     /// the record you mean rather than to a union of spellings of it.
     ///
     /// Returns:
-    ///     A validator whose every record admits keys beyond those declared.
+    ///     A validator whose every record and mapping admits the keys no clause
+    ///     claims.
     ///
     /// Raises:
     ///     ValueError: If admitting undeclared keys expands the schema past the
@@ -839,19 +843,21 @@ impl Validator {
         self.map_schemas(py, |schema| schema.with_records_open(Openness::Open))
     }
 
-    /// Close every record in the schema: only declared keys are admitted
-    /// throughout, including inside recursive definitions.
+    /// Close every record and mapping in the schema: a key no clause claims is
+    /// refused, throughout, including inside recursive definitions.
     ///
-    /// Returns a new validator; this one is unchanged. Closing drops a record's
-    /// catch-all clause, typed or not, so it admits only its declared keys. A
-    /// *mapping* declares no field, so there is no record to close and
-    /// `Validator(dict[str, int]).close()` is the mapping it was asked of.
+    /// Returns a new validator; this one is unchanged. A clause keeps what it
+    /// says, typed or `anything`: a record with no clause admits only its
+    /// declared keys, `{"a": int, str: int}` closed still admits a `str` key
+    /// mapped to an `int`, and `Validator(dict[str, int]).close()` is the
+    /// mapping it was asked of.
     ///
     /// Reads the schema rather than the set, for the reason
     /// [`open`](Self::open) gives.
     ///
     /// Returns:
-    ///     A validator whose every record admits only its declared keys.
+    ///     A validator whose every record and mapping refuses the keys no clause
+    ///     claims.
     fn close(&self, py: Python<'_>) -> PyResult<Validator> {
         self.map_schemas(py, |schema| schema.with_records_open(Openness::Closed))
     }

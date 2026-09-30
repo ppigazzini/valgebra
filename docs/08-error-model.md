@@ -30,7 +30,9 @@ A `ValidationError` exposes:
     an index or an integer key in brackets, `items[2].id`; a key that is not a
     bare name — empty, or holding a `.`, a bracket, whitespace or a control
     character — is written as a subscript of its Python literal, `['a.b']`, so
-    no two paths read alike and the message stays on one line.
+    no two string or integer keys read alike and the message stays on one
+    line. A key of any other type is written as its `repr`, and reads as the
+    string key with that text.
   - `expected` — a short label of the expected set (e.g. `int`).
   - `value` — a repr-style summary of the offending value.
 - `message`, `code`, `path`, `expected`, `value` — scalar convenience
@@ -95,7 +97,8 @@ sample, and a caller counting entries or looking for a particular path would be
 reading a truncated list with nothing saying it was truncated. Bounding the cost
 is the caller's, and there are two ways to do it — pass `fail_fast=True`, or
 validate the value in pieces. Each individual `value` *is* bounded, at eighty
-characters of its repr followed by `...`.
+characters of its repr followed by `...` (`SUMMARY_CHARS` in
+`crates/valgebra-py/src/errors.rs`).
 
 Pass `fail_fast=True` to stop at the first failure instead:
 
@@ -109,7 +112,11 @@ except ValidationError as err:
 ```
 
 A node-level type mismatch (a value that is not a dict where a record is
-expected) is terminal for that subtree: there is nothing to descend into.
+expected) is terminal for that subtree: there is nothing to descend into. So is
+a wrong length — a fixed shape's arity (`list_length`, `tuple_length`) or a
+container's length bound (`too_short`, `too_long`) — which is read after the
+kind and before any element, so the elements of a list too long for its bound
+are not reported.
 
 An `intersection` follows the same rule across its members. Each member is
 checked and each failure collected, until one rejects the value *itself* rather
@@ -176,9 +183,11 @@ sentence saying what to do about it.
 
 The closest-branch search is a bounded, best-effort heuristic: it runs only when
 a value has already failed the union, and it inspects at most the first 64
-branches. A union wider than that still reports correctly — the membership
-decision always considers every branch — but its error may fall back to the
-`union_error` summary rather than pinpointing a branch past the cap. This keeps
+branches (`CLOSEST_BRANCH_PROBE_LIMIT` in
+`crates/valgebra-py/src/check/walk.rs`). A union wider than that still reports
+correctly — the membership decision always considers every branch — but its
+error may fall back to the `union_error` summary rather than pinpointing a
+branch past the cap. This keeps
 building an error for a pathologically wide union (a large `Literal[...]`, say)
 bounded; the successful path is unaffected.
 
@@ -246,7 +255,7 @@ caller that reads none of them pays about a third of what building every row
 would cost. Measure it against your own shape with
 
 ```bash
-uv run --group bench pytest benches/bench_validate.py -k error
+uv run --no-sync --group bench pytest benches/bench_validate.py -k error
 ```
 
 Nothing about the model depends on it -- the same attributes, the same values,
@@ -306,10 +315,11 @@ because it is the same failure: the check has no stable value to decide about.
 ## The set of codes
 
 There is no hand-maintained list of every code on this page, because a list that
-drifts from the walk is worse than none. The codes are pinned by
-`tests/test_error_codes.py`, which asserts the code and the path for each node
-kind — read it as the enumeration, and add a case there when you need one that is
-not covered.
+drifts from the walk is worse than none. The codes are declared in two tables —
+`Schema::error_code` in `crates/valgebra-core/src/ir.rs` for a leaf's own code,
+and `crates/valgebra-py/src/codes.rs` for the rest — and
+`tests/test_error_matrix.py` drives every code a report can carry, with the path
+it reports. Read those as the enumeration.
 
 What is guaranteed here is the property a caller depends on: a code is stable and
 does not change meaning across releases, so branching on one written down today
@@ -317,19 +327,21 @@ keeps working. New codes may appear for node kinds that gain a distinct failure.
 
 **Every code is reported the same way on both entry paths.** `validate_json` and
 `load` parse the document and then walk the *Python value* the parser built, so
-a document reaches the same codes a value does, with the same `loc`. Three are
+a document reaches the same codes a value does, with the same `path`. Four are
 the exception, and each because the parser cannot build the value that reaches
 them:
 
 | Code | Why no document reaches it |
 |---|---|
 | `tuple_length` | a document's array is a list, never a tuple, so a tuple schema refuses it by kind first and the code is `tuple_type` |
+| `missing_attribute` | a class with declared attributes is the class met with its attribute record, and the parser builds no instance of the class, so the class refuses every document first and the code is `instance_type` |
 | `recursion_loop` | a parsed document is a tree, so no value contains itself |
 | `mutated_during_validation` | nothing runs against a parsed value while it is read, so it cannot move under the walk |
 
 `tests/test_error_matrix.py` drives every code through both modes and both
-paths, and carries that reason beside the code a document gets *instead*, so the
-claim is one a test can refute.
+paths. For `tuple_length` and `missing_attribute` it carries that reason beside
+the code a document gets *instead*, and it names the test that drives each of
+the other two, so the claim is one a test can refute.
 
 ## Determinism
 
@@ -352,8 +364,9 @@ Messages and codes follow a fixed style so they stay predictable:
 - `expected` names the set, `value` is a short repr of what was found, truncated
   so a large value cannot flood the message. A union names each of its branches,
   bounded, as each would name itself alone.
-- Set-membership failures (`union`, `complement`) report at the location of the
-  combinator, not inside a discarded branch.
+- A `complement`, and a `union` on which no branch makes progress, report at the
+  location of the combinator. A union whose closest branch descended into the
+  value reports that branch's failures, never a discarded branch's.
 
 ## What a union's `expected` says
 
@@ -397,10 +410,11 @@ constants and the message lists them. An `Enum` branch names the class, as it
 does alone. A meet names what each of its members admits, joined with `and`,
 and a class with declared attributes, which is a meet too, names the class.
 
-The list is bounded at 64 labels and ends in `...` beyond that, so a union wide
-enough to be a generated table reports a readable prefix. A branch that is itself
-a union contributes its own members, so the label count and the branch count are
-not the same number. See [resource limits](10-limits.md).
+The list is bounded at 64 labels (`UNION_LABEL_LIMIT` in
+`crates/valgebra-py/src/check/walk.rs`) and ends in `...` beyond that, so a
+union wide enough to be a generated table reports a readable prefix. A branch
+that is itself a union contributes its own members, so the label count and the
+branch count are not the same number. See [resource limits](10-limits.md).
 
 **`expected` describes the schema as built, not a canonical name for the set.**
 `int | str`, `str | int` and `~(~int & ~str)` denote one set and read

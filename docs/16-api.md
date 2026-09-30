@@ -64,8 +64,8 @@ is immutable, so the copy shares the pool rather than duplicating it.
 `repr` is a **rendering**, not a serialization. What it gives back is an
 expression that builds the same schema — a recursive schema as the `recursive`
 call it is, an open record as the catch-all entry it carries, the nullary product
-as `tuple[()]` — so it can be pasted into a session and read back. Five things
-it cannot render as an expression, and none of them reads back quietly: a
+as `tuple[()]` — so it can be pasted into a session and read back. Six things
+it cannot render as an expression, and one of them reads back quietly: a
 **class**, which is an object rather than syntax and appears as its name; a
 **predicate**, which is a function and appears as `Predicate(...)`, and which
 the frontend refuses where it is built; a **constant too long to print**, which
@@ -73,18 +73,21 @@ is cut mid-string and is a syntax error where it is parsed; a **meet of two
 classes that each declare attributes**, which flattens to the two classes and
 their two attribute records, and a record standing apart from its class prints
 as `object(x=int)`, a form no constructor spells -- the schema does not record
-which class each record came from, so the render cannot fold them back; and a
-**schema past the renderer's own depth bound**, which gives up and prints
-`<...>`. The bound
-is within reach: no *single* annotation
-can be written deep enough, since the frontend refuses past `MAX_SCHEMA_DEPTH`
-and the renderer's bound sits above it, but a chain of recursive definitions
-composes — the render descends into each in turn, so a hundred shallow links
-reach a depth one annotation cannot. The mark is deliberately not an ellipsis:
-`...` reads as a schema inside a subscript, so a truncated render would parse
-and hand back a *different* validator with nothing to say it had been cut. Do
-not parse a repr: it is for a person to read, and
-[inspection](09-inspection.md) says how to ask a schema questions instead.
+which class each record came from, so the render cannot fold them back; a
+**required key whose name ends in `?`**, the quiet one: the dict literal reads
+every trailing `?` as optional, so `TypedDict("TD", {"a?": int})` renders
+`{'a?': int, str: anything}`, which reads back as a record whose `a` is
+optional -- a different schema, with nothing to say so; and a **schema past the
+renderer's own depth bound**, which gives up and prints `<...>`. The bound is
+within reach: no *single* annotation can be written deep enough, since the
+frontend refuses past `MAX_SCHEMA_DEPTH` and the renderer's bound sits above
+it, but a chain of recursive definitions composes — the render descends into
+each in turn, so a hundred shallow links reach a depth one annotation cannot.
+The mark is deliberately not an ellipsis: `...` reads as a schema inside a
+subscript, so a truncated render would parse and hand back a *different*
+validator with nothing to say it had been cut. Do not parse a repr: it is for a
+person to read, and [inspection](09-inspection.md) says how to ask a schema
+questions instead.
 
 ## Lattice bounds
 
@@ -254,8 +257,10 @@ assert schema.is_valid(1) is ((MAX_SCHEMA_DEPTH - 1) % 2 == 0)
 the Cargo workspace manifest, which is what maturin derives the wheel's metadata
 from — so it matches the built wheel and never drifts from a hand-maintained
 literal. Taken from the compiled extension rather than read back out of the
-installed metadata, because the metadata reader costs twenty milliseconds of
-import time for a string the manifest already carries.
+installed metadata, because the metadata reader pulls modules of its own into
+`import valgebra` for a string the manifest already carries.
+`tests/test_version.py` bounds what the import pulls in, and holds the two
+versions to each other.
 
 ```python
 import valgebra

@@ -4,7 +4,7 @@
 //! elements are reached and agree on what each element must be. What they share
 //! is the reading a record does not: an arity, a positional schema or a
 //! repeated tail, a count taken once and compared again, and the snapshot a
-//! list of one scalar kind is read through.
+//! list is read through where one test settles every element.
 
 use std::ops::ControlFlow;
 
@@ -1127,18 +1127,18 @@ fn explain_elements(
 
 /// The narrowest list a snapshot pays for, and the widest.
 ///
-/// A list of one scalar kind is read through a snapshot of it (see
-/// [`snapshot_pays`]), and the two ends of that band are where the snapshot
-/// stops paying. Below the first, its fixed cost -- one call, one allocation --
-/// outweighs what it saves: sixteen elements is where the two meet, and a
-/// four-element list reads thirteen percent dearer through a snapshot on
-/// `CPython` 3.12. Above the second, the copy is large enough that walking it
-/// costs more cache than the reference counts it avoids: measured on one box,
-/// a snapshot reads a hundred thousand elements at 1.68 ns each against 4.57
-/// in place, two hundred thousand at 1.73 against 4.74, four hundred thousand
-/// at 3.88 against 4.68, and six hundred thousand at 5.76 against 4.61 -- so
-/// the crossing is between four and six hundred thousand, and the cap sits
-/// below it with margin, at two mebibytes of transient.
+/// A list one test settles element by element is read through a snapshot of it
+/// (see [`snapshot_pays`]), and the two ends of that band are where the
+/// snapshot stops paying. Below the first, its fixed cost -- one call, one
+/// allocation -- outweighs what it saves: sixteen elements is where the two
+/// meet, and a four-element list reads thirteen percent dearer through a
+/// snapshot on `CPython` 3.12. Above the second, the copy is large enough that
+/// walking it costs more cache than the reference counts it avoids: measured on
+/// one box, a snapshot reads a hundred thousand elements at 1.68 ns each
+/// against 4.57 in place, two hundred thousand at 1.73 against 4.74, four
+/// hundred thousand at 3.88 against 4.68, and six hundred thousand at 5.76
+/// against 4.61 -- so the crossing is between four and six hundred thousand,
+/// and the cap sits below it with margin, at two mebibytes of transient.
 ///
 /// Neither end changes an answer: both sides of each read the same elements and
 /// report the same membership. They are where one reading of a value stops

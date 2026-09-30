@@ -273,9 +273,10 @@ pub enum Verdict {
 }
 
 impl Verdict {
-    /// Whether this verdict proves emptiness. The reduction the public relations
-    /// make, named once: `Unknown` is not a proof, so it answers with
-    /// `Inhabited`.
+    /// Whether this verdict proves emptiness. The reduction the rules make where
+    /// they need a `bool`, named once: `Unknown` is not a proof, so it answers
+    /// with `Inhabited`. The public `is_empty` (`Schema::is_empty_with`) matches
+    /// the verdict itself instead, because it asks the descriptor on `Unknown`.
     pub(crate) const fn is_empty(self) -> bool {
         matches!(self, Verdict::Empty)
     }

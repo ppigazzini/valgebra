@@ -169,7 +169,8 @@ from valgebra import Validator
 
 base_accepts = Validator(str | None)
 override_accepts = str
-assert not base_accepts.is_subtype_of(override_accepts)  # the override narrows
+# The override narrows: a value the base accepts, None, is refused by it.
+assert base_accepts.relation_to(override_accepts) == "not_subset"
 ```
 
 ## What a workload actually passed
@@ -191,7 +192,7 @@ observed = [1, 2, 3]  # collected by a tracer over a real run
 assert all(declared.is_valid(value) for value in observed)  # no value escapes
 seen = union(*[Validator(type(value)) for value in observed])
 assert seen.is_subtype_of(int | str)
-assert not declared.is_subtype_of(seen)  # wider than anything observed
+assert declared.relation_to(seen) == "not_subset"  # wider than anything observed
 assert not any(Validator(str).is_valid(value) for value in observed)  # `str` untested
 ```
 
@@ -202,13 +203,23 @@ assert not any(Validator(str).is_valid(value) for value in observed)  # `str` un
 `is_subtype_of`, `is_equivalent` and `is_empty` are **sound, not complete**. A
 `True` is a proof; a `False` means *not proven*, which is not the same as
 disproven. A recipe that reads `not a.is_subtype_of(b)` as "a narrowing happened"
-reports a change that may not have occurred.
+reports a change that may not have occurred. `relation_to` gives the inclusion
+in three answers instead: `"subset"` is the proof, `"not_subset"` a refutation —
+some value of `a` is outside `b` — and `"undecided"` neither. Against `nothing`
+it splits `is_empty` the same way. A recipe that reports a narrowing asks for
+`"not_subset"`, as the ones above do.
 
 The [decidability boundary](15-decidability.md) states where the answers are exact.
 The place that bites an inspection script is a deeply nested Boolean
-combination, where the work is a product of the branches. A table of literals is
-not one of them: it denotes a finite set and is decided by membership, at any
-width and in both directions.
+combination, where the work is a product of the branches. A table of literals on
+the left is not one of them: it denotes a finite set and is decided by
+membership at any width, and a table against a table in either direction. An
+infinite set against a table is another question: refuting `int` below a table
+is the descriptor's to answer, and the descriptor reads at most `BUDGET` schema
+nodes (`crates/valgebra-core/src/descr/lower.rs`), so `int` against a `Literal`
+whose members and union node pass that budget is `"undecided"` — one of the
+bounds the [decidability boundary](15-decidability.md#sound-but-conservative)
+lists under a schema too large to build.
 
 ## What this cannot see
 

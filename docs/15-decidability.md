@@ -238,13 +238,23 @@ answers `"undecided"`.
   cancels a complement, `union` folds a join carrying a schema beside its own
   complement, and `intersection` folds the meet of that pair, all where the
   schema is built. So `complement(complement(int))` **is** `int` — one schema,
-  which `repr` and `==` report and which a comparison is never asked about — a
-  union covering the universe **is** `anything`, and a meet cancelling to
-  nothing **is** `nothing`. A predicate and a hooked class are exempt: the law
-  holds of sets, and neither is one.
-  The decision procedure has no rule for either shape and never meets one built
-  this way. A shape the fold does not reach is a different matter and is
-  conservative (below).
+  which `repr` and `==` report and which a comparison is never asked about —
+  `int | ~int` **is** `anything`, and `int & ~int` **is** `nothing`.
+  `complement(complement(X))` folds whatever `X` is. The two folds over a pair
+  read two occurrences of one schema as one set, so they decline wherever the
+  constructor cannot see that it is one: a schema holding a predicate or any
+  class, `list[C] | ~list[C]` included. The constructor holds no class object
+  to ask whether a metaclass hook answers
+  `isinstance` — `Schema::union_within` and `Schema::meet_within` in
+  `crates/valgebra-core/src/ir.rs` pass `NoLeafRelations`, and
+  `denotes_a_set_within` in `crates/valgebra-core/src/oracle.rs` reads a class
+  as a set only on the oracle's word. A plain class denotes a set all the same,
+  and the law holds of it: `intersection(C, complement(C))` keeps its spelling
+  and `is_empty()` decides it `True`. A union that covers the universe without
+  such a pair — `int | str | ~(int | str)` — stays a union as well, and
+  `is_equivalent(anything)` decides it.
+  The decision procedure has no rule for a folded shape and never meets one
+  built this way. A shape the folds do not reach is the relations' to decide.
 
 ```python
 from typing import Annotated, Any
@@ -366,18 +376,18 @@ no record at all.
 Here valgebra is correct but not complete: it may answer `False` or "not empty"
 for a relation that does in fact hold.
 
-**A negative answer is one of two different things**, and the core tells them
-apart even though the boundary does not. A relation can be *refuted* -- there is
-a value of the one schema outside the other, so the answer is `False` and will
-stay `False` however much the procedure improves -- or *declined*, which is the
-list below: nothing was found either way, and the same query decides once the
-representation reaches it. The three relations answer with all three values
-inside the core and map both negatives to `False` at the boundary, because
-`False` is what the contract promises and a third value at the surface would
-make every caller handle a case the guarantee does not need. What the split buys
-is that "not proven" is countable: a rule that begins refuting a relation the
-procedure declines is a change the tests see rather than one that hides behind
-an unchanged `False`.
+**A negative answer is one of two different things**, and `relation_to` tells
+them apart where the boolean methods do not. A relation can be *refuted* --
+there is a value of the one schema outside the other, so the answer is `False`
+and will stay `False` however much the procedure improves -- or *declined*,
+which is the list below: nothing was found either way, and the same query
+decides once the representation reaches it. The three relations answer with all
+three values inside the core. `is_subtype_of`, `is_equivalent` and `is_empty`
+map both negatives to `False`, because `False` is what their contract promises;
+`relation_to` reports the two apart, `"not_subset"` for a refutation and
+`"undecided"` for a decline. What the split buys is that "not proven" is
+countable: a rule that begins refuting a relation the procedure declines is a
+change the tests see rather than one that hides behind an unchanged `False`.
 
 The list is short, and it is short for one reason. Two representations answer
 these questions. The **rules** recurse over the schema tree, and where they
@@ -392,14 +402,18 @@ the shape. What is left below is what the descriptor cannot hold.
   declines rather than spreading it — so a relation about such a map is left to
   the rules, and a pair the rules do not decide comes back "not proven".
 
-    That partition is the model's, not a shortcut around it: the source treats
-    a record as a quasi-`K`-step function, where `K` is a *predefined finite
-    partition* of the key domain and the catch-all is split across its parts.
-    The paper weighs letting key domains overlap and declines it, because
-    comparing two records would then need the machinery for comparing
+    The partition is the source's: it treats a record as a quasi-`K`-step
+    function, where `K` is a *predefined finite partition* of the key domain
+    and the catch-all is split across its parts, and it forbids overlapping
+    domains in one map as "both a design and an implementation choice". It
+    also says a theory of maps with overlapping domains is possible, and that
+    comparing two records under it needs the machinery for comparing
     intersections of arrow types. A complement-keyed clause is exactly an
-    overlapping domain, so this decline is the model's shape rather than an
-    unfinished corner of the implementation.
+    overlapping domain, and valgebra admits it where the source forbids it:
+    the walk reads it exactly, and the comparison it needs is not built. That
+    is a gap rather than a refusal, and what it costs today is the relation --
+    a pair about such a map the rules do not decide comes back "not proven",
+    even between two spellings of every dict:
 
     ```python
     from valgebra import Validator, anything, complement
@@ -605,8 +619,11 @@ lands: it enumerates what the procedure must *decide* and fails in both
 directions, so a relation that regresses to conservatism fails there and one
 that becomes decided is added there. It also carries a strict expected-failure
 mark for a relation that holds and is not decided, so the row fails on the day
-it decides. It names one today: the four-field record against its corners,
-above, whose number is the width the sets decide.
+it decides. Those rows are the bound-limited relations above — the four-field
+record and the seven-component tuple against their corners, the thirteen-link
+chain of differences, and the mapping chain five levels deep — each carrying
+the width or depth at which the bound stops it; the ledger's `_LEDGERED` list
+owns them.
 
 ```python
 from typing import Annotated, Literal, NamedTuple
@@ -672,19 +689,22 @@ carries each relation above as a decided one, written the way a caller writes it
 rather than built from the other operand — a distinction that matters, because
 the shortcuts the procedure takes are keyed on two schemas sharing their
 constants. An entry of the list above that stops deciding fails there as a
-defect rather than a known gap; its strict expected-failure mark is for the
-other direction, a relation that holds and is not decided, and names the one
-this page describes. `tests/test_completeness_probe.py` searches a fixed
-universe for relations answered `False` that no value refutes and fails when one
-appears without a written reason, so a gap nobody thought of cannot arrive
-unnoticed. It reaches a gap only where some atom in its universe reaches it,
-which is why that universe carries both constraint families, a fixpoint beside
-its own unfolding, and a record beside a literal-keyed map.
+defect rather than a known gap; its strict expected-failure marks are for the
+other direction, a relation that holds and is not decided, and name the
+bound-limited relations this page describes. `tests/test_completeness_probe.py`
+searches a fixed universe for relations answered `False` that no value refutes
+and fails when one appears without a written reason, so a gap nobody thought of
+cannot arrive unnoticed. It reaches a gap only where some atom in its universe
+reaches it, which is why that universe carries both constraint families, a
+fixpoint beside its own unfolding, and a record beside a literal-keyed map.
 
-General regular-expression-types inclusion of sequences (a union of sequence
-languages that splits across branches, or a repeated heterogeneous group) is not
-implemented, and no schema valgebra builds takes that shape: the sequence node
-carries the linear prefix-and-tail form and has no syntax for the rest.
+A sequence below a union of sequence schemas it splits across, where no single
+branch contains it, is decided by the set representation's symbolic automaton
+(`crates/valgebra-core/src/descr/symbolic.rs`): `tuple[int, ...]` is below
+`tuple[()] | tuple[int, *tuple[int, ...]]`. What has no syntax is the rest of
+regular-expression-types inclusion — a repeated heterogeneous group, such as
+`int` and `str` alternating to any length — because the sequence node carries
+the linear prefix-and-tail form, so no schema valgebra builds takes that shape.
 
 ## Undecidable at runtime
 
@@ -747,12 +767,14 @@ Every decision also runs under a fixed work budget, and exhausting it returns th
 conservative answer (`False`, "not proven") rather than running unbounded. This
 preserves soundness: a bail-out is never a wrong `True`.
 
-The Python answer is `True` or `False`, so a `False` from an exhausted budget
-reads the same as a `False` the procedure decided. Inside the core the two are
-distinct — emptiness answers *empty*, *inhabited*, or *neither* — which is what
-lets a test say that a bail-out never claims a proof it does not have. The
-distinction is not surfaced here because the contract does not change with it: a
-`False` is "not proven" either way.
+The boolean methods answer `True` or `False`, so through them a `False` from an
+exhausted budget reads the same as a `False` the procedure decided. Inside the
+core the two are distinct — emptiness answers *empty*, *inhabited*, or
+*neither* — which is what lets a test say that a bail-out never claims a proof
+it does not have, and `relation_to` reports the split: a query whose budget runs
+out, and which the set representation does not settle either, answers
+`"undecided"` rather than `"not_subset"`. The contract does not change with it:
+a `False` is "not proven" either way.
 
 The budget binds where the work is a **product** rather than a sum. Subtyping
 distributes over both sides of a union, so relating two unions can cost the
@@ -803,8 +825,13 @@ What is left under the budget is the Boolean tower: a deeply nested combination
 of unions, meets and complements, where subtyping distributes over both sides
 and the work is a product of the branches. A `False` there may mean "not proven
 within the bound" rather than "not a subtype"; on anything else it means the
-relation is outside the decided fragment above. The bound stands in for a
-termination argument rather than for a missing optimisation: counted over the
-decision workloads the goals a query *repeats* number zero, because the trail
-absorbs recursion and the per-rule caches absorb the shape where one goal is
-asked once per field. A table over goals would have nothing to hit.
+relation is outside the decided fragment above. The bound caps cost and does
+not stand in for termination: every goal a query asks is drawn from a finite
+closure of its subterms, which `docs/dev/02-decision.md` in the repository
+writes out. Nor does it stand in for a goal memo on most shapes: over the
+`--decision`, `--decision-refute` and `--decision-repeat` workloads of
+`scripts/perf_gate.py` the goals a query *repeats* number zero, because the
+trail absorbs recursion and the per-rule caches absorb the shape where one goal
+is asked once per field. The relation matrix (`--decision-matrix`) is where a
+table over goals would hit: a meet against a union repeats goals there, and
+`decision::goal_tests` counts them.

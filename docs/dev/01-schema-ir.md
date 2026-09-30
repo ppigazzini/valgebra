@@ -25,8 +25,9 @@ rather than changing it.
 ## A node denotes a set of Python values
 
 That is the whole frame, and every variant's doc comment states its set.
-`Schema::Int` denotes the `int` instances; `Schema::Union` denotes the union of
-its members' sets; validation is membership in the set the root node denotes.
+`Schema::Int` denotes every value whose real type is `int` or a subclass of it;
+`Schema::Union` denotes the union of its members' sets; validation is membership
+in the set the root node denotes.
 
 Two consequences a reader needs before touching this file:
 
@@ -46,9 +47,9 @@ observable from an object of the pooled constant's own type.
 ## What fixes a node's carrier, and why it differs per node
 
 A structural node denotes values of a *shape* held by some *carrier* — a Python
-class. The three structural nodes fix their carrier three different ways, and
-the difference decides how large a change is that widens one. One of the three
-was widened, by taking the carrier out:
+class. The four structural nodes -- the ones `Schema::guards_children` names --
+fix their carrier three different ways, and the difference decides how large a
+change is that widens one:
 
 | node | how the carrier is fixed | widening it means |
 |---|---|---|
@@ -58,11 +59,12 @@ was widened, by taking the carrier out:
 | `AttrRecord { fields }` | **not fixed at all** — a record carries no carrier, and a class is a separate `Instance` atom met with it | nothing to widen; the two halves are already separate sets |
 
 Read that table before answering "can valgebra express `Mapping[K, V]`" or "can
-it express *any object* whose `.a` is an `int`". The first is still no, and the
-second became yes the day the class came out of the node — which took a
-denotation, a membership rule and a set of relations, not a flag. The three
-nodes are not one mechanism seen three times, and what one of them cost to widen
-is the measure of the other two.
+it express *any object* whose `.a` is an `int`". The first is no. The second is
+a set in the closure, because the record carries no class -- which takes a
+denotation, a membership rule and a set of relations, not a flag -- and no
+annotation spells it on its own ("A spelling for the carrier-free attribute
+record", below). The four nodes are not one mechanism seen four times, and what
+a record without a carrier takes is the measure of widening any of the others.
 
 ## Whether to add a variant
 
@@ -71,8 +73,8 @@ generating set plus the representatives the normal form names** — that is the
 definition, not a preference, and it is what makes "the algebra" a claim rather
 than a collection.
 
-Two columns, and `tests/test_closure_ledger.py` holds every variant to one of
-them:
+Two columns, and a third for what is not a set at all;
+`tests/test_closure_ledger.py` holds every variant to one of the three:
 
 - a **generator** denotes a set no combination of the others reaches. `Int`,
   `Seq`, `Literal`, `Union`, `Complement` and the rest are here, and admitting a
@@ -82,10 +84,15 @@ them:
   `Literal[True] | Literal[False]`, `NoneType` is `Literal[None]`, and
   `Intersection` is De Morgan of the other two — each is checked against its
   derivation, in both directions, by that ledger.
+- a **marker** is not a set of its own: `Ref` denotes the definition it points
+  at, and `SelfRef` marks where a `recursive` body's back edge will go, resolved
+  to a `Ref` before a validator is returned -- its doc comment gives it the empty
+  set only where that resolution did not happen. Neither column above fits
+  either, and the ledger names both.
 
 The distinction is what keeps the claim honest. Read as "no node denotes a set
-another reaches", the sentence was simply false of five variants; read as this,
-it is a statement a test settles.
+another reaches", the sentence is false of the four representatives; read as
+this, it is a statement a test settles.
 
 So a proposed node is one of exactly two things:
 
@@ -222,7 +229,7 @@ someone reading only the law.
 | argument | why it fails |
 |---|---|
 | "the behaviour already looks right" | a probe shows the walk, not the denotation |
-| "the implementation already computes it" | `build_object` computes attribute checks *inside* a node whose denotation includes the class |
+| "the implementation already computes it" | `build_object` computes attribute checks into an `AttrRecord` it meets with the class's `Instance` atom; a computation on the way to that meet is not a set of its own |
 | "it only changes which values a constructor sees" | subtyping is defined from the denotation, so that *is* the algebra |
 | "the sources name no carrier, so adding one is free" | an absence of guidance is not permission. It also is not a refusal — the refusal rests on the admission test, not on this row |
 | "a class carrier is unsound because `register()` mutates it" | false — class relations are re-decided on every call, never cached |
@@ -268,10 +275,10 @@ them address the **same** constants pool: a literal's constant, a class, a
 comparison operand, a user predicate. Each has its own type, and
 [06-type-design.md](06-type-design.md) owns why and what a crossing would cost.
 
-`Constraint::MinLen` and `Constraint::MaxLen` sit in the same enum and are **not**
-pool indices at all — they carry the length inline. That is what the type says: a
-length has no `shifted(PoolShift)`, so the arms that must not take a pool shift
-cannot.
+`Constraint::MinLen`, `Constraint::MaxLen` and `Constraint::Regex` sit in the
+same enum and are **not** pool indices at all — they carry the length or the
+pattern inline. That is what the type says: a length or a pattern has no
+`shifted(PoolShift)`, so the arms that must not take a pool shift cannot.
 
 ## Composition, and the two shifts
 
@@ -283,7 +290,8 @@ types so a caller cannot transpose them.
 `Schema::reindexed` is the same operation where the second pool is *interned*
 into the first rather than appended, so identity-shared constants collapse to one
 slot. It is the one the binding actually calls; `shifted` is reached from the
-tests and the fuzz targets.
+tests, `crates/valgebra-core/benches/core.rs` and
+`crates/valgebra-core/examples/perf_workload.rs`.
 
 Being the same operation, it is one walk: `Remap` names the difference — append
 by a distance, or intern through a table — and the walk asks each index space how
@@ -298,10 +306,10 @@ set instead of restating it. `Schema::remapped_by` takes no wildcard on purpose:
 a future variant carrying a pooled index must be a compile error there rather
 than a node that silently keeps an index into the wrong pool.
 
-The laws in `crates/valgebra-core/src/lib.rs` hold both entry points to moving
-every payload by its own space's distance, counted through an enumeration written
-in the test module rather than reached for in the IR — a check that judges the
-walk against something other than itself.
+The laws in `crates/valgebra-core/src/index_laws.rs` hold both entry points to
+moving every payload by its own space's distance, counted through an enumeration
+written in the test module rather than reached for in the IR — a check that
+judges the walk against something other than itself.
 
 ## Recursion, and why the guardedness check answers what it does
 
@@ -311,21 +319,28 @@ validator is returned — so no compiled schema holds a `SelfRef`, and the walk
 treats one as a non-member if it ever sees one.
 
 A definition is admitted only when it is **contractive**: every occurrence of the
-self-reference sits under a structural constructor. `Schema::occurs_unguarded`
-decides that, and its shape is worth stating because it is not obvious from
-reading it.
+self-reference sits under a structural constructor.
+`Schema::occurs_unguarded_under` decides that over the whole definitions table,
+because an inner fixpoint that names this one puts the occurrence behind a `Ref`,
+where a walk over the body alone sees a leaf. `recursive` in
+`crates/valgebra-py/src/lib.rs` and a self-naming PEP 695 alias in `build.rs`
+both run it on the resolved body. Its shape is worth stating because it is not
+obvious from reading it.
 
-**`Guarded::Yes` is absorbing.** The only arm that can answer true demands
-`Guarded::No`, and the algebraic combinators pass the guard through unchanged, so
-nothing below a structural constructor is ever reported unguarded however deeply
-it nests. Each structural arm therefore answers false for every input — the same
-answer the match's default gives. The arms are written out because they state
-*which* constructors guard; they compute nothing.
+**`Guarded::Yes` is absorbing.** The check is one rule over the child
+traversal: each node joins its own guard onto the one it inherited
+(`Guarded::join`) and asks its children under the result, and only a `Ref` met
+under `Guarded::No` can answer true. `Schema::guards_children` is the one place
+the structural constructors are named, in a match with no wildcard, so a new
+variant is a compile error there; the algebraic combinators answer
+`Guarded::No` and pass the guard through unchanged. Nothing below a structural
+constructor is therefore ever reported unguarded, however deeply it nests.
 
-Two properties in `crates/valgebra-core/src/lib.rs` pin that rather than leaving
-it as a comment: the guard absorbs under every structural constructor, and read
-from the top the check agrees exactly with "the reference is reachable through
-algebraic combinators alone".
+Two properties in `crates/valgebra-core/src/laws.rs` pin that rather than
+leaving it as a comment: the guard absorbs under every structural constructor
+(`structural_constructors_absorb_the_guard`), and read from the top the check
+agrees exactly with "the reference is reachable through algebraic combinators
+alone" (`a_reference_under_only_combinators_is_unguarded`).
 
 ## Which laws construction settles
 
@@ -343,15 +358,22 @@ anything, because a complement is evaluated by negating what is under it, so
 negating twice asks the same question once -- even of an atom that answers by
 running code. The other two ask `A` *twice*, and a predicate or a class with an
 `isinstance` hook may answer differently each time; those two folds are asked of
-the atom first, and decline for one that is not a set.
+the atom first (`denotes_a_set_within` in `crates/valgebra-core/src/oracle.rs`),
+and decline for one not known to be a set. Construction asks with no bindings in
+hand -- `Schema::union_within` and `Schema::meet_within` pass `NoLeafRelations`
+-- and only the bindings hold a class object, so the two folds decline for
+**every** `Instance`, a plain class included: `intersection(C, complement(C))`
+stays a meet of the pair, and `is_empty()` decides it empty. The law holds of the
+set a plain class denotes; only the fold declines, and the decision procedures,
+which do ask the bindings, answer it.
 
 **Why the normal form rather than a free term.** A constructor that folds some
-laws and not others is neither: `union(int, int)` rendered `int | int` and
-compared unequal to `int` while `union(int, complement(int))` rendered
-`anything`, so `==` was equality of nothing in particular and `repr` showed a
-shape no rule was written for. Normalising at construction makes `==` equality of
-a normal form -- which is what the API reference calls it -- and makes the shape
-every rule downstream may assume the shape it gets. The form is one per
+laws and not others is neither: it renders `union(int, int)` as `int | int`,
+unequal to `int`, while `union(int, complement(int))` renders `anything`, so `==`
+is equality of nothing in particular and `repr` shows a shape no rule was written
+for. Normalising at construction makes `==` equality of a normal form -- which is
+what the API reference calls it -- and makes the shape every rule downstream may
+assume the shape it gets. The form is one per
 spelling, not one per set: two spellings of one set can still compare unequal,
 and the set question is `is_equivalent`.
 
@@ -370,8 +392,8 @@ holds it to a search from the front. The digest `__hash__` reads is kept on the
 validator once computed.
 
 **Both sides or neither.** A law folded in `union` and left standing in
-`intersection` is two answers to one question, and the simplifier already folded
-the meet — so the constructors disagreed with each other and with it. Stating a
+`intersection` is two answers to one question, and the simplifier folds the meet
+— so such constructors would disagree with each other and with it. Stating a
 law once, in the place a schema is built, is what lets a rule downstream assume
 no such shape reaches it.
 
@@ -413,8 +435,8 @@ walk already uses for that kind".
 the term keeps the spelling so that `repr` can give it back.
 
 A runtime validator asks one question of a schema — does this value belong —
-and to that question `Any` answers yes for every value. The walk always said
-so, with one arm for both. Gradual typing (Siek & Taha)
+and to that question `Any` answers yes for every value. The walk says so, with
+one arm for both. Gradual typing (Siek & Taha)
 holds the dynamic type apart from the top for a *second* question, consistency,
 which a static checker asks at every site where a value crosses between typed
 and untyped code. A validator has no such site and never asks it. Keeping the
@@ -430,10 +452,13 @@ reads the top. The flag is a term fact like a field name, and it is not a set:
 two schemas that differ only in it are equal. That is not a rule asking to be
 followed — `Spelling` implements `PartialEq`, `Ord` and `Hash` by hand so every
 spelling compares and hashes alike, and a rule that tried to branch on it would
-find two values it cannot tell apart. Nothing in the core reads it; `render` in
-the bindings does, and it is the only thing that may. What is lost is the ability to say "this
-branch was deliberately not checked" *inside the algebra*; what is kept is that
-the reader sees it in `repr`, which is where they looked for it.
+find two values it cannot tell apart. Two things read it by matching the
+variant, and no relation or law may: `render` in the bindings, which writes it
+back, and the sharing table in `ir/intern.rs`, which hashes and compares it so
+that it never hands a caller back the spelling it did not write. What is lost is
+the ability to say "this branch was deliberately not checked" *inside the
+algebra*; what is kept is that the reader sees it in `repr`, which is where they
+looked for it.
 
 
 ## What a `TypedDict` denotes
@@ -452,10 +477,9 @@ sets are spellable both ways, so the choice fixes defaults only, and each
 default is the one its author's spec gives.
 
 `ReadOnly` is stripped: it constrains writers, and a value has no writers.
-`total`, `Required` and `NotRequired` set key optionality. A `TypedDict` is
-read **open**: the typing spec lets a value carry keys the class does not
-declare, so the schema carries a catch-all clause and `{"name": "Ada", "note":
-"x"}` is a member of one declaring only `name`.
+`total`, `Required` and `NotRequired` set key optionality. The open reading is
+one clause admitting any value at every `str` key the class does not name, so
+`{"name": "Ada", "note": "x"}` is a member of one declaring only `name`.
 
 ## Where a class and an attribute record go
 
@@ -480,10 +504,10 @@ union without multiplying the memory of every automaton that carries one.
 What is *not* a precondition is the descriptor replacing the decision
 procedure. That caution is about **consulting** a DNF descriptor
 beside a procedure that already answers — paying twice for one verdict — and it
-is the rule that withdrew the shadowing widening. It says nothing about building
-the representation, which is asked where the rules decline and is checked
-against membership over generated values like every other part of the
-descriptor.
+is why no reading asks the descriptor where the rules have decided. It says
+nothing about building the representation, which is asked where the rules
+decline and is checked against membership over generated values like every other
+part of the descriptor.
 
 Lowering an `Instance` needs the bindings to say which classes a class derives
 from, and the object pool answers it: three questions in all -- what an operand
@@ -491,9 +515,11 @@ is, what a literal names, and what order a class carries. See "How a class reach
 
 ## What a class with attributes is, on the surface
 
-An object schema is the meet of an instance atom and an attribute record, and
-the surface does not change: `repr(Validator(Pt))` stays `Pt`, and a value that
-is not an instance reports one violation, `instance_type`.
+An object schema is the meet of an instance atom and what the class declares --
+an attribute record where the fields are named, a tuple shape where they are a
+`NamedTuple`'s positions -- and the surface does not change:
+`repr(Validator(Pt))` stays `Pt`, and a value that is not an instance reports one
+violation, `instance_type`.
 
 The meet is right in the algebra — it is what the attribute form *is* — and
 left alone it would change two things a user sees: `render` would write it as
@@ -504,16 +530,17 @@ of a thing the user spelled as `Pt`, and the second reports attributes of an
 object that has no reason to have them.
 
 So the surface is preserved by construction. `Schema::object_class` recognises
-the pair — exactly one instance atom beside exactly one attribute record, other
-members tolerated — and `render` and a union's branch label both read the class
-out of it, which is why the shape is recognised once rather than matched at each
-of them. The walk stops collecting once a member of a meet has failed *at the
-meet's own path*: a member that rejects the value itself has settled it, and a
-member that fails inside the value leaves the others meaningful. That second
-rule is not specific to classes — it is the one a refinement already applies
-between a base and its constraints, which is why `Annotated[int, Gt(0)]` does
-not report a bound on a string — and it is recorded in
-[08-error-model.md](../08-error-model.md). The error snapshot pins both.
+the pair — exactly one instance atom beside exactly one declaration, an
+attribute record or a sequence, other members tolerated — and `render` and a
+union's branch label both read the class out of it, which is why the shape is
+recognised once rather than matched at each of them. The walk stops collecting
+once a member of a meet has failed *at the meet's own path*: a member that
+rejects the value itself has settled it, and a member that fails inside the
+value leaves the others meaningful. That second rule is not specific to classes
+— it is the one a refinement already applies between a base and its constraints,
+which is why `Annotated[int, Gt(0)]` does not report a bound on a string — and
+it is recorded in [08-error-model.md](../08-error-model.md). The error snapshot
+pins both.
 
 ## How a class reaches the core
 
@@ -523,23 +550,29 @@ that question, in three parts: what a comparison operand is, what a literal
 names, and -- since a class is a set the descriptor holds -- what order a class
 carries.
 
-A class answers as a snapshot: an id, the ids of the classes its `__mro__` lists,
-and a layout tag. The snapshot is taken once, at lowering, rather than by asking
-`issubclass` again later, because `abc.ABC.register` rewrites the subclass
+A class answers as a snapshot, `Class` in
+`crates/valgebra-core/src/descr/classes.rs`: an id, the ids of the classes its
+`__mro__` lists, a layout tag, and the kind that layout confines an instance to.
+The snapshot is taken once, at lowering, rather than by asking `issubclass`
+again later, because `abc.ABC.register` rewrites the subclass
 relation after a schema is built and a relation that moves is not an order to
 reason in. A class whose metaclass answers `isinstance` or `issubclass` itself is
 declined outright, on the test the decision procedure already applied: two
 occurrences of one such class can disagree, so `A ∧ ¬A` is not empty and the law
 that says it is must not fire.
 
-The layout tag is how disjointness is *proved* rather than guessed. Python
-refuses `class C(int, str)` -- "multiple bases have instance lay-out conflict" --
-so two classes built on different builtins share no value, and no class can
-derive from both. A class built on no builtin lays down no layout of its own and
-takes the plain tag, which conflicts with nothing: `class Both(Plain, MyStr)`
-builds, so a plain class and a `str` subclass do share values. Everything else is
-undecided, which is the honest answer -- two unrelated classes may still meet in
-a subclass nobody has written yet.
+The layout tag is how disjointness is *proved* rather than guessed, and
+`layout_of` in `crates/valgebra-py/src/oracle.rs` reads it. Python refuses a
+class deriving from two others unless the layout one lays down extends the
+other's: `class C(int, str)` is "multiple bases have instance lay-out conflict",
+and so is `class C(A, B)` for two classes whose own `__slots__` each add a slot
+over `object`. So two classes whose layouts neither extends -- two builtins, or
+two classes laying down slots of their own -- share no value, and no class can
+derive from both. A class that lays down no layout -- built on no builtin, and
+adding no slot -- takes the plain tag, which conflicts with nothing:
+`class Both(Plain, MyStr)` builds, so a plain class and a `str` subclass do
+share values. Everything else is undecided, which is the honest answer -- two
+unrelated classes may still meet in a subclass nobody has written yet.
 
 An operand is read by its **exact** type. A subclass of `int` carries its own
 `__eq__` and its own `__hash__`, and the sets the descriptor holds are Python's
@@ -572,12 +605,10 @@ cheaper, with every checksum unchanged.
 That last number is the shape of the problem. `MAX_LINES`, `MAX_ATOMS` and
 `MAX_STATES` -- rows in the table of every bound in the tree
 ([00-architecture.md](00-architecture.md)) -- bound the descriptor a build may
-**produce**; nothing bounds the work a build may **do**, so refusing costs as
-much as succeeding and a caller
-cannot buy safety by being asked to accept less. This is what the nightly fuzzer
-reported as an out-of-memory that four separate bound reductions did not move,
-and what took its throughput from three million runs to two thousand three
-hundred: not a bound set too high, but a quantity with no bound at all.
+**produce**, and say nothing about the work a build may **do**. Held by them
+alone, refusing costs as much as succeeding, and a caller cannot buy safety by
+being asked to accept less: the cost is not a bound set too high, but a quantity
+those bounds do not measure.
 
 So the decision is:
 
@@ -599,20 +630,21 @@ work whose result is discarded.
 There is a second bound, and the allowance does not replace it. An allowance
 bounds what a build spends once it has started; it cannot bound what starting
 costs. A lowering builds an automaton at every sequence node and a powerset at
-every set node, and none of that is a product to charge for. Held to 1024 units
-and nothing else, one `is_empty` over a record nested eight deep costs **more
-than the structural rules spend on the entire decision workload**: seventeen
-hundred times its instruction budget, which is not a budget to re-record but a
-workload no lane can run.
+every set node, and none of that is a product to charge for, so a build held to
+`WORK` and nothing else still pays that floor before the allowance can stop it --
+on the shapes a relation is asked about, far more than the structural rules spend
+answering the whole question. The `DEPTH` doc comment in
+`crates/valgebra-core/src/descr/lower.rs` carries the measurement.
 
 So a build that will not pay for itself is refused *before* it is walked, and
-**nesting** is what says which. Depth is the exponential and breadth is not,
-which the `lower_nested_records_depth*` rows of `cargo bench --bench core` show
-against a wide record beside them. Every relation the descriptor decides and the
-rules do not nests five deep or less; the shapes that blow up nest ten and
-deeper. Bounded at five, the whole widening costs the decision path a fraction
-the instruction-count gate holds, and the validation path, which no relation is
-on, is unchanged.
+**nesting** is what says which. Depth is the exponential, which the
+`lower_nested_records_depth*` rows of `cargo bench --bench core` show, run under
+`Bounds::UNHELD`; breadth is not, and `BUDGET` holds it instead. Every relation
+the descriptor decides and the rules do not nests five deep or less, which is
+where `DEPTH` sits; the shapes that blow up nest ten and deeper. Bounded at
+`DEPTH`, the whole widening costs the decision path a fraction the
+instruction-count gate holds, and the validation path, which no relation is on,
+is unchanged.
 
 What it does cost is the fuzzer. The decision target runs at 139 executions a
 second against 10,544, over five times the covered features and twice the
@@ -638,7 +670,7 @@ other -- `list[object]` is a sequence node in the `List` kind, and an
 `dict[anything, anything]` -- which is the set the typing spec assigns an
 unparameterised generic, and the set the walk already checked. The two spellings
 build one schema and compare as one. `str`, `bytes`, `int`, `float` and `bool`
-were already their kinds; this is the rest of that rule.
+are their kinds too; this is the rest of that rule.
 
 **A class laying down a builtin layout goes on that kind's line.** Every
 instance of a `str` subclass is a `str`, so the class constrains a value *within*
@@ -652,6 +684,11 @@ because a subclass keeps it.
 class's instances are not confined to the kindless slot -- a subclass may add any
 layout. Placing such a class narrowly would be the one direction that is unsound:
 claiming a value does not exist. It stays on every line.
+
+**A class laying down a layout that is no builtin's goes on the kindless slot
+alone.** Its own `__slots__` over `object` lay down a layout no subclass can
+combine with a builtin's, so none of its instances is ever of a listed kind.
+`Descr::instance_of` in `crates/valgebra-core/src/descr/mod.rs` places all three.
 
 ## Which representation decides
 
@@ -693,11 +730,11 @@ changes. The three a lowering can run out of are named together as `Bounds`, and
 set from, with
 `Bounds::UNHELD` to show what a build costs without them.
 
-That measurement corrected a guess. The descriptor was thought to allocate a
-component per kind, eleven of them, to fill one; it does not -- an empty
-component is an empty `Vec`, which allocates nothing, and a whole descriptor is
-384 bytes moved by value. The cost is in the products, which is what the three
-bounds already hold.
+That measurement also says where the cost is not. A descriptor does not
+allocate a component per kind to fill one: an empty component is an empty
+`Vec`, which allocates nothing, and a whole `Descr` is twelve `Lines` -- one per
+kind and the kindless slot -- moved by value. The cost is in the products, which
+is what the three bounds hold.
 
 ## Which whole-schema operations stay
 
@@ -725,10 +762,10 @@ shorter is not a reason. A validator does not pickle either, and the refusal
 says what to send instead ([docs/17-boundaries.md](../17-boundaries.md)).
 
 `simplify` is the lattice normal form of a term, and construction settles the
-laws -- see the next section -- so the schema a caller holds already *is* that
-normal form: `repr` shows it, `==` compares it, and the method is the identity
-under another name. It is deprecated rather
-than removed at once, because a method that quietly starts returning its
+laws -- see "Which laws construction settles" above -- so the schema a caller
+holds already *is* that normal form: `repr` shows it, `==` compares it, and the
+method is the identity under another name. It is deprecated rather than removed
+at once, because a method that quietly starts returning its
 argument is worse than one that says it is going.
 
 ## The limit
@@ -751,23 +788,23 @@ carry a work budget instead ([02-decision.md](02-decision.md)).
 A transform over the tree answers with the handle it was given when it changed
 nothing: opening a schema with no record in it, closing one already closed, or
 rebuilding one side of a composition whose indices do not move all return the
-input rather than a copy of it. Measured on a probe over a thirty-two-level
-tree, the two together cost half what they did.
+input rather than a copy of it. `with_records_open_depth32` in
+`cargo bench --bench core` is the shape that reads it.
 
 The trade the shared representation makes is visible in the gates. Carrying a
-subtree got cheaper and the node got smaller, which the membership walk and the
-decision procedures both read; *building* one is dearer, because a list is
-copied into the node's slice rather than moved into it, and a pass that rebuilds
-every node in a tree pays that on each. Both directions are
-budgeted, so neither is a claim: the instruction gate holds seven shapes across
-the three workloads.
+subtree is cheap and the node is small -- `ir.rs` pins its size, so a layout
+change is a compile error -- which the membership walk and the decision
+procedures both read; *building* one is dearer, because a list is copied into
+the node's slice rather than moved into it, and a pass that rebuilds every node
+in a tree pays that on each. Both directions are budgeted in
+`scripts/perf_budget.json`, so neither is a claim.
 
 What that costs is bounded by what the rules are for. They are the fast path
 rather than the whole answer: a shape they run out of budget on is asked again of the sets it
 denotes, and the descriptor interns the guard behind each object line, so sharing
-exists where a set is built even though it does not exist in the tree.
+exists where a set is built as well as in the tree.
 
 The limit that remains is the one no memo reaches. A cycle has no finite set
 representation here, so a recursive schema is decided by the rules or not at
-all, and that fragment -- not the missing sharing -- is what stands between this
+all, and that fragment -- not the missing memo -- is what stands between this
 procedure and a complete one.

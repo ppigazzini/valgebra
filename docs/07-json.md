@@ -21,7 +21,8 @@ assert Validator(list[int]).is_valid_json(b"[1, 2, 3]")
 
 `validate_json(data, *, fail_fast=False)` mirrors `validate`: it raises
 `ValidationError` on failure and aggregates every independent failure by default.
-`is_valid_json(data)` mirrors `is_valid`: it returns a bool and never raises.
+`is_valid_json(data)` mirrors `is_valid`: it returns a bool, and raises only
+where a comparison raises a fatal interpreter signal.
 Both accept a JSON `str` or `bytes`.
 
 When you need the data, not just the verdict, `load` validates and **returns the
@@ -58,12 +59,16 @@ doc = '[{"a": 1}, {"b": "x"}]'
 assert v.is_valid_json(doc) == v.is_valid(json.loads(doc))
 ```
 
-Three kinds of document are held to the JSON grammar, or to the parser's limit,
-where `json.loads` is looser, so the two paths part on those and nowhere else:
-the non-standard float tokens (below), a document nested past the parser's
-recursion limit (below), and an escape naming a **lone surrogate**. `"\ud800"` is a half of a pair that
-encodes no character, and the parser reports `json_invalid` where `json.loads`
-builds a `str` the object path admits.
+The two paths part only where the parser is stricter than `json.loads`. A
+`bytes` argument is read as UTF-8 alone, where `json.loads` detects a UTF-8
+byte-order mark or a UTF-16 or UTF-32 encoding and decodes it (below). And four
+kinds of document are held to the JSON grammar or to the parser's limits: the
+non-standard float tokens (below), a document nested past the parser's
+recursion limit (below), an integer longer than the parser's digit limit once
+the interpreter's own limit is lifted (below), and an escape naming a **lone
+surrogate**. `"\ud800"` is a half of a pair that encodes no character, and the
+parser reports `json_invalid` where `json.loads` builds a `str` the object path
+admits.
 
 ```python
 import json
@@ -116,8 +121,12 @@ tokens as malformed, even though Python's own `json.loads` accepts them as an
 extension. This is deliberately stricter: a document is held to the JSON grammar,
 so a float special can only enter through the object path (where `float('inf')`
 is an ordinary member), never through `validate_json`. A number too large for a
-machine integer still parses to a Python `int`, and an overflowing float literal
-such as `1e400` is standard JSON and parses to `inf`.
+machine integer still parses to a Python `int`, up to jiter's digit limit: 4300
+digits in the jiter the lockfile pins, which is also the interpreter's default
+`sys.get_int_max_str_digits()`. Past it the parser reports `json_invalid`
+(`number out of range`) whatever the interpreter's limit is set to, where
+`json.loads` follows that setting. An overflowing float literal such as `1e400`
+is standard JSON and parses to `inf`.
 
 ```python
 from valgebra import Validator
@@ -155,11 +164,13 @@ A non-`str`, non-`bytes` argument is a `TypeError` from `validate_json` and
 `load`, not a validation failure; `is_valid_json` answers `False` for it, as it
 does for anything that is not a document.
 
-**A leading byte-order mark makes the input malformed.** RFC 8259 says a JSON
-text does not begin with one, and the parser holds to that, so a document
-exported by a spreadsheet or written by a Windows editor is refused at column 1
-with `json_invalid` — reading as an error about a character nobody can see.
-Strip it before validating:
+**A leading byte-order mark makes the input malformed.** RFC 8259 forbids a
+sender to add one and lets a parser ignore one rather than treat it as an error;
+jiter refuses it, so a document exported by a spreadsheet or written by a
+Windows editor is refused at column 1 with `json_invalid` — reading as an error
+about a character nobody can see. `json.loads` refuses one at the start of a
+`str` as well, and decodes it away from `bytes`, so on `bytes` the two paths
+part here. Strip it before validating:
 
 ```python
 from valgebra import Validator
@@ -169,6 +180,10 @@ carrying = '\ufeff{"a": 1}'
 assert not v.is_valid_json(carrying)
 assert v.is_valid_json(carrying.lstrip("\ufeff"))
 ```
+
+**`bytes` are read as UTF-8.** A document encoded as UTF-16 or UTF-32 is
+malformed input, where `json.loads` detects the encoding and decodes it; decode
+such bytes to a `str` before validating.
 
 **A document nested past the parser's own recursion limit is malformed input
 too**, not a deep document the walk then refuses: jiter stops at a couple of
@@ -195,8 +210,17 @@ ships), per-call median on a passing document:
 | Shape | `is_valid_json` | `json.loads` + `is_valid` | speedup |
 | --- | --- | --- | --- |
 | Record, 50 int fields | 2.5 us | 6.2 us | ~2.5x |
-| List of 200 small records | 40.5 us | 39.9 us | ~1.0x |
+| List of 200 small mappings | 40.5 us | 39.9 us | ~1.0x |
 | `list[int]`, 10,000 elements | 71 us | 462 us | ~6.5x |
+
+`benches/bench_json.py` times both columns, and a strict
+`TypeAdapter.validate_json` over the same three shapes beside them; that third
+column is not recorded here, so read the comparison from the benchmark rather
+than from this page:
+
+```bash
+uv run --no-sync --group bench pytest benches/bench_json.py
+```
 
 Avoiding materialization helps where the document is large or scalar-heavy: the
 10,000-element array is six times faster than parse-then-validate, and the wide
@@ -240,9 +264,6 @@ the one that never loses.
 refinement read their value again, which a pull parser has moved past, and a
 stream answers differently from the tree on documents the tests hold. The
 document shape is a tree the walk reads once and drops.
-`benches/bench_json.py` measures a strict `TypeAdapter.validate_json` over the
-same three shapes; that column is not recorded above, so read the comparison
-from the benchmark rather than from this page.
 
 Nodes that compare against a Python object — literals, refinements, instance and
 object checks, and predicates — materialize just the value at that node, since

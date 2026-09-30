@@ -43,8 +43,10 @@ The laws hold of the schema a caller **builds**, not of a pass over it
 afterwards: `union`, `intersection` and `complement` produce the lattice normal
 form, so `union(int, int)` *is* `Validator(int)`, a member written twice in
 either order is one member, and a schema beside its own complement folds to a
-bound. Absorption is the law construction does **not** apply: `A | (A & B)` and
-`A` are one set and two terms. Absorption is one case of `A | B` folding to `A`
+bound, except where it carries a predicate or a class
+([below](#what-the-algebra-decides-and-the-conservative-frontier)). Absorption
+is the law construction does **not** apply: `A | (A & B)` and `A` are one set
+and two terms. Absorption is one case of `A | B` folding to `A`
 wherever `A` contains `B`, and that fold needs a containment, which is a
 decision rather than a shape. `repr` shows the built form and `==` compares it.
 The deprecated `simplify` method folds a few decisions more -- a meet of
@@ -86,7 +88,7 @@ site where a value crosses between typed and untyped code, and for that question
 the dynamic type is an interval rather than a point. A validator asks one
 question — does this value belong — and to it `Any` answers yes for every value.
 Holding an atom apart for a question nobody asks costs a decision that disagrees
-with the walk, which has always admitted every value under `Any`.
+with the walk, which admits every value under `Any`.
 
 What is left of the distinction is the spelling, and the schema keeps it:
 `repr(Validator(Any))` is `Any` and `repr(Validator(anything))` is `anything`.
@@ -110,8 +112,10 @@ letters that are themselves sets, the sets as a powerset lattice, the dicts as a
 lattice of map atoms — so inclusion becomes one question about emptiness: `a` is
 below `b` exactly when `a` and the complement of `b` share no value. That
 decides pairs no rule about shapes reaches, and it costs about two orders of
-magnitude more than a rule, which is why it is asked second and only where the
-rules decline.
+magnitude more than a rule -- `cargo bench --bench core` measures both, the
+`subtype_*` rows against the `lower_*` rows
+([performance](11-performance.md#what-a-relation-between-two-validators-costs))
+-- which is why it is asked second and only where the rules decline.
 
 Each kind's representation is **bounded**: a union of dicts, objects or sets
 holds at most a fixed number of atoms, and a build spends a fixed allowance
@@ -156,8 +160,14 @@ which fragment each part settles:
   (`X ∩ ¬X = ⊥`, `X ∪ ¬X = ⊤`) for any `X` that is a set. So
   `intersection(int, complement(int))` **is** `nothing` — one schema, which
   `repr` prints and `==` compares, and which no later call is needed to reach. A
-  predicate and a class with an `isinstance` hook are the exceptions, because
-  they answer by running code and the law is about sets.
+  predicate is the exception, because it answers by running code and the law is
+  about sets. Construction also declines the two folds for every class, for a
+  narrower reason: a metaclass may answer `isinstance` by running code too, and
+  telling a plain class from such a one needs the class object, which
+  construction does not consult (`denotes_a_set_within` in
+  `crates/valgebra-core/src/oracle.rs`). The law still holds of a plain class's
+  set; only the fold declines, and `intersection(C, complement(C)).is_empty()`
+  decides the meet empty instead.
 - **Decided rather than folded.** A meet of two disjoint kinds keeps its
   spelling: `intersection(int, str)` reprs as itself, and
   `intersection(int, str).is_empty()` is `True`. Emptiness is a question about
@@ -185,10 +195,11 @@ under union, intersection and complement, so the emptiness test is asked
 literally rather than approximated by a rule about the shape. It decides what a
 rule about shapes cannot — a container meet, a complement nested inside another,
 one regular language inside another, the ordering of two steps — and it is
-bounded, because
-building one costs about two orders of magnitude more than a rule that already
-answered. What is past those bounds, and what no finite descriptor holds, is what
-the boundary records as conservative.
+bounded, because building one costs the two orders of magnitude over a rule
+that `cargo bench --bench core` measures
+([above](#two-deciders-and-the-guard-between-them)). What is past those bounds,
+and what no finite descriptor holds, is what the boundary records as
+conservative.
 
 Neither ever changes a membership decision: the walk answers membership directly,
 and both representations are sound.

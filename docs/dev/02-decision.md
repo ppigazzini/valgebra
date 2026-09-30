@@ -45,7 +45,7 @@ flowchart TD
     RULES -->|proved| H([Holds])
     W -->|empty| H
     W -->|yes| F([Fails])
-    W -->|undecided| U([Unknown])
+    W -->|undecided| DESC
     DESC -->|empty| H
     DESC -->|inhabited| F
     DESC -->|refused| U
@@ -62,7 +62,8 @@ Two places carry the design. The **witness guard** is the `W` diamond, and it
 has three exits rather than two: a refutation whose subject is proved empty
 becomes the *opposite* answer, which is what puts the empty set below
 everything, and one whose subject is undecided becomes a decline rather than a
-`Fails`. The **descriptor** is reached only from "neither" -- a pair the rules
+`Fails`, which the descriptor is asked about as it is about any other. The
+**descriptor** is reached only from a decline -- a pair the rules
 refuted is never lowered, because a sound second reading cannot overturn a
 proof, and lowering one costs about two orders of magnitude more than the rule
 that already answered. Its inhabited answer refutes only where no reference was
@@ -91,11 +92,13 @@ container that admits an empty one, a keyed map that requires no key, a union
 with such a member. `laws.rs` holds that shallow reading to the value corpus,
 and `decision/tests.rs` pins its edge.
 
-**A pair no rule decided is worth three readings**, in this order, and every
-arm that answers for a shape and then declines hands its pair to them rather
-than ending the match: two sets that *share no value*, which refutes; then the
-oracle, the only reader of a class or a constant; then the supertype's own
-shape, where a **refinement** takes its base's refutation and not its proof --
+**A pair no rule decided is worth three kinds of reading**, in this order, and
+every arm that answers for a shape and then declines hands its pair to them
+rather than ending the match: the readings that refute on a value, the last of
+them two sets that *share no value* (`unstructured` in `decision.rs` asks them,
+and [What a refutation stands on](#what-a-refutation-stands-on) lists them);
+then the oracle, the only reader of a class or a constant; then the supertype's
+own shape, where a **refinement** takes its base's refutation and not its proof --
 the value outside the base is outside a subset of it, while being inside the
 base says nothing about the constraints. The oracle is asked before the
 refinement because it proves where the refinement reading only refutes: a
@@ -224,8 +227,9 @@ survivor outlives the rule it was written about.
 
 A rule the descriptor also decides is invisible through the public relation, so a
 test about a rule's *scope* has to ask the rule. `decision.rs`'s own test module
-carries `by_the_rules` and `empty_by_the_rules` for that, and every test about
-what a rule reaches goes through them.
+(`decision/tests.rs`) carries `by_the_rules` and `empty_by_the_rules` for that,
+and asks `Schema::subtype_relation` and `verdict_under` directly where a test
+needs the rules' three-valued answer rather than their proof.
 
 ## Sound, not complete, and the direction matters
 
@@ -294,16 +298,19 @@ It is asked of a **union** and of nothing else, because a union is the only
 shape that folds a member list and so the only one with a stop to read past. A
 meet covers the universe only when every member does, and the rule for a meet on
 the right asks each member on its own; a complement covers it only when the
-schema under it holds no value, which the complement rule already asks. Arms for
-those two were written, and the mutation sweep found that nothing could tell
-either from its own deletion.
+schema under it holds no value, which the complement rule already asks. An arm
+for either is indistinguishable from its own deletion, which the mutation sweep
+reads as a survivor.
 
-The complete reading is also the one the *constructors* take: a union is folded
-to `anything` when its readable members cover every region, ignoring the opaque
-ones for this reason. So a caller cannot spell the shape that separates the two
-— the fold catches it where the schema is built — and what the second reading
-buys is that the decision agrees with the construction for a schema assembled
-any other way, which is what the fuzz target builds.
+The constructors do not take the complete reading. `Schema::union_within` in
+`ir.rs` folds a union to `anything` only where it carries a member beside that
+member's own complement (`has_complementary_pair_within`), so a union whose
+readable members cover every region between them stays a union: `int | str |
+list[int] | ~(int | str)` is spelled and kept, the fast reading stops at the
+list, and the complete reading is what decides it -- as it decides the terms the
+fuzz target builds by hand. The region-cover fold belongs to the deprecated
+`simplify` (`simplify::finish_union`), which reads the regions the same way, so
+the decision agrees with what that pass would return.
 
 ## What the core cannot decide alone
 
@@ -398,7 +405,9 @@ raises -- and holds the decorator to nothing.
 site of a question reads one of the two answers as the conservative one, its
 `None` and that answer are indistinguishable, and a mutation replacing the
 default with it cannot be killed by any test. That is a property of the call
-sites rather than of the default, and it holds for exactly three of the eleven:
+sites rather than of the default, and it holds for the questions this table
+names -- `.cargo/mutants.toml` excludes exactly their mutants, and
+`tests/test_oracle_ledger.py` holds the table and the exclusions to each other:
 
 | question | its one reading | the unkillable default |
 |---|---|---|
@@ -418,8 +427,8 @@ the oracle declined, and the sweep kills it in about a minute.
 
 `leaf_subtype` answers one question the class hierarchy alone cannot: whether an
 enumeration is the union of its members. It is, when **every instance of the
-class is one of the values `list(cls)` yields** — and that is four conditions,
-not the three first written down:
+class is one of the values `list(cls)` yields** — and that takes four
+conditions:
 
 | condition | the value that stands against dropping it |
 |---|---|
@@ -428,15 +437,15 @@ not the three first written down:
 | it has **at least one member** | a subclass's member: a memberless enum is still subclassable |
 | its members compare by identity | an `IntEnum` member *is* the integer, so two of them are not two values |
 
-The first three were read as "the members are fixed at class creation, a class
-with any cannot be subclassed, and every instance is one of them". The middle
-clause is true and the outer two are not: a flag's `|` operator makes instances
-after the fact, and a class with *no* members is exactly the case the
-no-subclassing rule does not cover. Both were decided as unions, so
-`Validator(Flag) <= Literal[*Flag]` and `Validator(EmptyEnum) <= nothing` were
-`True` with a value refuting each.
+The shorter reading -- "the members are fixed at class creation, a class with
+any cannot be subclassed, and every instance is one of them" -- has a true
+middle clause and two false outer ones: a flag's `|` operator makes instances
+after the class is built, and a class with *no* members is exactly the case the
+no-subclassing rule does not cover. Decided as unions on that reading,
+`Validator(Flag) <= Literal[*Flag]` and `Validator(EmptyEnum) <= nothing` would
+each be `True` with a value refuting it.
 
-A class failing any condition stays the `isinstance` atom it already was. That
+A class failing any condition is the `isinstance` atom any other class is. That
 costs completeness and nothing else: membership is unaffected, and the relations
 simply stay undecided. `tests/test_enums.py` holds each refused kind to the value
 that would refute the union reading, so a kind read as its members again fails
@@ -559,15 +568,17 @@ for a schema that is shallow and wide.
 
 **The two orders of magnitude are per relation, and a query is not one
 relation.** On the workload whose shapes reach the descriptor at all
-(`scripts/perf_gate.py --decision-matrix`, 92 million instructions) the
-instructions divide the other way: **73% inside the rules and 23% inside the
-lowering**. No reading there is dear -- a disjointness is around forty
-instructions and a region set around fifteen -- and they are asked hundreds of
-thousands of times per run, because the meet rule and the union rule each
-distribute the pair and every leaf of that tree reads both sides' regions and,
-where it declines, the readings beside them. The descriptor is the dear answer
-and the rare one; the rules are the cheap answer asked constantly, and a change
-to either is measured on that workload rather than argued from this ratio.
+(`scripts/perf_gate.py --decision-matrix`, whose count
+`scripts/perf_budget.json` owns) the instructions divide the other way: the
+larger share is spent **inside the rules**, not inside the lowering, and a
+cachegrind profile of that workload is where to read the split. No reading
+there is dear -- a disjointness and a region set are each a handful of
+comparisons -- and they are asked hundreds of thousands of times per run,
+because the meet rule and the union rule each distribute the pair and every
+leaf of that tree reads both sides' regions and, where it declines, the
+readings beside them. The descriptor is the dear answer and the rare one; the
+rules are the cheap answer asked constantly, and a change to either is measured
+on that workload rather than argued from this split.
 
 ## The budget, and what exhausting it means
 
@@ -656,13 +667,16 @@ kind of bound.
 
 What to say about the ceiling is what it is measured to reach.
 `DECISION_BUDGET` is the ceiling and is a row of the bounds table
-([00-architecture.md](00-architecture.md)). What the shapes cost is pinned as
-properties rather than as prose: `decision/tests.rs` reads a query's steps with
-`subtype_steps` and holds the shapes that have been probed -- deep records with
-union-of-literal fields, two wide literal tables against each other, a fixed
-tuple of unions against the union of its expansions. The step count grows with
-the size of the query rather than exponentially in its depth on every one of
-them, and the build limits cap that size.
+([00-architecture.md](00-architecture.md)). What a shape costs is pinned as a
+property rather than as prose, and two shapes are pinned, both in
+`decision/tests.rs`: `a_table_is_decided_without_the_work_growing_with_it`
+reads `subtype_steps` over two wide literal tables and holds that the work does
+not grow with either width, and
+`the_product_rule_decides_its_corners_in_a_bounded_number_of_steps` reads the
+budget a fixed tuple of unions spends against the union of its corners (below).
+A record nested deep with union-of-literal fields has no such property: nothing
+holds its step count, so what the ceiling is measured to reach there is not
+pinned. The build limits cap the size of every query.
 
 **The product family reaches it, and says where.** The product rule narrows a
 fixed-length sequence by each branch at each position, and it drops a branch
@@ -730,8 +744,9 @@ of a `true` never reaches the subject, and the region check upstream answers a
 scalar right-hand side correctly on its own. What is left uncovered is exactly a
 container, a record or an instance on the other side.
 
-Both laws are stated over the property, in the fuzz targets and in the core
-property suite, and the enumerated cases are in the completeness ledger.
+Both laws are stated over the property, in the fuzz target
+(`fuzz/fuzz_targets/decision.rs`) and in the core property suite, and the
+enumerated cases are in the completeness ledger.
 
 **The two bounds are asked at different points**, because they cost different
 amounts. `A ⊆ U` is a comparison against the supertype's region set, which the
@@ -739,36 +754,34 @@ query already holds for the scalar rule, so it is asked before the rules: a
 universe on the right answers every pair. `∅ ⊆ B` is a walk of the *subject*,
 and it is asked where the rules declined. A proof stands without it, and a
 refutation is read against that same emptiness by the witness guard on the way
-out, so asking first walked the subject on every pair the rules were about to
-decide anyway. The answer is the same either way -- both readings are sound,
+out, so asking it first would walk the subject on every pair the rules are about
+to decide anyway. The answer is the same either way -- both readings are sound,
 and an empty subject is below everything whichever of them says so.
 
 **The empty-subject bound reads a complement with the complete reading too.**
-`¬X` is empty exactly when `X` covers the universe, and the emptiness fold got
-that from the *fast* region reading alone -- which stops at the first member a
-union carries that the partition cannot read. So `list | object` read as unknown,
-`¬(list | object)` read as unknown with it, and a subject that denotes nothing
-was not below everything after all. The complete reading is asked where the fast
-one declines and only there, so a complement the regions already settle pays
-nothing for it, and the walk is a member list against a bitset rather than a
-lowering.
+`¬X` is empty exactly when `X` covers the universe, and the *fast* region
+reading alone stops at the first member a union carries that the partition
+cannot read: it reads `list | object` as unknown and `¬(list | object)` as
+unknown with it, so on that reading a subject that denotes nothing would not be
+below everything. The complete reading is asked where the fast one declines and
+only there, so a complement the regions already settle pays nothing for it, and
+the walk is a member list against a bitset rather than a lowering.
 
-That is the bound the fuzzer found missing, and it is worth naming how it
-surfaced, because the shape is not one a caller can spell. `¬¬(list | object)`
+The shape is not one a caller can spell. `¬¬(list | object)`
 is the universe; the constructors fold `¬¬X` to `X`, so only a term built by
 hand carries it. The contravariant rule turns `¬A ⊆ ¬¬U` into `¬U ⊆ A`, which
 puts the un-spellable complement in the *subject*, where this bound is the only
 thing that answers. `fuzz/seeds/decision/` keeps the input, and
 `a_universal_supertype_bounds_a_subject_that_does_not_lower` in `laws.rs` draws
-the pair deliberately -- eight thousand pairs over the structural corpus built
-it not once.
+the pair deliberately, because a draw over the structural corpus does not build
+it.
 
-**The dearer route was tried here and withdrawn.** Asking the set representation
-for the same bound -- lowering the supertype alone where the subject refused --
-is sound and decides the same pair, and it cost the relation matrix **6.45
-billion instructions against 89.8 million**, a seventy-fold regression, because
-a pair whose subject does not lower is common and the lowering is the dear
-operation. `scripts/perf_gate.py --decision-matrix` is where that showed.
+**The dearer route is not taken.** Asking the set representation for the same
+bound -- lowering the supertype alone where the subject refused -- is sound and
+decides the same pair, but a pair whose subject does not lower is common and the
+lowering is the dear operation, so the route would put a lowering on the common
+path. `scripts/perf_gate.py --decision-matrix` is the workload that shows it,
+against the count `scripts/perf_budget.json` owns.
 
 **The universe bound reads a union one De Morgan step in, where the region
 walk passes over the member that covers the rest.** The complete walk carries
@@ -781,12 +794,12 @@ bound asks for the meet of the members' complements, `None ∩ set[Any]`, and th
 emptiness rules settle it by kind disjointness without lowering anything.
 
 It is asked only of a union with a member the walk skipped: a walk that read
-every member read each exactly, and its `false` is the answer. Without that
-filter the meet was built for every declined pair against a union, and the
-relation matrix paid **+20.5%** for answers it already had; with it, +0.24%. The
-nightly laws lane drew the pair with a literal subject the descriptor cannot
-lower, and `a_union_of_complements_covers_the_universe_where_their_inners_are_disjoint`
-in `decision/tests.rs` keeps it.
+every member read each exactly, and its `false` is the answer. Building the meet
+for every declined pair against a union pays for answers the walk already has,
+and `scripts/perf_gate.py --decision-matrix` is where that cost shows.
+`a_union_of_complements_covers_the_universe_where_their_inners_are_disjoint`
+in `decision/tests.rs` holds the pair, with a literal subject the descriptor
+cannot lower.
 
 **The universe bound is read through a reference on the right even where the
 subject is a set nobody can read.** A reference past the end of the table names
@@ -811,13 +824,13 @@ declines.** `A ⊆ ¬B` holds whenever `B` is empty, since `¬B` is then the
 universe, and the rules cannot empty a pattern beside a length: `Regex("x")` with
 `MaxLen(0)` denotes no string, and only the set representation reads the
 pattern's shortest match. The descriptor route asks it by lowering the subject
-first, so a subject with no descriptor -- a literal the null oracle cannot place,
-a union past the node budget -- was below nothing, not even the complement of a
-set `is_empty` proves empty. The rule reads `B` alone. It is not the dearer route
-withdrawn above: that lowered the whole supertype for every pair whose subject
-refused, and this lowers the complement's inner set only where the complement
-rule has declined -- the relation matrix reads +0.02%. The nightly fuzzer drew
-it, `fuzz/seeds/decision/` keeps the input, and
+first, so on that route a subject with no descriptor -- a literal the null
+oracle cannot place, a union past the node budget -- would be below nothing, not
+even the complement of a set `is_empty` proves empty. The rule reads `B` alone.
+It is not the dearer route above: that lowers the whole supertype for every pair
+whose subject refused, and this lowers the complement's inner set only where the
+complement rule has declined, which leaves the relation matrix's count where it
+is. `fuzz/seeds/decision/` keeps the input, and
 `a_complement_only_the_descriptor_empties_bounds_a_subject_with_no_descriptor`
 in `decision/tests.rs` holds the pair and its non-universal neighbour, which
 stays a decline.
@@ -860,19 +873,23 @@ it has a comment. Prefer one rule that asks the question.
 ## The limit
 
 [docs/15-decidability.md](../15-decidability.md) owns the published fragment and
-`tests/test_completeness_ledger.py` the relations it decides; the ledger's
-strict expected-failure mark is for a relation that regresses, and it names
-none. **The list of what is declined is not restated here.** A second copy is a
-second thing to hold true, and nothing holds this one.
+`tests/test_completeness_ledger.py` the relations it decides. A relation that
+regresses fails there outright; the ledger's strict expected-failure marks are
+the relations that hold and neither decider decides, each with the bound that
+stops it, and a row fails on the day its relation decides. **The list of what is
+declined is not restated here.** A second copy is a second thing to hold true,
+and nothing holds this one.
 
-What this page owes instead is the **shape** of what is left, which is one
-shape. Every kind carries a representation closed under complement, so a negated
-atom has a component to land in and a pair the rules decline goes to the sets.
-What neither holds is a **cycle**: a finite representation has no room for one,
-so a recursive schema is unfolded once and everything past that belongs to the
-coinductive rule alone. Beside it stand the three build bounds, a predicate, and
-a class whose metaclass answers the check by running code — each a refusal
-rather than an answer, each with its cost on the published page.
+What this page owes instead is the **shape** of what is left. Every kind
+carries a representation closed under complement, so a negated atom has a
+component to land in and a pair the rules decline goes to the sets. What
+neither holds is a **cycle**: a finite representation has no room for one, so a
+recursive schema is unfolded once and everything past that belongs to the
+coinductive rule alone. Beside it stand refusals of size and of representation
+-- the three build bounds, the limits of a component's carrier, a key or a
+length no component has a part for -- and the two atoms that are not sets, a
+predicate and a class whose metaclass answers the check by running code: each a
+refusal rather than an answer, each with its cost on the published page.
 
 One property outranks the list. **A refutation is a claim that a value exists**,
 so a reading that cannot name one declines instead: an unfolding that cuts a

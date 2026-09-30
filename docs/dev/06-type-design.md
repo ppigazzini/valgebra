@@ -21,8 +21,8 @@ its yield is asking to be taken on faith.
 
 **One pool, four kinds of object.** The validator holds a single
 `Vec<Py<PyAny>>` carrying a literal's constant, a class, a comparison operand and
-a user predicate. Every one of those was a bare `usize` into the same `Vec`, so
-any of them reached any of them — and because the spaces do not merely share a
+a user predicate. Carried as a bare `usize` into the same `Vec`, any of them
+would reach any of them — and because the spaces do not merely share a
 type but share the *table*, a payload used against the wrong kind retrieves a
 real Python object of the wrong kind. The failure is a plausible wrong verdict,
 never a panic.
@@ -30,20 +30,20 @@ never a panic.
 **A fifth space that is not the pool.** `Schema::Ref` addresses the definitions
 table, where the four above are each their own.
 
-**Each of these is a compile error**, and each was broken on purpose to
-confirm the compiler rejects it:
+**Each of these is a compile error**, and each is a swap that, without the
+types, compiles into a wrong answer:
 
-| the swap | what it did instead of failing |
+| the swap | what it would do instead of failing |
 |---|---|
 | the two shifts transposed at `Schema::shifted` | pool indices moved by the definitions offset |
 | a class index where a literal's constant belongs | `isinstance` against a pooled number |
 | a definition index where a pool index belongs | a schema read as a Python object |
 | a pool shift applied to a length bound | a length bound moved by a pool length |
 
-**It cost nothing measurable.** The core workload's instruction count is
-identical across the split, to the instruction, and the binding walk moved under
-a hundredth of a percent. Seven newtypes over `usize` -- five index spaces and
-two shifts -- all `#[repr(transparent)]`,
+**It costs nothing measurable.** The core workload reads the same instruction
+count with the index types as with a bare `usize`, to the instruction, and the
+binding walk differs by under a hundredth of a percent. Seven newtypes over
+`usize` -- five index spaces and two shifts -- all `#[repr(transparent)]`,
 carried and consumed one at a time: the free shape.
 
 ## The maps
@@ -60,8 +60,14 @@ and the call is where a reader looks.
   PredIx     -- predicate_at --> a user predicate
 ```
 
-Four accessors for four questions. Beneath them one private `pool_slot` takes a
-bare `usize` — the single place an index space stops being tracked. The frontend
+Four accessors for four questions, in the walk
+(`crates/valgebra-py/src/check/walk.rs`). Beneath them one private `pool_slot`
+takes a bare `usize`, which is the one place the walk stops tracking an index
+space. The walk is not the only reader: the
+oracle (`crates/valgebra-py/src/oracle.rs`), `==` (`equality.rs`) and the
+per-validator precompute (`check/index.rs`) each open an index with `get()` at
+their own sites, and every such call is a place the space stops being tracked,
+which is why `get` is the one way out of an index type. The frontend
 mints through the mirror-image four (`intern_const`, `intern_class`,
 `intern_operand`, `intern_predicate`), so an index acquires its meaning at the
 line that decides what the object is being pooled *as*
@@ -79,8 +85,8 @@ declared attributes is the meet of the two.
 ```
 
 `Schema::shifted` takes one of each, so transposing them does not compile, and
-the constraint arms that must not take a pool shift cannot: a length is a `usize` and
-has no `shifted(PoolShift)`.
+the constraint arms that must not take a pool shift cannot: a length is a
+`usize` and a pattern a `String`, and neither has `shifted(PoolShift)`.
 
 ### The region set
 
@@ -88,10 +94,29 @@ has no `shifted(PoolShift)`.
 `complement`, `is_empty` and `subset_of`. Subtyping on the scalar-decidable
 fragment **is** `subset_of`, and says so.
 
-The raw operators left the folds entirely. That is worth more than it reads: a
-`|` where a `^` belongs is a one-character defect sitting inside a fold no test
-could distinguish it in, and concentrating the five operations into five one-line
-methods put each somewhere a five-line test reaches.
+No fold spells the raw bit operators; each reads one of the five methods. That
+is worth more than it reads: a `|` where a `^` belongs is a one-character defect
+sitting inside a fold no test could distinguish it in, and concentrating the five
+operations into five one-line methods puts each somewhere a five-line test
+reaches.
+
+`Regions`, beside it in `crates/valgebra-core/src/kind.rs`, is that set or
+`Unknown`, for a schema that is not scalar-decidable. It is a monoid under each
+lattice operation with `Unknown` absorbing both, and naming the absorbing
+element is what lets a fold over members stop at it: past an opaque member no
+later one can change the result.
+
+`Kind`, in the same file, is the partition the descriptor is indexed by: the
+type a value's `type(x)` is, so two schemas carrying different kinds share no
+value, `bool` and `int` aside. It is public because a `Literal`'s kind is a fact
+about a pooled constant only the bindings can read, and they answer in this
+vocabulary through `LeafRelations::literal_kind`. `Kind::ALL` lists every kind,
+and a test counts it against the variants rather than a comment promising it is
+complete.
+
+`BoolSet` (`crates/valgebra-core/src/descr/mod.rs`) is the two booleans as a
+subset: `bool` has exactly two values, so a finite set over it is exact, and a
+two-bit set is the smallest thing closed under the three operations.
 
 ### The answers
 
@@ -111,10 +136,14 @@ becomes indistinguishable from a decision.
 
 Three consequences follow, and they are why this is a type rather than a comment:
 
-- **The reduction is named once.** `Relation::holds` is the only place a
-  three-valued answer becomes the `bool` the public relations return, and it
-  reads `matches!(self, Relation::Holds)` -- so only a proof is `true`, at one
-  line rather than at every call site.
+- **The reduction is named once per answer.** `Relation::holds` is the one
+  place a relation becomes the `bool` `is_subtype_of` and `is_equivalent`
+  return, and it reads `matches!(self, Relation::Holds)`. Emptiness becomes the
+  `bool` `is_empty` returns in one match, in `Schema::is_empty_with`
+  (`crates/valgebra-core/src/decision/emptiness.rs`), which reads only
+  `Verdict::Empty` as `true` and asks the descriptor where the rules answer
+  `Unknown`. So only a proof is `true`, at one place per answer rather than at
+  every call site.
 - **The combinators propagate it.** `Relation::and` and `Relation::or_else`
   carry `Unknown` through a conjunction and a disjunction, so a rule that
   declines one conjunct cannot have its decline read as a refutation by the rule
@@ -136,6 +165,18 @@ would carry at the guardedness check and the record constructor. `SeqArity` is
 `Exactly(n)` or `AtLeast(n)`, so the schema's arity is one argument rather than a
 length and a flag beside the value's own length.
 
+`Polarity` (`crates/valgebra-core/src/ir/transform.rs`) is `Widen` or `Narrow`,
+the side of an inclusion a schema is read on: an unfolding cuts the reference no
+finite representation holds to the top on the subject's side and to the bottom on
+the supertype's. It is named rather than spelled as a `bool` because the two
+members are what the soundness of a difference turns on, and a call site reading
+`true` says nothing about which side that is.
+
+`Entered` (`crates/valgebra-py/src/check/ctx.rs`) is what entering a reference at
+a value found: the level is `Open`, the pair is already on the trail (`Cycle`, a
+value that contains itself), or the trail stands at `MAX_RECURSION_DEPTH`
+(`Full`) and no level was opened.
+
 **The discriminant order of `WalkMode` is load-bearing.** Written naively the
 sealed mode measured 2.6% *worse* than the two booleans it replaced, because
 neither predicate the walk asks per node compiled to a single comparison. Ordered
@@ -143,6 +184,21 @@ so that explaining is "at most `ExplainFailFast`" and stopping at the first
 failure is "at least" it, the same three variants measure 1.4% *better*. The type
 was not the variable; the discriminant assignment was. A test pins both
 predicates over every variant so a reordering fails rather than silently costing.
+
+### The guards and the vocabulary
+
+`Allowance` (`crates/valgebra-core/src/descr/budget.rs`) is a descriptor build's
+work allowance for as long as it is held. The build is the guard's scope, and it
+ends where the guard drops -- including where the scope unwinds, so a panicking
+build gives back what it found rather than leaving the next one short. It is
+`#[must_use]`, because a dropped one arms nothing.
+
+`Code` (`crates/valgebra-py/src/codes.rs`) is a failure code as
+`ValidationError.code` reports one. It is a newtype rather than a `&'static str`
+so that the constants in that file are the only way to write one: a helper taking
+a `Code` cannot be handed a string that looks like a code, and the compiler is
+what says so. `tests/test_code_table.py` holds every name there to a site that
+writes it.
 
 ## Adding a type
 
@@ -203,6 +259,6 @@ live pool's length, so their sum is bounded by the length of the pool they are
 combined into. A `debug_assert` states it, because a wrapped index would read a
 real object of the wrong kind and the release profile wraps.
 
-**Cost.** A newtype is free in *layout* and not always free in *codegen*. The one
-place it was not free here was a branch the walk takes per node, which is why
-step 5 above is not optional.
+**Cost.** A newtype is free in *layout* and not always free in *codegen*. The
+place it is not free here is a branch the walk takes per node -- the `WalkMode`
+discriminant order above -- which is why step 5 above is not optional.

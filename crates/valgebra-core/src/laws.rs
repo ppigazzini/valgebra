@@ -1903,11 +1903,12 @@ proptest! {
     /// no reference below it is ever reported unguarded, however the algebraic
     /// combinators nest underneath.
     ///
-    /// This is the argument that makes deleting one of `occurs_unguarded`'s
-    /// structural arms an *equivalent* mutant rather than an untested one:
-    /// every such arm answers false for every input, so the default answers
-    /// the same. Pinned as a property rather than asserted in a comment, so a
-    /// future arm that breaks the absorption fails here.
+    /// This is the argument the check rests on: `occurs_unguarded` states no
+    /// arm per constructor, only one rule joining each node's own guard
+    /// (`guards_children`) onto the one it inherited, and the absorption is
+    /// what makes that one rule enough. Pinned as a property rather than
+    /// asserted in a comment, so a change to the join that breaks it fails
+    /// here.
     #[test]
     fn structural_constructors_absorb_the_guard(s in schema_holding_a_ref()) {
         prop_assert!(!s.occurs_unguarded(DefIx::new(0), Guarded::Yes));

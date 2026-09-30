@@ -307,9 +307,11 @@ behind a fallback that triggers on compile failure.
 
 The fourth is neither, because it is not accepted: a character class carrying
 `--`, `&&`, `~~` or a nested `[` raises a `ValueError` naming the operator, in
-the words `re` warns about it with. Python reserves all four and warns that it
-may one day read them as operators; this engine reads them as operators now, so
-the same pattern denotes two sets and nothing about compiling it says which.
+the words `re` uses where it warns. `re` answers the four three ways:
+`[\w--\d]` raises, `[\w&&\d]` and `[\w~~\d]` warn that it may one day read them
+as operators, and `[a[bc]]` compiles without a word. This engine reads all four
+as operators now, so a pattern `re` accepts denotes two sets and nothing about
+compiling it says which.
 Refusing is the loud direction, and it is the one a reader can act on. Escape
 the characters to mean them literally — `[\w\~\~\d]` — or write the classes
 out. A POSIX class (`[[:alpha:]]`) is the one nested `[` that is read rather
@@ -427,10 +429,16 @@ A `Predicate` runs an arbitrary Python callable. It is the one *refinement*
 constraint that leaves Rust for a caller's own code — literals, instance and
 attribute checks, and comparison bounds also compare against Python objects, but
 against fixed operators, not arbitrary callables — so it is a **documented slow
-path**, never a silent fallback. `is_valid` runs it once per value it reaches;
-`validate` may run it again, because a failing union is re-walked to find the
-branch to report, and that walk asks the predicate a second time -- in each
-branch up to its first failure under `fail_fast`, and throughout without it. A
+path**, never a silent fallback. `is_valid` runs it once per value it reaches,
+and stops at the first value that fails. `validate` explains as it decides, in
+one walk, and a union in it walks each branch once. A dict schema -- a record, a
+`TypedDict`, a mapping -- that refuses a value is read twice: a deciding pass,
+then an explaining pass that resumes at the entry the first one stopped at, so
+a predicate on or under that entry runs a second time, and one on the clause an
+undeclared key falls under runs once to find whether the clause covers the
+entry and again to report it ([dev/04-walk.md](dev/04-walk.md)). Without
+`fail_fast`, `validate` also reads past the first failure, running the
+predicate on values `is_valid` never reached. A
 predicate is user code, and every occurrence the walk reaches is a call: the
 walk keeps no cache over it, because a cache would change what a predicate that
 does not answer from its value alone observes, and the same reading is what
@@ -466,16 +474,17 @@ assert positive.is_valid(1)
 assert not positive.is_valid(-1)
 ```
 
-`Predicate` is the portable spelling — it is what pydantic, msgspec and cattrs
-read — so prefer it in an annotation other tools also consume. The bare form is
+`Predicate` is the portable spelling — pydantic reads it — so prefer it in an
+annotation other tools also consume. The bare form is
 valgebra's own convenience, and it excludes a class for the reason above.
 
 ### A bare callable is metadata only
 
 The bare form is read **only** in `Annotated` metadata position, and reading it
 there at all is valgebra's own convenience: the libraries that share this
-metadata channel each require a wrapper — pydantic `AfterValidator`, beartype
-`Is[...]`, msgspec `Meta(...)`, `annotated_types` `Predicate`. The typing spec
+metadata channel require a wrapper — pydantic `AfterValidator`, beartype
+`Is[...]`, `annotated_types` `Predicate` — and msgspec reads no callable at all,
+since its `Meta` carries none. The typing spec
 leaves each consumer to say what its own metadata means, so this arm reaches
 exactly as far as the metadata position and no further.
 

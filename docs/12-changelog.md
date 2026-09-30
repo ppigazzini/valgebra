@@ -30,7 +30,7 @@ only one of them is the API:
 ## Deprecation
 
 A name on its way out keeps working for **one minor release** and warns:
-calling it raises a `DeprecationWarning` naming what replaces it, and the notes
+calling it emits a `DeprecationWarning` naming what replaces it, and the notes
 below carry an entry saying when it goes. It is then removed in the next minor
 release.
 

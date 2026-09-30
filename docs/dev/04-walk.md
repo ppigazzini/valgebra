@@ -47,8 +47,9 @@ values of a document that turns out malformed, or on a key the document repeats
 | `Explain` | a violation for each independent failure — every field, element and entry |
 | `ExplainFailFast` | the first violation only |
 
-Three modes, and the type says three. The pair of independent booleans this
-replaced admitted a fourth combination that no caller produced. The
+Three modes, and the type says three. A pair of independent booleans would admit
+a fourth combination -- fail-fast without explaining -- that means nothing, and
+the type leaves it unnameable. The
 discriminants are ordered so both predicates the walk asks per node are a single
 comparison, and a test pins both over every variant — that order is load-bearing
 and measured, not cosmetic ([06-type-design.md](06-type-design.md)).
@@ -57,7 +58,8 @@ and measured, not cosmetic ([06-type-design.md](06-type-design.md)).
 
 Membership reads a value through Python operations that can raise: `__eq__` for a
 literal, a rich comparison for a bound, `isinstance` for a class, `getattr` for
-an attribute, `__mod__` for a multiple-of, `__len__` for a length.
+an attribute, `%` for a multiple-of (the operand's `__rmod__` where the value's
+type does not know it), `__len__` for a length.
 
 **One rule across every such site: a value whose comparison, instance check or
 attribute access raises an ordinary exception is a non-member.** A value that
@@ -112,16 +114,26 @@ its walk records -- with a tie keeping the earliest branch so the choice is
 deterministic. When no branch makes progress — every branch a flat type mismatch
 — it falls back to one union error.
 
+**A branch the walk could not answer for keeps its own report.** A branch whose
+first failure says the *walk* stopped -- `recursion_limit`, `recursion_loop`,
+`mutated_during_validation` or `predicate_error`, the codes `walk_declined`
+names -- fails at the union's own location too, so the progress rule would fold
+it into the union error and drop the one sentence that says what to do about
+it. Where no branch makes progress, the first such branch is reported in place
+of the summary. The search reads at most `CLOSEST_BRANCH_PROBE_LIMIT` branches;
+past it a branch is only decided, so a union that wide reports the closest of
+the branches it read, or the summary.
+
 **A branch whose failure no report reads is not explained.** A scalar kind, a
 literal, and any branch whose kind refuses the value before its constraints or
 contents are read fail at the union's own location with a mismatch, and such a
 failure reaches a report only as the union's label. `decided_quietly` settles
 those branches without explaining them, so a value the union admits builds no
-violation and its `__repr__` never runs. Explained, `int | Foo` summarized a
-`Foo` for the `int` branch before the `Foo` branch matched, and a repr that
-raised made `validate` raise for a member. It holds each level the branch's own
-walk would enter, so at the depth bound the branch is explained and reports the
-bound, as it did.
+violation and its `__repr__` never runs: explaining the `int` branch of
+`int | Foo` would summarize a `Foo` the next branch admits, and a repr that
+raised a fatal signal would make `validate` raise for a member. It holds each
+level the branch's own walk would enter, so at the depth bound the branch is
+explained and reports the bound, which a report does read.
 
 **Each branch is walked in the caller's mode.** The choice reads the first
 failure only, which a walk stopped there has measured, so under fail-fast a
@@ -133,22 +145,29 @@ violation fail-fast reports is the one the full report leads with.
 anywhere in a branch would need every branch walked whole in every mode, and a
 fail-fast report would then cost the size of the value.
 
-The probe asks a predicate again wherever it re-walks one, and keeps no memo
-over the answers. A predicate is user code, so each occurrence the walk
-reaches is a call, and a cache keyed on the value's identity would decide for
-an impure predicate which of its answers counts. The refinements page states
-the count a caller sees; a predicate that must run once per value is memoised
-on the caller's side, where the key is the caller's to choose.
+A predicate is asked again wherever the walk reads a value twice, and the walk
+keeps no memo over the answers. An explaining walk reads each branch of a union
+once, since the walk that chooses the branch is the walk that reports it; what
+it reads twice is a keyed map that fails, whose explaining pass re-reads the
+field its deciding pass stopped at and everything beneath it, and walks a clause
+once more against an undeclared key it does not cover, to report it. A predicate
+is user code, so each occurrence the walk reaches is a call, and a cache keyed
+on the value's identity would decide for an impure predicate which of its
+answers counts. The refinements page states the count a caller sees; a predicate
+that must run once per value is memoised on the caller's side, where the key is
+the caller's to choose.
 
 ## What is precomputed, and what correctness may not depend on
 
-Three per-validator indexes are built once on first use and keyed by the address
-of a node's own buffer:
+Four per-validator indexes -- `ValidatorIndex` in
+`crates/valgebra-py/src/check/index.rs` -- are built once on first use and keyed
+by the address of a node's own buffer:
 
-- declared-field lookups per record;
+- declared-field lookups and interned keys per record;
+- interned attribute names per attribute record;
 - value sets for unions whose members are all literals, with the addresses of
   the pooled constants behind them;
-- compiled patterns per regex source.
+- compiled patterns per pattern constraint.
 
 A thread that finds another building them waits **detached** from the
 interpreter. The build interns strings, and on a free-threaded interpreter that
@@ -157,10 +176,12 @@ attached would never reach. Once built, the read is the same load either way.
 
 **Correctness never depends on one being present.** A node absent from an index
 falls back to building the map, scanning the branches, or recompiling the
-pattern. The literal-union plan is consulted only on the membership path and only
-for an exact int or str — an explain walk, a non-literal union, another value
-type and a JSON value all fall through to the linear scan, which stays the one
-source of truth for behaviour.
+pattern. The literal-union plan answers only for an exact int or str. The
+deciding walk takes its answer either way; the explaining walk takes only its
+*yes*, for the elements of a list of the union (`literal_list_matches`), and
+walks every other element. A non-literal union, another value type and a JSON
+value all fall through to the linear scan, which stays the one source of truth
+for behaviour.
 
 **The constant itself is found by its address.** A literal a program spells in
 its own source is usually the object it validates: a string constant is
@@ -184,9 +205,10 @@ little else.
 
 Two files beside them are read by every arm. `crates/valgebra-py/src/input.rs`
 is the `Value` above — the two input paths and the decoders that produce them.
-`crates/valgebra-py/src/check/index.rs` is the precompute the next section is
-about: the record-field lookups, the literal-union tables and the compiled
-patterns, built once with the validator and read by the walk that uses them.
+`crates/valgebra-py/src/check/index.rs` is the precompute the section above is
+about: the record-field lookups, the attribute names, the literal-union tables
+and the compiled patterns, built on the validator's first use (`Validator::index`
+in `crates/valgebra-py/src/validator.rs`) and read by the walk that uses them.
 
 `walk/scalar.rs` answers what a value is **without descending into it**: a
 scalar kind, a literal, and the constraints that narrow one. A container's
@@ -205,7 +227,7 @@ shape whose membership is a question per key rather than per position -- which
 keys the value carries, which of them the schema declares, and what a key the
 schema does not declare is covered by. A keyed map is read one of three ways.
 **By its keys** (`keyed_map_asks_for_its_keys`): one probe per declared field,
-through the `RecordPlan` built with the validator, and a count of the entries
+through the record's `RecordPlan` in the index, and a count of the entries
 found against the entries the value holds -- a value holding exactly its
 declared keys has no undeclared key for any clause to govern. **By a scan**
 (`keyed_map_scan`): every entry of the value, each key resolved by name and
@@ -225,7 +247,8 @@ keys are strings by the grammar. `walk/sequence.rs` reads one as a run of
 **elements** -- a list, a tuple, a parsed array, a set, a frozenset -- which
 differ in how an element is reached and agree on what each must be, and which
 share an arity, a count taken once and compared again, and the snapshot a list
-of one scalar kind, or of a union of them, is read through.
+is read through where a test settles every element -- one scalar kind, a union
+of them, one class, a union of literals.
 
 All three read the same `Frame`: where the walk is in the value, what it has found
 there, and the context it may look things up in. A walk needing a different one
@@ -237,27 +260,28 @@ the fast path -- builds it from the parts it keeps.
 Membership runs arbitrary Python at almost every entry — a predicate, an
 `__eq__`, an `isinstance` hook — and a free-threaded interpreter lets another
 thread write to the container meanwhile. Every container the walk does not own
-is therefore read against a count taken at entry and re-read before each step
-and after the last: `scan_dict` over entries, `scan_set` over the iterator, and
-`scan_list` over positions. A count that moved makes the reading cover no state
-the value was ever in, so the scan answers `Scan::Unreadable` and the caller
-reports `mutated_during_validation` rather than answering from the part it saw.
+is therefore read against a count taken at entry. `scan_dict` over entries and
+`scan_list` over positions take it themselves and re-read it before each step
+and after the last; `scan_set` leaves it to the builtin set iterator, which
+raises when the set changes size, and reads that raise as the move. A reading
+that moved covers no state the value was ever in, so the scan answers
+`Scan::Unreadable` and the caller reports `mutated_during_validation` rather
+than answering from the part it saw.
 
-The three differ only in what they count, and the sequence one is the case that
-argues for all of them. A list is walked *by position* against a length read
-once, so a list that grows hides its new items from the walk and one that
-shrinks leaves the walk answering about items that are gone — and in both
-directions `is_valid` returned `True` for a value that is not a member. A
-**tuple** cannot be resized, so its arm keeps the plain iterator; a JSON array
-is owned by the parser and cannot move at all.
+The sequence case is the one that argues for all of them. A list is walked *by
+position* against a length read once, so a list that grows hides its new items
+from the walk and one that shrinks leaves the walk answering about items that
+are gone — and in both directions a walk answering from that reading calls a
+value a member that is not one. A **tuple** cannot be resized, so its arm keeps
+the plain iterator; a JSON array is owned by the parser and cannot move at all.
 
 **A tuple's length comes from the storage, and which reading gives it depends
 on the interpreter.** CPython's `PyTuple_GET_SIZE` and `PyTuple_GET_ITEM` read
 the storage whatever the type overrides, so there every tuple, subclass or not,
 is read where it lies and its type is asked nothing. PyPy's `cpyext` goes
 through the object's own `__len__`, so a subclass that *overrides* `__len__`
-answers the C accessor with whatever it likes — and a walk that indexed
-against that read past the end of the allocation and took the process down.
+answers the C accessor with whatever it likes — and a walk indexing against
+that answer reads past the end of the allocation and takes the process down.
 There such a value is copied through the base type's own slot and the copy is
 walked.
 
@@ -265,11 +289,12 @@ On PyPy a subclass that **inherits** `tuple.__len__` is not copied, because
 there is nothing to distrust: the overridden answer and the base's answer are
 the same function. That is every `NamedTuple`, which is the tuple subclass a
 program is most likely to hold, and the walk tells the two apart by asking the
-type whether its `__len__` *is* the base's. Telling them apart by "is this
-exactly a tuple" instead copied every `NamedTuple`. CPython asked the same
-question, whose answer changes nothing it reads: the lookup was a quarter of
-walking a list of `NamedTuple`s, 798 instructions an element against 581
-without it.
+type whether its `__len__` *is* the base's -- not whether it is exactly a
+tuple, which would copy every `NamedTuple`. CPython's tuple walk does not ask,
+since the answer changes nothing it reads: the lookup is a quarter of walking a
+list of `NamedTuple`s, 798 instructions an element against 581 without it. A
+length bound asks it on every interpreter, because `stored_len` counts what the
+value holds rather than what an override answers.
 
 **On PyPy a subclass's contents come through its own methods too.** `cpyext`
 fills a tuple subclass's C-level items from its own `__iter__`, and answers a
@@ -277,15 +302,15 @@ dict subclass's length through its own `__len__` and each value `PyDict_Next`
 yields through its own `__getitem__`. So there a tuple subclass is read where it
 lies only if it inherits `tuple.__iter__` as well as `tuple.__len__`, and a dict
 subclass only if it inherits `dict.__len__` and `dict.__getitem__`. Any other is
-copied through `tuple.__iter__` or `dict.copy`, and the copy is walked. A tuple
-subclass whose `__iter__` yielded one item over two took `validate` down, and a
-dict subclass overriding `__len__` was refused by a closed record it belongs
-to. One whose `__iter__` yields *more* than it stores never reaches the walk:
-`cpyext` refuses it at the call. CPython reads the storage in every case, and
-asks the type nothing. `scan_dict` reads its entries from a copy on PyPy
-for a reason of the same kind: a key swapped for another while the scan runs
-Python makes `cpyext`'s `PyDict_Next` fail fatally rather than report it, and
-the copy is a dict nothing else can reach.
+copied through `tuple.__iter__` or `dict.copy`, and the copy is walked: read in
+place, a tuple subclass whose `__iter__` yields one item over two takes
+`validate` down, and a dict subclass overriding `__len__` is refused by a closed
+record it belongs to. One whose `__iter__` yields *more* than it stores never
+reaches the walk: `cpyext` refuses it at the call. CPython reads the storage in
+every case, and asks the type nothing. `scan_dict` reads its entries from a copy
+on PyPy for a reason of the same kind: a key swapped for another while the scan
+runs Python makes `cpyext`'s `PyDict_Next` fail fatally rather than report it,
+and the copy is a dict nothing else can reach.
 
 **Every container the walk reads answers this way, and for one reason.** A
 schema over a container denotes what the value *holds*, so the reading of it
@@ -293,9 +318,9 @@ cannot be a method the value chooses: a `str`, `bytes`, `list`, `tuple`, `set`,
 `frozenset` or `dict` subclass that overrides `__len__` is counted through its
 base type's slot, and a `set` or `frozenset` subclass that overrides `__iter__`
 is walked through its base type's iterator. Believing an override admits a value
-whose storage the schema excludes — `set[int]` held a subclass whose storage
-carried a `str`, and `MinLen(3)` held one character — which is an accept no value
-supports. The exactness test comes first at every one of them, so an exact
+whose storage the schema excludes — `set[int]` would hold a subclass whose
+storage carries a `str`, and `MinLen(3)` one character — which is an accept no
+value supports. The exactness test comes first at every one of them, so an exact
 container and an inheriting subclass keep the reading their storage already
 gives.
 
@@ -304,33 +329,40 @@ the reason the tuple paragraph gives, and the iterator the base returns is the
 builtin one, so a set that changes size during the scan still raises where the
 scan expects it to.
 
-The cost is one length read per element, which is a pointer dereference: the
-`large_array` shape of the comparative gate moved 0.881 to 0.886 against
-pydantic-core when the sequence guard landed.
+The cost is one length read per element, which is a pointer dereference.
 
-## A list of one scalar kind is read through a snapshot of it
+## A list a test settles is read through a snapshot of it
 
 Reading an element out of a list hands back an *owned* handle: a reference count
 written when the handle is made and again when it drops, on an object the walk
 only type-tests. Copying the list into a tuple pays the same two counts inside
 the interpreter, in two loops carrying no dependent work between them, and the
 tuple is frozen -- so its elements are read borrowed and the walk pays neither.
-A ten-thousand element `list[int]` costs 1.64 ns per element against 4.38 on
-CPython 3.12, and 2.45 against 8.31 on the free-threaded build, where the copy
-also takes the container's lock once rather than once per element.
+On the free-threaded build the copy also takes the container's lock once rather
+than once per element. The readers of a list whose every element one test
+settles take that copy where it pays: one scalar kind and a union of them here,
+one class and a union of literals below. What each reading costs per element,
+in place and through the copy on each interpreter, is measured in the doc
+comment on `snapshot_pays` in `crates/valgebra-py/src/check/walk/sequence.rs`,
+the one place those figures live.
 
 Which reading is cheaper is a property of the **interpreter**, so the walk asks
-one. CPython 3.14 makes the count pair cheap enough that the copy is pure cost
-and the walk reads in place there. Asking requires the interpreter's own flags,
-which reach the crate that emits them and no other, so `crates/valgebra-py/build.rs`
-re-emits them; without it such a question reads "an older interpreter" against
-every interpreter, silently, and the fast path is taken everywhere.
+one. CPython 3.14 with its global lock makes the count pair cheap enough that
+the copy is pure cost, and the walk reads in place there; the free-threaded
+build pays a lock per element on top of the pair, and takes the copy on every
+release. Asking requires the interpreter's own flags, which reach the crate that
+emits them and no other, so `crates/valgebra-py/build.rs` re-emits them; without
+it such a question reads "an older interpreter" against every interpreter,
+silently, and the fast path is taken everywhere.
 
 Two widths bound the copy, `SNAPSHOT_MIN_ELEMENTS` and `SNAPSHOT_MAX_ELEMENTS`
-in `crates/valgebra-py/src/check/walk/sequence.rs`: below the first it cannot pay for its
-own allocation, above the second walking it costs more cache than the counts it
-avoids, and the transient stops at two mebibytes. Both are in the bounds table of
-[00-architecture.md](00-architecture.md), and neither changes an answer.
+in `crates/valgebra-py/src/check/walk/sequence.rs`: below the first it cannot
+pay for its own allocation under a global lock, above the second walking it
+costs more cache than the counts it avoids, and the transient stops at two
+mebibytes. The free-threaded build takes the copy at every width up to the
+second, since the lock it saves per element outweighs the allocation. Both are
+in the bounds table of [00-architecture.md](00-architecture.md), and neither
+changes an answer.
 
 The band is a rule about length, measured on distinct integers, and the walk
 asks nothing about what a list holds before choosing. A list of objects the
@@ -344,16 +376,21 @@ The contract of the section above is kept: the copy answers about the list as it
 was when the copy was taken, so the count is compared again afterwards and a
 value that moved reports the move. The **instruction** count moves the other way
 -- the copy is instructions and the stall it removes is not, so a sixty-four
-element walk executes 47% more of them -- which is why `scripts/perf_budget.json`
-carries that reading as a recorded step against the base it steps from.
+element walk executes 47% more of them. The walk's budget in
+`scripts/perf_budget.json` is recorded on CPython 3.12 over the snapshot
+reading, so the count it holds is the higher one.
 
 ## A scalar is its type test wherever the walk asks one
 
 The walk reaches a scalar through `member`, which takes a level, reads the
 fatal-signal flag and dispatches, all around the one type test the schema is.
-Five positions ask that question often enough for the frame around it to be
+These positions ask that question often enough for the frame around it to be
 most of what they cost, and each asks the test directly:
 
+- **A sequence of one scalar kind.** `list[int]` and `tuple[str, ...]` read the
+  kind once for the sequence and test each element against it
+  (`homogeneous_scalar`), the list through the snapshot above where one pays
+  (`scalar_list_matches`).
 - **A union's branch.** `int | str | None` tries its branches in order, and a
   scalar branch is its type test (`scalar_member` in `walk/scalar.rs`). A
   string checked against that union costs 18% fewer instructions, and the
@@ -362,6 +399,13 @@ most of what they cost, and each asks the test directly:
   the way `list[int]` is, above, with a test per branch
   (`homogeneous_scalar_union`): a thousand elements cost 87% fewer
   instructions, and a tuple of them 90%.
+- **A set of one scalar kind.** `set[str]` and `frozenset[int]` read the kind
+  once for the set and test each element against it in the deciding walk
+  (`check_elements` in `walk/sequence.rs`), reading once for the loop whether
+  the level every element sits at is free.
+- **A parsed array.** A document's array of one scalar kind, or of a union of
+  them, is one test an element (`json_array_matches`); a document is never
+  explained, so the loop records nothing.
 - **A mapping's clause.** `dict[str, int]` reads both halves of each entry as
   type tests in `covered`, and reads no key as a field name, since a mapping
   declares none: 37% fewer instructions on a thousand entries.
@@ -396,14 +440,14 @@ sequence first. A list that belongs is read through the deciding walk's
 snapshot where one pays, since a snapshot every element passes is the whole
 answer; a list holding an element that fails is read in place over the general
 walk's count, so one that moves reports the move. Read in place, the list that
-belongs cost `validate` twice what `is_valid` took on 3.12, for fewer
+belongs costs `validate` twice what `is_valid` takes on 3.12, for fewer
 instructions: an owned handle per element is a reference count written on a
 different object each time. A parsed array is never explained, and its
 readings refuse the mode.
 
 `validate` on a thousand-element `list[int]` that belongs costs 72% fewer
-instructions than when every element went through the explaining walk's
-dispatch and location push, on a `list[int | None]` 76%, and on a list of
+instructions than it does with every element taken through the explaining
+walk's dispatch and location push, on a `list[int | None]` 76%, and on a list of
 `tuple[int, str, float]` 22%. Where no reading applies, an element or a set
 member that `admitted_quietly` answers -- a scalar whose test passes, a union
 of scalars one of whose tests does, at free levels and with no fatal signal
@@ -425,24 +469,24 @@ and asks `isinstance` only of a subclass instance or another value. A list of
 `isinstance` otherwise, and there the call answers.
 
 **A list of one class, or of a union of literals, has a reader of its own.**
-Each element is the pointer test, or the union's table found once for the
-list (`instance_list_matches`, `literal_list_matches`), and an element the test
-does not settle -- a subclass instance, a value the table does not decide -- is
+Each element is the pointer test, or the union's table found once for the list
+(`instance_list_matches`, `literal_list_matches`), and an element the test does
+not settle -- a subclass instance, a value the table does not decide -- is
 walked, which may run Python; so a list is read in place, unless a snapshot the
-test admits entirely settles it. The general loop paid a call, a dispatch and,
-for the union, a lookup of its table at every element: a thousand `date`s cost
-76% fewer instructions and a thousand literals 62%. The list arm hands both
-kinds of tail to one reader (`element_list_matches`) behind its one tag test,
-and the readers cost the PGO wheel's walk of a nested list 3% more
-instructions with the training workload reading lists of each kind, 6%
-without it.
+test admits entirely settles it. The general loop pays a call, a dispatch and,
+for the union, a lookup of its table at every element, so the readers cost a
+thousand `date`s 76% fewer instructions and a thousand literals 62%. The list
+arm hands both kinds of tail to one reader (`element_list_matches`) behind its
+one tag test, and the readers cost the PGO wheel's walk of a nested list 3% more
+instructions with the training workload reading lists of each kind, 6% without
+it.
 
 **Where a question is asked is part of what it costs.** The walk is one
 recursive function under fat LTO, with the arms of `member` inlined into it, so
-a test added to an arm moves the register allocation of every shape that
-crosses the arm. Asked inline in `check_seq`, the union question cost a list
-nested twenty-five deep 4%; a one-comparison shortcut for `dict[str, int]` in
-the record walk cost the closed record 5% and the nested list 7%, though neither
+a test added to an arm moves the register allocation of every shape that crosses
+the arm. Asked inline in `check_seq`, the union question costs a list nested
+twenty-five deep 4%; a one-comparison shortcut for `dict[str, int]` in the
+record walk costs the closed record 5% and the nested list 7%, though neither
 reads a mapping. So the sequence readings of a union are out of line behind a
 test of the tail's tag, which the nested list pays at 1.4%, and a mapping has no
 reading beyond `covered`'s. The branch test is paid by every branch that is not
@@ -454,14 +498,15 @@ kinds.
 A keyed map that fails is walked twice: once to decide, once to say which field.
 Both walks resolve the declared keys in the same order, and a probe is the dear
 half — through the interpreter it is about 143 instructions, against a handful
-for the check that follows. A fifty-field record refused at the thirty-second
-position repeated thirty-one probes and thirty-one checks for nothing, because a
-field the deciding walk **passed** has no violation to report.
+for the check that follows. Starting over, a fifty-field record refused at the
+thirty-second position repeats thirty-one probes and thirty-one checks for
+nothing, because a field the deciding walk **passed** has no violation to report.
 
 So the deciding walk hands over where it stopped, and the explaining walk starts
-there. What it hands over is two integers and no allocation: the position, and
-how many declared keys had been found by then. The count travels because the
-count is load-bearing — a record holding exactly the keys it declares skips the
+there. What it hands over is three integers and no allocation (`Decided` in
+`walk/record.rs`): the entry count the dict held, the position, and
+how many declared keys had been found by then. The found count travels because
+it is load-bearing — a record holding exactly the keys it declares skips the
 scan for undeclared ones, and a walk that resumed without it would fall into a
 scan that finds nothing.
 
@@ -491,8 +536,8 @@ A parsed JSON object's keys that no field declares are covered by the default
 clauses, and `json.loads` semantics say a repeated key means its **last** value.
 Answering that for a whole object by collapsing it to a table of last values is
 linear with a hash per key, and it allocates: the free-form section of a record
-is written `dict[str, V]` and usually carries a handful of keys, so the table was
-being built for objects of one and two entries.
+is written `dict[str, V]` and usually carries a handful of keys, so the table
+would be built for objects of one and two entries.
 
 Up to `SMALL_OBJECT` entries the same question is asked in place. An entry is the
 one the document means exactly when no entry *after* it repeats the key, which is
@@ -548,7 +593,8 @@ tuple arm and a tuple schema rejects an array whatever its elements are. It is
 the one place the two input paths deliberately decide differently, and it is
 pinned by a case.
 
-**The walk is where an accept can be wrong, and a line floor does not see that.**
-Its adequacy is measured by mutation, over a value corpus in the file itself
-under the embedded-interpreter feature; [08-testing.md](08-testing.md) owns what
-that measures and what it skips.
+**The walk is where an accept can be wrong, and a line floor does not see
+that.** Its adequacy is measured by mutation, over the value corpus in
+`crates/valgebra-py/src/check/walk/interpreter.rs`, compiled under the
+`interpreter-tests` feature that embeds the interpreter;
+[08-testing.md](08-testing.md) owns what that measures and what it skips.

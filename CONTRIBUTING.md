@@ -38,9 +38,9 @@ Requirements: stable Rust (edition 2024, MSRV 1.88), Python >= 3.10, and
 [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync                     # create .venv and install dev dependencies
-uv run maturin develop                # build the Rust extension into the venv
-uv run --no-sync pre-commit install   # enable the git hooks
+uv sync                                   # create .venv and install dev dependencies
+uv run --no-sync maturin develop --uv     # build the Rust extension into the venv
+uv run --no-sync pre-commit install       # enable the git hooks
 ```
 
 Verify the build:
@@ -49,15 +49,17 @@ Verify the build:
 uv run --no-sync python -c "from valgebra import Validator; print(Validator(int).is_valid(7))"
 ```
 
-Building the docs site locally needs the extension built first
-(`uv run maturin develop`): the API reference introspects the compiled module to
-render the public surface's docstrings, which live on the Rust objects rather
-than being duplicated in the type stub.
+Building the docs site locally needs the extension built first (`uv run
+--no-sync maturin develop --uv`): the API reference introspects the compiled
+module to render the public surface's docstrings, which live on the Rust objects
+rather than being duplicated in the type stub.
 
 ## The gate
 
-A change is not done until every command exits 0. CI runs the same set on
-Linux, macOS, and Windows; local runs are previews of that source of truth.
+A change is not done until every command exits 0. CI runs the lanes these
+preview on Linux, and `cargo test` and the Python suite on macOS and Windows as
+well -- `.github/workflows/ci.yml` owns which lane runs where; local runs are
+previews of that source of truth.
 
 ```bash
 cargo fmt --check
@@ -76,7 +78,7 @@ uv run --no-sync ty check
 uv run --no-sync pytest
 ```
 
-Every `uv run` after the first build carries `--no-sync`: a bare one re-syncs the
+Every `uv run` after the sync carries `--no-sync`: a bare one re-syncs the
 environment first, which replaces the build `maturin develop` installed, so the
 commands after it would test a module other than the one just built.
 
@@ -114,41 +116,41 @@ file that owns the contract and the single command that reproduces its verdict.
 
 | Contract | Source of truth | First rerun command |
 |---|---|---|
-| the merge gate's steps a developer can run pass, in a clone shaped like a runner's | `.github/workflows/ci.yml` | `uv run python scripts/gate.py` |
+| the merge gate's steps a developer can run pass, in a clone shaped like a runner's | `.github/workflows/ci.yml` | `uv run --no-sync python scripts/gate.py` |
 | Rust formatting | rustfmt defaults, unconfigured | `cargo fmt --check` |
-| Rust lint policy | `Cargo.toml` `[workspace.lints]` | `cargo clippy --all-targets --all-features -- -D warnings` |
+| Rust lint policy | `Cargo.toml` `[workspace.lints]` | `cargo clippy --all-targets --all-features -- -D warnings && cargo clippy --all-targets -- -D warnings` |
 | Rust behaviour | `crates/` | `cargo test` |
-| Rust documentation links | the doc comments in `crates/` | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` |
-| the extension links on PyPy | `crates/valgebra-py/src/` | `uv run --python pypy-3.11 python scripts/pypy_import_check.py` |
-| the binding's four corpora | `crates/valgebra-py/src/check/walk.rs`, `crates/valgebra-py/src/build.rs`, `crates/valgebra-py/src/build/interpreter.rs`, `crates/valgebra-py/src/oracle/interpreter.rs` | `cargo test -p valgebra-py --features interpreter-tests` |
+| Rust documentation links | the doc comments in `crates/` | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps && RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items` |
+| the extension links on PyPy | `crates/valgebra-py/src/` | `uv venv --python pypy-3.11 .pypy && VIRTUAL_ENV=.pypy uv pip install maturin && VIRTUAL_ENV=.pypy .pypy/bin/maturin build --release --out dist-pypy -i "$(uv python find pypy-3.11)" && VIRTUAL_ENV=.pypy uv pip install --no-index dist-pypy/*.whl && .pypy/bin/python scripts/pypy_import_check.py` |
+| the binding's four corpora | `crates/valgebra-py/src/check/walk/interpreter.rs`, `crates/valgebra-py/src/build/interpreter.rs`, `crates/valgebra-py/src/equality/interpreter.rs`, `crates/valgebra-py/src/oracle/interpreter.rs` | `cargo test -p valgebra-py --features interpreter-tests` |
 | the detached fuzz surface | `fuzz/Cargo.toml` | `cargo check --manifest-path fuzz/Cargo.toml --all-targets` |
 | fuzz harness laws | `fuzz/src/lib.rs` | `cargo +nightly test --manifest-path fuzz/Cargo.toml --lib` |
-| Python behaviour | `tests/` | `uv run pytest` |
-| Python lint and format | `pyproject.toml` `[tool.ruff]` | `uv run ruff check . && uv run ruff format --check .` |
-| Python types | `pyproject.toml` | `uv run ty check` |
-| documentation claims | every tracked `*.md` | `uv run python scripts/docs_lint.py` |
-| the API reference carries the compiled docstrings | `scripts/docs_stubs.py` | `uv run mkdocs build --strict && uv run python scripts/docs_stubs.py --check` |
-| the use cases the tree has, and how many the suite names | the type stub and the codes the walk writes | `uv run python scripts/use_case_ledger.py` |
-| the branch arms the core's tests reach | an instrumented run on the pinned nightly | `uv run python scripts/branch_coverage.py branches.json` |
-| when a `typing` or `enum` name, or a stdlib module, arrived | `tests/floor_names.json` | `uv run python scripts/floor_names.py --check` |
-| doc examples run | `docs/` | `uv run python scripts/run_doc_examples.py` |
-| doc examples read clean under ty, mypy, pyright and ruff, or say why | `scripts/check_doc_examples.py` | `uv run python scripts/check_doc_examples.py` |
-| the rendered site builds | `mkdocs.yml` | `uv run --group docs mkdocs build --strict` |
-| core instruction budget | `scripts/perf_budget.json` | `uv run python scripts/perf_gate.py` |
-| binding instruction budget | `scripts/perf_budget.json` | `uv run python scripts/perf_gate.py --binding` |
-| competitive ratio | `scripts/perf_compare.json` | `uv run --group bench python scripts/compare_gate.py` |
-| what a profile buys, per shape | the two wheels a run builds | `uv run --group bench python scripts/pgo_compare.py --record plain.json` |
-| membership held and decisions only widened | `scripts/metamorphic_reference.json` | `uv run python scripts/metamorphic_gate.py` |
+| Python behaviour | `tests/` | `uv run --no-sync pytest` |
+| Python lint and format | `pyproject.toml` `[tool.ruff]` | `uv run --no-sync ruff check . && uv run --no-sync ruff format --check .` |
+| Python types | `pyproject.toml` | `uv run --no-sync ty check` |
+| documentation claims | every tracked `*.md` | `uv run --no-sync python scripts/docs_lint.py` |
+| the API reference carries the compiled docstrings | `scripts/docs_stubs.py` | `uv run --no-sync --group docs mkdocs build --strict && uv run --no-sync python scripts/docs_stubs.py --check` |
+| the use cases the tree has, and how many the suite names | the type stub and the codes the walk writes | `uv run --no-sync python scripts/use_case_ledger.py` |
+| the branch arms the core's tests reach | an instrumented run on the pinned nightly | `uv run --no-sync python scripts/branch_coverage.py branches.json` |
+| when a `typing` or `enum` name, or a stdlib module, arrived | `tests/floor_names.json` | `uv run --no-sync python scripts/floor_names.py --check` |
+| doc examples run | `docs/` | `uv run --no-sync python scripts/run_doc_examples.py` |
+| doc examples read clean under ty, mypy, pyright and ruff, or say why | `scripts/check_doc_examples.py` | `uv run --no-sync python scripts/check_doc_examples.py` |
+| the rendered site builds | `mkdocs.yml` | `uv run --no-sync --group docs mkdocs build --strict` |
+| core instruction budget | `scripts/perf_budget.json` | `uv run --no-sync python scripts/perf_gate.py` |
+| binding instruction budget | `scripts/perf_budget.json` | `uv run --no-sync python scripts/perf_gate.py --binding` |
+| competitive ratio | `scripts/perf_compare.json` | `uv run --no-sync --group bench python scripts/compare_gate.py` |
+| what a profile buys, per shape | the two wheels a run builds | `uv run --no-sync --group bench python scripts/pgo_compare.py --record plain.json` |
+| membership held and decisions only widened | `scripts/metamorphic_reference.json` | `uv run --no-sync python scripts/metamorphic_gate.py` |
 | core mutation adequacy | `scripts/mutation_baseline.json` | `cargo mutants --package valgebra-core -- -- --skip deep_subtype_into_bottom_terminates --skip subtyping_terminates_on_a_distributed_tower` |
 | walk mutation adequacy | `scripts/mutation_baseline_walk.json` | `cargo mutants --package valgebra-py --features interpreter-tests -- -- --skip recursion_deeper_than_the_bound_is_refused` |
 | suite mutation adequacy | `scripts/mutation_baseline_pytest.json` | `cargo mutants --config .cargo/mutants-pytest.toml --package valgebra-py --features pytest-sweep` |
 | a mutation verdict | any baseline | `python3 scripts/mutation_gate.py --baseline core` |
-| no file under the per-file coverage floor | `scripts/coverage_gate.py`'s floor and the files named under it, per lane scope | `uv run python scripts/coverage_gate.py --json coverage-core.json --scope core` |
-| where a change starts, for the bench gate and the diff sweeps, a force-push included | `scripts/change_base.py` | `uv run pytest tests/test_change_base.py` |
+| no file under the per-file coverage floor | `scripts/coverage_gate.py`'s floor and the files named under it, per lane scope | `uv run --no-sync python scripts/coverage_gate.py --json coverage-core.json --scope core` |
+| where a change starts, for the bench gate and the diff sweeps, a force-push included | `scripts/change_base.py` | `uv run --no-sync pytest tests/test_change_base.py` |
 | supply chain (Rust) | `deny.toml` | `cargo deny check` |
-| supply chain (Python) | `uv.lock` | `uv run pip-audit` |
-| workflow security | `.github/workflows/`, `.github/actions/` | `uvx zizmor .github/workflows/ .github/actions/` |
-| the profile-guided build's training run | `scripts/pgo_workload.py`, `pyproject.toml` `pgo-command` | `uv run --group bench maturin build --release --pgo --out dist` |
+| supply chain (Python) | `uv.lock` | `uv export --locked --format requirements-txt --no-emit-project --all-groups > requirements-audit.txt && uvx pip-audit -r requirements-audit.txt` |
+| workflow security | `.github/` | `uvx zizmor .github/` |
+| the profile-guided build's training run | `scripts/pgo_workload.py`, `pyproject.toml` `pgo-command` | `uv run --no-sync --group bench maturin build --release --pgo --out dist` |
 
 The first two mutation rows take a skip list; `docs/dev/07-tooling-ci.md` says
 which and why. The third needs `VALGEBRA_SWEEP_VENV` naming a place outside the
@@ -160,11 +162,14 @@ lane's own step runs; that step's `--file` list lives in `.github/workflows/ci.y
 copied here, because a list in two places drifts by one entry and reads exactly
 like one that has not. Commands that need an embedded interpreter need its library directory
 on the loader path — the binding-coverage job in `.github/workflows/ci.yml` shows
-the two lines that set it.
+the two lines that set it. The lint row is the two workspace passes; the
+`rust lint` job adds a third, three restriction lints over the library targets.
+The `pip audit` and `zizmor` jobs pin the tool versions their `uvx` commands
+run, and a local `uvx` without a pin takes the latest.
 
 `tests/test_contract_inventory.py` holds this table to the tree in both
-directions: a gate script with no row fails, and a row naming a script that does
-not exist fails.
+directions: a gate script with no row fails, and a row naming a script or a
+source of truth that does not exist fails.
 
 ## Testing
 
@@ -182,8 +187,8 @@ each layer is blind to beside it.
 - **External ground truth.** The same schemas and values run through valgebra and
   through pydantic-core (strict object path) and jsonschema (JSON path); every
   divergence is either a valgebra bug that fails the gate or one of a small,
-  enumerated set of documented intentional differences (bool as a subtype of
-  int, int and float as disjoint regions, exact-match `Literal` membership).
+  enumerated set of documented intentional differences, which the docstring of
+  `tests/test_differential.py` lists with the case each is localized to.
 - **Algebra laws as property tests.** Every claimed equivalence — associativity,
   De Morgan, the complement laws, the folds construction applies — is proved
   with proptest (Rust) and hypothesis (Python) against the membership relation,
@@ -202,13 +207,13 @@ each layer is blind to beside it.
   learns lands there rather than in the tracked seeds.
 
 Run the Rust property suites with `cargo test`; raise the example count with
-`PROPTEST_CASES=30000`. Run the Python suites with `uv run pytest`; the example
-count there is a **profile** rather than a number, selected by
+`PROPTEST_CASES=30000`. Run the Python suites with `uv run --no-sync pytest`;
+the example count there is a **profile** rather than a number, selected by
 `HYPOTHESIS_PROFILE` and registered in `tests/conftest.py`, which owns the
 budgets:
 
 ```bash
-HYPOTHESIS_PROFILE=nightly uv run pytest tests/test_laws.py
+HYPOTHESIS_PROFILE=nightly uv run --no-sync pytest tests/test_laws.py
 ```
 
 `dev` is the default and the edit-test loop's, `ci` the wider budget that still
@@ -243,32 +248,19 @@ merges; the third costs a suite run per mutant and stays on the schedule. Each
 checks the new-survivor direction alone, because a partial sweep never generates
 most of the baseline and the expiry direction is not its to judge.
 Performance is gated two ways: a **deterministic cachegrind instruction count**
-over the core engine compared to a committed budget, and a **competitive ratio**
-of per-call time against pydantic-core across a shape matrix. Both are
-independent of the runner's absolute speed — the instruction count by
-construction, the ratio by cancellation — so they block merges where a
+of the core, decision and binding workloads, compared with the same workloads
+built at the change's merge base (`scripts/perf_gate.py --against`), and a
+**competitive ratio** of per-call time against pydantic-core across a shape
+matrix. Both are independent of the runner's absolute speed — the instruction
+count by construction, the ratio by cancellation — so they block merges where a
 wall-clock budget could not.
 
 ## Vocabulary
 
-These words carry weight in this repository and in its CI, and three of them
-collide with an unrelated sense used nearby. Say which one you mean.
-
-| term | here it means |
-| --- | --- |
-| **gate** | a step that **asserts** and exits non-zero when the assertion breaks. A step that only builds, measures, or records is not one |
-| **lane** | one independently driven run: a CI job in `ci.yml`, or one target inside a step that drives several |
-| **denotation** | the set of Python values a schema admits. Every node has one written down; membership is testing a value against it |
-| **oracle** | a judge of a claim that does not go through the code under test |
-| **survivor** | a mutation of the source that the tests did not notice. A signal about the tests, never about the mutation |
-| **equivalent mutant** | a mutation that provably cannot change any result, so no test can kill it. Excluded from the sweep with its argument, never counted as a gap |
-| **ratchet** | a committed floor that may only move one way. The mutation baseline is one; a budget is not |
-| **budget** | a committed two-sided band a measurement is held to, in `scripts/perf_budget.json` |
-| **ledger** | an enumerated list held to the tree in both directions, so an entry that stops being true fails and a subject with no entry fails too |
-| **probe** | an instrument that *searches* for a defect rather than checking an enumerated list of them. A ledger confirms the rules it was built from; only a search reports a rule nobody wrote |
-| **suspected gap** | a relation the decision procedure answers `False` that no value refutes, so it looks true and was not seen. Accepted only with a reason and a route to deciding it |
-| **region** | one part of the value universe in the partition the decision procedure computes over |
-| **pool** | the validator's table of Python objects: a literal's constant, a class, a comparison operand, a predicate |
+These words carry weight in this repository and in its CI, and some of them
+collide with an unrelated sense used nearby. Say which one you mean:
+[docs/dev/13-glossary.md](docs/dev/13-glossary.md) defines them and owns the
+list of the ones that collide, and a second copy here would drift from it.
 
 Every gate script reports one of **three** outcomes, and the exit code says
 which, so a caller can dispatch on it rather than parse the output:
@@ -283,14 +275,6 @@ A gate that could not run has proven nothing, and must never read as one that
 passed. `perf_gate.py` exits 2 on cachegrind output it cannot parse,
 `mutation_gate.py` on a missing sweep result or baseline, and `compare_gate.py`
 without its benchmark dependency.
-
-Three collisions, and both senses are live:
-
-| term | one sense | the other |
-| --- | --- | --- |
-| **gate** | a CI step that asserts | the local build-health command set above, which is a preview of the merge gate rather than a single check |
-| **oracle** | an independent denotation predicate, or an external library, judging the walk | `LeafRelations`, the trait through which the decision procedure asks the bindings about a class or a value |
-| **budget** | the committed instruction count a workload is held to | `DECISION_BUDGET`, the work ceiling one decision query may spend before returning the conservative answer |
 
 ## Working on changes
 

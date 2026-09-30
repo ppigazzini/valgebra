@@ -303,8 +303,9 @@ jobs:
           name: ${{ matrix.wheel.artifact }}
           path: dist
       # Not the local ./.github/actions/setup-uv wrapper the CI lanes use: this
-      # job deliberately never checks the repository out, so the wrapper's own
-      # files are not on disk to run from.
+      # job installs uv before the repository is on disk -- its checkout comes
+      # later, into `tree/`, for `tests/` alone -- so the wrapper's own files are
+      # not there to run from.
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.14"
@@ -374,8 +375,9 @@ jobs:
           name: sdist
           path: dist
       # Not the local ./.github/actions/setup-uv wrapper the CI lanes use: this
-      # job deliberately never checks the repository out, so the wrapper's own
-      # files are not on disk to run from.
+      # job installs uv before the repository is on disk -- its checkout comes
+      # later, into `tree/`, for `tests/` alone -- so the wrapper's own files are
+      # not there to run from.
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.14"

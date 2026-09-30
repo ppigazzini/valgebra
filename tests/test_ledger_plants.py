@@ -2295,8 +2295,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "CONTRIBUTING.md",
-            "`uv run python scripts/metamorphic_gate.py` |",
-            "`uv run python scripts/metamorphic_check.py` |",
+            "`uv run --no-sync python scripts/metamorphic_gate.py` |",
+            "`uv run --no-sync python scripts/metamorphic_check.py` |",
         ),
         trips=("test_every_script_a_row_invokes_exists",),
     ),
@@ -2307,8 +2307,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "CONTRIBUTING.md",
-            "| `uv.lock` | `uv run pip-audit` |",
-            "| `uv.lock` | uv run pip-audit |",
+            "| `uv.lock` | `uv export --locked --format requirements-txt",
+            "| `uv.lock` | uv export --locked --format requirements-txt",
         ),
         trips=("test_every_row_carries_all_three_cells",),
     ),

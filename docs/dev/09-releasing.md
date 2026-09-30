@@ -31,7 +31,11 @@ an editable source with no version of its own, so it does not.
 
 `release.yml` triggers on `workflow_dispatch` alone. Its `publish_target` input
 selects the index (`none`, `testpypi`, `pypi`), and `none` builds the matrix and
-the sdist without uploading, which is the dry run.
+the sdist without uploading, which is the dry run. A third input,
+`attach_github_release`, attaches the built wheels and sdist to a GitHub
+pre-release tagged `build-<version>-<run>` for off-index installs, once the
+smoke has passed; it uploads to no index, and neither the ref nor
+`confirm_version` gates it.
 
 No workflow listens for a tag push. The tag records a release that already
 happened; it is a marker, not a trigger.
@@ -39,13 +43,14 @@ happened; it is a marker, not a trigger.
 Four conditions stand between a dispatch and an upload, and each is a step or a
 job condition in `release.yml` rather than a convention:
 
-- **The smoke must pass.** Each wheel set is imported on its own platform, on
-  the floor, the newest release and the free-threaded builds where the set
-  carries a wheel for them, with every warning an error and the free-threaded
-  import required to leave the GIL off, and the product suite runs on each; the
-  sdist is compiled from source, imported and put through the same suite before
-  the publish job runs. A version cannot be replaced on an index once uploaded, only yanked, so
-  a broken wheel has to fail before the upload rather than after it.
+- **The smoke must pass.** Each wheel set but the musllinux ones is imported on
+  its own platform, on the floor, the newest release and the free-threaded
+  builds where the set carries a wheel for them, with every warning an error and
+  the free-threaded import required to leave the GIL off, and the product suite
+  runs on each; the sdist is compiled from source, imported and put through the
+  same suite before the publish job runs. A version cannot be replaced on an
+  index once uploaded, only yanked, so a broken wheel has to fail before the
+  upload rather than after it.
 - **`confirm_version` must equal the version in the built wheels**, and an empty
   input aborts. A dispatch cannot publish a version the run did not build.
 - **The ref must be `main`.** A dispatch from a topic branch uploads nothing, so
@@ -133,7 +138,8 @@ wheels are different builds: plain rather than profile-guided, since a
 profiled extension crashes there at the walk's depth bound (`release.yml`
 says how), one per ABI tag since PyPy 8.0 changed it, and the push lane's PyPy
 leg runs the suite on a wheel it builds itself. The release smoke runs the
-product suite on every wheel set that ships, PyPy's included, and
+product suite on every wheel set that ships but the musllinux ones, PyPy's
+included, and
 `tests/test_release_smoke.py` holds every wheel the release builds on a runner
 to a smoke row there that runs it.
 
@@ -161,10 +167,10 @@ release as the latest, so disagreement between those two is propagation and not 
 failure.
 
 **The simple index lags the JSON API, and the simple index is what a resolver
-reads.** 0.0.10 was answered in full by `/pypi/valgebra/0.0.10/json` — fifty
-files — while `uv pip install` still reported no such version, because the
-simple listing had not caught up. That is the same message a failed upload
-gives, so read the simple index itself (the `curl` above) before believing
+reads.** The per-version JSON endpoint can answer with every file of a release
+while `uv pip install` still reports no such version, because the simple listing
+has not caught up. That is the same message a failed upload gives, so read the
+simple index itself (the `curl` above) before believing
 either, and if it is the one that is behind, wait and retry rather than
 re-dispatching the publish.
 

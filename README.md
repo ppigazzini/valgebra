@@ -1,9 +1,9 @@
 # valgebra
 
-**A closed, irreducible Boolean algebra of schemas for Python.** A schema denotes
+**A closed, minimal Boolean algebra of schemas for Python.** A schema denotes
 a *set of Python values*, and validating asks whether a value you already hold is
 a member — no copy, no coercion. `union`, `intersection`, `complement`,
-refinement, and fixpoints are the only primitives; they **close** into a lattice
+refinement, and fixpoints are the combinators; they **close** into a lattice
 whose laws are property-tested, and every other pattern is **derived** from them
 by composition rather than bundled as a special combinator. The schema compiles
 to a Rust validator, so a check is cheap enough to run on every request.
@@ -65,10 +65,10 @@ assert intersection(int, complement(int)).is_empty()  # provably no value
   `nothing` as bottom. Every Boolean law — associativity, idempotence, absorption,
   distributivity, De Morgan, double negation — is *property-tested against the
   membership relation*, not asserted.
-- **Irreducible: only the generators ship.** valgebra bundles no `conditional`,
-  no `at_least_one`, no `one_of`. Those are **derived** by composition (see
-  [below](#everything-else-is-derived)). A named wrapper for a one-line
-  composition would make a standard library, not a schema algebra.
+- **Minimal: a derived pattern does not ship.** valgebra bundles no
+  `conditional`, no `at_least_one`, no `one_of`. Those are **derived** by
+  composition (see [below](#everything-else-is-derived)). A named wrapper for a
+  one-line composition would make a standard library, not a schema algebra.
 - **Schemas are comparable values.** `is_subtype_of` (inclusion),
   `is_equivalent` (mutual inclusion), and `is_empty` (unsatisfiable) form a
   **sound** decision procedure: a `True` is correct for every value that answers
@@ -145,8 +145,10 @@ explained — live in the **[Boolean algebra guide](docs/04-algebra.md#compositi
 ## Recursive schemas and JSON
 
 Recursive (`recursive`) schemas describe trees and JSON-like data, and JSON input
-is validated directly on the Rust path — parsed and checked in one pass, never
-materialized into an untyped object graph first:
+is parsed in Rust and checked by the same walk: `is_valid_json` reads the parsed
+tree in place, with no Python objects for its structure, while `validate_json`
+and `load` build the Python value, since a report summarizes it and `load`
+returns it ([JSON input](docs/07-json.md)):
 
 ```python
 from valgebra import Validator
@@ -331,7 +333,7 @@ requires [`uv`](https://docs.astral.sh/uv/) and stable Rust (edition 2024, MSRV
 ```bash
 git clone https://github.com/ppigazzini/valgebra && cd valgebra
 uv sync                 # create .venv and install dev dependencies
-uv run maturin develop  # build the Rust extension into the venv
+uv run --no-sync maturin develop --uv  # build the Rust extension into the venv
 ```
 
 ## Why valgebra (in one screen)
@@ -340,9 +342,12 @@ uv run maturin develop  # build the Rust extension into the venv
   equivalence is mutual inclusion — sound, deciding a wide fragment and staying
   deliberately conservative beyond it ([foundations](docs/13-foundations.md),
   [decidability](docs/15-decidability.md), [soundness argument](docs/14-soundness.md)).
-- **A closed, irreducible algebra.** Five primitives generate everything; the
-  laws are property-tested against membership, and a schema is *built* in the
-  lattice normal form, so `repr` shows it and `==` compares it.
+- **A closed, minimal algebra.** `union`, `intersection` and `complement` close
+  over every schema, and the node set is a generating set plus the
+  representatives its normal form names, each held to its column by
+  [`tests/test_closure_ledger.py`](tests/test_closure_ledger.py). The laws are
+  property-tested against membership, and a schema is *built* in the lattice
+  normal form, so `repr` shows it and `==` compares it.
 - **Check, don't parse.** `validate`/`is_valid` never copy or coerce; `ensure` is
   the explicit value-returning mode.
 - **One boundary crossing.** Tree walks, key lookups, and bound checks run in

@@ -70,8 +70,8 @@ where they stay conservative.
 
 ## Composition recipes
 
-valgebra ships only the irreducible algebra; common patterns that reduce to it
-are recipes you compose, not combinators it bundles. The algebra expressing them
+valgebra ships only the minimal algebra; common patterns that reduce to it are
+recipes you compose, not combinators it bundles. The algebra expressing them
 is the point — a named wrapper for a one-line composition would be a standard
 library, not a schema algebra.
 
@@ -268,7 +268,8 @@ assert intersection(int, str) != Validator(nothing)
 ## The simplifier is going
 
 `simplify` is **deprecated** and is removed in the next minor version. Calling it
-raises a `DeprecationWarning`.
+emits a `DeprecationWarning`, which is raised only where warnings are errors
+(`-W error`).
 
 A schema is built in the lattice normal form, so the reduction `simplify`
 promises is the schema you already hold: `repr` shows it and `==` compares it.
@@ -486,7 +487,7 @@ A static type checker holds `Any` apart from the top, and for a reason that does
 not apply here: it asks a second question, *consistency*, at every site where a
 value crosses between typed and untyped code. A validator asks one question —
 does this value belong — and to it `Any` answers yes for every value, which is
-what the walk has always done. Writing `Any` still says something to a reader,
-and the schema keeps it: it is a spelling, not a set, so two schemas that differ
+what the walk does. Writing `Any` still says something to a reader, and the
+schema keeps it: it is a spelling, not a set, so two schemas that differ
 only in it are equal and nothing decides anything by it
 ([the boundary](15-decidability.md)).

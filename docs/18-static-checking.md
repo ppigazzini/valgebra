@@ -60,10 +60,11 @@ What each spelling reads as:
 | `union(a, b)` for validators of one type | that type; for two types ty reads their union, mypy and pyright `object` |
 | `intersection`, `complement`, `recursive` | `Validator[object]` |
 
-The rows that name a checker are held by a test that runs all three over one
-fixture per row and compares what each reveals, at the versions the project
-locks: a checker release that reads a row differently fails that test when the
-lock takes it, and this table moves with it.
+The rows that name a checker are held by `tests/test_checker_readings.py`, which
+runs all three over one fixture per row under `tests/typing/readings/` and
+compares what each reveals, at the versions the project locks: a checker release
+that reads a row differently fails that test when the lock takes it, and this
+table moves with it.
 
 **Where the set has no static type, the validator reads as `object`.** A meet,
 a complement and a fixpoint have no static spelling. `int | None`, a `Literal`
