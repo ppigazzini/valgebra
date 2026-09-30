@@ -62,9 +62,18 @@ pub(crate) type RecordIndex = FxHashMap<usize, RecordPlan>;
 /// `int`-typed literal values that fit a machine integer, and the `str`-typed
 /// literal values. An exact `int`/`str` value's membership is then a single set
 /// lookup instead of a scan of every branch.
+///
+/// And the addresses of the pooled constants behind those values, so the
+/// constant itself -- an interned string, a cached small integer, which is what
+/// a program spelling the literal in its own source holds -- is found by its
+/// address, without decoding or hashing its text. The pool holds each constant
+/// for as long as the validator lives, so no other object can have its address
+/// meanwhile, and an exact `int` or `str` is equal to itself: an address found
+/// here is a value the set beside it holds.
 pub(crate) struct UnionPlan {
     ints: FxHashSet<i64>,
     strs: FxHashSet<Box<str>>,
+    pooled: FxHashSet<usize>,
 }
 
 impl UnionPlan {
@@ -78,12 +87,18 @@ impl UnionPlan {
     pub(crate) fn decide(&self, value: &Value<'_, '_>) -> Option<bool> {
         let Value::Py(v) = value else { return None };
         if v.is_exact_instance_of::<PyInt>() {
+            if self.pooled.contains(&(v.as_ptr() as usize)) {
+                return Some(true);
+            }
             // A big integer (outside i64) cannot equal any i64-valued literal, so
             // deferring to the scan handles it against any big-integer literal.
             let i = v.extract::<i64>().ok()?;
             return Some(self.ints.contains(&i));
         }
         if v.is_exact_instance_of::<PyString>() {
+            if self.pooled.contains(&(v.as_ptr() as usize)) {
+                return Some(true);
+            }
             let s = v.cast::<PyString>().ok()?.to_str().ok()?;
             return Some(self.strs.contains(s));
         }
@@ -270,6 +285,7 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
 fn literal_union_plan(py: Python<'_>, members: &[Schema], pool: &[Py<PyAny>]) -> Option<UnionPlan> {
     let mut ints = FxHashSet::default();
     let mut strs = FxHashSet::default();
+    let mut pooled = FxHashSet::default();
     for member in members {
         let Schema::Literal(idx) = member else {
             return None;
@@ -286,6 +302,7 @@ fn literal_union_plan(py: Python<'_>, members: &[Schema], pool: &[Py<PyAny>]) ->
                     ints.reserve(members.len());
                 }
                 ints.insert(i);
+                pooled.insert(constant.as_ptr() as usize);
             }
         } else if constant.is_exact_instance_of::<PyString>()
             && let Some(s) = constant
@@ -297,9 +314,10 @@ fn literal_union_plan(py: Python<'_>, members: &[Schema], pool: &[Py<PyAny>]) ->
                 strs.reserve(members.len());
             }
             strs.insert(s.into());
+            pooled.insert(constant.as_ptr() as usize);
         }
     }
-    Some(UnionPlan { ints, strs })
+    Some(UnionPlan { ints, strs, pooled })
 }
 
 #[cfg(test)]

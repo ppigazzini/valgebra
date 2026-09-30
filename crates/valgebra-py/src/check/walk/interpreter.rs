@@ -4420,3 +4420,78 @@ fn a_sequence_of_a_union_of_scalars_is_read_as_its_tests() {
         assert!(!json("[1, \"x\"]"));
     });
 }
+
+/// The constant itself is its literal where equality is the builtin's and holds
+/// of every object -- an exact `str`, `int`, `bool` or `bytes`, and `None` --
+/// and nowhere else: not for the same `nan`, which is not equal to itself, not
+/// for a class answering `==` for itself, not for a `str` subclass, and not for
+/// an equal object that is another object. Where it does not answer, the
+/// comparison does, alone and inside a union's table.
+#[test]
+fn the_constant_itself_is_its_literal() {
+    use super::scalar::is_the_constant;
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Never:\n\
+              \x20   def __eq__(self, other):\n\
+              \x20       return False\n\
+              \x20   __hash__ = object.__hash__\n\
+              class Text(str):\n\
+              \x20   pass\n\
+              NAN = float('nan')\n\
+              NEVER = Never()\n\
+              TEXT = Text('ab')\n\
+              AB = 'ab'\n\
+              BUILT = ''.join(['a', 'b'])\n",
+            c"constants.py",
+            c"constants",
+        )
+        .expect("the module compiles");
+        let get = |name: &str| module.getattr(name).expect("the constant is defined");
+        let reflexive = [
+            get("AB"),
+            PyInt::new(py, 7i64).into_any(),
+            PyBool::new(py, true).to_owned().into_any(),
+            PyBytes::new(py, b"x").into_any(),
+            py.None().into_bound(py),
+        ];
+        for constant in &reflexive {
+            assert!(is_the_constant(constant, constant), "{constant}");
+        }
+        for name in ["NAN", "NEVER", "TEXT"] {
+            assert!(!is_the_constant(&get(name), &get(name)), "{name}");
+        }
+        let (ab, built) = (get("AB"), get("BUILT"));
+        assert!(!ab.is(&built), "two objects of one text");
+        assert!(!is_the_constant(&built, &ab));
+
+        let alone = |name: &str| {
+            let pool = vec![get(name).unbind()];
+            decide(
+                py,
+                &Schema::Literal(ConstIx::new(0)),
+                &get(name),
+                &pool,
+                &[],
+            )
+        };
+        assert!(alone("AB"));
+        assert!(!alone("NAN"), "the same nan is not equal to itself");
+        assert!(!alone("NEVER"), "a class's own `==` is asked");
+        let pool = vec![
+            ab.clone().unbind(),
+            PyString::new(py, "cd").into_any().unbind(),
+        ];
+        let either = Schema::Union((0..2).map(|i| Schema::Literal(ConstIx::new(i))).collect());
+        assert!(decide(py, &either, &ab, &pool, &[]));
+        assert!(decide(py, &either, &built, &pool, &[]));
+        assert!(!decide(
+            py,
+            &either,
+            &PyString::new(py, "ef").into_any(),
+            &pool,
+            &[]
+        ));
+    });
+}

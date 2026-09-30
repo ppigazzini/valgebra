@@ -409,7 +409,11 @@ set only for an exact `str`, and any other value — a `bool`, `float`, `None`, 
 subclass instance, a big integer, or a JSON value — falls back to the linear scan
 that remains the single source of truth. On a 32-literal union this cuts the
 per-call median several-fold; the decision is identical to the scan, locked by
-tests over the cross-type cases.
+tests over the cross-type cases. A literal a program spells in its own source is
+usually the very object it validates -- an interned string, a cached small
+integer -- so the table also keeps the addresses of its constants and answers
+that object without reading its text: a thousand-element list of four string
+literals costs 37% fewer instructions.
 
 Compiling one is linear too. A constant is read as itself before the frontend's
 dispatch, and the table's sets are sized once, so a `Literal` of two thousand

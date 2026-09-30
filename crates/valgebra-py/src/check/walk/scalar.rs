@@ -13,7 +13,7 @@
 
 use jiter::JsonValue;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
+use pyo3::types::{PyBool, PyBytes, PyDict, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple};
 use valgebra_core::{CollKind, ConstIx, Constraint, OperandIx, Schema, SeqKind, Violation, quoted};
 
 use super::{
@@ -236,11 +236,38 @@ pub(super) fn check_literal(
 /// second. All three arguments are `&Bound<'_, PyAny>`, so every transposition
 /// typechecks, and a reader who has just read two of them carries a prior into
 /// the third -- which is the condition under which a transposition gets written.
+///
+/// The constant itself is answered without the comparison where the answer is
+/// fixed: see [`is_the_constant`].
 pub(crate) fn literal_matches(
     value: &Bound<'_, PyAny>,
     literal: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
+    if is_the_constant(value, literal) {
+        return Ok(true);
+    }
     Ok(value.get_type().is(literal.get_type()) && value.eq(literal)?)
+}
+
+/// Whether `value` is the pooled `literal` object itself, of a builtin type
+/// whose equality holds of every object and runs no Python: an exact `str`,
+/// `int`, `bool` or `bytes`, or `None`.
+///
+/// Such a value has the literal's type and equals it, so [`literal_matches`]
+/// holds of it, and asking costs two type reads and a rich comparison that
+/// answer what the pointer already did. A literal a program spells in its own
+/// source is usually the very object it validates -- a string constant is
+/// interned, a small integer is cached -- so this is the common case, not a
+/// curiosity. A float is not among the types: the same `nan` is not equal to
+/// itself, so `Literal[nan]` refuses the object it names. Nor is any class with
+/// an `__eq__` of its own, whose answer is its own and whose running is a call.
+pub(crate) fn is_the_constant(value: &Bound<'_, PyAny>, literal: &Bound<'_, PyAny>) -> bool {
+    value.is(literal)
+        && (value.is_exact_instance_of::<PyString>()
+            || value.is_exact_instance_of::<PyInt>()
+            || value.is_exact_instance_of::<PyBool>()
+            || value.is_exact_instance_of::<PyBytes>()
+            || value.is_none())
 }
 
 /// Whether `value % operand == 0`. The remainder is zero iff it is falsy. Returns
