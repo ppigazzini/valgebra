@@ -54,7 +54,7 @@ mod sequence;
 use record::{Decided, check_attr_record, keyed_map_explain, keyed_map_matches};
 use scalar::{
     admit, check_literal, check_refine, homogeneous_scalar, is_of_its_kind, scalar_admits,
-    scalar_of,
+    scalar_member, scalar_of,
 };
 use sequence::{check_frozenset, check_seq, check_set};
 
@@ -740,29 +740,36 @@ fn walk_declined(code: &str) -> bool {
 
 fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
+    if ctx.mode.explains() {
+        return explain_union(members, value, frame);
+    }
     // Fast path for an all-literal union: an exact int or str value is decided by
     // a single set lookup. Only the membership decision uses it; the explain walk
-    // below, and every value type the plan does not cover, fall through to the
-    // linear scan, which stays the one source of truth for behavior.
-    if !ctx.mode.explains()
+    // above, and every value type the plan does not cover, fall through to the
+    // linear scan, which stays the one source of truth for behavior. A plan is
+    // built only for a union whose every member is a literal, so a union whose
+    // first member is not one has none, and is not looked up.
+    if matches!(members.first(), Some(Schema::Literal(_)))
         && let Some(plan) = ctx.unions.get(&(members.as_ptr() as usize))
         && let Some(decided) = plan.decide(value)
     {
         return decided;
     }
-    if ctx.mode.explains() {
-        return explain_union(members, value, frame);
-    }
     // A value is a member iff it matches at least one branch; decide that on the
-    // fast path, where a discarded branch pays for no location or violation.
+    // fast path, where a discarded branch pays for no location or violation. A
+    // scalar branch is its type test, asked without the walk around it.
     let sub = fast(ctx);
-    members.iter().any(|m| {
-        member(
-            m,
-            value,
-            &mut Frame::new(&mut Vec::new(), &mut Vec::new(), sub),
-        )
-    })
+    let room = ctx.room_to_descend();
+    members
+        .iter()
+        .any(|m| match scalar_member(m, value, ctx, room) {
+            Some(admitted) => admitted,
+            None => member(
+                m,
+                value,
+                &mut Frame::new(&mut Vec::new(), &mut Vec::new(), sub),
+            ),
+        })
 }
 
 /// Decide a union **and** explain it in one walk of each branch.

@@ -156,6 +156,18 @@ what that workload spends its time on is what the layout is arranged for. A
 change to it is measured on both sides of the comparison above, since a profile
 re-weighted toward one shape is a profile taken away from another.
 
+**A loop the profile holds no counts for is laid out by chance.** Every list
+the workload read was homogeneous, and a homogeneous list takes a loop of its
+own, so the profile held no counts for the general scan that every list of
+records and every nested list is read through. Whether that scan stayed inside
+the recursive walk was then the inliner's guess, and a change to the list
+arm's code turned it: the comparison gate's list nested twenty-five deep took
+64% longer in the PGO wheel, 245 ns against 405 on one box, while the
+instruction gate, which builds without a profile, read 0.9%. The workload
+reads a list of records and a list nested twenty-five deep, and that shape
+reads 0.14 of pydantic-core's time again, where it read 0.16 before the change
+and 0.28 after it.
+
 **What the matrix does with the reading.** `--pgo` ships on five targets, and
 that is a claim about those boxes rather than a default. Where the lane reads a
 gain on the shapes the release serves, the matrix keeps `pgo: true` and this

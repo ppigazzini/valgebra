@@ -212,7 +212,7 @@ keys are strings by the grammar. `walk/sequence.rs` reads one as a run of
 **elements** -- a list, a tuple, a parsed array, a set, a frozenset -- which
 differ in how an element is reached and agree on what each must be, and which
 share an arity, a count taken once and compared again, and the snapshot a list
-of one scalar kind is read through.
+of one scalar kind, or of a union of them, is read through.
 
 All three read the same `Frame`: where the walk is in the value, what it has found
 there, and the context it may look things up in. A walk needing a different one
@@ -324,6 +324,51 @@ value that moved reports the move. The **instruction** count moves the other way
 -- the copy is instructions and the stall it removes is not, so a sixty-four
 element walk executes 47% more of them -- which is why `scripts/perf_budget.json`
 carries that reading as a recorded step against the base it steps from.
+
+## A scalar is its type test wherever the walk asks one
+
+The walk reaches a scalar through `member`, which takes a level, reads the
+fatal-signal flag and dispatches, all around the one type test the schema is.
+Three positions ask that question often enough for the frame around it to be
+most of what they cost, and each asks the test directly:
+
+- **A union's branch.** `int | str | None` tries its branches in order, and a
+  scalar branch is its type test (`scalar_member` in `walk/scalar.rs`). A
+  string checked against that union costs 18% fewer instructions, and the
+  recursive walk of the binding gate 8.7% fewer.
+- **A sequence whose element is a union of scalars.** `list[int | None]` is read
+  the way `list[int]` is, above, with a test per branch
+  (`homogeneous_scalar_union`): a thousand elements cost 87% fewer
+  instructions, and a tuple of them 90%.
+- **A mapping's clause.** `dict[str, int]` reads both halves of each entry as
+  type tests in `covered`, and reads no key as a field name, since a mapping
+  declares none: 37% fewer instructions on a thousand entries.
+
+The two readings agree because the fast walk answers a scalar as three
+questions: whether a level is free under it, whether a fatal signal has been
+recorded, and the type test. The direct reading asks the same three, so it
+refuses at the bound and after a fatal signal exactly where `member` does, and
+`a_scalar_is_answered_as_the_walk_answers_it` holds that for every scalar schema
+against every kind of value. An explaining walk records the position of what it
+refuses, so none of the three is taken there.
+
+The level is read and not held. An element sits one level below its sequence and
+a branch one below its union, so a sequence of a union of scalars needs two free
+levels, and `homogeneous_scalar_union` holds the union's while it asks for the
+branch's -- what the walk does with each element -- and declines to the general
+path wherever either is missing, which then refuses at the bound.
+
+**Where a question is asked is part of what it costs.** The walk is one
+recursive function under fat LTO, with the arms of `member` inlined into it, so
+a test added to an arm moves the register allocation of every shape that
+crosses the arm. Asked inline in `check_seq`, the union question cost a list
+nested twenty-five deep 4%; a one-comparison shortcut for `dict[str, int]` in
+the record walk cost the closed record 5% and the nested list 7%, though neither
+reads a mapping. So the sequence readings of a union are out of line behind a
+test of the tail's tag, which the nested list pays at 1.4%, and a mapping has no
+reading beyond `covered`'s. The branch test is paid by every branch that is not
+a scalar too, eight instructions each, which is 1% on a union of twenty record
+kinds.
 
 ## The explaining walk resumes where the deciding one stopped
 

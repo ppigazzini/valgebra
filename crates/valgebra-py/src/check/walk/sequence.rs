@@ -14,7 +14,7 @@ use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyFrozenSet, PyIterator, PyList, PySet, PyTuple};
 use valgebra_core::{PathSegment, Schema, SeqKind, SeqShape, Violation};
 
-use super::scalar::Scalar;
+use super::scalar::{Scalar, homogeneous_scalar_union, scalar_union_admits};
 use super::{
     Base, Frame, Scan, held_iter, homogeneous_scalar, is_fatal, member, mutated,
     reads_its_elements, reads_its_length, record_fatal, record_if_fatal, scalar_admits, scalar_of,
@@ -56,6 +56,11 @@ pub(super) fn check_seq(
             }
             if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
                 return scalar_list_matches(list, kind, value, frame);
+            }
+            if let Some(Schema::Union(members)) = tail
+                && let Some(ok) = scalar_union_list_matches(list, prefix, members, value, frame)
+            {
+                return ok;
             }
             let mut ok = true;
             let scan = scan_list(list, |i, item| {
@@ -149,6 +154,13 @@ fn json_array_matches(
             .iter()
             .all(|item| scalar_admits(kind, &Value::Json(py, item)));
     }
+    if let Some(Schema::Union(members)) = tail
+        && let Some(members) = homogeneous_scalar_union(prefix, members, ctx)
+    {
+        return items
+            .iter()
+            .all(|item| scalar_union_admits(members, &Value::Json(py, item)));
+    }
     let mut ok = true;
     for (i, item) in items.iter().enumerate() {
         ok &= seq_element(prefix, tail, i, &Value::Json(py, item), frame);
@@ -238,6 +250,43 @@ fn scalar_list_matches(
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
+    scalar_list_loop(list, |item| scalar_admits(kind, item), value, frame)
+}
+
+/// Membership for a list whose every element is a union of scalars --
+/// `list[int | None]` -- where [`homogeneous_scalar_union`] reads it so, and
+/// `None` where it does not.
+///
+/// [`scalar_list_matches`]'s loop with a test per branch. The question is asked
+/// here rather than in [`check_seq`], which pays only the test of the tail's
+/// tag: asked there, it moved the register allocation of the whole arm and cost
+/// a list nested twenty-five deep four percent.
+#[inline(never)]
+pub(super) fn scalar_union_list_matches(
+    list: &Bound<'_, PyList>,
+    prefix: &[Schema],
+    members: &[Schema],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let members = homogeneous_scalar_union(prefix, members, frame.ctx)?;
+    Some(scalar_list_loop(
+        list,
+        |item| scalar_union_admits(members, item),
+        value,
+        frame,
+    ))
+}
+
+/// The loop [`scalar_list_matches`] and [`scalar_union_list_matches`] share,
+/// over the test each hands it.
+#[inline]
+fn scalar_list_loop(
+    list: &Bound<'_, PyList>,
+    admits: impl Fn(&Value<'_, '_>) -> bool,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
     let ctx = frame.ctx;
     // A snapshot of the list is a tuple, and a tuple's elements are
     // read borrowed. The reading it answers about is the list as it
@@ -255,7 +304,7 @@ fn scalar_list_matches(
             Ok(snapshot) => {
                 let ok = snapshot
                     .iter_borrowed()
-                    .all(|item| scalar_admits(kind, &Value::Py(&item)));
+                    .all(|item| admits(&Value::Py(&item)));
                 if !ok {
                     return false;
                 }
@@ -273,7 +322,7 @@ fn scalar_list_matches(
     }
     let mut ok = true;
     let scan = scan_list(list, |_, item| {
-        ok &= scalar_admits(kind, &Value::Py(item));
+        ok &= admits(&Value::Py(item));
         if ok {
             ControlFlow::Continue(())
         } else {
@@ -329,6 +378,11 @@ fn tuple_matches(
             .iter_borrowed()
             .all(|item| scalar_admits(kind, &Value::Py(&item)));
     }
+    if let Some(Schema::Union(members)) = tail
+        && let Some(ok) = scalar_union_tuple_matches(tuple, prefix, members, ctx)
+    {
+        return ok;
+    }
     let mut ok = true;
     for (i, item) in tuple.iter_borrowed().enumerate() {
         ok &= seq_element(prefix, tail, i, &Value::Py(&item), frame);
@@ -337,6 +391,25 @@ fn tuple_matches(
         }
     }
     ok
+}
+
+/// Membership for a tuple whose every element is a union of scalars --
+/// `tuple[int | None, ...]` -- where [`homogeneous_scalar_union`] reads it so,
+/// and `None` where it does not: [`scalar_union_list_matches`] for the frozen
+/// container, and out of line for the same reason.
+#[inline(never)]
+pub(super) fn scalar_union_tuple_matches(
+    tuple: &Bound<'_, PyTuple>,
+    prefix: &[Schema],
+    members: &[Schema],
+    ctx: Ctx<'_>,
+) -> Option<bool> {
+    let members = homogeneous_scalar_union(prefix, members, ctx)?;
+    Some(
+        tuple
+            .iter_borrowed()
+            .all(|item| scalar_union_admits(members, &Value::Py(&item))),
+    )
 }
 
 /// Whether the C accessors read this tuple's storage, so the walk can read it

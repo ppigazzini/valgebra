@@ -496,6 +496,12 @@ mutable container takes that container's lock. This gate is the coarse tripwire
 for ceding ground, with `perf_gate.py --against` doing the fine-grained work at
 2%. Changing a ceiling is an edit with an argument in its commit message.
 
+It is also the one gate that times the wheel the release ships. `perf_gate.py`
+builds without a profile, so a change the profile lays out differently is
+invisible there: a list arm that grew by one branch read 0.9% in its
+instruction count and 64% in this gate's `deep_nesting`, because the training
+workload held no counts for the loop the branch moved out of the walk.
+
 **A ceiling a shape passes by a wide margin stops measuring it**, which is why a
 claim is not the whole of the file. The JSON document sat at 0.87 under a
 ceiling of 1.00 while a commit message published 0.78 for it, and no gate was

@@ -29,7 +29,7 @@ import sys
 from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypedDict
 
 from valgebra import (
     Regex,
@@ -90,6 +90,24 @@ def main(argv: list[str]) -> None:
         _run(ints.is_valid_json, [json_text], max(50, 10000 // length))
     pair = Validator(tuple[int, str])
     _run(pair.is_valid, [(1, "a"), (1, 2), ("a", "b")], 5000)
+
+    # Lists whose elements are containers, which the homogeneous shapes above
+    # never reach: those take a loop of their own, and every other list is read
+    # through the general one. A list of records, and a list nested as deep as
+    # a document nests.
+    class Person(TypedDict):
+        name: str
+        age: int
+
+    people = Validator(list[Person])
+    crowd = [{"name": "Ada", "age": n} for n in range(20)]
+    _run(people.is_valid, [crowd, [*crowd, {"name": 5, "age": 1}]], 1000)
+    deep_schema: object = int
+    deep_value: object = 0
+    for _ in range(25):
+        deep_schema = list[deep_schema]  # type: ignore[valid-type]
+        deep_value = [deep_value]
+    _run(Validator(deep_schema).is_valid, [deep_value, [[1]]], 4000)
 
     # Nested documents (records of lists of records), valid and invalid.
     nested = Validator({"user": {"name": str, "age?": int}, "tags": list[str]})

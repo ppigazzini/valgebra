@@ -44,7 +44,7 @@ use crate::input::Value;
 /// `the_scalar_loop_and_the_walk_admit_the_same_values` asks both about every
 /// scalar schema and every kind of value, so a rule changed in one place and
 /// not the other fails rather than deciding one value two ways.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Scalar {
     /// The top and the bottom, which admit everything and nothing.
     Everything,
@@ -89,6 +89,27 @@ pub(super) fn scalar_admits(kind: Scalar, value: &Value<'_, '_>) -> bool {
     }
 }
 
+/// What [`member`] answers for a scalar schema in a fast walk, or `None` for a
+/// schema that is not one.
+///
+/// A scalar is one type test, and `member` spends a dispatch around it: the
+/// fatal-signal flag, a level of descent, the match. The answer is the same
+/// with the three read here -- `room` is whether a level is free, read once by
+/// a caller asking several branches -- and the flag is read at each call,
+/// because a branch asked before this one may have run Python. Only a walk
+/// that records nothing may ask: an explaining one reports where a scalar
+/// failed.
+#[inline]
+pub(super) fn scalar_member(
+    schema: &Schema,
+    value: &Value<'_, '_>,
+    ctx: Ctx<'_>,
+    room: bool,
+) -> Option<bool> {
+    let kind = scalar_of(schema)?;
+    Some(room && !ctx.fatal_seen.get() && scalar_admits(kind, value))
+}
+
 /// The scalar kind every position of a sequence takes, where the walk of it
 /// needs no path and reports no violation.
 ///
@@ -114,6 +135,36 @@ pub(super) fn homogeneous_scalar(
         return None;
     }
     scalar_of(tail?)
+}
+
+/// The branches of a union of scalars every position of a sequence takes, where
+/// the walk of it needs no path and reports no violation: [`homogeneous_scalar`]
+/// for `list[int | None]`, which [`check_union`](super::check_union) answers a
+/// test per branch.
+///
+/// A branch sits a level below the union, and the union a level below the
+/// sequence, so two levels must be free: the union's is held while the
+/// branch's is asked for, which is what the walk does with each element, and
+/// both are refused together.
+#[inline]
+pub(super) fn homogeneous_scalar_union<'s>(
+    prefix: &[Schema],
+    members: &'s [Schema],
+    ctx: Ctx<'_>,
+) -> Option<&'s [Schema]> {
+    if !prefix.is_empty() || ctx.mode.explains() {
+        return None;
+    }
+    let _union = ctx.descend()?;
+    (ctx.room_to_descend() && members.iter().all(|m| scalar_of(m).is_some())).then_some(members)
+}
+
+/// Whether some member of a union of scalars admits `value`.
+#[inline]
+pub(super) fn scalar_union_admits(members: &[Schema], value: &Value<'_, '_>) -> bool {
+    members
+        .iter()
+        .any(|m| scalar_of(m).is_some_and(|kind| scalar_admits(kind, value)))
 }
 
 /// A leaf decision: pass `ok` through, recording a type/value mismatch when it is

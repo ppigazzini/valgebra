@@ -17,6 +17,7 @@ use pyo3::types::{PyDict, PyString};
 use rustc_hash::{FxHashMap, FxHashSet};
 use valgebra_core::{Field, MapClause, PathSegment, Schema};
 
+use super::scalar::scalar_member;
 #[cfg(PyPy)]
 use super::{Base, held_dict, reads_its_length, reads_its_values};
 use super::{
@@ -218,9 +219,15 @@ fn covered(defaults: &[MapClause], key: &Value<'_, '_>, val: &Value<'_, '_>, ctx
     // not depend on.
     let (mut path, mut out) = (Vec::new(), Vec::new());
     let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
+    // A scalar key or value is its type test, asked without the walk around it:
+    // `dict[str, int]` reads both halves of every entry that way.
+    let room = ctx.room_to_descend();
+    let mut admits = |schema: &Schema, value: &Value<'_, '_>| {
+        scalar_member(schema, value, ctx, room).unwrap_or_else(|| member(schema, value, &mut sub))
+    };
     defaults
         .iter()
-        .any(|clause| member(&clause.key, key, &mut sub) && member(&clause.value, val, &mut sub))
+        .any(|clause| admits(&clause.key, key) && admits(&clause.value, val))
 }
 
 /// The field name a key resolves to, read the way the dict resolves one.
@@ -490,7 +497,14 @@ fn keyed_map_scan(
         // A non-string key, or a string carrying a lone surrogate (which cannot
         // equal a field name, since names are valid UTF-8 by build-time check),
         // resolves to no field and must instead be covered by a default clause.
-        let index = as_field_name(key, ctx).and_then(&lookup);
+        // A mapping declares no field, so no key resolves to one, and its keys
+        // are not read as names: decoding each and asking its type was a fifth
+        // of reading a `dict[str, int]`.
+        let index = if fields.is_empty() {
+            None
+        } else {
+            as_field_name(key, ctx).and_then(&lookup)
+        };
         match index.and_then(|i| fields.get(i)) {
             Some(field) => {
                 if !member(&field.schema, &Value::Py(val), &mut sub) {

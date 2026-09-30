@@ -4165,3 +4165,191 @@ fn a_fatal_signal_from_a_branch_label_is_recorded() {
         );
     });
 }
+
+/// A scalar branch or clause is answered as the walk answers it: the verdict
+/// `member` gives in a fast walk for every scalar schema and every kind of
+/// value, a refusal where no level is free or a fatal signal is recorded, and
+/// no answer for a schema that is not a scalar.
+#[test]
+fn a_scalar_is_answered_as_the_walk_answers_it() {
+    Python::attach(|py| {
+        let values = [
+            py.None().into_bound(py),
+            PyBool::new(py, true).to_owned().into_any(),
+            PyInt::new(py, 7i64).into_any(),
+            PyFloat::new(py, 1.5).into_any(),
+            PyString::new(py, "x").into_any(),
+            PyBytes::new(py, b"y").into_any(),
+            list_of(py, vec![1]),
+        ];
+        let scalars = [
+            Schema::ANY,
+            Schema::Nothing,
+            Schema::NoneType,
+            Schema::Bool,
+            Schema::Int,
+            Schema::Float,
+            Schema::Str,
+            Schema::Bytes,
+        ];
+        let index = build_index(py, &Schema::Int, &[], &[]);
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &[],
+            defs: &[],
+            records: &index.records,
+            attrs: &index.attrs,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
+            mode: WalkMode::Fast,
+        };
+        for schema in &scalars {
+            for value in &values {
+                let value = Value::Py(value);
+                let walked = member(
+                    schema,
+                    &value,
+                    &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
+                );
+                assert_eq!(scalar_member(schema, &value, ctx, true), Some(walked));
+                assert_eq!(scalar_member(schema, &value, ctx, false), Some(false));
+            }
+        }
+        let seven = Value::Py(&values[2]);
+        assert_eq!(
+            scalar_member(
+                &Schema::list(SeqShape::homogeneous(Schema::Int)),
+                &seven,
+                ctx,
+                true
+            ),
+            None
+        );
+        state.fatal_seen.set(true);
+        assert_eq!(scalar_member(&Schema::Int, &seven, ctx, true), Some(false));
+    });
+}
+
+/// A mapping of one clause of two scalars answers as the walk does: its keys
+/// are not read as field names, since it declares none, and each half of an
+/// entry is its type test, which refuses the entry that fails either.
+#[test]
+fn a_mapping_of_one_scalar_clause_is_read_entry_by_entry() {
+    Python::attach(|py| {
+        let mapping = Schema::mapping(MapClause {
+            key: Schema::Str,
+            value: Schema::Int,
+        });
+        let dict = |source: &str| {
+            py.eval(&std::ffi::CString::new(source).expect("no nul"), None, None)
+                .expect("the dict evaluates")
+        };
+        case(py, &mapping, &dict("{'a': 1, 'b': 2}"), true);
+        case(py, &mapping, &dict("{}"), true);
+        case(py, &mapping, &dict("{'a': 1, 'b': 'x'}"), false);
+        case(py, &mapping, &dict("{'a': 1, 2: 2}"), false);
+    });
+}
+
+/// A sequence whose repeated element is a scalar is read as its type test where
+/// one level is free under it, and one whose element is a union of scalars as
+/// a test per branch where two are -- the union's and its branch's -- and
+/// nowhere else: not in an explaining walk, not behind a fixed prefix, not for
+/// a union holding a container. Its verdict is the walk's, for a list, a tuple
+/// and a parsed array.
+#[test]
+fn a_sequence_of_a_union_of_scalars_is_read_as_its_tests() {
+    use super::scalar::{Scalar, homogeneous_scalar, homogeneous_scalar_union};
+    use super::sequence::{scalar_union_list_matches, scalar_union_tuple_matches};
+    Python::attach(|py| {
+        let nullable = Schema::union([Schema::Int, Schema::NoneType]);
+        let index = build_index(py, &Schema::Int, &[], &[]);
+        let state = WalkState::new();
+        let ctx = |mode| Ctx {
+            pool: &[],
+            defs: &[],
+            records: &index.records,
+            attrs: &index.attrs,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
+            mode,
+        };
+        let Schema::Union(branches) = &nullable else {
+            unreachable!("a union of two scalars stays a union")
+        };
+        let of_lists = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let holding_a_list = Schema::union([Schema::Int, of_lists.clone()]);
+        let Schema::Union(holding_a_list) = &holding_a_list else {
+            unreachable!("a union of a scalar and a list stays a union")
+        };
+        let union = |members: &[Schema], prefix: &[Schema], mode| {
+            homogeneous_scalar_union(prefix, members, ctx(mode)).map(<[Schema]>::len)
+        };
+        let kind = |tail: &Schema, prefix: &[Schema], mode| {
+            homogeneous_scalar(prefix, Some(tail), ctx(mode))
+        };
+        assert_eq!(union(branches, &[], WalkMode::Fast), Some(2));
+        assert_eq!(union(branches, &[], WalkMode::Explain), None);
+        assert_eq!(union(branches, &[Schema::Int], WalkMode::Fast), None);
+        assert_eq!(union(holding_a_list, &[], WalkMode::Fast), None);
+        assert_eq!(kind(&Schema::Int, &[], WalkMode::Fast), Some(Scalar::Int));
+        assert_eq!(kind(&Schema::Int, &[], WalkMode::Explain), None);
+        assert_eq!(kind(&Schema::Int, &[Schema::Int], WalkMode::Fast), None);
+        assert_eq!(kind(&of_lists, &[], WalkMode::Fast), None);
+        assert_eq!(kind(&nullable, &[], WalkMode::Fast), None);
+        assert_eq!(homogeneous_scalar(&[], None, ctx(WalkMode::Fast)), None);
+        state.depth.set(MAX_WALK_DEPTH - 2);
+        assert_eq!(union(branches, &[], WalkMode::Fast), Some(2));
+        state.depth.set(MAX_WALK_DEPTH - 1);
+        assert_eq!(union(branches, &[], WalkMode::Fast), None);
+        assert_eq!(kind(&Schema::Int, &[], WalkMode::Fast), Some(Scalar::Int));
+        state.depth.set(MAX_WALK_DEPTH);
+        assert_eq!(kind(&Schema::Int, &[], WalkMode::Fast), None);
+        state.depth.set(0);
+
+        let eval = |source: &str| {
+            py.eval(&std::ffi::CString::new(source).expect("no nul"), None, None)
+                .expect("the value evaluates")
+        };
+        let list = Schema::list(SeqShape::homogeneous(nullable.clone()));
+        let tuple = Schema::tuple(SeqShape::homogeneous(nullable.clone()));
+        case(py, &list, &eval("[1, None, 2]"), true);
+        case(py, &list, &eval("[1, 'x']"), false);
+        case(py, &tuple, &eval("(None, 3)"), true);
+        case(py, &tuple, &eval("(None, 1.5)"), false);
+        // Each reading answers where it is taken, and declines where it is not:
+        // a decline hands the walk to the general path, which answers the same,
+        // so only asking the reading itself shows it was taken.
+        let direct = |source: &str, mode| {
+            let value = eval(source);
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx(mode));
+            if let Ok(list) = value.cast::<PyList>() {
+                scalar_union_list_matches(list, &[], branches, &Value::Py(&value), &mut frame)
+            } else {
+                let tuple = value.cast::<PyTuple>().expect("a list or a tuple");
+                scalar_union_tuple_matches(tuple, &[], branches, ctx(mode))
+            }
+        };
+        assert_eq!(direct("[1, None, 2]", WalkMode::Fast), Some(true));
+        assert_eq!(direct("[1, 'x']", WalkMode::Fast), Some(false));
+        assert_eq!(direct("[1, None]", WalkMode::Explain), None);
+        assert_eq!(direct("(None, 3)", WalkMode::Fast), Some(true));
+        assert_eq!(direct("(None, 1.5)", WalkMode::Fast), Some(false));
+        assert_eq!(direct("(None, 3)", WalkMode::Explain), None);
+        let json = |source: &str| {
+            let parsed = JsonValue::parse(source.as_bytes(), false).expect("the JSON parses");
+            holds_json(py, &list, &parsed)
+        };
+        assert!(json("[1, null, 2]"));
+        assert!(!json("[1, \"x\"]"));
+    });
+}
