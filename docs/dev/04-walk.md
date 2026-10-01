@@ -390,7 +390,10 @@ most of what they cost, and each asks the test directly:
 - **A sequence of one scalar kind.** `list[int]` and `tuple[str, ...]` read the
   kind once for the sequence and test each element against it
   (`homogeneous_scalar`), the list through the snapshot above where one pays
-  (`scalar_list_matches`).
+  (`scalar_list_matches`). A list's loop is one per kind, its test a constant
+  inside it, so no element pays the dispatch on the kind: with the dispatch in
+  one shared loop, the PGO wheel laid it out an instruction an element dearer,
+  which the instruction gate, building without a profile, does not see.
 - **A union's branch.** `int | str | None` tries its branches in order, and a
   scalar branch is its type test (`scalar_member` in `walk/scalar.rs`). A
   string checked against that union costs 18% fewer instructions, and the

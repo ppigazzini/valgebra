@@ -254,6 +254,20 @@ fn seq_length_fail(
 /// register allocation follows every arm beside it, and `scripts/perf_gate.py
 /// --binding` reads a change to the tuple arm as a change to `list[int]`. The
 /// list pays one call.
+///
+/// **The kind is read once per list, not once per element.** Each builtin kind
+/// has a loop of its own, its type test a constant inside it, so no element
+/// pays the dispatch on `kind`. With the dispatch inside one shared loop, the
+/// PGO wheel laid that loop out with one instruction more per element than
+/// the loop read in place had, and `is_valid` on ten thousand integers took 6%
+/// longer, while the instruction gate, which builds without a profile, read the
+/// same change 24% cheaper.
+#[expect(
+    clippy::redundant_closure_for_method_calls,
+    reason = "the loop takes a test over a `Value` of any lifetime, and the \
+              method path names one lifetime; each closure is the method, \
+              generic over the lifetime the loop hands it"
+)]
 #[inline(never)]
 fn scalar_list_matches(
     list: &Bound<'_, PyList>,
@@ -265,7 +279,17 @@ fn scalar_list_matches(
     if frame.ctx.mode.explains() {
         return list_explained(list, schema, |item| scalar_admits(kind, item), value, frame);
     }
-    scalar_list_loop(list, |item| scalar_admits(kind, item), value, frame)
+    match kind {
+        Scalar::Int => scalar_list_loop(list, |item| item.is_int(), value, frame),
+        Scalar::Str => scalar_list_loop(list, |item| item.is_str(), value, frame),
+        Scalar::Float => scalar_list_loop(list, |item| item.is_float(), value, frame),
+        Scalar::Bool => scalar_list_loop(list, |item| item.is_bool(), value, frame),
+        Scalar::Bytes => scalar_list_loop(list, |item| item.is_bytes(), value, frame),
+        Scalar::NoneType => scalar_list_loop(list, |item| item.is_none(), value, frame),
+        Scalar::Everything | Scalar::Nothing => {
+            scalar_list_loop(list, |item| scalar_admits(kind, item), value, frame)
+        }
+    }
 }
 
 /// A list read in an explaining walk as its readers read it outside one: each
