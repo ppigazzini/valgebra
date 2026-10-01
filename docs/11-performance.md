@@ -256,6 +256,18 @@ Read that as the floor it is: a per-call check cannot be much cheaper than a
 Python call, and the way to spend less is to make fewer calls -- validate the
 list, not each element -- rather than to look for a faster scalar.
 
+**The crossing carries no reference pool.** PyO3 keeps a pool of
+reference-count decrements deferred while a thread is detached, and once any of
+its lazy initialisers has detached and attached again -- the first interned name
+does -- every call into the extension locks that pool's mutex to ask it for
+them: forty instructions and eight branches on `Validator(int).is_valid(1)`.
+The binding never detaches, so the pool is always empty, and
+`.cargo/config.toml` compiles it out; `tests/test_build_flags.py` holds the
+flags there. The instruction gate's boundary shape calls the walk without
+crossing PyO3's call machinery, so the comparison gate's `scalar` is the
+instrument that reads it: 36.7 ns with the pool gone against 39.9 with it, on
+CPython 3.14 and the machine below.
+
 ### Results
 
 End-to-end validation of a value that passes (lower is better):

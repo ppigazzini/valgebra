@@ -1,0 +1,21 @@
+# PyO3's global reference pool, compiled out.
+#
+# PyO3 keeps a pool of reference-count decrements deferred while a thread is
+# detached from the interpreter, and every call into the extension asks it for
+# them. Once any of PyO3's lazy initialisers has detached and attached again --
+# the first interned name does -- that question locks the pool's mutex: forty
+# instructions and eight branches on `Validator(int).is_valid(1)`. The binding
+# never detaches, so it never defers a decrement and the pool is never anything
+# but empty. `pyo3_disable_reference_pool` removes it; with it alone, dropping a
+# `Py<T>` while detached aborts the process, and
+# `pyo3_leak_on_drop_without_reference_pool` makes that drop a leak instead.
+# PyO3's guide, "Disable the global reference pool", states both.
+#
+# The sdist carries this file (`[tool.maturin] include`), so a build from
+# source compiles what a wheel does. A `RUSTFLAGS` set in the environment
+# replaces these flags rather than adding to them.
+[build]
+rustflags = [
+    "--cfg", "pyo3_disable_reference_pool",
+    "--cfg", "pyo3_leak_on_drop_without_reference_pool",
+]

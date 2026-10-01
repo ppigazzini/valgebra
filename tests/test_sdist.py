@@ -8,9 +8,10 @@ file in a crate -- ships to every user who builds from source. Both are decided
 by what `maturin sdist` collects, which no other check reads.
 
 Held both ways against the tree: the archive carries every tracked file of the
-workspace's crates and of the Python package, the manifests and the lock, and
-the readme and licences `pyproject.toml` names; and it carries nothing besides
-them but the `PKG-INFO` it writes.
+workspace's crates and of the Python package, the manifests and the lock, the
+readme and licences `pyproject.toml` names and the files `[tool.maturin]
+include` adds; and it carries nothing besides them but the `PKG-INFO` it
+writes.
 
 LEDGER: the source distribution carries every build input and nothing else
 """
@@ -74,6 +75,7 @@ def _inputs() -> set[str]:
     return (
         _tracked(*members, maturin["python-source"])
         | {"Cargo.toml", "Cargo.lock", "pyproject.toml", project["project"]["readme"]}
+        | {entry["path"] for entry in maturin.get("include", [])}
         | set(project["project"]["license-files"])
     )
 

@@ -42,7 +42,10 @@ The distinction this page keeps: a **fact** is verified from a reference; a
 
 - **PyO3** — <https://github.com/PyO3/pyo3> and its guide. Classes, conversions,
   and the free-threading rules the validator's shared-across-threads guarantee
-  rests on.
+  rests on. Its global reference pool is compiled out (`.cargo/config.toml`,
+  held by `tests/test_build_flags.py`); the guide's "Disable the global
+  reference pool" says what that removes from each call and what a drop while
+  detached does instead.
 - **maturin** — <https://github.com/PyO3/maturin>. The mixed Rust/Python layout
   and the wheel build, including the profile-guided build the release lane uses.
 

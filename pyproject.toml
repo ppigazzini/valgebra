@@ -125,6 +125,9 @@ manifest-path = "crates/valgebra-py/Cargo.toml"
 # over a broad, production-like spread of validation shapes; depends only on the
 # package itself, so it runs in the minimal environment maturin provisions.
 pgo-command = "python scripts/pgo_workload.py"
+# The compiler flags `.cargo/config.toml` sets are a build input: without them a
+# build from the sdist would compile PyO3's reference pool back in.
+include = [{ path = ".cargo/config.toml", format = "sdist" }]
 
 [tool.pytest.ini_options]
 minversion = "9.0"
