@@ -243,12 +243,12 @@ against the same cell, not against the gate's output.
 ### The cheapest door, and where the floor is
 
 `x in v` is `v.is_valid(x)` through the container protocol, and it is the
-cheaper call: **23 ns against 26 ns** for a scalar on the machine below, the
+cheaper call: **20 ns against 24 ns** for a scalar on the machine below, the
 best of fifteen `timeit` repeats of a million calls, because the interpreter
 reaches a container slot directly and a method by its call protocol. Neither
 number is the check. `Validator(anything).is_valid(1)` -- the schema that
-answers `True` without looking -- costs 25 ns, so the *walk* for an `int` is
-about a nanosecond and everything else is the boundary a Python call crosses.
+answers `True` without looking -- costs 23 ns, so the *walk* for an `int` is
+under a nanosecond and everything else is the boundary a Python call crosses.
 For reference on the same run, `isinstance(1, int)` is 12 ns and a call to an
 empty one-argument Python function is 15 ns.
 
@@ -274,16 +274,16 @@ End-to-end validation of a value that passes (lower is better):
 
 | Shape | valgebra | pydantic (strict) | jsonschema |
 | --- | --- | --- | --- |
-| `list[int]`, 10,000 elements | 9.95 +/- 0.14 us | 76.4 +/- 0.34 us | 24,601 +/- 253 us |
-| Closed record, 50 int fields | 0.521 +/- 0.015 us | 1.86 +/- 0.030 us | 126 +/- 2.9 us |
-| Nested `list[...]`, depth 25 | 0.223 +/- 0.031 us | 1.92 +/- 0.050 us | 73.8 +/- 1.7 us |
+| `list[int]`, 10,000 elements | 9.72 +/- 0.33 us | 77.2 +/- 1.9 us | 24,650 +/- 397 us |
+| Closed record, 50 int fields | 0.518 +/- 0.015 us | 1.92 +/- 0.055 us | 128 +/- 2.7 us |
+| Nested `list[...]`, depth 25 | 0.217 +/- 0.014 us | 1.95 +/- 0.049 us | 74.7 +/- 1.3 us |
 
 valgebra relative to pydantic on this machine, under the CPython 3.14 the matrix
-above names, as the medians above divide: **8.6x** faster on deep nesting,
-**7.7x** on the large flat array, **3.6x** on the wide record. The comparison
-gate's minimums read the same three at 8.2x, 7.7x and 3.8x (the 3.14 column
+above names, as the medians above divide: **9.0x** faster on deep nesting,
+**7.9x** on the large flat array, **3.7x** on the wide record. The comparison
+gate's minimums read the same three at 8.2x, 8.0x and 3.9x (the 3.14 column
 below). It is consistently far ahead of pure-Python jsonschema — 2,500x on the
-array, 331x on the nesting and 242x on the record.
+array, 344x on the nesting and 248x on the record.
 pydantic does strictly more work on the record (it constructs output), so read
 that shape as a margin over a heavier operation, not a like-for-like loss for
 pydantic.
@@ -299,17 +299,17 @@ build:
 
 | Shape | CPython 3.12 | CPython 3.14 | 3.14 free-threaded |
 | --- | --- | --- | --- |
-| `list[int]`, 10,000 elements | 0.183 | 0.130 | 0.135 |
-| Closed record, 50 int fields | 0.239 | 0.262 | 0.274 |
-| Nested `list[...]`, depth 25 | 0.135 | 0.122 | 0.262 |
-| One `int` | 0.221 | 0.208 | 0.216 |
+| `list[int]`, 10,000 elements | 0.177 | 0.125 | 0.137 |
+| Closed record, 50 int fields | 0.239 | 0.255 | 0.282 |
+| Nested `list[...]`, depth 25 | 0.132 | 0.122 | 0.274 |
+| One `int` | 0.207 | 0.192 | 0.199 |
 
 The **element** is what moves, not the check. A list hands out each of its items
 as an owned reference — a count written on the object when the handle is made
 and again when it drops — and the free-threaded build takes the list's lock for
 each one besides. A schema nested twenty-five deep is twenty-five containers of
-one element, so it is almost nothing but that cost, and it reads about twice as
-dear there as under a global lock. A flat array of ten thousand is read through
+one element, so it is almost nothing but that cost, and it reads more than twice
+as dear there as under a global lock. A flat array of ten thousand is read through
 a snapshot of the list under 3.12 and the free-threaded build, which pays the
 counts in two loops inside the interpreter and none in the walk;
 CPython 3.14 with its global lock makes the counts cheap enough that the walk
@@ -330,8 +330,8 @@ fraction of pydantic-core's time each takes, on a PGO CPython 3.12 build:
 
 | Shape | ratio | spread across runs |
 | --- | --- | --- |
-| JSON document, 200 records parsed and checked | 0.61 | 0.072 over twelve runs |
-| Error report, 50-field record with one wrong field | 0.46 | 0.074 over twelve runs |
+| JSON document, 200 records parsed and checked | 0.61 | 0.035 over twelve runs |
+| Error report, 50-field record with one wrong field | 0.46 | 0.042 over twelve runs |
 
 The JSON document is a single pass over bytes for both libraries, which is why
 valgebra takes three fifths of pydantic-core's time here rather than a fraction:
@@ -340,8 +340,10 @@ neither is spending its time in the check. A document's free-form sections are
 narrow object, through a table of last values for a wide one
 ([dev/04-walk.md](dev/04-walk.md)).
 
-The error report spreads the widest, beside the JSON document: 0.41 to 0.49
-across the twelve runs, where every other shape spreads between 0.001 and 0.021.
+The error report spreads 0.43 to 0.47 across the twelve runs, beside the JSON
+document's 0.035 and the scalar's 0.061, which sits near timer resolution;
+the array, the record, the nesting and the build spread between 0.002 and
+0.025.
 It is the only shape timing a path that raises and formats a Python exception,
 so a Python exception's cost is inside the number. It is excluded from the
 gate's drift ratchet, and `scripts/perf_compare.json` gives the reason rather
@@ -372,9 +374,9 @@ and the walk is at it; the experiment is recorded here rather than re-run.
 
 The scalar shape is absent from the table because it sits near timer resolution,
 and most of it is the call rather than the check, as the floor above shows: on
-CPython 3.14 the competitive gate measures it at a 39.5 ns median over seven
-runs with a spread of a twentieth of that, around 4.8x. That gate measures it;
-this record does not.
+CPython 3.14 the competitive gate measures it at a 36.7 ns median over seven
+runs with a spread of 1.5 ns, around 5.2x. That gate measures it; this record
+does not.
 
 Core micro-benchmarks (criterion, release+LTO, indicative single run):
 
