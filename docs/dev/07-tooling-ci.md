@@ -497,8 +497,8 @@ Each shape's ceiling is a **claim, not a recorded measurement**: the ratio the
 project says it stays under, with headroom. A recorded ratio travels badly,
 because the two libraries respond differently to a PGO build and to an
 interpreter. The interpreter is the one that moves a shape far: on a single box
-a schema nested twenty-five deep reads 0.14 to 0.16 under CPython 3.12 and 3.14
-and 0.33 under the free-threaded build, where every read of an element out of a
+a schema nested twenty-five deep reads 0.12 to 0.14 under CPython 3.12 and 3.14
+and 0.26 under the free-threaded build, where every read of an element out of a
 mutable container takes that container's lock. This gate is the coarse tripwire
 for ceding ground, with `perf_gate.py --against` doing the fine-grained work at
 2%. Changing a ceiling is an edit with an argument in its commit message.
@@ -582,7 +582,7 @@ shapes where it is a different environment rather than the same one on a slower
 clock: reading an element out of a mutable container takes that container's lock
 there, so a shape whose cost is per-element pays what no interpreter with a
 global lock pays. A schema nested twenty-five deep is twenty-five
-single-element lists, and it reads 0.31 to 0.34 against the 0.14 to 0.16 of the
+single-element lists, and it reads 0.26 to 0.28 against the 0.12 to 0.15 of the
 builds with a lock. A shape absent from that set is held to the shared ceiling,
 and the gate selects between them by asking the interpreter whether its global
 lock is enabled.

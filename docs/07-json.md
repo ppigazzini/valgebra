@@ -209,9 +209,9 @@ ships), per-call median on a passing document:
 
 | Shape | `is_valid_json` | `json.loads` + `is_valid` | speedup |
 | --- | --- | --- | --- |
-| Record, 50 int fields | 2.5 us | 6.2 us | ~2.5x |
-| List of 200 small mappings | 40.5 us | 39.9 us | ~1.0x |
-| `list[int]`, 10,000 elements | 71 us | 462 us | ~6.5x |
+| Record, 50 int fields | 1.18 us | 5.92 us | ~5.0x |
+| List of 200 small mappings | 25.7 us | 36.8 us | ~1.4x |
+| `list[int]`, 10,000 elements | 72 us | 447 us | ~6.2x |
 
 `benches/bench_json.py` times both columns, and a strict
 `TypeAdapter.validate_json` over the same three shapes beside them; that third
@@ -224,28 +224,32 @@ uv run --no-sync --group bench pytest benches/bench_json.py
 
 Avoiding materialization helps where the document is large or scalar-heavy: the
 10,000-element array is six times faster than parse-then-validate, and the wide
-record two and a half. The middle row is the shape where it stops paying -- two
-hundred small mappings are two hundred dict walks either way, and the object
-path reaches each of them through a walk that has been made cheaper than the
-parse it avoids. Measure your own documents rather than reading a rule off
-these three.
+record five. The middle row is the shape where it pays least, by about two
+fifths -- two hundred small mappings are two hundred container walks either
+way. Measure your own documents rather than reading a rule off these three.
 
 Where the middle shape's time goes is measured, because it is the shape where
 valgebra is closest to pydantic-core. On the competitive gate's document -- two
 hundred records of five fields, one of them a list and one a mapping, 17 KB --
-`is_valid_json` reads about 90 us on the machine above, and the parts are:
+`is_valid_json` reads about 70 us on the machine above in the PGO wheel, and
+the parts are:
 
 | part | per call | how it was measured |
 | --- | --- | --- |
-| `jiter::JsonValue::parse`, the tree the walk reads | 64 us | the parse alone, in Rust, release |
-| the walk over that tree | 26 us | `is_valid_json` less the parse |
-| jiter's pull parser over the same bytes, building nothing | 21 us | the parse alone, in Rust, release |
+| the parse into the tree the walk reads, and the call | 54 us | `Validator(anything).is_valid_json`, which parses and admits without a walk |
+| the walk over that tree | 16 us | `is_valid_json` less the row above |
+| `jiter::JsonValue::parse` alone | 64 us | in Rust, release, no profile |
+| jiter's pull parser over the same bytes, building nothing | 23 us | in Rust, release, no profile |
 
-The tree costs three times the parse that builds nothing: the cost is the
-tree's containers -- a vector per array and per object, each behind its own
-allocation -- and not the scanning. pydantic-core validates from the parser's
-events and builds no tree, which is why it reads this shape in the time
-valgebra reads the tree.
+The first two rows are one process. The parse moves with the heap a process
+starts from -- one process in seventeen read it two fifths dearer -- and the
+walk does not. Read in one build, the tree costs nearly three times the parse that
+builds nothing: the cost is the tree's containers -- a vector per array and per
+object, each behind its own allocation -- and not the scanning. pydantic-core
+validates from the parser's events and builds no tree, and the comparison
+gate's `json_document` reads it at 1.8 times valgebra's whole call on CPython
+3.14, so the tree is most of valgebra's call and the call is still the
+shorter.
 
 Two readings would remove that cost, and the page states both as the limits
 they are.
