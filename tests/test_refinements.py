@@ -289,6 +289,25 @@ def test_unrecognized_metadata_is_ignored() -> None:
     assert not schema.is_valid("x")
 
 
+class _Kilograms:
+    """A unit class, the metadata a units library writes for its own reading."""
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    ["user id", {"unit": "s"}, _Kilograms, [int]],
+    ids=["constant", "mapping", "class", "sequence"],
+)
+def test_metadata_another_library_writes_is_ignored(metadata: object) -> None:
+    # Read as a schema, each would meet `str` with a set "x" is not in -- the
+    # literal "user id", a record, the unit's instances, a list -- so a value
+    # of the base the annotation names would be refused. docs/dev/03-frontend.md
+    # records the refusal; ignored, the schema is the base it annotates.
+    schema = Validator(Annotated[str, metadata])
+    assert schema.is_valid("x")
+    assert repr(schema) == "str"
+
+
 #: Bases, validators and values whose memberships differ from one another.
 _BASES: tuple[object, ...] = (int, str, bool, float, list[int], type(None), object)
 _NARROWING = (

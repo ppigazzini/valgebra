@@ -59,8 +59,23 @@ The rest are read in this order:
    `annotated_types` vocabulary — refused, since it was written to narrow this
    schema and ignoring it would admit what it excludes.
 
-Metadata matching none of these is ignored, which the typing spec requires of
-any consumer for metadata it does not recognise.
+Metadata matching none of these is ignored, which the typing spec says a
+consumer should do with metadata it has no logic for.
+
+**Reading a constant, a mapping, a class or a sequence in the metadata as a
+schema is refused.** The spec leaves the reading to the consumer -- "deciding
+how to interpret the metadata (if at all) is the responsibility of the tool or
+library" -- so the refusal is this frontend's rule, not the spec's: what it
+reads there is its own statement of a set, a compiled validator, and the marker
+protocol other libraries share. Each of the four is a form other libraries
+write for their own reading -- a description, a mapping of options, a unit
+class, a list of tags -- and read as a schema, `Annotated[int, "user id"]`
+would be `int` met with the literal `"user id"`, a set with no member, and no
+library would say so. The set a schema author means is spelled
+`Annotated[T, Validator(s)]` or `intersection(T, s)`. A proposal starts from
+the test it fails: `test_metadata_another_library_writes_is_ignored` in
+`tests/test_refinements.py`, which holds each of the four kinds to the base it
+annotates.
 
 **A question the frontend asks of user code carries a fatal signal out.** A
 marker's attributes, a bound's conversion to a float, a length bound's
