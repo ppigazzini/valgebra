@@ -1,8 +1,12 @@
 name: CI
 
 on:
+  # A push to `github_ci` runs the workflow before the commit reaches `main`:
+  # `main` takes a commit once its `ci` check is green there -- the same commit,
+  # fast-forwarded -- so a red push lane is repaired on the branch that carries
+  # it, before `main` has it. A push to `main` runs it as well.
   push:
-    branches: [main]
+    branches: [main, github_ci]
   pull_request:
     branches: [main]
   schedule:
@@ -28,7 +32,7 @@ on:
 concurrency:
   # Keyed by event too, so a push to main does not share a group with the
   # scheduled nightly soak (both resolve github.ref to refs/heads/main) and cancel
-  # it mid-run.
+  # it mid-run. A push to `github_ci` cancels the run of the commit it replaces.
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 

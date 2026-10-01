@@ -221,8 +221,9 @@ finishes a merge gate, and `nightly` the deep one that hunts the long tail.
 
 ## Continuous integration
 
-The `ci.yml` workflow gates every push and pull request; the aggregated `ci`
-check is green only when every job is. `ci.yml` owns the job set, and
+The `ci.yml` workflow gates every push to `main` and to `github_ci`, and every
+pull request against `main`; the aggregated `ci` check is green only when every
+job is. `ci.yml` owns the job set, and
 `tests/test_required_jobs.py` holds the aggregator to it in both directions, so
 the list is not restated here: a second copy drifts by one entry and reads
 exactly like one that has not. What is worth knowing about its shape is the
@@ -278,8 +279,12 @@ without its benchmark dependency.
 
 ## Working on changes
 
-- Branch off `main`; open a pull request. Both push and PR trigger CI, and the
-  aggregated `ci` check must be green to merge.
+- Push to `github_ci`, force-pushing as often as the work needs, and move
+  `main` only to a commit whose `ci` check is green there:
+  `git push origin <commit>:main`, a fast-forward to the commit that passed. A
+  red push lane is repaired on `github_ci`, before `main` has the commit. A
+  pull request against `main` runs the same workflow, and the aggregated `ci`
+  check must be green to merge it.
 - Keep the Python/Rust boundary explicit: the validator tree runs in Rust;
   Python predicates are a documented slow path, never a silent fallback.
 - No schema combinator or annotation form lands without its denotation written

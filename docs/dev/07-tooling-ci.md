@@ -748,9 +748,16 @@ standard: a detector that cannot be shown to fail is not evidence.
 
 ## The lanes
 
-`.github/workflows/ci.yml` runs them; read the job set there. Four properties of
+`.github/workflows/ci.yml` runs them; read the job set there. Five properties of
 the arrangement are worth stating because they are decisions rather than
 mechanism:
+
+**`main` receives a commit the push lane passed.** A push to `github_ci` runs
+the workflow, and `main` moves to a commit only once its `ci` check is green
+there, by a fast-forward to that same commit, so the hash the check was read on
+is the one `main` carries. A red push lane is repaired on `github_ci`. A push
+to `main` runs the workflow too, and the nightly runs on the default branch,
+over what has landed.
 
 **A skipped job cannot pass.** The `ci` aggregator lists every required job in
 `needs:` *and* fails unless each result is `success` rather than merely
