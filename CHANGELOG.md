@@ -13,43 +13,47 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: a TypedDict is read against the sentinel its own implementation wrote
-- fix: a validator in Annotated metadata narrows the schema by its set
-- fix: a union's report names a meet by what its members admit
-- fix: a fail-fast union report walks no branch past its first failure
-- fix: a fatal signal raised inside a key or a type probe propagates
-- fix: a list subclass is read for what it holds on every interpreter
-- fix: a marker class is refused with the spelling that was meant
-- fix: a length bound is read before the elements it bounds
-- fix: a reference nothing resolves is below a reference to the universe -- internal
-- fix: an opened map carries its clauses in the constructor's order
-- fix: a step of -2**63 is past the period, not the set holding zero
-- fix: no float lies between a float and the next one
-- fix: a step dividing another is not read across kinds of number
-- fix: one dict key cannot witness two clauses of a union
-- fix: a pattern that parses only once anchored is refused
-- fix: a fatal signal from any part of a message propagates
-- fix: an object carrying metadata and no origin is a value
-- fix: a typing_extensions spelling reads as its typing one
-- fix: a bare TypedDict or NamedTuple is refused
-- fix: a TypedDict subclass inherits what its base says about unnamed keys
-- fix: a space or a # inside a verbose class is refused
-- fix: the unsupported-form refusal names every subscripted form it reads
-- fix: a length bound past a sequence's own lengths is empty -- internal
-- fix: a PyPy tuple or dict subclass is read for what it holds
-- fix: an error path names each key by what it holds
-- fix: a signal an element's repr raises once propagates from a summary
-- fix: building a validator and asking a relation carry a fatal signal out
-- fix: validate explains no union branch that refuses a value by its kind
-- fix: a PyPy dict scan survives a key swapped mid-scan
-- fix: a key that is not a bare name is quoted in a message's location
-- fix: the pattern and depth labels name the set a value missed
-- fix: a record below the complement of two records is decided
-- fix: equality, hash, repr and a build refusal carry a fatal signal out
-- fix: the complement of an empty refinement is above every subject
-- fix: the first build imports annotationlib before it reads typing
-
 -->
+
+## [0.0.15] - 2026-10-01
+
+A correctness release: thirty-three entries, all fixes.
+
+Four relations answered wrongly and two declined. A step of `-2**63` was read
+as the set holding zero, a pair of float bounds as reals with a real between
+them, a step dividing another as an inclusion across kinds of number `%` does
+not keep, and one dict key as witnessing two clauses of a union. A record below
+the complement of two records, and a union of pattern refinements below the
+complement of an empty one, are decided where they were undecided.
+
+The frontend reads more of what the typing spec writes. A validator in
+`Annotated` metadata narrows the schema rather than being ignored, a
+`typing_extensions` form reads as its `typing` one, and a `TypedDict` built by
+`typing_extensions` or inheriting from a closed one admits the extra keys its
+declaration says. A marker class written without its parentheses, a bare
+`TypedDict` or `NamedTuple`, a pattern that parses only once anchored and a
+space or `#` in a verbose character class are refused, where each built a
+schema for another set or failed for another reason.
+
+A fatal signal -- an interrupt or a `MemoryError` -- raised in code the library
+calls propagates from every site that read it as an ordinary answer: a key's
+`__eq__`, a type's metaclass, the `__repr__` of any part of a message, a
+predicate, bound or step that building or a relation asks, and the comparison,
+hash and repr of a constant a validator holds.
+
+Three fixes are about a process rather than an answer. Building the first
+validator on Python 3.15 could wait for good beside a thread importing
+`annotationlib`, and on PyPy a `tuple` subclass yielding fewer items than it
+holds crashed `validate`, and a dict whose key a predicate swapped mid-scan
+took the interpreter down.
+
+The rest are the walk and its reports. A list subclass is judged by what it
+holds on every interpreter, as a `tuple` or `dict` subclass is on PyPy, and a
+length bound is read before the elements it bounds. A report names an
+intersection branch by its members, quotes a key that is not a bare name in
+its location, spells a pattern as its Python literal, names each key of a path
+by what it holds, and under `fail_fast` walks each union branch only to its
+first failure.
 
 ### Fixed
 
@@ -2204,7 +2208,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.14...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.15...HEAD
+[0.0.15]: https://github.com/ppigazzini/valgebra/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/ppigazzini/valgebra/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/ppigazzini/valgebra/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/ppigazzini/valgebra/compare/v0.0.11...v0.0.12
