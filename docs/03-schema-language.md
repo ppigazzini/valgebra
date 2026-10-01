@@ -679,7 +679,7 @@ Membership is unaffected — the walk reads the value.
 | dataclass | the instances of the class whose every declared field holds a value of its type |
 | `NamedTuple` | the instances of the class whose fields, by position, hold values of their types |
 | `Enum` | the members of the enumeration |
-| `Protocol` decorated `@runtime_checkable` | the values `isinstance` admits against the protocol |
+| `Protocol` decorated `@runtime_checkable` | the values Python's `isinstance` admits against the protocol on the running interpreter: each member present, whatever it holds ([below](#a-protocol-is-pythons-own-check)) |
 | `NewType` | the set of the supertype it wraps |
 | PEP 695 `type` alias | the set of the aliased type, and ties the fixpoint where the alias names itself ([recursion](06-recursion.md)) |
 
@@ -772,6 +772,37 @@ own spelling, and a schema written as a *shape* means that shape. Both sets are
 spellable both ways: write `closed=True` (PEP 728) for a closed `TypedDict`, and
 `{"name": str, anything: anything}` for an open shape -- or `.open()`, which
 does the same to every record in a schema at once.
+
+### A protocol is Python's own check
+
+A runtime-checkable protocol compiles to an `isinstance` check against the
+class, so it denotes the set Python's check admits on the interpreter running
+it. That check asks whether each member is present and never what it holds: an
+object whose `x` is a string belongs to a protocol declaring `x: int`. It also
+admits an instance of any class that names the protocol among its bases without
+asking about a member at all, so such an instance with no `x` belongs too.
+
+How the check finds a member changed at Python 3.12. Before it the check uses
+`hasattr`, which runs a `__getattr__` hook and a property's getter; from it the
+check uses `inspect.getattr_static`, which runs neither and finds a slot on the
+class whether or not the instance filled it. Four kinds of value change sides:
+
+| value | 3.10 and 3.11 | 3.12 and later |
+|---|---|---|
+| a data member that only a `__getattr__` hook serves | admitted | refused |
+| a method that only a `__getattr__` hook serves | admitted | refused |
+| a data member whose property getter raises | refused: `isinstance` raises, and the error reads as a non-member | admitted |
+| a data member declared in `__slots__` and never assigned | refused | admitted |
+
+`test_a_protocol_admits_what_the_running_release_admits` in
+`tests/test_frontend_forms.py` holds each row on every interpreter the test
+matrix runs, so a release that moves the check again fails it and this table
+moves with it. A value none of the four rows describes gets the same answer on
+every release.
+
+One schema denoting two sets, chosen by the interpreter, is a gap: every other
+form on this page denotes one. A reading of the protocol that does not move --
+the record of its members, each checked for what it holds -- is not built.
 
 ### Pass the class, not its annotations
 

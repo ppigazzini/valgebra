@@ -477,6 +477,94 @@ def test_a_protocol_is_runtime_checkable_only_where_it_is_decorated() -> None:
         assert not schema.is_valid(1)
 
 
+@typing.runtime_checkable
+class HoldsX(typing.Protocol):
+    """A protocol with one data member."""
+
+    x: int
+
+
+@typing.runtime_checkable
+class HoldsM(typing.Protocol):
+    """A protocol with one method."""
+
+    def m(self) -> int: ...
+
+
+class XFromAHook:
+    """An `x` a `__getattr__` hook serves, with nothing on the class to find."""
+
+    def __getattr__(self, name: str) -> int:
+        if name == "x":
+            return 1
+        raise AttributeError(name)
+
+
+class MFromAHook:
+    """An `m` a `__getattr__` hook serves, with nothing on the class to find."""
+
+    def __getattr__(self, name: str) -> typing.Callable[[], int]:
+        if name == "m":
+            return lambda: 1
+        raise AttributeError(name)
+
+
+class XWhoseGetterRaises:
+    """An `x` that is a property, whose getter raises an ordinary exception."""
+
+    @property
+    def x(self) -> int:
+        raise RuntimeError("the getter fails")
+
+
+class XInAnEmptySlot:
+    """An `x` declared as a slot that no instance here assigns."""
+
+    __slots__ = ("x",)
+
+
+class NamesHoldsX(HoldsX):
+    """A class naming the protocol as a base, and assigning no `x`."""
+
+
+class XHoldsText:
+    """An `x` that is present and holds a value outside `int`."""
+
+    x = "text"
+
+
+def test_a_protocol_admits_what_the_running_release_admits() -> None:
+    """A protocol is Python's own check, and the check moved at 3.12.
+
+    `isinstance` against a runtime-checkable protocol finds a member with
+    `hasattr` on 3.10 and 3.11 and with `inspect.getattr_static` from 3.12.
+    `hasattr` runs a `__getattr__` hook and a property's getter; the static
+    lookup runs neither, and finds a slot's descriptor on the class whether or
+    not the instance has filled it. So a member served by a hook, a getter that
+    raises, and an empty slot change sides -- the four values below, each one
+    of the rows the schema-language page tabulates. On 3.10 and 3.11 the raising
+    getter makes `isinstance` raise, and the walk reads that as a non-member.
+
+    Two things hold on every release: the check asks whether a member is
+    present and not what it holds, and an instance of a class that names the
+    protocol as a base passes without a member being asked for -- here one
+    with no `x` at all.
+    """
+    reads_statically = sys.version_info >= (3, 12)
+    holds_x = Validator(HoldsX)
+    holds_m = Validator(HoldsM)
+    assert holds_x.is_valid(XFromAHook()) is not reads_statically
+    assert holds_m.is_valid(MFromAHook()) is not reads_statically
+    assert holds_x.is_valid(XWhoseGetterRaises()) is reads_statically
+    assert holds_x.is_valid(XInAnEmptySlot()) is reads_statically
+    # mypy and pyright refuse to construct the class, since it declares `x` and
+    # assigns none; Python constructs it, and that instance is the point.
+    unassigned = NamesHoldsX()
+    assert not hasattr(unassigned, "x")
+    assert holds_x.is_valid(unassigned)
+    assert holds_x.is_valid(XHoldsText())
+
+
 def test_a_qualifier_is_unwrapped_wherever_it_is_written() -> None:
     """A field qualifier compiles the type it qualifies, inside a record or not.
 

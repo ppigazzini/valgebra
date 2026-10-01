@@ -248,16 +248,33 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    well as the types. A field the hints do not carry — a `collections`
    namedtuple's — takes `anything` at its position, which checks the arity
    without the types.
-7. **A `Protocol`** validates by `isinstance`, and is a schema only where
-   `@runtime_checkable` was applied to the class itself; any other protocol is
-   refused. A subclass protocol inherits the attribute the decorator sets, so
-   `isinstance` answers for it -- with a `DeprecationWarning` from Python 3.15
-   and a `TypeError` from 3.20 -- and the walk reads a warning raised as an
-   error as a non-member, so under `-W error` such a schema would admit nothing
-   and say nothing. `declares_runtime_checkable` in `build/classes.rs` reads
+7. **A `Protocol`** is an instance check against the class, so it denotes the
+   set Python's own `isinstance` admits on the running interpreter, and it is a
+   schema only where `@runtime_checkable` was applied to the class itself; any
+   other protocol is refused. A subclass protocol inherits the attribute the
+   decorator sets, so `isinstance` answers for it -- with a
+   `DeprecationWarning` from Python 3.15 and a `TypeError` from 3.20 -- and the
+   walk reads a warning raised as an error as a non-member, so under `-W error`
+   such a schema would admit nothing and say nothing.
+   `declares_runtime_checkable` in `build/classes.rs` reads
    `_is_runtime_protocol` in the class's own namespace, where the decorator
    writes it in `typing` and `typing_extensions` alike on every supported
    release, and the inheriting class is refused by name.
+
+   **The set is the interpreter's, and it moved at 3.12.** The check finds a
+   member with `hasattr` on 3.10 and 3.11 and with `inspect.getattr_static`
+   from 3.12, so a member only a `__getattr__` hook serves, a property getter
+   that raises and an unassigned slot change sides. On every release it asks
+   whether a member is present and not what it holds, and it admits an
+   instance of a class naming the protocol among its bases without asking
+   about a member at all. The [schema-language
+   page](../03-schema-language.md#a-protocol-is-pythons-own-check) tabulates
+   the four values, and
+   `test_a_protocol_admits_what_the_running_release_admits` in
+   `tests/test_frontend_forms.py` holds them on each interpreter the matrix
+   runs. Every other form this page reads denotes one set on every release;
+   this one is a gap, and a reading of the protocol as the attribute record of
+   its members, which would not move, is not built.
 8. **Any other class** names its instances: the remaining builtins, the
    `collections.abc` ABCs, and every user class, uniformly.
 
