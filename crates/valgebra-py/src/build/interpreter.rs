@@ -398,16 +398,9 @@ fn each_refusal_says_what_it_refuses() {
             refuses(expression, wanted);
         }
         // The star inside a subscript is a syntax error before 3.11, so below
-        // it the refusal a row reads is the *parser's* rather than this one's.
-        // The release rides on the row, as it does in the table above.
-        for (since, expression, wanted) in [(
-            Since(11),
-            "tuple[*list[int]]",
-            "only a tuple can be unpacked",
-        )] {
-            if since.met(py) {
-                refuses(expression, wanted);
-            }
+        // it the refusal the row reads is the *parser's* rather than this one's.
+        if Since(11).met(py) {
+            refuses("tuple[*list[int]]", "only a tuple can be unpacked");
         }
     });
 }

@@ -382,7 +382,7 @@ fn a_meet_stops_at_the_member_that_rejects_the_value() {
         assert!(!ok);
         assert_eq!(violations.len(), 1, "{violations:?}");
         assert_eq!(violations[0].code, "instance_type");
-        assert!(violations[0].path.is_empty());
+        assert_eq!(violations[0].path, Vec::new());
 
         // A Point whose attribute is wrong fails *inside* the value: the
         // class atom held, and the record reports the attribute.

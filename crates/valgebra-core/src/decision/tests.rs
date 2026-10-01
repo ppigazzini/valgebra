@@ -1603,7 +1603,7 @@ fn two_sets_of_literals_are_asked_as_sets() {
     // empty set of constants would be a different question, and one this oracle
     // would answer `true` for whatever stood against it.
     assert!(!Schema::Union(Vec::new().into()).disjoint_with(&lit(0), &oracle));
-    assert!(oracle.asked.take().is_empty());
+    assert_eq!(oracle.asked.take(), Vec::new());
 }
 
 /// An oracle treating each pool index as its own value, so comparing indices

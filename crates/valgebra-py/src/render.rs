@@ -140,9 +140,7 @@ pub(crate) fn render(
             }
             let name = binder(active.borrow().len());
             active.borrow_mut().insert(*id, name.clone());
-            let body = defs
-                .get(id.get())
-                .map_or_else(|| Ok(GAVE_UP.to_owned()), &r);
+            let body = defs.get(id.get()).map_or_else(|| Ok(GAVE_UP.to_owned()), r);
             active.borrow_mut().remove(id);
             format!("recursive(lambda {name}: {})", body?)
         }
