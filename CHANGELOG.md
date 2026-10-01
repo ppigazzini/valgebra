@@ -13,7 +13,22 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: a refutation about a class stands on what its instance can carry
+
 -->
+
+### Fixed
+
+- **A relation about a class and its fields stands on an instance that can
+  carry them.** A dataclass is its class met with a record of its fields, and a
+  refutation about one -- `not_subset` against a kind or another class -- stands
+  on a direct instance of the class holding a value in each field. That
+  instance was assumed whatever the class defines. Where a field's name is a
+  property or another data descriptor on the class, or the class defines
+  `__getattribute__`, what the instance holds there is the answer of code, and
+  the pair was refuted on a value that may not exist; it is `undecided`. A class
+  whose instances have no `__dict__`, a name the class body defines and a slot
+  are read the same way, each for what a direct instance can hold.
 
 ## [0.0.15] - 2026-10-01
 

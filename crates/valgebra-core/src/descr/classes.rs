@@ -12,10 +12,145 @@
 //! the fact. A class with a hook answers arbitrary code, so it is not a set this
 //! algebra can hold; it stays opaque, and staying opaque is what keeps `C ∧ ¬C`
 //! from being decided empty while a hook admits a value to both.
+//!
+//! **A class also says what its direct instances can carry.** Every reading
+//! that proves a class met with a record inhabited stands on one value: a
+//! *direct* instance of the class carrying what the record's fields admit. That
+//! value exists only where the class leaves room for it -- an attribute the
+//! class body defines cannot be missing, a property answers with its getter,
+//! and an instance laid out without a dictionary holds no attribute its slots do
+//! not name. [`Attributes`] is that part of the snapshot, and [`Reach`] is what
+//! it answers for one name.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Arc, OnceLock};
 
 use crate::kind::Kind;
+
+/// What one attribute of a *direct* instance of a class can be.
+///
+/// A direct instance is the value the class assumption licenses: an object
+/// whose type is the class itself, which a refutation about the class may stand
+/// on. A subclass may carry anything, and nothing here says whether one exists,
+/// so this answers for the direct instance alone and claims nothing about the
+/// class's other instances.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reach {
+    /// Missing, or holding any value: the class defines nothing by the name and
+    /// the instance has a dictionary or a `__getattr__` hook to hold one, or the
+    /// name is a slot, which is missing until it is assigned.
+    Anything,
+    /// Holding any value, through an entry in the instance's own dictionary,
+    /// which a name the class defines without a data descriptor gives way to.
+    /// Whether it can be missing is not read: a class attribute is found
+    /// whenever the instance holds no entry, and a non-data descriptor's getter
+    /// is code.
+    AnyValue,
+    /// Never there: the class defines no such name, its instances carry no
+    /// dictionary, and no hook serves a name.
+    Missing,
+    /// What it holds is the answer of code -- a data descriptor such as a
+    /// property, or a `__getattribute__` hook -- or a value fixed on a class
+    /// whose instances carry no dictionary to replace it. No direct instance is
+    /// assumed to carry any particular thing here.
+    Unread,
+}
+
+/// What a class's namespace holds under one name, as an attribute lookup on an
+/// instance finds it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Member {
+    /// A slot its class's own `__slots__` lays down: missing until assigned,
+    /// then whatever was assigned.
+    Slot,
+    /// A value or a non-data descriptor, such as a function: an entry in the
+    /// instance's dictionary takes its place.
+    Plain,
+    /// A data descriptor other than a slot, such as a property: it answers
+    /// every read, whatever the instance's dictionary holds.
+    Descriptor,
+}
+
+/// Which attribute hook a class defines, if any.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Hook {
+    /// Neither: a lookup is the namespace and the instance's dictionary.
+    Neither,
+    /// `__getattr__`, which answers for a name a lookup does not find.
+    Getattr,
+    /// A `__getattribute__` other than the generic lookup, which answers every
+    /// lookup.
+    Getattribute,
+}
+
+/// What a class's direct instances can carry, read off the class once.
+///
+/// Three facts, each fixed where the class is made: the names its `__mro__`
+/// defines and what each is, whether its instances carry a dictionary, and
+/// which hook it defines. Assigning to the class after the snapshot moves them,
+/// as `ABC.register` moves the order; the snapshot is what a decision reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Attributes {
+    /// Each name some class in the `__mro__` defines, with what the first one
+    /// to define it holds -- the one a lookup finds.
+    defined: BTreeMap<Box<str>, Member>,
+    /// Whether a direct instance has a `__dict__` to hold any attribute.
+    carries_dict: bool,
+    hook: Hook,
+}
+
+impl Attributes {
+    /// A class defining no name a record asks for, whose instances carry a
+    /// dictionary and which defines no hook: every attribute is
+    /// [`Reach::Anything`].
+    ///
+    /// What a caller holding nothing but an identity gets. It is the class
+    /// `class C: pass` is, for every name neither its namespace nor `object`'s
+    /// defines.
+    #[must_use]
+    pub fn plain() -> Attributes {
+        Attributes {
+            defined: BTreeMap::new(),
+            carries_dict: true,
+            hook: Hook::Neither,
+        }
+    }
+
+    /// A class whose instances do or do not carry a dictionary, defining
+    /// `hook` and, until [`Self::define`] says otherwise, no name.
+    #[must_use]
+    pub fn new(carries_dict: bool, hook: Hook) -> Attributes {
+        Attributes {
+            defined: BTreeMap::new(),
+            carries_dict,
+            hook,
+        }
+    }
+
+    /// Record that a class in the `__mro__` defines `name` as `member`.
+    ///
+    /// Called in `__mro__` order, so the first definition of a name is the one
+    /// kept: it is the one an attribute lookup finds, and a later class's
+    /// definition of the same name is shadowed by it.
+    pub fn define(&mut self, name: &str, member: Member) {
+        self.defined.entry(name.into()).or_insert(member);
+    }
+
+    /// What attribute `name` of a direct instance can be.
+    #[must_use]
+    pub fn reach(&self, name: &str) -> Reach {
+        if self.hook == Hook::Getattribute {
+            return Reach::Unread;
+        }
+        match self.defined.get(name) {
+            Some(Member::Slot) => Reach::Anything,
+            Some(Member::Plain) if self.carries_dict => Reach::AnyValue,
+            Some(Member::Plain | Member::Descriptor) => Reach::Unread,
+            None if self.carries_dict || self.hook == Hook::Getattr => Reach::Anything,
+            None => Reach::Missing,
+        }
+    }
+}
 
 /// One class, with the order it stands in.
 ///
@@ -48,6 +183,15 @@ pub struct Class {
     /// its instances are strings, so placing such a class narrowly would claim a
     /// value does not exist. `None` is that case, and it is the default.
     kind: Option<Kind>,
+    /// What a direct instance can carry, shared by every copy of the snapshot.
+    attributes: Arc<Attributes>,
+}
+
+/// The facts of a class nothing has read: [`Attributes::plain`], built once
+/// rather than once per snapshot.
+fn plain_attributes() -> Arc<Attributes> {
+    static PLAIN: OnceLock<Arc<Attributes>> = OnceLock::new();
+    Arc::clone(PLAIN.get_or_init(|| Arc::new(Attributes::plain())))
 }
 
 impl Class {
@@ -67,6 +211,7 @@ impl Class {
             ancestors,
             layout,
             kind: None,
+            attributes: plain_attributes(),
         }
     }
 
@@ -87,6 +232,23 @@ impl Class {
     #[must_use]
     pub fn kind(&self) -> Option<Kind> {
         self.kind
+    }
+
+    /// The same class, with what its direct instances can carry read off it.
+    ///
+    /// Set beside the constructor, as the kind is, because only a caller that
+    /// can see the class object can read its namespace. A class built without
+    /// it carries [`Attributes::plain`]. Shared, because a caller reads a class
+    /// once and hands the reading to every snapshot of it.
+    #[must_use]
+    pub fn carrying(self, attributes: Arc<Attributes>) -> Class {
+        Class { attributes, ..self }
+    }
+
+    /// What attribute `name` of a direct instance of this class can be.
+    #[must_use]
+    pub fn reach(&self, name: &str) -> Reach {
+        self.attributes.reach(name)
     }
 
     /// A class deriving from nothing and laying down no layout of its own.

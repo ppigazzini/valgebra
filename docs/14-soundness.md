@@ -226,8 +226,13 @@ The soundness is relative to a small, explicit trust base:
   and below everything. The assumption licenses *one* object, on the line of
   objects with no builtin kind — a plain class against the complement of `int`
   stays undecided, because an integer that is an instance of it would need a
-  class deriving from both. It moves no `True`: a proof is a proof, and the
-  assumption is only ever read to believe a refutation.
+  class deriving from both. The object is a *direct* instance, and it carries
+  only what the class leaves room for: a field the class answers with a data
+  descriptor or a `__getattribute__` hook, a name its body defines that a
+  record requires missing, and a name its instances have no `__dict__` or slot
+  to hold are not assumed onto it, so a relation that would stand on one is
+  undecided. It moves no `True`: a proof is a proof, and the assumption is only
+  ever read to believe a refutation.
   [The decidability page](15-decidability.md) states it with the rows it moves.
 - **The JSON parser (jiter) agrees with `json.loads` where both accept.** On a
   document both parsers build a value from, they build the same value, which is

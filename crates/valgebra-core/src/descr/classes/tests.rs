@@ -137,3 +137,69 @@ fn one_layout_is_no_conflict_with_itself() {
     assert!(!apart.disjoint_from(&beside) && !beside.disjoint_from(&apart));
     assert!(apart.disjoint_from(&elsewhere) && elsewhere.disjoint_from(&apart));
 }
+
+/// What a direct instance carries is read off the class, branch by branch.
+///
+/// Each row is one way a class leaves room for an attribute or does not: a
+/// name it does not define is free where the instance has a dictionary or a
+/// hook to serve it, a slot is free, a plain definition gives way to the
+/// instance's dictionary and cannot be removed from under it, and a data
+/// descriptor or a `__getattribute__` hook answers with code.
+#[test]
+fn a_class_says_what_a_direct_instance_can_carry() {
+    use super::{Attributes, Hook, Member, Reach};
+
+    let mut open = Attributes::new(true, Hook::Neither);
+    open.define("body", Member::Plain);
+    open.define("slot", Member::Slot);
+    open.define("property", Member::Descriptor);
+    assert_eq!(open.reach("unnamed"), Reach::Anything);
+    assert_eq!(open.reach("slot"), Reach::Anything);
+    assert_eq!(open.reach("body"), Reach::AnyValue);
+    assert_eq!(open.reach("property"), Reach::Unread);
+
+    // Without a dictionary, a name nothing defines is never there, and a plain
+    // definition is a value fixed on the class.
+    let mut slotted = Attributes::new(false, Hook::Neither);
+    slotted.define("slot", Member::Slot);
+    slotted.define("body", Member::Plain);
+    assert_eq!(slotted.reach("unnamed"), Reach::Missing);
+    assert_eq!(slotted.reach("slot"), Reach::Anything);
+    assert_eq!(slotted.reach("body"), Reach::Unread);
+
+    // A `__getattr__` hook serves the names a lookup does not find; a
+    // `__getattribute__` hook answers every one.
+    let served = Attributes::new(false, Hook::Getattr);
+    assert_eq!(served.reach("unnamed"), Reach::Anything);
+    let mut guarded = Attributes::new(true, Hook::Getattribute);
+    guarded.define("slot", Member::Slot);
+    assert_eq!(guarded.reach("unnamed"), Reach::Unread);
+    assert_eq!(guarded.reach("slot"), Reach::Unread);
+}
+
+/// The first class in the `__mro__` to define a name is the one a lookup
+/// finds, so a later definition does not replace it.
+#[test]
+fn the_first_definition_of_a_name_is_the_one_read() {
+    use super::{Attributes, Hook, Member, Reach};
+
+    let mut attributes = Attributes::new(true, Hook::Neither);
+    attributes.define("x", Member::Descriptor);
+    attributes.define("x", Member::Plain);
+    assert_eq!(attributes.reach("x"), Reach::Unread);
+}
+
+/// A class built from nothing but an identity is a plain class: every
+/// attribute is free, which is the reading the snapshot gives until a caller
+/// that can see the class says otherwise.
+#[test]
+fn a_class_read_from_its_identity_alone_leaves_every_attribute_free() {
+    use super::{Attributes, Hook, Reach};
+    use std::sync::Arc;
+
+    assert_eq!(Class::plain(1).reach("x"), Reach::Anything);
+    assert_eq!(Class::laid_out(1, 1).reach("x"), Reach::Anything);
+    let closed = Class::plain(1).carrying(Arc::new(Attributes::new(false, Hook::Neither)));
+    assert_eq!(closed.reach("x"), Reach::Missing);
+    assert_eq!(closed, Class::plain(1), "identity is the id alone");
+}

@@ -141,9 +141,18 @@ slot as `⋁ᵢ (structureᵢ ∧ classesᵢ ∧ attrsᵢ)`. That is a disjuncti
 once. `descr/classes.rs` holds the class order as a **snapshot**, because the
 core cannot call `issubclass` and should not want to: `ABC.register` can change
 that relation after a schema is built, and a relation that moves is not a lattice
-to reason in. `descr/records.rs` holds the attributes as a union of always-open
-record atoms, a field's type living in `T⊥` so that optionality is membership
-rather than a flag with rules of its own.
+to reason in. Beside the order the snapshot carries what a *direct* instance can
+hold (`Attributes`): the names the `__mro__` defines and whether each is a
+slot, a plain definition or a data descriptor, whether the instances carry a
+`__dict__`, and which attribute hook the class defines. `Attributes::reach`
+turns those into one answer per name, which is the only place they are read:
+the atom's emptiness asks it through the snapshot, and the rules' reading of a
+class met with a record asks it through `LeafRelations::attribute_reach`, which
+the bindings answer from the same reading, cached once per class for the query
+(`oracle.rs`). Assigning to a class after the snapshot moves the facts as
+`ABC.register` moves the order. `descr/records.rs` holds the attributes as a
+union of always-open record atoms, a field's type living in `T⊥` so that
+optionality is membership rather than a flag with rules of its own.
 
 **A line's structure is one component per representation**, not one per kind, so
 two kinds that hold their values alike share one:
@@ -370,7 +379,14 @@ corpus of its own driving every question below
 - `kind_derives_from` — is every value of this kind an instance of that class,
   asked of the kind's own builtin so the answer is one `issubclass` over the
   order. The dual of the question above, with the kind and the class swapping
-  sides.
+  sides;
+- `attribute_reach` — what can this attribute of a *direct* instance of that
+  class be: missing or any value, any value, never there, or code's answer
+  (`Reach`). Asked before a class met with a record is read as holding the
+  direct instance the readings above stand on. The default reads the snapshot
+  `Constants::class` gives, which is what the descriptor reads, so the two
+  deciders answer from one reading; `None` reads as code's answer, which stands
+  nothing on the instance.
 
 **A probe that raised has answered nothing.** Every question above that runs
 user code -- a predicate or an `__eq__` a literal is probed with, a comparison,
@@ -516,8 +532,10 @@ These are the readings that refute, each with the value it stands on:
   Read as a bare shape on purpose: a constraint on the subject may exclude the
   empty sequence too, and then there is no value left to stand on.
 - `outside_every_kind` — the meet of a class and its attributes holds a *direct*
-  instance of the class, so `type(v) is C` settles `isinstance(v, D)` through the
-  order alone. That witness is **one** value and the same value in every branch
+  instance of the class, where the class leaves room for the attributes
+  (`Attributes::reach`; the meet is unknown where it does not, and the witness
+  guard declines the rule), so `type(v) is C` settles `isinstance(v, D)` through
+  the order alone. That witness is **one** value and the same value in every branch
   of a union, which is what lets the branches be read one at a time: a value in
   no branch is outside the union. A reference is unfolded once to the kind of
   what it names, since it denotes that set; once and not through what it finds,

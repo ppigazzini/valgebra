@@ -105,6 +105,12 @@ impl LeafRelations for Pure {
     fn atom_denotes_a_set(&self, _atom: &Schema) -> Option<bool> {
         Some(true)
     }
+
+    /// And every attribute a record asks about as one a plain class leaves
+    /// free: its instances carry a dictionary, and it defines no such name.
+    fn attribute_reach(&self, _class: ClassIx, _name: &str) -> Option<Reach> {
+        Some(Reach::Anything)
+    }
 }
 
 /// A reference is refused by the fold whatever it stands for. The law asks
@@ -268,4 +274,31 @@ fn the_default_oracle_declines_every_question() {
         None
     );
     assert_eq!(oracle.kind_derives_from(Kind::Int, ClassIx::new(0)), None);
+}
+
+/// The default answers what an attribute of a direct instance can be from the
+/// snapshot the oracle gives, so an oracle that reads its classes once answers
+/// both deciders alike; one that gives no snapshot answers nothing.
+#[test]
+fn the_attribute_question_reads_the_snapshot_by_default() {
+    use crate::descr::classes::{Attributes, Class, Hook};
+
+    struct Snapshots;
+    impl Constants for Snapshots {
+        fn class(&self, index: ClassIx) -> Option<Class> {
+            (index.get() == 0)
+                .then(|| Class::plain(0).carrying(Arc::new(Attributes::new(false, Hook::Neither))))
+        }
+    }
+    impl LeafRelations for Snapshots {
+        fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
+            None
+        }
+    }
+
+    assert_eq!(
+        Snapshots.attribute_reach(ClassIx::new(0), "x"),
+        Some(Reach::Missing)
+    );
+    assert_eq!(Snapshots.attribute_reach(ClassIx::new(1), "x"), None);
 }

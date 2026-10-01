@@ -159,6 +159,16 @@ impl LeafRelations for PlainClasses {
     fn atom_denotes_a_set(&self, atom: &Schema) -> Option<bool> {
         Some(matches!(atom, Schema::Instance(_)))
     }
+
+    /// A plain class's instances carry a dictionary, and it defines none of
+    /// the names a record here asks about.
+    fn attribute_reach(
+        &self,
+        _class: ClassIx,
+        _name: &str,
+    ) -> Option<crate::descr::classes::Reach> {
+        Some(crate::descr::classes::Reach::Anything)
+    }
 }
 
 /// What one query asked, with the verdict beside it.

@@ -16,8 +16,9 @@
 
 use std::cell::Cell;
 
+use crate::descr::classes::Reach;
 use crate::descr::lower::{Constants, lower_unfolded};
-use crate::ir::{ClassIx, Constraint, Constraints, DefIx, Polarity, Schema};
+use crate::ir::{ClassIx, Constraint, Constraints, DefIx, Field, Polarity, Schema};
 use crate::kind::{Kind, Region, Regions};
 use crate::verdict::Verdict;
 
@@ -457,12 +458,54 @@ fn intersection_verdict(
         || keyed_map_meet_empty(members, oracle, defs, visiting, budget);
     let verdict = if empty {
         Verdict::Empty
-    } else if class_with_attributes(members).is_some() {
-        members_hold
+    } else if let Some((class, fields)) = class_with_attributes(members) {
+        if members_hold == Verdict::Inhabited
+            && !a_direct_instance_carries(class, fields, oracle, defs, visiting, budget)
+        {
+            Verdict::Unknown
+        } else {
+            members_hold
+        }
     } else {
         region.verdict()
     };
     (verdict, region)
+}
+
+/// Whether a direct instance of `class` can carry the record it is met with.
+///
+/// The value [`class_with_attributes`] reads the meet as holding is a direct
+/// instance of the class with a witness in each field, and the class decides
+/// whether one can exist: a name its body defines cannot be missing, a property
+/// answers with its getter, and an instance without a dictionary holds nothing
+/// its slots do not name. Where it cannot, a subclass may carry the record and
+/// may not exist, so the caller reads the meet as unknown -- the descriptor's
+/// atom rule reads the same [`Reach`] off the same snapshot, and the two
+/// deciders keep one answer.
+///
+/// Asked only of a meet whose members are inhabited, so a required field is
+/// already known to admit a value; an optional one is asked here where only a
+/// value can meet it.
+fn a_direct_instance_carries(
+    class: ClassIx,
+    fields: &[Field],
+    oracle: &dyn LeafRelations,
+    defs: &[Schema],
+    visiting: &mut Vec<DefIx>,
+    budget: &Cell<u32>,
+) -> bool {
+    fields
+        .iter()
+        .all(|field| match oracle.attribute_reach(class, &field.name) {
+            Some(Reach::Anything) => true,
+            Some(Reach::AnyValue) => {
+                field.required
+                    || field.schema.verdict_rec(oracle, defs, visiting, budget)
+                        == Verdict::Inhabited
+            }
+            Some(Reach::Missing) => !field.required,
+            Some(Reach::Unread) | None => false,
+        })
 }
 
 /// Whether this meet is one class together with the attributes its instances
@@ -482,15 +525,15 @@ fn intersection_verdict(
 /// `{x: int}` and `{x: str}` are each inhabited and meet in nothing. Anything
 /// else in the meet leaves the answer to the regions.
 ///
-/// The class comes back with the answer because both callers want it: one
-/// reads the shape and the other reads the class out of it, and a guard that
-/// returned a `bool` made the second search for what the first had already
-/// matched -- a search that could not fail, and whose failure arm no input
-/// reached.
-pub(super) fn class_with_attributes(members: &[Schema]) -> Option<ClassIx> {
+/// The class and the record's fields come back with the answer because the
+/// callers want them: one reads the class out of the shape, and the meet's
+/// reading asks whether the class carries the fields. A guard that returned a
+/// `bool` made each search for what the match had already found -- a search
+/// that could not fail, and whose failure arm no input reached.
+pub(super) fn class_with_attributes(members: &[Schema]) -> Option<(ClassIx, &[Field])> {
     match members {
-        [Schema::Instance(class), Schema::AttrRecord { .. }]
-        | [Schema::AttrRecord { .. }, Schema::Instance(class)] => Some(*class),
+        [Schema::Instance(class), Schema::AttrRecord { fields }]
+        | [Schema::AttrRecord { fields }, Schema::Instance(class)] => Some((*class, fields)),
         _ => None,
     }
 }

@@ -157,6 +157,22 @@ The public `is_subtype_of` still answers `True`/`False`, because that is the
 contract a caller is held to. The three-valued type is what makes the distinction
 a property of the procedure instead of a sentence in a document.
 
+```
+  Reach     = Anything | AnyValue | Missing | Unread
+```
+
+`Reach` (`crates/valgebra-core/src/descr/classes.rs`) is what one attribute of a
+*direct* instance of a class can be: missing or any value, any value, never
+there, or code's answer. Four values rather than two flags, because the fourth
+is not a pair of answers. Two flags would spell `Unread` as "never missing and
+never a value", which reads as a fact about the instance -- no direct instance
+carries the field -- and a proof of emptiness could stand on it, where a subclass
+may carry the field and what code returns is not read. `Attributes` holds what the
+bindings read off a class -- each name as a `Member`, the `Hook`, whether there
+is a `__dict__` -- and its constructors are the only way in; `Attributes::reach`
+is the one place the four answers are derived, so both deciders read one
+function.
+
 ### The modes
 
 `WalkMode` is `Explain`, `ExplainFailFast`, `Fast` — three states where a pair of

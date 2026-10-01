@@ -8,7 +8,7 @@ use std::sync::Arc;
 use super::*;
 use crate::carries::{Carries, OrderGroup, carries_division, carries_length, carries_order};
 use crate::decision::{DECISION_BUDGET, LeafRelations, NoLeafRelations};
-use crate::descr::classes::Class;
+use crate::descr::classes::{Attributes, Class, Hook, Member};
 use crate::descr::lower::{Constants, Operand};
 use crate::ir::Polarity;
 use crate::kind::Kind;
@@ -173,7 +173,55 @@ fn shaped_schema() -> impl Strategy<Value = Schema> {
     })
 }
 
-/// A small, self-consistent oracle: three classes and three constants.
+/// What a direct instance of corpus class `class` can hold under `name`, as
+/// `(may be missing, may hold any value)`, written from the class's description
+/// on [`CorpusOracle`] rather than read through [`Attributes`]: the second
+/// opinion a refutation about a class and its record is checked against.
+fn corpus_carries(class: usize, name: &str) -> (bool, bool) {
+    match (class, name) {
+        // A slot is missing until it is assigned.
+        (3, "f0") => (true, true),
+        // A value fixed on the class, with no dictionary to replace it, and a
+        // property: what either holds is not a thing to stand a value on.
+        (3 | 4, "f1") => (false, false),
+        // No dictionary, nothing defined: never there.
+        (3, _) => (true, false),
+        // Defined on the class: replaced through the dictionary, never removed.
+        (4, "f0") => (false, true),
+        _ => (true, true),
+    }
+}
+
+/// A corpus class met with a record over some of the names `f0` to `f2`: the
+/// shape a dataclass lowers to, and the one a record meets a class in.
+fn class_with_record() -> impl Strategy<Value = (usize, Vec<Field>)> {
+    let field = prop_oneof![
+        Just(Schema::Int),
+        Just(Schema::Str),
+        Just(Schema::ANYTHING),
+        Just(Schema::Nothing),
+    ];
+    (
+        0usize..5,
+        proptest::collection::vec(proptest::option::of((field, proptest::bool::ANY)), 3),
+    )
+        .prop_map(|(class, drawn)| {
+            let fields = drawn
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i, field)| {
+                    field.map(|(schema, required)| Field {
+                        name: format!("f{i}").into(),
+                        schema,
+                        required,
+                    })
+                })
+                .collect();
+            (class, fields)
+        })
+}
+
+/// A small, self-consistent oracle: five classes and three constants.
 ///
 /// Every property in this file that compares the two deciders runs with no
 /// oracle, and an oracle is the only place the core learns anything about
@@ -191,8 +239,11 @@ fn shaped_schema() -> impl Strategy<Value = Schema> {
 ///
 /// Class 0 derives from class 1 and neither lays down a layout; class 2 lays
 /// one down and confines its instances to the tuple kind, which is the shape a
-/// class deriving from a builtin has. Constant 3 repeats constant 0's value,
-/// so an index and a value are two things here.
+/// class deriving from a builtin has. Classes 3 and 4 are plain and say what a
+/// direct instance carries, which [`corpus_carries`] spells out by hand: 3's
+/// instances have no dictionary, a slot `f0` and a value `f1` fixed on the
+/// class; 4's have one, a value `f0` on the class and a property `f1`. Constant
+/// 3 repeats constant 0's value, so an index and a value are two things here.
 struct CorpusOracle;
 
 impl CorpusOracle {
@@ -202,6 +253,18 @@ impl CorpusOracle {
             0 => Some(Class::new(0, None, &[base])),
             1 => Some(base),
             2 => Some(Class::laid_out(2, 9).of_kind(Kind::Tuple)),
+            3 => {
+                let mut closed = Attributes::new(false, Hook::Neither);
+                closed.define("f0", Member::Slot);
+                closed.define("f1", Member::Plain);
+                Some(Class::plain(3).carrying(Arc::new(closed)))
+            }
+            4 => {
+                let mut defining = Attributes::new(true, Hook::Neither);
+                defining.define("f0", Member::Plain);
+                defining.define("f1", Member::Descriptor);
+                Some(Class::plain(4).carrying(Arc::new(defining)))
+            }
             _ => None,
         }
     }
@@ -5216,6 +5279,51 @@ proptest! {
             prop_assert!(
                 a.subtype_relation(&b, &NoLeafRelations, &[], &budget) != Relation::Holds,
                 "the sets refuted {a:?} <= {b:?} and the rules prove it holds"
+            );
+        }
+    }
+
+    // THEORY: a-class-is-what-can-be-read
+    /// A refutation about a class met with a record stands on a direct
+    /// instance the class permits.
+    ///
+    /// Every supertype here is one a direct instance of the class is outside
+    /// of -- a kind, another class, a union of kinds -- so a refutation is a
+    /// claim that the meet holds a direct instance, which is the value the class
+    /// assumption licenses. The instance has to carry the record: each field
+    /// either missing, where the field may be and the class lets it be, or
+    /// holding a value, where the field admits one and the class lets the
+    /// instance hold any. Both deciders are asked, because both read what the
+    /// class carries and either could stop reading it.
+    #[test]
+    fn a_refutation_about_a_class_and_its_record_stands_on_an_instance_it_permits(
+        (class, fields) in class_with_record(),
+        other in prop_oneof![
+            Just(Schema::Int),
+            Just(Schema::Str),
+            Just(Schema::union([Schema::Int, Schema::Str])),
+            (0usize..5).prop_map(|i| Schema::Instance(ClassIx::new(i))),
+        ],
+    ) {
+        let subject = Schema::meet([
+            Schema::Instance(ClassIx::new(class)),
+            Schema::attr_record(fields.clone()),
+        ]);
+        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        let answers = [
+            ("rules", subject.subtype_relation(&other, &CorpusOracle, &[], &budget)),
+            ("sets", subject.descriptor_contained_in(&other, &CorpusOracle, &[])),
+        ];
+        let permitted = fields.iter().all(|field| {
+            let (may_be_missing, may_hold_any) = corpus_carries(class, &field.name);
+            (may_be_missing && !field.required)
+                || (may_hold_any && !matches!(field.schema, Schema::Nothing))
+        });
+        for (decider, answer) in answers {
+            prop_assert!(
+                answer != Relation::Fails || permitted,
+                "the {decider} refuted {subject:?} <= {other:?}, and no direct instance of \
+                 class {class} carries that record"
             );
         }
     }

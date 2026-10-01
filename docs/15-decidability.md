@@ -371,6 +371,42 @@ apart it makes a refutation reachable that the class alone leaves open. A
 `isinstance` itself, which is the decline the section above owns, and carries
 no record at all.
 
+**The object carries only what its class leaves room for.** The one object the
+assumption licenses is a *direct* instance of the class, and a refutation about
+a class met with a record stands on that instance holding a value in each
+field. The class decides whether it can, read off the namespaces of its
+`__mro__` once per relation: a name defined as a property or another data
+descriptor holds what its getter returns, a name defined any other way cannot
+be missing, an instance laid out without a `__dict__` holds nothing its slots
+do not name, and a `__getattribute__` other than the generic lookup answers
+every lookup. Where the class leaves no room, the pair is **undecided**: a
+subclass may carry the record, and may not exist. A dataclass whose field is a
+descriptor, or which defines `__getattribute__`, is where an annotation reaches
+it:
+
+```python
+from dataclasses import dataclass
+
+from valgebra import Validator
+
+
+@dataclass
+class Plain:
+    x: int
+
+
+@dataclass
+class Traced:
+    x: int
+
+    def __getattribute__(self, name: str) -> object:
+        return super().__getattribute__(name)
+
+
+assert Validator(Plain).relation_to(Validator(str)) == "not_subset"
+assert Validator(Traced).relation_to(Validator(str)) == "undecided"
+```
+
 ## Sound but conservative
 
 Here valgebra is correct but not complete: it may answer `False` or "not empty"

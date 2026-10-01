@@ -826,3 +826,117 @@ fn a_class_relation_needs_both_sides_to_denote_a_set() {
         });
     });
 }
+
+#[test]
+fn a_class_says_what_a_direct_instance_can_carry() {
+    // What a direct instance can hold under a name is read off the namespaces
+    // of the class's `__mro__`, as a lookup on the instance reads them: a name
+    // nothing defines is free where the instance has a `__dict__` or a
+    // `__getattr__` hook serves it, a slot is free, a plain definition gives
+    // way to the instance's dictionary, and a property, a value fixed on a
+    // class without a dictionary, or a `__getattribute__` hook answers with
+    // code. `object`'s namespace is read too, so its `__class__` is a data
+    // descriptor and its `__init__` a plain definition.
+    Python::attach(|py| {
+        let source = "types.SimpleNamespace(\
+             plain=type('Plain', (), {}),\
+             body=type('Body', (), {'x': 5}),\
+             below=type('Below', (type('Above', (), {'x': property(lambda self: 5)}),), {'x': 5}),\
+             prop=type('Prop', (), {'x': property(lambda self: 5)}),\
+             slotted=type('Slotted', (), {'__slots__': ('x',)}),\
+             closed=type('Closed', (), {'__slots__': ('y',)}),\
+             fixed=type('Fixed', (), {'__slots__': (), 'x': 5}),\
+             served=type('Served', (), {'__slots__': (), '__getattr__': lambda self, name: 1}),\
+             guarded=type('Guarded', (), {'__getattribute__': lambda self, name: 1}),\
+             single=type('Single', (), {'__slots__': 'x'}),\
+             setter=type('Setter', (), {'x': type('SetOnly', (), {'__get__': lambda self, obj, owner=None: 1, '__set__': lambda self, obj, value: None})()}),\
+             deleter=type('Deleter', (), {'x': type('DeleteOnly', (), {'__get__': lambda self, obj, owner=None: 1, '__delete__': lambda self, obj: None})()}),\
+             counted=type('Counted', (int,), {'x': 0}),\
+             failure=type('Failure', (Exception,), {'x': 0}),\
+             hooked=type('MetaI', (type,), {'__instancecheck__': lambda self, other: True})('HookedI', (), {}),\
+         )";
+        let built = built(py, source);
+        let names = [
+            "plain", "body", "below", "prop", "slotted", "closed", "fixed", "served", "guarded",
+            "single", "setter", "deleter", "counted", "failure", "hooked",
+        ];
+        let slots: Vec<Py<PyAny>> = names
+            .iter()
+            .map(|name| built.getattr(*name).unwrap().unbind())
+            .collect();
+        asking(py, slots, |oracle| {
+            let reach = |slot: usize, name: &str| oracle.attribute_reach(ClassIx::new(slot), name);
+            let expected = [
+                Reach::Anything,
+                Reach::AnyValue,
+                Reach::AnyValue,
+                Reach::Unread,
+                Reach::Anything,
+                Reach::Missing,
+                Reach::Unread,
+                Reach::Anything,
+                Reach::Unread,
+                // A slot `__slots__` names as one string, and a descriptor
+                // defining either half of what makes one a data descriptor.
+                Reach::Anything,
+                Reach::Unread,
+                Reach::Unread,
+                // An `int` subclass and an exception: their bases define the
+                // generic lookup on some releases, which is no hook on any.
+                Reach::AnyValue,
+                Reach::AnyValue,
+            ];
+            for (slot, want) in expected.into_iter().enumerate() {
+                assert_eq!(reach(slot, "x"), Some(want), "{}", names[slot]);
+                // The snapshot the descriptor reads carries the same reading.
+                let snapshot = oracle.class(ClassIx::new(slot)).expect("a pure class");
+                assert_eq!(snapshot.reach("x"), want, "{}'s snapshot", names[slot]);
+            }
+            assert_eq!(reach(5, "y"), Some(Reach::Anything), "a slot of its own");
+            assert_eq!(reach(0, "__class__"), Some(Reach::Unread));
+            assert_eq!(reach(0, "__init__"), Some(Reach::AnyValue));
+            // A class whose `isinstance` runs code is not one this reads.
+            assert_eq!(reach(14, "x"), None);
+        });
+    });
+}
+
+#[test]
+fn a_record_a_class_cannot_carry_is_not_refuted_against_a_kind() {
+    // A class met with a record refutes against a kind on one value: a direct
+    // instance carrying the record, which is a plain object and no string. A
+    // class laid out with no dictionary and no slot for the field has no such
+    // instance, so the same pair is declined by both deciders rather than
+    // refuted on a value that does not exist.
+    Python::attach(|py| {
+        let source = "types.SimpleNamespace(\
+             plain=type('Plain', (), {}),\
+             closed=type('Closed', (), {'__slots__': ('y',)}),\
+         )";
+        let built = built(py, source);
+        let slots: Vec<Py<PyAny>> = ["plain", "closed"]
+            .iter()
+            .map(|name| built.getattr(*name).unwrap().unbind())
+            .collect();
+        asking(py, slots, |oracle| {
+            let met = |class: usize| {
+                Schema::meet([
+                    Schema::Instance(ClassIx::new(class)),
+                    Schema::attr_record(vec![valgebra_core::Field {
+                        name: "x".into(),
+                        schema: Schema::Int,
+                        required: true,
+                    }]),
+                ])
+            };
+            assert_eq!(
+                met(0).subtype_relation_under(&Schema::Str, oracle, &[]),
+                valgebra_core::Relation::Fails
+            );
+            assert_eq!(
+                met(1).subtype_relation_under(&Schema::Str, oracle, &[]),
+                valgebra_core::Relation::Unknown
+            );
+        });
+    });
+}

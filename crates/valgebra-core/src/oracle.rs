@@ -23,6 +23,7 @@
 //! one of them and imported by the others is the edge `tests/
 //! test_module_direction.py` refuses.
 
+use crate::descr::classes::Reach;
 use crate::descr::lower::Constants;
 use crate::ir::{ClassIx, ConstIx, Constraint, DefIx, OperandIx, Schema};
 use crate::kind::Kind;
@@ -197,6 +198,20 @@ pub trait LeafRelations: Constants {
     /// conservative.
     fn kind_derives_from(&self, _kind: Kind, _class: ClassIx) -> Option<bool> {
         None
+    }
+
+    /// What attribute `name` of a direct instance of the pooled class can be,
+    /// or `None` when the bindings cannot read the class.
+    ///
+    /// The question the rules ask before a class met with a record is read as
+    /// inhabited: the value that makes it so is a direct instance of the class
+    /// holding a witness in each field, and the class decides whether it can.
+    /// The descriptor asks the same of the snapshot [`Constants::class`] gives,
+    /// which is why the default reads that snapshot: one answer for both
+    /// deciders, or neither. `None` is read as [`Reach::Unread`], the
+    /// conservative direction.
+    fn attribute_reach(&self, class: ClassIx, name: &str) -> Option<Reach> {
+        Some(self.class(class)?.reach(name))
     }
 
     /// Whether the two pooled constants behind a pair of [`Schema::Literal`]s

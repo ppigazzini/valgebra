@@ -695,6 +695,72 @@ def test_a_dataclass_outside_every_branch_of_a_union_is_outside_the_union() -> N
     assert schema.is_subtype_of(Point | int)
 
 
+class _Stored:
+    """A data descriptor keeping its value on the instance under another name."""
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        self.name = "_" + name
+
+    def __get__(self, instance: object, owner: type | None = None) -> int:
+        return 0 if instance is None else getattr(instance, self.name)
+
+    def __set__(self, instance: object, value: int) -> None:
+        setattr(instance, self.name, value)
+
+
+def test_a_dataclass_is_refuted_only_on_an_instance_that_can_carry_it() -> None:
+    """The witness is a direct instance, and the class says what one can hold.
+
+    A refutation about a dataclass stands on a direct instance of its class
+    holding a value in each field. Where a field's name is a data descriptor on
+    the class, or the class defines `__getattribute__`, what that instance holds
+    is code's answer, so the pair is undecided rather than refuted on a value
+    that may not exist. A plain field, a slot and a field with a default leave
+    room for any value, and stay refuted.
+    """
+
+    @dataclasses.dataclass
+    class Plain:
+        x: int
+
+    @dataclasses.dataclass(slots=True)
+    class Slotted:
+        x: int
+
+    @dataclasses.dataclass
+    class Defaulted:
+        x: int = 0
+
+    @dataclasses.dataclass
+    class Described:
+        x: _Stored = _Stored()
+
+    @dataclasses.dataclass
+    class Traced:
+        x: int
+
+        def __getattribute__(self, name: str) -> object:
+            return super().__getattribute__(name)
+
+    @dataclasses.dataclass
+    class Other:
+        y: str
+
+    # A builtin base defines the generic lookup itself on some releases, which
+    # is no hook on any of them.
+    @dataclasses.dataclass
+    class RefusalError(Exception):
+        code: int = 0
+
+    for carried in (Plain, Slotted, Defaulted, RefusalError):
+        assert Validator(carried).relation_to(Validator(str)) == "not_subset"
+        assert Validator(carried).relation_to(Validator(Other)) == "not_subset"
+    for read in (Described, Traced):
+        assert Validator(read).relation_to(Validator(str)) == "undecided"
+        assert Validator(read).relation_to(Validator(Other)) == "undecided"
+        assert Validator(read).is_subtype_of(read)
+
+
 def test_a_dataclass_is_read_against_the_kind_a_reference_names() -> None:
     """A reference denotes its definition's set, so it carries that set's kind.
 

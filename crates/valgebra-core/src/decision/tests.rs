@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use super::records::keyed_map_meet_empty;
 use super::*;
-use crate::descr::classes::Class;
+use crate::descr::classes::{Class, Reach};
 use crate::descr::lower::Operand;
 use crate::ir::{CollKind, Field, MapClause, OperandIx, SeqKind};
 use crate::ir::{DefIx, Openness};
@@ -4004,7 +4004,8 @@ fn a_subject_inside_a_schema_is_outside_its_complement() {
 /// Class 0 lays down no builtin layout, which is what a dataclass is: its
 /// direct instances are plain objects, so they have none of the kinds the
 /// partition names and no builtin derives from it. Class 1 is laid out as a
-/// string. Neither derives from the other.
+/// string. Neither derives from the other, and neither defines a name a record
+/// here asks about.
 struct Classes;
 impl Constants for Classes {}
 
@@ -4035,6 +4036,12 @@ impl LeafRelations for Classes {
 
     fn kind_derives_from(&self, _kind: Kind, _class: ClassIx) -> Option<bool> {
         Some(false)
+    }
+
+    /// Both classes leave every attribute a record here asks about free: their
+    /// instances carry a dictionary, and neither defines such a name.
+    fn attribute_reach(&self, _class: ClassIx, _name: &str) -> Option<Reach> {
+        Some(Reach::Anything)
     }
 }
 
@@ -4152,6 +4159,90 @@ fn a_class_met_with_its_attributes_is_outside_what_its_class_is() {
         ),
         Relation::Fails
     );
+}
+
+/// The two-class oracle, with every attribute of a direct instance answering
+/// one [`Reach`]: the class questions as [`Classes`] answers them, and the one
+/// question about what the direct instance carries set by the row.
+struct Carrying(Reach);
+impl Constants for Carrying {}
+
+impl LeafRelations for Carrying {
+    fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
+        Classes.leaf_subtype(sub, sup)
+    }
+
+    fn atom_denotes_a_set(&self, atom: &Schema) -> Option<bool> {
+        Classes.atom_denotes_a_set(atom)
+    }
+
+    fn direct_instance_of_kind(&self, class: ClassIx, kind: Kind) -> Option<bool> {
+        Classes.direct_instance_of_kind(class, kind)
+    }
+
+    fn kind_derives_from(&self, kind: Kind, class: ClassIx) -> Option<bool> {
+        Classes.kind_derives_from(kind, class)
+    }
+
+    fn attribute_reach(&self, _class: ClassIx, _name: &str) -> Option<Reach> {
+        Some(self.0)
+    }
+}
+
+/// A class met with a record is read as holding a direct instance that
+/// carries the record, and only where the class leaves room for one.
+///
+/// The value every reading of the meet stands on is a direct instance with a
+/// witness in each field. Where the class rules it out -- no dictionary to
+/// hold the field, a definition that cannot be removed, a property -- the meet
+/// is unknown, and the witness guard turns the kind refutation the rule makes
+/// into a decline. Where the class allows the witness, the reading is the one
+/// the plain class gets.
+#[test]
+fn a_class_that_leaves_no_room_for_a_field_is_not_read_as_carrying_it() {
+    let met = |field: Field| {
+        Schema::meet([
+            Schema::Instance(Classes::PLAIN),
+            Schema::AttrRecord {
+                fields: vec![field].into(),
+            },
+        ])
+    };
+    let relation = |sub: &Schema, oracle: &Carrying| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(&Schema::Str, oracle, &[], &budget)
+    };
+    let holds_an_int = met(field("x", Schema::Int, true));
+    let may_hold_an_int = met(field("x", Schema::Int, false));
+    let missing = met(field("x", Schema::Nothing, false));
+
+    // Never there: only a field that may be missing is carried.
+    let never = Carrying(Reach::Missing);
+    assert_eq!(holds_an_int.verdict_under(&never), Verdict::Unknown);
+    assert_eq!(relation(&holds_an_int, &never), Relation::Unknown);
+    assert_eq!(may_hold_an_int.verdict_under(&never), Verdict::Inhabited);
+    assert_eq!(relation(&may_hold_an_int, &never), Relation::Fails);
+
+    // Defined on the class: any value, and never missing.
+    let defined = Carrying(Reach::AnyValue);
+    assert_eq!(holds_an_int.verdict_under(&defined), Verdict::Inhabited);
+    assert_eq!(may_hold_an_int.verdict_under(&defined), Verdict::Inhabited);
+    assert_eq!(missing.verdict_under(&defined), Verdict::Unknown);
+    assert_eq!(relation(&missing, &defined), Relation::Unknown);
+
+    // Code's answer: nothing is assumed of the direct instance.
+    let unread = Carrying(Reach::Unread);
+    assert_eq!(may_hold_an_int.verdict_under(&unread), Verdict::Unknown);
+    assert_eq!(relation(&holds_an_int, &unread), Relation::Unknown);
+
+    // Free: the reading the plain class gets, refutation included.
+    let free = Carrying(Reach::Anything);
+    assert_eq!(missing.verdict_under(&free), Verdict::Inhabited);
+    assert_eq!(relation(&holds_an_int, &free), Relation::Fails);
+
+    // And a field nothing satisfies empties the meet whatever the class says.
+    let barren = met(field("x", Schema::Nothing, true));
+    assert_eq!(barren.verdict_under(&never), Verdict::Empty);
 }
 
 /// An oracle that declines the class questions leaves the meet undecided.

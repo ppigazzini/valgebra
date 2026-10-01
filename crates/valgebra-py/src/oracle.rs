@@ -15,8 +15,10 @@
 //! answers read; it is not the thing the contract is about.
 
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use pyo3::PyTypeInfo;
+use pyo3::exceptions::PyBaseException;
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
@@ -24,7 +26,7 @@ use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
 };
 use rustc_hash::FxHashMap;
-use valgebra_core::descr::classes::Class;
+use valgebra_core::descr::classes::{Attributes, Class, Hook, Member, Reach};
 use valgebra_core::descr::lower::{Constants, Operand};
 use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, OperandIx, Schema};
 
@@ -49,6 +51,11 @@ pub(crate) struct PoolRelations<'py, 'pool> {
     /// class it names alive, so an address cannot be reused while an id for it
     /// is outstanding.
     classes: RefCell<FxHashMap<usize, u32>>,
+    /// What each class's direct instances can carry, read once per class for
+    /// the query and keyed by the type object's address on the same argument
+    /// as [`Self::classes`]. Both deciders ask it -- the descriptor through the
+    /// snapshot, the rules field by field -- and one reading is one answer.
+    attributes: RefCell<FxHashMap<usize, Arc<Attributes>>>,
     /// The first fatal signal a probe raised, for the query to re-raise.
     ///
     /// A probe runs user code -- a predicate, an `__eq__`, a rich comparison, a
@@ -76,6 +83,7 @@ impl<'py, 'pool> PoolRelations<'py, 'pool> {
             literals,
             definitions,
             classes: RefCell::default(),
+            attributes: RefCell::default(),
             fatal: RefCell::default(),
         }
     }
@@ -384,6 +392,58 @@ fn adds_slots(ty: &Bound<'_, PyType>) -> bool {
         .is_ok_and(|names| names.filter_map(Result::ok).any(|name| adds(&name)))
 }
 
+/// Whether a class's own `__slots__` -- one name, or a sequence of them --
+/// names `name`.
+fn names_slot(slots: &Bound<'_, PyAny>, name: &str) -> bool {
+    let is = |slot: &Bound<'_, PyAny>| {
+        slot.cast::<PyString>()
+            .is_ok_and(|slot| slot.to_str().is_ok_and(|slot| slot == name))
+    };
+    if slots.is_instance_of::<PyString>() {
+        return is(slots);
+    }
+    slots
+        .try_iter()
+        .is_ok_and(|names| names.filter_map(Result::ok).any(|slot| is(&slot)))
+}
+
+/// Whether `class` is one whose own `__getattribute__` is the generic lookup
+/// rather than a hook: `object`, which defines it, and the builtins a value's
+/// kind is read from, with `BaseException`.
+///
+/// `CPython` 3.10 to 3.13 put a slot wrapper for the generic lookup in each of
+/// those namespaces, and 3.14 puts it in `object`'s alone; read as a hook, it
+/// would make every `int` or exception subclass's attributes code's answer on
+/// the older releases and not on the newer. The classes whose lookup is their
+/// own -- `type`, `super`, a module, `functools.partial` -- are not on the list,
+/// and read as hooks on every release: the conservative direction.
+fn defines_the_generic_lookup(class: &Bound<'_, PyAny>) -> bool {
+    let py = class.py();
+    [
+        PyAny::type_object(py),
+        PyInt::type_object(py),
+        PyFloat::type_object(py),
+        PyString::type_object(py),
+        PyBytes::type_object(py),
+        PyTuple::type_object(py),
+        PyList::type_object(py),
+        PyDict::type_object(py),
+        PySet::type_object(py),
+        PyFrozenSet::type_object(py),
+        PyBaseException::type_object(py),
+    ]
+    .iter()
+    .any(|generic| class.is(generic))
+}
+
+/// Whether `value` is a data descriptor: its type defines `__set__` or
+/// `__delete__`, so it answers a read whatever an instance's dictionary holds.
+fn is_data_descriptor(value: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = value.py();
+    let ty = value.get_type();
+    Ok(ty.hasattr(intern!(py, "__set__"))? || ty.hasattr(intern!(py, "__delete__"))?)
+}
+
 impl PoolRelations<'_, '_> {
     /// The dense id this class carries for the rest of the query.
     fn class_id(&self, ty: &Bound<'_, PyType>) -> u32 {
@@ -430,11 +490,97 @@ impl PoolRelations<'_, '_> {
         }
         let (solid, kind) = layout_of(ty);
         let layout = solid.map(|base| self.class_id(&base));
-        let class = Class::new(self.class_id(ty), layout, &bases);
+        let class = Class::new(self.class_id(ty), layout, &bases).carrying(self.attributes_of(ty)?);
         Some(match kind {
             Some(kind) => class.of_kind(kind),
             None => class,
         })
+    }
+
+    /// What a direct instance of `ty` can carry, read once for the query.
+    fn attributes_of(&self, ty: &Bound<'_, PyType>) -> Option<Arc<Attributes>> {
+        let key = ty.as_ptr() as usize;
+        if let Some(read) = self.attributes.borrow().get(&key) {
+            return Some(Arc::clone(read));
+        }
+        let read = Arc::new(self.read_attributes(ty)?);
+        self.attributes.borrow_mut().insert(key, Arc::clone(&read));
+        Some(read)
+    }
+
+    /// Read the three facts [`Attributes`] holds off the namespaces of
+    /// `ty.__mro__`, in order, as an attribute lookup on an instance reads them.
+    ///
+    /// A name is a [`Member::Slot`] where the class defining it names it in its
+    /// own `__slots__`, a [`Member::Descriptor`] where its value's type defines
+    /// `__set__` or `__delete__`, and a [`Member::Plain`] otherwise. A slot is
+    /// read by its name rather than by its descriptor's type, so a mangled slot
+    /// name, which `__slots__` spells unmangled, reads as a descriptor: the
+    /// conservative direction. The instances carry a dictionary where some
+    /// class defines `__dict__`, which is where Python puts the descriptor that
+    /// serves it. A `__getattribute__` answers every lookup, and a `__getattr__`
+    /// every lookup that finds nothing -- except the generic lookup itself,
+    /// which [`defines_the_generic_lookup`] names the classes of.
+    ///
+    /// Any error reading a namespace declines the whole reading: a class whose
+    /// namespace cannot be read is not one whose instances this can describe.
+    fn read_attributes(&self, ty: &Bound<'_, PyType>) -> Option<Attributes> {
+        let py = self.py;
+        let mut carries_dict = false;
+        let mut getattr = false;
+        let mut getattribute = false;
+        let mut defined = Vec::new();
+        for base in self.heard(
+            ty.getattr(intern!(py, "__mro__"))
+                .and_then(|mro| mro.try_iter()),
+        )? {
+            let base = self.heard(base)?;
+            let namespace = self.heard(base.getattr(intern!(py, "__dict__")))?;
+            // A namespace without `__slots__` raises `KeyError`, which `heard`
+            // reads as no slots; a fatal signal is kept for the query.
+            let slots = self.heard(namespace.get_item(intern!(py, "__slots__")));
+            for item in self.heard(
+                namespace
+                    .call_method0(intern!(py, "items"))
+                    .and_then(|items| items.try_iter()),
+            )? {
+                let (name, value) = self.heard(
+                    item.and_then(|item| item.extract::<(Bound<'_, PyAny>, Bound<'_, PyAny>)>()),
+                )?;
+                let Ok(name) = name.cast_into::<PyString>() else {
+                    continue;
+                };
+                let text = self.heard(name.to_str())?.to_owned();
+                match text.as_str() {
+                    "__dict__" => carries_dict = true,
+                    "__getattr__" => getattr = true,
+                    "__getattribute__" if !defines_the_generic_lookup(&base) => {
+                        getattribute = true;
+                    }
+                    _ => {}
+                }
+                let member = if slots.as_ref().is_some_and(|slots| names_slot(slots, &text)) {
+                    Member::Slot
+                } else if self.heard(is_data_descriptor(&value))? {
+                    Member::Descriptor
+                } else {
+                    Member::Plain
+                };
+                defined.push((text, member));
+            }
+        }
+        let hook = if getattribute {
+            Hook::Getattribute
+        } else if getattr {
+            Hook::Getattr
+        } else {
+            Hook::Neither
+        };
+        let mut attributes = Attributes::new(carries_dict, hook);
+        for (name, member) in &defined {
+            attributes.define(name, *member);
+        }
+        Some(attributes)
     }
 
     /// A pooled object as the descriptor reads one, or `None` for a value whose
@@ -602,6 +748,21 @@ impl LeafRelations for PoolRelations<'_, '_> {
         }
         let builtin = builtin_of(self.py, kind)?;
         self.heard(builtin.is_subclass(class))
+    }
+
+    /// What attribute `name` of a direct instance of the pooled class can be,
+    /// from the same reading the class's snapshot carries.
+    ///
+    /// The default reads it through [`Constants::class`], which builds the
+    /// whole order snapshot to read one name; this reads the cached attribute
+    /// facts alone, behind the same purity test the snapshot applies.
+    fn attribute_reach(&self, class: ClassIx, name: &str) -> Option<Reach> {
+        let value = self.literals.get(class.get())?.bind(self.py);
+        let class = value.cast::<PyType>().ok()?;
+        if !self.denotes_a_set(class)? {
+            return None;
+        }
+        Some(self.attributes_of(class)?.reach(name))
     }
 
     /// Whether the class behind an `Instance` atom denotes a set, on the test

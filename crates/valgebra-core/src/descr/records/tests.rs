@@ -1,9 +1,10 @@
 use super::{MAX_ATOMS, RecordLattice};
 use crate::descr::budget;
-use crate::descr::classes::Class;
+use crate::descr::classes::{Attributes, Class, Hook, Member};
 use crate::descr::integers::IntSet;
 use crate::verdict::Verdict;
 use proptest::prelude::*;
+use std::sync::Arc;
 
 /// A meet past the build's allowance refuses, and the same meet succeeds
 /// under one that covers it.
@@ -71,6 +72,60 @@ fn a_class_and_its_base_are_one_object() {
             .emptiness(),
         Verdict::Empty
     );
+}
+
+/// One class is one value, and the class decides whether that value carries a
+/// record's field.
+///
+/// An atom with one class is inhabited by a direct instance of it holding a
+/// witness in each field. A name the class body defines cannot be missing, a
+/// property's value is its getter's, and an instance without a dictionary holds
+/// nothing its slots do not lay down -- so where the class rules the direct
+/// instance out the answer is unknown, and never empty: a subclass may carry
+/// the field, and may not exist.
+#[test]
+fn a_class_that_leaves_no_room_for_a_field_is_not_read_as_carrying_it() {
+    let class = |facts: Attributes| {
+        RecordLattice::<IntSet>::instance_of(Class::plain(1).carrying(Arc::new(facts)))
+    };
+    let with = |of: &RecordLattice<IntSet>, field: RecordLattice<IntSet>| {
+        of.intersect(&field)
+            .expect("a class and a field")
+            .emptiness()
+    };
+    let holds_one = || RecordLattice::attribute("x", IntSet::just(1), false);
+    let may_hold_one = || RecordLattice::attribute("x", IntSet::just(1), true);
+    let missing = || RecordLattice::attribute("x", IntSet::empty(), true);
+
+    // No dictionary and no definition: the direct instance never has `x`.
+    let closed = class(Attributes::new(false, Hook::Neither));
+    assert_eq!(with(&closed, holds_one()), Verdict::Unknown);
+    assert_eq!(with(&closed, missing()), Verdict::Inhabited);
+    assert_eq!(with(&closed, may_hold_one()), Verdict::Inhabited);
+
+    // Defined on the class: any value through the dictionary, never missing.
+    let mut defines = Attributes::new(true, Hook::Neither);
+    defines.define("x", Member::Plain);
+    let defines = class(defines);
+    assert_eq!(with(&defines, holds_one()), Verdict::Inhabited);
+    assert_eq!(with(&defines, may_hold_one()), Verdict::Inhabited);
+    assert_eq!(with(&defines, missing()), Verdict::Unknown);
+
+    // A property answers with code: nothing is assumed of it either way.
+    let mut property = Attributes::new(true, Hook::Neither);
+    property.define("x", Member::Descriptor);
+    let property = class(property);
+    assert_eq!(with(&property, holds_one()), Verdict::Unknown);
+    assert_eq!(with(&property, missing()), Verdict::Unknown);
+
+    // A plain class leaves every field free, and a field nothing satisfies
+    // empties the atom whatever the class says.
+    let plain = class(Attributes::plain());
+    assert_eq!(with(&plain, holds_one()), Verdict::Inhabited);
+    assert_eq!(with(&plain, missing()), Verdict::Inhabited);
+    let barren = RecordLattice::attribute("x", IntSet::empty(), false);
+    assert_eq!(with(&closed, barren.clone()), Verdict::Empty);
+    assert_eq!(with(&defines, barren), Verdict::Empty);
 }
 
 /// The objects a law is checked over: the attributes the generator names,

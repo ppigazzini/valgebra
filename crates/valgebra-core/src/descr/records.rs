@@ -30,7 +30,7 @@
 //! regions.
 
 use super::budget;
-use super::classes::Class;
+use super::classes::{Class, Reach};
 use super::symbolic::Guard;
 use super::values::{Field, Values};
 use crate::Kind;
@@ -44,6 +44,22 @@ use std::collections::{BTreeMap, BTreeSet};
 /// representation rather than an approximation -- past it there is no sound
 /// union to substitute, so the operation refuses.
 pub const MAX_ATOMS: usize = 256;
+
+/// Whether an attribute that can be `reach` on a direct instance can satisfy
+/// `field`, which is known to admit something -- a value, or its absence.
+///
+/// [`Reach::Anything`] meets any field that admits something. An attribute that
+/// takes any value meets a field only through a value, and one that is never
+/// there only a field that may be missing. One whose value is code's answer
+/// meets none: the direct instance may hold anything there, or nothing.
+fn carries<G: Guard>(reach: Reach, field: &Field<G>) -> bool {
+    match reach {
+        Reach::Anything => true,
+        Reach::AnyValue => field.ty.emptiness() == Verdict::Inhabited,
+        Reach::Missing => field.absent,
+        Reach::Unread => false,
+    }
+}
 
 /// One open record: finitely many attributes constrained, the rest free, and
 /// finitely many classes the value must or must not be an instance of.
@@ -110,6 +126,17 @@ impl<G: Guard> Atom<G> {
     /// -- and whether one exists is not something a snapshot of the order can
     /// say. Reading that as inhabited would be a claim; reading it as empty
     /// would be a worse one.
+    ///
+    /// **One class is one value, and the class says what that value carries.**
+    /// What makes an atom with one class inhabited is a *direct* instance of
+    /// the class holding a witness in each field -- the one object the class
+    /// assumption licenses. A class can leave no room for it: a name its body
+    /// defines cannot be missing, a property answers with its getter, and an
+    /// instance laid out without a dictionary holds nothing its slots do not
+    /// name. Where the class's [`Reach`] for some field rules the direct
+    /// instance out, a subclass may still carry the field and may not exist, so
+    /// the answer is unknown -- never empty, which would claim no subclass
+    /// could.
     fn emptiness(&self) -> Verdict {
         if self
             .is_a
@@ -130,6 +157,15 @@ impl<G: Guard> Atom<G> {
         let unrelated = self.is_a.len() > 1;
         let fields = Verdict::every(self.fields.values().map(Field::emptiness));
         if unrelated && fields != Verdict::Empty {
+            return Verdict::Unknown;
+        }
+        if fields == Verdict::Inhabited
+            && let Some(class) = self.is_a.first()
+            && !self
+                .fields
+                .iter()
+                .all(|(name, field)| carries(class.reach(name), field))
+        {
             return Verdict::Unknown;
         }
         fields
@@ -356,10 +392,19 @@ impl<G: Guard> RecordLattice<G> {
     /// `None` is the line of objects that have no builtin kind, where the class
     /// is the whole of what is asked and the documented assumption -- a class
     /// the bindings can read has an instance -- is the answer.
+    ///
+    /// A form that is not negated is read where it stands: only a negated one
+    /// has a union to build first, and copying the atoms to read them would pay
+    /// a copy and a drop of every atom on each question.
     #[must_use]
     pub fn emptiness_of_kind(&self, kind: Option<Kind>) -> Verdict {
-        match self.positive() {
-            Some(atoms) => Verdict::any(atoms.iter().map(|atom| atom.emptiness_of_kind(kind))),
+        let any_held =
+            |atoms: &[Atom<G>]| Verdict::any(atoms.iter().map(|atom| atom.emptiness_of_kind(kind)));
+        if !self.negated {
+            return any_held(&self.atoms);
+        }
+        match complement_atoms(&self.atoms) {
+            Some(atoms) => any_held(&atoms),
             None => Verdict::Unknown,
         }
     }

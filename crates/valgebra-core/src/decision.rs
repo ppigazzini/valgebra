@@ -830,7 +830,7 @@ impl Schema {
         // settles `isinstance(v, D)` through the order alone, and a class
         // deriving from both changes nothing about that value. The guard around
         // this rule reads whether the meet has it.
-        let Some(class) = class_with_attributes(members) else {
+        let Some((class, _)) = class_with_attributes(members) else {
             return placed;
         };
         if matches!(other, Schema::Instance(_))
