@@ -545,6 +545,15 @@ program that builds validators per request, and to no validation call.
   `repr`, is built only at the site that records one (`Expected` in
   `check/walk/scalar.rs`): `tests/test_refinements.py` counts the bound's
   `repr` calls, and a hundred passing checks make none.
+- **A fast walk asks in the frame it holds.** A walk carries two buffers, for
+  where it is and what it has found, and a fast walk writes neither; each is
+  still a value with a destructor. A union's branch is walked in the union's
+  own frame (`check_union` in `check/walk.rs`), and a mapping's scan keeps one
+  fast frame for every entry its clauses are asked of (`covered` in
+  `check/walk/record.rs`), rather than a pair built and dropped per branch and
+  per key: a `dict[str, int]` of sixty-four entries costs 10% fewer
+  instructions that way (`--binding-mapping`), and a recursive schema's
+  descent 10% fewer (`--binding-recursive`).
 - **The recursion trail is a stack, reserved on first use.** Entering a
   reference pushes a `(value, definition)` pair and leaving pops it (`Trail` in
   `check/ctx.rs`), so nothing is hashed. The first level reserves `FIRST_TRAIL`

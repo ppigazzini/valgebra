@@ -229,19 +229,23 @@ fn field_holds(
 /// Whether `(key, val)` is covered by some default clause: the key belongs to a
 /// clause's key schema and the value to that clause's value schema. The clauses
 /// denote a union of key×value rectangles.
-fn covered(defaults: &[MapClause], key: &Value<'_, '_>, val: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
-    // One pair of scratch buffers for every clause rather than a pair per call
-    // into the walk. Neither is written on this path -- a fast walk reports
-    // nothing and records no location -- but each is a value with a destructor,
-    // and building and dropping four of them per key is work the answer does
-    // not depend on.
-    let (mut path, mut out) = (Vec::new(), Vec::new());
-    let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
+///
+/// Decided in `sub`, a fast walk's frame the caller holds for the whole map:
+/// a fast walk writes neither of its buffers, but each is a value with a
+/// destructor, and a pair built and dropped per key is work the answer does
+/// not depend on.
+fn covered(
+    defaults: &[MapClause],
+    key: &Value<'_, '_>,
+    val: &Value<'_, '_>,
+    sub: &mut Frame<'_, '_>,
+) -> bool {
+    let ctx = sub.ctx;
     // A scalar key or value is its type test, asked without the walk around it:
     // `dict[str, int]` reads both halves of every entry that way.
     let room = ctx.room_to_descend();
     let mut admits = |schema: &Schema, value: &Value<'_, '_>| {
-        scalar_member(schema, value, ctx, room).unwrap_or_else(|| member(schema, value, &mut sub))
+        scalar_member(schema, value, ctx, room).unwrap_or_else(|| member(schema, value, sub))
     };
     defaults
         .iter()
@@ -538,7 +542,7 @@ fn keyed_map_scan(
                 }
             }
             None => {
-                if !covered(defaults, &Value::Py(key), &Value::Py(val), ctx) {
+                if !covered(defaults, &Value::Py(key), &Value::Py(val), &mut sub) {
                     return ControlFlow::Break(());
                 }
             }
@@ -693,7 +697,7 @@ fn undeclared_covered(
             defaults,
             &Value::Json(py, &key_value),
             &Value::Json(py, val),
-            ctx,
+            &mut sub,
         )
     };
     // A narrow object is covered where it lies. The entry a document means by a
@@ -850,16 +854,34 @@ pub(super) fn keyed_map_explain(
     if present == entries && dict.len() == entries {
         return;
     }
-    // Built here rather than above, because the scan is the only reader and a
-    // record that answers by count never reaches it.
+    undeclared_explained(fields, defaults, dict, value, frame);
+}
+
+/// Report each key a record does not declare and no clause of it covers: the
+/// key, and its value, against the clause where the record has one, and the
+/// key alone where it is closed.
+fn undeclared_explained(
+    fields: &[Field],
+    defaults: &[MapClause],
+    dict: &Bound<'_, PyDict>,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) {
+    let ctx = frame.ctx;
+    // Built here rather than in the caller, because the scan is the only reader
+    // and a record that answers by count never reaches it.
     let declared: FxHashSet<&str> = fields.iter().map(|field| &*field.name).collect();
+    // Whether a clause covers a key is asked in a fast walk, whose frame is
+    // held for the scan rather than built per key.
+    let (mut path, mut out) = (Vec::new(), Vec::new());
+    let mut deciding = Frame::new(&mut path, &mut out, fast(ctx));
     let scan = scan_dict(dict, |key, val| {
         if let Some(name) = as_field_name(key, ctx)
             && declared.contains(name)
         {
             return ControlFlow::Continue(());
         }
-        if covered(defaults, &Value::Py(key), &Value::Py(val), ctx) {
+        if covered(defaults, &Value::Py(key), &Value::Py(val), &mut deciding) {
             return ControlFlow::Continue(());
         }
         if let Some(clause) = defaults.first() {

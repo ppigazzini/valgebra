@@ -275,8 +275,15 @@ of them, one class, a union of literals.
 
 All three read the same `Frame`: where the walk is in the value, what it has found
 there, and the context it may look things up in. A walk needing a different one
--- a union probing a branch into a buffer of its own, a clause pair deciding on
-the fast path -- builds it from the parts it keeps.
+-- a union explaining a branch into a buffer of its own, a clause pair deciding
+on the fast path inside an explaining walk -- builds it from the parts it keeps.
+A fast walk writes neither of a frame's buffers, so where the walk is fast
+already it asks in the frame it holds: `check_union` walks each branch in the
+union's frame, and a mapping's scan keeps one fast frame for every entry
+`covered` asks of its clauses. Each buffer is a value with a destructor, and a
+pair built and dropped per branch and per key is a tenth of what a recursive
+schema's walk and a `dict[str, int]` cost (`--binding-recursive`,
+`--binding-mapping`).
 
 ## A container is read against a count taken once
 

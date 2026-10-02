@@ -759,20 +759,17 @@ fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, 
     {
         return decided;
     }
-    // A value is a member iff it matches at least one branch; decide that on the
-    // fast path, where a discarded branch pays for no location or violation. A
-    // scalar branch is its type test, asked without the walk around it.
-    let sub = fast(ctx);
+    // A value is a member iff it matches at least one branch. A scalar branch is
+    // its type test, asked without the walk around it, and any other is walked
+    // in this frame: the walk here is a fast one, which writes neither of the
+    // frame's buffers, so a frame of its own per branch would be two buffers
+    // built and dropped for nothing.
     let room = ctx.room_to_descend();
     members
         .iter()
         .any(|m| match scalar_member(m, value, ctx, room) {
             Some(admitted) => admitted,
-            None => member(
-                m,
-                value,
-                &mut Frame::new(&mut Vec::new(), &mut Vec::new(), sub),
-            ),
+            None => member(m, value, frame),
         })
 }
 
