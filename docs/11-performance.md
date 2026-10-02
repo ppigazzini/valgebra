@@ -487,6 +487,17 @@ program that builds validators per request, and to no validation call.
   with a class `type` made is neither `ClassVar` nor `Final` without calling
   `typing.get_origin`, a Python function (`protocol_members` in
   `build/classes.rs`; `--binding-protocol`).
+- **A class's missing attribute raises nothing on CPython 3.12.** A build asks
+  a class for attributes it nearly always lacks -- the `__origin__` of a
+  `TypedDict` field's hint, the `__unpacked__` of a tuple's type arguments,
+  `_is_protocol` -- and below 3.13 PyO3 answers a miss with an
+  `AttributeError` built, its message formatted for a class, and cleared. On
+  3.12 a class is asked through the builtin `getattr` with a default instead
+  (`optional_attribute` in `build/classes.rs`), whose lookup answers without
+  the error: a fifty-field `TypedDict` of `int` compiles in 59% fewer
+  instructions there, and the binding gate's protocol build in 8.61% fewer
+  (`--binding-protocol`). From 3.13 PyO3 asks without the error, and 3.10 and
+  3.11 build it on either road.
 - **A validator is accepted on one walk of each tree.** `Schema::measure` in
   `crates/valgebra-core/src/ir.rs` reads the nesting depth, the node count and
   the self-reference marker in one level-by-level walk against two buffers, and

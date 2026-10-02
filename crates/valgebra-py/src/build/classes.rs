@@ -383,10 +383,59 @@ pub(super) fn build_protocol(
 /// that is `false`.
 pub(super) fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &Bound<'_, PyString>) -> PyResult<bool> {
     let py = obj.py();
-    match unless_fatal(obj.getattr_opt(name), py, None)? {
+    match unless_fatal(optional_attribute(obj, name), py, None)? {
         Some(value) => unless_fatal(value.is_truthy(), py, false),
         None => Ok(false),
     }
+}
+
+/// `obj.name`, or `None` where `obj` has no attribute of that name: the answer
+/// `getattr_opt` gives, at what a class's miss costs on the interpreter.
+///
+/// Below 3.13 `PyO3` reads a miss as an `AttributeError` raised and cleared,
+/// and a class formats the error's message on the way -- some 3,300
+/// instructions a name, asked per field of a `TypedDict`, per argument of a
+/// tuple and per class of a build, nearly always of a name the class lacks.
+/// On 3.12 the builtin `getattr` with a default asks a class through
+/// `_PyObject_LookupAttr`, which answers its miss without building the error,
+/// so there a class is asked through it, with a sentinel no attribute holds
+/// standing for absence. An error other than `AttributeError` propagates on
+/// either road. 3.10 and 3.11 build the error on both, and from 3.13 `PyO3`
+/// asks through the lookup that does not, so neither takes the detour; nor
+/// does an object that is not a class, which this lookup reads as `PyO3`
+/// does.
+#[cfg(all(Py_3_12, not(Py_3_13)))]
+pub(super) fn optional_attribute<'py>(
+    obj: &Bound<'py, PyAny>,
+    name: &Bound<'py, PyString>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    /// The builtin `getattr`, and an object nothing else holds.
+    static LOOKUP: PyOnceLock<(Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
+    if obj.is_instance_of::<PyType>() {
+        let py = obj.py();
+        let (getattr, absent) = LOOKUP.get_or_try_init(py, || {
+            let builtins = py.import(intern!(py, "builtins"))?;
+            Ok::<_, PyErr>((
+                builtins.getattr(intern!(py, "getattr"))?.unbind(),
+                builtins.getattr(intern!(py, "object"))?.call0()?.unbind(),
+            ))
+        })?;
+        let found = getattr.bind(py).call1((obj, name, absent))?;
+        Ok(if found.is(absent) { None } else { Some(found) })
+    } else {
+        obj.getattr_opt(name)
+    }
+}
+
+/// `obj.name`, or `None` where `obj` has no attribute of that name: `PyO3`'s
+/// `getattr_opt`, which asks without an exception from 3.13 and builds one
+/// either way on 3.10 and 3.11.
+#[cfg(not(all(Py_3_12, not(Py_3_13))))]
+pub(super) fn optional_attribute<'py>(
+    obj: &Bound<'py, PyAny>,
+    name: &Bound<'py, PyString>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    obj.getattr_opt(name)
 }
 
 /// Resolve a class's type hints with `Annotated` metadata preserved.
@@ -496,7 +545,7 @@ pub(super) fn annotations_as_written<'py>(
 ) -> PyResult<Option<Bound<'py, PyDict>>> {
     let py = ty.py();
     let names = evaluation(py)?;
-    if let Some(flag) = ty.getattr_opt(intern!(py, "__no_type_check__"))?
+    if let Some(flag) = optional_attribute(ty, intern!(py, "__no_type_check__"))?
         && flag.is_truthy()?
     {
         return Ok(None);
@@ -673,7 +722,7 @@ pub(super) fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<boo
         // common one, and an attribute that is absent answers by *raising* --
         // an exception built, thrown and dropped per field. `getattr_opt`
         // reads the same absence without one.
-        let Some(origin) = current.getattr_opt(intern!(py, "__origin__"))? else {
+        let Some(origin) = optional_attribute(&current, intern!(py, "__origin__"))? else {
             return Ok(None);
         };
         for (marker, answer) in [(&forms.required, true), (&forms.not_required, false)] {
@@ -791,7 +840,7 @@ enum Tail<'py> {
 /// sentinel where the class gave neither, whatever its bases gave.
 fn stated_tail<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Tail<'py>>> {
     let py = ty.py();
-    if let Some(flag) = ty.getattr_opt(intern!(py, "__closed__"))?
+    if let Some(flag) = optional_attribute(ty, intern!(py, "__closed__"))?
         && !flag.is_none()
     {
         return Ok(Some(if flag.is_truthy()? {
@@ -800,7 +849,7 @@ fn stated_tail<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Tail<'py>>> {
             Tail::Open
         }));
     }
-    if let Some(extra) = ty.getattr_opt(intern!(py, "__extra_items__"))?
+    if let Some(extra) = optional_attribute(ty, intern!(py, "__extra_items__"))?
         && !gave_no_extra_items(ty, &extra)?
     {
         return Ok(Some(Tail::Typed(extra)));

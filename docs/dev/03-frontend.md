@@ -110,7 +110,12 @@ and not the marker protocol's: the dispatch asks `__metadata__`, `__origin__`
 and `__supertype__` the same way, a class node asks `_is_protocol` and a
 protocol `__protocol_attrs__` the same way, and each is asked *optionally* --
 `getattr_opt` rather than `hasattr` and then `getattr`, which is one lookup
-instead of two and no exception where the answer is no. `__args__`, whose
+instead of two and no exception where the answer is no. Below 3.13 `PyO3`
+reads that answer as an `AttributeError` raised and cleared, and a class
+formats the error's message on the way, so on 3.12 a class is asked through
+the builtin `getattr` with a default (`optional_attribute` in
+`build/classes.rs`), whose lookup answers a class's miss without building it;
+3.10 and 3.11 build the error on either road. `__args__`, whose
 presence is all the dispatch reads, is asked by `hasattr`, one lookup through
 `PyObject_HasAttrWithError`. And a marker carries one or two
 of the ten names and not the rest, so absence is the common answer, and giving

@@ -95,6 +95,13 @@ exclude_re = [
     # interpreter tests read a data descriptor through each body on the
     # releases that compile it.
     "oracle\\.rs:.*: (replace type_has -> .*|.* in type_has)$",
+    # `optional_attribute` is the same case one release over: a body for 3.12,
+    # which asks a class through the builtin `getattr`, and one for every other
+    # release, which is PyO3's `getattr_opt`. The sweep's 3.12 compiles the
+    # second out, and what `cargo mutants` offers for either is a `PyResult` no
+    # build accepts. An interpreter test holds the 3.12 body to `getattr_opt`
+    # on every kind of object a build asks.
+    "build/classes\\.rs:.*: (replace optional_attribute -> .*|.* in optional_attribute)$",
     # The explain pass over a keyed map runs only where the map did not match.
     # Running it always reports nothing extra -- a value that matched has no
     # violation to find -- and in the fast mode the violations go to a buffer

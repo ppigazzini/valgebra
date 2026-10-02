@@ -1822,3 +1822,70 @@ fn a_typing_extensions_form_reads_as_its_typing_spelling() {
         .expect("the stand-in is gone");
     });
 }
+
+/// An optional attribute reads what `getattr_opt` reads, on every kind of
+/// object a build asks one of: a class that has the name, one that lacks it,
+/// one holding `None` there, a class whose metaclass answers every name, one
+/// whose metaclass refuses every name with `AttributeError` and one whose
+/// metaclass raises something else, and an object that is no class.
+///
+/// On 3.12 a class is asked through the builtin `getattr` with a sentinel, so
+/// what the two readings share is the whole of the claim: the same object,
+/// the same absence, the same error.
+#[test]
+fn an_optional_attribute_reads_what_getattr_opt_reads() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Has:\n\
+              \x20   name = 1\n\
+              class Lacks:\n\
+              \x20   pass\n\
+              class HoldsNone:\n\
+              \x20   name = None\n\
+              class Answers(type):\n\
+              \x20   def __getattr__(cls, name):\n\
+              \x20       return name\n\
+              class AnswersAll(metaclass=Answers):\n\
+              \x20   pass\n\
+              class Refuses(type):\n\
+              \x20   def __getattr__(cls, name):\n\
+              \x20       raise AttributeError(name)\n\
+              class RefusesAll(metaclass=Refuses):\n\
+              \x20   pass\n\
+              class Raises(type):\n\
+              \x20   def __getattr__(cls, name):\n\
+              \x20       raise ValueError(name)\n\
+              class RaisesAll(metaclass=Raises):\n\
+              \x20   pass\n\
+              instance = Has()\n",
+            c"optional.py",
+            c"optional",
+        )
+        .expect("the module compiles");
+        let name = intern!(py, "name");
+        for object in [
+            "Has",
+            "Lacks",
+            "HoldsNone",
+            "AnswersAll",
+            "RefusesAll",
+            "RaisesAll",
+            "instance",
+        ] {
+            let held = module.getattr(object).expect("the object");
+            match (optional_attribute(&held, name), held.getattr_opt(name)) {
+                (Ok(ours), Ok(theirs)) => assert_eq!(
+                    ours.as_ref().map(Bound::as_ptr),
+                    theirs.as_ref().map(Bound::as_ptr),
+                    "{object} reads one attribute"
+                ),
+                (Err(ours), Err(theirs)) => assert!(
+                    ours.get_type(py).is(theirs.get_type(py)),
+                    "{object} raises one error"
+                ),
+                (ours, theirs) => panic!("{object} reads {ours:?} against {theirs:?}"),
+            }
+        }
+    });
+}
