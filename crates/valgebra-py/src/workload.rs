@@ -145,6 +145,16 @@ pub enum BindingShape {
     /// dataclass 6.45%, and had to be found with a profiler because no shape
     /// here would move.
     Object,
+    /// Compiling a fifty-member **protocol**: forty-five annotated members and
+    /// five methods.
+    ///
+    /// The one class form whose members are a list `typing` keeps and the
+    /// frontend classifies name by name: the cached `__protocol_attrs__`, each
+    /// member's class attribute looked up along the `__mro__`, its hint, and a
+    /// method's callability. The dataclass beside it reads declared fields and
+    /// asks none of that, so a change to how a protocol is read would move no
+    /// shape without this one.
+    Protocol,
     /// Walking a `tuple` **subclass** that overrides nothing: a `NamedTuple`,
     /// against `tuple[int, ...]`.
     ///
@@ -244,6 +254,7 @@ impl BindingShape {
             "annotated" => BindingShape::Annotated,
             "keys" => BindingShape::Keys,
             "object" => BindingShape::Object,
+            "protocol" => BindingShape::Protocol,
             "subclass" => BindingShape::Subclass,
             "json" => BindingShape::Json,
             "pattern" => BindingShape::Pattern,
@@ -352,6 +363,34 @@ fn annotated_record(py: Python<'_>) -> Py<PyAny> {
         .expect("no interior nul"),
         &std::ffi::CString::new("annotated.py").expect("no interior nul"),
         &std::ffi::CString::new("annotated").expect("no interior nul"),
+    )
+    .expect("the spelling compiles");
+    module
+        .getattr("SPELLING")
+        .expect("the spelling is defined")
+        .unbind()
+}
+
+/// The fifty-member protocol the protocol build shape compiles, built once.
+///
+/// Made with `types.new_class` rather than written out, as the dataclass beside
+/// it is made with `make_dataclass`: fifty members are fifty lines that say one
+/// thing, and the class the frontend reads is the same either way.
+fn protocol_record(py: Python<'_>) -> Py<PyAny> {
+    let module = PyModule::from_code(
+        py,
+        &std::ffi::CString::new(
+            "import types\n\
+             from typing import Protocol\n\
+             def body(namespace):\n\
+             \x20   namespace['__annotations__'] = {f'f{i}': int for i in range(45)}\n\
+             \x20   for i in range(5):\n\
+             \x20       namespace[f'm{i}'] = lambda self: 0\n\
+             SPELLING = types.new_class('Wide', (Protocol,), exec_body=body)\n",
+        )
+        .expect("no interior nul"),
+        &std::ffi::CString::new("protocol_shape.py").expect("no interior nul"),
+        &std::ffi::CString::new("protocol_shape").expect("no interior nul"),
     )
     .expect("the spelling compiles");
     module
@@ -595,11 +634,11 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
         BindingShape::Pattern => pattern_walk(py, iters),
         BindingShape::ExplainAccept => explaining_record(py, iters, Wrong::No),
         BindingShape::Explain => explaining_record(py, iters, Wrong::Yes),
-        BindingShape::Annotated | BindingShape::Object => {
-            let spelling = if matches!(shape, BindingShape::Annotated) {
-                annotated_record(py)
-            } else {
-                object_record(py)
+        BindingShape::Annotated | BindingShape::Object | BindingShape::Protocol => {
+            let spelling = match shape {
+                BindingShape::Annotated => annotated_record(py),
+                BindingShape::Object => object_record(py),
+                _ => protocol_record(py),
             };
             settle_the_heap(py);
             let mut checksum: u64 = 0;

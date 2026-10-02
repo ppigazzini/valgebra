@@ -197,6 +197,21 @@ struct Forms {
     enum_class: Py<PyAny>,
     callable: Py<PyAny>,
     ellipsis: Py<PyAny>,
+    /// `typing.Protocol`, the base a protocol is declared from, which names no
+    /// set of its own.
+    protocol: Py<PyAny>,
+    /// `typing._get_protocol_attrs`, the derivation of a protocol's member
+    /// names that `typing` caches as `__protocol_attrs__` from 3.12. Read only
+    /// where a protocol carries no cache, and absent on a release that has
+    /// neither.
+    get_protocol_attrs: Option<Py<PyAny>>,
+    /// `typing.ClassVar` and `typing.Final`, which say where a protocol
+    /// member's value lives rather than what it is.
+    class_var: Py<PyAny>,
+    final_qualifier: Py<PyAny>,
+    /// `builtins.property`, the one class attribute a protocol member is read
+    /// through its getter for.
+    property: Py<PyAny>,
 }
 
 static FORMS: PyOnceLock<Forms> = PyOnceLock::new();
@@ -254,6 +269,11 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             enum_class: py.import("enum")?.getattr("Enum")?.unbind(),
             callable: py.import("collections.abc")?.getattr("Callable")?.unbind(),
             ellipsis: builtins.getattr("Ellipsis")?.unbind(),
+            protocol: typing.getattr("Protocol")?.unbind(),
+            get_protocol_attrs: optional_form(&typing, "_get_protocol_attrs"),
+            class_var: typing.getattr("ClassVar")?.unbind(),
+            final_qualifier: typing.getattr("Final")?.unbind(),
+            property: builtins.getattr("property")?.unbind(),
         })
     })
 }
@@ -282,6 +302,8 @@ pub(crate) struct Extensions {
     pub(crate) not_required: Option<Py<PyAny>>,
     pub(crate) read_only: Option<Py<PyAny>>,
     pub(crate) unpack: Option<Py<PyAny>>,
+    /// Its `Protocol`, which is its own below 3.14.
+    protocol: Option<Py<PyAny>>,
     /// Its `TypedDict` and `NamedTuple`, which are its own on some releases.
     class_factories: Vec<Py<PyAny>>,
 }
@@ -338,6 +360,7 @@ pub(crate) fn extensions(py: Python<'_>) -> PyResult<Option<&'static Extensions>
         not_required: form("NotRequired")?,
         read_only: form("ReadOnly")?,
         unpack: form("Unpack")?,
+        protocol: form("Protocol")?,
         class_factories: ["TypedDict", "NamedTuple"]
             .into_iter()
             .map(form)

@@ -1373,8 +1373,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "crates/valgebra-py/src/build/classes.rs",
-            '"a Protocol must be @runtime_checkable to be used as a schema"',
-            '"this class does not name a set"',
+            '"{} is a generic Protocol, which names one set per type argument: \\',
+            '"{} names no set: \\',
         ),
         trips=("test_every_refusal_is_matched_by_a_test_or_accepted",),
     ),

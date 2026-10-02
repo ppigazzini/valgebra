@@ -49,7 +49,7 @@ import abc
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Protocol, runtime_checkable
+from typing import Annotated, Any
 
 import annotated_types as at
 import pytest
@@ -57,12 +57,8 @@ import pytest
 from _reason import is_a_reason
 
 # The two class-shaped forms come from the node table rather than being written
-# again here. This file's tables claim to be that file's forms, and for the
-# attribute record the claim was once false: a `@runtime_checkable` Protocol
-# stood in for it, which compiles to a class that answers `isinstance` itself
-# and carries no record at all, so every decline in that row and column was the
-# hooked class's under the record's name. Importing is what makes the claim true
-# rather than repeated.
+# again here. This file's tables claim to be that file's forms, and importing is
+# what makes the claim true rather than repeated.
 from test_node_matrix import _Klass as Plain
 from test_node_matrix import _Record as Point
 from valgebra import (
@@ -107,13 +103,9 @@ REPRESENTATIVES: dict[str, Any] = {
     "Coll": set[int],
     "KeyedMap": {"x": int},
     # `tests/test_node_matrix.py` names a class with declared attributes for
-    # this node, and a class is the only producer of one: no annotation builds
-    # a carrier-free attribute record, so the form is `Instance ∧ AttrRecord`
-    # and the column is named for the variant only it reaches. A
-    # `@runtime_checkable` Protocol is not that form -- it compiles to an
-    # `Instance` alone, whose own `__instancecheck__` answers membership, so a
-    # column built from one reports the hooked-class decline under this name.
-    # That class belongs in `HOOKED`, where it is.
+    # this node, so the form is `Instance ∧ AttrRecord`: the record met with
+    # the class it was read from, which is what a dataclass compiles to. A
+    # `Protocol` builds the record with no class beside it.
     "AttrRecord": Point,
     "Refine": Annotated[int, at.Ge(0)],
     "Union": union(int, str),
@@ -474,20 +466,6 @@ class _Registered(abc.ABC):  # noqa: B024 - the point is the registration
 _Registered.register(int)
 
 
-@runtime_checkable
-class _Runs(Protocol):
-    """A protocol with a method and no data member, which `isinstance` answers."""
-
-    def run(self) -> None: ...
-
-
-class _Runner:
-    """A value the protocol above admits, by having the method."""
-
-    def run(self) -> None:
-        """Do nothing; the protocol asks only that the name is there."""
-
-
 #: The ways a class takes over one of the hooks, one row each.
 #:
 #: The oracle declines every question about such a class, and that is not a gap
@@ -501,7 +479,6 @@ HOOKED: dict[str, Hooked] = {
     "an abstract base with a registration": Hooked(
         _Registered, 1, "a", "__subclasscheck__"
     ),
-    "a runtime-checkable protocol": Hooked(_Runs, _Runner(), 1, "__instancecheck__"),
 }
 
 

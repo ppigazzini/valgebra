@@ -57,5 +57,7 @@
   "binding_json_open_workload_irefs": 343504875,
   "binding_json_deep_workload_irefs": 346599057,
   "binding_deep_workload_irefs": 182315000,
-  "binding_refined_workload_irefs": 424830032
+  "binding_refined_workload_irefs": 424830032,
+  "_binding_protocol_comment": "A fifty-member **protocol**, compiled per iteration: forty-five annotated members and five methods. The one class form whose members are a list `typing` keeps and the frontend classifies name by name -- the cached `__protocol_attrs__`, each member's class attribute along the `__mro__`, its hint, a method's callability -- none of which the dataclass shape beside it asks. The class is made with `types.new_class` in the workload, so the shape names no third-party package.",
+  "binding_protocol_workload_irefs": 744494775
 }

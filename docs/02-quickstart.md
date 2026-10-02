@@ -75,10 +75,9 @@ assert not adult.is_valid(5)
 ## Classes compile too
 
 `TypedDict`, dataclasses and `NamedTuple` compile, and refinements on their
-fields are enforced. An enum compiles to its members, and a runtime-checkable
-protocol to the values Python's `isinstance` admits against it, which asks
-whether each member is present and not what it holds
-([schema language](03-schema-language.md#a-protocol-is-pythons-own-check)):
+fields are enforced. An enum compiles to its members, and a protocol to the
+values carrying each of its members, holding what the member declares
+([schema language](03-schema-language.md#a-protocol-is-the-record-of-its-members)):
 
 ```python
 from typing import Annotated, TypedDict

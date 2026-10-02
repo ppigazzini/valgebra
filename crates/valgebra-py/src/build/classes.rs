@@ -3,10 +3,9 @@
 //!
 //! A `TypedDict` says so by carrying `__required_keys__`, an enum by subclassing
 //! `Enum`, a dataclass by `dataclasses.is_dataclass`, a `Protocol` by
-//! `_is_protocol` and a runtime-checkable one by the decorator's mark in its own
-//! namespace; every other class names its instances and is an `isinstance`
-//! atom. The section "What a class declares" in `docs/dev/03-frontend.md` is
-//! this module.
+//! `_is_protocol`; every other class names its instances and is an
+//! `isinstance` atom. The section "What a class declares" in
+//! `docs/dev/03-frontend.md` is this module.
 
 use pyo3::exceptions::PyValueError;
 use pyo3::intern;
@@ -66,7 +65,7 @@ pub(super) fn is_dataclass(ty: &Bound<'_, PyType>) -> PyResult<bool> {
 }
 
 /// Build the schema for a Python type object (a builtin, `TypedDict`, `Enum`,
-/// dataclass, `NamedTuple`, runtime-checkable `Protocol`, or `object`).
+/// dataclass, `NamedTuple`, `Protocol`, or `object`).
 pub(super) fn build_type_object(
     ty: &Bound<'_, PyType>,
     lits: &mut Pool,
@@ -146,27 +145,11 @@ pub(super) fn build_type_object(
     {
         return build_object(ty, lits, defs);
     }
-    // Protocol: membership is `isinstance`, which a protocol answers only where
-    // `@runtime_checkable` was applied to the class itself. A subclass protocol
-    // inherits the attribute the decorator sets, and Python 3.15 warns on every
-    // check against one and 3.20 refuses it; the walk reads a warning raised as
-    // an error as a non-member, so under `-W error` such a schema would admit
-    // nothing and say nothing.
+    // Protocol: the record of the members it declares, read off the value as
+    // every attribute is. `@runtime_checkable` is not read: it is what lets
+    // `isinstance` answer, and nothing here asks `isinstance`.
     if is_truthy_attr(ty, intern!(py, "_is_protocol"))? {
-        if declares_runtime_checkable(ty)? {
-            return Ok(Schema::Instance(lits.intern_class(ty.as_any())));
-        }
-        if is_truthy_attr(ty, intern!(py, "_is_runtime_protocol"))? {
-            return Err(not_implemented(&format!(
-                "{} inherits @runtime_checkable from a base rather than carrying it, \
-                 and Python refuses isinstance against such a protocol from 3.20: \
-                 decorate the class itself with @runtime_checkable",
-                summarize(ty.as_any())?
-            )));
-        }
-        return Err(not_implemented(
-            "a Protocol must be @runtime_checkable to be used as a schema",
-        ));
+        return build_protocol(ty, lits, defs);
     }
     // `typing_extensions.Any` is a class of its own on 3.10, which is the one
     // release where `Any` is a class there and not in `typing`. Read as one, it
@@ -181,20 +164,199 @@ pub(super) fn build_type_object(
     Ok(Schema::Instance(lits.intern_class(ty.as_any())))
 }
 
-/// Answer whether `@runtime_checkable` was applied to this protocol itself,
-/// rather than to a base it inherits the decorator's attribute from.
+/// What a protocol declares one of its members as.
 ///
-/// The decorator sets `_is_runtime_protocol` in the class's own namespace, in
-/// `typing` and `typing_extensions` alike, on every supported release; a
-/// subclass protocol sees the attribute through its bases and has none of its
-/// own. Read as `cls.__dict__.get(name)`, the shape [`annotations_as_written`]
-/// reads a namespace with, so one a metaclass supplies is read the way Python
-/// reads it.
-fn declares_runtime_checkable(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+/// The typing spec's member list is every name the class body and its protocol
+/// bases define or annotate; this is which of those a member is, read from the
+/// annotation and the class attribute behind the name. Each kind is read off a
+/// value by `getattr`, as every record field is, and what differs is the set
+/// the field admits.
+pub(super) enum ProtocolMember<'py> {
+    /// An annotated attribute, and its hint: the value's attribute is a member
+    /// of the hint's set.
+    Data(Bound<'py, PyAny>),
+    /// A name the class defines with a callable and nothing annotates -- a
+    /// method, a special method, any callable the body holds. The value's
+    /// attribute is callable; what it accepts is not readable, as for
+    /// `Callable[...]`.
+    Method,
+    /// A property, and its getter's return hint where it has one: the value's
+    /// attribute is what the getter returns.
+    Property(Option<Bound<'py, PyAny>>),
+    /// A name the class defines with a value that is neither callable nor a
+    /// property, and nothing annotates: the value carries the attribute,
+    /// holding anything.
+    Value,
+}
+
+/// Each member a protocol declares, in name order, with what it is declared as.
+///
+/// The names are the ones `typing` lists. Every protocol carries them as
+/// `__protocol_attrs__` from 3.12, and a `typing_extensions` protocol on every
+/// release; elsewhere `typing._get_protocol_attrs` derives them, which is the
+/// derivation that attribute caches -- the keys of each base's namespace and
+/// annotations along the `__mro__`, less the names Python and `typing` write
+/// there themselves. The cache is read first because the derivation of an
+/// older `typing` does not know the names a newer `typing_extensions` writes,
+/// and on 3.10 lists `__protocol_attrs__` itself as a member.
+///
+/// A member is a property where the first class on the `__mro__` defining the
+/// name holds one, data where an annotation names it, a method where the class
+/// attribute is callable, and a value otherwise -- callable as `typing` asks
+/// it, `callable(getattr(cls, name))`. A member annotated `ClassVar` or `Final`
+/// is refused: the qualifier says where the value lives, and reading it as the
+/// type it wraps is a reading no proposal has argued for yet.
+pub(super) fn protocol_members<'py>(
+    ty: &Bound<'py, PyType>,
+) -> PyResult<Vec<(Bound<'py, PyString>, ProtocolMember<'py>)>> {
     let py = ty.py();
-    ty.getattr(intern!(py, "__dict__"))?
-        .call_method1(intern!(py, "get"), (intern!(py, "_is_runtime_protocol"),))?
-        .is_truthy()
+    let forms = forms(py)?;
+    let names = match ty.getattr_opt(intern!(py, "__protocol_attrs__"))? {
+        Some(cached) => cached,
+        None => forms
+            .get_protocol_attrs
+            .as_ref()
+            .ok_or_else(|| {
+                not_implemented(
+                    "this release's typing lists no protocol members, so a Protocol \
+                     cannot be read as a schema",
+                )
+            })?
+            .bind(py)
+            .call1((ty,))?,
+    };
+    let mut names = names
+        .try_iter()?
+        .map(|name| Ok(name?.cast_into::<PyString>()?))
+        .collect::<PyResult<Vec<_>>>()?;
+    names.sort_by_cached_key(ToString::to_string);
+    let hints = resolve_type_hints(ty)?;
+    let hints = hints.cast::<PyDict>()?;
+    let mut members = Vec::with_capacity(names.len());
+    for name in names {
+        let member = if let Some(defined) = defined_on(ty, &name)?
+            && defined.is_instance(forms.property.bind(py))?
+        {
+            ProtocolMember::Property(getter_return(&defined)?)
+        } else if let Some(hint) = hints.get_item(&name)? {
+            if is_qualified_member(&hint)? {
+                return Err(not_implemented(&format!(
+                    "member {} of {} is declared ClassVar or Final, which says where \
+                     the value lives rather than what it is: declare it with its type",
+                    summarize(name.as_any())?,
+                    summarize(ty.as_any())?
+                )));
+            }
+            ProtocolMember::Data(hint)
+        } else if ty.getattr(&name)?.is_callable() {
+            ProtocolMember::Method
+        } else {
+            ProtocolMember::Value
+        };
+        members.push((name, member));
+    }
+    Ok(members)
+}
+
+/// What the first class on `ty.__mro__` to define `name` in its own namespace
+/// holds there: the object an attribute lookup on an instance finds before it
+/// asks the instance.
+fn defined_on<'py>(
+    ty: &Bound<'py, PyType>,
+    name: &Bound<'py, PyString>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let py = ty.py();
+    for base in ty.getattr(intern!(py, "__mro__"))?.try_iter()? {
+        let namespace = base?.getattr(intern!(py, "__dict__"))?;
+        if namespace.contains(name)? {
+            return Ok(Some(namespace.get_item(name)?));
+        }
+    }
+    Ok(None)
+}
+
+/// The return hint a property's getter carries, resolved as `get_type_hints`
+/// resolves it, or `None` for a property with no getter or no return hint.
+fn getter_return<'py>(property: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let py = property.py();
+    let getter = property.getattr(intern!(py, "fget"))?;
+    if getter.is_none() {
+        return Ok(None);
+    }
+    let options = PyDict::new(py);
+    options.set_item(intern!(py, "include_extras"), true)?;
+    let hints = forms(py)?
+        .get_type_hints
+        .bind(py)
+        .call((getter,), Some(&options))?;
+    hints
+        .get_item(intern!(py, "return"))
+        .map(Some)
+        .or_else(|err| {
+            if err.is_instance_of::<pyo3::exceptions::PyKeyError>(py) {
+                Ok(None)
+            } else {
+                Err(err)
+            }
+        })
+}
+
+/// Whether a member's hint is `ClassVar` or `Final`, bare or parametrized.
+fn is_qualified_member(hint: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = hint.py();
+    let forms = forms(py)?;
+    let origin = forms.get_origin.bind(py).call1((hint,))?;
+    Ok([&forms.class_var, &forms.final_qualifier]
+        .iter()
+        .any(|qualifier| hint.is(qualifier.bind(py)) || origin.is(qualifier.bind(py))))
+}
+
+/// Build the record a protocol denotes: every value carrying each member the
+/// protocol declares, as [`ProtocolMember`] reads it.
+///
+/// `typing.Protocol` itself is the base a protocol is declared from, and names
+/// no set; a generic protocol names a family of them, one per argument, and is
+/// refused until a reading of its parameters is argued for.
+pub(super) fn build_protocol(
+    ty: &Bound<'_, PyType>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let py = ty.py();
+    let forms = forms(py)?;
+    if ty.is(forms.protocol.bind(py)) || is_extension(ty.as_any(), |held| &held.protocol)? {
+        return Err(not_implemented(&format!(
+            "{} is the base a protocol is declared from, not a type: pass the \
+             protocol class itself",
+            summarize(ty.as_any())?
+        )));
+    }
+    if ty
+        .getattr_opt(intern!(py, "__parameters__"))?
+        .is_some_and(|parameters| parameters.len().is_ok_and(|count| count > 0))
+    {
+        return Err(not_implemented(&format!(
+            "{} is a generic Protocol, which names one set per type argument: \
+             declare its members with concrete types",
+            summarize(ty.as_any())?
+        )));
+    }
+    let mut fields = Vec::new();
+    for (name, member) in protocol_members(ty)? {
+        let schema = match member {
+            ProtocolMember::Data(hint) | ProtocolMember::Property(Some(hint)) => {
+                build_schema(&hint, lits, defs)?
+            }
+            ProtocolMember::Method => build_schema(forms.callable.bind(py), lits, defs)?,
+            ProtocolMember::Property(None) | ProtocolMember::Value => Schema::ANYTHING,
+        };
+        fields.push(Field {
+            name: field_name(&name)?.into(),
+            schema,
+            required: true,
+        });
+    }
+    Ok(Schema::attr_record(fields))
 }
 
 /// True if `obj.<name>` exists and is truthy; false on absence or an ordinary

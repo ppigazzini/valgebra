@@ -61,9 +61,9 @@ change is that widens one:
 Read that table before answering "can valgebra express `Mapping[K, V]`" or "can
 it express *any object* whose `.a` is an `int`". The first is no. The second is
 a set in the closure, because the record carries no class -- which takes a
-denotation, a membership rule and a set of relations, not a flag -- and no
-annotation spells it on its own ("A spelling for the carrier-free attribute
-record", below). The four nodes are not one mechanism seen four times, and what
+denotation, a membership rule and a set of relations, not a flag -- and a
+`Protocol` spells it ("A spelling for the carrier-free attribute record",
+below). The four nodes are not one mechanism seen four times, and what
 a record without a carrier takes is the measure of widening any of the others.
 
 ## Whether to add a variant
@@ -165,12 +165,13 @@ constructor. Beyond the admission test, two costs specific to this one:
   fragment with a published decision, which is the part the completeness claim
   rests on.
 
-**A spelling for the carrier-free attribute record.** Not refused, and not
-opened: the node is in the closure — `AttrRecord` denotes exactly "any object
-whose `.a` is an `int`" — but no annotation builds one on its own, because the
-frontend only ever meets one with the class it read it from. Giving it a
-spelling is a surface question, and it belongs where the surface is decided
-rather than here.
+**A spelling for the carrier-free attribute record.** A `Protocol` is that
+spelling: the node is in the closure — `AttrRecord` denotes exactly "any object
+whose `.a` is an `int`" — and the frontend builds a protocol as the record of
+its members with no class beside it ([03-frontend.md](03-frontend.md), "What a
+class declares"). No node was added for it, and no combinator: the annotation
+form the typing spec gives for "an object with these attributes" is the
+spelling, which is the surface rule.
 
 **A class-with-record node, so that a meet of two attribute-carrying classes
 renders as its two classes.** Refused. A dataclass lowers to

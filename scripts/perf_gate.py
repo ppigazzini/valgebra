@@ -30,7 +30,7 @@ Three workloads, and seven shapes across them:
   the core one never calls.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
-  twenty shapes: the membership walk (`--binding`), the call boundary alone
+  twenty-one shapes: the membership walk (`--binding`), the call boundary alone
   (`--binding-boundary`), the walk over a wide record (`--binding-record`), the
   same walk over a value whose keys are interned (`--binding-keys`), the same
   fields declared by an open record (`--binding-open`), walking a `tuple`
@@ -45,7 +45,8 @@ Three workloads, and seven shapes across them:
   (`--binding-json-deep`), building a validator from its Python spelling
   (`--binding-build`), compiling one written as a `TypedDict` of refined
   integers (`--binding-annotated`), compiling a fifty-field dataclass
-  (`--binding-object`), and explaining a failure in a record
+  (`--binding-object`), compiling a fifty-member protocol
+  (`--binding-protocol`), and explaining a failure in a record
   (`--binding-explain`) or accepting one in the same mode
   (`--binding-explain-accept`). Each is the deterministic twin of a shape the
   comparison gate times, so a wall-clock movement there can be confirmed or
@@ -397,6 +398,7 @@ MODES = {
     "binding-open": ("binding_workload", "binding open record walk"),
     "binding-annotated": ("binding_workload", "binding annotated build"),
     "binding-object": ("binding_workload", "binding dataclass build"),
+    "binding-protocol": ("binding_workload", "binding protocol build"),
     "binding-subclass": ("binding_workload", "binding tuple subclass walk"),
     "binding-keys": ("binding_workload", "binding record walk by interned keys"),
     "binding-json": ("binding_workload", "binding JSON document parse and walk"),
@@ -425,6 +427,7 @@ BINDING_ITERATIONS = {
     "binding-open": (20_000, 5_000),
     "binding-annotated": (300, 100),
     "binding-object": (2_000, 500),
+    "binding-protocol": (2_000, 500),
     "binding-subclass": (150_000, 50_000),
     "binding-keys": (20_000, 5_000),
     "binding-json": (500, 150),
@@ -448,6 +451,7 @@ BINDING_SHAPES = {
     "binding-open": "open",
     "binding-annotated": "annotated",
     "binding-object": "object",
+    "binding-protocol": "protocol",
     "binding-subclass": "subclass",
     "binding-keys": "keys",
     "binding-json": "json",

@@ -35,7 +35,7 @@ import enum
 import json
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, NamedTuple
+from typing import TYPE_CHECKING, Annotated, NamedTuple, Protocol
 
 import annotated_types as at
 import pytest
@@ -99,6 +99,16 @@ class _Unset(_Point):
 
     def __init__(self) -> None:
         pass
+
+
+class _HasX(Protocol):
+    """A protocol: a record with no class beside it.
+
+    A parsed document's objects are dicts, which carry no attribute, so a
+    document reaches the record's own code.
+    """
+
+    x: int
 
 
 def _raises(value: object) -> bool:
@@ -195,14 +205,11 @@ CASES: dict[str, Case] = {
         document="1",
     ),
     "missing_attribute": Case(
-        _Point,
+        _HasX,
         _Unset(),
         path=("x",),
-        nested=({"a": _Point}, {"a": _Unset()}, ("a", "x")),
-        no_json="the attribute record is met with the class, and the parser "
-        "builds no instance of one: every document is refused by the class "
-        "beside it before any attribute is asked for",
-        instead=('{"x": 1, "y": 2}', "instance_type"),
+        nested=({"a": _HasX}, {"a": _Unset()}, ("a", "x")),
+        document='{"x": 1}',
     ),
     "unexpected_match": Case(
         complement(int),

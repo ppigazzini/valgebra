@@ -311,7 +311,8 @@ with a message instead:
 | `Final`, `ClassVar` | a declaration about a name, not about a value |
 | `Unpack[X]` | binds element types into a `tuple[...]`, so it has no meaning alone |
 | a user `Generic[T]` parametrisation | the parameter is erased at runtime, so the type argument narrows nothing |
-| bare `Protocol`, and a `Protocol` not itself decorated `@runtime_checkable` | membership is `isinstance`, which such a class refuses to answer; one that inherits the decorator from a base answers with a warning from Python 3.15 and refuses from 3.20 |
+| bare `Protocol`, and a generic `Protocol[T]` | the base a protocol is declared from declares no member, and a protocol over a type parameter names one set per argument |
+| a `Protocol` member declared `ClassVar` or `Final` | the qualifier says where the value lives rather than what it is |
 | a set or frozen set literal | `{int}` and `frozenset({int})` name containers, which are `set[T]` and `frozenset[T]` |
 | a tuple literal | `(A, B)` is `tuple[A, B]`; the list literal `[A, B]` is the fixed-length list |
 | a frozen dict literal | `frozendict(a=int)` names a record, which the dict literal `{"a": int}` spells (Python 3.15+) |
@@ -679,7 +680,7 @@ Membership is unaffected — the walk reads the value.
 | dataclass | the instances of the class whose every declared field holds a value of its type |
 | `NamedTuple` | the instances of the class whose fields, by position, hold values of their types |
 | `Enum` | the members of the enumeration |
-| `Protocol` decorated `@runtime_checkable` | the values Python's `isinstance` admits against the protocol on the running interpreter: each member present, whatever it holds ([below](#a-protocol-is-pythons-own-check)) |
+| `Protocol` | the values carrying every member it declares, each holding what the member declares ([below](#a-protocol-is-the-record-of-its-members)) |
 | `NewType` | the set of the supertype it wraps |
 | PEP 695 `type` alias | the set of the aliased type, and ties the fixpoint where the alias names itself ([recursion](06-recursion.md)) |
 
@@ -773,36 +774,60 @@ spellable both ways: write `closed=True` (PEP 728) for a closed `TypedDict`, and
 `{"name": str, anything: anything}` for an open shape -- or `.open()`, which
 does the same to every record in a schema at once.
 
-### A protocol is Python's own check
+### A protocol is the record of its members
 
-A runtime-checkable protocol compiles to an `isinstance` check against the
-class, so it denotes the set Python's check admits on the interpreter running
-it. That check asks whether each member is present and never what it holds: an
-object whose `x` is a string belongs to a protocol declaring `x: int`. It also
-admits an instance of any class that names the protocol among its bases without
-asking about a member at all, so such an instance with no `x` belongs too.
+A `Protocol` denotes the values that carry every member it declares, each read
+the way an attribute access reads it. An annotated member holds a value of its
+type, a method or special method holds a callable, and a property holds what
+its getter's return annotation names, or anything where it names nothing.
+`@runtime_checkable` changes nothing here. It is what lets `isinstance` answer,
+and a schema does not ask `isinstance`, so a protocol reads the same with or
+without it, and the same on every Python release.
 
-How the check finds a member changed at Python 3.12. Before it the check uses
-`hasattr`, which runs a `__getattr__` hook and a property's getter; from it the
-check uses `inspect.getattr_static`, which runs neither and finds a slot on the
-class whether or not the instance filled it. Four kinds of value change sides:
+```python
+from typing import Protocol
 
-| value | 3.10 and 3.11 | 3.12 and later |
-|---|---|---|
-| a data member that only a `__getattr__` hook serves | admitted | refused |
-| a method that only a `__getattr__` hook serves | admitted | refused |
-| a data member whose property getter raises | refused: `isinstance` raises, and the error reads as a non-member | admitted |
-| a data member declared in `__slots__` and never assigned | refused | admitted |
+from valgebra import Validator
 
-`test_a_protocol_admits_what_the_running_release_admits` in
-`tests/test_frontend_forms.py` holds each row on every interpreter the test
-matrix runs, so a release that moves the check again fails it and this table
-moves with it. A value none of the four rows describes gets the same answer on
-every release.
 
-One schema denoting two sets, chosen by the interpreter, is a gap: every other
-form on this page denotes one. A reading of the protocol that does not move --
-the record of its members, each checked for what it holds -- is not built.
+class Named(Protocol):
+    name: str
+
+    def greet(self) -> str: ...
+
+
+class Person:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def greet(self) -> str:
+        return f"hello, {self.name}"
+
+
+class Robot:
+    name = 7
+
+    def greet(self) -> str:
+        return "beep"
+
+
+assert Validator(Named).is_valid(Person("Ada"))
+assert not Validator(Named).is_valid(Robot())  # `name` is present, not a str
+assert not Validator(Named).is_valid("Ada")  # a str carries no `name`
+```
+
+Each member is checked for what it holds, so a `name` that is present and
+not a string is refused, where `isinstance` against the protocol would admit
+it. A method is read as `Callable[...]` is, as callable with its parameters and
+return unchecked ([what a validator cannot do](17-boundaries.md#it-cannot-look-inside-a-callable)).
+An instance of a class that names the protocol among its bases belongs only
+where it carries the members.
+
+`test_a_protocol_admits_the_same_values_on_every_release` in
+`tests/test_frontend_forms.py` holds the values `isinstance` answers
+differently on 3.10 and 3.11 than from 3.12 -- a member a `__getattr__` hook
+serves, a getter that raises, an unassigned slot -- to one answer on every
+interpreter the test matrix runs.
 
 ### Pass the class, not its annotations
 

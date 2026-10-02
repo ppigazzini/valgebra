@@ -367,9 +367,13 @@ class: `int ≤ ~C` is "not proven" for a dataclass and for a class with no
 fields alike, and a class laid out as a kind decides either way. The record is
 not a second source of conservatism, and in the one place it tells two schemas
 apart it makes a refutation reachable that the class alone leaves open. A
-`Protocol` is a third thing again: it compiles to a class that answers
-`isinstance` itself, which is the decline the section above owns, and carries
-no record at all.
+`Protocol` is the record with no class beside it, and relates as records do: a
+dataclass declaring its members, each at least as narrowly, is below it, and a
+protocol with more members is below one with fewer. Against a builtin kind it
+declines in the direction that would stand on a value of the kind: an exact
+`int` carries no `__dict__`, and whether it has an attribute is `int`'s own
+namespace -- it has a `real`, it has no `x` -- which the relations do not
+hold, so `int` against a protocol of `x` is undecided though `1` fails it.
 
 **The object carries only what its class leaves room for.** The one object the
 assumption licenses is a *direct* instance of the class, and a refutation about

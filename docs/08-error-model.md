@@ -327,21 +327,23 @@ keeps working. New codes may appear for node kinds that gain a distinct failure.
 
 **Every code is reported the same way on both entry paths.** `validate_json` and
 `load` parse the document and then walk the *Python value* the parser built, so
-a document reaches the same codes a value does, with the same `path`. Four are
+a document reaches the same codes a value does, with the same `path`. Three are
 the exception, and each because the parser cannot build the value that reaches
 them:
 
 | Code | Why no document reaches it |
 |---|---|
 | `tuple_length` | a document's array is a list, never a tuple, so a tuple schema refuses it by kind first and the code is `tuple_type` |
-| `missing_attribute` | a class with declared attributes is the class met with its attribute record, and the parser builds no instance of the class, so the class refuses every document first and the code is `instance_type` |
 | `recursion_loop` | a parsed document is a tree, so no value contains itself |
 | `mutated_during_validation` | nothing runs against a parsed value while it is read, so it cannot move under the walk |
 
 `tests/test_error_matrix.py` drives every code through both modes and both
-paths. For `tuple_length` and `missing_attribute` it carries that reason beside
-the code a document gets *instead*, and it names the test that drives each of
-the other two, so the claim is one a test can refute.
+paths. For `tuple_length` it carries that reason beside the code a document
+gets *instead*, and it names the test that drives each of the other two, so the
+claim is one a test can refute. `missing_attribute` is reached through a
+`Protocol`, whose attribute record stands with no class beside it: a parsed
+object is a `dict`, which carries no attribute, so a protocol refuses a
+document member by member with that code.
 
 ## Determinism
 

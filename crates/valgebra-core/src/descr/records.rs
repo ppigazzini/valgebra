@@ -184,12 +184,24 @@ impl<G: Guard> Atom<G> {
     ///
     /// `None` is the line of objects that have no builtin kind, where the class
     /// is the whole of what is asked.
+    ///
+    /// **An atom with no class names its fields of the kind's own values.** On
+    /// a builtin kind's line the value that would satisfy it is an exact `int`,
+    /// `str` or `list`, the one the kind holds without a subclass being
+    /// assumed, and such a value carries no `__dict__`: a name its builtin does
+    /// not define is never there, and one it defines holds what the builtin
+    /// says -- `int.real`, `list.__len__` -- which the core cannot read. So an
+    /// atom that names a field is unknown there, as the class with no room is
+    /// ([`Reach::Unread`]); reading it as inhabited refuted `int` below a record
+    /// of `real` that every integer satisfies. The line of objects with no
+    /// builtin kind keeps the reading: a plain object carries what it is given.
     fn emptiness_of_kind(&self, kind: Option<Kind>) -> Verdict {
         let known = self.emptiness();
         match kind {
             Some(kind)
                 if known != Verdict::Empty
-                    && self.is_a.iter().any(|class| class.kind() != Some(kind)) =>
+                    && (self.is_a.iter().any(|class| class.kind() != Some(kind))
+                        || (self.is_a.is_empty() && !self.fields.is_empty())) =>
             {
                 Verdict::Unknown
             }

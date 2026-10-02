@@ -107,8 +107,8 @@ protocol asks for is asked by an interned `PyString` the interpreter already
 holds, because text would be decoded into a fresh string and hashed before the
 lookup could begin, once per name per marker. The rule is the whole frontend's
 and not the marker protocol's: the dispatch asks `__metadata__`, `__origin__`
-and `__supertype__` the same way, a class node asks `_is_protocol` and
-`_is_runtime_protocol` the same way, and each is asked *optionally* --
+and `__supertype__` the same way, a class node asks `_is_protocol` and a
+protocol `__protocol_attrs__` the same way, and each is asked *optionally* --
 `getattr_opt` rather than `hasattr` and then `getattr`, which is one lookup
 instead of two and no exception where the answer is no. `__args__`, whose
 presence is all the dispatch reads, is asked by `hasattr`, one lookup through
@@ -248,33 +248,39 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    well as the types. A field the hints do not carry — a `collections`
    namedtuple's — takes `anything` at its position, which checks the arity
    without the types.
-7. **A `Protocol`** is an instance check against the class, so it denotes the
-   set Python's own `isinstance` admits on the running interpreter, and it is a
-   schema only where `@runtime_checkable` was applied to the class itself; any
-   other protocol is refused. A subclass protocol inherits the attribute the
-   decorator sets, so `isinstance` answers for it -- with a
-   `DeprecationWarning` from Python 3.15 and a `TypeError` from 3.20 -- and the
-   walk reads a warning raised as an error as a non-member, so under `-W error`
-   such a schema would admit nothing and say nothing.
-   `declares_runtime_checkable` in `build/classes.rs` reads
-   `_is_runtime_protocol` in the class's own namespace, where the decorator
-   writes it in `typing` and `typing_extensions` alike on every supported
-   release, and the inheriting class is refused by name.
+7. **A `Protocol`** is the record of the members it declares: an
+   `AttrRecord` with one required field per member and no class beside it, so
+   it denotes every value whose attribute, read by `getattr`, holds what the
+   member declares. The members are the names `typing` lists --
+   `__protocol_attrs__`, which every protocol carries from 3.12 and a
+   `typing_extensions` protocol on every release, and otherwise
+   `typing._get_protocol_attrs`, the derivation that attribute caches.
+   `protocol_members` in `build/classes.rs` classifies each one, and
+   `each_protocol_member_is_classified_as_typing_lists_it` holds the
+   classification to `typing`'s own caches on the releases that have them:
 
-   **The set is the interpreter's, and it moved at 3.12.** The check finds a
-   member with `hasattr` on 3.10 and 3.11 and with `inspect.getattr_static`
-   from 3.12, so a member only a `__getattr__` hook serves, a property getter
-   that raises and an unassigned slot change sides. On every release it asks
-   whether a member is present and not what it holds, and it admits an
-   instance of a class naming the protocol among its bases without asking
-   about a member at all. The [schema-language
-   page](../03-schema-language.md#a-protocol-is-pythons-own-check) tabulates
-   the four values, and
-   `test_a_protocol_admits_what_the_running_release_admits` in
-   `tests/test_frontend_forms.py` holds them on each interpreter the matrix
-   runs. Every other form this page reads denotes one set on every release;
-   this one is a gap, and a reading of the protocol as the attribute record of
-   its members, which would not move, is not built.
+   | member | where the classifier finds it | its field |
+   |---|---|---|
+   | data | an annotation names it | the annotation's set |
+   | method, special method | the class attribute is callable | the `Callable` atom, as `Callable[...]` reads |
+   | property | the first class on the `__mro__` defining it holds a `property` | the getter's return annotation, or `anything` |
+   | value | the class attribute is neither callable nor a property | `anything`: present, holding anything |
+
+   `@runtime_checkable` is not read. It is what lets `isinstance` answer, and
+   nothing here asks `isinstance`, so one declaration is one set with the
+   decorator, without it, and with its mark inherited from a base -- and the
+   same set on every release, where `isinstance` finds a member by `hasattr`
+   on 3.10 and 3.11 and by `inspect.getattr_static` from 3.12.
+   `test_a_protocol_admits_the_same_values_on_every_release` in
+   `tests/test_frontend_forms.py` holds the values those two answer apart.
+
+   Three shapes are refused, each in `tests/test_refusal_messages.py`:
+   `typing.Protocol` itself, the base a protocol is declared from, which
+   declares nothing; a generic `Protocol[T]`, which names one set per type
+   argument and has no reading of its parameters yet; and a member declared
+   `ClassVar` or `Final`, whose qualifier says where the value lives rather
+   than what it is. A protocol naming itself in a member is refused by the
+   depth guard, with `recursive(...)` named, as a dataclass is.
 8. **Any other class** names its instances: the remaining builtins, the
    `collections.abc` ABCs, and every user class, uniformly.
 

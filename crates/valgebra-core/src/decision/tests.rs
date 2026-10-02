@@ -5081,7 +5081,9 @@ fn a_self_reference_is_declined_by_every_decider() {
 /// the value has -- so a pair naming it is decided by whether an object carrying
 /// those attributes must be of the other schema's kind. Each row below names the
 /// value that settles it, in the comment, and `tests/test_theory_matrix.py`
-/// carries the ones a walk can check.
+/// carries the ones a walk can check. A builtin kind's own values carry no
+/// `__dict__`, so a record is never read as satisfied by one: which names the
+/// builtin defines is not something the core holds.
 #[test]
 fn an_attribute_record_relates_through_the_objects_that_carry_it() {
     let attrs = Schema::attr_record(vec![Field {
@@ -5102,10 +5104,13 @@ fn an_attribute_record_relates_through_the_objects_that_carry_it() {
             "an object with an `x` is not always {other:?}"
         );
     }
-    // And the other direction is refuted too: an integer carries no `x`.
+    // The other direction declines. The witness would be an exact integer, the
+    // value the kind holds without a subclass being assumed, and whether it
+    // lacks an attribute is its builtin's namespace -- it has no `x` and it has
+    // a `real` -- which the core does not hold.
     assert_eq!(
         Schema::Int.subtype_relation_under(&attrs, &NoLeafRelations, &[]),
-        Relation::Fails
+        Relation::Unknown
     );
     // Proven: itself, the top above it, the bottom below it, and a record
     // asking for less than this one declares.

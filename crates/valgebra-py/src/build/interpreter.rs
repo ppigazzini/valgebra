@@ -340,6 +340,16 @@ fn each_refusal_says_what_it_refuses() {
                 "list, set, frozenset, dict, tuple",
             ),
             ("typing.NamedTuple", "the base a class is declared from"),
+            ("typing.Protocol", "the base a protocol is declared from"),
+            (
+                "types.new_class('Box', (typing.Protocol[typing.TypeVar('T')],))",
+                "generic Protocol",
+            ),
+            (
+                "types.new_class('Shared', (typing.Protocol,), exec_body=lambda ns: \
+                 ns.update(__annotations__={'count': typing.ClassVar[int]}))",
+                "declared ClassVar or Final",
+            ),
             ("list['Account']", "get_type_hints"),
             ("typing.Annotated[int, at.MinLen(1)]", "length"),
             ("[..., int]", "only as the last element"),
@@ -1193,61 +1203,132 @@ fn a_declared_field_becomes_an_attribute_beside_the_class() {
     });
 }
 
-/// A protocol is an `isinstance` check, and only where the class says the
-/// check is allowed: `@runtime_checkable` applied to the class itself.
+/// The protocols the two rows below read, defined in the corpus namespace.
 ///
-/// A subclass protocol inherits the attribute the decorator sets without the
-/// decorator. Python 3.15 warns on every `isinstance` against one and 3.20
-/// refuses it, so it is refused here on every release, by name; the same
-/// class decorated itself is read.
-#[test]
-fn a_protocol_is_read_only_where_it_carries_the_decorator() {
-    Python::attach(|py| {
-        let namespace = namespace(py).expect("the corpus namespace builds");
-        py.run(
-            &CString::new(
-                "import typing\n\
-                 @typing.runtime_checkable\n\
-                 class Sized(typing.Protocol):\n\
-                 \x20   def __len__(self) -> int: ...\n\
-                 class Quiet(typing.Protocol):\n\
-                 \x20   def __len__(self) -> int: ...\n\
-                 class Inherits(Sized, typing.Protocol):\n\
-                 \x20   def __bool__(self) -> bool: ...\n\
-                 @typing.runtime_checkable\n\
-                 class Carries(Sized, typing.Protocol):\n\
-                 \x20   def __bool__(self) -> bool: ...\n",
-            )
-            .expect("a source with no interior nul"),
-            Some(&namespace),
-            None,
+/// `Sized` and `Quiet` differ in the decorator alone, `Inherits` takes the
+/// decorator's mark from a base, and `Members` declares one member of each
+/// kind [`ProtocolMember`] tells apart, over a protocol base.
+fn protocols(py: Python<'_>) -> Bound<'_, PyDict> {
+    let namespace = namespace(py).expect("the corpus namespace builds");
+    py.run(
+        &CString::new(
+            "import typing\n\
+             @typing.runtime_checkable\n\
+             class Sized(typing.Protocol):\n\
+             \x20   def __len__(self) -> int: ...\n\
+             class Quiet(typing.Protocol):\n\
+             \x20   def __len__(self) -> int: ...\n\
+             class Inherits(Sized, typing.Protocol):\n\
+             \x20   def __bool__(self) -> bool: ...\n\
+             @typing.runtime_checkable\n\
+             class Members(Sized, typing.Protocol):\n\
+             \x20   data: int\n\
+             \x20   defaulted: str = 'a'\n\
+             \x20   value = 0\n\
+             \x20   @property\n\
+             \x20   def computed(self) -> bytes: ...\n\
+             \x20   @property\n\
+             \x20   def unhinted(self): ...\n\
+             \x20   def run(self) -> None: ...\n",
         )
-        .expect("the corpus protocols define");
-        let build = |name: &str| {
+        .expect("a source with no interior nul"),
+        Some(&namespace),
+        None,
+    )
+    .expect("the corpus protocols define");
+    namespace
+}
+
+/// A protocol is the record of the members it declares, decorated or not.
+///
+/// The decorator is what lets `isinstance` answer, and nothing here asks
+/// `isinstance`, so the same declaration is the same record with it, without
+/// it, and with its mark inherited from a base.
+#[test]
+fn a_protocol_is_the_record_of_its_members_whatever_its_decorator() {
+    Python::attach(|py| {
+        let namespace = protocols(py);
+        let rendered = |name: &str| {
             let annotation = namespace
                 .get_item(name)
                 .expect("the namespace answers")
                 .expect("the class is in it");
             let mut pool = Pool::default();
             let mut defs = Vec::new();
-            build_schema(&annotation, &mut pool, &mut defs)
+            let schema = build_schema(&annotation, &mut pool, &mut defs)
+                .unwrap_or_else(|refusal| panic!("{name} was refused: {refusal}"));
+            let active = RefCell::new(FxHashMap::default());
+            render(py, &schema, pool.items(), &defs, &active, 0).expect("the record renders")
         };
-        let refusal = |name: &str| match build(name) {
-            Err(refusal) => refusal.to_string(),
-            Ok(schema) => panic!("{name} built {schema:?}"),
-        };
-        assert!(matches!(build("Sized"), Ok(Schema::Instance(_))));
-        assert!(matches!(build("Carries"), Ok(Schema::Instance(_))));
-        let plain = refusal("Quiet");
-        assert!(
-            plain.contains("must be @runtime_checkable"),
-            "the refusal does not say what is missing: {plain}"
+        assert_eq!(rendered("Sized"), "object(__len__=Callable)");
+        assert_eq!(rendered("Quiet"), rendered("Sized"));
+        assert_eq!(
+            rendered("Inherits"),
+            "object(__bool__=Callable, __len__=Callable)"
         );
-        let inherited = refusal("Inherits");
-        assert!(
-            inherited.contains("Inherits") && inherited.contains("inherits @runtime_checkable"),
-            "the refusal does not name the class and what it lacks: {inherited}"
+        assert_eq!(
+            rendered("Members"),
+            "object(__len__=Callable, computed=bytes, data=int, defaulted=str, \
+             run=Callable, unhinted=anything, value=anything)"
         );
+    });
+}
+
+/// Each member is classified as `typing` lists and calls it.
+///
+/// From 3.12 `typing` caches a protocol's members as `__protocol_attrs__`, and
+/// `@runtime_checkable` caches the ones whose class attribute is not callable
+/// as `__non_callable_proto_members__`. The classifier reads the first and
+/// derives its own split, so the two caches are the second opinion: the names
+/// are the same, and the methods are exactly the members `typing` calls
+/// callable. A member that is annotated and holds a callable on the class would
+/// part the two, and none of these does.
+#[test]
+fn each_protocol_member_is_classified_as_typing_lists_it() {
+    Python::attach(|py| {
+        let cached = Since(12).met(py);
+        if !cached {
+            return;
+        }
+        let namespace = protocols(py);
+        for name in ["Sized", "Inherits", "Members"] {
+            let class = namespace
+                .get_item(name)
+                .expect("the namespace answers")
+                .expect("the class is in it")
+                .cast_into::<PyType>()
+                .expect("a protocol is a class");
+            let members = protocol_members(&class).expect("the members classify");
+            let names: Vec<String> = members.iter().map(|(name, _)| name.to_string()).collect();
+            let mut listed: Vec<String> = class
+                .getattr("__protocol_attrs__")
+                .expect("3.12 caches the members")
+                .try_iter()
+                .expect("a set iterates")
+                .map(|name| name.expect("a name").to_string())
+                .collect();
+            listed.sort();
+            assert_eq!(names, listed, "{name}'s members");
+            let not_callable: Vec<String> = match class
+                .getattr_opt("__non_callable_proto_members__")
+                .expect("an optional attribute")
+            {
+                Some(cached) => cached
+                    .try_iter()
+                    .expect("a set iterates")
+                    .map(|name| name.expect("a name").to_string())
+                    .collect(),
+                None => continue,
+            };
+            for (member, kind) in &members {
+                let callable = !not_callable.contains(&member.to_string());
+                assert_eq!(
+                    matches!(kind, ProtocolMember::Method),
+                    callable,
+                    "{name}.{member} is classified against typing's callable split"
+                );
+            }
+        }
     });
 }
 

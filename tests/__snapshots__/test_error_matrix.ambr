@@ -61,17 +61,9 @@
     'literal_error, root, fail fast': "expected the literal 'active', got 'paused' [literal_error]",
     'literal_error, under a key, aggregate': "at k: expected the literal 'active', got 'paused' [literal_error]",
     'literal_error, under a key, fail fast': "at k: expected the literal 'active', got 'paused' [literal_error]",
-    'missing_attribute, root, aggregate': '''
-      2 validation errors:
-      at x: expected attribute "x", got missing [missing_attribute]
-      at y: expected attribute "y", got missing [missing_attribute]
-    ''',
+    'missing_attribute, root, aggregate': 'at x: expected attribute "x", got missing [missing_attribute]',
     'missing_attribute, root, fail fast': 'at x: expected attribute "x", got missing [missing_attribute]',
-    'missing_attribute, under a key, aggregate': '''
-      2 validation errors:
-      at k.x: expected attribute "x", got missing [missing_attribute]
-      at k.y: expected attribute "y", got missing [missing_attribute]
-    ''',
+    'missing_attribute, under a key, aggregate': 'at k.x: expected attribute "x", got missing [missing_attribute]',
     'missing_attribute, under a key, fail fast': 'at k.x: expected attribute "x", got missing [missing_attribute]',
     'missing_key, root, aggregate': 'at a: expected required key "a", got missing [missing_key]',
     'missing_key, root, fail fast': 'at a: expected required key "a", got missing [missing_key]',

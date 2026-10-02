@@ -14,8 +14,36 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a refutation about a class stands on what its instance can carry
+- feat: a protocol is the record of the members it declares
 
 -->
+
+### Changed
+
+- **A `Protocol` is the record of the members it declares, decorated or not.**
+  A protocol compiled to an `isinstance` check against the class, and only
+  where `@runtime_checkable` was applied to the class itself; any other protocol
+  was refused. It denotes the values carrying every member it declares, each
+  read by `getattr`: an annotated member holds a value of its type, a method or
+  special method holds a callable, and a property holds what its getter's
+  return annotation names.
+
+  Three readings of a runtime-checkable protocol break. A member present with a
+  value outside its type is refused, where `isinstance` admitted it. An
+  instance of a class naming the protocol among its bases, with a data member
+  never assigned, is refused. And a member a `__getattr__` hook serves, a
+  getter that raises and an unassigned slot answer alike on every release,
+  where `isinstance` answered them one way on 3.10 and 3.11 and the other way
+  from 3.12. A protocol without the decorator, or inheriting its mark from a
+  base, builds where it was refused. The bare `Protocol` base, a generic
+  `Protocol[T]` and a member declared `ClassVar` or `Final` are refused, each
+  with the reason.
+
+  A protocol relates as a record: a dataclass declaring its members, each at
+  least as narrowly, is below it, and a protocol with more members is below one
+  with fewer. A record is not read as satisfied by an exact `int`, `str` or
+  other builtin value, whose attributes are its type's, so a builtin kind
+  against a protocol declines where the witness would be such a value.
 
 ### Fixed
 

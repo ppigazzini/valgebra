@@ -275,6 +275,7 @@ gate only catches what it exercises:
   `--binding-json`, `--binding-json-reject`, `--binding-json-union`,
   `--binding-json-open`, `--binding-json-deep`, `--binding-pattern`,
   `--binding-build`, `--binding-annotated`, `--binding-object`,
+  `--binding-protocol`,
   `--binding-explain`, `--binding-explain-accept`) —
   membership over a live Python value, the call boundary
   alone, a wide record closed, the same record walked over a value whose keys

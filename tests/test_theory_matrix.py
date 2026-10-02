@@ -383,14 +383,22 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
         "undecided",
         [[], ["a"], ["aa", "a"], [[]], "a", "", "b", ["b"]],
     ),
-    # -- a class whose metaclass answers the check is not a set --------------
+    # -- a protocol is the record of its members -----------------------------
     (
-        "a protocol whose issubclass raises decides nothing",
+        "a class without the protocol's member is outside it",
         Plain,
         HasX,
-        "undecided",
+        "not_subset",
         [Plain(), Point(1), 1, "a"],
     ),
+    (
+        "a dataclass declaring the member is inside the protocol",
+        Point,
+        HasX,
+        "subset",
+        [Point(1), Point(True), Plain(), 1, "a"],
+    ),
+    # -- a class whose metaclass answers the check is not a set --------------
     (
         "a class whose subclass check raises decides nothing",
         Plain,

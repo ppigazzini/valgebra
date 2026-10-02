@@ -73,7 +73,8 @@ is cut mid-string and is a syntax error where it is parsed; a **meet of two
 classes that each declare attributes**, which flattens to the two classes and
 their two attribute records, and a record standing apart from its class prints
 as `object(x=int)`, a form no constructor spells -- the schema does not record
-which class each record came from, so the render cannot fold them back; a
+which class each record came from, so the render cannot fold them back, and a
+`Protocol` prints the same way, as the record of its members; a
 **required key whose name ends in `?`**, the quiet one: the dict literal reads
 every trailing `?` as optional, so `TypedDict("TD", {"a?": int})` renders
 `{'a?': int, str: anything}`, which reads back as a record whose `a` is

@@ -47,6 +47,7 @@ from typing import (
     TYPE_CHECKING,
     Annotated,
     Any,
+    ClassVar,
     Generic,
     NamedTuple,
     Protocol,
@@ -123,32 +124,29 @@ P = typing.ParamSpec("P")
 
 #: The refusal table's protocol cell. It names more than one form, so the row,
 #: `ALSO` and the set of such cells all key on it.
-UNDECORATED_PROTOCOL = (
-    "bare `Protocol`, and a `Protocol` not itself decorated `@runtime_checkable`"
-)
+PROTOCOL_BASES = "bare `Protocol`, and a generic `Protocol[T]`"
 
 
 class Parametrised(Generic[T]):
     """A user generic, whose parameter is erased before a value exists."""
 
 
-class NotRuntimeCheckable(Protocol):
-    """A protocol `isinstance` refuses to answer for."""
-
-    x: int
-
-
-@typing.runtime_checkable
 class HasX(Protocol):
-    """A protocol `isinstance` does answer for."""
+    """A protocol with one data member."""
 
     x: int
 
 
-class InheritsRuntimeCheckable(HasX, Protocol):
-    """A subclass protocol: it inherits the decorator's mark, not the decorator."""
+class Boxed(Protocol[T]):
+    """A protocol over a type parameter, which names one set per argument."""
 
-    y: int
+    item: T
+
+
+class Counted(Protocol):
+    """A protocol whose member says where its value lives, not what it is."""
+
+    count: ClassVar[int]
 
 
 class Movie(TypedDict):
@@ -247,7 +245,7 @@ FORMS: dict[str, Reads | Refuses] = {
     "dataclass": Reads(Point, Point(1), "a"),
     "`NamedTuple`": Reads(Pair, Pair(1, "a"), (1, 2)),
     "`Enum`": Reads(Colour, Colour.RED, "red"),
-    "`Protocol` decorated `@runtime_checkable`": Reads(HasX, Point(1), "a"),
+    "`Protocol`": Reads(HasX, Point(1), "a"),
     "`NewType`": Reads(UserId, 1, "a"),
     "PEP 695 `type` alias": Reads(_ALIAS.get("Alias", list[int]), [1], ["a"]),
     # -- the refinement markers ---------------------------------------------
@@ -277,9 +275,9 @@ FORMS: dict[str, Reads | Refuses] = {
     "a user `Generic[T]` parametrisation": Refuses(
         lambda: Parametrised[int], "unsupported typing form with origin"
     ),
-    UNDECORATED_PROTOCOL: Refuses(
-        lambda: NotRuntimeCheckable,
-        "a Protocol must be @runtime_checkable to be used as a schema",
+    PROTOCOL_BASES: Refuses(lambda: Protocol, "the base a protocol is declared from"),
+    "a `Protocol` member declared `ClassVar` or `Final`": Refuses(
+        lambda: Counted, "declared ClassVar or Final"
     ),
     "a set or frozen set literal": Refuses(
         lambda: {int}, "a set literal is not a schema"
@@ -313,15 +311,8 @@ ALSO: dict[str, list[Reads | Refuses]] = {
     "`Final`, `ClassVar`": [
         Refuses(lambda: typing.ClassVar[int], "unsupported typing form with origin"),
     ],
-    UNDECORATED_PROTOCOL: [
-        Refuses(
-            lambda: Protocol,
-            "a Protocol must be @runtime_checkable to be used as a schema",
-        ),
-        Refuses(
-            lambda: InheritsRuntimeCheckable,
-            "inherits @runtime_checkable from a base",
-        ),
+    PROTOCOL_BASES: [
+        Refuses(lambda: Boxed, "is a generic Protocol"),
     ],
     "a set or frozen set literal": [
         Refuses(lambda: frozenset({int}), "a frozen set literal is not a schema"),
@@ -343,7 +334,7 @@ NAMES_MORE_THAN_ONE_FORM = {
     "`typing.List`, `typing.Tuple`, ...",
     "`TypeVar`, `ParamSpec`, `TypeVarTuple`",
     "`Final`, `ClassVar`",
-    UNDECORATED_PROTOCOL,
+    PROTOCOL_BASES,
     "a set or frozen set literal",
 }
 

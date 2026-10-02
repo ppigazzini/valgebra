@@ -64,6 +64,44 @@ assert callables.is_valid(len)  # any callable belongs
 assert not callables.is_valid(3)
 ```
 
+A `Protocol`'s method is read the same way: the value's attribute is callable,
+and its parameters and return are not asked.
+
+## It reads values, not declarations
+
+A relation is inclusion between sets of values; a static checker's
+assignability is a relation between declarations, and the two part where a
+checker reasons about what a declaration permits. A mutable member is invariant
+to a checker, so a class declaring `count: bool` is not assignable to a protocol
+declaring `count: int`. Over values every `bool` is an `int`, so the class's set
+is inside the protocol's, and `relation_to` says `"subset"`. A `TypedDict`
+declaring `x: bool` is below one declaring `x: int` for the same reason.
+
+```python
+from dataclasses import dataclass
+from typing import Protocol
+
+from valgebra import Validator
+
+
+class Counted(Protocol):
+    count: int
+
+
+@dataclass
+class Flag:
+    count: bool
+
+
+assert Validator(Flag).relation_to(Validator(Counted)) == "subset"
+```
+
+The same reading decides what a class's declarations cannot. An instance of a
+plain class annotated `x: int` can be given `x = "s"`, so the class is not below
+a protocol of `x`, whatever a checker says about it. And a special method set on
+the instance satisfies a protocol's member as any attribute does, though `len()`
+and the other operators read it from the type.
+
 ## It cannot see a generic's arguments on a value
 
 Python erases them. A `list` at runtime is a list of whatever it holds, so

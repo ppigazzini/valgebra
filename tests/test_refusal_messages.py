@@ -27,7 +27,7 @@ from __future__ import annotations
 import re
 import sys
 import typing
-from typing import Annotated, Protocol, TypeVar, runtime_checkable
+from typing import Annotated, ClassVar, Protocol, TypeVar
 
 import annotated_types as at
 import pytest
@@ -52,23 +52,19 @@ class _Flagged:
         self.flags = flags
 
 
-class _Structural(Protocol):
-    """A protocol with no `@runtime_checkable`, which `isinstance` refuses."""
-
-    def method(self) -> None: ...
+_T = TypeVar("_T")
 
 
-@runtime_checkable
-class _Checked(Protocol):
-    """A protocol the decorator was applied to."""
+class _Generic(Protocol[_T]):
+    """A protocol over a type parameter, which names one set per argument."""
 
-    def method(self) -> None: ...
+    item: _T
 
 
-class _Inheriting(_Checked, Protocol):
-    """A subclass protocol: it inherits the decorator's mark, not the decorator."""
+class _Shared(Protocol):
+    """A protocol whose member says where its value lives, not what it is."""
 
-    def other(self) -> None: ...
+    count: ClassVar[int]
 
 
 #: Each row: what the refusal is about, the annotation that provokes it, the
@@ -191,16 +187,28 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
         NotImplementedError,
         "is a typing (special form|construct)",
     ),
-    # A protocol decides membership by `isinstance`, which a protocol that is
-    # not runtime-checkable refuses to answer.
+    # `build/classes.rs`: a protocol is the record of its members, so what has
+    # no record is refused -- the base it is declared from, a family of them
+    # over a type parameter, and a member whose qualifier says where its value
+    # lives.
     (
-        "a protocol that is not runtime-checkable",
-        _Structural,
+        "the bare Protocol base",
+        Protocol,
         NotImplementedError,
-        "must be @runtime_checkable",
+        "the base a protocol is declared from",
     ),
-    # A subclass protocol inherits the attribute the decorator sets and not the
-    # decorator, and Python refuses `isinstance` against one from 3.20.
+    (
+        "a generic protocol",
+        _Generic,
+        NotImplementedError,
+        "is a generic Protocol",
+    ),
+    (
+        "a protocol member declared ClassVar",
+        _Shared,
+        NotImplementedError,
+        "declared ClassVar or Final",
+    ),
     # `Validator[int]` annotates a validator for a checker; the subscript is a
     # generic alias of the class, which no schema reads.
     (
@@ -208,12 +216,6 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
         vg.Validator[int],
         NotImplementedError,
         "is the annotation a static checker reads",
-    ),
-    (
-        "a protocol that inherits runtime-checkability",
-        _Inheriting,
-        NotImplementedError,
-        "inherits @runtime_checkable from a base",
     ),
 ]
 

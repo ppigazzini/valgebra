@@ -431,8 +431,8 @@ def test_an_unpack_outside_a_tuple_is_refused() -> None:
 
 
 def test_a_bare_protocol_is_refused() -> None:
-    """Membership of a protocol is `isinstance`, which the bare form refuses."""
-    with pytest.raises(NotImplementedError, match="runtime_checkable"):
+    """The base a protocol is declared from declares no member and names no set."""
+    with pytest.raises(NotImplementedError, match="the base a protocol is declared"):
         Validator(typing.Protocol)
 
 
@@ -456,25 +456,23 @@ class CarriesTheMark(Sized, typing.Protocol):
     def __iter__(self) -> typing.Iterator[object]: ...
 
 
-def test_a_protocol_is_runtime_checkable_only_where_it_is_decorated() -> None:
-    """A subclass protocol is refused unless the decorator was applied to it.
+def test_a_subclass_protocol_is_its_members_and_its_bases_decorated_or_not() -> None:
+    """A subclass protocol reads its own members and its bases', whatever its mark.
 
-    It inherits the attribute `@runtime_checkable` sets, so `isinstance`
-    answers for it, with a `DeprecationWarning` on 3.15 and a `TypeError` from
-    3.20. The walk reads a warning raised as an error as a non-member, so under
-    `-W error` such a schema would admit nothing and say nothing; it is refused
-    by name on every release instead. Decorated itself, the same class is read,
-    and a check against it raises no warning.
+    It inherits the attribute `@runtime_checkable` sets, and `isinstance`
+    against it warns on 3.15 and raises from 3.20 -- which reaches nothing here,
+    since nothing here asks `isinstance`. Under `-W error` a check against
+    either class answers, with no warning, and the two read alike.
     """
-    with pytest.raises(
-        NotImplementedError, match=r"InheritsTheMark.* inherits @runtime_checkable"
-    ):
-        Validator(InheritsTheMark)
-    schema = Validator(CarriesTheMark)
+    inherits = Validator(InheritsTheMark)
+    carries = Validator(CarriesTheMark)
+    assert inherits.is_equivalent(carries)
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        assert schema.is_valid([1])
-        assert not schema.is_valid(1)
+        for schema in (inherits, carries):
+            assert schema.is_valid([1])
+            assert not schema.is_valid(1)
+            assert not schema.is_valid(object())
 
 
 @typing.runtime_checkable
@@ -533,36 +531,30 @@ class XHoldsText:
     x = "text"
 
 
-def test_a_protocol_admits_what_the_running_release_admits() -> None:
-    """A protocol is Python's own check, and the check moved at 3.12.
+def test_a_protocol_admits_the_same_values_on_every_release() -> None:
+    """A protocol reads each member by `getattr`, which every release answers alike.
 
     `isinstance` against a runtime-checkable protocol finds a member with
-    `hasattr` on 3.10 and 3.11 and with `inspect.getattr_static` from 3.12.
-    `hasattr` runs a `__getattr__` hook and a property's getter; the static
-    lookup runs neither, and finds a slot's descriptor on the class whether or
-    not the instance has filled it. So a member served by a hook, a getter that
-    raises, and an empty slot change sides -- the four values below, each one
-    of the rows the schema-language page tabulates. On 3.10 and 3.11 the raising
-    getter makes `isinstance` raise, and the walk reads that as a non-member.
-
-    Two things hold on every release: the check asks whether a member is
-    present and not what it holds, and an instance of a class that names the
-    protocol as a base passes without a member being asked for -- here one
-    with no `x` at all.
+    `hasattr` on 3.10 and 3.11 and with `inspect.getattr_static` from 3.12, so
+    a member a `__getattr__` hook serves, a getter that raises and an empty slot
+    would each change sides at 3.12. The record reads the attribute the way an
+    attribute access does: a hook serves it, a raising getter is no member, an
+    empty slot is missing. And it reads what a member holds, so a present `x`
+    outside `int` is refused, and an instance of a class naming the protocol as
+    a base is a member only where it carries the members.
     """
-    reads_statically = sys.version_info >= (3, 12)
     holds_x = Validator(HoldsX)
     holds_m = Validator(HoldsM)
-    assert holds_x.is_valid(XFromAHook()) is not reads_statically
-    assert holds_m.is_valid(MFromAHook()) is not reads_statically
-    assert holds_x.is_valid(XWhoseGetterRaises()) is reads_statically
-    assert holds_x.is_valid(XInAnEmptySlot()) is reads_statically
+    assert holds_x.is_valid(XFromAHook())
+    assert holds_m.is_valid(MFromAHook())
+    assert not holds_x.is_valid(XWhoseGetterRaises())
+    assert not holds_x.is_valid(XInAnEmptySlot())
     # mypy and pyright refuse to construct the class, since it declares `x` and
     # assigns none; Python constructs it, and that instance is the point.
     unassigned = NamesHoldsX()
     assert not hasattr(unassigned, "x")
-    assert holds_x.is_valid(unassigned)
-    assert holds_x.is_valid(XHoldsText())
+    assert not holds_x.is_valid(unassigned)
+    assert not holds_x.is_valid(XHoldsText())
 
 
 def test_a_qualifier_is_unwrapped_wherever_it_is_written() -> None:

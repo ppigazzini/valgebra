@@ -250,12 +250,49 @@ def test_runtime_checkable_protocol() -> None:
 
 
 class NotRuntime(Protocol):
-    def ping(self) -> None: ...
+    def __len__(self) -> int: ...
 
 
-def test_non_runtime_protocol_is_rejected() -> None:
-    with pytest.raises(NotImplementedError):
-        Validator(NotRuntime)
+def test_a_protocol_reads_the_same_with_or_without_its_decorator() -> None:
+    """The decorator lets `isinstance` answer, and nothing here asks it."""
+    assert Validator(NotRuntime).is_equivalent(Validator(Sized))
+    assert Validator(NotRuntime).is_valid([1, 2])
+    assert not Validator(NotRuntime).is_valid(5)
+
+
+def test_a_protocol_relates_as_the_record_of_its_members() -> None:
+    """A protocol is the record of its members, so it relates as records do.
+
+    A dataclass declaring the member with a narrower type is below it -- over
+    values, so a `bool` field is below an `int` member, which a static checker
+    refuses by invariance. A protocol with more members is below one with
+    fewer, and not the other way. An integer carries no `x`, but deciding that
+    reads `int`'s own namespace, which the relations do not hold, so the pair
+    declines rather than refutes.
+    """
+
+    @runtime_checkable
+    class HasX(Protocol):
+        x: int
+
+    class HasXY(HasX, Protocol):
+        y: str
+
+    @dataclasses.dataclass
+    class Flag:
+        x: bool
+
+    @dataclasses.dataclass
+    class Point:
+        x: int
+        y: str
+
+    assert Validator(Flag).relation_to(Validator(HasX)) == "subset"
+    assert Validator(Point).relation_to(Validator(HasXY)) == "subset"
+    assert Validator(HasXY).relation_to(Validator(HasX)) == "subset"
+    assert Validator(HasX).relation_to(Validator(HasXY)) == "not_subset"
+    assert Validator(HasX).relation_to(Validator(Flag)) == "not_subset"
+    assert Validator(int).relation_to(Validator(HasX)) == "undecided"
 
 
 UserId = NewType("UserId", int)
@@ -640,8 +677,7 @@ def test_a_class_whose_metaclass_answers_isinstance_denotes_no_set() -> None:
     snapshot of the order predicts what that code says. So the reading declines
     rather than guessing, and the pair is undecided.
 
-    Every abstract base class is such a class, `ABCMeta` defining both hooks,
-    and so is a runtime-checkable `Protocol`.
+    Every abstract base class is such a class, `ABCMeta` defining both hooks.
     """
     for abstract in (
         collections.abc.Sequence,
@@ -655,12 +691,6 @@ def test_a_class_whose_metaclass_answers_isinstance_denotes_no_set() -> None:
     assert Validator(numbers.Number).is_valid(1)
     assert Validator(numbers.Number).is_valid(1.5)
     assert not Validator(numbers.Number).is_valid("1")
-
-    @runtime_checkable
-    class HasX(Protocol):
-        x: int
-
-    assert Validator(int).relation_to(Validator(HasX)) == "undecided"
 
 
 def test_a_dataclass_outside_every_branch_of_a_union_is_outside_the_union() -> None:
