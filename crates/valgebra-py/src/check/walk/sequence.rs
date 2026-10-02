@@ -261,7 +261,10 @@ fn seq_length_fail(
 /// PGO wheel laid that loop out with one instruction more per element than
 /// the loop read in place had, and `is_valid` on ten thousand integers took 6%
 /// longer, while the instruction gate, which builds without a profile, read the
-/// same change 24% cheaper.
+/// same change 24% cheaper. The explaining walk reads its list with a test per
+/// kind for the same reason: a match on `kind` at every element is three
+/// instructions of `validate`'s per element on 3.14, where the list is read in
+/// place.
 #[expect(
     clippy::redundant_closure_for_method_calls,
     reason = "the loop takes a test over a `Value` of any lifetime, and the \
@@ -277,7 +280,17 @@ fn scalar_list_matches(
     frame: &mut Frame<'_, '_>,
 ) -> bool {
     if frame.ctx.mode.explains() {
-        return list_explained(list, schema, |item| scalar_admits(kind, item), value, frame);
+        return match kind {
+            Scalar::Int => list_explained(list, schema, |item| item.is_int(), value, frame),
+            Scalar::Str => list_explained(list, schema, |item| item.is_str(), value, frame),
+            Scalar::Float => list_explained(list, schema, |item| item.is_float(), value, frame),
+            Scalar::Bool => list_explained(list, schema, |item| item.is_bool(), value, frame),
+            Scalar::Bytes => list_explained(list, schema, |item| item.is_bytes(), value, frame),
+            Scalar::NoneType => list_explained(list, schema, |item| item.is_none(), value, frame),
+            Scalar::Everything | Scalar::Nothing => {
+                list_explained(list, schema, |item| scalar_admits(kind, item), value, frame)
+            }
+        };
     }
     match kind {
         Scalar::Int => scalar_list_loop(list, |item| item.is_int(), value, frame),

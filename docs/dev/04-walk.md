@@ -423,7 +423,10 @@ most of what they cost, and each asks the test directly:
   (`scalar_list_matches`). A list's loop is one per kind, its test a constant
   inside it, so no element pays the dispatch on the kind: with the dispatch in
   one shared loop, the PGO wheel laid it out an instruction an element dearer,
-  which the instruction gate, building without a profile, does not see.
+  which the instruction gate, building without a profile, does not see. The
+  explaining walk's reader takes the same test per kind: with the kind matched
+  at every element, `validate` on a `list[int]` read in place, as 3.14 and
+  3.15 read one, costs a fifth more than `is_valid`.
 - **A union's branch.** `int | str | None` tries its branches in order, and a
   scalar branch is its type test (`scalar_member` in `walk/scalar.rs`). A
   string checked against that union costs 18% fewer instructions, and the

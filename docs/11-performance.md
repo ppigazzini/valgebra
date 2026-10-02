@@ -683,7 +683,11 @@ program that builds validators per request, and to no validation call.
   `check/walk/scalar.rs`), and a sequence of scalars is read as its tests, an
   element that fails being walked at its own position (`list_explained`,
   `tuple_explained`). `validate` on a thousand-element `list[int]` that belongs
-  executes about a fifth of the instructions the general element loop takes.
+  executes about a fifth of the instructions the general element loop takes,
+  and within a twentieth of what `is_valid` takes: each scalar kind has a loop
+  of its own in the explaining reader as in the deciding one, which on CPython
+  3.14 and 3.15, where the list is read in place, is a fifth of `validate`'s
+  instructions on a list of integers and 15% of its time.
 - **A union explains no branch for a value it admits.** Only a refused
   value's report reads the branches that did not match, so a branch that fails
   at the union's own location -- a scalar, a literal, a container of another

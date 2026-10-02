@@ -5094,6 +5094,62 @@ fn an_explaining_walk_reads_a_list_that_belongs_through_its_snapshot() {
     });
 }
 
+/// Each scalar kind with a value of it and a value outside it, where one
+/// exists: the readers of a list or a set of one kind take a test per kind,
+/// and each is its own code.
+fn scalar_kinds() -> [(Schema, Option<&'static str>, Option<&'static str>); 8] {
+    [
+        (Schema::Int, Some("1"), Some("'x'")),
+        (Schema::Str, Some("'a'"), Some("1")),
+        (Schema::Float, Some("1.5"), Some("'x'")),
+        (Schema::Bool, Some("True"), Some("2")),
+        (Schema::Bytes, Some("b'a'"), Some("'a'")),
+        (Schema::NoneType, Some("None"), Some("0")),
+        (Schema::ANY, Some("1"), None),
+        (Schema::Nothing, None, Some("1")),
+    ]
+}
+
+/// Evaluate a Python expression with no names of its own.
+fn evaluate<'py>(py: Python<'py>, source: &str) -> Bound<'py, PyAny> {
+    py.eval(&std::ffi::CString::new(source).expect("no nul"), None, None)
+        .expect("the value evaluates")
+}
+
+/// A list of each scalar kind answers alike in both modes through the kind's
+/// own test, read in place and wide enough for a snapshot: every element
+/// passing, or the last failing, which the report names at its index.
+#[test]
+fn a_list_of_each_scalar_kind_is_explained_by_its_own_test() {
+    Python::attach(|py| {
+        for (kind, good, bad) in scalar_kinds() {
+            let list = Schema::list(SeqShape::homogeneous(kind));
+            for width in [3, 40] {
+                if let Some(good) = good {
+                    let value = evaluate(py, &format!("[{good}] * {width}"));
+                    assert!(decide(py, &list, &value, &[], &[]), "{good} x{width}");
+                }
+                let Some(bad) = bad else {
+                    continue;
+                };
+                let source = match good {
+                    Some(good) => format!("[{good}] * {} + [{bad}]", width - 1),
+                    None => format!("[{bad}]"),
+                };
+                let value = evaluate(py, &source);
+                assert!(!decide(py, &list, &value, &[], &[]), "{source}");
+                let (_, violations) = explain(py, &list, &value, &[], &[]);
+                let refused_at = if good.is_some() { width - 1 } else { 0 };
+                assert_eq!(
+                    violations[0].path,
+                    vec![PathSegment::Index(refused_at)],
+                    "{source}"
+                );
+            }
+        }
+    });
+}
+
 /// A list whose element is a union of literals is read by the union's table,
 /// found once for the list, where a level is free under it: an element the
 /// table decides is its answer, one it does not decide is walked, and the
