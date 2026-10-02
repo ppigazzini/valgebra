@@ -384,3 +384,57 @@ fn annotations_as_written_are_the_hints_get_type_hints_returns() {
         }
     });
 }
+
+/// The builtin bases a class's annotations are not read from are the ones
+/// that hold none on every release, and no other class is skipped.
+///
+/// Each named builtin reads the empty table through the call the reading
+/// makes for it on this release, so skipping it moves no answer; a class of
+/// the program's own, a `NamedTuple`, a `TypedDict` and `type` itself, which
+/// holds the two descriptors in its namespace, are each still read.
+#[test]
+fn a_builtin_base_holding_no_annotations_is_not_asked_for_them() {
+    use super::classes::annotates_nothing;
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"from typing import NamedTuple, TypedDict\n\
+              class Plain:\n\
+              \x20   a: int\n\
+              class Pair(NamedTuple):\n\
+              \x20   x: int\n\
+              class Row(TypedDict):\n\
+              \x20   a: int\n\
+              import sys\n\
+              if sys.version_info >= (3, 14):\n\
+              \x20   from annotationlib import get_annotations as read\n\
+              else:\n\
+              \x20   def read(base):\n\
+              \x20       return base.__dict__.get('__annotations__', {})\n\
+              builtins = [object, tuple, dict, list, int, float, str, bytes, set,\n\
+              \x20           frozenset, BaseException, Exception]\n\
+              others = [Plain, Pair, Row, type]\n",
+            c"annotated_bases.py",
+            c"annotated_bases",
+        )
+        .expect("the module compiles");
+        let read = module.getattr("read").expect("the reading");
+        let listed = |name: &str| -> Vec<Bound<'_, PyAny>> {
+            module
+                .getattr(name)
+                .and_then(|classes| classes.try_iter()?.collect())
+                .expect("the classes read")
+        };
+        for base in listed("builtins") {
+            assert!(annotates_nothing(&base), "{base} is skipped");
+            let own = read.call1((&base,)).expect("the reading answers");
+            assert!(
+                own.cast::<PyDict>().is_ok_and(PyDictMethods::is_empty),
+                "{base} holds no annotations"
+            );
+        }
+        for class in listed("others") {
+            assert!(!annotates_nothing(&class), "{class} is read");
+        }
+    });
+}

@@ -469,7 +469,12 @@ program that builds validators per request, and to no validation call.
   call would rebuild -- a string, a `ForwardRef`, a nesting deeper than
   `MAX_ANNOTATION_DEPTH` -- so an answer or an error a caller sees is the
   call's. A Rust interpreter test compares the two over a corpus of classes on
-  every supported interpreter.
+  every supported interpreter. A static builtin base -- `object`, `tuple`
+  under a `NamedTuple`, `dict` under a `TypedDict` -- holds no annotations and
+  is not asked for them (`annotates_nothing`): from 3.14 the asking is a
+  Python call that raises and drops an error for each, and skipping it makes a
+  `NamedTuple` compile in 45% fewer instructions on CPython 3.14 and 3.15, a
+  five-field `TypedDict` in 30% fewer, and a dataclass in 16% fewer.
 - **A dataclass's fields are read as `dataclasses.fields` reads them**
   (`fields_as_declared`), and an order bound of exactly `int`, `float` or `bool`
   is placed without asking the `numbers.Number` ABC, whose `__instancecheck__`

@@ -7,7 +7,8 @@
 //! `isinstance` atom. The section "What a class declares" in
 //! `docs/dev/03-frontend.md` is this module.
 
-use pyo3::exceptions::PyValueError;
+use pyo3::PyTypeInfo;
+use pyo3::exceptions::{PyBaseException, PyException, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
@@ -533,6 +534,8 @@ const MAX_ANNOTATION_DEPTH: usize = 64;
 /// `type(None)`. What the call adds is `_eval_type` over each value, and that
 /// returns the value unchanged unless [`evaluates`] says otherwise. A class
 /// marked `__no_type_check__` is left to the call, which answers `{}` for it.
+/// A base [`annotates_nothing`] names contributes nothing on any release, and
+/// is not asked.
 ///
 /// **Equal to the call's answer, and the objects themselves.** Two values
 /// differ only where `_eval_type` rebuilds a builtin alias, and every such
@@ -553,6 +556,9 @@ pub(super) fn annotations_as_written<'py>(
     let mut hints = PyDict::new(py);
     let mro = ty.getattr(intern!(py, "__mro__"))?;
     for base in mro.cast::<PyTuple>()?.iter().rev() {
+        if annotates_nothing(&base) {
+            continue;
+        }
         let own = if let Some(get_annotations) = &names.get_annotations {
             get_annotations.bind(py).call1((&base,))?
         } else {
@@ -599,7 +605,36 @@ pub(super) fn annotations_as_written<'py>(
     Ok(Some(hints))
 }
 
-/// Whether `typing._eval_type` would hand back anything other than `value`.
+/// Whether `base` is a builtin class whose own annotations are none on every
+/// release: `object`, and the builtins a class's `__mro__` most often holds
+/// beside it -- `tuple` under a `NamedTuple`, `dict` under a `TypedDict`.
+///
+/// Each is a static type, which refuses an assignment to any name, and holds
+/// neither `__annotations__` nor `__annotate__` in its namespace, so what
+/// either reading takes from it is the empty table. Read anyway, it is a call
+/// into `annotationlib.get_annotations` from 3.14, where a static type's
+/// `__annotations__` and `__annotate__` answer by raising -- an
+/// `AttributeError` with its message formatted, then dropped -- for every class
+/// a build compiles; and a namespace lookup below 3.14.
+pub(super) fn annotates_nothing(base: &Bound<'_, PyAny>) -> bool {
+    const STATIC: [fn(Python<'_>) -> Bound<'_, PyType>; 12] = [
+        PyAny::type_object,
+        PyTuple::type_object,
+        PyDict::type_object,
+        PyList::type_object,
+        PyInt::type_object,
+        PyFloat::type_object,
+        PyString::type_object,
+        PyBytes::type_object,
+        PySet::type_object,
+        PyFrozenSet::type_object,
+        PyBaseException::type_object,
+        PyException::type_object,
+    ];
+    STATIC.iter().any(|class| base.is(class(base.py())))
+}
+
+/// Whether `typing._eval_type` would hand back anything other than `value`./// Whether `typing._eval_type` would hand back anything other than `value`.
 ///
 /// It resolves a forward reference, and descends only into the `__args__` of
 /// the three alias classes. A builtin `types.GenericAlias` it rebuilds as

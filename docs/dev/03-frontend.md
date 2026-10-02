@@ -300,6 +300,15 @@ the call runs, wherever `typing._eval_type` would rebuild a value: a string, a
 `ForwardRef`, a builtin alias with a string argument, an unpacked alias, a
 `collections.abc.Callable`, or a class marked `__no_type_check__`. A failure
 inside the reading is a decline too, so an error a caller sees is the call's.
+A base among `object`, `tuple`, `dict` and the other static builtins
+`annotates_nothing` names is not read at all: no assignment reaches such a type
+and its namespace holds neither `__annotations__` nor `__annotate__`, so it
+contributes the empty table on every release. From 3.14 reading it anyway is a
+call into `annotationlib.get_annotations`, where those two names raise an
+`AttributeError` with its message formatted for the call to drop -- most of a
+`NamedTuple`'s build on 3.14 and 3.15, whose `__mro__` ends in `tuple` and
+`object`. `a_builtin_base_holding_no_annotations_is_not_asked_for_them` holds
+the list to the reading it skips.
 The invariant is equality with the call, and two tests hold it: the Rust
 interpreter test compares the dicts on the interpreter the coverage lane
 builds, and `tests/test_classes.py` compares the validators on every
