@@ -272,26 +272,24 @@ gate only catches what it exercises:
 - the **binding** shapes (`--binding`, `--binding-boundary`,
   `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-mapping`,
   `--binding-subclass`, `--binding-recursive`, `--binding-deep`,
-  `--binding-refined`, `--binding-nullable`,
+  `--binding-refined`, `--binding-nullable`, `--binding-set`,
   `--binding-json`, `--binding-json-reject`, `--binding-json-union`,
   `--binding-json-open`, `--binding-json-deep`, `--binding-pattern`,
   `--binding-build`, `--binding-annotated`, `--binding-object`,
   `--binding-protocol`, `--binding-relation`,
   `--binding-explain`, `--binding-explain-accept`) —
-  membership over a live Python value, the call boundary
-  alone, a wide record closed, the same record walked over a value whose keys
-  are interned, the record open the way a `TypedDict` is, a `dict[str, int]`
-  read through its clause, walking a `NamedTuple`, a recursive schema's
-  descent, a value nested twenty-five deep,
-  elements that each read a refinement's bound, a list of `int | None`, parsing
-  and walking a JSON document -- accepted, rejected halfway, as a union of two
-  record kinds, read
-  through a key-type clause, and against a recursive schema -- matching a
-  string against a compiled pattern, building a validator
-  from its Python spelling, compiling one written as a `TypedDict` of refined
-  integers, compiling a fifty-field dataclass or a fifty-member protocol,
-  relating two dataclasses, and explaining a failure in a record or accepting
-  one in the same mode. The walk is the shipped
+  membership over a live Python value, the call boundary alone, a wide record
+  closed, the same record walked over a value whose keys are interned, the
+  record open the way a `TypedDict` is, a `dict[str, int]` read through its
+  clause, walking a `NamedTuple`, a recursive schema's descent, a value nested
+  twenty-five deep, elements that each read a refinement's bound, a list of
+  `int | None`, a `set[str]`, parsing and walking a JSON document -- accepted,
+  rejected halfway, as a union of two record kinds, read through a key-type
+  clause, and against a recursive schema -- matching a string against a compiled
+  pattern, building a validator from its Python spelling, compiling one written
+  as a `TypedDict` of refined integers, compiling a fifty-field dataclass or a
+  fifty-member protocol, relating two dataclasses, and explaining a failure in a
+  record or accepting one in the same mode. The walk is the shipped
   hot path neither pure-Rust workload reaches; schema construction grew twelve
   percent over a release cycle while only the walk was counted, and an open
   record was read a third dearer than a closed one while only the closed one

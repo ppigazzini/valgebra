@@ -258,6 +258,9 @@ pub enum BindingShape {
     /// reader of its own beside the one for a single kind that the walk shape
     /// reaches.
     Nullable,
+    /// A `set[str]` of sixty-four strings: a set, read through its own
+    /// iterator rather than by position, which no other shape reaches.
+    Set,
 }
 
 impl BindingShape {
@@ -289,6 +292,7 @@ impl BindingShape {
             "refined" => BindingShape::Refined,
             "mapping" => BindingShape::Mapping,
             "nullable" => BindingShape::Nullable,
+            "set" => BindingShape::Set,
             _ => return None,
         })
     }
@@ -719,6 +723,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
         BindingShape::Refined => spelled_walk(py, iters, REFINED),
         BindingShape::Mapping => spelled_walk(py, iters, MAPPING),
         BindingShape::Nullable => spelled_walk(py, iters, NULLABLE),
+        BindingShape::Set => spelled_walk(py, iters, SET),
         BindingShape::Pattern => pattern_walk(py, iters),
         BindingShape::ExplainAccept => explaining_record(py, iters, Wrong::No),
         BindingShape::Explain => explaining_record(py, iters, Wrong::Yes),
@@ -896,6 +901,10 @@ const MAPPING: &str = "SPELLING = dict[str, int]\n\
 /// Sixty-four integers and `None`, alternating.
 const NULLABLE: &str = "SPELLING = list[int | None]\n\
      VALUE = [i if i % 2 else None for i in range(64)]\n";
+
+/// Sixty-four strings in a set.
+const SET: &str = "SPELLING = set[str]\n\
+     VALUE = {f'k{i}' for i in range(64)}\n";
 
 /// Build a shape's `SPELLING` through the frontend and walk its `VALUE`.
 fn spelled_walk(py: Python<'_>, iters: usize, source: &str) -> u64 {
