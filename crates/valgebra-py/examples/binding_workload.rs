@@ -28,7 +28,7 @@ fn main() {
             "unknown shape {name:?}: walk, boundary, record, keys, build, \
              annotated, explain, explain-accept, open, subclass, json, \
              pattern, object, recursive, json-reject, json-union, json-open, \
-             json-deep, deep, refined, protocol"
+             json-deep, deep, refined, protocol, mapping"
         );
         std::process::exit(2);
     };

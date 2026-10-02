@@ -248,6 +248,11 @@ pub enum BindingShape {
     /// refined values, where every element reads its bound. Every other walk
     /// shape checks a kind and nothing more.
     Refined,
+    /// A `dict[str, int]` of sixty-four entries: a mapping, read entry by entry
+    /// through its clause. Every record shape names its keys and asks the dict
+    /// for each; a mapping declares none, so each entry is iterated and asked
+    /// of the clause, a reading no other shape over a Python value reaches.
+    Mapping,
 }
 
 impl BindingShape {
@@ -277,6 +282,7 @@ impl BindingShape {
             "json-deep" => BindingShape::JsonDeep,
             "deep" => BindingShape::Deep,
             "refined" => BindingShape::Refined,
+            "mapping" => BindingShape::Mapping,
             _ => return None,
         })
     }
@@ -705,6 +711,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
         BindingShape::JsonDeep => json_deep_walk(py, iters),
         BindingShape::Deep => spelled_walk(py, iters, DEEP),
         BindingShape::Refined => spelled_walk(py, iters, REFINED),
+        BindingShape::Mapping => spelled_walk(py, iters, MAPPING),
         BindingShape::Pattern => pattern_walk(py, iters),
         BindingShape::ExplainAccept => explaining_record(py, iters, Wrong::No),
         BindingShape::Explain => explaining_record(py, iters, Wrong::Yes),
@@ -874,6 +881,10 @@ const REFINED: &str = "from typing import Annotated\n\
      \x20       self.ge = ge\n\
      SPELLING = list[Annotated[int, Ge(1000)]]\n\
      VALUE = list(range(1000, 1064))\n";
+
+/// Sixty-four string keys, each holding an integer.
+const MAPPING: &str = "SPELLING = dict[str, int]\n\
+     VALUE = {f'k{i}': i for i in range(64)}\n";
 
 /// Build a shape's `SPELLING` through the frontend and walk its `VALUE`.
 fn spelled_walk(py: Python<'_>, iters: usize, source: &str) -> u64 {

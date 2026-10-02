@@ -270,8 +270,9 @@ gate only catches what it exercises:
   refutation and a repeated goal walk different paths, and a workload that
   asks only for proofs holds a refuting rule to nothing;
 - the **binding** shapes (`--binding`, `--binding-boundary`,
-  `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-subclass`,
-  `--binding-recursive`, `--binding-deep`, `--binding-refined`,
+  `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-mapping`,
+  `--binding-subclass`, `--binding-recursive`, `--binding-deep`,
+  `--binding-refined`,
   `--binding-json`, `--binding-json-reject`, `--binding-json-union`,
   `--binding-json-open`, `--binding-json-deep`, `--binding-pattern`,
   `--binding-build`, `--binding-annotated`, `--binding-object`,
@@ -279,8 +280,9 @@ gate only catches what it exercises:
   `--binding-explain`, `--binding-explain-accept`) —
   membership over a live Python value, the call boundary
   alone, a wide record closed, the same record walked over a value whose keys
-  are interned, the record open the way a `TypedDict` is, walking a
-  `NamedTuple`, a recursive schema's descent, a value nested twenty-five deep,
+  are interned, the record open the way a `TypedDict` is, a `dict[str, int]`
+  read through its clause, walking a `NamedTuple`, a recursive schema's
+  descent, a value nested twenty-five deep,
   elements that each read a refinement's bound, parsing and walking a JSON
   document -- accepted, rejected halfway, as a union of two record kinds, read
   through a key-type clause, and against a recursive schema -- matching a
