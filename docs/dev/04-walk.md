@@ -436,9 +436,14 @@ most of what they cost, and each asks the test directly:
   (`homogeneous_scalar_union`): a thousand elements cost 87% fewer
   instructions, and a tuple of them 90%.
 - **A set of one scalar kind.** `set[str]` and `frozenset[int]` read the kind
-  once for the set and test each element against it in the deciding walk
-  (`check_elements` in `walk/sequence.rs`), reading once for the loop whether
-  the level every element sits at is free.
+  once for the set, and each element is the kind's test, a scan per kind with
+  the test a constant inside it, in the deciding walk (`elements_admitted` in
+  `walk/sequence.rs`) and the explaining one (`explain_elements`), reading
+  once for the scan whether the level every element sits at is free. The
+  explaining scan's sort and report are one function beside the scans
+  (`elements_reported`), so a kind adds a scan and no second copy of the sort.
+  A set of a thousand strings costs 10% fewer instructions to accept that way,
+  and 28% fewer to `validate` (`--binding-set`).
 - **A parsed array.** A document's array of one scalar kind, or of a union of
   them, is one test an element (`json_array_matches`); a document is never
   explained, so the loop records nothing.

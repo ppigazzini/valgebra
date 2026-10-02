@@ -1050,6 +1050,12 @@ pub(super) fn check_frozenset(
 /// Membership for either set-like container: the value is of the container's
 /// kind and every element belongs to `element`. One rule for both, because the
 /// two differ only in the type they admit and the code they report.
+#[expect(
+    clippy::redundant_closure_for_method_calls,
+    reason = "the explaining reader takes a test over a `Value` of any \
+              lifetime, and the method path names one lifetime; each closure \
+              is the method, generic over the lifetime the reader hands it"
+)]
 fn check_elements(
     collection: &Collection,
     element: &Schema,
@@ -1078,32 +1084,59 @@ fn check_elements(
         );
     }
     if ctx.mode.explains() {
-        return explain_elements(element, container, value, frame);
+        let (set, schema) = (container, element);
+        return match scalar_of(element).filter(|_| ctx.room_to_descend()) {
+            Some(Scalar::Int) => explain_elements(schema, set, |v| v.is_int(), value, frame),
+            Some(Scalar::Str) => explain_elements(schema, set, |v| v.is_str(), value, frame),
+            Some(Scalar::Float) => explain_elements(schema, set, |v| v.is_float(), value, frame),
+            Some(Scalar::Bool) => explain_elements(schema, set, |v| v.is_bool(), value, frame),
+            Some(Scalar::Bytes) => explain_elements(schema, set, |v| v.is_bytes(), value, frame),
+            Some(Scalar::NoneType) => explain_elements(schema, set, |v| v.is_none(), value, frame),
+            Some(Scalar::Everything | Scalar::Nothing) | None => {
+                let admits = |v: &Value<'_, '_>| admitted_quietly(schema, v, ctx);
+                explain_elements(schema, set, admits, value, frame)
+            }
+        };
     }
     // A set of one scalar kind, as a sequence of one is: the element schema is
-    // read once and each element tested against the kind, without the walk's
-    // per-element signal check and dispatch. The level every element sits at is
-    // taken once for the loop rather than skipped, so this answers what the
-    // explaining walk beside it answers at the depth bound.
-    let scalar = scalar_of(element).filter(|_| ctx.room_to_descend());
-    let mut ok = true;
-    let scan = scan_set(container, ctx, |item| {
-        let value = Value::Py(item);
-        ok &= match scalar {
-            Some(kind) => scalar_admits(kind, &value),
-            None => member(element, &value, frame),
-        };
-        if !ok && stop(ctx) {
-            ControlFlow::Break(())
-        } else {
-            ControlFlow::Continue(())
+    // read once and each element tested against the kind, a scan per kind with
+    // its test a constant inside it, without the walk's per-element signal
+    // check and dispatch. The level every element sits at is taken once for
+    // the scan rather than skipped, so this answers what the explaining walk
+    // beside it answers at the depth bound.
+    let scan = match scalar_of(element).filter(|_| ctx.room_to_descend()) {
+        Some(Scalar::Int) => elements_admitted(container, ctx, |v| v.is_int()),
+        Some(Scalar::Str) => elements_admitted(container, ctx, |v| v.is_str()),
+        Some(Scalar::Float) => elements_admitted(container, ctx, |v| v.is_float()),
+        Some(Scalar::Bool) => elements_admitted(container, ctx, |v| v.is_bool()),
+        Some(Scalar::Bytes) => elements_admitted(container, ctx, |v| v.is_bytes()),
+        Some(Scalar::NoneType) => elements_admitted(container, ctx, |v| v.is_none()),
+        Some(kind @ (Scalar::Everything | Scalar::Nothing)) => {
+            elements_admitted(container, ctx, |v| scalar_admits(kind, v))
         }
-    });
+        None => elements_admitted(container, ctx, |v| member(element, v, frame)),
+    };
     match scan {
-        Scan::Complete => ok,
+        Scan::Complete => true,
         Scan::Stopped => false,
         Scan::Unreadable => mutated(value, frame),
     }
+}
+
+/// Scan a set until an element does not pass `admits`: the deciding walk's
+/// reading, which stops at the first element that refuses.
+fn elements_admitted(
+    set: &Bound<'_, PyAny>,
+    ctx: Ctx<'_>,
+    mut admits: impl FnMut(&Value<'_, '_>) -> bool,
+) -> Scan {
+    scan_set(set, ctx, |item| {
+        if admits(&Value::Py(item)) {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    })
 }
 
 /// Report a set's failing elements in an order that is a property of the value
@@ -1116,12 +1149,17 @@ fn check_elements(
 /// model promises they do not. Every element is walked and the failures are
 /// ordered by what they report; fail-fast then keeps the first of *that* order,
 /// which costs a full scan of a set that is already failing. An element the
-/// walk would admit reports nothing, so one [`admitted_quietly`] answers is
-/// passed without a probe of its own: `validate` over a `set[str]` that belongs
-/// read every element that way, at three quarters again what `is_valid` pays.
+/// walk would admit reports nothing, so one `admits` answers is passed without
+/// a probe of its own: [`admitted_quietly`] for any element schema, and for a
+/// scalar kind with a level free under the set the kind's own test, chosen
+/// once for the set as the deciding loop chooses it. A test runs no Python, so
+/// an element it passes is one the walk passes; asked through
+/// [`admitted_quietly`] at every element, it cost `validate` over a `set[str]`
+/// a fifth again what `is_valid` pays on 3.14.
 fn explain_elements(
     element: &Schema,
     container: &Bound<'_, PyAny>,
+    admits: impl Fn(&Value<'_, '_>) -> bool,
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
@@ -1129,7 +1167,7 @@ fn explain_elements(
     let where_it_is = &mut *frame.path;
     let mut failures: Vec<(String, Vec<Violation>)> = Vec::new();
     let scan = scan_set(container, ctx, |item| {
-        if admitted_quietly(element, &Value::Py(item), ctx) {
+        if admits(&Value::Py(item)) {
             return ControlFlow::Continue(());
         }
         let mut reported = Vec::new();
@@ -1149,9 +1187,20 @@ fn explain_elements(
     if matches!(scan, Scan::Unreadable) {
         return mutated(value, frame);
     }
+    elements_reported(failures, frame)
+}
+
+/// Report the failures [`explain_elements`] gathered, ordered by what they say.
+///
+/// Apart from the scan, which takes a test of its own per kind, so the one
+/// sort and report serve them all.
+fn elements_reported(
+    mut failures: Vec<(String, Vec<Violation>)>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
     let ok = failures.is_empty();
     failures.sort_by(|left, right| left.0.cmp(&right.0));
-    let reported = if ctx.mode.stops_at_first() {
+    let reported = if frame.ctx.mode.stops_at_first() {
         1
     } else {
         failures.len()

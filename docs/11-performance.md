@@ -572,7 +572,8 @@ program that builds validators per request, and to no validation call.
   and runs a loop whose type test is a constant, compiled out of line from the
   rest of the sequence walk so that an edit elsewhere does not move its register
   allocation (`--binding`). A set, a frozenset and a parsed JSON array take the
-  same reading.
+  same reading, a set with a scan per kind in both the deciding and the
+  explaining walk (`--binding-set`).
 - **A list is read through a snapshot where that pays.** Reading a list element
   hands out an owned reference, a count written on the element twice; a tuple
   copy pays those writes in two loops inside the interpreter and none in the

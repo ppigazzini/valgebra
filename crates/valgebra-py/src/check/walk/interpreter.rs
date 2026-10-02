@@ -5150,6 +5150,37 @@ fn a_list_of_each_scalar_kind_is_explained_by_its_own_test() {
     });
 }
 
+/// A set and a frozenset of each scalar kind answer alike in both modes
+/// through the kind's own scan, deciding and explaining: every element
+/// passing, or one failing, which the report names.
+#[test]
+fn a_set_of_each_scalar_kind_is_scanned_by_its_own_test() {
+    Python::attach(|py| {
+        for (kind, good, bad) in scalar_kinds() {
+            for (schema, wrap) in [
+                (Schema::set(kind.clone()), "set"),
+                (Schema::frozen_set(kind.clone()), "frozenset"),
+            ] {
+                if let Some(good) = good {
+                    let value = evaluate(py, &format!("{wrap}([{good}])"));
+                    assert!(decide(py, &schema, &value, &[], &[]), "{wrap} of {good}");
+                }
+                let Some(bad) = bad else {
+                    continue;
+                };
+                let source = match good {
+                    Some(good) => format!("{wrap}([{good}, {bad}])"),
+                    None => format!("{wrap}([{bad}])"),
+                };
+                let value = evaluate(py, &source);
+                assert!(!decide(py, &schema, &value, &[], &[]), "{source}");
+                let (_, violations) = explain(py, &schema, &value, &[], &[]);
+                assert_eq!(violations.len(), 1, "{source}");
+            }
+        }
+    });
+}
+
 /// A list whose element is a union of literals is read by the union's table,
 /// found once for the list, where a level is free under it: an element the
 /// table decides is its answer, one it does not decide is walked, and the
