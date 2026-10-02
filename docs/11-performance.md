@@ -841,7 +841,16 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   the one loop where a goal repeats.
 - **Comparing an order bound as a native integer**: 28% dearer on
   `--binding-refined`, since reading a Python integer out costs more than the
-  rich comparison it would replace.
+  rich comparison it would replace. Read once per value and once per bound as
+  a machine word, it is still 4.6% dearer on CPython 3.14, and an `int` past
+  the word raises on every read, nearly four times the cost; only a `float`,
+  whose value is a field, reads cheaper.
+- **Answering a union of scalars by the element's exact type**, from a table
+  of the builtin types the union's kinds admit built once per list: a list of a
+  thousand `int | str` costs 25% fewer instructions in the PGO wheel, but an
+  eight-element list costs 26% more for the table, a homogeneous tuple of
+  `int | None` 26% more, and `--binding-nullable` reads 6.8% dearer on CPython
+  3.12, where the member test the table replaces is already inlined.
 - **A replacement global allocator**: up to 28% cheaper on the JSON shapes and
   12% dearer on the call boundary, past the gate's ceiling, for a C dependency
   on every wheel target.
