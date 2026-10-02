@@ -275,7 +275,7 @@ gate only catches what it exercises:
   `--binding-json`, `--binding-json-reject`, `--binding-json-union`,
   `--binding-json-open`, `--binding-json-deep`, `--binding-pattern`,
   `--binding-build`, `--binding-annotated`, `--binding-object`,
-  `--binding-protocol`,
+  `--binding-protocol`, `--binding-relation`,
   `--binding-explain`, `--binding-explain-accept`) —
   membership over a live Python value, the call boundary
   alone, a wide record closed, the same record walked over a value whose keys
@@ -286,8 +286,9 @@ gate only catches what it exercises:
   through a key-type clause, and against a recursive schema -- matching a
   string against a compiled pattern, building a validator
   from its Python spelling, compiling one written as a `TypedDict` of refined
-  integers, compiling a fifty-field dataclass, and explaining a failure in a
-  record or accepting one in the same mode. The walk is the shipped
+  integers, compiling a fifty-field dataclass or a fifty-member protocol,
+  relating two dataclasses, and explaining a failure in a record or accepting
+  one in the same mode. The walk is the shipped
   hot path neither pure-Rust workload reaches; schema construction grew twelve
   percent over a release cycle while only the walk was counted, and an open
   record was read a third dearer than a closed one while only the closed one
@@ -342,6 +343,15 @@ gate only catches what it exercises:
   third is what the ratio is about. A walk regression therefore shows here at
   roughly a third of its size, which is the price of measuring the shape a
   caller actually runs rather than a walk with the parse taken out.
+
+  **And a relation is not a decision workload.** The four decision shapes
+  relate classes that are identities with nothing behind them, so what the
+  bindings read off a real class -- the namespaces of its `__mro__`, which a
+  refutation about the class stands on -- had no count. Read whole for every
+  class of every query, with `object`'s namespace among them and a `hasattr`
+  per value, it made one relation between two dataclasses six times dearer on
+  3.14 and twenty-two times on 3.12, with every gate green. `--binding-relation`
+  relates two of them through `relation_to`.
 
   **And a compiled pattern is not a comparison.** Every other refinement costs
   an operator; a pattern costs a compiled object, built once when the

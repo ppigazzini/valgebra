@@ -757,7 +757,7 @@ jobs:
             uv run --no-sync python scripts/perf_gate.py \
               --binding --binding-boundary --binding-record --binding-keys \
               --binding-build --binding-annotated --binding-object \
-              --binding-protocol \
+              --binding-protocol --binding-relation \
               --binding-subclass --binding-explain --binding-explain-accept \
               --binding-open --binding-json --binding-pattern \
               --binding-recursive --binding-json-reject --binding-json-union \
@@ -785,7 +785,7 @@ jobs:
             uv run --no-sync python scripts/perf_gate.py \
               --binding --binding-boundary --binding-record --binding-keys \
               --binding-build --binding-annotated --binding-object \
-              --binding-protocol \
+              --binding-protocol --binding-relation \
               --binding-subclass --binding-explain --binding-explain-accept \
               --binding-open --binding-json --binding-pattern \
               --binding-recursive --binding-json-reject --binding-json-union \

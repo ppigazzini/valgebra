@@ -155,6 +155,17 @@ pub enum BindingShape {
     /// asks none of that, so a change to how a protocol is read would move no
     /// shape without this one.
     Protocol,
+    /// Relating two **dataclasses**: a two-field `Point` against a one-field
+    /// `Other`, which answers `"not_subset"`.
+    ///
+    /// The one shape that decides a relation through the bindings. A refutation
+    /// about a class stands on a direct instance of it, and what that instance
+    /// can carry is read off the namespaces of the class's `__mro__`, its own
+    /// once per query: the core's decision shapes cannot reach that reading,
+    /// because their classes are identities with nothing behind them. The
+    /// reading is most of what such a relation costs, and no other shape reads
+    /// a class's namespace.
+    Relation,
     /// Walking a `tuple` **subclass** that overrides nothing: a `NamedTuple`,
     /// against `tuple[int, ...]`.
     ///
@@ -255,6 +266,7 @@ impl BindingShape {
             "keys" => BindingShape::Keys,
             "object" => BindingShape::Object,
             "protocol" => BindingShape::Protocol,
+            "relation" => BindingShape::Relation,
             "subclass" => BindingShape::Subclass,
             "json" => BindingShape::Json,
             "pattern" => BindingShape::Pattern,
@@ -421,6 +433,67 @@ fn object_record(py: Python<'_>) -> Py<PyAny> {
         .getattr("SPELLING")
         .expect("the spelling is defined")
         .unbind()
+}
+
+/// The two dataclasses the relation shape relates, each compiled once into the
+/// validator a caller holds.
+fn related_classes(py: Python<'_>) -> (Py<PyAny>, Py<PyAny>) {
+    let module = spelled_module(
+        py,
+        "from dataclasses import dataclass\n\
+         @dataclass\n\
+         class Point:\n\
+         \x20   x: int\n\
+         \x20   y: int\n\
+         @dataclass\n\
+         class Other:\n\
+         \x20   name: str\n",
+    );
+    let compiled = |name: &str| {
+        let mut literals = Pool::default();
+        let mut definitions = Vec::new();
+        let schema = build_schema(
+            &module.getattr(name).expect("the class is defined"),
+            &mut literals,
+            &mut definitions,
+        )
+        .expect("a two-field dataclass always builds");
+        Validator::checked(schema, literals.into_items(), definitions)
+            .expect("a two-field dataclass is within every limit")
+    };
+    let held = |name: &str| {
+        Py::new(py, compiled(name))
+            .expect("a validator always wraps")
+            .into_any()
+    };
+    (held("Point"), held("Other"))
+}
+
+/// `Point`'s relation to `Other`, decided once per iteration.
+///
+/// Asked through the method a caller calls rather than the function behind it:
+/// a second caller in Rust takes that function out of line in the extension,
+/// and the trampoline pays for the call. Kept out of line itself, because the
+/// call's machinery inlined into the dispatcher moves what the other shapes'
+/// loops compile to, which the call-boundary shape counts.
+#[inline(never)]
+fn relation_walk(py: Python<'_>, iters: usize) -> u64 {
+    let (point, other) = related_classes(py);
+    let (point, other) = (point.bind(py), other.bind(py));
+    let name = PyString::new(py, "relation_to");
+    settle_the_heap(py);
+    let mut checksum: u64 = 0;
+    for _ in 0..iters {
+        let relation = point
+            .call_method1(&name, (std::hint::black_box(other),))
+            .expect("relating two dataclasses raises nothing");
+        checksum = checksum.wrapping_add(u64::from(
+            relation
+                .cast::<PyString>()
+                .is_ok_and(|relation| relation == "not_subset"),
+        ));
+    }
+    checksum
 }
 
 /// The three-field `NamedTuple` the subclass walk reads, built once.
@@ -624,6 +697,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             checksum
         }
         BindingShape::Recursive => recursive_walk(py, iters),
+        BindingShape::Relation => relation_walk(py, iters),
         BindingShape::Json => json_walk(py, iters, JSON_DOCUMENT, Expect::Member),
         BindingShape::JsonReject => json_walk(py, iters, JSON_REJECT, Expect::NonMember),
         BindingShape::JsonUnion => json_walk(py, iters, JSON_UNION, Expect::Member),

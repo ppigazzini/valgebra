@@ -86,6 +86,15 @@ exclude_re = [
     "check/walk/record\\.rs:.*: (replace stored(_copy)? -> .*|.* in stored(_copy)?)$",
     "check/walk\\.rs:.*: (replace (held_dict|reads_its_values) -> .*|.* in (held_dict|reads_its_values))$",
     "check/walk/sequence\\.rs:.*: (replace (reads_where_it_lies|storage_of) -> .*|.* in (reads_where_it_lies|storage_of))$",
+    # A function with a body for each side of 3.13 -- `type_has`, which asks
+    # PyO3's `hasattr` from 3.13 and the builtin `hasattr` below it -- has one
+    # body compiled out of the 3.12 the binding sweep links, where every mutant
+    # of it builds and passes, which says nothing about a test. What `cargo
+    # mutants` offers for either body is a `PyResult` no build accepts, so the
+    # exclusion takes no mutant a build could judge out of the sweep. The
+    # interpreter tests read a data descriptor through each body on the
+    # releases that compile it.
+    "oracle\\.rs:.*: (replace type_has -> .*|.* in type_has)$",
     # The explain pass over a keyed map runs only where the map did not match.
     # Running it always reports nothing extra -- a value that matched has no
     # violation to find -- and in the fast mode the violations go to a buffer

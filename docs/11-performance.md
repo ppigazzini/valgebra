@@ -495,11 +495,26 @@ pair again reads neither pool. Relating two tables of ten thousand codes costs
 5.4 million instructions that way, 2.3 million of them the rules' own answer;
 reading the keys afresh for each question costs 15.0 million.
 
-There is no gate on this, and that is deliberate: the instruction budgets cover
-the decision workloads `crates/valgebra-core/examples/` holds -- one for each
-path a relation takes, which `MODES` in `scripts/perf_gate.py` names -- and those
-are what a change to the rules moves. A relation's wall-clock cost is a property
-of the pair, and pinning one would be pinning a number the next rule changes.
+**A refutation about a class reads the class.** It stands on a direct instance
+of the class, and what that instance can carry is read off the namespaces of
+the class's `__mro__`: which names each defines, whether each is a slot or a
+data descriptor, and whether instances carry a `__dict__`. The namespaces of
+`object`, the builtins a kind is read from and `BaseException` are static types
+no assignment reaches, so each is read once for the process; a class's own
+namespace is read once per relation, because an assignment to the class between
+two relations moves what the second one reads. The reading is most of what a
+refutation between two dataclasses costs: twenty thousand of its thirty-two
+thousand instructions on 3.14.
+
+There is no wall-clock gate on this, and that is deliberate: a relation's
+wall-clock cost is a property of the pair, and pinning one would be pinning a
+number the next rule changes. The instruction budgets cover the decision
+workloads `crates/valgebra-core/examples/` holds -- one for each path a relation
+takes, which `MODES` in `scripts/perf_gate.py` names -- and those are what a
+change to the rules moves. What the bindings read off a class is no rule's, and
+no decision workload reaches it, because their classes are identities with
+nothing behind them; `--binding-relation` relates two dataclasses through
+`relation_to` and counts it.
 
 ## Regression gate
 

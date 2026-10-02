@@ -168,10 +168,10 @@ is not a pair of answers. Two flags would spell `Unread` as "never missing and
 never a value", which reads as a fact about the instance -- no direct instance
 carries the field -- and a proof of emptiness could stand on it, where a subclass
 may carry the field and what code returns is not read. `Attributes` holds what the
-bindings read off a class -- each name as a `Member`, the `Hook`, whether there
-is a `__dict__` -- and its constructors are the only way in; `Attributes::reach`
-is the one place the four answers are derived, so both deciders read one
-function.
+bindings read off a class -- each name as a `Member`, in one `Namespace` per
+class on the `__mro__`, the `Hook`, whether there is a `__dict__` -- and its
+constructors are the only way in; `Attributes::reach` is the one place the
+four answers are derived, so both deciders read one function.
 
 ### The modes
 

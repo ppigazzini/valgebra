@@ -902,6 +902,29 @@ fn a_class_says_what_a_direct_instance_can_carry() {
 }
 
 #[test]
+fn a_class_assigned_to_between_two_queries_is_read_again() {
+    // Only the namespaces no assignment reaches are read once for the process.
+    // A class's own is read once per query, so a property assigned to it
+    // between two queries is what the second one reads, and taking it away
+    // again is too.
+    Python::attach(|py| {
+        let class = built(py, "type('Point', (), {'x': 0})");
+        let reach = || {
+            asking(py, vec![class.clone().unbind()], |oracle| {
+                oracle.attribute_reach(ClassIx::new(0), "x")
+            })
+        };
+        assert_eq!(reach(), Some(Reach::AnyValue));
+        class
+            .setattr("x", built(py, "property(lambda self: 0)"))
+            .expect("a plain class takes an attribute");
+        assert_eq!(reach(), Some(Reach::Unread));
+        class.delattr("x").expect("the attribute is there");
+        assert_eq!(reach(), Some(Reach::Anything));
+    });
+}
+
+#[test]
 fn a_record_a_class_cannot_carry_is_not_refuted_against_a_kind() {
     // A class met with a record refutes against a kind on one value: a direct
     // instance carrying the record, which is a plain object and no string. A

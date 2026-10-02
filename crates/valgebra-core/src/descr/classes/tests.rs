@@ -189,6 +189,41 @@ fn the_first_definition_of_a_name_is_the_one_read() {
     assert_eq!(attributes.reach("x"), Reach::Unread);
 }
 
+/// A namespace answers for every name it holds, whatever order they were read
+/// in, and a name it was given twice keeps its first entry. Without a
+/// dictionary each answer is apart from the others: a slot is free, a
+/// definition is code's or the class's, and a name it lacks is never there.
+#[test]
+fn a_namespace_answers_for_each_name_it_holds() {
+    use super::{Attributes, Hook, Member, Namespace, Reach};
+    use std::sync::Arc;
+
+    let namespace = Arc::new(Namespace::new(vec![
+        ("zeta".into(), Member::Descriptor),
+        ("alpha".into(), Member::Slot),
+        ("mid".into(), Member::Plain),
+        ("alpha".into(), Member::Plain),
+    ]));
+    let mut closed = Attributes::new(false, Hook::Neither);
+    closed.inherit(Arc::clone(&namespace));
+    assert_eq!(closed.reach("alpha"), Reach::Anything);
+    assert_eq!(closed.reach("mid"), Reach::Unread);
+    assert_eq!(closed.reach("zeta"), Reach::Unread);
+    assert_eq!(closed.reach("omega"), Reach::Missing);
+
+    // With a dictionary, a plain definition gives way to it and a descriptor
+    // does not; a later namespace answers only for what the first lacks.
+    let mut open = Attributes::new(true, Hook::Neither);
+    open.inherit(namespace);
+    open.inherit(Arc::new(Namespace::new(vec![
+        ("zeta".into(), Member::Plain),
+        ("omega".into(), Member::Descriptor),
+    ])));
+    assert_eq!(open.reach("mid"), Reach::AnyValue);
+    assert_eq!(open.reach("zeta"), Reach::Unread);
+    assert_eq!(open.reach("omega"), Reach::Unread);
+}
+
 /// A class built from nothing but an identity is a plain class: every
 /// attribute is free, which is the reading the snapshot gives until a caller
 /// that can see the class says otherwise.

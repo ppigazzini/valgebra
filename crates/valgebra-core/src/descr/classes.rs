@@ -22,7 +22,7 @@
 //! not name. [`Attributes`] is that part of the snapshot, and [`Reach`] is what
 //! it answers for one name.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::sync::{Arc, OnceLock};
 
 use crate::kind::Kind;
@@ -83,6 +83,40 @@ pub enum Hook {
     Getattribute,
 }
 
+/// The names one class's own namespace defines, with what each holds there.
+///
+/// One per class on a `__mro__`, and shared by every [`Attributes`] whose
+/// `__mro__` the class stands on rather than copied into each: a namespace no
+/// assignment reaches, such as `object`'s, is read once and enters every class
+/// deriving from it as a reference.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Namespace {
+    /// Sorted by name, with one entry per name.
+    names: Box<[(Box<str>, Member)]>,
+}
+
+impl Namespace {
+    /// The namespace defining each of `names` as what it holds. A name given
+    /// twice keeps its first entry.
+    #[must_use]
+    pub fn new(mut names: Vec<(Box<str>, Member)>) -> Namespace {
+        names.sort_by(|(left, _), (right, _)| left.cmp(right));
+        names.dedup_by(|(later, _), (earlier, _)| later == earlier);
+        Namespace {
+            names: names.into_boxed_slice(),
+        }
+    }
+
+    /// What the namespace holds under `name`, where it defines it.
+    fn get(&self, name: &str) -> Option<Member> {
+        let at = self
+            .names
+            .binary_search_by(|(defined, _)| (**defined).cmp(name))
+            .ok()?;
+        self.names.get(at).map(|(_, member)| *member)
+    }
+}
+
 /// What a class's direct instances can carry, read off the class once.
 ///
 /// Three facts, each fixed where the class is made: the names its `__mro__`
@@ -91,9 +125,9 @@ pub enum Hook {
 /// as `ABC.register` moves the order; the snapshot is what a decision reads.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attributes {
-    /// Each name some class in the `__mro__` defines, with what the first one
-    /// to define it holds -- the one a lookup finds.
-    defined: BTreeMap<Box<str>, Member>,
+    /// The namespace of each class in the `__mro__`, in its order: a lookup
+    /// finds a name in the first one to define it.
+    namespaces: Vec<Arc<Namespace>>,
     /// Whether a direct instance has a `__dict__` to hold any attribute.
     carries_dict: bool,
     hook: Hook,
@@ -109,31 +143,33 @@ impl Attributes {
     /// defines.
     #[must_use]
     pub fn plain() -> Attributes {
-        Attributes {
-            defined: BTreeMap::new(),
-            carries_dict: true,
-            hook: Hook::Neither,
-        }
+        Attributes::new(true, Hook::Neither)
     }
 
     /// A class whose instances do or do not carry a dictionary, defining
-    /// `hook` and, until [`Self::define`] says otherwise, no name.
+    /// `hook` and, until [`Self::inherit`] says otherwise, no name.
     #[must_use]
     pub fn new(carries_dict: bool, hook: Hook) -> Attributes {
         Attributes {
-            defined: BTreeMap::new(),
+            namespaces: Vec::new(),
             carries_dict,
             hook,
         }
     }
 
-    /// Record that a class in the `__mro__` defines `name` as `member`.
+    /// Record that the next class in the `__mro__` defines `namespace`.
     ///
-    /// Called in `__mro__` order, so the first definition of a name is the one
-    /// kept: it is the one an attribute lookup finds, and a later class's
-    /// definition of the same name is shadowed by it.
+    /// Called in `__mro__` order, so the first namespace to define a name is
+    /// the one read: it is the one an attribute lookup finds, and a later
+    /// class's definition of the same name is shadowed by it.
+    pub fn inherit(&mut self, namespace: Arc<Namespace>) {
+        self.namespaces.push(namespace);
+    }
+
+    /// Record that the next class in the `__mro__` defines `name` as `member`
+    /// and nothing else: [`Self::inherit`] of a namespace of one name.
     pub fn define(&mut self, name: &str, member: Member) {
-        self.defined.entry(name.into()).or_insert(member);
+        self.inherit(Arc::new(Namespace::new(vec![(name.into(), member)])));
     }
 
     /// What attribute `name` of a direct instance can be.
@@ -142,7 +178,11 @@ impl Attributes {
         if self.hook == Hook::Getattribute {
             return Reach::Unread;
         }
-        match self.defined.get(name) {
+        let defined = self
+            .namespaces
+            .iter()
+            .find_map(|namespace| namespace.get(name));
+        match defined {
             Some(Member::Slot) => Reach::Anything,
             Some(Member::Plain) if self.carries_dict => Reach::AnyValue,
             Some(Member::Plain | Member::Descriptor) => Reach::Unread,

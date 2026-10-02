@@ -59,5 +59,7 @@
   "binding_deep_workload_irefs": 182315000,
   "binding_refined_workload_irefs": 424830032,
   "_binding_protocol_comment": "A fifty-member **protocol**, compiled per iteration: forty-five annotated members and five methods. The one class form whose members are a list `typing` keeps and the frontend classifies name by name -- the cached `__protocol_attrs__`, each member's class attribute along the `__mro__`, its hint, a method's callability -- none of which the dataclass shape beside it asks. The class is made with `types.new_class` in the workload, so the shape names no third-party package.",
-  "binding_protocol_workload_irefs": 744494775
+  "binding_protocol_workload_irefs": 744494775,
+  "_binding_relation_comment": "Two **dataclasses** related per iteration, a two-field `Point` against a one-field `Other`, through the `relation_to` method a caller calls: the one shape that decides a relation through the bindings. A refutation about a class stands on a direct instance of it, and what that instance can carry is read off the namespaces of the class's `__mro__`, the class's own once per query -- a reading the decision shapes cannot reach, because their classes are identities with nothing behind them. The checksum counts the `not_subset` answers.",
+  "binding_relation_workload_irefs": 492617070
 }

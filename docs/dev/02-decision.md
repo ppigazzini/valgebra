@@ -149,10 +149,14 @@ turns those into one answer per name, which is the only place they are read:
 the atom's emptiness asks it through the snapshot, and the rules' reading of a
 class met with a record asks it through `LeafRelations::attribute_reach`, which
 the bindings answer from the same reading, cached once per class for the query
-(`oracle.rs`). Assigning to a class after the snapshot moves the facts as
-`ABC.register` moves the order. `descr/records.rs` holds the attributes as a
-union of always-open record atoms, a field's type living in `T⊥` so that
-optionality is membership rather than a flag with rules of its own.
+(`oracle.rs`). The names are one `Namespace` per class on the `__mro__`, shared
+by every class standing on it rather than copied into each. The namespaces of
+`object`, of the builtins a kind is read from and of `BaseException` are static
+types no assignment reaches, so the bindings read them once per process, and
+every other namespace once per query. Assigning to a class after the snapshot
+moves the facts as `ABC.register` moves the order. `descr/records.rs` holds the
+attributes as a union of always-open record atoms, a field's type living in `T⊥`
+so that optionality is membership rather than a flag with rules of its own.
 
 **A line's structure is one component per representation**, not one per kind, so
 two kinds that hold their values alike share one:
