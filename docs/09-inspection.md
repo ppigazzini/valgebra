@@ -209,6 +209,33 @@ some value of `a` is outside `b` — and `"undecided"` neither. Against `nothing
 it splits `is_empty` the same way. A recipe that reports a narrowing asks for
 `"not_subset"`, as the ones above do.
 
+**A `"subset"` is inclusion over values, not assignability.** A type checker
+relates declarations and holds a mutable member invariant, so it reports a
+`TypedDict` whose `x: int` became `x: bool` as an incompatible change. Over
+values every `bool` is an `int`, so the narrowed record is below the old one,
+and a recipe comparing two versions of an annotation reads `"subset"`:
+
+```python
+from typing import TypedDict
+
+from valgebra import Validator
+
+
+class Before(TypedDict):
+    x: int
+
+
+class After(TypedDict):
+    x: bool
+
+
+assert Validator(After).relation_to(Validator(Before)) == "subset"
+```
+
+A protocol relates the same way, and a plain class is below one only where its
+instances cannot be changed out of it, which its annotations do not decide
+([what a validator cannot do](17-boundaries.md#it-reads-values-not-declarations)).
+
 The [decidability boundary](15-decidability.md) states where the answers are exact.
 The place that bites an inspection script is a deeply nested Boolean
 combination, where the work is a product of the branches. A table of literals on

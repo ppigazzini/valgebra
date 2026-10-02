@@ -704,6 +704,15 @@ impl Validator {
     /// shapes, a leaf relation the oracle declines, a query that spends its
     /// work budget.
     ///
+    /// What `"subset"` proves is inclusion between two sets of values, not a
+    /// static checker's assignability, which is a relation between
+    /// declarations. A checker holds a mutable member invariant, so it refuses
+    /// a `TypedDict` declaring `x: bool` where one declaring `x: int` is wanted,
+    /// and a class declaring `count: bool` where a protocol declares
+    /// `count: int`; every `bool` is an `int`, so both pairs are `"subset"`
+    /// here. And a plain class is below a protocol only where its instances
+    /// cannot be changed out of it, which its declarations do not decide.
+    ///
     /// Runs the same work `is_subtype_of` runs and calls back into Python
     /// wherever it does.
     ///
