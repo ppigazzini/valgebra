@@ -294,14 +294,14 @@ build:
 
 The **element** is what moves, not the check. A list hands out each of its items
 as an owned reference — a count written on the object when the handle is made
-and again when it drops — and the free-threaded build takes the list's lock for
-each one besides. A schema nested twenty-five deep is twenty-five containers of
-one element, so it is almost nothing but that cost, and it reads more than twice
-as dear there as under a global lock. A flat array of ten thousand is read through
-a snapshot of the list under 3.12 and the free-threaded build, which pays the
-counts in two loops inside the interpreter and none in the walk;
-CPython 3.14 with its global lock makes the counts cheap enough that the walk
-reads the list in place (`snapshot_pays` in
+and again when it drops — and the free-threaded build writes each count through
+a call into the interpreter. A schema nested twenty-five deep is twenty-five
+containers of one element, so it is almost nothing but that cost, and it reads
+more than twice as dear there as under a global lock. A flat array of ten
+thousand is read through a snapshot of the list under 3.12 and the free-threaded
+build, which pays the counts in two loops inside the interpreter and none in the
+walk; CPython 3.14 with its global lock makes the counts cheap enough that the
+walk reads the list in place (`snapshot_pays` in
 `crates/valgebra-py/src/check/walk/sequence.rs`). The margin carries across all
 three.
 
@@ -600,6 +600,15 @@ program that builds validators per request, and to no validation call.
   settle is walked, which may run Python, so the list is read in place unless a
   snapshot settles it entirely. A thousand `datetime.date` values cost 76% fewer
   instructions than through the general loop.
+- **A scan holds its container's lock once on a free-threaded build.** `PyO3`'s
+  list and dict iterators take the container's critical section around every
+  step, each a re-entry of the section the scan already holds; their `find_map`
+  takes it once, and the free-threaded build's list and dict scans step inside
+  it. In the 3.14t PGO wheel, `is_valid` on a hundred-entry `dict[str, int]`
+  takes 18% less time, and on a thousand-element `list[tuple[int, str]]` 19%.
+  Under a global lock both scans keep their hand-stepped loops: through
+  `find_map`, a `list[int]` read in place on 3.14 costs 59% more instructions,
+  and the record shapes the dict scan is inlined beside 1.4% more.
 
 ### Records
 

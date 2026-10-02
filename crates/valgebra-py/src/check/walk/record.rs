@@ -38,15 +38,16 @@ use crate::input::Value;
 /// the boundary as a `BaseException` that no caller catches as a validation
 /// failure. The scan asks the same question one step earlier, before each step
 /// rather than inside it, and stops at the entry count it began with, so the
-/// iterator is never advanced into either of the states it panics in. The
-/// critical section keeps a second thread out of the dict for the parts of the
-/// scan that do not call back into the interpreter.
+/// iterator is never advanced into either of the states it panics in.
 ///
-/// That section is the scan's only one on a free-threaded build: the iterator
-/// opens none per entry inside it, so a 3.14t build of the open-record shape
-/// reads one `PyCriticalSection_Begin` per scan and no more. Folding the loop
-/// into `Iterator::all`, which holds a single section for the whole loop, would
-/// hold nothing longer than this does.
+/// The loop is spelled once for a build with a global lock and once for a
+/// free-threaded one (`scan_held_dict`), and the two read the same entries
+/// against the same count. The critical section is no lock on this build, and
+/// the loop keeps both it and its own spelling because the record walk the
+/// scan is inlined into lays out differently without either: spelled through
+/// `find_map`, or without the closure the section takes, the record shapes of
+/// the instruction gate read 1.4% dearer on 3.14, and 1.9% where the keys are
+/// interned.
 ///
 /// `PyPy`'s `PyDict_Next` does not survive the change at all: a key replaced by
 /// another at the same size, while the scan runs Python, is a fatal error inside
@@ -54,6 +55,7 @@ use crate::input::Value;
 /// copy taken before the first visit, which nothing else can reach, while the
 /// size check still reads the value itself. `dict.copy` asks no key for its
 /// hash, so taking it runs no code of the value's.
+#[cfg(not(Py_GIL_DISABLED))]
 pub(super) fn scan_dict<'py>(
     dict: &Bound<'py, PyDict>,
     mut visit: impl FnMut(&Bound<'py, PyAny>, &Bound<'py, PyAny>) -> ControlFlow<()>,
@@ -87,6 +89,60 @@ pub(super) fn scan_dict<'py>(
             Scan::Unreadable
         }
     })
+}
+
+/// [`scan_dict`] on a free-threaded build, where the dict is held for the
+/// whole scan and read by `scan_held_dict`. The critical section keeps a
+/// second thread out of the dict for the parts of the scan that do not call
+/// back into the interpreter.
+#[cfg(Py_GIL_DISABLED)]
+pub(super) fn scan_dict<'py>(
+    dict: &Bound<'py, PyDict>,
+    visit: impl FnMut(&Bound<'py, PyAny>, &Bound<'py, PyAny>) -> ControlFlow<()>,
+) -> Scan {
+    with_critical_section(dict.as_any(), || scan_held_dict(dict, visit))
+}
+
+/// Visit a dict's entries inside the critical section [`scan_dict`] holds on
+/// it, on a free-threaded build.
+///
+/// `PyO3`'s dict iterator takes the dict's section around every step it is
+/// asked for, and inside the section the scan already holds each of those is
+/// a re-entry: a call into the interpreter, a compare-and-swap that fails, a
+/// second call that finds the section already held, and a third to end it, at
+/// every entry. Its `find_map` takes the section once and steps inside it, so
+/// the scan is spelled through it and pays the re-entry once a dict:
+/// `is_valid` on a hundred-entry `dict[str, int]` reads 16% fewer instructions
+/// on 3.14t and 17% fewer on 3.15t, and the 3.14t PGO wheel takes 18% less
+/// time over it.
+///
+/// `find_map` steps the iterator before it hands over each entry, so the
+/// question [`scan_dict`] asks before a step is asked here after each visit,
+/// which is the same point in the scan: nothing runs between taking the count
+/// and the first step, and the scan stops at the count it began with.
+#[cfg(Py_GIL_DISABLED)]
+fn scan_held_dict<'py>(
+    dict: &Bound<'py, PyDict>,
+    mut visit: impl FnMut(&Bound<'py, PyAny>, &Bound<'py, PyAny>) -> ControlFlow<()>,
+) -> Scan {
+    let entries = dict.len();
+    let read_to_end = || {
+        if dict.len() == entries {
+            Scan::Complete
+        } else {
+            Scan::Unreadable
+        }
+    };
+    let mut seen = 0;
+    dict.iter()
+        .find_map(|(key, value)| {
+            if visit(&key, &value).is_break() {
+                return Some(Scan::Stopped);
+            }
+            seen += 1;
+            (seen == entries || dict.len() != entries).then(read_to_end)
+        })
+        .unwrap_or_else(read_to_end)
 }
 
 /// A dict the C-level reads reach the storage of, on `PyPy`: the value itself,

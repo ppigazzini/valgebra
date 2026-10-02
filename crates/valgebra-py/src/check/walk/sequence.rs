@@ -883,6 +883,17 @@ fn storage_of<'py>(tuple: &Bound<'py, PyTuple>, ctx: Ctx<'_>) -> Option<Bound<'p
 /// is [`scan_dict`](super::record::scan_dict)'s rule applied to positions
 /// instead of entries. A tuple needs none of this: it cannot be resized, so its
 /// arm walks the iterator directly over the storage [`tuple_matches`] hands it.
+///
+/// The loop is spelled once for a build with a global lock and once for a
+/// free-threaded one (`scan_held_list`), and the two read the same positions
+/// against the same count. Here the count is compared just before each item is
+/// asked for, and the compiler reads the iterator's own bound against that
+/// comparison and drops it: `is_valid` on a thousand integers read in place on
+/// 3.14 costs 20 instructions an element, against 32 through the free-threaded
+/// spelling. The critical section is no lock on this build, and its closure
+/// stays because the explaining reader inlines the loop differently without
+/// it: `validate` on the same list read 9% more instructions.
+#[cfg(not(Py_GIL_DISABLED))]
 pub(super) fn scan_list<'py>(
     list: &Bound<'py, PyList>,
     mut visit: impl FnMut(usize, &Bound<'py, PyAny>) -> ControlFlow<()>,
@@ -910,6 +921,54 @@ pub(super) fn scan_list<'py>(
             Scan::Unreadable
         }
     })
+}
+
+/// [`scan_list`] on a free-threaded build, where the list is held for the
+/// whole scan and read by `scan_held_list`.
+#[cfg(Py_GIL_DISABLED)]
+pub(super) fn scan_list<'py>(
+    list: &Bound<'py, PyList>,
+    visit: impl FnMut(usize, &Bound<'py, PyAny>) -> ControlFlow<()>,
+) -> Scan {
+    with_critical_section(list.as_any(), || scan_held_list(list, visit))
+}
+
+/// Visit a list's items by position inside the critical section [`scan_list`]
+/// holds on it, on a free-threaded build.
+///
+/// `PyO3`'s list iterator takes the list's section around every step it is
+/// asked for, and inside the section the scan already holds each of those is
+/// a re-entry: a call into the interpreter, a compare-and-swap that fails, a
+/// second call that finds the section already held, and a third to end it, at
+/// every element. Its `find_map` takes the section once and steps inside it,
+/// so the scan is spelled through it and pays the re-entry once a list:
+/// `is_valid` on a `list[tuple[int, str]]` of a thousand elements reads 12%
+/// fewer instructions on 3.14t and 14% fewer on 3.15t, and the 3.14t PGO
+/// wheel takes 19% less time over it.
+///
+/// The count is re-read after each item rather than before it. That is the
+/// same reading: nothing runs between taking the count and asking for the
+/// first item, and the re-read after the last item is the one the scan ends on.
+#[cfg(Py_GIL_DISABLED)]
+fn scan_held_list<'py>(
+    list: &Bound<'py, PyList>,
+    mut visit: impl FnMut(usize, &Bound<'py, PyAny>) -> ControlFlow<()>,
+) -> Scan {
+    let items = list.len();
+    let mut at = 0;
+    list.iter()
+        .find_map(|item| {
+            let flow = visit(at, &item);
+            at += 1;
+            if flow.is_break() {
+                Some(Scan::Stopped)
+            } else if list.len() != items {
+                Some(Scan::Unreadable)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(Scan::Complete)
 }
 
 /// Visit a set's or frozenset's elements, reporting rather than panicking when
@@ -1248,9 +1307,11 @@ const SNAPSHOT_MAX_ELEMENTS: usize = 262_144;
 /// pair cheap enough that the copy is pure cost -- a ten-thousand element list
 /// reads 1.44 ns per element in place there and 1.65 through a snapshot -- so
 /// it reads in place. Below 3.14 the pair dominates: 4.77 against 1.66. The
-/// free-threaded build pays a lock per element on top of the pair, and the copy
-/// takes one lock for the whole list: 8.90 against 2.22, and it pays at every
-/// width, so the lower end of the band does not apply there.
+/// free-threaded build pays each count of the pair through a call into the
+/// interpreter, where the copy writes both inline: 6.63 against 2.05 on 3.14t,
+/// with the list held once for the whole scan, and the copy pays at every
+/// width -- three elements read 65 ns through it against 77 in place -- so the
+/// lower end of the band does not apply there.
 const fn snapshot_pays(len: usize) -> bool {
     if cfg!(Py_GIL_DISABLED) {
         len <= SNAPSHOT_MAX_ELEMENTS

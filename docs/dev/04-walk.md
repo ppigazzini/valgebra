@@ -298,6 +298,19 @@ that moved covers no state the value was ever in, so the scan answers
 `Scan::Unreadable` and the caller reports `mutated_during_validation` rather
 than answering from the part it saw.
 
+**On a free-threaded build a scan holds the container's critical section once.**
+`PyO3`'s list and dict iterators take the container's section around every step
+they are asked for, and inside the one the scan already holds each step is a
+re-entry: a call into the interpreter, a compare-and-swap that fails, a second
+call that finds the section held, and a third to end it. Their `find_map` takes
+the section once and steps inside it, so on the free-threaded build each scan is
+spelled through it, as `scan_held_list` and `scan_held_dict`. Under a global
+lock the section is no lock, and both scans keep their hand-stepped loops: the
+list's count check lets the compiler drop the iterator's own bound, which
+`find_map` does not, and the record walk a dict scan is inlined into lays out
+worse around `find_map`. What each spelling costs is in the doc comments on the
+four.
+
 The sequence case is the one that argues for all of them. A list is walked *by
 position* against a length read once, so a list that grows hides its new items
 from the walk and one that shrinks leaves the walk answering about items that
@@ -368,21 +381,22 @@ written when the handle is made and again when it drops, on an object the walk
 only type-tests. Copying the list into a tuple pays the same two counts inside
 the interpreter, in two loops carrying no dependent work between them, and the
 tuple is frozen -- so its elements are read borrowed and the walk pays neither.
-On the free-threaded build the copy also takes the container's lock once rather
-than once per element. The readers of a list whose every element one test
-settles take that copy where it pays: one scalar kind and a union of them here,
-one class and a union of literals below. What each reading costs per element,
-in place and through the copy on each interpreter, is measured in the doc
-comment on `snapshot_pays` in `crates/valgebra-py/src/check/walk/sequence.rs`,
-the one place those figures live.
+On the free-threaded build an owned handle pays each count through a call into
+the interpreter, where the copy writes both inline. The readers of a list whose
+every element one test settles take that copy where it pays: one scalar kind and
+a union of them here, one class and a union of literals below. What each reading
+costs per element, in place and through the copy on each interpreter, is
+measured in the doc comment on `snapshot_pays` in
+`crates/valgebra-py/src/check/walk/sequence.rs`, the one place those figures
+live.
 
 Which reading is cheaper is a property of the **interpreter**, so the walk asks
 one. CPython 3.14 with its global lock makes the count pair cheap enough that
 the copy is pure cost, and the walk reads in place there; the free-threaded
-build pays a lock per element on top of the pair, and takes the copy on every
-release. Asking requires the interpreter's own flags, which reach the crate that
-emits them and no other, so `crates/valgebra-py/build.rs` re-emits them; without
-it such a question reads "an older interpreter" against every interpreter,
+build pays the pair through those calls, and takes the copy on every release.
+Asking requires the interpreter's own flags, which reach the crate that emits
+them and no other, so `crates/valgebra-py/build.rs` re-emits them; without it
+such a question reads "an older interpreter" against every interpreter,
 silently, and the fast path is taken everywhere.
 
 Two widths bound the copy, `SNAPSHOT_MIN_ELEMENTS` and `SNAPSHOT_MAX_ELEMENTS`
@@ -390,7 +404,7 @@ in `crates/valgebra-py/src/check/walk/sequence.rs`: below the first it cannot
 pay for its own allocation under a global lock, above the second walking it
 costs more cache than the counts it avoids, and the transient stops at two
 mebibytes. The free-threaded build takes the copy at every width up to the
-second, since the lock it saves per element outweighs the allocation. Both are
+second, since the calls it saves per element outweigh the allocation. Both are
 in the bounds table of [00-architecture.md](00-architecture.md), and neither
 changes an answer.
 

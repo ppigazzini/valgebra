@@ -185,6 +185,26 @@ fn a_dict_scan_visits_each_entry_once_and_stops_where_it_is_told() {
             ControlFlow::Continue(())
         });
         assert!(matches!(scan, Scan::Unreadable));
+
+        // A key the scan has passed, swapped at the same size for a new one,
+        // leaves the iterator one entry past the count: it yields the new key,
+        // and PyO3 panics on the step after. The scan stops at the count it
+        // began with, so it takes neither step.
+        let swapped = PyDict::new(py);
+        for i in 0..4 {
+            swapped.set_item(i, i).expect("set_item");
+        }
+        let mut visited = 0;
+        let scan = scan_dict(&swapped, |key, _| {
+            visited += 1;
+            if key.extract::<i64>().unwrap_or(-1) == 1 {
+                swapped.del_item(0).expect("del_item");
+                swapped.set_item("new", 0).expect("set_item");
+            }
+            ControlFlow::Continue(())
+        });
+        assert_eq!(visited, 4, "the scan stops at the count it began with");
+        assert!(!matches!(scan, Scan::Stopped));
     });
 }
 
