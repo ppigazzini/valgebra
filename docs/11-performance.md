@@ -6,8 +6,8 @@ description: Measured benchmarks, datasets, and compared versions.
 
 valgebra compiles a schema once into a Rust validator tree and crosses into Rust
 exactly once per validation call. This page records how that is measured, a
-reproducible baseline against other validators, and the honest limits of the
-numbers.
+reproducible baseline against other validators, the honest limits of the
+numbers, and the techniques behind them.
 
 A speed claim is only as good as its methodology. Every number here states the
 harness, the dataset, the library versions, and the machine class. Re-run the
@@ -256,18 +256,6 @@ Read that as the floor it is: a per-call check cannot be much cheaper than a
 Python call, and the way to spend less is to make fewer calls -- validate the
 list, not each element -- rather than to look for a faster scalar.
 
-**The crossing carries no reference pool.** PyO3 keeps a pool of
-reference-count decrements deferred while a thread is detached, and once any of
-its lazy initialisers has detached and attached again -- the first interned name
-does -- every call into the extension locks that pool's mutex to ask it for
-them: forty instructions and eight branches on `Validator(int).is_valid(1)`.
-The binding never detaches, so the pool is always empty, and
-`.cargo/config.toml` compiles it out; `tests/test_build_flags.py` holds the
-flags there. The instruction gate's boundary shape calls the walk without
-crossing PyO3's call machinery, so the comparison gate's `scalar` is the
-instrument that reads it: 36.7 ns with the pool gone against 39.9 with it, on
-CPython 3.14 and the machine below.
-
 ### Results
 
 End-to-end validation of a value that passes (lower is better):
@@ -361,17 +349,6 @@ the deciding walk stopped, since a field that matched has no violation to report
 the deciding walk is one walk of the fields *after* the failure, and the
 exception.
 
-**What a closed record costs is the interpreter's own dict lookup.** Profiled
-under callgrind on CPython 3.12, fifty probes of a fifty-field record are about
-143 instructions each and 64% of the accepting call; on the failing call the
-deciding and explaining walks together make fifty-one probes for fifty fields,
-the one repeat being the field that failed. The obvious alternative — iterate
-the dict once and resolve each key by name, rather than probe each declared key
-— was measured and is **47.9% dearer**: an iterator step increments two
-refcounts, casts and decodes the key, and hashes it, where a probe on an
-interned key carries its hash already. So the probe is the floor for this shape
-and the walk is at it; the experiment is recorded here rather than re-run.
-
 The scalar shape is absent from the table because it sits near timer resolution,
 and most of it is the call rather than the check, as the floor above shows: on
 CPython 3.14 the competitive gate measures it at a 36.7 ns median over seven
@@ -411,64 +388,289 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
   The JSON input path is measured separately, on the same machine class, in the
   [JSON page](07-json.md).
 
-## How the record fast path is tuned
+## How the speed is made
 
-A closed record is answered by **probing the dict for each declared key**, not
-by scanning the value's entries: the probe carries the key's hash already, where
-an iteration step increments two refcounts, casts and decodes the key, and hashes
-it. The alternative was measured and is 47.9% dearer, which is the figure
-recorded above; the probe is the floor for this shape and the walk is at it.
+Every technique below changes how an answer is reached and never the answer.
+Where a cheap reading stands beside the general one, a test asks both and holds
+them to one verdict, so a rule changed in one and not the other fails. Where
+only the cost moves, no test can tell the readings apart, and a shape of the
+instruction gate holds the cost instead: `scripts/perf_gate.py --against <rev>`
+measures it against a base, and the flag a figure below names is the shape that
+reproduces it. A percentage compares a technique with the general reading it
+stands beside, which stays in the tree as the fallback.
 
-The keys a validator probes with are interned once when it is first used, so a
-wide record rebuilds no name map per call, and a dict whose own keys are interned
-settles each field on a pointer comparison. The keys settle a record whenever
-what its clauses say about a key it does not declare can be said without that
-key's value: a record with no clause refuses the key, the top clause admits it,
-and the `str: anything` a `TypedDict` carries admits it exactly when it is a
-`str` (`Undeclared::of` in `crates/valgebra-py/src/check/walk/record.rs`). Where
-a clause reads an undeclared key together with its value, the entries are
-scanned instead, because that clause has to see each one. The two readings
-answer alike by construction: neither resolves a key by decoding its bytes, so a
-`str` subclass carrying a field's text is found exactly where the dict finds it
-([dev/04-walk.md](dev/04-walk.md)).
+Each entry names the code that owns it. The developer pages carry the arguments
+in full: [the walk](dev/04-walk.md), [the frontend](dev/03-frontend.md), [the
+relations](dev/02-decision.md), [the error model](dev/05-errors.md) and [the
+schema representation](dev/01-schema-ir.md).
 
-A **report** on that record -- one field wrong, explained, raised -- costs about
-three accepting walks, and the count attributes the three. Two are the walks:
-the fast pass, which stops at the field that fails, and the explaining pass,
-which resumes there and reads every field after it so the report names all of
-them, fifty-one dict probes between them. The third is the raise itself, which
-the interpreter charges for building the exception and unwinding to the caller.
-Nothing in the three is a walk over what the schema already knows, so a further
-cut would be a cheaper report rather than a shorter walk. The same count reaches
-a shape the wall clock does not: the same fifty fields under the clause a
-`TypedDict` carries, which the walk reads by its keys as it reads the closed
-record. A shape of its own is what would see that record fall back to the scan,
-which is why both are budgeted in `scripts/perf_budget.json`.
+### Crossing into Rust
 
-## How large literal unions dispatch
+- **One crossing per call.** `is_valid`, `validate` and `is_valid_json` enter
+  the extension once and walk the whole value in Rust. Python runs during a
+  walk only where the schema or the value brings code of its own: a predicate,
+  a class whose metaclass computes `isinstance`, a property read as a field, a
+  value's own `__eq__`. What the crossing itself costs
+  is the floor [the cheapest door](#the-cheapest-door-and-where-the-floor-is)
+  measures.
+- **No reference pool.** PyO3 keeps a pool of reference-count decrements
+  deferred while a thread is detached, and once any of its lazy initialisers
+  has detached and attached again -- the first interned name does -- every call
+  into the extension locks that pool's mutex to ask it for them: forty
+  instructions and eight branches on `Validator(int).is_valid(1)`. The binding
+  never detaches, so the pool is always empty, and `.cargo/config.toml`
+  compiles it out; `tests/test_build_flags.py` holds the flags there. The
+  instruction gate's boundary shape calls the walk without crossing PyO3's call
+  machinery, so the comparison gate's `scalar` is the instrument that reads it:
+  36.7 ns with the pool gone against 39.9 with it, on CPython 3.14 and the
+  machine named above.
+- **A failure is raised in one step.** `into_pyerr` in
+  `crates/valgebra-py/src/errors.rs` builds the `ValidationError` instance and
+  hands it to PyO3 as the error's value, so the raise is one
+  `PyErr_SetObject`. A lazily built error is normalised by releasing the
+  interpreter lock and taking it back, which lets another thread run in the
+  middle of a raise and costs a failing `validate` of a fifty-field record 5.4%
+  more instructions. The exception being handled is chained as `__context__`
+  either way, and a test holds that on every interpreter the suite runs.
+- **Every fixed name is one the interpreter already holds.** An attribute, key
+  or method name crosses as an interned string (`intern!`), which carries its
+  hash; a name handed over as Rust text is decoded into a new string and hashed
+  on every lookup. An attribute that may be absent is asked for with
+  `getattr_opt`, which answers without building an exception wherever the
+  interpreter offers a lookup that does (`PyObject_GetOptionalAttr`, from 3.13).
+- **Internal maps hash with FxHash.** A validator's own maps are keyed by its
+  field names and by object identities, never by a caller's data, so they use
+  `rustc-hash` rather than the standard hasher and its per-map random seed.
 
-A union whose members are all literals (a `Literal["a", "b", ...]` enum, or a
-discriminator) is compiled once into value-keyed sets — one for the integer
-literals, one for the string literals. An exact `int` or `str` value is then a
-single set lookup rather than a scan of every branch, so membership cost stops
-growing with the number of literals. The same-type literal rule is preserved:
-the integer set is consulted only for an exact `int` (never a `bool`), the string
-set only for an exact `str`, and any other value — a `bool`, `float`, `None`, a
-subclass instance, a big integer, or a JSON value — falls back to the linear scan
-that remains the single source of truth. On a 32-literal union this cuts the
-per-call median several-fold; the decision is identical to the scan, locked by
-tests over the cross-type cases. A literal a program spells in its own source is
-usually the very object it validates -- an interned string, a cached small
-integer -- so the table also keeps the addresses of its constants and answers
-that object without reading its text: a thousand-element list of four string
-literals costs 37% fewer instructions.
+### Building a validator
 
-Compiling one is linear too. A constant is read as itself before the frontend's
-dispatch, and the table's sets are sized once, so a `Literal` of two thousand
-string codes compiles in about three million instructions; read through the
-whole dispatch one constant at a time, it costs four times that.
+Compiling happens once per schema, so these are startup costs. They matter to a
+program that builds validators per request, and to no validation call.
 
-## What a relation between two validators costs
+- **A type is dispatched before any `typing` introspection**, and an exact
+  `bool`, `int`, `float`, `str` or `bytes` constant, or a `Validator`, is read
+  before the frontend's dispatch (`builtin_constant` in
+  `crates/valgebra-py/src/build.rs`). A `Literal` of two thousand string codes
+  compiles in about three million instructions; read through the whole dispatch
+  one constant at a time, it costs four times that. The pool indexes its
+  constants by type and value or by address (`Pool::intern_keyed`), so interning
+  one is a lookup rather than a scan.
+- **The `typing` forms are resolved once per interpreter** (`forms` in
+  `build.rs`), and `dataclasses` is imported on the first dataclass a program
+  compiles (`IS_DATACLASS` in `build/classes.rs`). Held among the forms, its
+  import would leave tracked objects behind that lengthen every later
+  garbage-collection pass, and a build that compiles no dataclass would read
+  6.45% dearer on `--binding-build`.
+- **A class's annotations are read as written** wherever evaluating them would
+  hand each one back unchanged (`annotations_as_written` in `build/classes.rs`).
+  `typing.get_type_hints` exists to evaluate forward references, and on a class
+  with none it still copies every base's namespace and walks every annotation
+  in Python. The reading takes the call's steps and declines every case the
+  call would rebuild -- a string, a `ForwardRef`, a nesting deeper than
+  `MAX_ANNOTATION_DEPTH` -- so an answer or an error a caller sees is the
+  call's. A Rust interpreter test compares the two over a corpus of classes on
+  every supported interpreter.
+- **A dataclass's fields are read as `dataclasses.fields` reads them**
+  (`fields_as_declared`), and an order bound of exactly `int`, `float` or `bool`
+  is placed without asking the `numbers.Number` ABC, whose `__instancecheck__`
+  is a Python function (`is_a_number` in `build/refine.rs`). A subclass is still
+  asked, because the ABC reads a value's `__class__`, which a subclass may
+  answer with code of its own.
+- **A refinement marker is read by its type, once.** A marker carries one or
+  two of ten optional attributes and not the rest, and below 3.13 asking for one
+  it does not have is answered by raising. So the frontend asks the marker's
+  *type* which names it carries and remembers the answer, up to
+  `MAX_MARKER_TYPES` types, which costs no exceptions on any interpreter: fifty
+  `Annotated[int, Ge(0)]` fields compile in about 30 us on CPython 3.14 and 27
+  on 3.12, on the machine named above.
+- **A protocol reads its classes' namespaces once**, and a member annotated
+  with a class `type` made is neither `ClassVar` nor `Final` without calling
+  `typing.get_origin`, a Python function (`protocol_members` in
+  `build/classes.rs`; `--binding-protocol`).
+- **A validator is accepted on one walk of each tree.** `Schema::measure` in
+  `crates/valgebra-core/src/ir.rs` reads the nesting depth, the node count and
+  the self-reference marker in one level-by-level walk against two buffers, and
+  descends no native stack.
+- **What the walk needs is built once per validator.** `ValidatorIndex` in
+  `crates/valgebra-py/src/check/index.rs` holds each record's name-to-position
+  plan, its keys and attribute names interned, each literal union's tables and
+  each compiled pattern. It is keyed by the address of the schema's own
+  buffers, which are stable for the life of the immutable schema, so a copied
+  validator never inherits another's index; and a node the build traversal does
+  not reach falls back to reading its own text, so no answer depends on the
+  index being complete.
+
+### Walking a Python value
+
+- **The leaf decision is a test where the answer is.** `admit` in
+  `crates/valgebra-py/src/check/walk/scalar.rs` is inlined, and recording a
+  violation is a `#[cold]` function of its own, so the accepting path is one
+  comparison and the allocating path sits apart from it.
+- **A scalar is its type test.** A union's scalar branch, a mapping clause's key
+  and value, a record's scalar field and the elements of a sequence of a union
+  of scalars ask the type test directly (`scalar_member`, and `field_holds` in
+  `check/walk/record.rs`), reading the depth level and the fatal-signal flag as
+  the general walk does, so each refuses exactly where the walk refuses. A
+  thousand-element `list[int | None]` costs 87% fewer instructions that way. A
+  Rust test holds the direct reading to the walk's verdict for every scalar
+  schema against every kind of value.
+- **An instance of the class itself is read off its type pointer.**
+  `type(obj) is C` answers `isinstance(obj, C)` before `C.__instancecheck__` is
+  asked, which is the test CPython's `PyObject_IsInstance` makes first
+  (`is_exactly_a` in `check/walk.rs`). PyPy implements `isinstance` otherwise,
+  and there the call answers.
+- **A literal's own constant is answered by its address.** A literal written in
+  a program's source is usually the very object it validates: an interned
+  string, a cached small integer. An exact `str`, `int`, `bool`, `bytes` or
+  `None` that *is* the pooled constant equals it, so `is_the_constant` answers
+  without a comparison. A `float` is excluded, since a NaN is not equal to
+  itself.
+- **A refinement borrows its operand and renders nothing on a pass.** The bound
+  is read out of the pool as a borrow for the whole check, so a passing check
+  writes no reference count. A violation's message, which needs the bound's
+  `repr`, is built only at the site that records one (`Expected` in
+  `check/walk/scalar.rs`): `tests/test_refinements.py` counts the bound's
+  `repr` calls, and a hundred passing checks make none.
+- **The recursion trail is a stack, reserved on first use.** Entering a
+  reference pushes a `(value, definition)` pair and leaving pops it (`Trail` in
+  `check/ctx.rs`), so nothing is hashed. The first level reserves `FIRST_TRAIL`
+  pairs in one small request, and a walk that enters no reference allocates
+  nothing (`--binding-recursive`).
+
+### Sequences and sets
+
+- **A sequence of one scalar kind is a loop per kind.** `scalar_list_matches`
+  in `crates/valgebra-py/src/check/walk/sequence.rs` reads the element kind once
+  and runs a loop whose type test is a constant, compiled out of line from the
+  rest of the sequence walk so that an edit elsewhere does not move its register
+  allocation (`--binding`). A set, a frozenset and a parsed JSON array take the
+  same reading.
+- **A list is read through a snapshot where that pays.** Reading a list element
+  hands out an owned reference, a count written on the element twice; a tuple
+  copy pays those writes in two loops inside the interpreter and none in the
+  walk. `snapshot_pays` decides it per interpreter and per length, as [the
+  margins above](#one-of-those-margins-moves-with-the-interpreter) describe. The
+  instruction count of a snapshot reading is *higher* than in place -- the copy
+  is instructions, and the stall it removes is not -- which is why the wall
+  clock decides this one.
+- **A tuple's elements are borrowed**, because a tuple cannot change while the
+  caller holds it; a list cannot be read that way. On CPython,
+  `PyTuple_GET_SIZE` and `PyTuple_GET_ITEM` read a tuple's storage whatever its
+  type overrides, so every tuple, subclass or not, is read where it lies and its
+  type is asked nothing: a `NamedTuple` validates at what a tuple does
+  (`--binding-subclass`). PyPy's `cpyext` answers those accessors through a
+  subclass's own `__len__` and `__iter__`, so there the walk asks the type
+  whether it inherits both and copies any subclass that does not. A length
+  bound asks the type whether its `__len__` is the tuple's own on every
+  interpreter, since it counts what the value holds rather than what an
+  override answers.
+- **A tuple of scalar positions is one type test a position**
+  (`scalar_positions_tuple_matches`), and a list whose element is a union of
+  literals, or one class, is read through that union's table or the
+  type-pointer test (`element_list_matches`). An element the test does not
+  settle is walked, which may run Python, so the list is read in place unless a
+  snapshot settles it entirely. A thousand `datetime.date` values cost 76% fewer
+  instructions than through the general loop.
+
+### Records
+
+- **A closed record probes the keys it declares.** Membership is settled by
+  asking the dict for each declared key and counting: the value belongs exactly
+  when each key it holds matches its field and it holds nothing else, which the
+  dict's own length says, since a dict cannot repeat a key. A declared key is
+  interned with the validator and carries its hash, so each probe is the probe
+  alone, and a key is resolved the way Python resolves one -- a `str` subclass
+  carrying a field's text is found exactly where indexing the dict finds it.
+- **The probe is the floor for this shape.** Profiled under callgrind on CPython
+  3.12, fifty probes of a fifty-field record are about 143 instructions each and
+  64% of the accepting call. Iterating the dict once and resolving each key by
+  name instead was measured and is 47.9% dearer: an iteration step increments
+  two reference counts, casts and decodes the key and hashes it, where a probe
+  on an interned key carries its hash already.
+- **Interned keys meet on a pointer, and Python interns most of them.** A dict
+  probe compares the key it is given with the key it holds by pointer before it
+  compares hashes or bytes. A dict written as a literal, one built from
+  `**kwargs` and an object's `__dict__` all carry interned keys, so a record
+  walk over them settles each field in one comparison: on a fifty-field record,
+  interned keys read about 28% cheaper than keys that are not
+  (`--binding-keys` against `--binding-record`). Keys parsed from JSON or built
+  with f-strings are not interned and take the hash-and-compare path, which is
+  what the figures on this page are measured over; `sys.intern` on the keys of a
+  dict you validate in a loop is worth trying if that loop is your bottleneck.
+- **An open record is read by its keys too.** A `TypedDict` admits keys it does
+  not declare through the clause `str: anything`, and what that clause says
+  about an undeclared key -- it is admitted exactly when it is a `str` -- can be
+  said without reading its value (`Undeclared::of` in
+  `crates/valgebra-py/src/check/walk/record.rs`; `--binding-open`). A record
+  whose clause reads a key together with its value scans its entries, because
+  that clause has to see each one.
+- **A dataclass's attribute names are interned once per validator**, so
+  `getattr` is handed an object the interpreter already holds.
+
+### Unions and literals
+
+- **A union of literals is a table.** A union whose members are all literals --
+  a `Literal["a", "b", ...]`, a discriminator -- is compiled once into
+  value-keyed sets, one for its integer literals and one for its string
+  literals (`UnionPlan` in `crates/valgebra-py/src/check/index.rs`). An exact
+  `int` or `str` value is one set lookup, so the cost stops growing with the
+  number of literals. The integer set is consulted only for an exact `int`
+  (never a `bool`) and the string set only for an exact `str`; any other value
+  -- a `bool`, a `float`, `None`, a subclass instance, a JSON value -- falls
+  back to the scan, which remains the single source of truth, and tests hold
+  the two to one verdict over the cross-type cases. The table also keeps its
+  constants' addresses, so a value that is the constant itself is answered
+  without reading its text: a thousand-element list of four string literals
+  costs 37% fewer instructions than reading each value's text.
+- **The closest branch is searched within a bound.** A failing union reports
+  the branch whose first failure lies deepest, and the search re-walks at most
+  `CLOSEST_BRANCH_PROBE_LIMIT` branches, so a very wide union bounds the cost of
+  its own report.
+
+### JSON
+
+- **`is_valid_json` walks the parsed document in place.** The walk reads a
+  value that is either a Python object or a parsed JSON value, so a document is
+  checked without building Python objects for it; the two sources run one walk
+  and stay equivalent by construction, which a property test holds over random
+  schemas and documents ([the JSON page](07-json.md) has the figures).
+- **A closed record reads a document's keys through its plan, once.** Each key
+  of the parsed object is resolved through the record's name-to-position plan
+  and every declared field's value gathered before any is checked, because a
+  repeated key means the document's last entry, as `json.loads` has it. The
+  gathered table sits on the stack for a record of up to `FOUND_ON_STACK`
+  fields.
+- **A parsed object's keys are strings.** A clause keyed by `str` therefore
+  admits every key of a parsed object, and covering a free-form section is a
+  check of its values alone. An object of up to `SMALL_OBJECT` entries is
+  covered where it lies -- an entry is the one the document means exactly when
+  no later entry repeats its key -- and a wider one through a table of last
+  values.
+
+### Reporting a failure
+
+- **`validate` is one explaining walk**, and the cheap readings serve it. An
+  explaining walk records nothing of what it admits, so an element that passes
+  its type test is answered by the test (`admitted_quietly` in
+  `check/walk/scalar.rs`), and a sequence of scalars is read as its tests, an
+  element that fails being walked at its own position (`list_explained`,
+  `tuple_explained`). `validate` on a thousand-element `list[int]` that belongs
+  executes about a fifth of the instructions the general element loop takes.
+- **The explaining walk resumes where the deciding walk stopped**, as
+  [the closest races](#the-closest-races) describe: a field the first walk
+  passed has no violation to report (`--binding-explain`).
+- **A report builds each key and string once.** The keys of the error model are
+  interned, a violation's message and path are built once and shared between
+  the error item and the attribute that mirrors it, and a path segment shares
+  the field name the schema already holds.
+- **A value summary is bounded while it is built.** Every violation summarises
+  the value it is about, and a container is rendered through `reprlib` under a
+  depth and width bound (`BOUNDED_REPR` in `crates/valgebra-py/src/errors.rs`)
+  rather than rendered whole and cut, so reporting on a value nested twenty
+  thousand deep takes about a millisecond. A value small enough to print
+  renders exactly as `repr` would.
+
+### What a relation between two validators costs
 
 `is_subtype_of`, `relation_to` and `is_equivalent` are not the membership walk,
 and they have a cost of their own with two clear levels. A pair a **rule**
@@ -487,13 +689,38 @@ a structure on the other -- a class deriving from no builtin, a complement as
 the subject -- and a bound that has to be *compared* rather than matched, such
 as a list against a length-bounded list of the same element.
 
+- **The cheap questions are asked first.** A node is a subtype of itself, which
+  a pointer comparison answers before anything else; a universe on the right is
+  read off the region set the query already holds; a schema below a union is
+  first looked for among the union's branches, which keeps widening a literal
+  union linear in its members; and the readings that refute a pair no rule
+  places are asked in the order they cost, the walk of both subtrees last
+  (`crates/valgebra-core/src/decision.rs`).
+- **The set representation is asked only where the rules are silent.** Both
+  deciders answer in three values, so the descriptor is asked where the rules
+  answer *unknown*, never where they proved the answer.
+- **Records compare by a cursor.** Two name-sorted field lists are walked
+  together, each lookup one ordering comparison, with no table built per call
+  (`FieldCursor` in `decision/records.rs`); a record whose fields repeat one
+  schema asks that goal once.
+- **Every query spends a work budget** (`spend` in `decision.rs`), and returns
+  the conservative answer once it is spent, so a deeply nested Boolean
+  combination stops rather than running unbounded.
+- **The set representation shares what it does not edit.** An automaton holds
+  its edge guards and its word automata by handle, a complement of a minimal
+  automaton keeps it minimal, and a question about which kinds a descriptor
+  reaches is read off its components (`Descr::within`, `Descr::reaches` in
+  `descr/mod.rs`) rather than answered by building a meet and testing it.
+
 **A pair's constants are read once per validator, not once per question.**
 Relating two validators pools one's constants into the other's, and the key a
 constant is pooled by is read out of the interpreter. Each validator keeps the
 keys of its own pool from the first relation it is a side of, so asking about a
 pair again reads neither pool. Relating two tables of ten thousand codes costs
 5.4 million instructions that way, 2.3 million of them the rules' own answer;
-reading the keys afresh for each question costs 15.0 million.
+reading the keys afresh for each question costs 15.0 million. Two validators
+built alike compare equal in one pass over their members, and a validator keeps
+its hash once computed, as a `frozenset` does.
 
 **A refutation about a class reads the class.** It stands on a direct instance
 of the class, and what that instance can carry is read off the namespaces of
@@ -515,6 +742,65 @@ change to the rules moves. What the bindings read off a class is no rule's, and
 no decision workload reaches it, because their classes are identities with
 nothing behind them; `--binding-relation` relates two dataclasses through
 `relation_to` and counts it.
+
+### The schema representation
+
+- **A node carries its children by a shared handle.** A child is a shared
+  pointer and a node's lists are shared slices, so carrying a subtree across a
+  rebuild is a reference count rather than a copy; a field's name is an
+  `Arc<str>`, atomic because a validator is shared across threads on a
+  free-threaded interpreter.
+- **A transform hands back what it was given when nothing changed**, so opening
+  a schema that holds no record, or shifting the half of a composition whose
+  indices do not move, returns the caller's own handle.
+- **A node built twice is one node.** A member list, field list, clause list or
+  child built twice is one handle, held in a per-thread, direct-mapped table of
+  weak references (`crates/valgebra-core/src/ir/intern.rs`). Sharing is
+  decided by a test stricter than structural equality -- the same allocation,
+  or the same value in every field -- so a caller cannot observe which handle
+  it got; and the table is what makes two equal schemas cheap for a relation to
+  compare.
+- **Lists are assembled in per-thread buffers** and moved into the node, and
+  the lists every record shares -- an open record's catch-all, a closed one's
+  empty one -- are allocated once for the process.
+
+### The build
+
+The release profile in `Cargo.toml` links with fat LTO into one codegen unit and
+wraps rather than checks integer overflow, which the dev and test profiles
+trap; `[profile.profiling]` is the same build with its symbols kept, for a
+profiler. The published wheels are profile-guided, trained by
+`scripts/pgo_workload.py`, which `pyproject.toml` names as `pgo-command`; what
+that buys, and on which shapes it costs, is [measured
+above](#baseline-matrix). A path the training workload never enters is laid out
+by chance, so the workload reaches every reading the walk has -- lists of
+scalars, of literals and of one class, records open and closed, a deeply nested
+list, the explaining walk -- and relations at both of their levels.
+
+### Measured and not taken
+
+Each of these reads as an obvious gain and measures as a loss on a shape the
+gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
+
+- **Resolving a record's keys by iterating the dict**, rather than probing each
+  declared key: 47.9% dearer, as above.
+- **Reserving a record's field vector from the dict's length** while building
+  it: the build shape reads 9% dearer, because one large request leaves glibc's
+  fastbins, where growing from empty is served from bins already warm.
+- **An unstable sort for the canonical orders**: 7% dearer on the build shape,
+  since its swaps over a record's fields cost more than the stable sort's
+  scratch buffer.
+- **A memo over every goal of a query**: up to 18% dearer on the queries whose
+  goals do not repeat, which is most of them; the memo kept is one entry, in
+  the one loop where a goal repeats.
+- **Comparing an order bound as a native integer**: 28% dearer on
+  `--binding-refined`, since reading a Python integer out costs more than the
+  rich comparison it would replace.
+- **A replacement global allocator**: up to 28% cheaper on the JSON shapes and
+  12% dearer on the call boundary, past the gate's ceiling, for a C dependency
+  on every wheel target.
+- **A snapshot of a list on CPython 3.14**: 1.65 ns an element against 1.28 in
+  place, timed, because that interpreter makes the reference counts cheap.
 
 ## Regression gate
 
@@ -552,39 +838,6 @@ holds is part of what its count means**, and is read before the number is: a
 build shape that assembles its fifty fields inside the loop spends most of its
 count on the harness naming them and none of it on the annotation walk, which is
 the half a build gate exists to measure.
-
-**A refinement marker is read by its type, once.** A marker carries one or two
-of ten optional attributes and not the rest, and below 3.13 asking for one it
-does not have is answered by raising -- `PyObject_GetOptionalAttr` is the first
-spelling that does not, and there is none before it. So the frontend asks the
-marker's *type* and remembers what that type carries, which costs no exceptions
-on any interpreter: fifty `Annotated[int, Ge(0)]` fields compile in about 30 us
-on CPython 3.14 and 27 on 3.12, on the machine class above. Compilation happens
-once per schema, so this is a startup figure rather than a per-call one -- it
-matters to a program that builds validators per request, and to nothing else.
-
-**A `NamedTuple` validates at what a tuple does on CPython.** CPython's
-`PyTuple_GET_SIZE` and `PyTuple_GET_ITEM` read a tuple's storage whatever its
-type overrides, so the walk reads every tuple, subclass or not, where it lies
-and asks its type nothing. PyPy's `cpyext` answers those accessors through a
-subclass's own `__len__` and `__iter__`, so a subclass that overrides either can
-send the walk past the end of its storage; there the walk asks the type whether
-it inherits both -- every `NamedTuple` does -- and copies any subclass that does
-not ([dev/04-walk.md](dev/04-walk.md)). A length bound asks the type whether its
-`__len__` is the tuple's own on every interpreter, since it counts what the
-value holds rather than what an override answers.
-
-**Interned keys are the fast path, and Python interns most of them for you.** A
-validator holds an interned `str` for every declared field, and a dict probe
-compares the key it is given with the key it holds by *pointer* before it
-compares hashes or bytes. A dict written as a literal, one built from
-`**kwargs`, and an object's `__dict__` all carry interned keys, so a record
-walk over them settles each field in one comparison: measured on a fifty-field
-record, both sides interned read **29% cheaper** than neither. Keys that are
-not interned -- the usual case for a dict parsed from JSON or built with
-f-strings -- take the hash-and-compare path, which is what the figures on this
-page are measured over. `sys.intern` on the keys of a dict you validate in a
-loop is worth trying if that loop is your bottleneck.
 
 One thing an embedded interpreter brings with it is its **string hash seed**,
 drawn per process; a shape that probes a dict of string keys executes a
