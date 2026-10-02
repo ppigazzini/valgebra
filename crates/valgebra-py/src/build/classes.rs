@@ -232,9 +232,14 @@ pub(super) fn protocol_members<'py>(
     names.sort_by_cached_key(ToString::to_string);
     let hints = resolve_type_hints(ty)?;
     let hints = hints.cast::<PyDict>()?;
+    let namespaces = ty
+        .getattr(intern!(py, "__mro__"))?
+        .try_iter()?
+        .map(|base| base?.getattr(intern!(py, "__dict__")))
+        .collect::<PyResult<Vec<_>>>()?;
     let mut members = Vec::with_capacity(names.len());
     for name in names {
-        let member = if let Some(defined) = defined_on(ty, &name)?
+        let member = if let Some(defined) = defined_on(&namespaces, &name)?
             && defined.is_instance(forms.property.bind(py))?
         {
             ProtocolMember::Property(getter_return(&defined)?)
@@ -258,16 +263,18 @@ pub(super) fn protocol_members<'py>(
     Ok(members)
 }
 
-/// What the first class on `ty.__mro__` to define `name` in its own namespace
-/// holds there: the object an attribute lookup on an instance finds before it
-/// asks the instance.
+/// What the first of `namespaces` -- each class's own on a `__mro__`, in its
+/// order -- to define `name` holds there: the object an attribute lookup on an
+/// instance finds before it asks the instance.
+///
+/// The namespaces are read once per protocol rather than once per member. Each
+/// is the class's `__dict__`, a view of the dictionary rather than a copy of
+/// it, so a member is still looked up in what the class holds when it is read.
 fn defined_on<'py>(
-    ty: &Bound<'py, PyType>,
+    namespaces: &[Bound<'py, PyAny>],
     name: &Bound<'py, PyString>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let py = ty.py();
-    for base in ty.getattr(intern!(py, "__mro__"))?.try_iter()? {
-        let namespace = base?.getattr(intern!(py, "__dict__"))?;
+    for namespace in namespaces {
         if namespace.contains(name)? {
             return Ok(Some(namespace.get_item(name)?));
         }
@@ -302,8 +309,15 @@ fn getter_return<'py>(property: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py
 }
 
 /// Whether a member's hint is `ClassVar` or `Final`, bare or parametrized.
+///
+/// A class `type` made is neither, and `typing.get_origin` answers one with
+/// `None`, or with `Generic` for `Generic` itself, so the answer is read off it
+/// without the call: a Python function, asked of nearly every member.
 fn is_qualified_member(hint: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = hint.py();
+    if hint.get_type().is(py.get_type::<PyType>()) {
+        return Ok(false);
+    }
     let forms = forms(py)?;
     let origin = forms.get_origin.bind(py).call1((hint,))?;
     Ok([&forms.class_var, &forms.final_qualifier]
