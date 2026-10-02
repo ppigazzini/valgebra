@@ -36,7 +36,8 @@ use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBytes, PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple, PyType};
 use valgebra_core::{
-    ClassIx, CollKind, ConstIx, DefIx, OperandIx, PathSegment, PredIx, Schema, Violation,
+    ClassIx, CollKind, ConstIx, DefIx, Field, MapClause, OperandIx, PathSegment, PredIx, Schema,
+    Violation,
 };
 
 use crate::check::ctx::{Ctx, Entered, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, WalkMode};
@@ -789,6 +790,16 @@ fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, 
 /// A branch walked in explain mode already answers both: it returns whether it
 /// matched, and it reports what failed if it did not. Asking once makes the
 /// recursion linear, and keeps the walk a second question would throw away.
+///
+/// A record is the exception, because its walk is two passes already: one
+/// that decides and one that explains, resuming where the first stopped
+/// ([`Decided`]). The union asks each record branch's deciding pass in branch
+/// order with the other branches, and the explaining passes only once no
+/// branch has admitted the value. A value the union admits builds no report
+/// for a record branch before the one that matched, so no `__repr__` of the
+/// value or of its fields runs for one. A value it refuses has each record
+/// branch read by both passes, as a record walked alone is, and the report
+/// chooses among the same branch reports in the same order.
 fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
     // The *closest* branch -- the one that descended furthest into the value
@@ -804,13 +815,10 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
     // same branch, so the one failure fail-fast keeps is the one the full report
     // leads with. This runs only where a value is being explained.
     let base_depth = frame.path.len();
-    let mut best: Option<(usize, Vec<Violation>)> = None;
-    // The first branch the walk could not answer for, kept aside. A branch that
-    // ran out of levels, found the value inside itself, or raised inside a
-    // predicate has not said "this value is not a member" -- it has said the
-    // walk stopped -- and its failure sits at the union's own location, so the
-    // progress rule below would fold it into a summary and drop the reason.
-    let mut declined: Option<Vec<Violation>> = None;
+    // The branches a report chooses among, in branch order: a record branch
+    // waits here for its explaining pass, and every other branch is explained
+    // as it is decided.
+    let mut refused: Vec<Refused<'_>> = Vec::new();
     for (position, branch_schema) in members.iter().enumerate() {
         if position >= CLOSEST_BRANCH_PROBE_LIMIT {
             // Past the probe's width the branch is asked the cheap question
@@ -830,6 +838,19 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
             Some(false) => continue,
             None => {}
         }
+        // The level `member` would open for the record, held for its deciding
+        // pass alone; where none is free the record is walked whole, and
+        // reports the bound.
+        if let Schema::KeyedMap { fields, defaults } = branch_schema
+            && let Some(_level) = ctx.descend()
+        {
+            let mut decided = Decided::default();
+            if keyed_map_matches(fields, defaults, value, ctx, Some(&mut decided)) {
+                return true;
+            }
+            refused.push(Refused::Record(fields, defaults, decided));
+            continue;
+        }
         let mut branch = Vec::new();
         let matched = {
             let mut probing = Frame::new(&mut *frame.path, &mut branch, ctx);
@@ -838,6 +859,25 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
         if matched {
             return true;
         }
+        refused.push(Refused::Explained(branch));
+    }
+    let mut best: Option<(usize, Vec<Violation>)> = None;
+    // The first branch the walk could not answer for, kept aside. A branch that
+    // ran out of levels, found the value inside itself, or raised inside a
+    // predicate has not said "this value is not a member" -- it has said the
+    // walk stopped -- and its failure sits at the union's own location, so the
+    // progress rule below would fold it into a summary and drop the reason.
+    let mut declined: Option<Vec<Violation>> = None;
+    for walked in refused {
+        let branch = match walked {
+            Refused::Explained(branch) => branch,
+            Refused::Record(fields, defaults, decided) => {
+                let mut branch = Vec::new();
+                let mut explaining = Frame::new(&mut *frame.path, &mut branch, ctx);
+                record_explained(fields, defaults, value, &mut explaining, &decided);
+                branch
+            }
+        };
         let first = branch.first();
         let progress = first
             .map_or(base_depth, |v| v.path.len())
@@ -889,6 +929,49 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
     false
 }
 
+/// A union branch that did not admit the value, as the report reads it.
+enum Refused<'s> {
+    /// Walked in the caller's mode, with what it reported.
+    Explained(Vec<Violation>),
+    /// A record whose deciding pass refused the value, with where that pass
+    /// stopped: explained once the union is refused.
+    Record(&'s [Field], &'s [MapClause], Decided),
+}
+
+/// The explaining pass of a union's record branch, which the union asks once
+/// no branch has admitted the value: what [`member`]'s record arm reports
+/// after its deciding pass refuses, read from where that pass stopped.
+///
+/// The arm's own lines rather than a function both call: drawn out of the
+/// arm, they move the register allocation of the recursive walk every shape
+/// crosses. [`member`]'s two first questions are asked again because the walk
+/// has moved since the deciding pass. A fatal signal another branch raised
+/// stops it, as it stops every later [`member`]; the level the deciding pass
+/// held is free again at the depth the union walks, so a walk that finds it
+/// taken has broken its own bookkeeping, and degrades to an empty report
+/// rather than panicking across the boundary.
+fn record_explained(
+    fields: &[Field],
+    defaults: &[MapClause],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+    decided: &Decided,
+) {
+    let ctx = frame.ctx;
+    if ctx.fatal_seen.get() {
+        return;
+    }
+    let Some(_level) = ctx.descend() else {
+        debug_assert!(false, "a union's record branch finds its level taken");
+        return;
+    };
+    let before = frame.out.len();
+    keyed_map_explain(fields, defaults, value, frame, decided);
+    if frame.out.len() == before {
+        mutated(value, frame);
+    }
+}
+
 /// A union branch whose failure, if it fails, is one no report reads: its
 /// answer, decided without explaining it, or `None` for a branch to explain.
 ///
@@ -900,6 +983,15 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
 /// A value a union *admits* had its repr run once for each branch before the
 /// one that matched, and a repr that raised a fatal signal made `validate`
 /// raise for a member.
+///
+/// A class is such a branch too: it is its instance test, asked once either
+/// way. So is a class met with the attributes it declares -- a dataclass --
+/// whose class refuses the value, since the meet stops at a member that
+/// refuses the value itself; but only where the class's metaclass is `type`.
+/// The meet's walk asks the class again when it admits, and `isinstance`
+/// against such a class reads nothing of a value it admits -- the type's
+/// `__mro__` answers -- where another metaclass's `__instancecheck__` is code
+/// that would run twice.
 ///
 /// Each level the branch's own walk would enter is held while it is decided,
 /// as [`member`] holds it: at the walk's depth bound the branch records the
@@ -922,8 +1014,29 @@ fn decided_quietly(schema: &Schema, value: &Value<'_, '_>, ctx: Ctx<'_>) -> Opti
         Schema::Seq { .. } | Schema::Coll { .. } | Schema::KeyedMap { .. } => {
             (!is_of_its_kind(schema, value)).then_some(false)
         }
+        Schema::Instance(index) => {
+            let Value::Py(obj) = value else {
+                return None;
+            };
+            let class = class_at(ctx, *index, obj.py())?;
+            Some(is_exactly_a(obj, class) || fold(obj.is_instance(class), obj.py(), ctx))
+        }
+        Schema::Intersection(members) => match members.first() {
+            Some(first @ Schema::Instance(index))
+                if class_at(ctx, *index, value.py()).is_some_and(made_by_type) =>
+            {
+                decided_quietly(first, value, ctx).filter(|admits| !admits)
+            }
+            _ => None,
+        },
         _ => None,
     }
+}
+
+/// Whether `class` is a class `type` itself made, whose instance test is
+/// `type`'s own.
+fn made_by_type(class: &Bound<'_, PyAny>) -> bool {
+    class.get_type().is(class.py().get_type::<PyType>())
 }
 
 fn check_intersection(

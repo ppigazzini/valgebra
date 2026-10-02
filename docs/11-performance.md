@@ -656,6 +656,19 @@ program that builds validators per request, and to no validation call.
   element that fails being walked at its own position (`list_explained`,
   `tuple_explained`). `validate` on a thousand-element `list[int]` that belongs
   executes about a fifth of the instructions the general element loop takes.
+- **A union explains no branch for a value it admits.** Only a refused
+  value's report reads the branches that did not match, so a branch that fails
+  at the union's own location -- a scalar, a literal, a container of another
+  kind, a class -- is decided by its test (`decided_quietly` in
+  `check/walk.rs`), and a record branch by its deciding pass, its explaining
+  pass waiting until no branch has admitted the value (`explain_union`).
+  `validate` on a hundred values of a tagged union of three `TypedDict`s costs
+  a fifth of the instructions it costs with each refused branch explained in
+  turn, close to what `is_valid` costs, and a union of dataclasses about as
+  much, on CPython 3.12 and 3.14 alike: the report a refused branch builds
+  summarizes the value, and a dataclass's summary is its `__repr__`, Python
+  code. Tests count the reprs a member's report would run, and hold a refused
+  union's report to the one its chosen branch gives alone.
 - **The explaining walk resumes where the deciding walk stopped**, as
   [the closest races](#the-closest-races) describe: a field the first walk
   passed has no violation to report (`--binding-explain`).

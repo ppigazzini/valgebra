@@ -1,12 +1,13 @@
 import copy
+import dataclasses
 import json
 import pickle
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypedDict
 
 import annotated_types as at
 import pytest
 
-from valgebra import ValidationError, Validator
+from valgebra import ValidationError, Validator, union
 
 
 def test_error_carries_scalar_attributes() -> None:
@@ -166,9 +167,11 @@ def test_a_value_a_union_admits_is_never_summarized() -> None:
     """A member builds no report, so nothing reads its repr.
 
     `validate` explained a union by walking each branch in explaining mode, and
-    a branch refusing the value by its kind summarized it -- running the
-    value's `__repr__` once for each branch before the one that matched. A repr
-    that raised `MemoryError` made `validate` raise for a member.
+    a branch refusing the value summarized it -- running the value's
+    `__repr__`, or a field's, once for each branch before the one that matched.
+    A repr that raised `MemoryError` made `validate` raise for a member. A
+    branch refusing by its kind or its class is decided without a report, and
+    a record branch is explained only where no branch admits the value.
     """
     reprs = []
 
@@ -181,6 +184,19 @@ def test_a_value_a_union_admits_is_never_summarized() -> None:
         def __repr__(self) -> str:
             raise MemoryError
 
+    class Other:
+        pass
+
+    @dataclasses.dataclass
+    class Point:
+        x: int
+
+    class Counts(TypedDict):
+        a: int
+
+    class Holds(TypedDict):
+        a: Seen
+
     for schema, value in [
         (int | Seen, Seen()),
         (list[int | Seen], [Seen(), Seen()]),
@@ -188,6 +204,14 @@ def test_a_value_a_union_admits_is_never_summarized() -> None:
         (Annotated[list[int], at.MinLen(1)] | Seen, Seen()),
         (dict[str, int] | Seen, Seen()),
         (int | Unrepresentable, Unrepresentable()),
+        (Other | Seen, Seen()),
+        (Point | Seen, Seen()),
+        (Point | Unrepresentable, Unrepresentable()),
+        (union({"a": int}, {"a": Seen}), {"a": Seen()}),
+        (Counts | Holds, {"a": Seen()}),
+        (list[Counts | Holds], [{"a": Seen()}, {"a": 1}]),
+        (dict[str, int] | dict[str, Seen], {"k": Seen()}),
+        (union({"a": int}, {"a": Unrepresentable}), {"a": Unrepresentable()}),
     ]:
         compiled = Validator(schema)
         compiled.validate(value)

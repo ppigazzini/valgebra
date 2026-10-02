@@ -135,6 +135,27 @@ raised a fatal signal would make `validate` raise for a member. It holds each
 level the branch's own walk would enter, so at the depth bound the branch is
 explained and reports the bound, which a report does read.
 
+A class is such a branch: its walk is one `isinstance`, which `decided_quietly`
+asks in its place. So is a class met with the attributes it declares -- a
+dataclass -- whose class refuses the value, because the meet stops at a member
+that refuses the value itself; but only where the class's metaclass is `type`.
+The meet's walk asks the class again where it admits, and `isinstance` against
+a class `type` made reads nothing of a value it admits, where another
+metaclass's `__instancecheck__` is code that would then run twice.
+
+**A record branch is explained only once the union is refused.** A record's
+walk is two passes already, one that decides and one that explains, resuming
+where the first stopped, and its failure lies inside the value, where a report
+does read it. `explain_union` asks each record branch's deciding pass in branch
+order beside the other branches, and the explaining passes, in branch order,
+only once no branch has admitted the value. A value the union admits builds no
+report for a record branch before the one that matched, and a value it refuses
+gets the report each branch explained in turn would give: the choice reads the
+same branch reports in the same order. A fatal signal a later branch raises
+stops every explaining pass that waits for it, as it stops every later walk.
+`a_refused_union_reports_what_its_chosen_branch_reports_alone` in
+`check/walk/interpreter.rs` holds the report to the chosen branch's own.
+
 **Each branch is walked in the caller's mode.** The choice reads the first
 failure only, which a walk stopped there has measured, so under fail-fast a
 branch is walked to its first failure and no further: the report costs a
@@ -150,7 +171,9 @@ keeps no memo over the answers. An explaining walk reads each branch of a union
 once, since the walk that chooses the branch is the walk that reports it; what
 it reads twice is a keyed map that fails, whose explaining pass re-reads the
 field its deciding pass stopped at and everything beneath it, and walks a clause
-once more against an undeclared key it does not cover, to report it. A predicate
+once more against an undeclared key it does not cover, to report it. A keyed map
+that is a union's branch takes the second read only where the union refuses the
+value, since its explaining pass waits for that. A predicate
 is user code, so each occurrence the walk reaches is a call, and a cache keyed
 on the value's identity would decide for an impure predicate which of its
 answers counts. The refinements page states the count a caller sees; a predicate

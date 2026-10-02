@@ -436,7 +436,9 @@ one walk, and a union in it walks each branch once. A dict schema -- a record, a
 then an explaining pass that resumes at the entry the first one stopped at, so
 a predicate on or under that entry runs a second time, and one on the clause an
 undeclared key falls under runs once to find whether the clause covers the
-entry and again to report it ([dev/04-walk.md](dev/04-walk.md)). Without
+entry and again to report it ([dev/04-walk.md](dev/04-walk.md)). A dict schema
+that is a branch of a union is read the second time only where no branch admits
+the value. Without
 `fail_fast`, `validate` also reads past the first failure, running the
 predicate on values `is_valid` never reached. A
 predicate is user code, and every occurrence the walk reaches is a call: the

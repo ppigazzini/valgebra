@@ -537,6 +537,266 @@ fn a_value_a_union_admits_is_never_summarized() {
     });
 }
 
+/// The classes the union corpus below reads: a repr that counts, two plain
+/// classes and a subclass, and a class whose metaclass answers `isinstance`
+/// with code of its own that counts its calls.
+///
+/// Each test names its own module. `PyModule::from_code` runs its source in
+/// the `sys.modules` entry of the name it is given when there is one, so a
+/// second test under the same name rebinds the first's classes and resets its
+/// counts -- on a free-threaded interpreter, between the first reading a class
+/// and reading its count.
+fn union_classes<'py>(py: Python<'py>, name: &std::ffi::CStr) -> Bound<'py, PyModule> {
+    PyModule::from_code(
+        py,
+        c"class Seen:\n\
+          \x20   reprs = 0\n\
+          \x20   def __repr__(self):\n\
+          \x20       Seen.reprs += 1\n\
+          \x20       return 'Seen()'\n\
+          class Other:\n\
+          \x20   pass\n\
+          class Base:\n\
+          \x20   def __init__(self):\n\
+          \x20       self.x = 1\n\
+          class Sub(Base):\n\
+          \x20   pass\n\
+          class Meta(type):\n\
+          \x20   calls = 0\n\
+          \x20   def __instancecheck__(cls, value):\n\
+          \x20       Meta.calls += 1\n\
+          \x20       return True\n\
+          class Hooked(metaclass=Meta):\n\
+          \x20   pass\n\
+          def interrupts(value):\n\
+          \x20   raise KeyboardInterrupt\n",
+        c"union_classes.py",
+        name,
+    )
+    .expect("the module compiles")
+}
+
+/// A class attribute of the union corpus's module, read as a count.
+fn count_of(module: &Bound<'_, PyModule>, class: &str, name: &str) -> i64 {
+    module
+        .getattr(class)
+        .and_then(|class| class.getattr(name))
+        .and_then(|count| count.extract::<i64>())
+        .expect("the count reads")
+}
+
+/// A record branch or a class branch builds no report for a value its union
+/// admits.
+///
+/// A record branch is decided by its deciding pass beside the others, and
+/// explained only once no branch admits the value; a class branch is its
+/// instance test, and a class met with its attributes is refused by its class
+/// without being explained. Each union below admits the value through a later
+/// branch, a subclass instance through the class it derives from among them,
+/// and none may summarize it.
+#[test]
+fn a_record_or_class_branch_builds_no_report_for_a_value_the_union_admits() {
+    Python::attach(|py| {
+        let module = union_classes(py, c"union_unreported");
+        let class = |name: &str| module.getattr(name).expect("the class");
+        let pool: Vec<Py<PyAny>> = ["Seen", "Other", "Base"]
+            .map(|name| class(name).unbind())
+            .into();
+        let instance = |slot| Schema::Instance(ClassIx::new(slot));
+        let object = |slot| {
+            Schema::meet([
+                instance(slot),
+                Schema::AttrRecord {
+                    fields: vec![field("x", Schema::Int, true)].into(),
+                },
+            ])
+        };
+        let record = |schema| Schema::record(vec![field("a", schema, true)], Openness::Closed);
+        let union = |branches: Vec<Schema>| Schema::Union(branches.into());
+        let seen = class("Seen").call0().expect("an instance");
+        let holding = PyDict::new(py);
+        holding.set_item("a", &seen).expect("a field");
+        let sub = class("Sub").call0().expect("a subclass instance");
+        let cases = [
+            (
+                union(vec![record(Schema::Int), record(instance(0))]),
+                holding.as_any(),
+            ),
+            (union(vec![instance(1), instance(0)]), &seen),
+            (union(vec![object(1), instance(0)]), &seen),
+            (union(vec![Schema::Int, instance(2)]), &sub),
+            (union(vec![Schema::Int, object(2)]), &sub),
+        ];
+        for (schema, value) in &cases {
+            for mode in [WalkMode::Explain, WalkMode::ExplainFailFast] {
+                let (admitted, violations) = explain_in(py, schema, value, &pool, &[], mode);
+                assert!(admitted, "{schema:?} admits {value}");
+                assert!(violations.is_empty(), "{schema:?} reports nothing");
+            }
+        }
+        assert_eq!(count_of(&module, "Seen", "reprs"), 0);
+        let refused = union(vec![record(Schema::Int), record(Schema::Str)]);
+        let (admitted, _) = explain(py, &refused, holding.as_any(), &pool, &[]);
+        assert!(!admitted);
+        assert!(
+            count_of(&module, "Seen", "reprs") > 0,
+            "a union the value is outside summarizes it"
+        );
+    });
+}
+
+/// A union no branch admits reports what its chosen branch reports walked on
+/// its own, in either explaining mode.
+///
+/// The branch whose first failure lies deepest is chosen, the earliest on a
+/// tie, and a record branch is explained after every branch is decided while
+/// any other is explained as it is decided: the cases below put a record
+/// beside a record nested deeper, beside a record that ties it, and beside a
+/// refined record explained in its own place, in both orders.
+#[test]
+fn a_refused_union_reports_what_its_chosen_branch_reports_alone() {
+    Python::attach(|py| {
+        let record = |fields| Schema::record(fields, Openness::Closed);
+        let flat = record(vec![field("a", Schema::Int, true)]);
+        let wide = record(vec![
+            field("a", Schema::Int, true),
+            field("b", Schema::Int, true),
+        ]);
+        let text = record(vec![field("a", Schema::Str, true)]);
+        let deep = record(vec![field(
+            "a",
+            record(vec![field("c", Schema::Int, true)]),
+            true,
+        )]);
+        let refined = Schema::Refine {
+            base: Arc::new(text.clone()),
+            constraints: vec![Constraint::MinLen(1)].into(),
+        };
+        let dict = |code: &str| {
+            py.eval(&std::ffi::CString::new(code).expect("no nul"), None, None)
+                .expect("the value evaluates")
+        };
+        let cases = [
+            (wide.clone(), text.clone(), dict("{'a': 1, 'b': 'x'}"), 0),
+            (text, wide, dict("{'a': 1, 'b': 'x'}"), 0),
+            (flat.clone(), deep, dict("{'a': {'c': 'x'}}"), 1),
+            (flat.clone(), refined.clone(), dict("{'a': 1.5}"), 0),
+            (refined, flat, dict("{'a': 1.5}"), 0),
+        ];
+        for (first, second, value, chosen) in cases {
+            let union = Schema::Union(vec![first.clone(), second.clone()].into());
+            let alone = [first, second][chosen].clone();
+            for mode in [WalkMode::Explain, WalkMode::ExplainFailFast] {
+                let (admitted, report) = explain_in(py, &union, &value, &[], &[], mode);
+                let (_, expected) = explain_in(py, &alone, &value, &[], &[], mode);
+                assert!(!admitted, "{union:?} refuses {value}");
+                assert!(!expected.is_empty(), "{alone:?} reports {value}");
+                assert_eq!(
+                    format!("{report:?}"),
+                    format!("{expected:?}"),
+                    "{union:?} against {value} in {mode:?}"
+                );
+            }
+        }
+    });
+}
+
+/// A class whose metaclass answers `isinstance` with code of its own is asked
+/// once for a value a union admits through it, alone or met with the
+/// attributes it declares.
+///
+/// The meet's walk asks the class itself, so a branch led by such a class is
+/// explained rather than decided first: deciding it would run the metaclass's
+/// code twice for one member.
+#[test]
+fn a_class_with_its_own_instance_test_is_asked_once_through_a_union() {
+    Python::attach(|py| {
+        let module = union_classes(py, c"union_asked_once");
+        let hooked = module.getattr("Hooked").expect("the class");
+        let pool = vec![hooked.unbind()];
+        let value = module
+            .getattr("Base")
+            .and_then(|class| class.call0())
+            .expect("an instance");
+        let alone = Schema::Instance(ClassIx::new(0));
+        let met = Schema::meet([
+            alone.clone(),
+            Schema::AttrRecord {
+                fields: vec![field("x", Schema::Int, true)].into(),
+            },
+        ]);
+        for branch in [alone, met] {
+            let union = Schema::Union(vec![Schema::Int, branch].into());
+            for mode in [WalkMode::Explain, WalkMode::ExplainFailFast] {
+                let before = count_of(&module, "Meta", "calls");
+                let (admitted, _) = explain_in(py, &union, &value, &pool, &[], mode);
+                assert!(admitted, "{union:?} admits {value}");
+                assert_eq!(
+                    count_of(&module, "Meta", "calls") - before,
+                    1,
+                    "{union:?} asks its class once"
+                );
+            }
+        }
+    });
+}
+
+/// A fatal signal one branch of a union raises stops the report of a record
+/// branch decided before it, as it stops every later walk: the record's
+/// explaining pass, which would summarize a key it does not declare, never
+/// runs.
+///
+/// The refined record between them is explained as it is decided, before the
+/// signal, and is the branch the report chooses; it admits the undeclared key,
+/// so nothing it reports summarizes it either.
+#[test]
+fn a_signal_a_later_branch_raises_stops_an_earlier_record_report() {
+    use pyo3::exceptions::PyKeyboardInterrupt;
+    Python::attach(|py| {
+        let module = union_classes(py, c"union_signalled");
+        let pool = vec![
+            module
+                .getattr("interrupts")
+                .expect("the predicate")
+                .unbind(),
+        ];
+        let interrupted = Schema::Refine {
+            base: Arc::new(Schema::Int),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        };
+        let refined = Schema::Refine {
+            base: Arc::new(Schema::record(
+                vec![field("a", Schema::Str, true)],
+                Openness::Open,
+            )),
+            constraints: vec![Constraint::MinLen(1)].into(),
+        };
+        let union = Schema::Union(
+            vec![
+                Schema::record(vec![field("a", Schema::Int, true)], Openness::Closed),
+                refined,
+                Schema::record(vec![field("b", interrupted, true)], Openness::Closed),
+            ]
+            .into(),
+        );
+        let value = PyDict::new(py);
+        value.set_item("a", 1.5f64).expect("a field");
+        value.set_item("b", 1i64).expect("a field");
+        let seen = module
+            .getattr("Seen")
+            .and_then(|class| class.call0())
+            .expect("an instance");
+        value.set_item("z", seen).expect("an undeclared key");
+        let (fatal, report) = recorded(py, &union, value.as_any(), &pool);
+        assert!(fatal.is_some_and(|err| err.is_instance_of::<PyKeyboardInterrupt>(py)));
+        assert_eq!(
+            report.iter().map(|v| v.code).collect::<Vec<_>>(),
+            ["string_type"]
+        );
+        assert_eq!(count_of(&module, "Seen", "reprs"), 0);
+    });
+}
+
 /// `(schema, value, expected)` over an empty pool and no definitions.
 fn case(py: Python<'_>, schema: &Schema, value: &Bound<'_, PyAny>, expected: bool) {
     assert_eq!(

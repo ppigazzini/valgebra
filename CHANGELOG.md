@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a refutation about a class stands on what its instance can carry
 - feat: a protocol is the record of the members it declares
+- fix: validate explains a union's records and classes only for a refused value
 
 -->
 
@@ -57,6 +58,18 @@ answer of its own, or a repair to a change not yet released.
   the pair was refuted on a value that may not exist; it is `undecided`. A class
   whose instances have no `__dict__`, a name the class body defines and a slot
   are read the same way, each for what a direct instance can hold.
+- **`validate` explains a union's record and class branches only for a value
+  the union refuses.** A record branch -- a `TypedDict`, a dict schema, a
+  mapping -- and a class branch, a dataclass among them, were explained as each
+  was decided, and the report was dropped when a later branch admitted the
+  value: `validate` ran the value's `__repr__`, or a field's, once for each such
+  branch before the one that matched, a predicate under one ran a second time,
+  and a repr raising `MemoryError` made it raise for a member. A record
+  branch's explaining pass waits until no branch has admitted the value, and a
+  class branch is decided by its instance test, a dataclass's where its
+  metaclass is `type`. `validate` on a member of a union of records or of
+  dataclasses costs a fifth of the instructions it cost, close to what
+  `is_valid` costs; the report for a value no branch admits is unchanged.
 
 ## [0.0.15] - 2026-10-01
 
