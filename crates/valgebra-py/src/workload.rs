@@ -253,6 +253,11 @@ pub enum BindingShape {
     /// for each; a mapping declares none, so each entry is iterated and asked
     /// of the clause, a reading no other shape over a Python value reaches.
     Mapping,
+    /// Sixty-four elements against `list[int | None]`, integers and `None`
+    /// alternating: a list whose element is a union of scalars, which has a
+    /// reader of its own beside the one for a single kind that the walk shape
+    /// reaches.
+    Nullable,
 }
 
 impl BindingShape {
@@ -283,6 +288,7 @@ impl BindingShape {
             "deep" => BindingShape::Deep,
             "refined" => BindingShape::Refined,
             "mapping" => BindingShape::Mapping,
+            "nullable" => BindingShape::Nullable,
             _ => return None,
         })
     }
@@ -712,6 +718,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
         BindingShape::Deep => spelled_walk(py, iters, DEEP),
         BindingShape::Refined => spelled_walk(py, iters, REFINED),
         BindingShape::Mapping => spelled_walk(py, iters, MAPPING),
+        BindingShape::Nullable => spelled_walk(py, iters, NULLABLE),
         BindingShape::Pattern => pattern_walk(py, iters),
         BindingShape::ExplainAccept => explaining_record(py, iters, Wrong::No),
         BindingShape::Explain => explaining_record(py, iters, Wrong::Yes),
@@ -885,6 +892,10 @@ const REFINED: &str = "from typing import Annotated\n\
 /// Sixty-four string keys, each holding an integer.
 const MAPPING: &str = "SPELLING = dict[str, int]\n\
      VALUE = {f'k{i}': i for i in range(64)}\n";
+
+/// Sixty-four integers and `None`, alternating.
+const NULLABLE: &str = "SPELLING = list[int | None]\n\
+     VALUE = [i if i % 2 else None for i in range(64)]\n";
 
 /// Build a shape's `SPELLING` through the frontend and walk its `VALUE`.
 fn spelled_walk(py: Python<'_>, iters: usize, source: &str) -> u64 {

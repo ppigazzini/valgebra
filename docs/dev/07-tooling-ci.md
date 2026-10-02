@@ -272,7 +272,7 @@ gate only catches what it exercises:
 - the **binding** shapes (`--binding`, `--binding-boundary`,
   `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-mapping`,
   `--binding-subclass`, `--binding-recursive`, `--binding-deep`,
-  `--binding-refined`,
+  `--binding-refined`, `--binding-nullable`,
   `--binding-json`, `--binding-json-reject`, `--binding-json-union`,
   `--binding-json-open`, `--binding-json-deep`, `--binding-pattern`,
   `--binding-build`, `--binding-annotated`, `--binding-object`,
@@ -283,8 +283,9 @@ gate only catches what it exercises:
   are interned, the record open the way a `TypedDict` is, a `dict[str, int]`
   read through its clause, walking a `NamedTuple`, a recursive schema's
   descent, a value nested twenty-five deep,
-  elements that each read a refinement's bound, parsing and walking a JSON
-  document -- accepted, rejected halfway, as a union of two record kinds, read
+  elements that each read a refinement's bound, a list of `int | None`, parsing
+  and walking a JSON document -- accepted, rejected halfway, as a union of two
+  record kinds, read
   through a key-type clause, and against a recursive schema -- matching a
   string against a compiled pattern, building a validator
   from its Python spelling, compiling one written as a `TypedDict` of refined

@@ -63,5 +63,7 @@
   "_binding_relation_comment": "Two **dataclasses** related per iteration, a two-field `Point` against a one-field `Other`, through the `relation_to` method a caller calls: the one shape that decides a relation through the bindings. A refutation about a class stands on a direct instance of it, and what that instance can carry is read off the namespaces of the class's `__mro__`, the class's own once per query -- a reading the decision shapes cannot reach, because their classes are identities with nothing behind them. The checksum counts the `not_subset` answers.",
   "binding_relation_workload_irefs": 492617070,
   "_binding_mapping_comment": "A `dict[str, int]` of sixty-four entries walked per iteration: a mapping, which declares no key, so each entry is iterated and asked of the clause both halves of it fall under. Every record shape names its keys and probes the dict for each, so none of them reaches the reading a free-form section of a document takes, and a cost added per entry there reads as nothing on every one of them.",
-  "binding_mapping_workload_irefs": 216045045
+  "binding_mapping_workload_irefs": 216045045,
+  "_binding_nullable_comment": "Sixty-four integers and `None`, alternating, against `list[int | None]` per iteration: a list whose element is a union of scalars, read by a reader of its own beside the one a single scalar kind takes. The walk shape reads only that one, so a cost added per element of a nullable list reads as nothing on every shape beside this.",
+  "binding_nullable_workload_irefs": 376400035
 }

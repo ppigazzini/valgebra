@@ -30,7 +30,7 @@ Three workloads, and seven shapes across them:
   the core one never calls.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
-  twenty-three shapes: the membership walk (`--binding`), the call boundary
+  twenty-four shapes: the membership walk (`--binding`), the call boundary
   alone (`--binding-boundary`), the walk over a wide record
   (`--binding-record`), the same walk over a value whose keys are interned
   (`--binding-keys`), the same fields declared by an open record
@@ -39,13 +39,14 @@ Three workloads, and seven shapes across them:
   a compiled pattern (`--binding-pattern`), walking a value against a
   recursive schema (`--binding-recursive`), walking a value nested twenty-five
   deep (`--binding-deep`), walking refined elements (`--binding-refined`),
-  parsing and walking a JSON document (`--binding-json`), the same document
-  rejected halfway (`--binding-json-reject`), a document of two record kinds
-  against their union (`--binding-json-union`), records read through a
-  key-type clause (`--binding-json-open`), a recursive schema over a nested
-  document (`--binding-json-deep`), building a validator from its Python
-  spelling (`--binding-build`), compiling one written as a `TypedDict` of
-  refined integers (`--binding-annotated`), compiling a fifty-field dataclass
+  walking elements of a union of scalars (`--binding-nullable`), parsing and
+  walking a JSON document (`--binding-json`), the same document rejected
+  halfway (`--binding-json-reject`), a document of two record kinds against
+  their union (`--binding-json-union`), records read through a key-type clause
+  (`--binding-json-open`), a recursive schema over a nested document
+  (`--binding-json-deep`), building a validator from its Python spelling
+  (`--binding-build`), compiling one written as a `TypedDict` of refined
+  integers (`--binding-annotated`), compiling a fifty-field dataclass
   (`--binding-object`), compiling a fifty-member protocol
   (`--binding-protocol`), relating two dataclasses (`--binding-relation`), and
   explaining a failure in a record (`--binding-explain`) or accepting one in
@@ -413,6 +414,7 @@ MODES = {
     "binding-deep": ("binding_workload", "binding deep nesting walk"),
     "binding-refined": ("binding_workload", "binding refined element walk"),
     "binding-mapping": ("binding_workload", "binding mapping walk"),
+    "binding-nullable": ("binding_workload", "binding nullable element walk"),
 }
 
 #: The workload argument each binding mode passes, and the budget key it reads.
@@ -444,6 +446,7 @@ BINDING_ITERATIONS = {
     "binding-deep": (50_000, 15_000),
     "binding-refined": (20_000, 5_000),
     "binding-mapping": (20_000, 5_000),
+    "binding-nullable": (150_000, 50_000),
 }
 
 BINDING_SHAPES = {
@@ -470,6 +473,7 @@ BINDING_SHAPES = {
     "binding-deep": "deep",
     "binding-refined": "refined",
     "binding-mapping": "mapping",
+    "binding-nullable": "nullable",
 }
 
 
