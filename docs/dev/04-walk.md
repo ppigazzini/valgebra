@@ -439,6 +439,14 @@ most of what they cost, and each asks the test directly:
   `NamedTuple` of builtin fields, is a type test a position
   (`scalar_positions_tuple_matches`): a thousand such tuples cost 37% fewer
   instructions.
+- **A refinement's base.** `Annotated[int, Ge(0)]` asks its base before its
+  constraints, and a scalar base that admits the value is its type test
+  (`check_refine` in `walk/scalar.rs`); a base that refuses is walked, which
+  records the mismatch an explaining walk reports. The constraints read the
+  value the walk holds rather than a handle of their own, so a passing check
+  writes no reference count on it: refined integers cost 8% fewer instructions
+  on the binding gate (`--binding-refined`), and strings matched against a
+  pattern 5% (`--binding-pattern`).
 - **A record's field.** A field that is a scalar -- most of a `TypedDict` -- is
   its type test in the deciding walk (`field_holds`), read by keys, by the scan
   and in both JSON readings: the binding gate's fifty-field record costs 7%

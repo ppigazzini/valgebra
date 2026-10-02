@@ -526,8 +526,11 @@ program that builds validators per request, and to no validation call.
   without a comparison. A `float` is excluded, since a NaN is not equal to
   itself.
 - **A refinement borrows its operand and renders nothing on a pass.** The bound
-  is read out of the pool as a borrow for the whole check, so a passing check
-  writes no reference count. A violation's message, which needs the bound's
+  is read out of the pool as a borrow for the whole check, and the value from
+  the walk, so a passing check writes no reference count; a scalar base that
+  admits the value is its type test rather than a walk (`check_refine`;
+  `--binding-refined`). A
+  violation's message, which needs the bound's
   `repr`, is built only at the site that records one (`Expected` in
   `check/walk/scalar.rs`): `tests/test_refinements.py` counts the bound's
   `repr` calls, and a hundred passing checks make none.

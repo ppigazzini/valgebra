@@ -333,9 +333,11 @@ fn predicate_passes(value: &Bound<'_, PyAny>, predicate: &Bound<'_, PyAny>) -> P
 ///
 /// Which bases have elements is a property of the node, so a refinement of a
 /// scalar -- asked once per element of a list of them -- pays one comparison
-/// of the base's variant. The loop is the one place [`check_constraint`] is
-/// called, which is what keeps it inlined here: a second call site moves it out
-/// of line and costs a list of refined elements 7% of its instructions.
+/// of the base's variant, and a scalar base that admits the value is its type
+/// test ([`scalar_member`]) rather than a walk; one that refuses it is walked,
+/// which records where. The loop is the one place [`check_constraint`]
+/// is called, which is what keeps it inlined here: a second call site moves it
+/// out of line and costs a list of refined elements 7% of its instructions.
 pub(super) fn check_refine(
     base: &Schema,
     constraints: &[Constraint],
@@ -350,19 +352,31 @@ pub(super) fn check_refine(
     {
         return false;
     }
-    if !member(base, value, frame) {
+    if !(scalar_member(base, value, ctx, ctx.room_to_descend()) == Some(true)
+        || member(base, value, frame))
+    {
         return false;
     }
-    let obj = match value.to_python() {
-        Ok(obj) => obj,
-        Err(err) => {
-            record_if_fatal(err, value.py(), ctx);
-            return false;
-        }
+    // A Python value is borrowed for the whole check, as the bound is: the walk
+    // holds it, so a passing check writes no reference count on it. A parsed
+    // JSON value is built into the object `json.loads` would have given.
+    let built;
+    let obj = match value {
+        Value::Py(obj) => *obj,
+        Value::Json(..) => match value.to_python() {
+            Ok(obj) => {
+                built = obj;
+                &built
+            }
+            Err(err) => {
+                record_if_fatal(err, value.py(), ctx);
+                return false;
+            }
+        },
     };
     let mut ok = true;
     for constraint in constraints {
-        ok &= check_constraint(constraint, &obj, ctx, frame);
+        ok &= check_constraint(constraint, obj, ctx, frame);
         if !ok && stop(ctx) {
             return false;
         }
