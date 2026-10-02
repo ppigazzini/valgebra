@@ -1,0 +1,79 @@
+name: Set up Rust
+description: Install a Rust toolchain with rustup, which every hosted runner carries, and make it the default.
+
+# A toolchain action is a third-party commit a lane runs, pinned by hash with a
+# comment naming the tag it came from. The one these lanes used publishes a
+# single moving tag, `v1`, and moves it with every upstream change, so the pin
+# and its comment part company and the workflow audit fails every lane behind it
+# until somebody re-pins. What that action ran for these lanes is the rustup
+# command below, so the lanes run it themselves: there is no tag to drift and no
+# third-party code between the runner and the compiler.
+# `tests/test_workflow_actions.py` holds every workflow to installing a
+# toolchain this way.
+
+inputs:
+  toolchain:
+    description: >-
+      The rustup toolchain to install and make the default: `stable`,
+      `nightly`, a dated nightly, or a release such as `1.88`.
+    required: true
+  components:
+    description: >-
+      Components to add beside the minimal profile, separated by commas.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # A release-server update can serve a manifest whose checksums do not match
+    # yet, which rustup reports and which clears within minutes. That failure,
+    # and only that one, is retried: anything else is a red lane.
+    - name: rustup toolchain install ${{ inputs.toolchain }}
+      shell: bash
+      env:
+        TOOLCHAIN: ${{ inputs.toolchain }}
+        COMPONENTS: ${{ inputs.components }}
+        RUSTUP_PERMIT_COPY_RENAME: "1"
+      run: |
+        args=(toolchain install "$TOOLCHAIN" --profile minimal --no-self-update)
+        for component in ${COMPONENTS//,/ }; do
+          args+=(--component "$component")
+        done
+        # A component missing from the newest nightly is found on an older one.
+        if [[ $TOOLCHAIN == nightly && -n $COMPONENTS ]]; then
+          args+=(--allow-downgrade)
+        fi
+        log=$(mktemp)
+        trap 'rm -f "$log"' EXIT
+        for attempt in 1 2 3 4 5; do
+          if rustup "${args[@]}" 2>&1 | tee "$log"; then
+            break
+          else
+            status=$?
+          fi
+          if [[ $attempt == 5 ]] || ! grep -Fq 'checksum failed for ' "$log" \
+              || ! grep -Fq 'this is likely due to an ongoing update of the official release server' "$log"; then
+            exit "$status"
+          fi
+          echo "retrying rustup toolchain install in 30 seconds (retry $attempt of 4)" >&2
+          sleep 30
+        done
+    - name: rustup default ${{ inputs.toolchain }}
+      shell: bash
+      env:
+        TOOLCHAIN: ${{ inputs.toolchain }}
+      run: rustup default "$TOOLCHAIN"
+    # Incremental compilation writes state a fresh runner never reads again, so
+    # it is off unless a lane says otherwise.
+    - name: Disable incremental compilation
+      shell: bash
+      run: |
+        if [ -z "${CARGO_INCREMENTAL+set}" ]; then
+          echo CARGO_INCREMENTAL=0 >> "$GITHUB_ENV"
+        fi
+    - name: rustc --version --verbose
+      shell: bash
+      env:
+        TOOLCHAIN: ${{ inputs.toolchain }}
+      run: rustc +"$TOOLCHAIN" --version --verbose

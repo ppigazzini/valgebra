@@ -367,9 +367,15 @@ jobs:
     # before it can publish: a broken manifest or a missing crate file fails here
     # rather than on a user's machine.
     steps:
-      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
-        with:
-          toolchain: stable
+      # Not the $/.github/actions/setup-rust wrapper the CI lanes use, for the
+      # reason the uv install below gives: nothing is checked out yet. It runs
+      # the same rustup command, which the runner carries.
+      - name: Install the stable Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustc --version --verbose
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: sdist

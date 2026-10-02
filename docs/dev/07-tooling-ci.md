@@ -891,6 +891,18 @@ they install uv before the repository is on disk -- their checkout comes later,
 into `tree/`, for `tests/` alone -- and a local action needs its own files on
 disk.
 
+**A toolchain comes from rustup, not from an action.** A third-party action is
+pinned by hash with a comment naming its tag, and `zizmor` checks that the tag
+still names the hash. A toolchain action that publishes one moving tag moves it
+with every upstream change, so the pin drifts from its comment and the audit
+fails every lane behind it until somebody re-pins. Every lane installs through
+`.github/actions/setup-rust` instead, which runs `rustup toolchain install` and
+`rustup default` itself -- the runner carries rustup -- with the one retry the
+release server needs while it publishes, and leaves no tag to drift. The
+release workflow's sdist smoke job runs the same two commands as a plain step,
+because nothing is checked out when it installs. `tests/test_workflow_actions.py`
+fails on a toolchain installed by any third-party action.
+
 **A lane syncs once and runs without re-resolving.** A bare `uv run` resolves
 the environment again first, which uninstalls the editable build `maturin
 develop` put there and installs the wheel from the lock, so every command after
