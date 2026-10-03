@@ -249,6 +249,44 @@ states the release it needs as `Since(n)` -- the one spelling the corpora use
 for one -- and stands down below it, which is the `skipif` the Python suite
 writes one layer up.
 
+**On CPython 3.15, two corpora can hang each other's first imports.** The defect
+is the interpreter's, and 3.15.0rc2 has it: resolving a `lazy import`
+(`_PyImport_LoadLazyImportTstate`) holds the interpreter's global import lock
+while it waits for the module's own lock, and a thread running a module's body
+needs that global lock for every import the body makes (`_imp.acquire_lock`).
+`importlib` detects a cycle among module locks only, so a thread resolving a
+lazy import of a module that a second thread is importing for the first time
+waits on the second for good, and the second waits on it. `typing` holds
+`annotationlib` as `lazy import annotationlib` and resolves it in `NamedTuple`'s
+and `TypedDict`'s metaclasses, in `get_type_hints` and `_eval_type`, in its
+protocol hooks and in the module `__getattr__` that serves `ForwardRef`;
+`dataclasses` and `inspect` import `annotationlib` eagerly. So two test threads
+whose first Python stands on either side -- one corpus defining a `NamedTuple`,
+another importing `dataclasses` -- hang the binary at no CPU, with no frame of
+the extension on either stack. Filtered to that pair,
+`annotations_as_written_are_the_hints_get_type_hints_returns` and
+`a_builtin_base_holding_no_annotations_is_not_asked_for_them` in
+`crates/valgebra-py/src/build/tests.rs` hang nine runs in ten on 3.15. The same
+two module sources started together on two threads of a plain interpreter, with
+no valgebra loaded, hang sixteen runs in twenty on 3.15, four in ten on 3.15t,
+and none on 3.14, which has no lazy imports. The whole binary on four cores
+hangs in none of twenty, because a test that imports `annotationlib` reaches the
+interpreter before the pair meet. The matrix step's five-minute `timeout` is
+what turns a hang there into a failing step rather than a cancelled job.
+
+A hung binary is this defect when one thread's native stack holds
+`_PyImport_LoadLazyImportTstate` and another's `_imp_acquire_lock` or a module
+lock's `acquire`, and then it is the interpreter's before it is the change's:
+run the same filter on the base, where it hangs the same. A filtered run of the
+corpora on 3.15 takes `--test-threads=1`. Reading the stacks takes a tracer the
+kernel admits: with `ptrace_scope` at 1, `gdb -p` refuses a process that is not
+its child, so the binary runs with a preloaded library whose constructor calls
+`prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY)`, and `gdb -p <pid> -batch -ex
+"thread apply all bt"` reads it. `faulthandler.dump_traceback_later` gives the
+Python frames of the plain-interpreter reproduction. What the frontend does
+about the race, and the part of it a program keeps, is on [the frontend
+page](03-frontend.md#what-a-parametrized-form-says).
+
 A release written onto a row is a claim about the lanes, and
 `tests/test_version_gates.py` holds it to them: each release a gate names has a
 lane below it, where the guard is taken, and an **enforced** lane at or above

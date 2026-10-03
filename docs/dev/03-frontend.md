@@ -371,6 +371,16 @@ reads `ForwardRef` out of it: an ordinary import waits on the module's own lock
 alone, and once it returns every lazy import of the module finds it loaded.
 `test_the_first_validator_builds_beside_a_thread_importing_annotationlib` holds
 the import open in a fresh interpreter while the first validator builds.
+The defect is the interpreter's, and `forms` closes only the frontend's own way
+into it. `typing` resolves its lazy `annotationlib` wherever it uses it -- a
+`NamedTuple` or `TypedDict` class statement, `get_type_hints` -- so a program
+that does one of those on one thread while another imports `annotationlib` for
+the first time hangs on 3.15 with no valgebra in it, and the frontend's own
+first import of `annotationlib` can be the second of the two, as an import of
+`dataclasses` can. Importing `annotationlib`, or anything that imports it,
+before a program starts its threads takes the race away. [The testing
+page](08-testing.md#the-bindings-own-corpora) has the reproduction, the hang it
+makes of the interpreter corpora and the stacks that name it.
 
 `Union` and `X | Y` are the same origin in two spellings and build the same
 node. `Literal` interns each argument as a constant, and refuses a type, a list,
