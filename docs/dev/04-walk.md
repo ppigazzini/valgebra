@@ -490,7 +490,16 @@ most of what they cost, and each asks the test directly:
   value the walk holds rather than a handle of their own, so a passing check
   writes no reference count on it: refined integers cost 8% fewer instructions
   on the binding gate (`--binding-refined`), and strings matched against a
-  pattern 5% (`--binding-pattern`).
+  pattern 5% (`--binding-pattern`). A constraint is decided apart from what its
+  failure says: `check_constraint` reads the operand and nothing it would name,
+  and `explained` builds the code and the expectation only for a failure a walk
+  that explains records. The context is read through the frame rather than
+  copied out of it, since a thirteen-word copy handed by value to a function
+  left out of line is written to the stack once per constraint, on the path
+  every passing value takes. Refined integers cost 5% fewer instructions again
+  on the binding gate on 3.12 and 3.14, and a pattern 1.9%; a thousand integers
+  under two bounds cost 11% fewer on 3.12 and 3.15, and a thousand strings
+  under two length bounds 17%.
 - **A record's field.** A field that is a scalar -- most of a `TypedDict` -- is
   its type test in the deciding walk (`field_holds`), read by keys, by the scan
   and in both JSON readings: the binding gate's fifty-field record costs 7%

@@ -2830,6 +2830,51 @@ fn a_fatal_signal_propagates_from_an_attribute_and_from_a_predicate() {
     });
 }
 
+/// An order bound and a divisor run their operand's code where the value's
+/// type declines the operator, and the constraint folds what that code raises
+/// as the attribute and the predicate do: an ordinary exception is a
+/// non-member, and a fatal signal is recorded for the walk to unwind on.
+#[test]
+fn a_fatal_signal_propagates_from_a_bound_and_from_a_divisor() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Rude:\n\
+              \x20   def __le__(self, other):\n\
+              \x20       raise ValueError('no')\n\
+              \x20   def __rmod__(self, other):\n\
+              \x20       raise ValueError('no')\n\
+              class Stopping:\n\
+              \x20   def __le__(self, other):\n\
+              \x20       raise KeyboardInterrupt\n\
+              \x20   def __rmod__(self, other):\n\
+              \x20       raise KeyboardInterrupt\n",
+            c"bound_operands.py",
+            c"bound_operands",
+        )
+        .expect("the module compiles");
+        let one = PyInt::new(py, 1i64).into_any();
+        for (name, want_fatal) in [("Rude", false), ("Stopping", true)] {
+            let operand = module.getattr(name).expect("class").call0().expect("()");
+            let pool = vec![operand.unbind()];
+            for constraint in [
+                Constraint::Ge(OperandIx::new(0)),
+                Constraint::MultipleOf(OperandIx::new(0)),
+            ] {
+                let schema = Schema::Refine {
+                    base: Arc::new(Schema::Int),
+                    constraints: vec![constraint.clone()].into(),
+                };
+                assert_eq!(
+                    decide_with_fatal(py, &schema, &one, &pool),
+                    (false, want_fatal),
+                    "{name} {constraint:?}"
+                );
+            }
+        }
+    });
+}
+
 // SWEEP-SKIP: this case exists to prove a bound, so a mutation that removes
 // the bound makes it run without end. It stays in the test lane and leaves
 // the mutation sweep, where a run that returns no verdict is a rig fault.

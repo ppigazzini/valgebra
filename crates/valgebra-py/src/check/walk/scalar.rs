@@ -14,7 +14,9 @@
 use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyDict, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple};
-use valgebra_core::{CollKind, ConstIx, Constraint, OperandIx, Schema, SeqKind, Violation, quoted};
+use valgebra_core::{
+    CollKind, ConstIx, Constraint, OperandIx, PredIx, Schema, SeqKind, Violation, quoted,
+};
 
 use super::{
     Base, Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at,
@@ -344,7 +346,6 @@ pub(super) fn check_refine(
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
-    let ctx = frame.ctx;
     if matches!(
         base,
         Schema::Seq { .. } | Schema::Coll { .. } | Schema::KeyedMap { .. }
@@ -352,7 +353,7 @@ pub(super) fn check_refine(
     {
         return false;
     }
-    if !(scalar_member(base, value, ctx, ctx.room_to_descend()) == Some(true)
+    if !(scalar_member(base, value, frame.ctx, frame.ctx.room_to_descend()) == Some(true)
         || member(base, value, frame))
     {
         return false;
@@ -369,16 +370,18 @@ pub(super) fn check_refine(
                 &built
             }
             Err(err) => {
-                record_if_fatal(err, value.py(), ctx);
+                record_if_fatal(err, value.py(), frame.ctx);
                 return false;
             }
         },
     };
     let mut ok = true;
     for constraint in constraints {
-        ok &= check_constraint(constraint, obj, ctx, frame);
-        if !ok && stop(ctx) {
-            return false;
+        if !check_constraint(constraint, obj, frame) {
+            ok = false;
+            if stop(frame.ctx) {
+                return false;
+            }
         }
     }
     ok
@@ -410,7 +413,7 @@ fn lengths_before_elements(
     let len = match value {
         Value::Json(_, JsonValue::Array(items)) => Some(items.len()),
         Value::Json(..) | Value::Py(_) => {
-            match value.to_python().and_then(|obj| stored_len(&obj, ctx)) {
+            match value.to_python().and_then(|obj| stored_len(&obj, &ctx)) {
                 Ok(len) => Some(len),
                 Err(err) => {
                     record_if_fatal(err, value.py(), ctx);
@@ -556,13 +559,16 @@ const SIZED: [Sized; 7] = [
 /// An object that is none of these -- one with a `__len__` and no builtin
 /// container behind it -- answers for itself, because there is no storage to
 /// read past it and `__len__` is the whole of what it holds.
-pub(super) fn stored_len(value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> PyResult<usize> {
+///
+/// The context is lent rather than copied: only a subclass reads it, and a
+/// refinement asks a length of every element it bounds.
+pub(super) fn stored_len(value: &Bound<'_, PyAny>, ctx: &Ctx<'_>) -> PyResult<usize> {
     for sized in &SIZED {
         if (sized.is_exact)(value) {
             return value.len();
         }
         if (sized.is_kind)(value) {
-            return if reads_its_length(value, sized.base, ctx) {
+            return if reads_its_length(value, sized.base, *ctx) {
                 value.len()
             } else {
                 held_len(value, sized.base)
@@ -611,98 +617,74 @@ impl Expected<'_> {
 
 /// Check one order bound (`Ge`/`Gt`/`Le`/`Lt`) against `value`: resolve the pool
 /// constant and run the rich comparison at the boundary, folding an ordinary
-/// error to a non-match. Returns `None` when the pool constant is unavailable,
-/// the signal the caller turns into a non-member.
-fn order_bound<'py>(
-    value: &Bound<'py, PyAny>,
+/// error to a non-match. A pool constant that is unavailable is a non-member,
+/// recorded as nothing.
+fn order_bound(
+    value: &Bound<'_, PyAny>,
     index: OperandIx,
-    ctx: Ctx<'py>,
-    py: Python<'py>,
-    compare: impl Fn(&Bound<'py, PyAny>, &Bound<'py, PyAny>) -> PyResult<bool>,
+    compare: impl Fn(&Bound<'_, PyAny>, &Bound<'_, PyAny>) -> PyResult<bool>,
     code: Code,
     symbol: &'static str,
-) -> Option<(bool, Code, Expected<'py>)> {
-    let bound = operand_at(ctx, index, py)?;
-    let ok = fold(compare(value, bound), py, ctx);
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let py = value.py();
+    let Some(bound) = operand_at(frame.ctx, index, py) else {
+        return false;
+    };
+    let ok = decided(compare(value, bound), py, &frame.ctx);
     // Borrowed from the pool for as long as the walk's context lives, so a
     // passing check -- every check, in fast mode -- takes no reference to the
     // bound; a free-threaded interpreter would make that an atomic on one
     // counter every thread sharing the validator touches.
-    Some((ok, code, Expected::Order(symbol, bound)))
+    explained(ok, code, || Expected::Order(symbol, bound), value, frame)
 }
 
 /// Whether `value` (already a base member, materialized once) satisfies one
 /// constraint, recording a violation on failure in explain mode.
-fn check_constraint<'py>(
-    constraint: &'py Constraint,
-    value: &Bound<'py, PyAny>,
-    ctx: Ctx<'py>,
+///
+/// The answer is reached without the message: a constraint reads its operand
+/// and nothing it would name, and [`explained`] builds what a failure says only
+/// once a walk that explains has one to record. The context is read through the
+/// frame, never copied out of it: it is thirteen words, and a copy handed by
+/// value to a function left out of line is written to the stack once per
+/// constraint, on the path every passing value takes.
+fn check_constraint(
+    constraint: &Constraint,
+    value: &Bound<'_, PyAny>,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
     let py = value.py();
-    let (ok, code, expected): (bool, Code, Expected<'py>) = match constraint {
+    match constraint {
         Constraint::Ge(i) => {
-            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.ge(b), GREATER_THAN_EQUAL, ">=")
-            else {
-                return false;
-            };
-            t
+            order_bound(value, *i, |v, b| v.ge(b), GREATER_THAN_EQUAL, ">=", frame)
         }
-        Constraint::Gt(i) => {
-            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.gt(b), GREATER_THAN, ">") else {
-                return false;
-            };
-            t
+        Constraint::Gt(i) => order_bound(value, *i, |v, b| v.gt(b), GREATER_THAN, ">", frame),
+        Constraint::Le(i) => order_bound(value, *i, |v, b| v.le(b), LESS_THAN_EQUAL, "<=", frame),
+        Constraint::Lt(i) => order_bound(value, *i, |v, b| v.lt(b), LESS_THAN, "<", frame),
+        Constraint::MinLen(n) => {
+            let len = stored_len(value, &frame.ctx);
+            let ok = decided(len.map(|len| len >= *n), py, &frame.ctx);
+            explained(ok, TOO_SHORT, || Expected::Length(">=", *n), value, frame)
         }
-        Constraint::Le(i) => {
-            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.le(b), LESS_THAN_EQUAL, "<=")
-            else {
-                return false;
-            };
-            t
+        Constraint::MaxLen(n) => {
+            let len = stored_len(value, &frame.ctx);
+            let ok = decided(len.map(|len| len <= *n), py, &frame.ctx);
+            explained(ok, TOO_LONG, || Expected::Length("<=", *n), value, frame)
         }
-        Constraint::Lt(i) => {
-            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.lt(b), LESS_THAN, "<") else {
-                return false;
-            };
-            t
-        }
-        Constraint::MinLen(n) => (
-            fold(stored_len(value, ctx).map(|len| len >= *n), py, ctx),
-            TOO_SHORT,
-            Expected::Length(">=", *n),
-        ),
-        Constraint::MaxLen(n) => (
-            fold(stored_len(value, ctx).map(|len| len <= *n), py, ctx),
-            TOO_LONG,
-            Expected::Length("<=", *n),
-        ),
         Constraint::MultipleOf(i) => {
-            let Some(operand) = operand_at(ctx, *i, py) else {
+            let Some(operand) = operand_at(frame.ctx, *i, py) else {
                 return false;
             };
-            let ok = fold(is_multiple_of(value, operand), py, ctx);
-            (ok, MULTIPLE_OF, Expected::Multiple(operand))
+            let ok = decided(is_multiple_of(value, operand), py, &frame.ctx);
+            explained(
+                ok,
+                MULTIPLE_OF,
+                || Expected::Multiple(operand),
+                value,
+                frame,
+            )
         }
-        Constraint::Predicate(i) => {
-            // Slow path: the user's Python callable runs at the boundary. A
-            // raising predicate is surfaced as a distinct `predicate_error`
-            // rather than masked as an ordinary failed match.
-            let Some(predicate) = predicate_at(ctx, *i, py) else {
-                return false;
-            };
-            match predicate_passes(value, predicate) {
-                Ok(passed) => (
-                    passed,
-                    PREDICATE_FAILED,
-                    Expected::Fixed("a passing predicate"),
-                ),
-                Err(err) => match predicate_raised(err, py, ctx) {
-                    Some(expected) => (false, PREDICATE_ERROR, expected),
-                    None => return false,
-                },
-            }
-        }
+        Constraint::Predicate(i) => check_predicate(*i, value, frame),
         Constraint::Regex(pattern) => {
             // Native fast path: the precompiled, anchored pattern matches the
             // borrowed string UTF-8 in Rust. A non-string never matches (the base
@@ -717,21 +699,82 @@ fn check_constraint<'py>(
             // belongs; answering "no match" there refutes an inclusion that
             // holds. `a_literal_is_asked_of_a_pattern_the_probe_compiles_itself`
             // holds the case.
+            let regexes = frame.ctx.regexes;
             let matched = value
                 .cast::<PyString>()
                 .ok()
                 .and_then(|s| s.to_str().map_err(set_aside).ok())
-                .is_some_and(|text| match ctx.regexes.get(&(pattern.as_ptr() as usize)) {
+                .is_some_and(|text| match regexes.get(&(pattern.as_ptr() as usize)) {
                     Some(compiled) => compiled.is_match(text),
                     None => compile_pattern(pattern).is_ok_and(|re| re.is_match(text)),
                 });
-            (matched, STRING_PATTERN_MISMATCH, Expected::Pattern(pattern))
+            explained(
+                matched,
+                STRING_PATTERN_MISMATCH,
+                || Expected::Pattern(pattern),
+                value,
+                frame,
+            )
         }
-    };
-    if !ok && ctx.mode.explains() {
-        record_failure(code, &expected, summarize_in(value, ctx), frame);
+    }
+}
+
+/// `ok`, with the failure it is recorded where the walk explains one. What
+/// the failure says is built past that test, so a passing value -- and every
+/// value a walk that only decides reads -- names no operand.
+fn explained<'e>(
+    ok: bool,
+    code: Code,
+    expected: impl FnOnce() -> Expected<'e>,
+    value: &Bound<'_, PyAny>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    if !ok && frame.ctx.mode.explains() {
+        record_failure(code, &expected(), summarize_in(value, frame.ctx), frame);
     }
     ok
+}
+
+/// [`fold`] for a caller that holds the context by reference: an error is
+/// folded out of line, where the context is copied, and an answer copies
+/// nothing.
+fn decided(result: PyResult<bool>, py: Python<'_>, ctx: &Ctx<'_>) -> bool {
+    result.unwrap_or_else(|err| refused(err, py, ctx))
+}
+
+/// The error a constraint's test raised, read as a non-match and recorded
+/// where it is a fatal signal. Out of line and cold, for the reason
+/// [`set_aside`] is.
+#[cold]
+#[inline(never)]
+fn refused(err: PyErr, py: Python<'_>, ctx: &Ctx<'_>) -> bool {
+    record_if_fatal(err, py, *ctx);
+    false
+}
+
+/// A predicate constraint: the user's callable, run at the boundary -- the
+/// slow path, out of line so the constraints the walk decides in Rust keep
+/// the loop they share small. A raising predicate is surfaced as a distinct
+/// `predicate_error` rather than masked as an ordinary failed match.
+#[inline(never)]
+fn check_predicate(index: PredIx, value: &Bound<'_, PyAny>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
+    let py = value.py();
+    let Some(predicate) = predicate_at(ctx, index, py) else {
+        return false;
+    };
+    let (ok, code, expected) = match predicate_passes(value, predicate) {
+        Ok(passed) => (
+            passed,
+            PREDICATE_FAILED,
+            Expected::Fixed("a passing predicate"),
+        ),
+        Err(err) => match predicate_raised(err, py, ctx) {
+            Some(expected) => (false, PREDICATE_ERROR, expected),
+            None => return false,
+        },
+    };
+    explained(ok, code, || expected, value, frame)
 }
 
 /// What a predicate that raised `err` reports: the error, or `None` where it is

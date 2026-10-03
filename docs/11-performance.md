@@ -559,7 +559,12 @@ program that builds validators per request, and to no validation call.
   `--binding-refined`). A violation's message, which needs the bound's `repr`,
   is built only at the site that records one (`Expected` in
   `check/walk/scalar.rs`): `tests/test_refinements.py` counts the bound's
-  `repr` calls, and a hundred passing checks make none.
+  `repr` calls, and a hundred passing checks make none. A constraint is decided
+  without its code and expectation, which `explained` builds only for a failure
+  a walk that explains records, and the walk's context is read through the
+  frame rather than copied onto the stack once per constraint: a thousand
+  integers under two bounds cost 11% fewer instructions, a thousand strings
+  under two length bounds 17%.
 - **An error the walk answers with is dropped out of line.** Dropping one asks
   whether the thread is attached to the interpreter, a thread-local the
   extension reaches through a call into the dynamic linker, and inlined into a
