@@ -12,10 +12,11 @@ use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyFrozenSet, PyIterator, PyList, PySet, PyTuple};
-use valgebra_core::{ClassIx, PathSegment, Schema, SeqKind, SeqShape, Violation};
+use valgebra_core::{ClassIx, Field, PathSegment, Schema, SeqKind, SeqShape, Violation};
 
 #[cfg(PyPy)]
 use super::reads_its_length;
+use super::record::check_attr_record;
 use super::scalar::{Scalar, admitted_quietly, homogeneous_scalar_union, scalar_union_admits};
 use super::{
     Base, Frame, Scan, class_at, held_iter, homogeneous_scalar, is_exactly_a, is_fatal, member,
@@ -593,9 +594,12 @@ pub(super) fn element_list_matches(
         Schema::Union(members) => {
             scalar_union_list_matches(list, prefix, element, members, value, frame)
         }
-        Schema::Intersection(members) => {
-            named_tuple_list_matches(list, prefix, element, members, value, frame)
-        }
+        Schema::Intersection(members) => match &members[..] {
+            [Schema::Instance(index), Schema::AttrRecord { fields }] => {
+                class_record_list_matches(list, prefix, element, *index, fields, value, frame)
+            }
+            _ => named_tuple_list_matches(list, prefix, element, members, value, frame),
+        },
         Schema::Instance(index) => {
             instance_list_matches(list, prefix, element, *index, value, frame)
         }
@@ -735,6 +739,66 @@ fn scalar_tuple_positions<'s>(
             .iter()
             .all(|position| scalar_of(position).is_some()))
     .then_some(&shape.prefix)
+}
+
+/// Membership for a list whose every element is a dataclass -- `list[Point]`,
+/// each element the meet of the class and the record of its fields -- and
+/// `None` behind a fixed prefix.
+///
+/// An element whose type is the class passes the meet's class conjunct as the
+/// walk reads it, off the type pointer, so its membership is the record's, and
+/// the record is walked directly, at the levels the walk would walk it at: the
+/// meet's and the record's are held around it. Any other element -- a subclass
+/// instance, another value, one where either level is not free or a fatal
+/// signal is recorded -- is walked whole, which asks `isinstance` and refuses
+/// where the walk refuses. The general loop paid a call into `member` for the
+/// meet, one for the class and one for the record around the same walk of the
+/// fields. The list is read in place: reading an attribute may run Python,
+/// which may move the list.
+#[inline(never)]
+pub(super) fn class_record_list_matches(
+    list: &Bound<'_, PyList>,
+    prefix: &[Schema],
+    element: &Schema,
+    index: ClassIx,
+    fields: &[Field],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    if !prefix.is_empty() {
+        return None;
+    }
+    let class = class_at(ctx, index, value.py())?;
+    let mut ok = true;
+    let scan = scan_list(list, |at, item| {
+        if ctx.mode.explains() {
+            frame.path.push(PathSegment::Index(at));
+        }
+        let held = !ctx.fatal_seen.get() && is_exactly_a(item, class);
+        let item = Value::Py(item);
+        ok &= if held
+            && let Some(_meet) = ctx.descend()
+            && let Some(_record) = ctx.descend()
+        {
+            check_attr_record(fields, &item, frame)
+        } else {
+            member(element, &item, frame)
+        };
+        if ctx.mode.explains() {
+            frame.path.pop();
+        }
+        if !ok && stop(ctx) {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    Some(match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    })
 }
 
 /// Membership for a list whose every element is a named tuple of scalar

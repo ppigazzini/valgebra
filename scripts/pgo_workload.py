@@ -51,6 +51,12 @@ class _Point(NamedTuple):
     y: str
 
 
+@dataclass
+class _Pair:
+    x: int
+    y: str
+
+
 def _run(check: Check, samples: Sequence[object], rounds: int) -> None:
     for _ in range(rounds):
         for value in samples:
@@ -70,9 +76,10 @@ def _lists_with_readers() -> None:
     # by its table, a class by each element's type, a scalar or `None` by its
     # kind's loop -- an integer's and a string's, the two kinds most often made
     # optional -- any other union of scalars by its branches' tests, a tuple of
-    # scalars by its positions', a named tuple by its type and positions'. The
-    # walk around those readers is the one every other list takes, and a reader
-    # the profile never enters moves how that walk is laid out.
+    # scalars by its positions', a named tuple by its type and positions', a
+    # dataclass by its type and the record of its attributes. The walk around
+    # those readers is the one every other list takes, and a reader the profile
+    # never enters moves how that walk is laid out.
     statuses = Validator(list[Literal["new", "open", "done"]])
     _run(statuses.is_valid, [["new", "open", "done"] * 8, ["new", "gone"]], 2000)
     days = Validator(list[datetime.date])
@@ -87,6 +94,12 @@ def _lists_with_readers() -> None:
     _run(coordinates.is_valid, [[(1, "a")] * 24, [(1, 2)]], 2000)
     points = Validator(list[_Point])
     _run(points.is_valid, [[_Point(1, "a")] * 24, [(1, "a")]], 2000)
+    pairs = Validator(list[_Pair])
+    _run(pairs.is_valid, [[_Pair(1, "a")] * 24, [(1, "a")]], 2000)
+    # A field of the wrong type, which the constructor does not check.
+    wrong = _Pair(1, "a")
+    vars(wrong)["y"] = 2
+    _explain(pairs.validate, [[_Pair(1, "a")] * 24, [wrong]], 500)
 
 
 def main(argv: list[str]) -> None:

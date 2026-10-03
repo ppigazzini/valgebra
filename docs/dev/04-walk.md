@@ -560,13 +560,21 @@ at every element, for the tuple the tuple's own arm and a reading of each
 position's schema, and for the named tuple a call into the meet and one into
 each of its two conjuncts, so the readers cost a thousand `date`s 76% fewer
 instructions, a thousand literals 62%, a thousand `tuple[int, str]` 61% and a
-thousand `NamedTuple`s of two scalar fields 76% (81% under `validate`). The
-tuple reader needs the two levels below the list free, the tuple's and its
-positions', as the union of scalars needs the union's and its branch's; the
-named-tuple reader needs the meet's as well. The list arm hands every kind of
-tail to one reader (`element_list_matches`) behind its one tag test, and the
-readers cost the PGO wheel's walk of a nested list 3% more instructions with
-the training workload reading lists of each kind, 6% without it.
+thousand `NamedTuple`s of two scalar fields 76% (81% under `validate`). A list
+of dataclasses, each element the meet of its class and the record of its fields,
+has a reader too (`class_record_list_matches`): an element of exactly the class
+is walked as its record, with the meet's level and the record's held around it
+as the walk holds them, and any other element is walked whole, as is every
+element once a fatal signal is recorded, so that no class's code runs after it.
+A record is read by `getattr`, which may run Python, so that list is always read
+in place, and a hundred five-field dataclasses cost 12% fewer instructions than
+with the meet, the class and the record each dispatched. The tuple reader needs
+the two levels below the list free, the tuple's and its positions', as the union
+of scalars needs the union's and its branch's; the named-tuple reader needs the
+meet's as well. The list arm hands every kind of tail to one reader
+(`element_list_matches`) behind its one tag test, and the readers cost the PGO
+wheel's walk of a nested list 3% more instructions with the training workload
+reading lists of each kind, 6% without it.
 
 **Where a question is asked is part of what it costs.** The walk is one
 recursive function under fat LTO, with the arms of `member` inlined into it, so

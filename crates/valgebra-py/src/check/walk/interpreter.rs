@@ -5864,3 +5864,202 @@ fn a_tuple_of_each_scalar_kind_is_explained_by_its_own_test() {
         }
     });
 }
+
+/// A module holding a dataclass `Pair(x: int, y: str)`, a subclass of it, a
+/// second dataclass of the same fields, and instances of each the
+/// dataclass-list tests read, under the name its test gives, for the reason
+/// `union_classes` takes one.
+fn dataclasses_listed<'py>(py: Python<'py>, name: &std::ffi::CStr) -> Bound<'py, PyModule> {
+    PyModule::from_code(
+        py,
+        c"import dataclasses\n\
+          @dataclasses.dataclass\n\
+          class Pair:\n\
+          \x20   x: int\n\
+          \x20   y: str\n\
+          class Moved(Pair):\n\
+          \x20   pass\n\
+          @dataclasses.dataclass\n\
+          class Other:\n\
+          \x20   x: int\n\
+          \x20   y: str\n\
+          P, WRONG, SUB, ELSE = Pair(1, 'a'), Pair(1, 2), Moved(2, 'b'), Other(1, 'a')\n",
+        c"dataclasses_listed.py",
+        name,
+    )
+    .expect("the module compiles")
+}
+
+/// A dataclass as the frontend lowers one: the meet of its class, pooled at
+/// slot 0, and the record of its fields.
+fn class_record_schema() -> Schema {
+    Schema::meet([
+        Schema::Instance(ClassIx::new(0)),
+        Schema::attr_record(vec![
+            Field {
+                name: "x".into(),
+                schema: Schema::Int,
+                required: true,
+            },
+            Field {
+                name: "y".into(),
+                schema: Schema::Str,
+                required: true,
+            },
+        ]),
+    ])
+}
+
+/// A list whose element is a dataclass answers what the walk answers in both
+/// modes -- an instance of the class whose fields pass, a subclass instance
+/// walked and admitted, another class of the same fields refused -- and a
+/// refused field is named at its element's index.
+#[test]
+fn a_list_of_dataclasses_answers_as_the_walk_does() {
+    Python::attach(|py| {
+        let module = dataclasses_listed(py, c"dataclasses_answered");
+        let pool = vec![module.getattr("Pair").expect("the class").unbind()];
+        let list = Schema::list(SeqShape::homogeneous(class_record_schema()));
+        for (source, want) in [
+            ("[P, P]", true),
+            ("[P, SUB]", true),
+            ("[]", true),
+            ("[P, WRONG]", false),
+            ("[P, ELSE]", false),
+            ("[P, 1]", false),
+        ] {
+            assert_eq!(
+                decide(py, &list, &evaluated(&module, source), &pool, &[]),
+                want,
+                "{source}"
+            );
+        }
+        let refused = evaluated(&module, "[P, WRONG]");
+        let (ok, violations) = explain(py, &list, &refused, &pool, &[]);
+        let at: Vec<Vec<PathSegment>> = violations.into_iter().map(|v| v.path).collect();
+        assert_eq!(
+            (ok, at),
+            (
+                false,
+                vec![vec![PathSegment::Index(1), PathSegment::Key("y".into())]]
+            )
+        );
+    });
+}
+
+/// The dataclass-list reader walks an element of exactly the class as its
+/// record and any other element whole, in both modes. It declines behind a
+/// fixed prefix; an element is walked whole where the two levels below the
+/// list are not free, which refuses at the bound as the walk does; and the
+/// reader a list arm hands its tails to reaches it.
+#[test]
+fn a_list_of_dataclasses_is_read_as_its_records() {
+    use super::sequence::{class_record_list_matches, element_list_matches};
+    Python::attach(|py| {
+        let module = dataclasses_listed(py, c"dataclasses_read");
+        let pool = vec![module.getattr("Pair").expect("the class").unbind()];
+        let element = class_record_schema();
+        let Schema::Intersection(members) = &element else {
+            unreachable!("a meet")
+        };
+        let [_, Schema::AttrRecord { fields }] = &members[..] else {
+            unreachable!("a class and its record")
+        };
+        let list = Schema::list(SeqShape::homogeneous(element.clone()));
+        let index = build_index(py, &list, &[], &pool);
+        let state = WalkState::new();
+        let ctx = |mode| Ctx {
+            pool: &pool,
+            defs: &[],
+            records: &index.records,
+            attrs: &index.attrs,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
+            mode,
+        };
+        let read = |source: &str, prefix: &[Schema], mode| {
+            let value = evaluated(&module, source);
+            let listed = value.cast::<PyList>().expect("a list");
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx(mode));
+            let answer = class_record_list_matches(
+                listed,
+                prefix,
+                &element,
+                ClassIx::new(0),
+                fields,
+                &Value::Py(&value),
+                &mut frame,
+            );
+            (answer, out.len())
+        };
+        let fast = WalkMode::Fast;
+        assert_eq!(read("[P, SUB]", &[], fast), (Some(true), 0));
+        assert_eq!(read("[P, WRONG]", &[], fast), (Some(false), 0));
+        assert_eq!(read("[P, ELSE]", &[], fast), (Some(false), 0));
+        assert_eq!(read("[P, SUB]", &[], WalkMode::Explain), (Some(true), 0));
+        assert_eq!(read("[P, WRONG]", &[], WalkMode::Explain), (Some(false), 1));
+        assert_eq!(read("[P]", &[Schema::Int], fast), (None, 0));
+        state.depth.set(MAX_WALK_DEPTH - 3);
+        assert_eq!(read("[P]", &[], fast), (Some(true), 0));
+        // Each field's level is past the bound: the record reports both, as
+        // the walk through the meet does.
+        state.depth.set(MAX_WALK_DEPTH - 2);
+        assert_eq!(read("[P]", &[], fast), (Some(false), 0));
+        assert_eq!(read("[P]", &[], WalkMode::Explain), (Some(false), 2));
+        state.depth.set(MAX_WALK_DEPTH - 1);
+        assert_eq!(read("[P]", &[], fast), (Some(false), 0));
+        state.depth.set(0);
+
+        let value = evaluated(&module, "[P]");
+        let listed = value.cast::<PyList>().expect("a list");
+        let (mut path, mut out) = (Vec::new(), Vec::new());
+        let mut frame = Frame::new(&mut path, &mut out, ctx(fast));
+        assert_eq!(
+            element_list_matches(listed, &[], &element, &Value::Py(&value), &mut frame),
+            Some(true)
+        );
+    });
+}
+
+/// The dataclass-list reader reads no element's attributes once a fatal
+/// signal is recorded: an explaining walk goes on past the element that
+/// raised it, and every later element is refused at once, as the walk refuses
+/// it, without running the class's code.
+#[test]
+fn a_list_of_dataclasses_reads_nothing_past_a_fatal_signal() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Probe:\n\
+              \x20   reads = 0\n\
+              \x20   y = 'a'\n\
+              \x20   def __init__(self, fatal):\n\
+              \x20       self.fatal = fatal\n\
+              \x20   @property\n\
+              \x20   def x(self):\n\
+              \x20       if self.fatal:\n\
+              \x20           raise KeyboardInterrupt\n\
+              \x20       Probe.reads += 1\n\
+              \x20       return 1\n\
+              VALUE = [Probe(True), Probe(False)]\n",
+            c"fatal_records.py",
+            c"fatal_records",
+        )
+        .expect("the module compiles");
+        let class = module.getattr("Probe").expect("the class");
+        let pool = vec![class.clone().unbind()];
+        let list = Schema::list(SeqShape::homogeneous(class_record_schema()));
+        let value = module.getattr("VALUE").expect("the list");
+        let (ok, _) = explain(py, &list, &value, &pool, &[]);
+        let reads: usize = class
+            .getattr("reads")
+            .and_then(|reads| reads.extract())
+            .expect("a count");
+        assert_eq!((ok, reads), (false, 0));
+    });
+}
