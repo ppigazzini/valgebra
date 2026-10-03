@@ -461,7 +461,11 @@ program that builds validators per request, and to no validation call.
   compiles (`IS_DATACLASS` in `build/classes.rs`). Held among the forms, its
   import would leave tracked objects behind that lengthen every later
   garbage-collection pass, and a build that compiles no dataclass would read
-  6.45% dearer on `--binding-build`.
+  6.45% dearer on `--binding-build`. The table of loaded modules is held too
+  (`loaded_modules` in `build.rs`): a `TypedDict` from CPython 3.15, and one
+  `typing_extensions` builds on any release, asks it once per class for the
+  sentinel that says no `extra_items` were given, and importing `sys` to ask
+  is 12% of compiling a three-field one.
 - **A class's annotations are read as written** wherever evaluating them would
   hand each one back unchanged (`annotations_as_written` in `build/classes.rs`).
   `typing.get_type_hints` exists to evaluate forward references, and on a class

@@ -19,7 +19,9 @@ use pyo3::types::{
 use valgebra_core::{Field, MapClause, Schema, SeqShape};
 
 use super::generics::is_field_qualifier;
-use super::{MAX_BUILD_DEPTH, Pool, build_schema, forms, is_extension, not_implemented};
+use super::{
+    MAX_BUILD_DEPTH, Pool, build_schema, forms, is_extension, loaded_modules, not_implemented,
+};
 use crate::errors::{summarize, unless_fatal};
 
 /// `dataclasses.is_dataclass`, held apart from [`Forms`](super::Forms) and
@@ -814,14 +816,13 @@ fn gave_no_extra_items(ty: &Bound<'_, PyType>, extra: &Bound<'_, PyAny>) -> PyRe
 /// one.
 ///
 /// Looked up in `sys.modules` rather than imported: the class exists, so its
-/// metaclass's module is loaded, and a lookup runs no module's code.
+/// metaclass's module is loaded, and a lookup runs no module's code. The table
+/// is the one [`loaded_modules`] holds, since every `TypedDict` from 3.15 says
+/// what it gives its extra keys and asks this once per class compiled.
 fn no_extra_items<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = ty.py();
     let module = ty.get_type().getattr(intern!(py, "__module__"))?;
-    let modules = py
-        .import(intern!(py, "sys"))?
-        .getattr(intern!(py, "modules"))?;
-    match modules.cast::<PyDict>()?.get_item(module)? {
+    match loaded_modules(py)?.get_item(module)? {
         Some(module) => module.getattr_opt(intern!(py, "NoExtraItems")),
         None => Ok(None),
     }

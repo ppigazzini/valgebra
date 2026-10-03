@@ -314,6 +314,24 @@ static EXTENSIONS: PyOnceLock<Extensions> = PyOnceLock::new();
 /// dictionary lookup rather than an import of `sys` per question.
 static MODULES: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
 
+/// The table of loaded modules, `sys.modules`, read once per interpreter.
+///
+/// An import of `sys` is `__import__` called through the import machinery,
+/// with its arguments built by format string, every time it is asked: some two
+/// thousand instructions, which a lookup the build makes per class pays again
+/// for every class it compiles.
+pub(crate) fn loaded_modules(py: Python<'_>) -> PyResult<&Bound<'_, PyDict>> {
+    MODULES
+        .get_or_try_init(py, || -> PyResult<Py<PyDict>> {
+            Ok(py
+                .import(intern!(py, "sys"))?
+                .getattr(intern!(py, "modules"))?
+                .cast_into::<PyDict>()?
+                .unbind())
+        })
+        .map(|modules| modules.bind(py))
+}
+
 /// The `typing_extensions` forms, once the module is loaded.
 ///
 /// Looked up in `sys.modules` rather than imported: an object of the module
@@ -325,17 +343,7 @@ pub(crate) fn extensions(py: Python<'_>) -> PyResult<Option<&'static Extensions>
     if let Some(held) = EXTENSIONS.get(py) {
         return Ok(Some(held));
     }
-    let modules = MODULES.get_or_try_init(py, || -> PyResult<Py<PyDict>> {
-        Ok(py
-            .import(intern!(py, "sys"))?
-            .getattr(intern!(py, "modules"))?
-            .cast_into::<PyDict>()?
-            .unbind())
-    })?;
-    let Some(module) = modules
-        .bind(py)
-        .get_item(intern!(py, "typing_extensions"))?
-    else {
+    let Some(module) = loaded_modules(py)?.get_item(intern!(py, "typing_extensions"))? else {
         return Ok(None);
     };
     // A module is in `sys.modules` before its body has run, and another thread

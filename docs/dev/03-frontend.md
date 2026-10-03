@@ -328,20 +328,24 @@ before any name is read -- and the call answers wherever a step does not read as
 its own: a table that is not exactly a `dict`, a `dataclasses` with no marker.
 `a_dataclass_declares_what_fields_returns` holds the reading to the call.
 
-**A module is a handle too.** `dataclasses.is_dataclass` and `dataclasses.fields`
-are asked of handles held after the first class that asks and *only* after one
-asks: importing `dataclasses` pulls `inspect`, `copy` and `functools` in with
-it, and the tracked objects they leave behind are walked by every later garbage
-collection. `numbers.Number` -- the register both a multiple-of's remainder and
-an order bound's comparison follow -- is held the same way, and for the ordinary
-reason rather than that one: written as an import it asks `sys.modules` and
-decodes two names **per bound**, which a fifty-field record of
-`Annotated[int, Ge(0)]` pays fifty times. A bound of exactly `int`, `float` or
-`bool` is a number without asking: `numbers` registers those types and an ABC
-keeps what it registers, where the question runs `ABCMeta.__instancecheck__`, a
-Python function, once a bound -- 15% of compiling that record. A subclass is
-asked, because the ABC also reads a value's `__class__`, which a subclass may
-answer with code.
+**A module is a handle too.** `dataclasses.is_dataclass` and
+`dataclasses.fields` are asked of handles held after the first class that asks
+and *only* after one asks: importing `dataclasses` pulls `inspect`, `copy` and
+`functools` in with it, and the tracked objects they leave behind are walked by
+every later garbage collection. `numbers.Number` -- the register both a
+multiple-of's remainder and an order bound's comparison follow -- is held the
+same way, and for the ordinary reason rather than that one: written as an import
+it asks `sys.modules` and decodes two names **per bound**, which a fifty-field
+record of `Annotated[int, Ge(0)]` pays fifty times. A bound of exactly `int`,
+`float` or `bool` is a number without asking: `numbers` registers those types
+and an ABC keeps what it registers, where the question runs
+`ABCMeta.__instancecheck__`, a Python function, once a bound -- 15% of compiling
+that record. A subclass is asked, because the ABC also reads a value's
+`__class__`, which a subclass may answer with code. The table of loaded modules
+is held the same way (`loaded_modules` in `build.rs`): a `TypedDict` from 3.15
+asks it for its implementation's `NoExtraItems` sentinel once per class, and an
+import of `sys` there is 12% of compiling a three-field one, and of one built by
+`typing_extensions` on every release.
 
 ## What a parametrized form says
 
