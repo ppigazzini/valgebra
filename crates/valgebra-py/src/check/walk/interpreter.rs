@@ -5571,3 +5571,179 @@ fn a_list_of_scalar_tuples_is_read_by_a_test_of_each_element() {
         );
     });
 }
+
+/// A module holding a named tuple `Point(x: int, y: str)`, a subclass of it,
+/// a second named tuple of the same fields, and instances of each the
+/// named-tuple list tests read, under the name its test gives, for the reason
+/// `union_classes` takes one.
+fn named_tuples<'py>(py: Python<'py>, name: &std::ffi::CStr) -> Bound<'py, PyModule> {
+    PyModule::from_code(
+        py,
+        c"from typing import NamedTuple\n\
+          class Point(NamedTuple):\n\
+          \x20   x: int\n\
+          \x20   y: str\n\
+          class Moved(Point):\n\
+          \x20   pass\n\
+          class Other(NamedTuple):\n\
+          \x20   x: int\n\
+          \x20   y: str\n\
+          P, WRONG, SUB, ELSE = Point(1, 'a'), Point(1, 2), Moved(2, 'b'), Other(1, 'a')\n",
+        c"named_tuples_listed.py",
+        name,
+    )
+    .expect("the module compiles")
+}
+
+/// A named tuple as the frontend lowers one: the meet of its class, pooled at
+/// slot 0, and the tuple its fields lay out.
+fn named_tuple_schema(positions: impl IntoIterator<Item = Schema>) -> Schema {
+    Schema::meet([
+        Schema::Instance(ClassIx::new(0)),
+        Schema::tuple(SeqShape::fixed(positions)),
+    ])
+}
+
+/// A list whose element is a named tuple of scalar fields answers what the
+/// walk answers in both modes: an instance of the class whose positions pass
+/// is admitted, a subclass instance walked and admitted, a plain tuple or
+/// another named tuple of the same fields refused, in place and through a
+/// snapshot, and a refused position is named at its own index within its
+/// element.
+#[test]
+fn a_list_of_named_tuples_answers_as_the_walk_does() {
+    Python::attach(|py| {
+        let module = named_tuples(py, c"named_tuples_answered");
+        let pool = vec![module.getattr("Point").expect("the class").unbind()];
+        let list = Schema::list(SeqShape::homogeneous(named_tuple_schema([
+            Schema::Int,
+            Schema::Str,
+        ])));
+        for (source, want) in [
+            ("[P, P]", true),
+            ("[Point(True, 'a')]", true),
+            ("[P, SUB]", true),
+            ("[]", true),
+            ("[P, WRONG]", false),
+            ("[P, (1, 'a')]", false),
+            ("[P, ELSE]", false),
+            ("[P, 1]", false),
+            ("[P] * 40", true),
+            ("[P] * 39 + [SUB]", true),
+            ("[P] * 39 + [WRONG]", false),
+        ] {
+            assert_eq!(
+                decide(py, &list, &evaluated(&module, source), &pool, &[]),
+                want,
+                "{source}"
+            );
+        }
+        let refused = evaluated(&module, "[P, WRONG]");
+        let (ok, violations) = explain(py, &list, &refused, &pool, &[]);
+        let at: Vec<Vec<PathSegment>> = violations.into_iter().map(|v| v.path).collect();
+        assert_eq!(
+            (ok, at),
+            (
+                false,
+                vec![vec![PathSegment::Index(1), PathSegment::Index(1)]]
+            )
+        );
+    });
+}
+
+/// The named-tuple reader settles an element of exactly the class whose
+/// positions pass and walks any other, in both modes. It declines behind a
+/// fixed prefix, for a meet of other conjuncts, for a tuple with a tail or a
+/// position that is not a scalar, and where the three levels below the list
+/// are not free; the reader a list arm hands its tails to reaches it.
+#[test]
+fn a_list_of_named_tuples_is_read_by_a_test_of_each_element() {
+    use super::sequence::{element_list_matches, named_tuple_list_matches};
+    Python::attach(|py| {
+        let module = named_tuples(py, c"named_tuples_read");
+        let pool = vec![module.getattr("Point").expect("the class").unbind()];
+        let element = named_tuple_schema([Schema::Int, Schema::Str]);
+        let list = Schema::list(SeqShape::homogeneous(element.clone()));
+        let index = build_index(py, &list, &[], &pool);
+        let state = WalkState::new();
+        let ctx = |mode| Ctx {
+            pool: &pool,
+            defs: &[],
+            records: &index.records,
+            attrs: &index.attrs,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
+            mode,
+        };
+        let read = |source: &str, prefix: &[Schema], element: &Schema, mode| {
+            let Schema::Intersection(members) = element else {
+                unreachable!("a meet")
+            };
+            let value = evaluated(&module, source);
+            let listed = value.cast::<PyList>().expect("a list");
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx(mode));
+            let answer = named_tuple_list_matches(
+                listed,
+                prefix,
+                element,
+                members,
+                &Value::Py(&value),
+                &mut frame,
+            );
+            (answer, out.len())
+        };
+        let fast = WalkMode::Fast;
+        assert_eq!(read("[P, SUB]", &[], &element, fast), (Some(true), 0));
+        assert_eq!(read("[P, WRONG]", &[], &element, fast), (Some(false), 0));
+        assert_eq!(read("[P, ELSE]", &[], &element, fast), (Some(false), 0));
+        assert_eq!(
+            read("[P, SUB]", &[], &element, WalkMode::Explain),
+            (Some(true), 0)
+        );
+        assert_eq!(
+            read("[P, WRONG]", &[], &element, WalkMode::Explain),
+            (Some(false), 1)
+        );
+        assert_eq!(read("[P]", &[Schema::Int], &element, fast), (None, 0));
+        let record = Schema::meet([
+            Schema::Instance(ClassIx::new(0)),
+            Schema::attr_record(vec![Field {
+                name: "x".into(),
+                schema: Schema::Int,
+                required: true,
+            }]),
+        ]);
+        assert_eq!(read("[P]", &[], &record, fast), (None, 0));
+        let tailed = Schema::meet([
+            Schema::Instance(ClassIx::new(0)),
+            Schema::tuple(SeqShape::homogeneous(Schema::Int)),
+        ]);
+        assert_eq!(read("[P]", &[], &tailed, fast), (None, 0));
+        let nested = named_tuple_schema([
+            Schema::Int,
+            Schema::list(SeqShape::homogeneous(Schema::Str)),
+        ]);
+        assert_eq!(read("[P]", &[], &nested, fast), (None, 0));
+        state.depth.set(MAX_WALK_DEPTH - 3);
+        assert_eq!(read("[P]", &[], &element, fast), (Some(true), 0));
+        state.depth.set(MAX_WALK_DEPTH - 2);
+        assert_eq!(read("[P]", &[], &element, fast), (None, 0));
+        state.depth.set(MAX_WALK_DEPTH - 1);
+        assert_eq!(read("[P]", &[], &element, fast), (None, 0));
+        state.depth.set(0);
+
+        let value = evaluated(&module, "[P]");
+        let listed = value.cast::<PyList>().expect("a list");
+        let (mut path, mut out) = (Vec::new(), Vec::new());
+        let mut frame = Frame::new(&mut path, &mut out, ctx(fast));
+        assert_eq!(
+            element_list_matches(listed, &[], &element, &Value::Py(&value), &mut frame),
+            Some(true)
+        );
+    });
+}

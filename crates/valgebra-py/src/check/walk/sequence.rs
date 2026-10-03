@@ -60,6 +60,7 @@ pub(super) fn check_seq(
             }
             if let Some(
                 element @ (Schema::Union(_)
+                | Schema::Intersection(_)
                 | Schema::Instance(_)
                 | Schema::Seq {
                     container: SeqKind::Tuple,
@@ -482,12 +483,20 @@ pub(super) fn scalar_union_list_matches(
     Some(scalar_list_loop(list, admits, value, frame))
 }
 
-/// Membership for a list whose element is a union, a class or a tuple, read by
-/// the reader for its kind, and `None` where that reader declines.
+/// Membership for a list whose element is a union, a meet, a class or a tuple,
+/// read by the reader for its kind, and `None` where that reader declines.
 ///
 /// One call for every kind, behind the one test of the tail's tag [`check_seq`]
 /// makes: a second test there moved the PGO wheel's layout of the general
 /// scan beside it.
+///
+/// **Cold, which it is not.** It is called once per list, and the mark is what
+/// orders the tag test: without a profile, the compiler tests the tags a case
+/// covers most of first, and it reads a union and a meet side by side as a
+/// range of two, which it tests before a nested list's tag -- four instructions
+/// more for every list holding lists, 1.85% of `--binding-deep`. Marked cold,
+/// the readers' tags are tested after the nested list's.
+#[cold]
 #[inline(never)]
 pub(super) fn element_list_matches(
     list: &Bound<'_, PyList>,
@@ -499,6 +508,9 @@ pub(super) fn element_list_matches(
     match element {
         Schema::Union(members) => {
             scalar_union_list_matches(list, prefix, element, members, value, frame)
+        }
+        Schema::Intersection(members) => {
+            named_tuple_list_matches(list, prefix, element, members, value, frame)
         }
         Schema::Instance(index) => {
             instance_list_matches(list, prefix, element, *index, value, frame)
@@ -639,6 +651,83 @@ fn scalar_tuple_positions<'s>(
             .iter()
             .all(|position| scalar_of(position).is_some()))
     .then_some(&shape.prefix)
+}
+
+/// Membership for a list whose every element is a named tuple of scalar
+/// fields -- `list[Point]`, each element the meet of the class and the tuple
+/// its fields lay out -- where the three levels below the list are free, and
+/// `None` elsewhere.
+///
+/// An element whose type is the class, holding as many positions as the tuple
+/// has and each passing its kind's test, belongs to both conjuncts as the walk
+/// reads them: the class off the type pointer, as
+/// [`check_instance`](super::check_instance) reads it, and the tuple through
+/// its storage, which `CPython` reads whatever the class overrides. Any other
+/// element is walked, which asks `isinstance` and may run the class's
+/// `__instancecheck__`. The general loop paid a call into `member` for the meet
+/// and one for each conjunct around the same tests, and read each position's
+/// schema again for every tuple. A list is read in place unless a snapshot
+/// every element of which fits settles it.
+///
+/// The meet's level is held while the tuple's and its positions' are asked
+/// for, which is what the walk does with each element. `PyPy` reads no type
+/// pointer, so there every element is walked.
+#[inline(never)]
+pub(super) fn named_tuple_list_matches(
+    list: &Bound<'_, PyList>,
+    prefix: &[Schema],
+    element: &Schema,
+    members: &[Schema],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    let [
+        Schema::Seq {
+            container: SeqKind::Tuple,
+            shape,
+        },
+        Schema::Instance(index),
+    ] = members
+    else {
+        return None;
+    };
+    let positions = {
+        let _meet = ctx.descend()?;
+        scalar_tuple_positions(prefix, shape, ctx)?
+    };
+    let class = class_at(ctx, *index, value.py())?;
+    let fits = |item: &Value<'_, '_>| {
+        matches!(item, Value::Py(obj) if is_exactly_a(obj, class)
+        && obj.cast::<PyTuple>().is_ok_and(|tuple| {
+            tuple.len() == positions.len()
+                && tuple.iter_borrowed().zip(positions).all(|(item, position)| {
+                    scalar_of(position)
+                        .is_some_and(|kind| scalar_admits(kind, &Value::Py(&item)))
+                })
+        }))
+    };
+    if ctx.mode.explains() {
+        return Some(list_explained(list, element, fits, value, frame));
+    }
+    if let Some(answer) = admitted_through_snapshot(list, &fits, value, frame) {
+        return Some(answer);
+    }
+    let mut ok = true;
+    let scan = scan_list(list, |_, item| {
+        let item = Value::Py(item);
+        ok &= fits(&item) || member(element, &item, frame);
+        if !ok && stop(ctx) {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    Some(match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    })
 }
 
 /// Membership for a list whose every element is a union of literals --

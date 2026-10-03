@@ -30,7 +30,7 @@ import sys
 from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Literal, TypedDict
+from typing import Literal, NamedTuple, TypedDict
 
 from valgebra import (
     Regex,
@@ -44,6 +44,11 @@ from valgebra import (
 
 # A bound validator method; `...` admits is_valid/validate/is_valid_json alike.
 Check = Callable[..., object]
+
+
+class _Point(NamedTuple):
+    x: int
+    y: str
 
 
 def _run(check: Check, samples: Sequence[object], rounds: int) -> None:
@@ -63,9 +68,10 @@ def _explain(validate: Check, samples: Sequence[object], rounds: int) -> None:
 def _lists_with_readers() -> None:
     # The lists whose element a reader of its own settles: a union of literals
     # by its table, a class by each element's type, a union of scalars by its
-    # tests, a tuple of scalars by its positions'. The walk around those readers
-    # is the one every other list takes, and a reader the profile never enters
-    # moves how that walk is laid out.
+    # tests, a tuple of scalars by its positions', a named tuple by its type and
+    # positions'. The walk around those readers is the one every other list
+    # takes, and a reader the profile never enters moves how that walk is laid
+    # out.
     statuses = Validator(list[Literal["new", "open", "done"]])
     _run(statuses.is_valid, [["new", "open", "done"] * 8, ["new", "gone"]], 2000)
     days = Validator(list[datetime.date])
@@ -74,6 +80,8 @@ def _lists_with_readers() -> None:
     _run(optional.is_valid, [[1, None] * 12, [1, "x"]], 2000)
     coordinates = Validator(list[tuple[int, str]])
     _run(coordinates.is_valid, [[(1, "a")] * 24, [(1, 2)]], 2000)
+    points = Validator(list[_Point])
+    _run(points.is_valid, [[_Point(1, "a")] * 24, [(1, "a")]], 2000)
 
 
 def main(argv: list[str]) -> None:

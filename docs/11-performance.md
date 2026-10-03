@@ -180,9 +180,10 @@ pydantic-core's time on CPython 3.14.
 
 The same holds for a reader the workload never enters: the lists a reader of
 their own settles -- a union of literals, one class, a union of scalars, a tuple
-of scalars -- sit beside the general scan, and untrained, the readers for
-literals and classes move the PGO wheel's walk of a nested list by 6% in
-instructions. The workload reads a list of each kind, which takes that to 3%.
+of scalars, a named tuple of them -- sit beside the general scan, and untrained,
+the readers for literals and classes move the PGO wheel's walk of a nested list
+by 6% in instructions. The workload reads a list of each kind, which takes that
+to 3%.
 
 **What the matrix does with the reading.** `--pgo` ships on five targets, and
 that is a claim about those boxes rather than a default. Where the lane reads a
@@ -595,13 +596,15 @@ program that builds validators per request, and to no validation call.
   override answers.
 - **A tuple of scalar positions is one type test a position**
   (`scalar_positions_tuple_matches`), and a list whose element is a union of
-  literals, one class or a tuple of scalars is read through that union's table,
-  the type-pointer test or a test of each position, with the positions read
-  once for the list (`element_list_matches`). An element the test does not
+  literals, one class, a tuple of scalars or a named tuple of them is read
+  through that union's table, the type-pointer test, a test of each position,
+  or the class's pointer test and a test of each position, with the positions
+  read once for the list (`element_list_matches`). An element the test does not
   settle is walked, which may run Python, so the list is read in place unless a
   snapshot settles it entirely. A thousand `datetime.date` values cost 76% fewer
-  instructions than through the general loop, and a thousand `tuple[int, str]`
-  61% on 3.12 and 3.14, 68% in the 3.14 PGO wheel.
+  instructions than through the general loop, a thousand `tuple[int, str]` 61%
+  on 3.12 and 3.14, 68% in the 3.14 PGO wheel, and a thousand two-field
+  `NamedTuple`s 76% on 3.12, 3.14 and 3.15, 81% under `validate`.
 - **A scan holds its container's lock once on a free-threaded build.** `PyO3`'s
   list and dict iterators take the container's critical section around every
   step, each a re-entry of the section the scan already holds; their `find_map`
@@ -830,9 +833,9 @@ The published wheels are profile-guided, trained by `scripts/pgo_workload.py`,
 which `pyproject.toml` names as `pgo-command`; what that buys, and on which
 shapes it costs, is [measured above](#baseline-matrix). A path the training
 workload never enters is laid out by chance, so the workload reaches every
-reading the walk has -- lists of scalars, of literals, of one class and of
-tuples, records open and closed, a deeply nested list, the explaining walk --
-and relations at both of their levels.
+reading the walk has -- lists of scalars, of literals, of one class, of tuples
+and of named tuples, records open and closed, a deeply nested list, the
+explaining walk -- and relations at both of their levels.
 
 ### Measured and not taken
 
