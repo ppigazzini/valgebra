@@ -697,26 +697,18 @@ fn check_constraint<'py>(
                     PREDICATE_FAILED,
                     Expected::Fixed("a passing predicate"),
                 ),
-                // A fatal signal raised inside the predicate is the interpreter
-                // unwinding, not a predicate that merely errored: propagate it.
-                Err(err) if is_fatal(&err, py) => {
-                    record_fatal(err, ctx);
-                    return false;
-                }
-                // Bounded like every other value a message carries: a predicate
-                // raising a megabyte of text is a message nobody reads.
-                Err(err) => (
-                    false,
-                    PREDICATE_ERROR,
-                    Expected::Raised(shorten(err.to_string(), SUMMARY_CHARS)),
-                ),
+                Err(err) => match predicate_raised(err, py, ctx) {
+                    Some(expected) => (false, PREDICATE_ERROR, expected),
+                    None => return false,
+                },
             }
         }
         Constraint::Regex(pattern) => {
             // Native fast path: the precompiled, anchored pattern matches the
             // borrowed string UTF-8 in Rust. A non-string never matches (the base
             // of a pattern refinement is a string, so this is reached only after
-            // a string base check, but stays defensive).
+            // a string base check, but stays defensive), and nor does a string
+            // holding a lone surrogate, which has no UTF-8 to match.
             //
             // A pattern absent from the index is compiled here, per value. A
             // validator's own walk never misses -- its index compiles every
@@ -728,7 +720,7 @@ fn check_constraint<'py>(
             let matched = value
                 .cast::<PyString>()
                 .ok()
-                .and_then(|s| s.to_str().ok())
+                .and_then(|s| s.to_str().map_err(set_aside).ok())
                 .is_some_and(|text| match ctx.regexes.get(&(pattern.as_ptr() as usize)) {
                     Some(compiled) => compiled.is_match(text),
                     None => compile_pattern(pattern).is_ok_and(|re| re.is_match(text)),
@@ -740,6 +732,39 @@ fn check_constraint<'py>(
         record_failure(code, &expected, summarize_in(value, ctx), frame);
     }
     ok
+}
+
+/// What a predicate that raised `err` reports: the error, or `None` where it is
+/// a fatal signal, recorded for the walk to unwind on and the entry point to
+/// raise again -- the interpreter unwinding, not a predicate that merely
+/// errored. The error's text is bounded like every other value a message
+/// carries: a predicate raising a megabyte of text is a message nobody reads.
+///
+/// Out of line and cold, for the reason [`set_aside`] is.
+#[cold]
+#[inline(never)]
+fn predicate_raised(err: PyErr, py: Python<'_>, ctx: Ctx<'_>) -> Option<Expected<'static>> {
+    if is_fatal(&err, py) {
+        record_fatal(err, ctx);
+        return None;
+    }
+    Some(Expected::Raised(shorten(err.to_string(), SUMMARY_CHARS)))
+}
+
+/// Drop an error a constraint reads as its answer, out of line.
+///
+/// Dropping an error reads a thread-local -- whether the thread is attached to
+/// the interpreter -- and inlined into [`check_refine`]'s loop over its
+/// constraints, that read's address is taken once per check, ahead of the
+/// loop, on the path where nothing raises: in the extension, a call into the
+/// dynamic linker for every refined value, whatever its constraints. The
+/// instruction gate's workload is an executable, which reads a thread-local
+/// without that call, so `--binding-refined` cannot see the difference; a
+/// probe of the extension can.
+#[cold]
+#[inline(never)]
+fn set_aside(err: PyErr) {
+    drop(err);
 }
 
 /// Record a constraint's failure. The message is rendered here and nowhere

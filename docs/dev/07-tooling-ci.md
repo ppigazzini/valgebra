@@ -1009,6 +1009,16 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
     2 ms under the allocation bound, and are in `fuzz/seeds/decision/` as inputs
     rather than in `fuzz/artifacts/` as findings. `-malloc_limit_mb` is the flag
     that names a defect, because it fires on an allocation.
+- **The binding gate cannot see what the extension pays for a thread-local.**
+  Its workload is an executable, which reads a thread-local with one load off a
+  segment register; the extension is a shared object, which reaches one through
+  `__tls_get_addr`, a call into the dynamic linker of a dozen instructions. So a
+  cost that lives in that call reads 0% on `scripts/perf_gate.py` and several
+  percent in the extension: a drop of a PyO3 error inlined into a loop has its
+  thread-local address taken ahead of the loop, on every value. Count it
+  against a `--profile profiling` build of the extension itself, as
+  [the performance page](../11-performance.md) does, and read the function's
+  disassembly for a call to `__tls_get_addr` on its accepting path.
 - **A soundness property has nothing to say about a `False`.** A law shaped
   `if a.is_subtype_of(&b) { ..check.. }` never examines the answers that are
   wrong in the conservative direction, and those are the majority of them.

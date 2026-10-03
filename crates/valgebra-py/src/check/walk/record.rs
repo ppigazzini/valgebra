@@ -1019,30 +1019,53 @@ pub(super) fn check_attr_record(
                     frame.path.pop();
                 }
             }
-            // A fatal signal during attribute access is the interpreter
-            // unwinding, not a missing attribute: record it and stop.
-            Err(err) if is_fatal(&err, value.py()) => {
-                record_fatal(err, ctx);
-                return false;
-            }
-            // A field the schema does not require is satisfied by its absence.
-            Err(_) if !field.required => {}
-            Err(_) => {
-                if ctx.mode.explains() {
-                    frame.out.push(located(
-                        frame.path,
-                        Arc::clone(&field.name),
-                        MISSING_ATTRIBUTE,
-                        format!("attribute {:?}", field.name),
-                        "missing".to_owned(),
-                    ));
-                }
-                ok = false;
-            }
+            Err(err) => match attribute_missing(err, field, value.py(), frame) {
+                Some(holds) => ok &= holds,
+                None => return false,
+            },
         }
         if !ok && stop(ctx) {
             return false;
         }
     }
     ok
+}
+
+/// Whether a record holds without the attribute `field` names, whose reading
+/// raised `err`: a field the schema does not require is satisfied by its
+/// absence, and a required one is missing, which an explaining walk records.
+/// `None` where `err` is a fatal signal -- the interpreter unwinding, not a
+/// missing attribute -- recorded for the walk to stop on.
+///
+/// Out of line and cold. Dropping an error reads a thread-local, whether the
+/// thread is attached to the interpreter, and inlined into
+/// [`check_attr_record`]'s loop over the fields, that read's address is taken
+/// once per record, ahead of the loop, on the path where every attribute is
+/// there: a call into the dynamic linker per value.
+#[cold]
+#[inline(never)]
+fn attribute_missing(
+    err: PyErr,
+    field: &Field,
+    py: Python<'_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    if is_fatal(&err, py) {
+        record_fatal(err, ctx);
+        return None;
+    }
+    if !field.required {
+        return Some(true);
+    }
+    if ctx.mode.explains() {
+        frame.out.push(located(
+            frame.path,
+            Arc::clone(&field.name),
+            MISSING_ATTRIBUTE,
+            format!("attribute {:?}", field.name),
+            "missing".to_owned(),
+        ));
+    }
+    Some(false)
 }

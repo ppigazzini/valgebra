@@ -570,6 +570,21 @@ nested list 1.85%. The branch test is paid by every branch that is not
 a scalar too, eight instructions each, which is 1% on a union of twenty record
 kinds.
 
+**An error the walk answers with is dropped out of line.** PyO3 asks, when an
+error is dropped, whether the thread is attached to the interpreter, and that
+answer is a thread-local, which the extension reaches through a call into the
+dynamic linker. The compiler reads the address as free to compute, so where a
+drop sits inlined in a loop it takes the address ahead of the loop, on the path
+where nothing raises: inlined into `check_refine`, that is a call for every
+refined value, and into `check_attr_record`, one for every record. So the
+errors those loops answer with are dropped in functions of their own --
+`set_aside` and `predicate_raised` in `walk/scalar.rs`, `attribute_missing` in
+`walk/record.rs` -- and in the extension, refined integers cost 2.8% fewer
+instructions that way and a list of dataclasses 1.2%. The instruction gate
+cannot read this, as [the tooling
+page](07-tooling-ci.md#what-each-instrument-cannot-see) says, so a change that
+moves a drop into a loop is read off the built extension.
+
 ## The explaining walk resumes where the deciding one stopped
 
 A keyed map that fails is walked twice: once to decide, once to say which field.

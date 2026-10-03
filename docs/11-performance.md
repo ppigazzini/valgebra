@@ -546,11 +546,22 @@ program that builds validators per request, and to no validation call.
   is read out of the pool as a borrow for the whole check, and the value from
   the walk, so a passing check writes no reference count; a scalar base that
   admits the value is its type test rather than a walk (`check_refine`;
-  `--binding-refined`). A
-  violation's message, which needs the bound's
-  `repr`, is built only at the site that records one (`Expected` in
+  `--binding-refined`). A violation's message, which needs the bound's `repr`,
+  is built only at the site that records one (`Expected` in
   `check/walk/scalar.rs`): `tests/test_refinements.py` counts the bound's
   `repr` calls, and a hundred passing checks make none.
+- **An error the walk answers with is dropped out of line.** Dropping one asks
+  whether the thread is attached to the interpreter, a thread-local the
+  extension reaches through a call into the dynamic linker, and inlined into a
+  loop, the compiler takes that address ahead of the loop, on the path where
+  nothing raises. So the errors a constraint and an attribute record answer
+  with are dropped in functions of their own (`set_aside` and
+  `predicate_raised` in `check/walk/scalar.rs`, `attribute_missing` in
+  `check/walk/record.rs`): in the extension, a thousand integers under two
+  bounds cost 2.8% fewer instructions on 3.12, 3.14 and 3.15, strings under two
+  length bounds 3.6%, and a list of dataclasses 1.2%. The instruction gate's
+  workload is an executable, which reads a thread-local without the call, so
+  it sees none of this; a probe of the built extension does.
 - **A fast walk asks in the frame it holds.** A walk carries two buffers, for
   where it is and what it has found, and a fast walk writes neither; each is
   still a value with a destructor. A union's branch is walked in the union's
