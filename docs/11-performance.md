@@ -479,7 +479,13 @@ program that builds validators per request, and to no validation call.
   is not asked for them (`annotates_nothing`): from 3.14 the asking is a
   Python call that raises and drops an error for each, and skipping it makes a
   `NamedTuple` compile in 45% fewer instructions on CPython 3.14 and 3.15, a
-  five-field `TypedDict` in 30% fewer, and a dataclass in 16% fewer.
+  five-field `TypedDict` in 30% fewer, and a dataclass in 16% fewer. A class
+  of the program's own is read through `type`'s own `__annotations__`
+  descriptor, which `annotationlib.get_annotations` asks first and whose
+  `dict` it copies (`own_annotations`); the call, two Python functions, answers
+  only what the descriptor leaves to it. From 3.14 that makes a three-field
+  `TypedDict` compile in 19% fewer instructions, a `NamedTuple` in 14% and a
+  dataclass in 7% (`--binding-protocol`, `--binding-object`).
 - **A dataclass's fields are read as `dataclasses.fields` reads them**
   (`fields_as_declared`), and an order bound of exactly `int`, `float` or `bool`
   is placed without asking the `numbers.Number` ABC, whose `__instancecheck__`

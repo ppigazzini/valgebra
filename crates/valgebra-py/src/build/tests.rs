@@ -317,7 +317,18 @@ class Deep:
 class Meta(type):
     x: int
 
-FAST = [Plain, Derived, Record, Pair, Box, Bare, AtTheBound, Meta]
+class Refusal(ValueError):
+    reason: str
+
+class Annotations(dict):
+    pass
+
+class Held:
+    a: int
+
+Held.__annotations__ = Annotations(Held.__annotations__)
+
+FAST = [Plain, Derived, Record, Pair, Box, Bare, AtTheBound, Meta, Refusal, Held]
 DECLINED = [Written, Nested, Referenced, Called, Unchecked, Deep]
 if sys.version_info >= (3, 11):
     exec("class Unpacked:\n    a: tuple[int, *tuple[str, ...]]")

@@ -116,6 +116,14 @@ exclude_re = [
     # build accepts. An interpreter test holds the 3.12 body to `getattr_opt`
     # on every kind of object a build asks.
     "build/classes\\.rs:.*: (replace optional_attribute -> .*|.* in optional_attribute)$",
+    # `own_annotations` is the same case for 3.14: compiled under `Py_3_14`
+    # alone, where a class's own annotations are read through `type`'s
+    # descriptor as `annotationlib.get_annotations` reads them first, and absent
+    # from the 3.12 the sweep links, which reads a class's namespace instead.
+    # What `cargo mutants` offers for it is a `PyResult` no build accepts. The
+    # annotation corpus in `build/tests.rs` holds it to `get_type_hints` on
+    # every release that compiles it.
+    "build/classes\\.rs:.*: (replace own_annotations -> .*|.* in own_annotations)$",
     # The explain pass over a keyed map runs only where the map did not match.
     # Running it always reports nothing extra -- a value that matched has no
     # violation to find -- and in the fast mode the violations go to a buffer

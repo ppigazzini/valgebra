@@ -481,12 +481,25 @@ struct Evaluation {
     /// arguments are.
     generic_alias: Py<PyAny>,
     /// `types.GetSetDescriptorType`, which `get_type_hints` reads as a class
-    /// with no annotations of its own, below 3.14.
-    getset_descriptor: Py<PyAny>,
-    /// `annotationlib.get_annotations`, how `get_type_hints` reads one class's
-    /// own annotations from 3.14; `None` below it, where the class's namespace
+    /// with no annotations of its own, below 3.14, where a class's namespace
     /// holds them.
-    get_annotations: Option<Py<PyAny>>,
+    #[cfg(not(Py_3_14))]
+    getset_descriptor: Py<PyAny>,
+    /// How `get_type_hints` reads one class's own annotations from 3.14.
+    #[cfg(Py_3_14)]
+    own_annotations: OwnAnnotations,
+}
+
+/// The two readings [`own_annotations`] takes a class's annotations through:
+/// `type`'s own `__annotations__` descriptor, which `annotationlib` asks
+/// first, and `annotationlib.get_annotations`, which asks it.
+#[cfg(Py_3_14)]
+struct OwnAnnotations {
+    /// `type.__dict__["__annotations__"].__get__`, which
+    /// `annotationlib._BASE_GET_ANNOTATIONS` names.
+    descriptor: Py<PyAny>,
+    /// `annotationlib.get_annotations`.
+    call: Py<PyAny>,
 }
 
 static EVALUATION: PyOnceLock<Evaluation> = PyOnceLock::new();
@@ -503,20 +516,24 @@ fn evaluation(py: Python<'_>) -> PyResult<&'static Evaluation> {
                 types.getattr("UnionType")?,
             ],
         )?;
-        let get_annotations = if py.version_info() >= (3, 14) {
-            Some(
-                py.import("annotationlib")?
-                    .getattr("get_annotations")?
-                    .unbind(),
-            )
-        } else {
-            None
-        };
         Ok(Evaluation {
             aliases: aliases.unbind(),
             generic_alias: generic_alias.unbind(),
+            #[cfg(not(Py_3_14))]
             getset_descriptor: types.getattr("GetSetDescriptorType")?.unbind(),
-            get_annotations,
+            #[cfg(Py_3_14)]
+            own_annotations: OwnAnnotations {
+                descriptor: py
+                    .get_type::<PyType>()
+                    .getattr("__dict__")?
+                    .get_item("__annotations__")?
+                    .getattr("__get__")?
+                    .unbind(),
+                call: py
+                    .import("annotationlib")?
+                    .getattr("get_annotations")?
+                    .unbind(),
+            },
         })
     })
 }
@@ -531,13 +548,13 @@ const MAX_ANNOTATION_DEPTH: usize = 64;
 ///
 /// The reading is the call's own, step for step. Each base in reversed
 /// `__mro__` contributes its own annotations -- from its namespace's
-/// `__annotations__` below 3.14, from `annotationlib.get_annotations` from 3.14
-/// -- a later name replacing an earlier one in place, and `None` read as
-/// `type(None)`. What the call adds is `_eval_type` over each value, and that
-/// returns the value unchanged unless [`evaluates`] says otherwise. A class
-/// marked `__no_type_check__` is left to the call, which answers `{}` for it.
-/// A base [`annotates_nothing`] names contributes nothing on any release, and
-/// is not asked.
+/// `__annotations__` below 3.14, as `annotationlib.get_annotations` reads them
+/// from 3.14 (`own_annotations`) -- a later name replacing an earlier one in
+/// place, and `None` read as `type(None)`. What the call adds is `_eval_type`
+/// over each value, and that returns the value unchanged unless [`evaluates`]
+/// says otherwise. A class marked `__no_type_check__` is left to the call,
+/// which answers `{}` for it. A base [`annotates_nothing`] names contributes
+/// nothing on any release, and is not asked.
 ///
 /// **Equal to the call's answer, and the objects themselves.** Two values
 /// differ only where `_eval_type` rebuilds a builtin alias, and every such
@@ -561,21 +578,19 @@ pub(super) fn annotations_as_written<'py>(
         if annotates_nothing(&base) {
             continue;
         }
-        let own = if let Some(get_annotations) = &names.get_annotations {
-            get_annotations.bind(py).call1((&base,))?
-        } else {
-            // `base.__dict__.get('__annotations__', {})`, the call's own
-            // spelling, so a namespace a metaclass supplies is read the way the
-            // call reads it.
-            let own = base.getattr(intern!(py, "__dict__"))?.call_method1(
-                intern!(py, "get"),
-                (intern!(py, "__annotations__"), PyDict::new(py)),
-            )?;
-            if own.is_instance(names.getset_descriptor.bind(py))? {
-                continue;
-            }
-            own
-        };
+        #[cfg(Py_3_14)]
+        let own = own_annotations(&base, &names.own_annotations)?;
+        // `base.__dict__.get('__annotations__', {})`, the call's own spelling,
+        // so a namespace a metaclass supplies is read the way the call reads it.
+        #[cfg(not(Py_3_14))]
+        let own = base.getattr(intern!(py, "__dict__"))?.call_method1(
+            intern!(py, "get"),
+            (intern!(py, "__annotations__"), PyDict::new(py)),
+        )?;
+        #[cfg(not(Py_3_14))]
+        if own.is_instance(names.getset_descriptor.bind(py))? {
+            continue;
+        }
         // `get_type_hints` reads any mapping through `.items()`; a dict is the
         // one this reading takes, and anything else is left to the call.
         let Ok(own) = own.cast::<PyDict>() else {
@@ -605,6 +620,37 @@ pub(super) fn annotations_as_written<'py>(
         }
     }
     Ok(Some(hints))
+}
+
+/// `annotationlib.get_annotations(base)`, which is how `get_type_hints` reads
+/// a class's own annotations from 3.14, without the call where the call's
+/// first question answers.
+///
+/// For a class, the call asks `type`'s own `__annotations__` descriptor and,
+/// handed a `dict`, returns a copy of it, and that much is asked here: the
+/// descriptor is C, where the call is two Python functions -- a `match` on its
+/// format, an `isinstance`, a `try` -- run for every class a build compiles.
+/// Anything else the descriptor answers -- `None`, a `dict` subclass, an error
+/// -- is the call's to answer, and the call asks the descriptor again and
+/// answers it: a class whose annotations raise is read twice before the error
+/// leaves, which every reading that declines does anyway, `get_type_hints`
+/// asking again behind it.
+///
+/// Compiled from 3.14, as the struct it reads is: the extension is built for
+/// one interpreter, and below 3.14 there is no call to stand in for, since
+/// `get_type_hints` reads a class's namespace there.
+#[cfg(Py_3_14)]
+fn own_annotations<'py>(
+    base: &Bound<'py, PyAny>,
+    reading: &OwnAnnotations,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = base.py();
+    if let Ok(found) = reading.descriptor.bind(py).call1((base,))
+        && let Ok(found) = found.cast_exact::<PyDict>()
+    {
+        return Ok(found.copy()?.into_any());
+    }
+    reading.call.bind(py).call1((base,))
 }
 
 /// Whether `base` is a builtin class whose own annotations are none on every

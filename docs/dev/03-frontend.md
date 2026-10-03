@@ -308,7 +308,16 @@ call into `annotationlib.get_annotations`, where those two names raise an
 `AttributeError` with its message formatted for the call to drop -- most of a
 `NamedTuple`'s build on 3.14 and 3.15, whose `__mro__` ends in `tuple` and
 `object`. `a_builtin_base_holding_no_annotations_is_not_asked_for_them` holds
-the list to the reading it skips.
+the list to the reading it skips. Every other base is read from 3.14 as
+`annotationlib.get_annotations` reads a class first, through `type`'s own
+`__annotations__` descriptor, whose `dict` the call copies and hands back
+(`own_annotations`): the call is two Python functions per class, and it answers
+only what the descriptor leaves -- `None`, a `dict` subclass, an error -- by
+asking the descriptor again. A class whose annotations raise is evaluated once
+more that way before the error leaves, and `get_type_hints`, which the decline
+runs, evaluates it again regardless. Both readings are compiled for the one
+interpreter the extension is built for, `#[cfg(Py_3_14)]` and below it the
+namespace lookup, so neither is dead code on the other.
 The invariant is equality with the call, and two tests hold it: the Rust
 interpreter test compares the dicts on the interpreter the coverage lane
 builds, and `tests/test_classes.py` compares the validators on every
