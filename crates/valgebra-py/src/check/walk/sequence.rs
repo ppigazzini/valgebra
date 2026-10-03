@@ -572,13 +572,15 @@ fn nullable_list_read(
 /// makes: a second test there moved the PGO wheel's layout of the general
 /// scan beside it.
 ///
-/// **Cold, which it is not.** It is called once per list, and the mark is what
-/// orders the tag test: without a profile, the compiler tests the tags a case
-/// covers most of first, and it reads a union and a meet side by side as a
-/// range of two, which it tests before a nested list's tag -- four instructions
-/// more for every list holding lists, 1.85% of `--binding-deep`. Marked cold,
-/// the readers' tags are tested after the nested list's.
-#[cold]
+/// **Not marked cold, though it is called once per list.** Without a profile,
+/// the compiler tests first the tags a case covers most of, and it reads a
+/// union and a meet side by side as a range of two, which it tests before a
+/// nested list's tag: four instructions more for every list holding lists,
+/// 1.86% of `--binding-deep`. Marked cold, the plain build tests the nested
+/// list's tag first, and the PGO wheel the release ships lays the list arm out
+/// worse: a list of lists costs it 4.4% more instructions, and lists of refined
+/// values 1.6% to 3.5%. The wheel is what a caller runs, so the plain build
+/// pays the 1.86%.
 #[inline(never)]
 pub(super) fn element_list_matches(
     list: &Bound<'_, PyList>,

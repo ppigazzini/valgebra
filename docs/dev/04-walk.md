@@ -574,12 +574,14 @@ record walk costs the closed record 5% and the nested list 7%, though neither
 reads a mapping. So the sequence readings of a union are out of line behind a
 test of the tail's tag, which the nested list pays at 1.4%, and a mapping has no
 reading beyond `covered`'s. Even the order of that test's cases is a cost:
-without a profile the compiler tests first the tags a case covers most of, and
-the reader `element_list_matches` is marked cold so that a nested list's tag is
-tested before the readers' -- tested after the union and the meet, it costs the
-nested list 1.85%. The branch test is paid by every branch that is not
-a scalar too, eight instructions each, which is 1% on a union of twenty record
-kinds.
+without a profile the compiler tests first the tags a case covers most of, so
+the union and the meet are tested before a nested list's tag, which costs the
+plain build's nested list 1.86%. Marking the reader `element_list_matches` cold
+restores the order there and costs the PGO wheel the release ships more -- a
+list of lists 4.4% of its instructions, lists of refined values 1.6% to 3.5% --
+so the reader is not marked, and the plain build pays. The branch test is paid
+by every branch that is not a scalar too, eight instructions each, which is 1%
+on a union of twenty record kinds.
 
 **An error the walk answers with is dropped out of line.** PyO3 asks, when an
 error is dropped, whether the thread is attached to the interpreter, and that

@@ -69,10 +69,10 @@ def _lists_with_readers() -> None:
     # The lists whose element a reader of its own settles: a union of literals
     # by its table, a class by each element's type, a scalar or `None` by its
     # kind's loop -- an integer's and a string's, the two kinds most often made
-    # optional -- a tuple of scalars by its positions', a named tuple by its
-    # type and positions'. The walk around those readers is the one every
-    # other list takes, and a reader the profile never enters moves how that
-    # walk is laid out.
+    # optional -- any other union of scalars by its branches' tests, a tuple of
+    # scalars by its positions', a named tuple by its type and positions'. The
+    # walk around those readers is the one every other list takes, and a reader
+    # the profile never enters moves how that walk is laid out.
     statuses = Validator(list[Literal["new", "open", "done"]])
     _run(statuses.is_valid, [["new", "open", "done"] * 8, ["new", "gone"]], 2000)
     days = Validator(list[datetime.date])
@@ -81,6 +81,8 @@ def _lists_with_readers() -> None:
     _run(optional.is_valid, [[1, None] * 12, [1, "x"]], 2000)
     names = Validator(list[str | None])
     _run(names.is_valid, [["a", None] * 12, ["a", 1]], 2000)
+    keys = Validator(list[int | str])
+    _run(keys.is_valid, [[1, "a"] * 12, [1, None]], 2000)
     coordinates = Validator(list[tuple[int, str]])
     _run(coordinates.is_valid, [[(1, "a")] * 24, [(1, 2)]], 2000)
     points = Validator(list[_Point])
