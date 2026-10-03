@@ -1058,6 +1058,9 @@ pub(super) fn scalar_positions_tuple_matches(
             .is_some_and(|kind| scalar_admits(kind, item))
     };
     if ctx.mode.explains() {
+        if let (true, Some(kind)) = (prefix.is_empty(), repeated) {
+            return Some(homogeneous_tuple_explained(tuple, tail, kind, frame));
+        }
         return Some(tuple_explained(tuple, prefix, tail, admits, frame));
     }
     Some(
@@ -1066,6 +1069,33 @@ pub(super) fn scalar_positions_tuple_matches(
             .enumerate()
             .all(|(at, item)| admits(at, &Value::Py(&item))),
     )
+}
+
+/// [`tuple_explained`] for a tuple whose every position is one scalar kind --
+/// `tuple[int, ...]` -- with that kind's test a constant inside the loop.
+///
+/// The positions reader asks each position which schema it holds and matches
+/// that schema's kind at every element, which is the dispatch
+/// [`scalar_list_matches`] makes once per list. Read through it, `validate` on
+/// a thousand integers in a tuple costs two and a half times what `is_valid`
+/// does, which reads the kind once.
+fn homogeneous_tuple_explained(
+    tuple: &Bound<'_, PyTuple>,
+    tail: Option<&Schema>,
+    kind: Scalar,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    match kind {
+        Scalar::Int => tuple_explained(tuple, &[], tail, |_, item| item.is_int(), frame),
+        Scalar::Str => tuple_explained(tuple, &[], tail, |_, item| item.is_str(), frame),
+        Scalar::Float => tuple_explained(tuple, &[], tail, |_, item| item.is_float(), frame),
+        Scalar::Bool => tuple_explained(tuple, &[], tail, |_, item| item.is_bool(), frame),
+        Scalar::Bytes => tuple_explained(tuple, &[], tail, |_, item| item.is_bytes(), frame),
+        Scalar::NoneType => tuple_explained(tuple, &[], tail, |_, item| item.is_none(), frame),
+        Scalar::Everything | Scalar::Nothing => {
+            tuple_explained(tuple, &[], tail, |_, item| scalar_admits(kind, item), frame)
+        }
+    }
 }
 
 /// Whether `PyPy`'s C accessors read this tuple's storage, so the walk can read

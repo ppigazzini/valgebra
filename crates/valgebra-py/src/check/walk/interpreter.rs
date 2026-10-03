@@ -5832,3 +5832,35 @@ fn a_list_of_a_scalar_or_none_is_answered_by_its_reader() {
         }
     });
 }
+
+/// A homogeneous tuple of each scalar kind answers alike in both modes, the
+/// explaining walk through the kind's own test: every element passing, or the
+/// last failing, which the report names at its index.
+#[test]
+fn a_tuple_of_each_scalar_kind_is_explained_by_its_own_test() {
+    Python::attach(|py| {
+        for (kind, good, bad) in scalar_kinds() {
+            let tuple = Schema::tuple(SeqShape::homogeneous(kind));
+            if let Some(good) = good {
+                let value = evaluate(py, &format!("({good},) * 3"));
+                assert!(decide(py, &tuple, &value, &[], &[]), "{good} x3");
+            }
+            let Some(bad) = bad else {
+                continue;
+            };
+            let source = match good {
+                Some(good) => format!("({good},) * 2 + ({bad},)"),
+                None => format!("({bad},)"),
+            };
+            let value = evaluate(py, &source);
+            assert!(!decide(py, &tuple, &value, &[], &[]), "{source}");
+            let (_, violations) = explain(py, &tuple, &value, &[], &[]);
+            let refused_at = if good.is_some() { 2 } else { 0 };
+            assert_eq!(
+                violations[0].path,
+                vec![PathSegment::Index(refused_at)],
+                "{source}"
+            );
+        }
+    });
+}

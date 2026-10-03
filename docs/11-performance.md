@@ -727,7 +727,11 @@ program that builds validators per request, and to no validation call.
   and within a twentieth of what `is_valid` takes: each scalar kind has a loop
   of its own in the explaining reader as in the deciding one, which on CPython
   3.14 and 3.15, where the list is read in place, is a fifth of `validate`'s
-  instructions on a list of integers and 15% of its time.
+  instructions on a list of integers and 15% of its time. A tuple of one
+  scalar kind takes a test per kind the same way
+  (`homogeneous_tuple_explained`), and `validate` on a thousand-element
+  `tuple[int, ...]` costs 46% fewer instructions than through the reading of
+  each position's schema.
 - **A union explains no branch for a value it admits.** Only a refused
   value's report reads the branches that did not match, so a branch that fails
   at the union's own location -- a scalar, a literal, a container of another

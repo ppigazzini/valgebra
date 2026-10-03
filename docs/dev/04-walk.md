@@ -500,22 +500,25 @@ refuses at the bound and after a fatal signal exactly where `member` does, and
 against every kind of value.
 
 **What an explaining walk admits, it records nothing of.** `validate` explains
-as it decides, in one walk, so it is the mode a value that belongs is read in.
-A scalar records only a mismatch, and a union returns at the first branch that
+as it decides, in one walk, so it is the mode a value that belongs is read in. A
+scalar records only a mismatch, and a union returns at the first branch that
 matches, keeping nothing of the branches before it, so an element that passes
 its test leaves nothing behind, and the sequence readings serve the explaining
 walk too: each element is its test, and one that fails is walked at its own
 location, which records what the walk records of it (`list_explained`,
 `tuple_explained`). No element can raise before the one that fails -- a test
 runs no Python, and only a failing element's summary can, which fails the
-sequence first. A list that belongs is read through the deciding walk's
-snapshot where one pays, since a snapshot every element passes is the whole
-answer; a list holding an element that fails is read in place over the general
-walk's count, so one that moves reports the move. Read in place, the list that
-belongs costs `validate` twice what `is_valid` takes on 3.12, for fewer
-instructions: an owned handle per element is a reference count written on a
-different object each time. A parsed array is never explained, and its
-readings refuse the mode.
+sequence first. A list that belongs is read through the deciding walk's snapshot
+where one pays, since a snapshot every element passes is the whole answer; a
+list holding an element that fails is read in place over the general walk's
+count, so one that moves reports the move. Read in place, the list that belongs
+costs `validate` twice what `is_valid` takes on 3.12, for fewer instructions: an
+owned handle per element is a reference count written on a different object each
+time. A tuple whose every position is one scalar kind is read with that kind's
+test a constant, as a list of one kind is (`homogeneous_tuple_explained`),
+rather than asking each position which schema it holds and matching its kind:
+`validate` on a thousand-element `tuple[int, ...]` costs 46% fewer instructions
+that way. A parsed array is never explained, and its readings refuse the mode.
 
 `validate` on a thousand-element `list[int]` that belongs costs 72% fewer
 instructions than it does with every element taken through the explaining
