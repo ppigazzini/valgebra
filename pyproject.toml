@@ -41,7 +41,7 @@ dev = [
     "annotated-types>=0.8",
     "hypothesis>=6.168.3",
     "maturin>=1.15.0,<2",
-    "mypy>=2.3.1",
+    "mypy>=2.4.0",
     "pre-commit>=4.6.2",
     "pyright>=1.1.414",
     "pytest>=9.1.1",
@@ -50,7 +50,7 @@ dev = [
     # workflow is YAML: parsing it with a regex is how a gate ends up disagreeing
     # with the lane it claims to reproduce.
     "pyyaml>=6.0.3",
-    "ruff>=0.16.9",
+    "ruff>=0.16.10",
     "syrupy>=6.1.1",
     "ty>=0.0.84",
     # The suite reads a PEP 728 `TypedDict` from each implementation that takes
