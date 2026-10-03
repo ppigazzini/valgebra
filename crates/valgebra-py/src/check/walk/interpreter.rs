@@ -5617,6 +5617,177 @@ fn a_list_of_scalar_tuples_is_read_by_a_test_of_each_element() {
     });
 }
 
+/// A refinement of an integer between two pooled bounds, the element the
+/// refinement-list tests read, with the pool that holds its bounds.
+fn bounded_int(py: Python<'_>) -> (Schema, Vec<Py<PyAny>>) {
+    let pool = [0i64, 10]
+        .map(|bound| PyInt::new(py, bound).into_any().unbind())
+        .into();
+    let element = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![
+            Constraint::Ge(OperandIx::new(0)),
+            Constraint::Le(OperandIx::new(1)),
+        ]
+        .into(),
+    };
+    (element, pool)
+}
+
+/// A list whose element is a refinement answers what the walk answers of a
+/// tuple of the same elements, which it walks element by element: in both
+/// modes, in place and wide enough for a snapshot, and with each refused
+/// element named at its own index by the code its own walk records.
+#[test]
+fn a_list_of_refinements_answers_as_the_walk_does() {
+    Python::attach(|py| {
+        let (element, pool) = bounded_int(py);
+        let list = Schema::list(SeqShape::homogeneous(element.clone()));
+        let tuple = Schema::tuple(SeqShape::homogeneous(element));
+        let report = |schema: &Schema, value: &Bound<'_, PyAny>| {
+            let (ok, violations) = explain(py, schema, value, &pool, &[]);
+            let fields: Vec<_> = violations
+                .into_iter()
+                .map(|v| (v.path, v.code, v.expected, v.value_summary))
+                .collect();
+            (ok, fields)
+        };
+        for (source, want) in [
+            ("[0, 5, 10]", true),
+            ("[True]", true),
+            ("[]", true),
+            ("[0, -1]", false),
+            ("[0, 11]", false),
+            ("[0, 'x']", false),
+            ("[5] * 40", true),
+            ("[5] * 39 + [11]", false),
+        ] {
+            let listed = evaluate(py, source);
+            let tupled = evaluate(py, &format!("tuple({source})"));
+            assert_eq!(decide(py, &list, &listed, &pool, &[]), want, "{source}");
+            assert_eq!(report(&list, &listed), report(&tuple, &tupled), "{source}");
+        }
+        let (ok, violations) = explain(py, &list, &evaluate(py, "[-1, 5, 'x', 11]"), &pool, &[]);
+        let at: Vec<(Vec<PathSegment>, &str)> = violations
+            .into_iter()
+            .map(|violation| (violation.path, violation.code))
+            .collect();
+        assert_eq!(
+            (ok, at),
+            (
+                false,
+                vec![
+                    (vec![PathSegment::Index(0)], "greater_than_equal"),
+                    (vec![PathSegment::Index(2)], "int_type"),
+                    (vec![PathSegment::Index(3)], "less_than_equal"),
+                ]
+            )
+        );
+    });
+}
+
+/// A list of refinements that moves while it is read is reported as moved, as
+/// the walk reports any list that moves: here the predicate empties the list
+/// it is asked about at the first element.
+#[test]
+fn a_list_of_refinements_that_moves_is_reported_moved() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"VALUE = []\n\
+              def shrink(x):\n\
+              \x20   VALUE.clear()\n\
+              \x20   return True\n",
+            c"shrinking_refinements.py",
+            c"shrinking_refinements",
+        )
+        .expect("the module compiles");
+        let pool = vec![module.getattr("shrink").expect("the predicate").unbind()];
+        let list = Schema::list(SeqShape::homogeneous(Schema::Refine {
+            base: Arc::new(Schema::Int),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        }));
+        let value = module.getattr("VALUE").expect("the list");
+        let fill = || {
+            value
+                .call_method1("extend", ([1i64, 2, 3],))
+                .expect("the list fills");
+        };
+        fill();
+        assert!(!holds(py, &list, &value, &pool, &[]));
+        fill();
+        let (ok, violations) = explain(py, &list, &value, &pool, &[]);
+        let codes: Vec<&str> = violations.iter().map(|v| v.code).collect();
+        assert_eq!((ok, codes), (false, vec![MUTATED_CODE.as_str()]));
+    });
+}
+
+/// The refinement-list reader checks every element by its refinement, in the
+/// walk's own mode: a deciding walk stops at the first element refused, an
+/// explaining one names each, and one that fails fast the first. It declines
+/// behind a fixed prefix and where the level below the list is not free, and
+/// with that level and none below it refuses an element as too deep, as the
+/// walk does; the reader a list arm hands its tails to reaches it.
+#[test]
+fn a_list_of_refinements_is_read_by_each_refinement() {
+    use super::sequence::element_list_matches;
+    Python::attach(|py| {
+        let (element, pool) = bounded_int(py);
+        let list = Schema::list(SeqShape::homogeneous(element.clone()));
+        let index = build_index(py, &list, &[], &pool);
+        let state = WalkState::new();
+        let ctx = |mode| Ctx {
+            pool: &pool,
+            defs: &[],
+            records: &index.records,
+            attrs: &index.attrs,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
+            mode,
+        };
+        let read = |source: &str, prefix: &[Schema], mode| {
+            let value = evaluate(py, source);
+            let listed = value.cast::<PyList>().expect("a list");
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx(mode));
+            let answer =
+                element_list_matches(listed, prefix, &element, &Value::Py(&value), &mut frame);
+            let at: Vec<Vec<PathSegment>> = out.into_iter().map(|v| v.path).collect();
+            (answer, at)
+        };
+        let fast = WalkMode::Fast;
+        let index_of = |at| vec![PathSegment::Index(at)];
+        assert_eq!(read("[0, 5]", &[], fast), (Some(true), vec![]));
+        assert_eq!(read("[11, 5]", &[], fast), (Some(false), vec![]));
+        assert_eq!(read("[5]", &[], WalkMode::Explain), (Some(true), vec![]));
+        assert_eq!(
+            read("[-1, 5, 11]", &[], WalkMode::Explain),
+            (Some(false), vec![index_of(0), index_of(2)])
+        );
+        assert_eq!(
+            read("[-1, 5, 11]", &[], WalkMode::ExplainFailFast),
+            (Some(false), vec![index_of(0)])
+        );
+        assert_eq!(read("[5]", &[Schema::Int], fast), (None, vec![]));
+        state.depth.set(MAX_WALK_DEPTH - 2);
+        assert_eq!(read("[5]", &[], fast), (Some(true), vec![]));
+        // The element takes the last level, and its base finds none: refused
+        // as too deep, where the walk refuses it.
+        state.depth.set(MAX_WALK_DEPTH - 1);
+        assert_eq!(
+            read("[5]", &[], WalkMode::Explain),
+            (Some(false), vec![index_of(0)])
+        );
+        state.depth.set(MAX_WALK_DEPTH);
+        assert_eq!(read("[5]", &[], fast), (None, vec![]));
+        state.depth.set(0);
+    });
+}
+
 /// A module holding a named tuple `Point(x: int, y: str)`, a subclass of it,
 /// a second named tuple of the same fields, and instances of each the
 /// named-tuple list tests read, under the name its test gives, for the reason

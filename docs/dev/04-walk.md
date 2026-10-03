@@ -586,10 +586,23 @@ in place, and a hundred five-field dataclasses cost 12% fewer instructions than
 with the meet, the class and the record each dispatched. The tuple reader needs
 the two levels below the list free, the tuple's and its positions', as the union
 of scalars needs the union's and its branch's; the named-tuple reader needs the
-meet's as well. The list arm hands every kind of tail to one reader
-(`element_list_matches`) behind its one tag test, and the readers cost the PGO
-wheel's walk of a nested list 3% more instructions with the training workload
-reading lists of each kind, 6% without it.
+meet's as well. A list of refinements has a reader too
+(`refined_list_matches`), which calls each element's own check directly and
+holds the level the walk opens for an element across the whole list. No test
+settles an element apart from that check, which may run Python through an
+operand of a class of its own or through a predicate, so each element is
+checked once, in the walk's own mode, and named at its index as the walk names
+it. Without a call into `member`, its depth guard and its dispatch at every
+element, a thousand integers under two bounds cost 12% fewer instructions on
+3.12 and 3.15, 13% to 14% under `validate`, and a thousand strings under two
+length bounds 19%. The list arm hands every kind of tail to one reader
+(`element_list_matches`) behind its one tag test, which asks the whole run of
+tags from a union to a refinement, a complement and an attribute record among
+them though the reader declines both: asked as only the tags the reader takes,
+the test costs a list nested twenty-five deep 1.25% more instructions, and
+asked as the run, 0.03%. The readers cost the PGO wheel's walk of a nested
+list 3% more instructions with the training workload reading lists of each
+kind, 6% without it.
 
 **Where a question is asked is part of what it costs.** The walk is one
 recursive function under fat LTO, with the arms of `member` inlined into it, so

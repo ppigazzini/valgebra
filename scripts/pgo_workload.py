@@ -16,8 +16,9 @@ caller writes is laid out by guesswork in the shipped wheel.
 
 It depends only on ``valgebra`` and the standard library (no test, comparison,
 or annotation-metadata packages), so it runs in the minimal environment maturin
-sets up for ``--pgo`` -- which is why the refinement it trains is spelled with
-the native ``Regex`` rather than with a bound marker.
+sets up for ``--pgo`` -- which is why the refinements it trains are spelled
+with the native ``Regex`` and with a bound class of its own, read by its ``ge``
+as ``annotated_types.Ge`` is.
 Keep it quick: a few seconds is enough to accumulate representative branch
 counts.
 """
@@ -30,7 +31,7 @@ import sys
 from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Literal, NamedTuple, TypedDict
+from typing import Annotated, Literal, NamedTuple, TypedDict
 
 from valgebra import (
     Regex,
@@ -57,6 +58,13 @@ class _Pair:
     y: str
 
 
+class _AtLeast:
+    """An order bound, carried as `annotated_types.Ge` carries one."""
+
+    def __init__(self, ge: int) -> None:
+        self.ge = ge
+
+
 def _run(check: Check, samples: Sequence[object], rounds: int) -> None:
     for _ in range(rounds):
         for value in samples:
@@ -77,9 +85,10 @@ def _lists_with_readers() -> None:
     # kind's loop -- an integer's and a string's, the two kinds most often made
     # optional -- any other union of scalars by its branches' tests, a tuple of
     # scalars by its positions', a named tuple by its type and positions', a
-    # dataclass by its type and the record of its attributes. The walk around
-    # those readers is the one every other list takes, and a reader the profile
-    # never enters moves how that walk is laid out.
+    # dataclass by its type and the record of its attributes, a refinement by
+    # its own check. The walk around those readers is the one every other list
+    # takes, and a reader the profile never enters moves how that walk is laid
+    # out.
     statuses = Validator(list[Literal["new", "open", "done"]])
     _run(statuses.is_valid, [["new", "open", "done"] * 8, ["new", "gone"]], 2000)
     days = Validator(list[datetime.date])
@@ -100,6 +109,11 @@ def _lists_with_readers() -> None:
     wrong = _Pair(1, "a")
     vars(wrong)["y"] = 2
     _explain(pairs.validate, [[_Pair(1, "a")] * 24, [wrong]], 500)
+    bounded = Validator(list[Annotated[int, _AtLeast(0)]])
+    _run(bounded.is_valid, [list(range(24)), [0, -1]], 2000)
+    _explain(bounded.validate, [list(range(24)), [0, -1]], 500)
+    worded = Validator(list[Annotated[str, Regex("[a-z]+")]])
+    _run(worded.is_valid, [["ab", "cd"] * 12, ["ab", "1"]], 2000)
 
 
 def main(argv: list[str]) -> None:

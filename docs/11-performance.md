@@ -641,10 +641,13 @@ program that builds validators per request, and to no validation call.
   instructions than through the general loop, a thousand `tuple[int, str]` 61%
   on 3.12 and 3.14, 68% in the 3.14 PGO wheel, and a thousand two-field
   `NamedTuple`s 76% on 3.12, 3.14 and 3.15, 81% under `validate`. A list of
-  dataclasses walks an element of exactly the class as the record of its
-  fields, without dispatching the meet, the class and the record around it
-  (`class_record_list_matches`): 12% fewer instructions for a hundred
-  five-field dataclasses, in both modes.
+  refinements calls each element's own check, with the level the walk opens
+  for an element held across the list (`refined_list_matches`): a thousand
+  integers under two bounds cost 12% fewer instructions, and a thousand strings
+  under two length bounds 19%. A list of dataclasses walks an element of
+  exactly the class as the record of its fields, without dispatching the meet,
+  the class and the record around it (`class_record_list_matches`): 12% fewer
+  instructions for a hundred five-field dataclasses, in both modes.
 - **A scan holds its container's lock once on a free-threaded build.** `PyO3`'s
   list and dict iterators take the container's critical section around every
   step, each a re-entry of the section the scan already holds; their `find_map`

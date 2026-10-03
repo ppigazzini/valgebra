@@ -12,12 +12,16 @@ use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyFrozenSet, PyIterator, PyList, PySet, PyTuple};
-use valgebra_core::{ClassIx, Field, PathSegment, Schema, SeqKind, SeqShape, Violation};
+use valgebra_core::{
+    ClassIx, Constraint, Field, PathSegment, Schema, SeqKind, SeqShape, Violation,
+};
 
 #[cfg(PyPy)]
 use super::reads_its_length;
 use super::record::check_attr_record;
-use super::scalar::{Scalar, admitted_quietly, homogeneous_scalar_union, scalar_union_admits};
+use super::scalar::{
+    Scalar, admitted_quietly, check_refine, homogeneous_scalar_union, scalar_union_admits,
+};
 use super::{
     Base, Frame, Scan, class_at, held_iter, homogeneous_scalar, is_exactly_a, is_fatal, member,
     mutated, reads_its_elements, record_fatal, record_if_fatal, scalar_admits, scalar_of, stop,
@@ -59,10 +63,18 @@ pub(super) fn check_seq(
             if let Some((kind, schema)) = homogeneous_scalar(prefix, tail, ctx) {
                 return scalar_list_matches(list, kind, schema, value, frame);
             }
+            // Every tag from a union to a refinement, a complement and an
+            // attribute record among them, though the reader declines both:
+            // asked as that run of tags, the test costs a list nested
+            // twenty-five deep 0.03% more instructions, and asked as only the
+            // tags the reader takes, 1.25%.
             if let Some(
                 element @ (Schema::Union(_)
                 | Schema::Intersection(_)
+                | Schema::Complement(_)
                 | Schema::Instance(_)
+                | Schema::AttrRecord { .. }
+                | Schema::Refine { .. }
                 | Schema::Seq {
                     container: SeqKind::Tuple,
                     ..
@@ -566,8 +578,9 @@ fn nullable_list_read(
     }
 }
 
-/// Membership for a list whose element is a union, a meet, a class or a tuple,
-/// read by the reader for its kind, and `None` where that reader declines.
+/// Membership for a list whose element is a union, a meet, a class, a
+/// refinement or a tuple, read by the reader for its kind, and `None` where
+/// that reader declines.
 ///
 /// One call for every kind, behind the one test of the tail's tag [`check_seq`]
 /// makes: a second test there moved the PGO wheel's layout of the general
@@ -602,6 +615,9 @@ pub(super) fn element_list_matches(
         },
         Schema::Instance(index) => {
             instance_list_matches(list, prefix, element, *index, value, frame)
+        }
+        Schema::Refine { base, constraints } => {
+            refined_list_matches(list, prefix, base, constraints, value, frame)
         }
         Schema::Seq {
             container: SeqKind::Tuple,
@@ -645,6 +661,58 @@ pub(super) fn instance_list_matches(
     let scan = scan_list(list, |_, item| {
         let item = Value::Py(item);
         ok &= exact(&item) || member(element, &item, frame);
+        if !ok && stop(ctx) {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    Some(match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    })
+}
+
+/// Membership for a list whose every element is a refinement --
+/// `list[Annotated[int, Ge(0)]]`, `list[Annotated[str, MinLen(1)]]` -- where a
+/// level is free under the list, and `None` elsewhere.
+///
+/// Each element is the refinement's own check, called directly, and the level
+/// the walk opens for an element is opened once and held for the list: what
+/// the walk spent around the check -- a call into [`member`], its depth guard
+/// and its dispatch on the element's tag -- is spent once. The check makes the
+/// rest of what [`member`] makes: a fatal signal recorded at one element fails
+/// the next at its base, which [`member`] refuses at once. No test settles an
+/// element apart from that check, as a type test settles one for the other
+/// readers: a constraint may run Python, through an order bound whose operand
+/// is a class of its own or through a predicate, so each element is checked
+/// once, in the walk's own mode, and an explaining walk names it at its index
+/// as the walk does.
+#[inline(never)]
+fn refined_list_matches(
+    list: &Bound<'_, PyList>,
+    prefix: &[Schema],
+    base: &Schema,
+    constraints: &[Constraint],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    if !prefix.is_empty() {
+        return None;
+    }
+    let _element = ctx.descend()?;
+    let explains = ctx.mode.explains();
+    let mut ok = true;
+    let scan = scan_list(list, |at, item| {
+        if explains {
+            frame.path.push(PathSegment::Index(at));
+        }
+        ok &= check_refine(base, constraints, &Value::Py(item), frame);
+        if explains {
+            frame.path.pop();
+        }
         if !ok && stop(ctx) {
             ControlFlow::Break(())
         } else {
