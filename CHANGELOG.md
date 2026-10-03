@@ -13,11 +13,25 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: a refutation about a class stands on what its instance can carry
-- feat: a protocol is the record of the members it declares
-- fix: validate explains a union's records and classes only for a refused value
-
 -->
+
+## [0.0.16] - 2026-10-04
+
+A protocol and correctness release: three entries, one change and two fixes.
+
+A `Protocol` is the record of the members it declares, decorated or not, where
+it was an `isinstance` check that held only where `@runtime_checkable` sat on
+the class itself, and it relates to other schemas as a record. Three readings
+of a runtime-checkable protocol break, and the entry below names each. A
+refutation about a class stands on an instance that can carry its fields, so a
+pair refuted on a value that may not exist is `undecided`. And `validate`
+explains a union's record and class branches only for a value the union
+refuses, so a member of such a union is checked without running any
+`__repr__`.
+
+Beside the entries, the release carries performance work on validating a
+value, on building a validator and on relations between validators. No answer
+changes.
 
 ### Changed
 
@@ -2264,7 +2278,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.15...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.16...HEAD
+[0.0.16]: https://github.com/ppigazzini/valgebra/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/ppigazzini/valgebra/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/ppigazzini/valgebra/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/ppigazzini/valgebra/compare/v0.0.12...v0.0.13
