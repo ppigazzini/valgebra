@@ -673,7 +673,12 @@ program that builds validators per request, and to no validation call.
   whose clause reads a key together with its value scans its entries, because
   that clause has to see each one.
 - **A dataclass's attribute names are interned once per validator**, so
-  `getattr` is handed an object the interpreter already holds.
+  `getattr` is handed an object the interpreter already holds. The object is
+  read borrowed, as the walk holds it, so reading a record writes no reference
+  count on it, and a scalar attribute is its type test asked in the loop over
+  the attributes, the level it needs read once for the record
+  (`check_attr_record` in `check/walk/record.rs`): a list of dataclasses costs
+  2.7% fewer instructions that way on CPython 3.12 and 3.15.
 
 ### Unions and literals
 

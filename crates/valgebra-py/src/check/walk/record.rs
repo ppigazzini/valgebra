@@ -984,18 +984,29 @@ pub(super) fn check_attr_record(
 ) -> bool {
     let ctx = frame.ctx;
     // Attributes are read off a Python object, so a value that will not
-    // materialize into one carries none and belongs to no record.
-    let obj = match value.to_python() {
-        Ok(obj) => obj,
-        Err(err) => {
-            record_if_fatal(err, value.py(), ctx);
-            return false;
-        }
+    // materialize into one carries none and belongs to no record. A Python
+    // value is borrowed, as the walk holds it, so reading a record writes no
+    // reference count on the object.
+    let built;
+    let obj = match value {
+        Value::Py(obj) => *obj,
+        Value::Json(..) => match value.to_python() {
+            Ok(obj) => {
+                built = obj;
+                &built
+            }
+            Err(err) => {
+                record_if_fatal(err, value.py(), ctx);
+                return false;
+            }
+        },
     };
     // The interned names, in field order. A schema absent from the index (an
     // incomplete build traversal) falls back to the field's own text, so
     // correctness never depends on the plan being complete.
     let interned = ctx.attrs.get(&(fields.as_ptr() as usize));
+    // Whether a level is free under the record, which no field's walk moves.
+    let room = ctx.room_to_descend();
     let mut ok = true;
     for (position, field) in fields.iter().enumerate() {
         let name = interned.and_then(|plan| plan.names.get(position));
@@ -1006,15 +1017,23 @@ pub(super) fn check_attr_record(
         match attribute {
             Ok(attr) => {
                 // An attribute the walk would admit without recording anything
-                // -- a scalar that passes its test -- is answered by the test,
-                // in either mode, before its location is pushed.
-                if admitted_quietly(&field.schema, &Value::Py(&attr), ctx) {
+                // -- a scalar that passes its test, a union of scalars one of
+                // whose tests does -- is answered by the test, in either mode,
+                // before its location is pushed. A scalar's test is asked here
+                // and any other field's in `admitted_quietly`, which is out of
+                // line and asked of every attribute would be a call a field.
+                let attr = Value::Py(&attr);
+                let quiet = match scalar_member(&field.schema, &attr, ctx, room) {
+                    Some(admits) => admits,
+                    None => admitted_quietly(&field.schema, &attr, ctx),
+                };
+                if quiet {
                     continue;
                 }
                 if ctx.mode.explains() {
                     frame.path.push(PathSegment::Key(Arc::clone(&field.name)));
                 }
-                ok &= member(&field.schema, &Value::Py(&attr), frame);
+                ok &= member(&field.schema, &attr, frame);
                 if ctx.mode.explains() {
                     frame.path.pop();
                 }

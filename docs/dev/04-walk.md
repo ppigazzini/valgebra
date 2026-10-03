@@ -491,6 +491,9 @@ most of what they cost, and each asks the test directly:
   fewer instructions, 10% with interned keys. A dataclass's attribute is walked
   in the caller's mode, so it takes the explaining walk's quiet admit, below, in
   either mode: a list of dataclasses costs 8% fewer, and 19% under `validate`.
+  A scalar attribute asks its type test in the record's own loop, with the
+  level read once for the record, and any other attribute asks
+  `admitted_quietly`, which is out of line and would be a call a field.
 
 The two readings agree because the fast walk answers a scalar as three
 questions: whether a level is free under it, whether a fatal signal has been
