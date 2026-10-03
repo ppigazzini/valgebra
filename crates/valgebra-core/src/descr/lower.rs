@@ -277,15 +277,15 @@ pub const WORK: u64 = 4096;
 ///
 /// Nesting is the exponential, and `benches/core.rs` measures it:
 /// `lower_nested_records_depth{0,2,4,6}`, run under [`Bounds::UNHELD`], grows
-/// 1.7 microseconds, 198 microseconds, 1.5 milliseconds, 7.2 milliseconds.
+/// 0.98 microseconds, 134 microseconds, 1.0 milliseconds, 4.8 milliseconds.
 /// Breadth is not the exponential and is bounded by [`BUDGET`] instead.
 ///
 /// Set from both sides. Every relation the descriptor decides and the rules do
 /// not nests five deep or less -- `lower_container_meet`,
 /// `lower_double_complement`, `lower_regular_language` and `lower_step_divides`
-/// are those four, and each builds in 49 to 188 microseconds. The shapes that
+/// are those four, and each builds in 29 to 108 microseconds. The shapes that
 /// blow up nest ten and deeper. `lower_sibling_union_difference_{unheld,held}`
-/// is the pair that shows what the bound buys: 9.0 milliseconds against 1.35
+/// is the pair that shows what the bound buys: 5.6 milliseconds against 0.96
 /// microseconds, on one shape, from this number alone.
 ///
 /// **This bound is debt.** It counts work rather than limiting what the

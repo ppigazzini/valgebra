@@ -579,14 +579,14 @@ cannot be re-derived on another machine, and cannot fail when the shape it guard
 against changes.
 
 What the numbers say, and where to read them. `cargo bench --bench core` is the
-harness: the `lower_nested_records_depth*` rows grow by orders of magnitude per
-two levels of nesting, which is the exponential the nesting bound catches, and
-`lower_sibling_union_difference_unheld` against its `_held` sibling is what the
-bound saves on one shape. Building a set costs about two orders of magnitude
-more than a rule that already answers, which is the whole reason the rules are
-asked first and the descriptor second. On the shapes reachable today the nesting
-bound refuses before the work allowance does, so the allowance is what remains
-for a schema that is shallow and wide.
+harness: the `lower_nested_records_depth*` rows grow from under a microsecond at
+no nesting to milliseconds at six levels, which is the exponential the nesting
+bound catches, and `lower_sibling_union_difference_unheld` against its `_held`
+sibling is what the bound saves on one shape. Building a set costs about two
+orders of magnitude more than a rule that already answers, which is the whole
+reason the rules are asked first and the descriptor second. On the shapes
+reachable today the nesting bound refuses before the work allowance does, so the
+allowance is what remains for a schema that is shallow and wide.
 
 **The two orders of magnitude are per relation, and a query is not one
 relation.** On the workload whose shapes reach the descriptor at all

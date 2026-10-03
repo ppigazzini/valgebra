@@ -509,8 +509,8 @@ Each shape's ceiling is a **claim, not a recorded measurement**: the ratio the
 project says it stays under, with headroom. A recorded ratio travels badly,
 because the two libraries respond differently to a PGO build and to an
 interpreter. The interpreter is the one that moves a shape far: on a single box
-a schema nested twenty-five deep reads 0.12 to 0.13 under CPython 3.12 and 3.14
-and 0.27 under the free-threaded build, where every read of an element out of a
+a schema nested twenty-five deep reads 0.13 to 0.14 under CPython 3.12 and 3.14
+and 0.26 under the free-threaded build, where every read of an element out of a
 mutable container takes that container's lock. This gate is the coarse tripwire
 for ceding ground, with `perf_gate.py --against` doing the fine-grained work at
 2%. Changing a ceiling is an edit with an argument in its commit message.
@@ -523,8 +523,9 @@ workload held no counts for the loop the branch moved out of the walk.
 
 **A ceiling a shape passes by a wide margin stops measuring it**, which is why a
 claim is not the whole of the file. The JSON document's ratio moves between
-0.78 and 0.87 under a ceiling of 1.00 with no gate red, and nothing reports the
-move until somebody re-runs this gate and reads the number. So beside each
+0.62 and 0.78 under a ceiling of 1.00 with no gate red -- thirty runs on CPython
+3.12 and 3.14 on one box -- and nothing reports the move until somebody re-runs
+this gate and reads the number. So beside each
 ceiling the file has a `recorded` block for the ratio the shape last measured
 and the spread it was measured across -- the ratchet the mutation sweep and the
 instruction gate already have. Once armed, a shape measuring worse than
@@ -594,7 +595,7 @@ shapes where it is a different environment rather than the same one on a slower
 clock: reading an element out of a mutable container takes that container's lock
 there, so a shape whose cost is per-element pays what no interpreter with a
 global lock pays. A schema nested twenty-five deep is twenty-five
-single-element lists, and it reads 0.27 to 0.30 against the 0.12 to 0.14 of the
+single-element lists, and it reads 0.26 to 0.27 against the 0.13 to 0.15 of the
 builds with a lock. A shape absent from that set is held to the shared ceiling,
 and the gate selects between them by asking the interpreter whether its global
 lock is enabled.

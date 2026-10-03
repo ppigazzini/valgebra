@@ -16,8 +16,8 @@ here". A recorded measurement would be a fourth number that travels badly: the
 two libraries respond differently to a PGO build and to an interpreter version,
 so a ratio recorded in one environment is not the ratio of another. The gap is
 the interpreter rather than the box: on a single machine a schema nested
-twenty-five deep takes 0.12 to 0.13 of pydantic's time under CPython 3.12 and
-3.14 and 0.27 under the free-threaded build, where every read of an element out
+twenty-five deep takes 0.13 to 0.14 of pydantic's time under CPython 3.12 and
+3.14 and 0.26 under the free-threaded build, where every read of an element out
 of a mutable container takes that container's lock. A claim
 does not move when the environment does, and changing one is an edit somebody
 argues for.
@@ -28,9 +28,9 @@ on any machine, with no re-recording. The fine-grained work is
 base under cachegrind at 2%.
 
 **A ceiling a shape passes by a wide margin stops measuring it.** The JSON
-document sits under a ceiling of 1.00 and clears it by a fifth, so its ratio
-moves by a tenth with nothing red until somebody re-runs the gate and reads the
-number. So beside each ceiling -- the claim -- the file carries
+document sits under a ceiling of 1.00 and clears it by a third, so its ratio
+moves by a tenth or more with nothing red until somebody re-runs the gate and
+reads the number. So beside each ceiling -- the claim -- the file carries
 a *recorded* ratio and a per-shape tolerance, which is the ratchet the mutation
 sweep and the instruction gate already have: a shape drifting past what it last
 measured is red even while it is under what the project promises.
