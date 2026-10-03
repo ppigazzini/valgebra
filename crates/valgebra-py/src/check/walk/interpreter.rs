@@ -385,7 +385,7 @@ fn a_union_names_its_branches_by_their_constants() {
 #[test]
 fn a_meet_stops_at_the_member_that_rejects_the_value() {
     Python::attach(|py| {
-        let module = classes(py);
+        let module = classes(py, c"classes_meet");
         let point = module.getattr("Point").expect("Point");
         let pool: Vec<Py<PyAny>> = vec![point.clone().unbind()];
         let object = Schema::meet([
@@ -441,7 +441,7 @@ fn a_meet_stops_at_the_member_that_rejects_the_value() {
 #[test]
 fn a_union_names_a_class_branch_by_its_class() {
     Python::attach(|py| {
-        let module = classes(py);
+        let module = classes(py, c"classes_union");
         let point = module.getattr("Point").expect("Point");
         let other = module.getattr("Other").expect("Other");
         let pool: Vec<Py<PyAny>> = vec![point.unbind(), other.unbind()];
@@ -1696,8 +1696,9 @@ fn a_reference_unfolds_its_definition_and_a_cycle_is_refused() {
 
 /// Define a small class hierarchy in the embedded interpreter, for the two
 /// class-based arms. `Point` carries `x: int` and `y: int`; `Sub` is a
-/// subclass of it; `Other` is unrelated.
-fn classes(py: Python<'_>) -> Bound<'_, PyAny> {
+/// subclass of it; `Other` is unrelated. The module takes the name its test
+/// gives, for the reason `union_classes` takes one.
+fn classes<'py>(py: Python<'py>, name: &std::ffi::CStr) -> Bound<'py, PyAny> {
     let module = PyModule::from_code(
         py,
         std::ffi::CString::new(
@@ -1717,9 +1718,7 @@ fn classes(py: Python<'_>) -> Bound<'_, PyAny> {
         std::ffi::CString::new("classes.py")
             .expect("no interior nul")
             .as_c_str(),
-        std::ffi::CString::new("classes")
-            .expect("no interior nul")
-            .as_c_str(),
+        name,
     )
     .expect("the module compiles");
     module.into_any()
@@ -1728,7 +1727,7 @@ fn classes(py: Python<'_>) -> Bound<'_, PyAny> {
 #[test]
 fn an_instance_atom_admits_the_class_and_its_subclasses() {
     Python::attach(|py| {
-        let module = classes(py);
+        let module = classes(py, c"classes_instance");
         let point_class = module.getattr("Point").expect("Point");
         let sub_class = module.getattr("Sub").expect("Sub");
         let other_class = module.getattr("Other").expect("Other");
@@ -1759,7 +1758,7 @@ fn an_instance_atom_admits_the_class_and_its_subclasses() {
 #[test]
 fn an_attribute_record_checks_the_class_then_every_attribute() {
     Python::attach(|py| {
-        let module = classes(py);
+        let module = classes(py, c"classes_attributes");
         let point_class = module.getattr("Point").expect("Point");
         let other_class = module.getattr("Other").expect("Other");
         let bare_class = module.getattr("NoAttrs").expect("NoAttrs");
@@ -4323,8 +4322,9 @@ fn a_fail_fast_report_walks_no_branch_past_its_first_failure() {
 
 /// A module whose objects run caller code when a message renders them: two
 /// whose `repr` is interrupted, one whose `repr` fails the ordinary way, and a
-/// class whose metaclass answers `__name__` with an interrupt.
-fn loud(py: Python<'_>) -> Bound<'_, PyAny> {
+/// class whose metaclass answers `__name__` with an interrupt, under the name
+/// its test gives, for the reason `union_classes` takes one.
+fn loud<'py>(py: Python<'py>, name: &std::ffi::CStr) -> Bound<'py, PyAny> {
     PyModule::from_code(
         py,
         c"class Loud:\n    def __repr__(self):\n        raise KeyboardInterrupt\n\
@@ -4335,7 +4335,7 @@ fn loud(py: Python<'_>) -> Bound<'_, PyAny> {
           \x20       return super().__getattribute__(name)\n\
           class LoudlyNamed(metaclass=Meta):\n    pass\n",
         c"loud.py",
-        c"loud",
+        name,
     )
     .expect("the module compiles")
     .into_any()
@@ -4381,7 +4381,7 @@ fn recorded(
 fn a_fatal_signal_from_any_part_of_a_message_is_recorded() {
     use pyo3::exceptions::PyKeyboardInterrupt;
     Python::attach(|py| {
-        let module = loud(py);
+        let module = loud(py, c"loud_message");
         let make = |name: &str, arg: Option<i64>| -> Py<PyAny> {
             let class = module.getattr(name).expect("the class");
             match arg {
@@ -4460,7 +4460,7 @@ fn a_fatal_signal_from_any_part_of_a_message_is_recorded() {
 #[test]
 fn a_fatal_signal_from_a_branch_label_is_recorded() {
     Python::attach(|py| {
-        let module = loud(py);
+        let module = loud(py, c"loud_label");
         let make = |name: &str| -> Py<PyAny> {
             module
                 .getattr(name)

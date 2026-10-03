@@ -508,7 +508,7 @@ fn a_fatal_signal_from_a_constant_propagates_and_an_ordinary_one_folds() {
               \x20   def __hash__(self):\n\
               \x20       raise self.raised\n",
             c"loud.py",
-            c"loud",
+            c"loud_constant",
         )
         .expect("the module compiles");
         let loud = |raised: &str| {

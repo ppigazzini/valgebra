@@ -287,6 +287,16 @@ Python frames of the plain-interpreter reproduction. What the frontend does
 about the race, and the part of it a program keeps, is on [the frontend
 page](03-frontend.md#what-a-parametrized-form-says).
 
+**A corpus module is named by the test that reads it.** `PyModule::from_code`
+runs its source in the `sys.modules` entry of the name it is given when there
+is one, not in a module of its own, so two tests that build a module under one
+name rebind each other's classes. On a free-threaded interpreter the two run at
+once, and one test's pooled class stops being the class of the instances it
+reads next: `a_list_of_named_tuples_answers_as_the_walk_does`, sharing its
+module with the test of its reader, failed thirty runs in forty on 3.14t at four
+test threads and none at one. A helper that builds a module takes the name from
+its caller.
+
 A release written onto a row is a claim about the lanes, and
 `tests/test_version_gates.py` holds it to them: each release a gate names has a
 lane below it, where the guard is taken, and an **enforced** lane at or above
