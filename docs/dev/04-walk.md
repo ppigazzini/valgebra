@@ -271,7 +271,7 @@ keys are strings by the grammar. `walk/sequence.rs` reads one as a run of
 differ in how an element is reached and agree on what each must be, and which
 share an arity, a count taken once and compared again, and the snapshot a list
 is read through where a test settles every element -- one scalar kind, a union
-of them, one class, a union of literals.
+of them, one class, a union of literals, a tuple of scalars.
 
 All three read the same `Frame`: where the walk is in the value, what it has found
 there, and the context it may look things up in. A walk needing a different one
@@ -384,9 +384,9 @@ tuple is frozen -- so its elements are read borrowed and the walk pays neither.
 On the free-threaded build an owned handle pays each count through a call into
 the interpreter, where the copy writes both inline. The readers of a list whose
 every element one test settles take that copy where it pays: one scalar kind and
-a union of them here, one class and a union of literals below. What each reading
-costs per element, in place and through the copy on each interpreter, is
-measured in the doc comment on `snapshot_pays` in
+a union of them here, one class, a union of literals and a tuple of scalars
+below. What each reading costs per element, in place and through the copy on
+each interpreter, is measured in the doc comment on `snapshot_pays` in
 `crates/valgebra-py/src/check/walk/sequence.rs`, the one place those figures
 live.
 
@@ -531,18 +531,23 @@ and asks `isinstance` only of a subclass instance or another value. A list of
 `date`, or of one enumeration, costs 29% fewer instructions. PyPy implements
 `isinstance` otherwise, and there the call answers.
 
-**A list of one class, or of a union of literals, has a reader of its own.**
-Each element is the pointer test, or the union's table found once for the list
-(`instance_list_matches`, `literal_list_matches`), and an element the test does
-not settle -- a subclass instance, a value the table does not decide -- is
-walked, which may run Python; so a list is read in place, unless a snapshot the
-test admits entirely settles it. The general loop pays a call, a dispatch and,
-for the union, a lookup of its table at every element, so the readers cost a
-thousand `date`s 76% fewer instructions and a thousand literals 62%. The list
-arm hands both kinds of tail to one reader (`element_list_matches`) behind its
-one tag test, and the readers cost the PGO wheel's walk of a nested list 3% more
-instructions with the training workload reading lists of each kind, 6% without
-it.
+**A list of one class, of a union of literals, or of a tuple of scalars has a
+reader of its own.** Each element is the pointer test, the union's table found
+once for the list, or a type test of an exact tuple, its arity and a test per
+position (`instance_list_matches`, `literal_list_matches`,
+`tuple_list_matches`), and an element the test does not settle -- a subclass
+instance, a value the table does not decide, a tuple subclass -- is walked,
+which may run Python; so a list is read in place, unless a snapshot the test
+admits entirely settles it. The general loop pays a call, a dispatch and, for
+the union, a lookup of its table at every element, and for the tuple the tuple's
+own arm and a reading of each position's schema, so the readers cost a thousand
+`date`s 76% fewer instructions, a thousand literals 62% and a thousand
+`tuple[int, str]` 61%. The tuple reader needs the two levels below the list
+free, the tuple's and its positions', as the union of scalars needs the union's
+and its branch's. The list arm hands every kind of tail to one reader
+(`element_list_matches`) behind its one tag test, and the readers cost the PGO
+wheel's walk of a nested list 3% more instructions with the training workload
+reading lists of each kind, 6% without it.
 
 **Where a question is asked is part of what it costs.** The walk is one
 recursive function under fat LTO, with the arms of `member` inlined into it, so

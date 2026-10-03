@@ -5409,3 +5409,165 @@ fn a_list_of_one_class_is_read_off_its_elements_types() {
         );
     });
 }
+
+/// A module holding `SUB`, an instance of a `tuple` subclass the tuple-list
+/// tests read beside exact tuples, under the name its test gives, for the
+/// reason `union_classes` takes one.
+fn tuple_subclass<'py>(py: Python<'py>, name: &std::ffi::CStr) -> Bound<'py, PyModule> {
+    PyModule::from_code(
+        py,
+        c"class Pair(tuple):\n\
+          \x20   pass\n\
+          SUB = Pair((1, 'a'))\n",
+        c"tuples_listed.py",
+        name,
+    )
+    .expect("the module compiles")
+}
+
+/// Evaluate `source` against `module`'s globals.
+fn evaluated<'py>(module: &Bound<'py, PyModule>, source: &str) -> Bound<'py, PyAny> {
+    module
+        .py()
+        .eval(
+            &std::ffi::CString::new(source).expect("no nul"),
+            Some(&module.dict()),
+            None,
+        )
+        .expect("the value evaluates")
+}
+
+/// A list whose element is a tuple of scalar positions answers what the walk
+/// answers in both modes: a tuple subclass is admitted through its storage, a
+/// wrong arity, position or container refused, in place and through a
+/// snapshot, and a refused position is named at its own index within its
+/// element.
+#[test]
+fn a_list_of_scalar_tuples_answers_as_the_walk_does() {
+    Python::attach(|py| {
+        let module = tuple_subclass(py, c"tuples_answered");
+        let element = Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Str]));
+        let list = Schema::list(SeqShape::homogeneous(element));
+        for (source, want) in [
+            ("[(1, 'a'), (2, 'b')]", true),
+            ("[(True, 'a')]", true),
+            ("[(1, 'a'), SUB]", true),
+            ("[]", true),
+            ("[(1, 'a'), (1, 2)]", false),
+            ("[(1, 'a'), (1,)]", false),
+            ("[(1, 'a'), (1, 'a', 2)]", false),
+            ("[(1, 'a'), [1, 'a']]", false),
+            ("[(1, 'a')] * 40", true),
+            ("[(1, 'a')] * 39 + [SUB]", true),
+            ("[(1, 'a')] * 39 + [(1, b'a')]", false),
+        ] {
+            assert_eq!(
+                decide(py, &list, &evaluated(&module, source), &[], &[]),
+                want,
+                "{source}"
+            );
+        }
+        let refused = evaluated(&module, "[(1, 'a'), (1, 2)]");
+        let (ok, violations) = explain(py, &list, &refused, &[], &[]);
+        let at: Vec<Vec<PathSegment>> = violations.into_iter().map(|v| v.path).collect();
+        assert_eq!(
+            (ok, at),
+            (
+                false,
+                vec![vec![PathSegment::Index(1), PathSegment::Index(1)]]
+            )
+        );
+    });
+}
+
+/// The tuple-list reader settles an exact tuple whose positions pass and walks
+/// any other element, in both modes. It declines behind a fixed prefix, for a
+/// tuple with a tail or a position that is not a scalar, and where the two
+/// levels below the list are not free; the reader a list arm hands its tails
+/// to reaches it.
+#[test]
+fn a_list_of_scalar_tuples_is_read_by_a_test_of_each_element() {
+    use super::sequence::{element_list_matches, tuple_list_matches};
+    Python::attach(|py| {
+        let module = tuple_subclass(py, c"tuples_read");
+        let element = Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Str]));
+        let list = Schema::list(SeqShape::homogeneous(element.clone()));
+        let index = build_index(py, &list, &[], &[]);
+        let state = WalkState::new();
+        let ctx = |mode| Ctx {
+            pool: &[],
+            defs: &[],
+            records: &index.records,
+            attrs: &index.attrs,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
+            mode,
+        };
+        let read = |source: &str, prefix: &[Schema], element: &Schema, mode| {
+            let Schema::Seq { shape, .. } = element else {
+                unreachable!("a tuple schema")
+            };
+            let value = evaluated(&module, source);
+            let listed = value.cast::<PyList>().expect("a list");
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx(mode));
+            let answer = tuple_list_matches(
+                listed,
+                prefix,
+                element,
+                shape,
+                &Value::Py(&value),
+                &mut frame,
+            );
+            (answer, out.len())
+        };
+        let fast = WalkMode::Fast;
+        assert_eq!(
+            read("[(1, 'a'), SUB]", &[], &element, fast),
+            (Some(true), 0)
+        );
+        assert_eq!(
+            read("[(1, 'a'), (1, 2)]", &[], &element, fast),
+            (Some(false), 0)
+        );
+        assert_eq!(
+            read("[(1, 'a')]", &[], &element, WalkMode::Explain),
+            (Some(true), 0)
+        );
+        assert_eq!(
+            read("[(1, 'a'), (1, 2)]", &[], &element, WalkMode::Explain),
+            (Some(false), 1)
+        );
+        assert_eq!(
+            read("[(1, 'a')]", &[Schema::Int], &element, fast),
+            (None, 0)
+        );
+        let tailed = Schema::tuple(SeqShape::homogeneous(Schema::Int));
+        assert_eq!(read("[(1, 2)]", &[], &tailed, fast), (None, 0));
+        let nested = Schema::tuple(SeqShape::fixed([
+            Schema::Int,
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+        ]));
+        assert_eq!(read("[(1, [2])]", &[], &nested, fast), (None, 0));
+        state.depth.set(MAX_WALK_DEPTH - 2);
+        assert_eq!(read("[(1, 'a')]", &[], &element, fast), (Some(true), 0));
+        state.depth.set(MAX_WALK_DEPTH - 1);
+        assert_eq!(read("[(1, 'a')]", &[], &element, fast), (None, 0));
+        state.depth.set(MAX_WALK_DEPTH);
+        assert_eq!(read("[(1, 'a')]", &[], &element, fast), (None, 0));
+        state.depth.set(0);
+
+        let value = evaluated(&module, "[(1, 'a')]");
+        let listed = value.cast::<PyList>().expect("a list");
+        let (mut path, mut out) = (Vec::new(), Vec::new());
+        let mut frame = Frame::new(&mut path, &mut out, ctx(fast));
+        assert_eq!(
+            element_list_matches(listed, &[], &element, &Value::Py(&value), &mut frame),
+            Some(true)
+        );
+    });
+}

@@ -58,7 +58,14 @@ pub(super) fn check_seq(
             if let Some((kind, schema)) = homogeneous_scalar(prefix, tail, ctx) {
                 return scalar_list_matches(list, kind, schema, value, frame);
             }
-            if let Some(element @ (Schema::Union(_) | Schema::Instance(_))) = tail
+            if let Some(
+                element @ (Schema::Union(_)
+                | Schema::Instance(_)
+                | Schema::Seq {
+                    container: SeqKind::Tuple,
+                    ..
+                }),
+            ) = tail
                 && let Some(ok) = element_list_matches(list, prefix, element, value, frame)
             {
                 return ok;
@@ -475,10 +482,10 @@ pub(super) fn scalar_union_list_matches(
     Some(scalar_list_loop(list, admits, value, frame))
 }
 
-/// Membership for a list whose element is a union or a class, read by the
-/// reader for its kind, and `None` where that reader declines.
+/// Membership for a list whose element is a union, a class or a tuple, read by
+/// the reader for its kind, and `None` where that reader declines.
 ///
-/// One call for both, behind the one test of the tail's tag [`check_seq`]
+/// One call for every kind, behind the one test of the tail's tag [`check_seq`]
 /// makes: a second test there moved the PGO wheel's layout of the general
 /// scan beside it.
 #[inline(never)]
@@ -496,6 +503,10 @@ pub(super) fn element_list_matches(
         Schema::Instance(index) => {
             instance_list_matches(list, prefix, element, *index, value, frame)
         }
+        Schema::Seq {
+            container: SeqKind::Tuple,
+            shape,
+        } => tuple_list_matches(list, prefix, element, shape, value, frame),
         _ => None,
     }
 }
@@ -545,6 +556,89 @@ pub(super) fn instance_list_matches(
         Scan::Stopped => false,
         Scan::Unreadable => mutated(value, frame),
     })
+}
+
+/// Membership for a list whose every element is a tuple of scalar positions --
+/// `list[tuple[int, str]]` -- where the two levels below the list are free, and
+/// `None` elsewhere.
+///
+/// An exact tuple of the arity whose every position passes its kind's test is
+/// a member, as [`scalar_positions_tuple_matches`] reads it; any other element
+/// is walked, which reads a tuple subclass through its storage and reports
+/// what does not fit. The general loop paid a call into `member` and the
+/// tuple's arm of [`check_seq`] around the same tests, and the positions reader
+/// read each position's schema again for every tuple: 285 instructions an
+/// element on 3.14, against 110 here. A list is read in place unless a snapshot
+/// every element of which fits settles it, as [`instance_list_matches`] reads
+/// its own, whose body this one repeats rather than shares: drawn into one
+/// generic reader, the class list's elements cost the PGO wheel two
+/// instructions more each, 8% of a thousand `date`s. Out of line for the same
+/// reason: inlined into [`element_list_matches`] beside the class reader, it
+/// cost that reader one instruction an element.
+#[inline(never)]
+pub(super) fn tuple_list_matches(
+    list: &Bound<'_, PyList>,
+    prefix: &[Schema],
+    element: &Schema,
+    shape: &SeqShape,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    let positions = scalar_tuple_positions(prefix, shape, ctx)?;
+    let fits = |item: &Value<'_, '_>| {
+        matches!(item, Value::Py(obj) if obj.cast_exact::<PyTuple>().is_ok_and(|tuple| {
+            tuple.len() == positions.len()
+                && tuple.iter_borrowed().zip(positions).all(|(item, position)| {
+                    scalar_of(position).is_some_and(|kind| scalar_admits(kind, &Value::Py(&item)))
+                })
+        }))
+    };
+    if ctx.mode.explains() {
+        return Some(list_explained(list, element, fits, value, frame));
+    }
+    if let Some(answer) = admitted_through_snapshot(list, &fits, value, frame) {
+        return Some(answer);
+    }
+    let mut ok = true;
+    let scan = scan_list(list, |_, item| {
+        let item = Value::Py(item);
+        ok &= fits(&item) || member(element, &item, frame);
+        if !ok && stop(ctx) {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    Some(match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    })
+}
+
+/// The positions of the fixed tuple of scalars every element of a list is, and
+/// `None` for any other element.
+///
+/// A position sits a level below its tuple, and the tuple a level below the
+/// list, so two levels must be free: the tuple's is held while the position's
+/// is asked for, which is what the walk does with each element, and both are
+/// refused together, as [`homogeneous_scalar_union`] refuses a union's.
+fn scalar_tuple_positions<'s>(
+    prefix: &[Schema],
+    shape: &'s SeqShape,
+    ctx: Ctx<'_>,
+) -> Option<&'s [Schema]> {
+    if !prefix.is_empty() || shape.tail.is_some() {
+        return None;
+    }
+    let _tuple = ctx.descend()?;
+    (ctx.room_to_descend()
+        && shape
+            .prefix
+            .iter()
+            .all(|position| scalar_of(position).is_some()))
+    .then_some(&shape.prefix)
 }
 
 /// Membership for a list whose every element is a union of literals --
