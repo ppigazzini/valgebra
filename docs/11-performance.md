@@ -585,7 +585,11 @@ program that builds validators per request, and to no validation call.
   rest of the sequence walk so that an edit elsewhere does not move its register
   allocation (`--binding`). A set, a frozenset and a parsed JSON array take the
   same reading, a set with a scan per kind in both the deciding and the
-  explaining walk (`--binding-set`).
+  explaining walk (`--binding-set`). A list of one scalar kind or `None` has a
+  loop per kind too, both tests constants inside it (`nullable_list_matches`;
+  `--binding-nullable`): a thousand-element `list[str | None]` costs 80% fewer
+  instructions than through the union's branches on CPython 3.14 and 3.15,
+  under `is_valid` and `validate` alike, and 72% on 3.12.
 - **A list is read through a snapshot where that pays.** Reading a list element
   hands out an owned reference, a count written on the element twice; a tuple
   copy pays those writes in two loops inside the interpreter and none in the

@@ -476,11 +476,93 @@ pub(super) fn scalar_union_list_matches(
     let Some(members) = homogeneous_scalar_union(prefix, members, ctx) else {
         return literal_list_matches(list, prefix, union, members, value, frame);
     };
+    if let [Schema::NoneType, kind] = members
+        && let Some(answer) = nullable_list_matches(list, union, kind, value, frame)
+    {
+        return Some(answer);
+    }
     let admits = |item: &Value<'_, '_>| scalar_union_admits(members, item);
     if ctx.mode.explains() {
         return Some(list_explained(list, union, admits, value, frame));
     }
     Some(scalar_list_loop(list, admits, value, frame))
+}
+
+/// Membership for a list whose every element is one scalar kind or `None` --
+/// `list[int | None]`, `list[Optional[str]]` -- read with a loop for that kind,
+/// and `None` for a kind it has no loop for.
+///
+/// [`scalar_list_matches`] for the union a scalar and `None` make: each kind
+/// has a loop of its own, both tests constants inside it, where the loop over
+/// the union's branches matched each branch's kind at every element, read the
+/// branch's schema again to do it, and asked the kind it had already ruled out
+/// of every `None`. Reached behind [`homogeneous_scalar_union`], which holds
+/// the two levels the walk would take, as the union's other readings are.
+#[inline(never)]
+pub(super) fn nullable_list_matches(
+    list: &Bound<'_, PyList>,
+    union: &Schema,
+    kind: &Schema,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    Some(match kind {
+        Schema::Int => nullable_list_read(
+            list,
+            union,
+            |item| item.is_none() || item.is_int(),
+            value,
+            frame,
+        ),
+        Schema::Str => nullable_list_read(
+            list,
+            union,
+            |item| item.is_none() || item.is_str(),
+            value,
+            frame,
+        ),
+        Schema::Float => nullable_list_read(
+            list,
+            union,
+            |item| item.is_none() || item.is_float(),
+            value,
+            frame,
+        ),
+        Schema::Bool => nullable_list_read(
+            list,
+            union,
+            |item| item.is_none() || item.is_bool(),
+            value,
+            frame,
+        ),
+        Schema::Bytes => nullable_list_read(
+            list,
+            union,
+            |item| item.is_none() || item.is_bytes(),
+            value,
+            frame,
+        ),
+        _ => return None,
+    })
+}
+
+/// One kind's loop of [`nullable_list_matches`], in the walk's mode: the
+/// deciding loop, or the explaining reader, which walks `union` at an element
+/// `admits` refuses. One test for both, so the two modes cannot read a kind
+/// differently.
+#[inline]
+fn nullable_list_read(
+    list: &Bound<'_, PyList>,
+    union: &Schema,
+    admits: impl Fn(&Value<'_, '_>) -> bool,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    if frame.ctx.mode.explains() {
+        list_explained(list, union, admits, value, frame)
+    } else {
+        scalar_list_loop(list, admits, value, frame)
+    }
 }
 
 /// Membership for a list whose element is a union, a meet, a class or a tuple,

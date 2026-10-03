@@ -5747,3 +5747,88 @@ fn a_list_of_named_tuples_is_read_by_a_test_of_each_element() {
         );
     });
 }
+
+/// A list of each scalar kind or `None` answers alike in both modes through
+/// the kind's own loop, read in place and wide enough for a snapshot: every
+/// element passing, or the last failing, which the report names at its index.
+#[test]
+fn a_list_of_each_scalar_kind_or_none_is_read_by_its_own_loop() {
+    Python::attach(|py| {
+        for (kind, good, bad) in scalar_kinds().into_iter().take(5) {
+            let (Some(good), Some(bad)) = (good, bad) else {
+                unreachable!("the first five kinds have a value each way")
+            };
+            let list = Schema::list(SeqShape::homogeneous(Schema::union([
+                kind,
+                Schema::NoneType,
+            ])));
+            for width in [2, 40] {
+                let value = evaluate(py, &format!("[{good}, None] * {}", width / 2));
+                assert!(decide(py, &list, &value, &[], &[]), "{good} x{width}");
+                let source = format!("[{good}, None] * {} + [{bad}]", width / 2);
+                let value = evaluate(py, &source);
+                assert!(!decide(py, &list, &value, &[], &[]), "{source}");
+                let (_, violations) = explain(py, &list, &value, &[], &[]);
+                assert_eq!(
+                    violations[0].path,
+                    vec![PathSegment::Index(width)],
+                    "{source}"
+                );
+            }
+        }
+    });
+}
+
+/// The nullable reader answers a list of each scalar kind or `None` in both
+/// modes through that kind's loop, and declines for a kind it has no loop of
+/// its own for.
+#[test]
+fn a_list_of_a_scalar_or_none_is_answered_by_its_reader() {
+    use super::sequence::nullable_list_matches;
+    Python::attach(|py| {
+        let index = build_index(py, &Schema::NoneType, &[], &[]);
+        let state = WalkState::new();
+        let read = |source: &str, kind: &Schema, mode| {
+            let union = Schema::union([kind.clone(), Schema::NoneType]);
+            let value = evaluate(py, source);
+            let listed = value.cast::<PyList>().expect("a list");
+            let ctx = Ctx {
+                pool: &[],
+                defs: &[],
+                records: &index.records,
+                attrs: &index.attrs,
+                unions: &index.unions,
+                regexes: &index.regexes,
+                guard: &state.guard,
+                depth: &state.depth,
+                fatal: &state.fatal,
+                fatal_seen: &state.fatal_seen,
+                mode,
+            };
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx);
+            let answer =
+                nullable_list_matches(listed, &union, kind, &Value::Py(&value), &mut frame);
+            (answer, out.len())
+        };
+        for mode in [WalkMode::Fast, WalkMode::Explain] {
+            let recorded = usize::from(mode.explains());
+            for (kind, good, bad) in scalar_kinds().into_iter().take(5) {
+                let (Some(good), Some(bad)) = (good, bad) else {
+                    unreachable!("the first five kinds have a value each way")
+                };
+                assert_eq!(
+                    read(&format!("[{good}, None]"), &kind, mode),
+                    (Some(true), 0),
+                    "{good}"
+                );
+                assert_eq!(
+                    read(&format!("[{good}, None, {bad}]"), &kind, mode),
+                    (Some(false), recorded),
+                    "{bad}"
+                );
+            }
+            assert_eq!(read("[None]", &Schema::NoneType, mode), (None, 0));
+        }
+    });
+}

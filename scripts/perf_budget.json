@@ -64,8 +64,8 @@
   "binding_relation_workload_irefs": 492617070,
   "_binding_mapping_comment": "A `dict[str, int]` of sixty-four entries walked per iteration: a mapping, which declares no key, so each entry is iterated and asked of the clause both halves of it fall under. Every record shape names its keys and probes the dict for each, so none of them reaches the reading a free-form section of a document takes, and a cost added per entry there reads as nothing on every one of them.",
   "binding_mapping_workload_irefs": 216045045,
-  "_binding_nullable_comment": "Sixty-four integers and `None`, alternating, against `list[int | None]` per iteration: a list whose element is a union of scalars, read by a reader of its own beside the one a single scalar kind takes. The walk shape reads only that one, so a cost added per element of a nullable list reads as nothing on every shape beside this.",
-  "binding_nullable_workload_irefs": 376400035,
+  "_binding_nullable_comment": "Sixty-four integers and `None`, alternating, against `list[int | None]` per iteration: a list whose element is one scalar kind or `None`, read by a loop of its own for that kind beside the one a single scalar kind takes. The walk shape reads only that one, so a cost added per element of a nullable list reads as nothing on every shape beside this. A union of two scalars neither of which is `None` is read by the loop over the union's branches, which no shape reads.",
+  "binding_nullable_workload_irefs": 246700035,
   "_binding_set_comment": "A `set[str]` of sixty-four strings walked per iteration: a set, which has no positions and is read through its own iterator, so none of the sequence shapes reaches its reader, and a cost added per element of a set reads as nothing on every one of them.",
   "binding_set_workload_irefs": 579499991
 }

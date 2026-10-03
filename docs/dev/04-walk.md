@@ -449,7 +449,15 @@ most of what they cost, and each asks the test directly:
 - **A sequence whose element is a union of scalars.** `list[int | None]` is read
   the way `list[int]` is, above, with a test per branch
   (`homogeneous_scalar_union`): a thousand elements cost 87% fewer
-  instructions, and a tuple of them 90%.
+  instructions, and a tuple of them 90%. A list of one scalar kind or `None`
+  -- the `Optional` of a builtin -- has a loop per kind besides, both tests
+  constants inside it, as a single kind has (`nullable_list_matches`), where
+  the loop over the branches matches each branch's kind at every element: a
+  thousand of them cost a further 80% fewer instructions on 3.14 and 3.15,
+  under `is_valid` and `validate` alike, and 72% on 3.12, which reads the list
+  through a snapshot. A union of two kinds neither of which is `None` keeps
+  the loop over its branches: a loop for each such pair is ten loops more a
+  mode.
 - **A set of one scalar kind.** `set[str]` and `frozenset[int]` read the kind
   once for the set, and each element is the kind's test, a scan per kind with
   the test a constant inside it, in the deciding walk (`elements_admitted` in
@@ -511,8 +519,8 @@ readings refuse the mode.
 
 `validate` on a thousand-element `list[int]` that belongs costs 72% fewer
 instructions than it does with every element taken through the explaining
-walk's dispatch and location push, on a `list[int | None]` 76%, and on a list of
-`tuple[int, str, float]` 22%. Where no reading applies, an element or a set
+walk's dispatch and location push, and on a list of `tuple[int, str, float]`
+22%. Where no reading applies, an element or a set
 member that `admitted_quietly` answers -- a scalar whose test passes, a union
 of scalars one of whose tests does, at free levels and with no fatal signal
 recorded -- is passed without the push and the dispatch: `validate` on a
