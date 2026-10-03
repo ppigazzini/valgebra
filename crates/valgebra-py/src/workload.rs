@@ -39,7 +39,7 @@ use pyo3::types::{PyDict, PyInt, PyList, PyModule, PyString};
 use valgebra_core::{Constraint, DefIx, Field, MapClause, Schema, SeqKind, SeqShape};
 
 use crate::build::{Pool, build_schema};
-use crate::check::{Frame, WalkMode, WalkState, member};
+use crate::check::{Frame, Unwritten, WalkMode, WalkState, member};
 use crate::input::Value;
 use crate::validator::Validator;
 
@@ -683,11 +683,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
                 let ok = member(
                     std::hint::black_box(&validator.schema),
                     &Value::Py(std::hint::black_box(&obj)),
-                    &mut Frame::new(
-                        &mut Vec::new(),
-                        &mut Vec::new(),
-                        validator.context(py, &state, WalkMode::Fast),
-                    ),
+                    &mut Unwritten::default().frame(validator.context(py, &state, WalkMode::Fast)),
                 );
                 checksum = checksum.wrapping_add(u64::from(ok));
             }
@@ -767,11 +763,7 @@ fn boundary_walk(py: Python<'_>, iters: usize) -> u64 {
         let ok = member(
             std::hint::black_box(&validator.schema),
             &Value::Py(std::hint::black_box(&obj)),
-            &mut Frame::new(
-                &mut Vec::new(),
-                &mut Vec::new(),
-                validator.context(py, &state, WalkMode::Fast),
-            ),
+            &mut Unwritten::default().frame(validator.context(py, &state, WalkMode::Fast)),
         );
         checksum = checksum.wrapping_add(u64::from(ok));
     }
@@ -924,11 +916,7 @@ fn spelled_walk(py: Python<'_>, iters: usize, source: &str) -> u64 {
         let ok = member(
             std::hint::black_box(&validator.schema),
             &Value::Py(std::hint::black_box(&value)),
-            &mut Frame::new(
-                &mut Vec::new(),
-                &mut Vec::new(),
-                validator.context(py, &state, WalkMode::Fast),
-            ),
+            &mut Unwritten::default().frame(validator.context(py, &state, WalkMode::Fast)),
         );
         checksum = checksum.wrapping_add(u64::from(ok));
     }
@@ -969,11 +957,7 @@ fn recursive_walk(py: Python<'_>, iters: usize) -> u64 {
         let ok = member(
             std::hint::black_box(&validator.schema),
             &Value::Py(std::hint::black_box(&value)),
-            &mut Frame::new(
-                &mut Vec::new(),
-                &mut Vec::new(),
-                validator.context(py, &state, WalkMode::Fast),
-            ),
+            &mut Unwritten::default().frame(validator.context(py, &state, WalkMode::Fast)),
         );
         checksum = checksum.wrapping_add(u64::from(ok));
     }
@@ -1003,11 +987,7 @@ fn pattern_walk(py: Python<'_>, iters: usize) -> u64 {
         let ok = member(
             std::hint::black_box(&validator.schema),
             &Value::Py(std::hint::black_box(&obj)),
-            &mut Frame::new(
-                &mut Vec::new(),
-                &mut Vec::new(),
-                validator.context(py, &state, WalkMode::Fast),
-            ),
+            &mut Unwritten::default().frame(validator.context(py, &state, WalkMode::Fast)),
         );
         checksum = checksum.wrapping_add(u64::from(ok));
     }
@@ -1087,11 +1067,7 @@ pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
         let ok = member(
             std::hint::black_box(&validator.schema),
             &Value::Py(std::hint::black_box(&obj)),
-            &mut Frame::new(
-                &mut Vec::new(),
-                &mut Vec::new(),
-                validator.context(py, &state, WalkMode::Fast),
-            ),
+            &mut Unwritten::default().frame(validator.context(py, &state, WalkMode::Fast)),
         );
         checksum = checksum.wrapping_add(u64::from(ok));
     }

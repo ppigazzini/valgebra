@@ -580,7 +580,13 @@ program that builds validators per request, and to no validation call.
   `check/walk/record.rs`), rather than a pair built and dropped per branch and
   per key: a `dict[str, int]` of sixty-four entries costs 10% fewer
   instructions that way (`--binding-mapping`), and a recursive schema's
-  descent 10% fewer (`--binding-recursive`).
+  descent 10% fewer (`--binding-recursive`). Where a fast walk has no frame to
+  hold -- `is_valid` and `is_valid_json` themselves, a mapping's scan, a parsed
+  object -- its pair is an `Unwritten` one, never dropped because it never owns
+  anything: `is_valid` on a scalar costs 6% fewer instructions that way on
+  CPython 3.15, `in` 9%, and the instruction gate's call boundary 13%
+  (`--binding-boundary`). A record read by its keys keeps an ordinary pair,
+  since without the drop the release build lays its loop out dearer.
 - **The recursion trail is a stack, reserved on first use.** Entering a
   reference pushes a `(value, definition)` pair and leaving pops it (`Trail` in
   `check/ctx.rs`), so nothing is hashed. The first level reserves `FIRST_TRAIL`

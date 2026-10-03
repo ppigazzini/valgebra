@@ -30,7 +30,7 @@ use valgebra_core::descr::classes::{Attributes, Class, Hook, Member, Namespace, 
 use valgebra_core::descr::lower::{Constants, Operand};
 use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, OperandIx, Schema};
 
-use crate::check::{Ctx, Frame, ValidatorIndex, WalkMode, WalkState, member};
+use crate::check::{Ctx, Unwritten, ValidatorIndex, WalkMode, WalkState, member};
 use crate::errors::is_fatal;
 use crate::input::Value;
 
@@ -254,7 +254,7 @@ impl PoolRelations<'_, '_> {
         let admitted = member(
             schema,
             &Value::Py(value),
-            &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
+            &mut Unwritten::default().frame(ctx),
         );
         if let Some(err) = state.fatal.take() {
             self.keep_if_fatal(err);

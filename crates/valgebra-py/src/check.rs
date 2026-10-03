@@ -23,4 +23,4 @@ mod walk;
 
 pub(crate) use ctx::{Ctx, WalkMode, WalkState};
 pub(crate) use index::{ValidatorIndex, build_index, compile_pattern};
-pub(crate) use walk::{Frame, member};
+pub(crate) use walk::{Frame, Unwritten, member};

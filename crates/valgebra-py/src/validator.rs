@@ -19,7 +19,9 @@ use rustc_hash::FxHashMap;
 use valgebra_core::{Measure, Openness, Relation, Schema};
 
 use crate::build::{Pool, PoolKeys, build_schema};
-use crate::check::{Ctx, Frame, ValidatorIndex, WalkMode, WalkState, build_index, member};
+use crate::check::{
+    Ctx, Frame, Unwritten, ValidatorIndex, WalkMode, WalkState, build_index, member,
+};
 use crate::errors::into_pyerr;
 use crate::input::{JsonInput, Value, decode_json_input, parse_json};
 use crate::oracle::PoolRelations;
@@ -364,11 +366,7 @@ impl Validator {
         let ok = member(
             &self.schema,
             &Value::Json(py, &json),
-            &mut Frame::new(
-                &mut Vec::new(),
-                &mut Vec::new(),
-                self.context(py, &state, WalkMode::Fast),
-            ),
+            &mut Unwritten::default().frame(self.context(py, &state, WalkMode::Fast)),
         );
         reraise_fatal(state, ok)
     }
@@ -510,11 +508,7 @@ impl Validator {
         let ok = member(
             &self.schema,
             &Value::Py(obj),
-            &mut Frame::new(
-                &mut Vec::new(),
-                &mut Vec::new(),
-                self.context(obj.py(), &state, WalkMode::Fast),
-            ),
+            &mut Unwritten::default().frame(self.context(obj.py(), &state, WalkMode::Fast)),
         );
         reraise_fatal(state, ok)
     }

@@ -31,6 +31,8 @@
 //! [`member`] call returns at once) and the entry point re-raises it, so an
 //! interrupted check stops instead of being silently reported as a non-member.
 
+use std::mem::ManuallyDrop;
+
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
@@ -86,6 +88,27 @@ impl<'a, 'ctx> Frame<'a, 'ctx> {
         ctx: Ctx<'ctx>,
     ) -> Self {
         Frame { path, out, ctx }
+    }
+}
+
+/// The two buffers a walk that records nothing is handed, and never writes.
+///
+/// A fast walk pushes no location and no violation, so both stay empty and own
+/// no allocation, yet dropping an empty `Vec<PathSegment>` is a call into drop
+/// glue written out of line -- a loop over elements that releases each one's
+/// shared name -- paid at every entry point a caller crosses and at every
+/// record a fast walk reads. Held in `ManuallyDrop`, the pair has no drop code
+/// at all, and forgetting a vector that owns nothing frees nothing.
+#[derive(Default)]
+pub(crate) struct Unwritten {
+    path: ManuallyDrop<Vec<PathSegment>>,
+    out: ManuallyDrop<Vec<Violation>>,
+}
+
+impl Unwritten {
+    /// A fast walk's frame over the pair, reading `ctx` in the fast mode.
+    pub(crate) fn frame<'a, 'ctx>(&'a mut self, ctx: Ctx<'ctx>) -> Frame<'a, 'ctx> {
+        Frame::new(&mut self.path, &mut self.out, fast(ctx))
     }
 }
 
@@ -821,11 +844,7 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
             // Past the probe's width the branch is asked the cheap question
             // only: a union this wide reports the closest of the branches
             // already walked, and the rest merely decide membership.
-            if member(
-                branch_schema,
-                value,
-                &mut Frame::new(&mut Vec::new(), &mut Vec::new(), fast(ctx)),
-            ) {
+            if member(branch_schema, value, &mut Unwritten::default().frame(ctx)) {
                 return true;
             }
             continue;
@@ -1005,7 +1024,7 @@ fn decided_quietly(schema: &Schema, value: &Value<'_, '_>, ctx: Ctx<'_>) -> Opti
         Schema::Literal(index) => Some(check_literal(
             *index,
             value,
-            &mut Frame::new(&mut Vec::new(), &mut Vec::new(), fast(ctx)),
+            &mut Unwritten::default().frame(ctx),
         )),
         Schema::Refine { base, .. } => decided_quietly(base, value, ctx).filter(|admits| !admits),
         Schema::Seq { .. } | Schema::Coll { .. } | Schema::KeyedMap { .. } => {
@@ -1081,11 +1100,7 @@ fn check_complement(inner: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_,
     let ctx = frame.ctx;
     // A value matches the complement iff it does not match the inner schema; the
     // inner explanation is irrelevant, so decide it on the fast path.
-    if member(
-        inner,
-        value,
-        &mut Frame::new(&mut Vec::new(), &mut Vec::new(), fast(ctx)),
-    ) {
+    if member(inner, value, &mut Unwritten::default().frame(ctx)) {
         if ctx.mode.explains() {
             frame.out.push(Violation {
                 code: UNEXPECTED_MATCH.as_str(),

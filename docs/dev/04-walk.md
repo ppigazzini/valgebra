@@ -274,17 +274,23 @@ is read through where a test settles every element -- one scalar kind, a union
 of them, one class, a union of literals, a tuple of scalars, a named tuple of
 them.
 
-All three read the same `Frame`: where the walk is in the value, what it has found
-there, and the context it may look things up in. A walk needing a different one
--- a union explaining a branch into a buffer of its own, a clause pair deciding
-on the fast path inside an explaining walk -- builds it from the parts it keeps.
-A fast walk writes neither of a frame's buffers, so where the walk is fast
-already it asks in the frame it holds: `check_union` walks each branch in the
-union's frame, and a mapping's scan keeps one fast frame for every entry
-`covered` asks of its clauses. Each buffer is a value with a destructor, and a
-pair built and dropped per branch and per key is a tenth of what a recursive
-schema's walk and a `dict[str, int]` cost (`--binding-recursive`,
-`--binding-mapping`).
+All three read the same `Frame`: where the walk is in the value, what it has
+found there, and the context it may look things up in. A walk needing a
+different one -- a union explaining a branch into a buffer of its own, a clause
+pair deciding on the fast path inside an explaining walk -- builds it from the
+parts it keeps. A fast walk writes neither of a frame's buffers, so where the
+walk is fast already it asks in the frame it holds: `check_union` walks each
+branch in the union's frame, and a mapping's scan keeps one fast frame for every
+entry `covered` asks of its clauses. Each buffer is a value with a destructor,
+and a pair built and dropped per branch and per key is a tenth of what a
+recursive schema's walk and a `dict[str, int]` cost (`--binding-recursive`,
+`--binding-mapping`). Where a fast walk has no frame to borrow -- the entry
+points `is_valid` and `is_valid_json`, a mapping's scan, a parsed object, a
+complement's inner walk -- it takes an `Unwritten` pair (`walk.rs`), whose
+buffers are never dropped: they never own anything, and dropping an empty
+location buffer is a call into drop glue written out of line. A record read by
+its keys keeps an ordinary pair, because without the drop the release build lays
+that loop out three instructions a field dearer.
 
 ## A container is read against a count taken once
 

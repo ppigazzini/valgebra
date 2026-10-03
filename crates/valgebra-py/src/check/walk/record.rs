@@ -21,7 +21,8 @@ use super::scalar::{admitted_quietly, scalar_member};
 #[cfg(PyPy)]
 use super::{Base, held_dict, reads_its_length, reads_its_values};
 use super::{
-    Frame, Scan, fast, fold, is_fatal, member, mutated, record_fatal, record_if_fatal, stop,
+    Frame, Scan, Unwritten, fast, fold, is_fatal, member, mutated, record_fatal, record_if_fatal,
+    stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::index::RecordPlan;
@@ -429,7 +430,10 @@ fn keyed_map_asks_for_its_keys(
         return None;
     }
     // One pair of scratch buffers for the record, as the scan takes: a fast
-    // walk writes to neither.
+    // walk writes to neither. Dropped as ordinary vectors, unlike the scan's
+    // `Unwritten` pair: without the drop, the release build lays this loop out
+    // three instructions a field dearer -- 1.4% of `--binding-record` -- which
+    // outweighs the call the drop costs a small record.
     let (mut path, mut out) = (Vec::new(), Vec::new());
     let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
     with_critical_section(dict.as_any(), || {
@@ -570,8 +574,8 @@ fn keyed_map_scan(
     // Scratch buffers for the whole record, not one pair per field: a fast walk
     // writes to neither, and a fifty-field record was building and dropping a
     // hundred of them to answer one membership question.
-    let (mut path, mut out) = (Vec::new(), Vec::new());
-    let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
+    let mut unwritten = Unwritten::default();
+    let mut sub = unwritten.frame(ctx);
     let room = ctx.room_to_descend();
     let scan = scan_dict(dict, |key, val| {
         // A non-string key, or a string carrying a lone surrogate (which cannot
@@ -622,8 +626,8 @@ pub(super) fn keyed_map_matches_json(
     entries: &[(Cow<'_, str>, JsonValue<'_>)],
     ctx: Ctx<'_>,
 ) -> bool {
-    let (mut path, mut out) = (Vec::new(), Vec::new());
-    let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
+    let mut unwritten = Unwritten::default();
+    let mut sub = unwritten.frame(ctx);
     let room = ctx.room_to_descend();
     // A record whose keys settle it resolves the document's keys through the
     // plan instead of searching the document once per field. The search is
@@ -742,8 +746,8 @@ fn undeclared_covered(
         [clause] if matches!(clause.key, Schema::Str | Schema::Anything(_)) => Some(&clause.value),
         _ => None,
     };
-    let (mut path, mut out) = (Vec::new(), Vec::new());
-    let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
+    let mut unwritten = Unwritten::default();
+    let mut sub = unwritten.frame(ctx);
     let mut covers = |key: &str, val: &JsonValue<'_>| {
         if let Some(schema) = value_only {
             return member(schema, &Value::Json(py, val), &mut sub);
@@ -929,8 +933,8 @@ fn undeclared_explained(
     let declared: FxHashSet<&str> = fields.iter().map(|field| &*field.name).collect();
     // Whether a clause covers a key is asked in a fast walk, whose frame is
     // held for the scan rather than built per key.
-    let (mut path, mut out) = (Vec::new(), Vec::new());
-    let mut deciding = Frame::new(&mut path, &mut out, fast(ctx));
+    let mut unwritten = Unwritten::default();
+    let mut deciding = unwritten.frame(ctx);
     let scan = scan_dict(dict, |key, val| {
         if let Some(name) = as_field_name(key, ctx)
             && declared.contains(name)
