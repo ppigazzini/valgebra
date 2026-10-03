@@ -107,7 +107,7 @@ reproduces; the count is the table's rather than this sentence's:
 | the step's declared `env:` | yes, since the plan carries it | `RUSTDOCFLAGS=-D warnings` was dropped, so `cargo doc` could not fail locally |
 | the terminal's own variables | yes, `runner_environment` | `FORCE_COLOR` turned `pip-audit` red against a clean dependency tree |
 | the machine's git identity | yes, `deep_clone` and `NO_IDENTITY` | a checkout configures no `user.name`, this repository has one in its own `.git/config`, and a ledger that plants a commit with `git commit-tree` passed here and failed there |
-| the interpreter the lane names | partly: `PYO3_PYTHON` follows the caller's, and the gate's closing line says so | the mutation and cachegrind lanes name CPython 3.12 in `ci.yml`; a local sweep on 3.14 read two mutants as survivors that the lane kills, which is half an hour spent on a difference that was the interpreter |
+| the interpreter the lane names | partly: `PYO3_PYTHON` follows the caller's, and the gate's closing line says so | the mutation lanes name CPython 3.12 in `ci.yml` and the cachegrind lane 3.14; a local sweep on 3.14 read two mutants as survivors that the lane kills, which is half an hour spent on a difference that was the interpreter |
 | the *release* of the interpreter, not only the caller's | yes, at the floor: the gate builds it beside the caller's and runs the product suite on it | `typing.Self`, `LiteralString` and `Unpack` are 3.11 members; a test module naming them collected here on 3.14, failed to collect on the floor, and took nine jobs red with it |
 | the operating system and architecture | no | a macOS or Windows leg fails where Linux does not, and nothing local sees it |
 | the pinned tool versions | no, for the tools `taiki-e/install-action` installs | `ci.yml` installs `cargo-deny`, `cargo-llvm-cov` and `cargo-mutants` at versions it names, and the gate runs whichever is on the caller's `PATH`; a `uvx` step carries its pin in its own command, so the gate runs the lane's version of it |
@@ -376,16 +376,18 @@ through cargo rather than through maturin, which builds the extension module
 the release lane ships:
 
 ```bash
-export PYO3_PYTHON="$(uv python find 3.12)"          # the interpreter the lanes pin
+export PYO3_PYTHON="$(uv python find 3.14)"          # the interpreter the bench lane pins
 cargo build --profile profiling -p valgebra-py --features pyo3/extension-module
 pkg="$(python -c 'import valgebra, pathlib; print(pathlib.Path(valgebra.__file__).parent)')"
-cp target/profiling/lib_valgebra.so "$pkg/_valgebra.cpython-312-x86_64-linux-gnu.so"
+cp target/profiling/lib_valgebra.so "$pkg/_valgebra.cpython-314-x86_64-linux-gnu.so"
 PYTHONHASHSEED=0 valgrind --tool=callgrind --callgrind-out-file=out.callgrind python probe.py
 callgrind_annotate --inclusive=yes out.callgrind
 ```
 
 Two things make this work and are easy to get wrong. The interpreter must be
-3.12 or valgrind aborts on an instruction it does not model in 3.14. And
+one valgrind can run: uv's builds are, and a source build compiled with
+`-march=native` is not, since valgrind aborts on an instruction it does not
+model. And
 `pyproject.toml` must not set `strip`: a `strip` key under `[tool.maturin]`
 overrides both profiles, so `maturin build --profile profiling` would produce a
 binary with no symbols and a profile that attributes nothing, which reads as a
@@ -427,6 +429,19 @@ verdict:
   binary then reads the same count from any shell. `--update` writes the
   valgrind and C library a budget was recorded with under `measured_with` in
   `scripts/perf_budget.json`, since both move a count with the tree unchanged.
+- **No run writes bytecode.** A binding shape is the difference of two runs,
+  which cancels the interpreter's start-up only while both runs start alike. An
+  interpreter compiles a module the first time it imports it and writes the
+  bytecode beside the source, so on a fresh interpreter the first run pays a
+  compile its partner reads back. `settle_the_heap` imports `ctypes`, nothing
+  else in the bench job does, and the job installs its interpreter fresh: the
+  first walk the gate measured read a third dearer than the same binary run
+  again, on whichever side came first. `workload_environment` sets
+  `PYTHONDONTWRITEBYTECODE=1`, so both runs compile or both read. Before the
+  two, `warm_the_interpreter` runs the shape once uncounted, and that run may
+  write: without it the side measured first reads a colder cache than the side
+  after it, since building the base runs the interpreter in between, and a
+  cold start leaves the loop a different heap.
 - **Branch mispredicts are read beside the decision shapes, and not gated.**
   The decision path dispatches on a node's kind through jump tables taken
   several times per goal, so a change can trade instructions for predicted
@@ -580,7 +595,7 @@ because the shapes a profile serves best are the per-element ones and a global
 lock is what those pay. The release matrix's `pgo: true` is decided on that
 reading, and `docs/11-performance.md` carries the decision with its reason.
 
-**The lane names the interpreter these are read on**, which is CPython 3.12,
+**The lane names the interpreter these are read on**, which is CPython 3.14,
 and it is written in `ci.yml` rather than left to the runner image: a ratio
 belongs to the pair of libraries *and* the interpreter running them, and a lane
 that inherits one from an image makes claims nobody chose. The same holds for
@@ -589,6 +604,16 @@ and for both mutation sweeps, where a mutant on a version-gated branch is
 killable on the interpreter that takes the branch and unviable on the one that
 compiles it out. `tests/test_lane_interpreters.py` holds every lane to naming
 one.
+
+**The bench job's build cache is keyed on that interpreter too**, and a change
+that moves the lane moves the key with it. The binding workload links whichever
+interpreter `PYO3_PYTHON` names, and pyo3 resolves it again only when that
+variable's value changes; the lane's value is `.venv/bin/python` whatever
+release is behind it. A cache saved on another release therefore links HEAD's
+workload against that release, while the base, built in a fresh target
+directory, links the lane's, and every binding shape reads the distance between
+two interpreters as the change's own. The `python` matrix keys its cache on the
+interpreter for the same reason.
 
 The **free-threaded** build is held to its own set, in the same file, for the
 shapes where it is a different environment rather than the same one on a slower
@@ -742,12 +767,13 @@ one side.** `crates/valgebra-py/build.rs` re-emits the interpreter's `Py_3_x`
 and `Py_GIL_DISABLED` flags, so a `cfg!` on one compiles a different reading per
 interpreter. Such a site says in its doc comment which behaviour of which
 release it answers, with the measurement for each reading; `snapshot_pays` in
-the sequence walk is the one site. The lanes that measure all read one side:
-the binding sweep, the coverage lane and the bench lane pin 3.12, where the
-snapshot reading compiles in. The product suite holds the answers on every
-interpreter, since the readings answer alike. What no lane holds is the cost of
-the 3.14 and free-threaded readings, which is the doc comment's measurement and
-nothing more.
+the sequence walk is the one site. Each lane that measures reads one side: the
+binding sweep and the coverage lane pin 3.12, where the snapshot reading
+compiles in, and the bench lane pins 3.14, where the reading in place does, so
+the instruction gate holds the cost of that reading and of no other. The
+product suite holds the answers on every interpreter, since the readings answer
+alike. What no lane holds is the cost of the snapshot reading and of the
+free-threaded one, which is the doc comment's measurement and nothing more.
 
 ## A gate that compared nothing must not pass
 

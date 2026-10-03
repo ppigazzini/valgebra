@@ -269,10 +269,21 @@ def workload_environment(caller: Mapping[str, str]) -> dict[str, str]:
     all of the difference in `_int_malloc` and `malloc_consolidate`. With
     `mxfast=0` the two read 535,119,725 and 534,992,150. A count taken this
     way is a count of the tree's work rather than of where the linker put it.
+
+    **No run writes bytecode.** A binding shape is the difference of two runs,
+    which cancels the interpreter's start-up only while both runs start the same
+    way. An interpreter that has never imported a module compiles it on first
+    import and writes the result beside the source, so the first run pays a
+    compile its partner reads back: `settle_the_heap` imports `ctypes`, which
+    nothing else in the bench job imports, and on a fresh interpreter the first
+    walk read 166,682,582 against 125,400,049 for the same binary run again.
+    With nothing written, both runs compile or both read, and a cold
+    interpreter and a warm one read the same count.
     """
     kept = {name: caller[name] for name in PASSED_THROUGH if name in caller}
     kept["PYTHONHASHSEED"] = "0"
     kept["GLIBC_TUNABLES"] = MALLOC_TUNABLES
+    kept["PYTHONDONTWRITEBYTECODE"] = "1"
     return kept
 
 
@@ -483,6 +494,27 @@ BINDING_SHAPES = {
 }
 
 
+def warm_the_interpreter(binary: Path, shape: str) -> None:
+    """Run one iteration of a shape, uncounted, so every module it imports is compiled.
+
+    The counted runs write no bytecode (`workload_environment`), so they read
+    whatever cache the interpreter has when they start, and the side measured
+    first would read a colder one than the side after it: building the base runs
+    the interpreter in between. A cold start compiles what a warm one reads, and
+    leaves the loop a different heap. This run may write, so both sides of a
+    comparison count from the same cache.
+    """
+    environment = workload_environment(os.environ)
+    del environment["PYTHONDONTWRITEBYTECODE"]
+    subprocess.run(
+        [str(binary), "1", shape],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        env=environment,
+    )
+
+
 def measure_mode(
     mode: str, root: Path = ROOT, target: Path | None = None
 ) -> Measurement:
@@ -504,6 +536,7 @@ def measure_mode(
     hi, lo = BINDING_ITERATIONS[mode]
     build_binding_workload(root, target)
     binary = (target or root / "target") / "release" / "examples" / example
+    warm_the_interpreter(binary, shape)
     high = measure(binary, str(hi), shape)
     low = measure(binary, str(lo), shape)
     # The build shape folds a node count per iteration rather than one, so its

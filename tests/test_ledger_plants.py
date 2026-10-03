@@ -992,7 +992,7 @@ PLANTS = (
             tree,
             ".github/workflows/ci.yml",
             "      - uses: $/.github/actions/setup-uv\n        with:\n"
-            '          python-version: "3.12"\n'
+            '          python-version: "3.14"\n'
             "      - run: uv sync --locked --no-install-project --group bench\n",
             "      - uses: $/.github/actions/setup-uv\n"
             "      - run: uv sync --locked --no-install-project --group bench\n",

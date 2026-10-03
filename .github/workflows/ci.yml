@@ -678,6 +678,15 @@ jobs:
           # llvm-tools merges the profile-guided-optimization profiles.
           components: llvm-tools
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # Keyed on the interpreter this lane names below, and moved with it.
+          # The binding workload links the interpreter `PYO3_PYTHON` names, and
+          # pyo3 resolves it again only when that variable's value changes --
+          # here `.venv/bin/python` on every release. A cache saved on another
+          # release links HEAD's workload against that one while the base,
+          # built in a fresh target directory, links this one, and the gate
+          # then compares two interpreters rather than two commits.
+          key: python-3.14
       - name: Install valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
         # The ceilings in `scripts/perf_compare.json` and the bands in
@@ -687,7 +696,7 @@ jobs:
         # means, so the version is written here rather than left to the image.
       - uses: $/.github/actions/setup-uv
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - run: uv sync --locked --no-install-project --group bench
       # The wall-clock benches must measure the shipped artifact, not a debug
       # build, so build the release wheel with LTO and profile-guided
@@ -849,7 +858,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.14t"]
+        python-version: ["3.14", "3.14t"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

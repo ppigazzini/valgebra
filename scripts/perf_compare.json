@@ -18,16 +18,16 @@
     "environment": null,
     "ratios": {},
     "tolerance": {
-      "scalar": 0.015,
+      "scalar": 0.025,
       "large_array": 0.01,
       "wide_record": 0.03,
-      "deep_nesting": 0.02,
+      "deep_nesting": 0.025,
       "json_document": 0.06,
       "build": 0.005
     },
     "unratcheted": {
       "error_report": "Not measurable on this instrument. Five runs of one PGO CPython 3.12 build read 0.861, 0.882, 0.889, 1.056 and 1.193 -- a spread of 0.33, a third of the shape's own value, where every other shape spreads between 0.001 and 0.048. A tolerance wide enough not to fire on that noise would be wider than any regression worth catching, and a tighter one would fire constantly. The shape keeps its ceiling of 1.60, which it is nowhere near crossing, and the reason it is noisy is worth its own reading: it is the only shape timing a path that raises and formats an exception, so a Python exception's cost is inside the measurement."
     },
-    "_how_to_arm": "Unrecorded on purpose: a recording made off the bench lane would match its fingerprint while carrying another machine's noise, so the first --update belongs on the lane, in a commit whose message carries the run. The tolerances are not waiting for that -- they are the shapes' own spread over twelve runs of one PGO CPython 3.12 build (scalar 0.008, large_array 0.004, deep_nesting 0.014, wide_record 0.029, json_document 0.057, build 0.001), each rounded up."
+    "_how_to_arm": "Unrecorded on purpose: a recording made off the bench lane would match its fingerprint while carrying another machine's noise, so the first --update belongs on the lane, in a commit whose message carries the run. The tolerances are not waiting for that -- they cover the shapes' own spread on CPython 3.14, the interpreter the lane runs, read twice on one box: twelve runs of a PGO wheel on uv's build and eighteen on a source build. Each tolerance is at least the wider of the two, rounded up (scalar 0.021, large_array 0.010, deep_nesting 0.023, wide_record 0.022, json_document 0.058, build 0.001)."
   }
 }

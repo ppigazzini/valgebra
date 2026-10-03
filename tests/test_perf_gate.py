@@ -175,7 +175,9 @@ def test_a_workload_runs_without_the_callers_environment() -> None:
     The environment's size moves a count on its own -- one binary read 2.97% apart
     between a login shell and `uv run` -- so everything the caller carries that a
     workload does not need is left behind, and the seed is fixed whatever the
-    caller set it to.
+    caller set it to. No run writes bytecode: the first run on a fresh
+    interpreter would otherwise compile a module its partner run reads back, and
+    the difference of the two would count the compile.
     """
     caller = {
         "PATH": "/home/u/.venv/bin:/usr/bin",
@@ -191,10 +193,12 @@ def test_a_workload_runs_without_the_callers_environment() -> None:
         "PYTHONHOME": "/opt/python",
         "PYTHONHASHSEED": "0",
         "GLIBC_TUNABLES": "glibc.malloc.mxfast=0",
+        "PYTHONDONTWRITEBYTECODE": "1",
     }
     assert gate.workload_environment({}) == {
         "PYTHONHASHSEED": "0",
         "GLIBC_TUNABLES": "glibc.malloc.mxfast=0",
+        "PYTHONDONTWRITEBYTECODE": "1",
     }
     # A caller's own allocator setting is the caller's, and is replaced.
     tuned = gate.workload_environment({"GLIBC_TUNABLES": "glibc.malloc.tcache_count=0"})
