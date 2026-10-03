@@ -33,7 +33,7 @@ Wheels are published for Linux (manylinux, x86_64 and aarch64), macOS (Intel and
 Apple silicon) and Windows x64 for every supported CPython, 3.10 through 3.15,
 Windows arm64 from 3.12, and free-threaded CPython 3.14 and 3.15 on Linux, macOS
 and Windows x64. musllinux (x86_64 and aarch64) gets a wheel for each
-interpreter its build image carries: in 0.0.14, CPython 3.10 through 3.14 and
+interpreter its build image carries: in 0.0.15, CPython 3.10 through 3.14 and
 3.14t, the set `UNNAMED` in `tests/test_release_matrix.py` records for each
 musllinux row. Free-threaded support starts at 3.14t; the earlier 3.13
 free-threaded build is not a target.

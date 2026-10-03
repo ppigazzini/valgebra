@@ -22,12 +22,15 @@ Two ways to compare, and the relative one is the merge gate:
   wide enough not to flake is too wide to see a real 5% regression. That is what
   ``--against`` exists to fix, and why the merge gate uses it.
 
-Three workloads, and seven shapes across them:
+Three workloads, and thirty shapes across them:
 
 * The default **core** workload (`perf_workload`, pure Rust) measures the schema
   operations and is fully deterministic, so its budget is tight.
-* The **decision** workload (`--decision`) measures the three relations, which
-  the core one never calls.
+* The **decision** workloads measure the three relations, which the core one
+  never calls, in four shapes: relations that hold (`--decision`), relations
+  that are refuted (`--decision-refute`), goals asked again
+  (`--decision-repeat`), and the pairs that reach the set representation
+  (`--decision-matrix`).
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
   twenty-five shapes: the membership walk (`--binding`), the call boundary
