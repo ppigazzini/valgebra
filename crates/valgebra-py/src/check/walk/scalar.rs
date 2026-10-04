@@ -20,7 +20,7 @@ use valgebra_core::{
 
 use super::{
     Base, Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at,
-    reads_its_length, record_fatal, record_if_fatal, stop,
+    reads_its_length, record_fatal, record_if_fatal, record_stop, stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::index::compile_pattern;
@@ -109,7 +109,7 @@ pub(super) fn scalar_member(
     room: bool,
 ) -> Option<bool> {
     let kind = scalar_of(schema)?;
-    Some(room && !ctx.fatal_seen.get() && scalar_admits(kind, value))
+    Some(room && !ctx.signals.fatal_seen.get() && scalar_admits(kind, value))
 }
 
 /// The scalar kind every position of a sequence takes, with the schema it is
@@ -183,7 +183,7 @@ pub(super) fn admitted_quietly(schema: &Schema, value: &Value<'_, '_>, ctx: Ctx<
                 return false;
             };
             ctx.room_to_descend()
-                && !ctx.fatal_seen.get()
+                && !ctx.signals.fatal_seen.get()
                 && members.iter().all(|m| scalar_of(m).is_some())
                 && scalar_union_admits(members, value)
         }
@@ -770,7 +770,10 @@ fn check_predicate(index: PredIx, value: &Bound<'_, PyAny>, frame: &mut Frame<'_
             Expected::Fixed("a passing predicate"),
         ),
         Err(err) => match predicate_raised(err, py, ctx) {
-            Some(expected) => (false, PREDICATE_ERROR, expected),
+            Some(expected) => {
+                record_stop(PREDICATE_ERROR, ctx);
+                (false, PREDICATE_ERROR, expected)
+            }
             None => return false,
         },
     };

@@ -248,7 +248,7 @@ impl PoolRelations<'_, '_> {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode: WalkMode::Fast,
         };
         let admitted = member(

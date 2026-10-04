@@ -22,12 +22,14 @@ use super::scalar::{admitted_quietly, scalar_member};
 use super::{Base, held_dict, reads_its_length, reads_its_values};
 use super::{
     Frame, Scan, Unwritten, fast, fold, is_fatal, member, mutated, record_fatal, record_if_fatal,
-    stop,
+    record_stop, stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::index::RecordPlan;
 use crate::check::violation::{at_key, key_segment, located, summarize_value, type_mismatch};
-use crate::codes::{DICT_TYPE, EXTRA_FORBIDDEN, MISSING_ATTRIBUTE, MISSING_KEY};
+use crate::codes::{
+    DICT_TYPE, EXTRA_FORBIDDEN, MISSING_ATTRIBUTE, MISSING_KEY, MUTATED_DURING_VALIDATION,
+};
 use crate::input::Value;
 
 /// Visit a dict's entries, refusing rather than panicking when the dict changes
@@ -181,7 +183,7 @@ pub(super) fn stored<'a, 'py>(
 #[cold]
 #[inline(never)]
 fn stored_copy<'py>(dict: &Bound<'py, PyDict>, ctx: Ctx<'_>) -> Option<Bound<'py, PyDict>> {
-    if ctx.fatal_seen.get() {
+    if ctx.signals.fatal_seen.get() {
         return None;
     }
     held_dict(dict)
@@ -481,6 +483,7 @@ fn keyed_map_asks_for_its_keys(
             // The value changed while it was being read, so there is no reading
             // to answer from: not a member, exactly as the scan answers it, and
             // the explain pass names the mutation.
+            record_stop(MUTATED_DURING_VALIDATION, ctx);
             return Some(false);
         }
         // Every key the value carries is one of the declared ones exactly when
@@ -503,7 +506,7 @@ fn keyed_map_asks_for_its_keys(
                         ControlFlow::Break(())
                     }
                 });
-                Some(matches!(keys, Scan::Complete))
+                Some(read_whole(&keys, ctx))
             }
             // Kept out by the guard above; were it not, the scan still decides,
             // at the cost of the reading just done.
@@ -609,7 +612,21 @@ fn keyed_map_scan(
         }
         ControlFlow::Continue(())
     });
-    matches!(scan, Scan::Complete) && required_remaining == 0
+    read_whole(&scan, ctx) && required_remaining == 0
+}
+
+/// Whether a deciding scan read the dict to the end. One the dict moved under
+/// answers a non-member, as one that stopped does, and records the stop: the
+/// explaining pass names the move, and a complement over this walk reads it.
+fn read_whole(scan: &Scan, ctx: Ctx<'_>) -> bool {
+    match scan {
+        Scan::Complete => true,
+        Scan::Stopped => false,
+        Scan::Unreadable => {
+            record_stop(MUTATED_DURING_VALIDATION, ctx);
+            false
+        }
+    }
 }
 
 /// How wide a record's per-object field table may be and still sit on the

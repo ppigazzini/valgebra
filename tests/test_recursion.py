@@ -1,7 +1,9 @@
+import dataclasses
 import json
 import sys
 import threading
 from collections.abc import Callable
+from typing import Literal
 
 import pytest
 from hypothesis import given
@@ -456,6 +458,91 @@ def test_every_entry_point_reports_the_bound_it_reaches() -> None:
         with pytest.raises(ValidationError) as caught:
             reads(document)
         assert caught.value.errors[0]["code"] == "json_invalid"
+
+
+@dataclasses.dataclass
+class _Tagged:
+    tag: Literal["a", "b"]
+
+
+#: Leaves whose union of literals the deciding walk answers from a table, and
+#: an `int` beside them whose union it walks branch by branch.
+_BOUNDARY_LEAVES: dict[str, tuple[object, object]] = {
+    "Literal[a, b]": (Literal["a", "b"], "a"),
+    "Literal[1, 2]": (Literal[1, 2], 2),
+    "tuple[Literal, ...]": (tuple[Literal["a", "b"], ...], ("a",)),
+    "set[Literal]": (set[Literal["a", "b"]], {"a"}),
+    "a dataclass of a Literal": (_Tagged, _Tagged("a")),
+    "int": (int, 1),
+}
+
+
+def _boundary_answers(validator: Validator, value: object) -> set[bool]:
+    """Return the answers five entry points give about `value`."""
+    answers = {validator.is_valid(value), value in validator}
+    for call in (
+        validator.validate,
+        lambda v: validator.validate(v, fail_fast=True),
+        validator.ensure,
+    ):
+        answers.add(_accepts(call, value))
+    return answers
+
+
+def _accepts(call: Callable[[object], object], value: object) -> bool:
+    """Return whether an entry point that raises on a refusal accepts `value`."""
+    try:
+        call(value)
+    except ValidationError:
+        return False
+    return True
+
+
+def _stops_at_the_bound(validator: Validator, value: object) -> bool:
+    """Return whether the walk refuses `value` at the depth bound."""
+    try:
+        validator.validate(value, fail_fast=True)
+    except ValidationError as error:
+        return error.code == "recursion_limit"
+    return False
+
+
+@pytest.mark.parametrize("leaf", list(_BOUNDARY_LEAVES))
+def test_every_entry_point_gives_one_answer_at_the_depth_bound(leaf: str) -> None:
+    """At the walk's depth bound `is_valid` and `validate` give one answer.
+
+    A union of literals is decided by a table in the deciding walk and branch
+    by branch in the explaining one, and the table answered without the level
+    a branch opens: a value whose leaf sat one level past the bound was a
+    member to `is_valid` and `in` and refused with `recursion_limit` by
+    `validate`, `ensure` and a fail-fast `validate`. The levels swept are the
+    ones on either side of the first the walk refuses, whatever that bound is.
+    """
+    schema, member = _BOUNDARY_LEAVES[leaf]
+    # The leaf sits in a tuple so a union of literals keeps its own table rather
+    # than flattening into the tree's, and three lists a level reach the walk's
+    # bound before the reference trail's.
+    tree = recursive(lambda t: union([[[t]]], tuple[schema]))  # ty: ignore[invalid-type-form]
+
+    def nested(depth: int) -> object:
+        value: object = (member,)
+        for _ in range(depth):
+            value = [value]
+        return value
+
+    for outer in range(6):
+        validator = Validator(tree)
+        for _ in range(outer):
+            validator = Validator([validator])
+        # A value of the tree is three lists a level inside the outer ones.
+        first = next(
+            k
+            for k in range(1, 700)
+            if _stops_at_the_bound(validator, nested(3 * k + outer))
+        )
+        for level in range(max(first - 2, 0), first + 2):
+            answers = _boundary_answers(validator, nested(3 * level + outer))
+            assert len(answers) == 1, (outer, level, answers)
 
 
 # THEORY: a-cycle-is-caught-by-identity

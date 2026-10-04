@@ -152,6 +152,13 @@ fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
 /// methods can raise should not rely on the complement alone to exclude them;
 /// intersect with a positive type that pins the shape instead.
 ///
+/// A walk of the inner that stops instead of deciding — past the depth bound,
+/// at a value that contains itself, at a value that changes while it is read,
+/// or at a predicate that raises — has not said the value is outside the
+/// inner, and the complement refuses the value with that walk's code
+/// (`recursion_limit`, `recursion_loop`, `mutated_during_validation`,
+/// `predicate_error`) rather than admitting it.
+///
 /// Args:
 ///     schema: The schema spec or validator to complement.
 ///

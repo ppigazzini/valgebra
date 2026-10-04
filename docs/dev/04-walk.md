@@ -104,6 +104,33 @@ where no walk runs: they return the signal rather than record it.
 Each disjunct needs its own test case: a mutation collapsing the classifier to
 one of them is invisible to a corpus that only raises `KeyboardInterrupt`.
 
+## A stop is not a non-member
+
+Four refusals say the *walk* stopped rather than that the value is outside a
+set: the depth bound (`member`'s level, and the reference trail in
+`check_ref`), a value inside itself (`check_ref`), a value that moved while it
+was read (`mutated`, and the record's deciding pass where it answers a move
+before the explaining pass names it), and a predicate that raised. Each
+answers `false`, as a non-member does, and each also records its code in a
+second cell beside the fatal one (`record_stop`), in every mode. Unlike a fatal
+signal a stop does not unwind the walk: a union branch beside it may still
+decide the value.
+
+`check_complement` is the one arm that reads the cell. It clears the cell for
+its inner walk and finds out from it whether that walk stopped; a `false` that
+stopped is no answer, so the complement refuses the value with the stop's code
+instead of admitting it, and puts the stop back so a complement above it reads
+it too. A union admits a value a branch decides whatever another branch did,
+and a meet refuses on either, so neither needs the cell.
+
+**Both modes stop at the same level.** A shortcut that answers for a level the
+walk would open asks whether the level is free first (`room_to_descend`), so a
+deciding walk and an explaining one refuse at one depth. The literal-union
+table is such a shortcut, in `check_union` and in `literal_list_matches`
+alike: a value whose union of literals sat one level past the bound was a
+member to `is_valid` and refused by `validate` while the union's table asked
+nothing.
+
 ## The union reports the closest branch
 
 When no branch of a union matches, dumping every branch's errors buries the one

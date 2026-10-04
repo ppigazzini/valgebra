@@ -331,7 +331,7 @@ impl Validator {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode,
         }
     }

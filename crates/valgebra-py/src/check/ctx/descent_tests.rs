@@ -22,7 +22,7 @@ fn with_ctx(state: &WalkState, run: impl FnOnce(Ctx<'_>)) {
         guard: &state.guard,
         depth: &state.depth,
         fatal: &state.fatal,
-        fatal_seen: &state.fatal_seen,
+        signals: &state.signals,
         mode: WalkMode::Fast,
     });
 }
@@ -100,7 +100,7 @@ fn the_recorded_signal_leaves_with_the_state() {
     );
     let state = WalkState::new();
     *state.fatal.borrow_mut() = Some(PyKeyboardInterrupt::new_err("stop"));
-    state.fatal_seen.set(true);
+    state.signals.fatal_seen.set(true);
     assert!(
         state.into_fatal().is_some(),
         "the signal must reach the entry point that re-raises it"

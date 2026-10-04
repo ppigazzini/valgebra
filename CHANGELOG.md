@@ -16,6 +16,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a pattern's set is every string it matches whole
 - fix: a refutation stands on members that stay apart
 - fix: a literal is its constant at its exact type
+- fix: a walk that stops is not a non-member
 
 -->
 
@@ -59,6 +60,21 @@ answer of its own, or a repair to a change not yet released.
   literal key is the exact `str`. A proof that stands on a literal key
   subtracted from a dict a field or a kind's part can key is `undecided`; a
   subject keyed by literals alone decides, and every refutation stands.
+- **A complement refuses a value its inner walk stopped on.** A walk that
+  stops -- past the depth bound, at a value that contains itself, at a value
+  that changes while it is read, at a predicate that raises -- answers no as a
+  non-member does, and `complement` admitted every such value: `[T] & ~T`,
+  which the relations prove empty for `T = recursive(lambda t: [t])`, admitted
+  a list one level past the bound through `is_valid`, `validate`, `ensure`,
+  `is_valid_json` and `load`, and so did the documented deny-list shape
+  `intersection(X, complement(P))` for a predicate with a bug. The complement
+  refuses the value with the code the inner walk stopped with.
+- **`is_valid` and `validate` agree at the depth bound.** A union of literals
+  is answered from a table when a value is only being checked and branch by
+  branch when it is explained, and the table answered without the level a
+  branch takes: a value whose union of literals sat one level past the bound
+  was a member to `is_valid` and `in` and refused with `recursion_limit` by
+  `validate` and `ensure`. Both refuse it.
 
 ## [0.0.16] - 2026-10-04
 

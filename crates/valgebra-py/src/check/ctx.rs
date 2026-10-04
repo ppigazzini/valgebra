@@ -11,6 +11,7 @@ use pyo3::prelude::*;
 use valgebra_core::Schema;
 
 use super::index::{AttrsIndex, RecordIndex, RegexIndex, UnionIndex};
+use crate::codes::Code;
 
 /// The read-only context threaded through a validation walk: the constants pool,
 /// the recursion definitions, the precomputed record index, the active recursion
@@ -55,10 +56,10 @@ pub(crate) struct Ctx<'a> {
     /// silently reporting a non-member. An ordinary exception during a membership
     /// probe stays folded to non-membership and never lands here.
     pub(crate) fatal: &'a RefCell<Option<PyErr>>,
-    /// A `Cell` mirror of whether [`fatal`](Self::fatal) holds a signal yet, set
-    /// alongside it in `record_fatal`. The per-node short-circuit reads this with a
-    /// plain load instead of taking a `RefCell` borrow on every membership step.
-    pub(crate) fatal_seen: &'a Cell<bool>,
+    /// What the walk has met that is not an answer: whether a fatal signal is
+    /// recorded, and the first stop. One reference for the two, so the context
+    /// every arm copies is no wider for the second.
+    pub(crate) signals: &'a Signals,
     /// What the walk is for. Constant for a whole walk, so the fast path pays
     /// nothing for the explain bookkeeping.
     pub(crate) mode: WalkMode,
@@ -135,9 +136,26 @@ impl Trail {
     }
 }
 
+/// What a walk has met that is not an answer, read by every arm through one
+/// reference.
+#[derive(Default)]
+pub(crate) struct Signals {
+    /// A `Cell` mirror of whether [`Ctx::fatal`] holds a signal yet, set
+    /// alongside it in `record_fatal`. The per-node short-circuit reads this
+    /// with a plain load instead of taking a `RefCell` borrow on every
+    /// membership step.
+    pub(crate) fatal_seen: Cell<bool>,
+    /// The code of the first walk that stopped rather than decided: one past
+    /// the depth bound, at a value inside itself, at a value that moved while
+    /// it was read, or at a predicate that raised. Recorded in every mode,
+    /// since a complement decides its inner schema on the fast path, and read
+    /// there: a walk that stopped has not said the value is outside a set, so
+    /// the set's complement cannot say it is inside.
+    pub(crate) stopped: Cell<Option<Code>>,
+}
+
 /// The mutable state one membership test carries: the recursion guard, the
-/// first fatal signal and the flag mirroring it, and the count of open walk
-/// levels.
+/// first fatal signal, the signals, and the count of open walk levels.
 ///
 /// One owner rather than a local per cell at each entry point. They share a
 /// lifetime — one call — and they are read together as `Ctx`, so a caller that
@@ -148,7 +166,7 @@ pub(crate) struct WalkState {
     /// that contains itself fails with `recursion_loop` instead of looping.
     pub(crate) guard: RefCell<Trail>,
     pub(crate) fatal: RefCell<Option<PyErr>>,
-    pub(crate) fatal_seen: Cell<bool>,
+    pub(crate) signals: Signals,
     pub(crate) depth: Cell<usize>,
 }
 
@@ -157,7 +175,7 @@ impl WalkState {
         Self {
             guard: RefCell::new(Trail::default()),
             fatal: RefCell::new(None),
-            fatal_seen: Cell::new(false),
+            signals: Signals::default(),
             depth: Cell::new(0),
         }
     }

@@ -1,4 +1,5 @@
 import itertools
+import json
 import sys
 from typing import Annotated, Literal, NoReturn
 
@@ -85,6 +86,206 @@ def test_complement_failure_reports_unexpected_match() -> None:
     with pytest.raises(ValidationError) as info:
         complement(int).validate(5)
     assert info.value.code == "unexpected_match"
+
+
+#: The codes that say the walk stopped rather than that the value is outside
+#: a set (`docs/08-error-model.md`).
+STOPS = (
+    "recursion_limit",
+    "recursion_loop",
+    "mutated_during_validation",
+    "predicate_error",
+)
+
+
+def _raises(_: object) -> NoReturn:
+    raise ValueError("a predicate with a bug")
+
+
+def _nested(depth: int) -> object:
+    """Return an integer `depth` lists deep."""
+    value: object = 0
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
+def _stops(schema: Validator, value: object) -> bool:
+    """Whether the schema's walk stops on `value` at a bound."""
+    try:
+        schema.validate(value, fail_fast=True)
+    except ValidationError as error:
+        return error.code == "recursion_limit"
+    return False
+
+
+def _stopping(code: str) -> tuple[Validator, object]:
+    """Return a schema and a fresh value its walk stops on with `code`.
+
+    The depth is the walk's own bound: three lists a level reach it before the
+    reference trail's, which one list a level reaches first.
+    """
+    lists = Validator(recursive(lambda t: union(int, [t])))
+    if code == "recursion_limit":
+        return Validator(recursive(lambda t: union(int, [[[t]]]))), _nested(1000)
+    if code == "recursion_loop":
+        loop: list[object] = []
+        loop.append(loop)
+        return lists, loop
+    if code == "mutated_during_validation":
+        moved = {"a": 1, "b": 2}
+
+        def grow(_: object) -> bool:
+            moved.setdefault("c", 3)
+            return True
+
+        grows = Annotated[int, at.Predicate(grow)]
+        return Validator({"a": grows, "b": int, "c?": int}), moved
+    return Validator(Annotated[int, at.Predicate(_raises)]), 1
+
+
+@pytest.mark.parametrize("code", STOPS)
+def test_a_complement_refuses_a_value_its_inner_walk_stopped_on(code: str) -> None:
+    """A walk that stopped said nothing about the set, so its negation says nothing.
+
+    The inner walk answers `False` for a value it stopped on, as it does for
+    one outside its set, and the complement read the two alike: it admitted a
+    value past the depth bound, a value inside itself, a value that moved and
+    a value whose predicate raised. Each is refused with the stop's code, at
+    every entry point, where the inner schema's own walk reports the same code.
+    """
+    inner, value = _stopping(code)
+    with pytest.raises(ValidationError) as caught:
+        inner.validate(value, fail_fast=True)
+    assert caught.value.code == code
+
+    inner, value = _stopping(code)
+    assert complement(inner).is_valid(value) is False
+    inner, value = _stopping(code)
+    assert (value in complement(inner)) is False
+    for fail_fast in (True, False):
+        inner, value = _stopping(code)
+        with pytest.raises(ValidationError) as caught:
+            complement(inner).validate(value, fail_fast=fail_fast)
+        assert caught.value.code == code
+    inner, value = _stopping(code)
+    with pytest.raises(ValidationError) as caught:
+        complement(inner).ensure(value)
+    assert caught.value.code == code
+
+
+def test_a_complement_refuses_a_value_that_moves_under_its_inner_scan() -> None:
+    """The same for a container read by scanning its entries.
+
+    A record whose clause reads undeclared keys with their values is read by
+    walking every entry, and so is a list: a predicate on an entry that grows
+    the container moves it under that scan rather than between two lookups.
+    """
+    moved: dict[str, int] = {}
+
+    def grow(_: object) -> bool:
+        moved.setdefault("c", 3)
+        return True
+
+    record = Validator({"a": int, str: Annotated[int, at.Predicate(grow)]})
+    moved = {"a": 1, "b": 2}
+    assert complement(record).is_valid(moved) is False
+    moved = {"a": 1, "b": 2}
+    with pytest.raises(ValidationError) as caught:
+        complement(record).validate(moved)
+    assert caught.value.code == "mutated_during_validation"
+
+    grown: list[int] = []
+
+    def append(_: object) -> bool:
+        grown.append(3)
+        return True
+
+    sequence = Validator(list[Annotated[int, at.Predicate(append)]])
+    grown = [1, 2]
+    assert complement(sequence).is_valid(grown) is False
+    grown = [1, 2]
+    with pytest.raises(ValidationError) as caught:
+        complement(sequence).validate(grown)
+    assert caught.value.code == "mutated_during_validation"
+
+
+@pytest.mark.parametrize("code", ["recursion_limit", "predicate_error"])
+def test_a_complement_refuses_a_document_its_inner_walk_stopped_on(code: str) -> None:
+    """The same on the JSON path, for the two stops a document can carry.
+
+    A parsed document holds no cycle and is not shared with a predicate that
+    could move it, so the depth bound and a raising predicate are the two.
+    The depth is the first the walk refuses, which the parser's own nesting
+    bound -- the lower of the two over a document -- lets through.
+    """
+    inner, value = _stopping(code)
+    if code == "recursion_limit":
+        # One list a level: the trail's bound, which a document reaches inside
+        # the parser's nesting bound, where three a level do not.
+        inner = Validator(recursive(lambda t: union(int, [t])))
+        depth = next(d for d in range(1, 1000) if _stops(inner, _nested(d)))
+        value = _nested(depth)
+    document = json.dumps(value)
+    assert complement(inner).is_valid_json(document) is False
+    for reads in (complement(inner).validate_json, complement(inner).load):
+        with pytest.raises(ValidationError) as caught:
+            reads(document)
+        assert caught.value.code == code
+
+
+def test_a_stopped_branch_does_not_block_a_branch_that_decides() -> None:
+    """A union admits a value one branch decides, whatever another branch did.
+
+    The complement's refusal stands on the inner walk having decided nothing;
+    a union beside it that does decide the value keeps its answer, and a meet
+    beside it keeps its refusal.
+    """
+    inner, value = _stopping("recursion_limit")
+    assert union(complement(inner), list).is_valid(value)
+    assert not intersection(list, complement(inner)).is_valid(value)
+    # A stop beside a complement that does decide is kept for a complement
+    # above both: the union stopped in its first branch and refused in the
+    # second, which decides nothing about the value. The list branch is the
+    # union's first, as it holds them.
+    with pytest.raises(ValidationError) as caught:
+        complement(union([inner], complement(list))).validate(value)
+    assert caught.value.code == "recursion_limit"
+
+
+def test_a_meet_proved_empty_admits_no_value_past_the_bound() -> None:
+    """`[T] & ~T` is empty, and the walk admits nothing into it.
+
+    `T` is the finite nested lists and `[T]` its unfolding, which the relation
+    proves the same set, so the meet is empty. A list one level past the depth
+    `T` is walked to is one `[T]` reads and `T` stops on, and the complement
+    read that stop as "not in `T`": every entry point admitted it.
+    """
+    lists = recursive(lambda t: [t])
+    assert Validator(lists).is_equivalent([lists])
+    meet = intersection([lists], complement(lists))
+    walked = Validator(lists)
+    depth = next(d for d in range(1, 1000) if _stops(walked, _nested_lists(d)))
+    value = _nested_lists(depth)
+    assert meet.is_valid(value) is False
+    assert (value in meet) is False
+    for call in (meet.validate, meet.ensure):
+        with pytest.raises(ValidationError) as caught:
+            call(value)
+        assert caught.value.code == "recursion_limit"
+    document = json.dumps(value)
+    assert meet.is_valid_json(document) is False
+    with pytest.raises(ValidationError) as caught:
+        meet.load(document)
+    assert caught.value.code == "recursion_limit"
+
+
+def _nested_lists(depth: int) -> object:
+    """Return an empty list `depth` lists deep."""
+    value: object = []
+    for _ in range(depth):
+        value = [value]
+    return value
 
 
 def test_intersect_with_an_annotation() -> None:

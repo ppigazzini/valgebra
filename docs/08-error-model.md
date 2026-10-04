@@ -181,6 +181,28 @@ outside a set, and each of them fails at the union's own location — so the
 progress rule would count it as no progress and the summary would drop the one
 sentence saying what to do about it.
 
+A `complement` reads the four the same way. A walk of its inner schema that
+stopped has not said the value is outside that schema, so the complement does
+not admit the value: it fails at its own location with the code the inner walk
+stopped with, where a decided match fails with `unexpected_match`. A union
+beside it that admits the value admits it, and a complement above it fails
+with the same code.
+
+```python
+from valgebra import ValidationError, complement, recursive, union
+
+lists = recursive(lambda t: union(int, [t]))
+loop: list[object] = []
+loop.append(loop)
+assert not complement(lists).is_valid(loop)
+try:
+    complement(lists).validate(loop)
+except ValidationError as error:
+    assert error.code == "recursion_loop"
+else:
+    raise AssertionError("a value that contains itself is refused")
+```
+
 The closest-branch search is a bounded, best-effort heuristic: it runs only when
 a value has already failed the union, and it inspects at most the first 64
 branches (`CLOSEST_BRANCH_PROBE_LIMIT` in

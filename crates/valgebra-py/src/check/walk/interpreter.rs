@@ -36,7 +36,7 @@ fn holds(
         guard: &state.guard,
         depth: &state.depth,
         fatal: &state.fatal,
-        fatal_seen: &state.fatal_seen,
+        signals: &state.signals,
         mode: WalkMode::Fast,
     };
     member(
@@ -80,7 +80,7 @@ fn explain_in(
         guard: &state.guard,
         depth: &state.depth,
         fatal: &state.fatal,
-        fatal_seen: &state.fatal_seen,
+        signals: &state.signals,
         mode,
     };
     let mut out = Vec::new();
@@ -299,7 +299,7 @@ fn a_changed_container_is_a_non_member_that_names_itself() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode,
         };
 
@@ -360,7 +360,7 @@ fn a_union_names_its_branches_by_their_constants() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode: WalkMode::Explain,
         };
         let mut labels = BranchLabels::new();
@@ -480,7 +480,7 @@ fn a_union_names_a_class_branch_by_its_class() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode: WalkMode::Explain,
         };
         let mut labels = BranchLabels::new();
@@ -1845,7 +1845,7 @@ fn decide_with_fatal(
         guard: &state.guard,
         depth: &state.depth,
         fatal: &state.fatal,
-        fatal_seen: &state.fatal_seen,
+        signals: &state.signals,
         mode: WalkMode::Fast,
     };
     let ok = member(
@@ -1885,7 +1885,7 @@ fn walk_json(
         guard: &state.guard,
         depth: &state.depth,
         fatal: &state.fatal,
-        fatal_seen: &state.fatal_seen,
+        signals: &state.signals,
         mode,
     };
     let mut out = Vec::new();
@@ -2125,7 +2125,7 @@ fn a_union_explains_the_branch_that_descended_furthest() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode: WalkMode::ExplainFailFast,
         };
         let ok = member(
@@ -2208,7 +2208,7 @@ fn an_explaining_walk_aggregates_every_independent_failure() {
                 guard: &state.guard,
                 depth: &state.depth,
                 fatal: &state.fatal,
-                fatal_seen: &state.fatal_seen,
+                signals: &state.signals,
                 mode,
             };
             let mut out = Vec::new();
@@ -2245,7 +2245,7 @@ fn run_mode(
         guard: &state.guard,
         depth: &state.depth,
         fatal: &state.fatal,
-        fatal_seen: &state.fatal_seen,
+        signals: &state.signals,
         mode,
     };
     let mut out = Vec::new();
@@ -2529,7 +2529,7 @@ fn a_closed_record_reports_every_extra_key_unless_fail_fast_stops_it() {
                 guard: &state.guard,
                 depth: &state.depth,
                 fatal: &state.fatal,
-                fatal_seen: &state.fatal_seen,
+                signals: &state.signals,
                 mode,
             };
             let mut out = Vec::new();
@@ -2974,7 +2974,7 @@ fn the_json_record_path_agrees_with_and_without_its_plan() {
                 guard: &state.guard,
                 depth: &state.depth,
                 fatal: &state.fatal,
-                fatal_seen: &state.fatal_seen,
+                signals: &state.signals,
                 mode: WalkMode::Fast,
             };
             assert!(keyed_map_matches_json(fields, defaults, py, &good, ctx));
@@ -3009,7 +3009,7 @@ fn the_json_path_and_the_object_path_agree() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode: WalkMode::Fast,
         };
         assert!(member(
@@ -3422,7 +3422,7 @@ fn an_explaining_walk_resumes_where_the_deciding_one_stopped() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode: WalkMode::Explain,
         };
         let report = |value: &Bound<'_, PyDict>| {
@@ -3571,7 +3571,7 @@ fn a_resumption_carries_the_count_the_deciding_walk_had() {
                     guard: &state.guard,
                     depth: &state.depth,
                     fatal: &state.fatal,
-                    fatal_seen: &state.fatal_seen,
+                    signals: &state.signals,
                     mode: WalkMode::Explain,
                 },
             ),
@@ -3669,7 +3669,7 @@ fn a_value_that_changes_size_between_the_walks_is_not_resumed() {
                     guard: &state.guard,
                     depth: &state.depth,
                     fatal: &state.fatal,
-                    fatal_seen: &state.fatal_seen,
+                    signals: &state.signals,
                     mode: WalkMode::Explain,
                 },
             ),
@@ -4406,7 +4406,7 @@ fn recorded(
         guard: &state.guard,
         depth: &state.depth,
         fatal: &state.fatal,
-        fatal_seen: &state.fatal_seen,
+        signals: &state.signals,
         mode: WalkMode::Explain,
     };
     let mut out = Vec::new();
@@ -4539,7 +4539,7 @@ fn a_fatal_signal_from_a_branch_label_is_recorded() {
                 guard: &state.guard,
                 depth: &state.depth,
                 fatal: &state.fatal,
-                fatal_seen: &state.fatal_seen,
+                signals: &state.signals,
                 mode: WalkMode::Explain,
             };
             push_branch_label(&schema, ctx, py, &mut BranchLabels::new());
@@ -4596,7 +4596,7 @@ fn a_scalar_is_answered_as_the_walk_answers_it() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode: WalkMode::Fast,
         };
         for schema in &scalars {
@@ -4621,7 +4621,7 @@ fn a_scalar_is_answered_as_the_walk_answers_it() {
             ),
             None
         );
-        state.fatal_seen.set(true);
+        state.signals.fatal_seen.set(true);
         assert_eq!(scalar_member(&Schema::Int, &seven, ctx, true), Some(false));
     });
 }
@@ -4672,7 +4672,7 @@ fn a_sequence_of_a_union_of_scalars_is_read_as_its_tests() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode,
         };
         let Schema::Union(branches) = &nullable else {
@@ -4856,7 +4856,7 @@ fn a_tuple_of_scalar_positions_is_read_as_its_tests() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode,
         };
         let eval = |source: &str| {
@@ -4989,7 +4989,7 @@ fn an_admitted_scalar_element_is_answered_quietly_when_explaining() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode: WalkMode::Explain,
         };
         let one = PyInt::new(py, 1i64).into_any();
@@ -5012,10 +5012,10 @@ fn an_admitted_scalar_element_is_answered_quietly_when_explaining() {
         state.depth.set(MAX_WALK_DEPTH);
         assert!(!admitted_quietly(&Schema::Int, &one, ctx));
         state.depth.set(0);
-        state.fatal_seen.set(true);
+        state.signals.fatal_seen.set(true);
         assert!(!admitted_quietly(&Schema::Int, &one, ctx));
         assert!(!admitted_quietly(&nullable, &one, ctx));
-        state.fatal_seen.set(false);
+        state.signals.fatal_seen.set(false);
     });
 }
 
@@ -5295,7 +5295,7 @@ fn a_list_of_literals_is_read_by_its_table() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode,
         };
         let read = |source: &str, prefix: &[Schema], members: &[Schema], mode| {
@@ -5408,7 +5408,7 @@ fn a_list_of_one_class_is_read_off_its_elements_types() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode,
         };
         let read = |source: &str, prefix: &[Schema], mode| {
@@ -5549,7 +5549,7 @@ fn a_list_of_scalar_tuples_is_read_by_a_test_of_each_element() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode,
         };
         let read = |source: &str, prefix: &[Schema], element: &Schema, mode| {
@@ -5746,7 +5746,7 @@ fn a_list_of_refinements_is_read_by_each_refinement() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode,
         };
         let read = |source: &str, prefix: &[Schema], mode| {
@@ -5892,7 +5892,7 @@ fn a_list_of_named_tuples_is_read_by_a_test_of_each_element() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode,
         };
         let read = |source: &str, prefix: &[Schema], element: &Schema, mode| {
@@ -6018,7 +6018,7 @@ fn a_list_of_a_scalar_or_none_is_answered_by_its_reader() {
                 guard: &state.guard,
                 depth: &state.depth,
                 fatal: &state.fatal,
-                fatal_seen: &state.fatal_seen,
+                signals: &state.signals,
                 mode,
             };
             let (mut path, mut out) = (Vec::new(), Vec::new());
@@ -6194,7 +6194,7 @@ fn a_list_of_dataclasses_is_read_as_its_records() {
             guard: &state.guard,
             depth: &state.depth,
             fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
+            signals: &state.signals,
             mode,
         };
         let read = |source: &str, prefix: &[Schema], mode| {
@@ -6277,5 +6277,198 @@ fn a_list_of_dataclasses_reads_nothing_past_a_fatal_signal() {
             .and_then(|reads| reads.extract())
             .expect("a count");
         assert_eq!((ok, reads), (false, 0));
+    });
+}
+
+/// A module of pooled helpers, under a name of its own.
+fn helpers<'py>(py: Python<'py>, source: &str, name: &str) -> Bound<'py, PyModule> {
+    let code = std::ffi::CString::new(source).expect("no interior nul");
+    let file = std::ffi::CString::new(format!("{name}.py")).expect("no interior nul");
+    let module = std::ffi::CString::new(name).expect("no interior nul");
+    PyModule::from_code(py, &code, &file, &module).expect("the module compiles")
+}
+
+/// A value from a Python expression.
+fn eval<'py>(py: Python<'py>, code: &str) -> Bound<'py, PyAny> {
+    let code = std::ffi::CString::new(code).expect("no interior nul");
+    py.eval(&code, None, None).expect("the value evaluates")
+}
+
+/// A predicate refinement of `int` that calls the pooled callable at `slot`.
+fn checked_by(slot: usize) -> Schema {
+    Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Predicate(PredIx::new(slot))].into(),
+    }
+}
+
+/// A walk that stopped has not said the value is outside a set, so a
+/// complement over it refuses the value with the stop's code: past the walk's
+/// own bound, past the reference trail's, at a value inside itself and at a
+/// predicate that raises. A stop beside a complement that decides is kept for
+/// one above both.
+#[test]
+fn a_complement_refuses_a_value_its_inner_walk_stopped_on() {
+    Python::attach(|py| {
+        let module = helpers(
+            py,
+            "def raises(x):\n\
+             \x20   raise ValueError('a predicate with a bug')\n",
+            "stopped_under_a_complement",
+        );
+        let pool: Vec<Py<PyAny>> = vec![module.getattr("raises").expect("raises").unbind()];
+        let reference = Schema::Ref(DefIx::new(0));
+        let lists = |depth: usize| {
+            (0..depth).fold(reference.clone(), |inner, _| {
+                Schema::list(SeqShape::homogeneous(inner))
+            })
+        };
+        let not = |inner: Schema| Schema::Complement(Arc::new(inner));
+        let refuses = |schema: &Schema, value: &Bound<'_, PyAny>, defs: &[Schema], code: &str| {
+            assert!(
+                !holds(py, schema, value, &pool, defs),
+                "{schema:?} admits it"
+            );
+            for mode in [WalkMode::Explain, WalkMode::ExplainFailFast] {
+                let (admitted, report) = explain_in(py, schema, value, &pool, defs, mode);
+                assert!(!admitted, "{schema:?} admits it in {mode:?}");
+                assert_eq!(report.first().map(|v| v.code), Some(code), "{schema:?}");
+            }
+        };
+        // One list a level: the reference trail stops first. Three: the walk.
+        let trail = vec![Schema::Union(vec![Schema::Int, lists(1)].into())];
+        let walk = vec![Schema::Union(vec![Schema::Int, lists(3)].into())];
+        let deep = eval(
+            py,
+            "__import__('functools').reduce(lambda x, _: [x], range(1000), 0)",
+        );
+        refuses(&not(reference.clone()), &deep, &trail, "recursion_limit");
+        refuses(&not(reference.clone()), &deep, &walk, "recursion_limit");
+        let cyclic = eval(py, "(lambda x: (x.append(x), x)[1])([])");
+        refuses(&not(reference.clone()), &cyclic, &trail, "recursion_loop");
+        refuses(
+            &not(checked_by(0)),
+            &PyInt::new(py, 1i64).into_any(),
+            &[],
+            "predicate_error",
+        );
+        // The union stops in its list branch, then refuses in its complement;
+        // the stop is what the complement above both reads.
+        let beside = not(Schema::Union(
+            vec![
+                lists(1),
+                not(Schema::list(SeqShape::homogeneous(Schema::ANYTHING))),
+            ]
+            .into(),
+        ));
+        refuses(&beside, &deep, &walk, "recursion_limit");
+    });
+}
+
+/// A dict or a list that moves while it is read is not in the complement of
+/// a set it was being checked against, on either walk.
+#[test]
+fn a_complement_refuses_a_value_that_moved_while_read() {
+    Python::attach(|py| {
+        let module = helpers(
+            py,
+            "moved = {}\n\
+             def grow(x):\n\
+             \x20   moved.setdefault('c', 3)\n\
+             \x20   return True\n\
+             grown = []\n\
+             def append(x):\n\
+             \x20   grown.append(3)\n\
+             \x20   return True\n",
+            "moved_under_a_complement",
+        );
+        let pool: Vec<Py<PyAny>> = ["grow", "append"]
+            .into_iter()
+            .map(|name| module.getattr(name).expect("the helper").unbind())
+            .collect();
+        let record = Schema::Complement(Arc::new(Schema::record(
+            vec![
+                field("a", checked_by(0), true),
+                field("b", Schema::Int, true),
+                field("c", Schema::Int, false),
+            ],
+            Openness::Closed,
+        )));
+        let list = Schema::Complement(Arc::new(Schema::list(SeqShape::homogeneous(checked_by(1)))));
+        let moved = module.getattr("moved").expect("the dict");
+        let grown = module.getattr("grown").expect("the list");
+        let reset = || {
+            moved.call_method0("clear").expect("clear");
+            moved.set_item("a", 1i64).expect("a");
+            moved.set_item("b", 2i64).expect("b");
+            grown.call_method0("clear").expect("clear");
+            grown
+                .call_method1("extend", ((1i64, 2i64),))
+                .expect("extend");
+        };
+        reset();
+        assert!(!holds(py, &record, &moved, &pool, &[]), "a dict that moved");
+        reset();
+        assert!(!holds(py, &list, &grown, &pool, &[]), "a list that moved");
+        for (schema, value) in [(&record, &moved), (&list, &grown)] {
+            reset();
+            let (admitted, report) = explain(py, schema, value, &pool, &[]);
+            assert!(!admitted, "{schema:?} admits a value that moved");
+            assert_eq!(
+                report.first().map(|v| v.code),
+                Some("mutated_during_validation")
+            );
+        }
+    });
+}
+
+/// At the walk's depth bound the deciding and the explaining walk give one
+/// answer: a union of literals answers from its table only where the level a
+/// branch takes is free.
+#[test]
+fn both_walks_stop_at_one_depth_under_a_union_of_literals() {
+    Python::attach(|py| {
+        let pool: Vec<Py<PyAny>> = vec![
+            PyString::new(py, "a").into_any().unbind(),
+            PyString::new(py, "b").into_any().unbind(),
+        ];
+        let literals = Schema::Union(
+            vec![
+                Schema::Literal(ConstIx::new(0)),
+                Schema::Literal(ConstIx::new(1)),
+            ]
+            .into(),
+        );
+        let reference = Schema::Ref(DefIx::new(0));
+        let three = (0..3).fold(reference.clone(), |inner, _| {
+            Schema::list(SeqShape::homogeneous(inner))
+        });
+        let leaf = Schema::tuple(SeqShape {
+            prefix: vec![literals].into(),
+            tail: None,
+        });
+        let defs = vec![Schema::Union(vec![three, leaf].into())];
+        let nested = |depth: usize| {
+            eval(
+                py,
+                &format!(
+                    "__import__('functools').reduce(lambda x, _: [x], range({depth}), ('a',))"
+                ),
+            )
+        };
+        for outer in 0..3 {
+            let schema = (0..outer).fold(reference.clone(), |inner, _| {
+                Schema::list(SeqShape::homogeneous(inner))
+            });
+            // A member nests three lists a level, below the outer ones.
+            let first = (1..200)
+                .map(|level| 3 * level + outer)
+                .find(|&depth| !holds(py, &schema, &nested(depth), &pool, &defs))
+                .expect("a level the walk refuses");
+            for depth in first - 6..first + 6 {
+                // `decide` asserts the two walks agree.
+                decide(py, &schema, &nested(depth), &pool, &defs);
+            }
+        }
     });
 }

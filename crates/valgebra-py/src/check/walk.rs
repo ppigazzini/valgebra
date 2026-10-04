@@ -383,7 +383,17 @@ pub(super) fn record_fatal(err: PyErr, ctx: Ctx<'_>) {
         *slot = Some(err);
     }
     // Mirror into the cheap flag the per-node short-circuit reads.
-    ctx.fatal_seen.set(true);
+    ctx.signals.fatal_seen.set(true);
+}
+
+/// Record that the walk stopped with `code` rather than deciding, for a
+/// complement above it to read. The first stop is kept, as the first fatal
+/// signal is; unlike that signal a stop does not unwind the walk, since a
+/// union branch beside it may still decide.
+pub(super) fn record_stop(code: Code, ctx: Ctx<'_>) {
+    if ctx.signals.stopped.get().is_none() {
+        ctx.signals.stopped.set(Some(code));
+    }
 }
 
 /// Record `err` if it is a fatal signal, for the walk to unwind and the entry
@@ -472,7 +482,7 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
     // A fatal interpreter signal recorded earlier in the walk unwinds the whole
     // traversal: every remaining node reports a non-member at once, so a large
     // value stops promptly instead of finishing the walk after a KeyboardInterrupt.
-    if ctx.fatal_seen.get() {
+    if ctx.signals.fatal_seen.get() {
         return false;
     }
     // One level of the walk is one native stack frame, so the walk counts its own
@@ -482,6 +492,7 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
     // bounds; the counter bounds that product, and a value that reaches it is
     // refused the way an over-deep one already is.
     let Some(_level) = ctx.descend() else {
+        record_stop(RECURSION_LIMIT, ctx);
         if ctx.mode.explains() {
             frame.out.push(Violation {
                 code: RECURSION_LIMIT.as_str(),
@@ -580,6 +591,7 @@ const MUTATED_EXPECTED: &str = "a value that does not change while it is checked
 /// Record that a container changed under the walk, and report a non-member.
 fn mutated(value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
+    record_stop(MUTATED_CODE, ctx);
     if ctx.mode.explains() {
         frame.out.push(Violation {
             code: MUTATED_CODE.as_str(),
@@ -775,8 +787,11 @@ fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, 
     // above, and every value type the plan does not cover, fall through to the
     // linear scan, which stays the one source of truth for behavior. A plan is
     // built only for a union whose every member is a literal, so a union whose
-    // first member is not one has none, and is not looked up.
+    // first member is not one has none, and is not looked up. It answers for the
+    // branch walks, so it needs the level a branch would open: at the walk's
+    // bound the scan below reports the bound, as the explaining walk does.
     if matches!(members.first(), Some(Schema::Literal(_)))
+        && ctx.room_to_descend()
         && let Some(plan) = ctx.unions.get(&(members.as_ptr() as usize))
         && let Some(decided) = plan.decide(value)
     {
@@ -974,7 +989,7 @@ fn record_explained(
     decided: &Decided,
 ) {
     let ctx = frame.ctx;
-    if ctx.fatal_seen.get() {
+    if ctx.signals.fatal_seen.get() {
         return;
     }
     let Some(_level) = ctx.descend() else {
@@ -1013,7 +1028,7 @@ fn record_explained(
 /// as [`member`] holds it: at the walk's depth bound the branch records the
 /// bound instead, which a report does read, so there it is explained.
 fn decided_quietly(schema: &Schema, value: &Value<'_, '_>, ctx: Ctx<'_>) -> Option<bool> {
-    if ctx.fatal_seen.get() {
+    if ctx.signals.fatal_seen.get() {
         return Some(false);
     }
     let _level = ctx.descend()?;
@@ -1100,18 +1115,31 @@ fn check_complement(inner: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_,
     let ctx = frame.ctx;
     // A value matches the complement iff it does not match the inner schema; the
     // inner explanation is irrelevant, so decide it on the fast path.
-    if member(inner, value, &mut Unwritten::default().frame(ctx)) {
-        if ctx.mode.explains() {
-            frame.out.push(Violation {
-                code: UNEXPECTED_MATCH.as_str(),
-                path: frame.path.clone(),
-                expected: format!("not {}", inner.expected()),
-                value_summary: summarize_value(value, ctx),
-            });
-        }
-        return false;
+    //
+    // A non-member is an answer only where the inner walk decided it. One that
+    // stopped -- at the depth bound, at a value inside itself, at a value that
+    // moved, at a predicate that raised -- said nothing about the set, and its
+    // negation says nothing either, so the complement refuses the value with
+    // the stop's code. The cell is cleared for the inner walk and keeps any
+    // earlier stop after it, so a complement above this one reads both.
+    let before = ctx.signals.stopped.take();
+    let matched = member(inner, value, &mut Unwritten::default().frame(ctx));
+    let stopped = ctx.signals.stopped.get();
+    ctx.signals.stopped.set(before.or(stopped));
+    let code = match (matched, stopped) {
+        (false, None) => return true,
+        (true, _) => UNEXPECTED_MATCH,
+        (false, Some(code)) => code,
+    };
+    if ctx.mode.explains() {
+        frame.out.push(Violation {
+            code: code.as_str(),
+            path: frame.path.clone(),
+            expected: format!("not {}", inner.expected()),
+            value_summary: summarize_value(value, ctx),
+        });
     }
-    true
+    false
 }
 
 fn check_instance(index: ClassIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
@@ -1175,6 +1203,7 @@ fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> boo
     match ctx.guard.borrow_mut().enter(key) {
         Entered::Open => {}
         Entered::Cycle => {
+            record_stop(RECURSION_LOOP, ctx);
             if ctx.mode.explains() {
                 frame.out.push(Violation {
                     code: RECURSION_LOOP.as_str(),
@@ -1186,6 +1215,7 @@ fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> boo
             return false;
         }
         Entered::Full => {
+            record_stop(RECURSION_LIMIT, ctx);
             if ctx.mode.explains() {
                 frame.out.push(Violation {
                     code: RECURSION_LIMIT.as_str(),
