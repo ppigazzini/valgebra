@@ -225,6 +225,20 @@ impl Lines {
         }
     }
 
+    /// The structure of every line proved to hold a value, or `None` where a
+    /// line is proved neither way or a negated form cannot be expanded.
+    pub(crate) fn inhabited_structures(&self, whole: Whole) -> Option<Vec<Component>> {
+        let mut structures = Vec::new();
+        for line in self.positive(whole)?.iter() {
+            match line.emptiness(whole.kind()) {
+                Verdict::Inhabited => structures.push(line.structure.clone()),
+                Verdict::Empty => {}
+                Verdict::Unknown => return None,
+            }
+        }
+        Some(structures)
+    }
+
     /// Whether some line admits a value with this structure, class and
     /// attributes.
     ///

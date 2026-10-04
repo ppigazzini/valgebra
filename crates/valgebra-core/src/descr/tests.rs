@@ -564,6 +564,161 @@ fn a_kind_whose_values_are_not_sets_refuses() {
     assert!(Descr::set(&Descr::nothing(), Kind::Str).is_none());
 }
 
+/// The sets of `elements` that are outside the set of each of `minus`.
+fn escaping(elements: &Descr, minus: &[Descr]) -> Descr {
+    let set_of = |members: &Descr| Descr::set(members, Kind::Set).expect("a set kind");
+    minus.iter().fold(set_of(elements), |line, excluded| {
+        line.intersect(&set_of(excluded).complement())
+            .expect("a small difference")
+    })
+}
+
+/// The union of a list of descriptors.
+fn either(members: &[Descr]) -> Descr {
+    members
+        .iter()
+        .try_fold(Descr::nothing(), |all, member| all.union(member))
+        .expect("a small union")
+}
+
+/// A set escaping two others, one member each, is not read inhabited where
+/// the two members are one number in two kinds: `{1, True}` is `{1}`.
+#[test]
+fn two_members_python_equates_do_not_make_a_set() {
+    let (one, yes, one_float) = (Descr::integer(1), Descr::boolean(true), Descr::float(1.0));
+    for (a, b) in [(&one, &yes), (&one, &one_float), (&yes, &one_float)] {
+        let line = escaping(&either(&[a.clone(), b.clone()]), &[a.clone(), b.clone()]);
+        assert_ne!(line.emptiness(), Verdict::Inhabited, "{a:?} and {b:?}");
+    }
+    // Three subtractions, each escaped only by the one number the others are.
+    let all = [one, yes, one_float];
+    assert_ne!(
+        escaping(&either(&all), &all).emptiness(),
+        Verdict::Inhabited
+    );
+}
+
+/// And where nothing equates the members, the set is there: one member each
+/// of two kinds, of one kind, or of two number kinds with room to choose.
+#[test]
+fn members_nothing_equates_make_a_set() {
+    let int = Descr::of_kind(Kind::Int);
+    let float = Descr::of_kind(Kind::Float);
+    let words = Descr::of_kind(Kind::Str);
+    let flags = Descr::of_kind(Kind::Bool);
+    let none = Descr::of_kind(Kind::NoneType);
+    let (one, two, yes) = (Descr::integer(1), Descr::integer(2), Descr::boolean(true));
+    for parts in [
+        vec![int.clone(), words.clone()],
+        vec![one.clone(), two.clone()],
+        vec![int.clone(), float],
+        vec![flags, words.clone()],
+        vec![none, int.clone()],
+        vec![two, yes],
+        vec![int, words, Descr::of_kind(Kind::Bytes)],
+    ] {
+        let line = escaping(&either(&parts), &parts);
+        assert_eq!(line.emptiness(), Verdict::Inhabited, "{parts:?}");
+    }
+}
+
+/// The numbers a set line's law draws from: three kinds, and the values
+/// Python's `==` joins across them.
+const NUMBERS: [(Kind, f64); 6] = [
+    (Kind::Bool, 0.0),
+    (Kind::Bool, 1.0),
+    (Kind::Int, 1.0),
+    (Kind::Int, 2.0),
+    (Kind::Float, 1.0),
+    (Kind::Float, 2.5),
+];
+
+/// The descriptor holding the numbers a mask picks out of [`NUMBERS`].
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "the numbers are small and integral where an integer is built"
+)]
+fn numbers(mask: u8) -> Descr {
+    let picked: Vec<Descr> = NUMBERS
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| mask & (1 << index) != 0)
+        .map(|(_, &(kind, number))| match kind {
+            Kind::Bool => Descr::boolean(number > 0.5),
+            Kind::Int => Descr::integer(number as i64),
+            _ => Descr::float(number),
+        })
+        .collect();
+    either(&picked)
+}
+
+/// Whether some Python set of members of `elements` is outside the set of
+/// each of `minus`: members pairwise unequal under `==`, which equates the
+/// numbers of [`NUMBERS`] by value whatever their kind.
+fn python_escapes(elements: u8, minus: &[u8]) -> bool {
+    (0..=u8::MAX)
+        .filter(|chosen| chosen & !elements == 0)
+        .any(|chosen| {
+            let members: Vec<usize> = (0..NUMBERS.len())
+                .filter(|i| chosen & (1 << i) != 0)
+                .collect();
+            let apart = members.iter().all(|&a| {
+                members
+                    .iter()
+                    .all(|&b| a == b || NUMBERS[a].1.total_cmp(&NUMBERS[b].1).is_ne())
+            });
+            apart && minus.iter().all(|excluded| chosen & !excluded != 0)
+        })
+}
+
+/// Whether two escapes hold one number in two kinds between them.
+fn one_number_in_two_kinds(escapes: &[u8]) -> bool {
+    let kinds_of = |mask: u8| (0..NUMBERS.len()).filter(move |i| mask & (1 << i) != 0);
+    escapes.iter().enumerate().any(|(i, &mine)| {
+        escapes.iter().skip(i + 1).any(|&theirs| {
+            kinds_of(mine).any(|a| {
+                kinds_of(theirs).any(|b| {
+                    NUMBERS[a].0 != NUMBERS[b].0 && NUMBERS[a].1.total_cmp(&NUMBERS[b].1).is_eq()
+                })
+            })
+        })
+    })
+}
+
+proptest! {
+    // A bounded shrink, as every law here has. Not armed with the allowance:
+    // it asserts that its operations succeed, and its descriptors are a
+    // handful of numbers.
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    // THEORY: property-testing
+    /// A set line's verdict is a claim about Python's sets, whose members are
+    /// unequal under `==`: an inhabited line holds one, an empty line none. And
+    /// where no two escapes hold one number in two kinds, a line holding one is
+    /// read inhabited -- the refutations a set relation stands on.
+    #[test]
+    fn a_set_line_is_read_as_python_holds_its_members(
+        elements in 0u8..64,
+        minus in prop::collection::vec(0u8..64, 2..=3),
+    ) {
+        let excluded: Vec<Descr> = minus.iter().map(|&mask| numbers(mask)).collect();
+        let verdict = escaping(&numbers(elements), &excluded).emptiness();
+        let holds = python_escapes(elements, &minus);
+        match verdict {
+            Verdict::Inhabited => prop_assert!(holds, "inhabited holds a set"),
+            Verdict::Empty => prop_assert!(!holds, "empty holds none"),
+            Verdict::Unknown => {}
+        }
+        let escapes: Vec<u8> = minus.iter().map(|&mask| elements & !mask).collect();
+        if holds && !one_number_in_two_kinds(&escapes) {
+            prop_assert_eq!(verdict, Verdict::Inhabited, "nothing equates the members");
+        }
+    }
+}
+
 /// The third answer, and where it comes from.
 ///
 /// Two classes a value must both be an instance of, neither deriving from

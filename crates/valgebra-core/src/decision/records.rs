@@ -226,16 +226,21 @@ pub(super) fn keyed_map_subtype(
         // A clause whose key the rules cannot read might admit the name, so
         // where `b` carries one the reading is a proof or nothing. Where every
         // clause's key is one of the two spellings that plainly admit a string
-        // name -- and where `b` carries no clause at all, which is the closed
-        // record -- the covering clauses are all of them, and a field whose
-        // values none of them accepts is a refutation: fields are independent,
-        // so a value of `a` carrying that key with that value is a value `b`
-        // rejects. It stands on the field having a value, read the way the
-        // query reads the subject's, so a field the rules cannot tell either
-        // way declines and an empty *optional* field proves nothing against.
+        // name, the covering clauses are all of them, and a refutation needs a
+        // value of the field that every one of them rejects: fields are
+        // independent, so a value of `a` carrying that key with that value is a
+        // value `b` rejects. Each clause's own refutation stands on a value of
+        // its own, so they make one only where there is at most one clause --
+        // the closed record has none. Two clauses may cover the field together,
+        // `int | str` under `str: int` and `str: str`, and refuting each in turn
+        // proves nothing about the pair. A refutation also stands on the field
+        // having a value, read the way the query reads the subject's, so a field
+        // the rules cannot tell either way declines and an empty *optional*
+        // field proves nothing against.
         let readable_keys = db
             .iter()
             .all(|clause| matches!(clause.key, Schema::Str | Schema::Anything(_)));
+        let one_witness = db.len() <= 1;
         let extra_covered = Relation::all(
             fa.iter()
                 .filter(|a_field| b_by_name.named(&a_field.name).is_none())
@@ -250,7 +255,7 @@ pub(super) fn keyed_map_subtype(
                     }));
                     match answer {
                         Relation::Holds => Relation::Holds,
-                        Relation::Fails if readable_keys => {
+                        Relation::Fails if readable_keys && one_witness => {
                             Relation::of_mismatch(a_field.schema.verdict_of(cx))
                         }
                         _ => Relation::Unknown,

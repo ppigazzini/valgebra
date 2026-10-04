@@ -256,6 +256,14 @@ ROWS: dict[str, Row] = {
         # length above the positions there are is decided empty.
         beside=(Annotated[tuple[int, int], at.MinLen(3)], nothing, "subset"),
     ),
+    "A set that needs two members Python's `==` makes one.": Declines(
+        set[Literal[1, True]],
+        union(set[Literal[1]], set[Literal[True]]),
+        "a reading of which members `==` joins beyond the numbers each escape "
+        "offers when it offers only a few",
+        # Two members `==` keeps apart refute as before.
+        beside=(set[int | str], union(set[int], set[str]), "not_subset"),
+    ),
     "An integer bound outside the 64-bit range.": Declines(
         Annotated[int, at.Ge(2**70)],
         Annotated[int, at.Ge(2**70 + 1)],

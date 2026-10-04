@@ -187,6 +187,23 @@ impl IntSet {
             .is_some_and(|class| class.holds(value.div_euclid(self.modulus)))
     }
 
+    /// Every integer this set holds where there are at most `cap`, and `None`
+    /// where there are more.
+    pub(crate) fn values_up_to(&self, cap: usize) -> Option<Vec<i128>> {
+        let mut values = Vec::new();
+        for (residue, class) in (0_i128..).zip(&self.classes) {
+            for k in class.values_up_to(cap)? {
+                if values.len() == cap {
+                    return None;
+                }
+                // A period of at most `MAX_PERIOD` times an `i64` with a step
+                // of headroom stays far inside an `i128`.
+                values.push(residue + i128::from(self.modulus) * k);
+            }
+        }
+        Some(values)
+    }
+
     /// This set's table read at `modulus`, which its period must divide, or
     /// `None` for a period past [`MAX_PERIOD`].
     ///

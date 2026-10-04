@@ -1,4 +1,4 @@
-use super::{MAX_LINES, SetLattice};
+use super::{MAX_LINES, Members, SetLattice};
 use crate::descr::Descr;
 use crate::descr::budget;
 use crate::descr::integers::IntSet;
@@ -7,6 +7,9 @@ use crate::kind::Kind;
 use crate::verdict::Verdict;
 use proptest::prelude::*;
 use std::sync::Arc;
+
+/// An integer equals no other integer, so two distinct ones are two members.
+impl Members for IntSet {}
 
 /// A meet past the build's allowance refuses, and the same meet succeeds
 /// under one that covers it.

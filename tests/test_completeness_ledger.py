@@ -306,6 +306,40 @@ _DECIDED = [
         "equivalent", tuple, tuple[object, ...], id="tuple==tuple[object,...]"
     ),
     pytest.param("equivalent", set, set[object], id="set==set[object]"),
+    # A set of two element types is not below the union of the sets of each: a
+    # set holding one member of each is in neither. The refutation stands on
+    # two members, so it holds only where nothing equates them -- two kinds,
+    # two numbers, or two number kinds with room to choose.
+    pytest.param(
+        "refutes",
+        set[int | str],
+        union(set[int], set[str]),
+        id="refute:set[int|str]<=set[int]|set[str]",
+    ),
+    pytest.param(
+        "refutes",
+        set[Literal[1, 2]],
+        union(set[Literal[1]], set[Literal[2]]),
+        id="refute:set[1|2]<=set[1]|set[2]",
+    ),
+    pytest.param(
+        "refutes",
+        frozenset[int | float],
+        union(frozenset[int], frozenset[float]),
+        id="refute:frozenset[int|float]<=frozenset[int]|frozenset[float]",
+    ),
+    pytest.param(
+        "refutes",
+        set[Literal[2, True]],
+        union(set[Literal[2]], set[Literal[True]]),
+        id="refute:set[2|True]<=set[2]|set[True]",
+    ),
+    pytest.param(
+        "refutes",
+        set[tuple[int] | tuple[str]],
+        union(set[tuple[int]], set[tuple[str]]),
+        id="refute:set[tuple[int]|tuple[str]]<=either-set",
+    ),
     pytest.param(
         "equivalent", frozenset, frozenset[object], id="frozenset==frozenset[object]"
     ),
@@ -607,6 +641,15 @@ _DECIDED = [
     # covered through a catch-all as undecided, though the general rule beside it
     # already decided exactly that.
     pytest.param("subtype", {"x": int}, {str: int}, id="map:closed-record<=mapping"),
+    # A field the supertype covers through two clauses together: each clause
+    # alone refutes the field's type on a value of its own, and no one value is
+    # outside both.
+    pytest.param(
+        "subtype",
+        {"f": union(int, str)},
+        {str: int, Any: str},
+        id="map:field<=two-clauses-together",
+    ),
     # A named tuple's positions are its attributes, and the frontend reads them,
     # so the shape its instances have is in the schema and the relation is
     # structural rather than a question about a class's layout.
@@ -1058,6 +1101,24 @@ _LEDGERED: list[object] = [
         _nested(str, 5, mapping=True),
         id="refute:mappings-5-deep-over-int<=over-str",
         marks=_missed("the chain nests deeper than a lowering descends"),
+    ),
+    # A set of `1` and `True` is a set of one member, since `{1, True}` is
+    # `{1}`, so every set of either is a set of one of them. The two members a
+    # refutation would need are one number in two kinds, which the sets read
+    # as unknown rather than as a proof that no set escapes.
+    pytest.param(
+        "subtype",
+        set[Literal[1, True]],
+        union(set[Literal[1]], set[Literal[True]]),
+        id="set:set[1|True]<=set[1]|set[True]",
+        marks=_missed("the members it takes are one number in two kinds"),
+    ),
+    pytest.param(
+        "subtype",
+        set[union(Literal[1], Validator(1.0))],  # ty: ignore[invalid-type-form]
+        union(set[Literal[1]], set[Validator(1.0)]),  # ty: ignore[invalid-type-form]
+        id="set:set[1|1.0]<=set[1]|set[1.0]",
+        marks=_missed("the members it takes are one number in two kinds"),
     ),
 ]
 

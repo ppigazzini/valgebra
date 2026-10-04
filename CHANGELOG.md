@@ -14,6 +14,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a pattern's set is every string it matches whole
+- fix: a refutation stands on members that stay apart
 
 -->
 
@@ -28,6 +29,21 @@ answer of its own, or a repair to a change not yet released.
   `Regex("foo|foobar")` with `Literal["foobar"]` was decided empty. Membership
   was right throughout: the walk matches a pattern whole, and the relations
   read the same set.
+- **A field two clauses cover together is not refuted.** A record field the
+  supertype does not name is read through the supertype's catch-all clauses,
+  and the field was refuted where each clause refused its type alone, though
+  the clauses together admit every value of it: `{"f": int | str}` was
+  `not_subset` of `{str: int, Any: str}`, which holds it. Each clause's refusal
+  stands on a value of its own; with two or more clauses the relation goes to
+  the set representation, which decides this one `subset`.
+- **A set's refutation stands on members a Python set keeps apart.** A set of
+  two element types is outside the union of the sets of each by a set holding
+  one member of each, and a Python set holds no two members that compare
+  equal. Where the two were one number in two kinds the refutation stood on no
+  value: `set[Literal[1, True]]` was `not_subset` of `set[Literal[1]] |
+  set[Literal[True]]`, though `{1, True}` is `{1}` and every set of it is in
+  one of the two, and `1` with `1.0` read the same way. Those pairs are
+  `undecided`; every other refutation of this shape stands.
 
 ## [0.0.16] - 2026-10-04
 

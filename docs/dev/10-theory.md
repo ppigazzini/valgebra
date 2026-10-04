@@ -496,7 +496,8 @@ membership by a property suite rather than asserted
 
 SOURCE: §13.8 "**Property-based testing.**"; §9 "Hypothesis adds integrated test-case shrinking"
 
-HELD-BY: test_de_morgan, laws.rs::the_lattice_laws_hold_of_the_sets, test_simplify_preserves_acceptance
+HELD-BY: test_de_morgan, laws.rs::the_lattice_laws_hold_of_the_sets, test_simplify_preserves_acceptance,
+a_set_line_is_read_as_python_holds_its_members
 
 **Chen, Cheung & Yiu, "Metamorphic Testing: A New Approach for Generating Next
 Test Cases" (1998)**, and **Chen et al., "Metamorphic Testing: A Review of

@@ -289,6 +289,33 @@ impl FloatSet {
         self.spans.iter().any(|span| span.holds(value))
     }
 
+    /// Every float this set holds where there are at most `cap` and none is
+    /// `nan`, and `None` otherwise.
+    ///
+    /// `nan` counts as more than any cap: no `nan` is equal to another value,
+    /// itself included, so a set holding one holds as many unequal members as a
+    /// caller asks for.
+    pub(crate) fn values_up_to(&self, cap: usize) -> Option<Vec<f64>> {
+        if self.nan {
+            return None;
+        }
+        let mut values = Vec::new();
+        for span in &self.spans {
+            let mut value = span.lo;
+            loop {
+                if values.len() == cap {
+                    return None;
+                }
+                values.push(value);
+                if value.total_cmp(&span.hi).is_ge() {
+                    break;
+                }
+                value = successor(value)?;
+            }
+        }
+        Some(values)
+    }
+
     /// The floats in either set.
     #[must_use]
     pub fn union(&self, other: &FloatSet) -> FloatSet {

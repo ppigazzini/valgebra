@@ -560,6 +560,17 @@ the shape. What is left below is what the descriptor cannot hold.
   Whether such a schema *has a value* is a different question and the rules
   answer it, since a set of any length is built by repeating one element.
 
+- **A set that needs two members Python's `==` makes one.** A set of `int | str`
+  is not below `set[int] | set[str]`: `{1, "a"}` is in neither. That refutation
+  stands on two members, and a Python set holds no two that compare equal --
+  `{1, True}` is `{1}`, and so is `{1, 1.0}`. So a set refuted only by a member
+  of each, where those members are one number in two kinds, is undecided rather
+  than refuted: `set[Literal[1, True]]` is below `set[Literal[1]] |
+  set[Literal[True]]`, since every set of it holds one member, and that pair
+  answers `undecided`. Two members `==` keeps apart -- an `int` and a `str`, two
+  integers, or two number kinds with other numbers to choose, as
+  `frozenset[int | float]` against the frozensets of each -- refute as before.
+
 - **An integer bound outside the 64-bit range.** The integer component carries
   its bounds as `i64`, so `Annotated[int, Ge(2**70)]` is held as the widest set
   the carrier spells rather than as the half-line it names. The schema validates
@@ -662,8 +673,8 @@ mark for a relation that holds and is not decided, so the row fails on the day
 it decides. Those rows are the bound-limited relations above — the four-field
 record and the seven-component tuple against their corners, the thirteen-link
 chain of differences, and the mapping chain five levels deep — each carrying
-the width or depth at which the bound stops it; the ledger's `_LEDGERED` list
-owns them.
+the width or depth at which the bound stops it, and the two sets whose members
+are one number in two kinds; the ledger's `_LEDGERED` list owns them.
 
 ```python
 from typing import Annotated, Literal, NamedTuple

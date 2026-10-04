@@ -137,6 +137,24 @@ impl IntervalSet {
         self.spans.iter().any(|span| span.holds(i128::from(value)))
     }
 
+    /// Every integer this set holds where there are at most `cap`, and `None`
+    /// where there are more -- an unbounded span among them.
+    pub(crate) fn values_up_to(&self, cap: usize) -> Option<Vec<i128>> {
+        let mut values = Vec::new();
+        for span in &self.spans {
+            let (Some(lo), Some(hi)) = (span.lo, span.hi) else {
+                return None;
+            };
+            for value in lo..=hi {
+                if values.len() == cap {
+                    return None;
+                }
+                values.push(value);
+            }
+        }
+        Some(values)
+    }
+
     /// The integers in either set.
     ///
     /// Merging is what restores the canonical form: the spans are gathered,
