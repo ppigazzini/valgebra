@@ -47,6 +47,35 @@ def test_pattern_matches_re_fullmatch(pattern: str) -> None:
         assert schema.is_valid(value) == (reference.fullmatch(value) is not None), value
 
 
+@pytest.mark.parametrize(
+    ("pattern", "preferred", "word"),
+    [
+        ("a|ab", "a", "ab"),
+        ("http|https", "http", "https"),
+        (r"\d+|\d+\.\d+", r"\d+", "1.5"),
+        ("|a", "", "a"),
+        ("a*?", "", "aaa"),
+    ],
+)
+def test_a_relation_reads_every_string_a_pattern_matches(
+    pattern: str, preferred: str, word: str
+) -> None:
+    """A pattern's set is every string it matches whole.
+
+    A search ranks the ways a pattern can match: an alternation prefers its
+    earlier branch and a lazy repetition its shortest run. `preferred` is the
+    pattern for what a search reports first. `word` is a match the ranking puts
+    second, so it separates the two sets: a relation reading the pattern as its
+    preferred match would prove the wider set inside the narrower one.
+    """
+    schema = Validator(Annotated[str, Regex(pattern)])
+    narrower = Validator(Annotated[str, Regex(preferred)])
+    assert schema.is_valid(word)
+    assert not narrower.is_valid(word)
+    assert schema.relation_to(narrower) == "not_subset"
+    assert narrower.relation_to(schema) == "subset"
+
+
 def test_invalid_pattern_raises_at_compile_time() -> None:
     with pytest.raises(ValueError, match="invalid regular expression"):
         Validator(Annotated[str, Regex(r"(unclosed")])

@@ -13,7 +13,21 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: a pattern's set is every string it matches whole
+
 -->
+
+### Fixed
+
+- **A pattern's set is every string it matches whole.** The relations read a
+  `Regex` as the strings a search reports first, which is fewer than it matches:
+  an alternation whose earlier branch is a prefix of a later one, an empty first
+  branch, and a lazy repetition each lost the matches ranked below the first.
+  `Regex("http|https")` was proved below `Literal["http"]` and equivalent to it,
+  `Regex("ab")` was refuted below `Regex("a|ab")`, and the meet of
+  `Regex("foo|foobar")` with `Literal["foobar"]` was decided empty. Membership
+  was right throughout: the walk matches a pattern whole, and the relations
+  read the same set.
 
 ## [0.0.16] - 2026-10-04
 

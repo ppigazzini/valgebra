@@ -137,7 +137,11 @@ one table, so `Regex("a")` is decided inside `Regex("ab?")` and equal to
 `Literal["a"]`. The automaton for one pattern comes from `regex-automata`, which
 the binding already depends on; the three set operations and the emptiness
 decision are valgebra's, because that crate builds automata for searching and
-offers no complement.
+offers no complement. It is asked for every match rather than for its default,
+leftmost-first, which keeps only the match a search prefers: `a|ab` would lose
+`ab`, and `a*?` every word but the empty one. A law in
+`crates/valgebra-core/src/descr/regular/tests.rs` holds each pattern's table
+to the `regex` matcher the walk runs.
 
 **The rule that splits a fixed-length sequence across a union** is the product
 decomposition — Frisch, Castagna & Benzaken Lemma 6.5 for pairs, in the

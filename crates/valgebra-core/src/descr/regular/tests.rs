@@ -63,6 +63,48 @@ fn language(pattern: &str) -> RegularSet {
     RegularSet::pattern(pattern, Alphabet::Text).expect("a small pattern builds")
 }
 
+/// The walk's reading of a pattern: the `regex` matcher, over the whole text.
+fn matcher(pattern: &str) -> regex::Regex {
+    regex::Regex::new(&format!(r"\A(?:{pattern})\z")).expect("a drawn pattern compiles")
+}
+
+/// Every word over `{a, b}` of up to four letters, and one outside the alphabet.
+fn short_words() -> Vec<String> {
+    let mut words = vec![String::new(), "c".to_owned()];
+    let mut layer = vec![String::new()];
+    for _ in 0..4 {
+        layer = layer
+            .iter()
+            .flat_map(|word| [format!("{word}a"), format!("{word}b")])
+            .collect();
+        words.extend(layer.iter().cloned());
+    }
+    words
+}
+
+/// Patterns over `{a, b}` in the shapes a search ranks: an alternation, whose
+/// earlier branch may be a prefix of a later one or empty, and a repetition,
+/// greedy or lazy.
+fn ranked_pattern() -> impl Strategy<Value = String> {
+    let leaf = prop_oneof![
+        Just(String::new()),
+        Just("a".to_owned()),
+        Just("b".to_owned()),
+        Just("[ab]".to_owned()),
+    ];
+    leaf.prop_recursive(3, 12, 2, |inner| {
+        prop_oneof![
+            (inner.clone(), inner.clone()).prop_map(|(x, y)| format!("{x}{y}")),
+            (inner.clone(), inner.clone()).prop_map(|(x, y)| format!("(?:{x}|{y})")),
+            (
+                inner,
+                prop::sample::select(vec!["*", "+", "?", "*?", "+?", "??", "{1,2}", "{1,2}?"]),
+            )
+                .prop_map(|(x, quantifier)| format!("(?:{x}){quantifier}")),
+        ]
+    })
+}
+
 /// Languages over the three-letter alphabet the universe covers.
 fn regular_set() -> impl Strategy<Value = RegularSet> {
     let leaf = prop_oneof![
@@ -189,6 +231,54 @@ proptest! {
             prop_assert!(universe().into_iter().all(|w| !a.holds(w)));
         }
     }
+
+    /// A pattern's language is the words the walk's matcher admits whole.
+    ///
+    /// The laws above check the automata against each other, which holds as
+    /// well of a table that drops words as of one that keeps them. This holds
+    /// the table one pattern lowers to against the matcher, on the patterns
+    /// where a search's preference among matches could leave words out.
+    #[test]
+    fn a_pattern_holds_the_words_its_matcher_admits(pattern in ranked_pattern()) {
+        let set = language(&pattern);
+        let whole = matcher(&pattern);
+        for word in short_words() {
+            prop_assert_eq!(
+                set.holds(word.as_bytes()),
+                whole.is_match(&word),
+                "{} against {:?}",
+                pattern,
+                word
+            );
+        }
+    }
+}
+
+/// The words a search would not report first are in the language all the same:
+/// a later branch an earlier one is a prefix of, an empty first branch, and
+/// what a lazy repetition matches past its shortest.
+#[test]
+fn a_pattern_holds_every_word_it_matches_whole() {
+    for (pattern, word) in [
+        ("a|ab", "ab"),
+        ("http|https", "https"),
+        (r"\d+|\d+\.\d+", "1.5"),
+        ("|a", "a"),
+        ("a*?", "aaa"),
+        ("a+?", "aa"),
+        (".*?", "text"),
+    ] {
+        assert!(
+            language(pattern).holds(word.as_bytes()),
+            "{pattern} holds {word:?}"
+        );
+    }
+    // And the inclusion the dropped words would refute is refuted.
+    assert!(
+        !language("a|ab")
+            .intersect(&RegularSet::word(b"a").complement())
+            .is_some_and(|set| set.is_empty())
+    );
 }
 
 /// The two relations this component exists to decide, both declined by the
@@ -236,6 +326,10 @@ fn two_spellings_of_one_language_are_one_set() {
     assert_eq!(language("a|b"), language("[ab]"));
     assert_eq!(language("a*a*"), language("a*"));
     assert_eq!(language("(a|b)*"), language("[ab]*"));
+    // The order of the branches and the laziness of a repetition rank a
+    // search's matches and change no word the pattern matches whole.
+    assert_eq!(language("a|ab"), language("ab|a"));
+    assert_eq!(language("a*?"), language("a*"));
     // And two that are *not* one language stay apart.
     assert_ne!(language("a"), language("b"));
     assert_ne!(language("a*"), language("a+"));

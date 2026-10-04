@@ -29,6 +29,8 @@
 //! dependency. What is taken from it is the *parser and determiniser* for one
 //! pattern; the three set operations and the emptiness decision are here,
 //! because the crate builds automata for searching and offers no complement.
+//! The determiniser is asked for every match rather than for the one a search
+//! prefers, since a set of words has no preference among its members.
 
 use regex_automata::dfa::{Automaton, dense};
 use regex_automata::util::syntax;
@@ -614,8 +616,17 @@ impl RegularSet {
     /// Build a language from a pattern the caller of this module wrote.
     fn compile(anchored: &str, utf8: bool) -> Option<RegularSet> {
         let syntax = syntax::Config::new().utf8(utf8);
+        // Every match, which is the classical construction. The builder's
+        // default is leftmost-first, a search semantics: once the thread a
+        // backtracking engine prefers has matched, the threads ranked below it
+        // are dropped, so `a|ab` reaches no state past `a` and `a*?` stops at the
+        // empty word. That table holds the matches a search reports, a smaller
+        // set than the words the pattern matches whole -- which is what the walk
+        // asks and what a `Regex` denotes -- and a relation read off it proves an
+        // inclusion a value refutes.
         let config = dense::Config::new()
             .start_kind(regex_automata::dfa::StartKind::Anchored)
+            .match_kind(regex_automata::MatchKind::All)
             .dfa_size_limit(Some(BUILD_SIZE_LIMIT))
             .determinize_size_limit(Some(BUILD_SIZE_LIMIT));
         let built = dense::Builder::new()

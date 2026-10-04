@@ -24,6 +24,10 @@ regex-automata = { workspace = true }
 criterion = "0.8.2"
 insta = "1.49.0"
 proptest = "1.11"
+# The matcher the walk runs a pattern with, so a law holds the automaton a
+# pattern lowers to against the words that matcher admits. The binding depends
+# on it already, so the lockfile gains no crate.
+regex = "1.13"
 
 [lints]
 workspace = true

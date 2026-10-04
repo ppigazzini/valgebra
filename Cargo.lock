@@ -943,6 +943,7 @@ dependencies = [
  "criterion",
  "insta",
  "proptest",
+ "regex",
  "regex-automata",
  "rustc-hash",
 ]
