@@ -185,7 +185,11 @@ free-threaded build can fail to co-install in one step. On macOS a free-threaded
 install also answers to the release's name, and `--find-interpreter` found it
 there in the release's place, so the macOS builds find each interpreter in the
 tool cache `setup-python` records it in, under the runner's architecture, and
-ask it which build it is -- a framework path holds only some releases. The Windows arm64 smoke runs
+ask it which build it is -- a framework path holds only some releases. The
+wheel job's ceiling (`timeout-minutes` in `release.yml`) is twice its slowest
+row's reading, which is the macOS x86_64 build: eight interpreters, each built
+twice for its profile, on the slowest runner the matrix uses. A row that reaches
+the ceiling is cancelled, and the release waits on every row. The Windows arm64 smoke runs
 on the arm64 interpreters `setup-python` installs, because uv's own build of a
 release candidate can be x64 alone. The maturin a release builds with is the one `uv.lock`
 resolves, pinned in the workflow rather than taken as the newest. A version
