@@ -1,13 +1,15 @@
 """A test the mutation sweep skips must be marked in its own source.
 
 Three Rust tests exist to prove a bound -- the decision budget, the recursion
-depth. A mutation that removes the bound makes each of them run past any
-timeout the sweep sets, so the whole sweep returns no verdict for that mutant: a
-rig fault, not a detection. Each therefore leaves the *sweep* while staying in
-the test lane, where it runs on every push.
+depth -- and a fourth walks a union of two walked branches to the depth bound.
+A mutation that removes the bound, or that makes the union's deciding walk
+explain, makes each of them run past any timeout the sweep sets, so the whole
+sweep returns no verdict for that mutant: a rig fault, not a detection. Each
+therefore leaves the *sweep* while staying in the test lane, where it runs on
+every push.
 
 That is a hole in what the sweep can judge, so it is held to the tree in both
-directions rather than living as three strings in a workflow:
+directions rather than living as four strings in a workflow:
 
 * a test marked ``SWEEP-SKIP`` that no sweep skips fails, so a marker cannot be
   written and forgotten;

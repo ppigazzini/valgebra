@@ -151,6 +151,51 @@ def test_the_closest_branch_is_reported_where_one_descends() -> None:
     assert errors[0]["code"] == "int_type"
 
 
+def test_the_record_branch_that_admitted_the_most_is_reported() -> None:
+    """Of the record branches, the one whose deciding walk got furthest.
+
+    Each refused record branch was explained and the one whose first failure
+    lay deepest was kept, the earliest on a tie -- so a value tagged for the
+    second branch, refused at its own field, was reported against the first
+    branch's tag. One record branch is explained, the one whose deciding walk
+    admitted the most fields, and the tag is read first.
+    """
+    branches = union(
+        {"t": Literal["x"], "z": int},
+        {"t": Literal["y"], "z": str, "u": int},
+    )
+    errors = _errors(branches, {"t": "y", "z": 1.5, "u": 1})
+    assert [(e["code"], e["path"]) for e in errors] == [("string_type", ("z",))]
+
+
+def test_a_tag_read_first_counts_toward_how_far_its_branch_got() -> None:
+    """A field read before the declared order counts for its branch.
+
+    `type` is read before `left`, so the `y` branch admits its tag before it
+    finds `left` missing, and the `x` branch refuses at the tag: one field
+    against none, although `left` comes first in either branch.
+    """
+    branches = union(
+        {"left": list[int], "type": Literal["x"]},
+        {"left": list[int], "type": Literal["y"]},
+    )
+    errors = _errors(branches, {"type": "y"})
+    assert [(e["code"], e["path"]) for e in errors] == [("missing_key", ("left",))]
+
+
+def test_a_record_branch_read_by_its_entries_is_ranked_by_what_it_admitted() -> None:
+    """A record whose clause reads values is decided by scanning its entries.
+
+    The scan admitted no field by name, so it counted as admitting nothing and
+    lost to any record that admitted one: the open record below admits `a` and
+    refuses only `l`, and the closed one admits `a` and lacks `b`. Counting the
+    entries a scan admits ranks the two alike, and the union's first is kept.
+    """
+    branches = union({"a": int, "b": str}, {"a": int, str: int})
+    first = _errors(branches, {"a": 1, "l": "b"})[0]
+    assert (first["code"], first["path"]) == ("int_type", ("l",))
+
+
 def test_the_branch_probe_has_a_width_and_the_answer_does_not() -> None:
     """A branch past the probe's width decides membership and is not described.
 

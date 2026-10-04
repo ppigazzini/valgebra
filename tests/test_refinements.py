@@ -17,6 +17,7 @@ from valgebra import (
     Validator,
     complement,
     intersection,
+    recursive,
     union,
 )
 
@@ -694,6 +695,36 @@ def test_a_predicate_runs_once_per_value_the_fast_walk_reaches() -> None:
         # the record branch whole, asking at `a` and at `b`; under `fail_fast`
         # it stops at `a`, its first failure.
         assert calls["n"] == expected, (fail_fast, calls["n"])
+
+
+def test_a_refused_chain_runs_its_leaf_predicate_once() -> None:
+    """A union with one branch left to walk explains that branch once.
+
+    Under `positive | [T]` a list and an integer each leave one branch to walk,
+    so a refused chain runs the leaf's predicate once in every mode. Deciding
+    each level before explaining it ran the predicate once a level, and walked
+    the levels below every level a report explained.
+    """
+    calls = {"n": 0}
+
+    def positive(value: int) -> bool:
+        calls["n"] += 1
+        return value > 0
+
+    chain = Validator(
+        recursive(lambda t: union(Annotated[int, at.Predicate(positive)], [t]))
+    )
+    value: object = -1
+    for _ in range(50):
+        value = [value]
+    for ask in (
+        lambda: chain.is_valid(value),
+        lambda: _refused(chain, value),
+        lambda: _refused(chain, value, fail_fast=True),
+    ):
+        calls["n"] = 0
+        ask()
+        assert calls["n"] == 1
 
 
 def _refused(schema: Validator, value: object, *, fail_fast: bool = False) -> None:

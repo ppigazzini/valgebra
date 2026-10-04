@@ -21,6 +21,7 @@ schema's declared size.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
@@ -577,6 +578,82 @@ def test_explaining_a_deep_value_does_not_scale_with_its_size() -> None:
         f"explaining a 20,000-deep value took {large:.3f}s against "
         f"{small:.3f}s for a 2,000-deep one; the summary is scaling with the value"
     )
+
+
+def _fastest(call: Callable[[], object]) -> float:
+    """Return the fastest of three timed calls; a loaded machine only adds."""
+
+    def once() -> float:
+        started = time.perf_counter()
+        call()
+        return time.perf_counter() - started
+
+    return min(once() for _ in range(3))
+
+
+def test_a_tag_after_a_recursive_field_refuses_its_branch_first() -> None:
+    """A union of records told apart by a tag is linear, whatever the tag is called.
+
+    Fields are stored sorted by name, so `type` beside `left` was read after
+    the child, and each branch the tag refuses walked the whole child first:
+    four branches to the power of the depth, a second at depth ten and no
+    answer at twenty, on a valid value of a few hundred bytes. The deciding
+    walk reads a field decided by its own value first. Both entry points, as
+    the JSON path reads a record by the same plan.
+    """
+    tags = (Literal["a"], Literal["b"], Literal["c"], Literal["d"])
+    schema = Validator(
+        recursive(lambda t: union(int, *[{"left": t, "type": tag} for tag in tags]))
+    )
+
+    def chain(depth: int) -> object:
+        value: object = 0
+        for _ in range(depth):
+            value = {"left": value, "type": "d"}
+        return value
+
+    for check in (schema.is_valid, lambda v: schema.is_valid_json(json.dumps(v))):
+        small, large = (
+            _fastest(lambda d=d, check=check: check(chain(d))) for d in (6, 12)
+        )
+        assert check(chain(12)) is True
+        # Twice the depth: linear is a factor of two, and the defect was 4,096.
+        assert large < small * 5 + 0.05, (small, large)
+
+
+def test_explaining_a_refused_union_of_records_does_not_double_per_level() -> None:
+    """A union of records explains one record branch, not each of them.
+
+    Explaining every refused record branch walked the levels below once per
+    branch, so the default report on a refused chain doubled with each level:
+    a third of a second at eighteen levels of a value of three hundred bytes.
+    The branch explained is the one whose deciding walk admitted the most.
+    """
+    schema = Validator(
+        recursive(
+            lambda t: union(
+                None, {"z": t, "t": Literal["x"]}, {"z": t, "t": Literal["y"], "u": str}
+            )
+        )
+    )
+
+    def chain(depth: int) -> object:
+        value: object = 3.5
+        for _ in range(depth):
+            value = {"z": value, "t": "x"}
+        return value
+
+    def explain(depth: int) -> Callable[[], object]:
+        def refused() -> None:
+            with pytest.raises(ValidationError):
+                schema.validate(chain(depth))
+
+        return refused
+
+    small, large = _fastest(explain(8)), _fastest(explain(16))
+    # Twice the depth: the report is quadratic at worst, a factor of four, and
+    # the defect was 256.
+    assert large < small * 6 + 0.05, (small, large)
 
 
 def test_a_bounded_summary_still_names_a_small_value_exactly() -> None:

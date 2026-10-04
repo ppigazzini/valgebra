@@ -668,11 +668,12 @@ fn a_record_or_class_branch_builds_no_report_for_a_value_the_union_admits() {
 /// A union no branch admits reports what its chosen branch reports walked on
 /// its own, in either explaining mode.
 ///
-/// The branch whose first failure lies deepest is chosen, the earliest on a
-/// tie, and a record branch is explained after every branch is decided while
-/// any other is explained as it is decided: the cases below put a record
-/// beside a record nested deeper, beside a record that ties it, and beside a
-/// refined record explained in its own place, in both orders.
+/// Of the record branches the one whose deciding walk got furthest is
+/// explained, and of the branches explained the one whose first failure lies
+/// deepest is chosen, the earliest on a tie: the cases below put a record
+/// beside a record that admits more of the value, in both orders, beside a
+/// record nested deeper, and beside a refined record that ties it, in both
+/// orders.
 #[test]
 fn a_refused_union_reports_what_its_chosen_branch_reports_alone() {
     Python::attach(|py| {
@@ -698,7 +699,7 @@ fn a_refused_union_reports_what_its_chosen_branch_reports_alone() {
         };
         let cases = [
             (wide.clone(), text.clone(), dict("{'a': 1, 'b': 'x'}"), 0),
-            (text, wide, dict("{'a': 1, 'b': 'x'}"), 0),
+            (text, wide, dict("{'a': 1, 'b': 'x'}"), 1),
             (flat.clone(), deep, dict("{'a': {'c': 'x'}}"), 1),
             (flat.clone(), refined.clone(), dict("{'a': 1.5}"), 0),
             (refined, flat, dict("{'a': 1.5}"), 0),
@@ -761,14 +762,10 @@ fn a_class_with_its_own_instance_test_is_asked_once_through_a_union() {
     });
 }
 
-/// A fatal signal one branch of a union raises stops the report of a record
-/// branch decided before it, as it stops every later walk: the record's
-/// explaining pass, which would summarize a key it does not declare, never
-/// runs.
-///
-/// The refined record between them is explained as it is decided, before the
-/// signal, and is the branch the report chooses; it admits the undeclared key,
-/// so nothing it reports summarizes it either.
+/// A fatal signal one branch of a union raises while the union decides its
+/// branches stops the union before it explains any, as it stops every later
+/// walk: the record's explaining pass, which would summarize a key it does not
+/// declare, never runs, and the union reports nothing.
 #[test]
 fn a_signal_a_later_branch_raises_stops_an_earlier_record_report() {
     use pyo3::exceptions::PyKeyboardInterrupt;
@@ -809,10 +806,7 @@ fn a_signal_a_later_branch_raises_stops_an_earlier_record_report() {
         value.set_item("z", seen).expect("an undeclared key");
         let (fatal, report) = recorded(py, &union, value.as_any(), &pool);
         assert!(fatal.is_some_and(|err| err.is_instance_of::<PyKeyboardInterrupt>(py)));
-        assert_eq!(
-            report.iter().map(|v| v.code).collect::<Vec<_>>(),
-            ["string_type"]
-        );
+        assert!(report.is_empty(), "{report:?}");
         assert_eq!(count_of(&module, "Seen", "reprs"), 0);
     });
 }
@@ -1858,12 +1852,22 @@ fn decide_with_fatal(
 
 /// Decide membership of a parsed JSON value, in the mode `is_valid_json` uses.
 fn holds_json(py: Python<'_>, schema: &Schema, json: &JsonValue<'_>) -> bool {
-    walk_json(py, schema, json, WalkMode::Fast).0
+    walk_json(py, schema, json, &[], WalkMode::Fast).0
+}
+
+/// The same decision over a pool of constants and predicates.
+fn holds_json_over(
+    py: Python<'_>,
+    schema: &Schema,
+    json: &JsonValue<'_>,
+    pool: &[Py<PyAny>],
+) -> bool {
+    walk_json(py, schema, json, pool, WalkMode::Fast).0
 }
 
 /// The same decision in explain mode, with the violations it aggregated.
 fn explain_json(py: Python<'_>, schema: &Schema, json: &JsonValue<'_>) -> (bool, Vec<Violation>) {
-    walk_json(py, schema, json, WalkMode::Explain)
+    walk_json(py, schema, json, &[], WalkMode::Explain)
 }
 
 /// Walk a parsed JSON value in `mode`.
@@ -1871,12 +1875,13 @@ fn walk_json(
     py: Python<'_>,
     schema: &Schema,
     json: &JsonValue<'_>,
+    pool: &[Py<PyAny>],
     mode: WalkMode,
 ) -> (bool, Vec<Violation>) {
-    let index = build_index(py, schema, &[], &[]);
+    let index = build_index(py, schema, &[], pool);
     let state = WalkState::new();
     let ctx = Ctx {
-        pool: &[],
+        pool,
         defs: &[],
         records: &index.records,
         attrs: &index.attrs,
@@ -2095,6 +2100,20 @@ fn a_union_explains_the_branch_that_descended_furthest() {
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].location(), "x");
         assert_ne!(violations[0].code, "union_error");
+
+        // Two branches walked, the deeper failure chosen in either order: a
+        // list of integers fails at the element, a list of lists inside it.
+        let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let lists = Schema::list(SeqShape::homogeneous(ints.clone()));
+        let nested = PyList::new(py, [PyList::new(py, ["a"]).expect("a list")])
+            .expect("a list")
+            .into_any();
+        for branches in [vec![ints.clone(), lists.clone()], vec![lists, ints]] {
+            let union = Schema::Union(branches.into());
+            let (ok, violations) = explain(py, &union, &nested, &[], &[]);
+            assert!(!ok);
+            assert_eq!(violations[0].location(), "[0][0]", "{union:?}");
+        }
 
         // No branch makes any progress: a single union error, not two flat
         // mismatches. This is the arm the depth comparison selects between.
@@ -2577,18 +2596,19 @@ fn a_fatal_signal_propagates_from_a_key() {
                 .as_c_str(),
         )
         .expect("the module compiles");
-        let keyed = |class: &str| {
+        let keyed = |class: &str, name: &str| {
             let dict = PyDict::new(py);
             let key = module
                 .getattr(class)
                 .expect("class")
-                .call1(("a",))
+                .call1((name,))
                 .expect("key");
             dict.set_item(key, 1i64).expect("set");
             dict.into_any()
         };
         // A closed record asks the dict for its declared keys; a record beside a
-        // clause scans the entries and resolves each key to a field name.
+        // clause scans the entries and resolves each key to a field name; a
+        // field decided by its own value after a structured one is asked first.
         let closed = Schema::record(vec![field("a", Schema::Int, true)], Openness::Closed);
         let clausal = Schema::keyed_map(
             vec![field("a", Schema::Int, true)],
@@ -2597,10 +2617,17 @@ fn a_fatal_signal_propagates_from_a_key() {
                 value: Schema::Int,
             }],
         );
-        for schema in [&closed, &clausal] {
+        let early = Schema::record(
+            vec![
+                field("a", Schema::list(SeqShape::homogeneous(Schema::Int)), true),
+                field("b", Schema::Int, true),
+            ],
+            Openness::Closed,
+        );
+        for (schema, name) in [(&closed, "a"), (&clausal, "a"), (&early, "b")] {
             for (class, want_fatal) in [("RudeKey", false), ("StoppingKey", true)] {
                 assert_eq!(
-                    decide_with_fatal(py, schema, &keyed(class), &[]),
+                    decide_with_fatal(py, schema, &keyed(class, name), &[]),
                     (false, want_fatal),
                     "{class} against {schema:?}"
                 );
@@ -3996,6 +4023,10 @@ fn a_prefix_is_not_read_against_the_tail_it_precedes() {
 /// A fixpoint is what drives a walk that deep -- the schema depth bound stops a
 /// spelled one long before -- and its branches carry the scalar-tailed list the
 /// shortcut is for.
+// SWEEP-SKIP: this case drives a union of two walked branches to the walk's
+// depth bound, and a union decides such branches before it explains one, so a
+// mutation that makes the deciding walk explain walks every level twice and
+// the case runs without end. It stays in the test lane.
 #[test]
 fn the_two_readings_agree_at_the_walks_depth_bound() {
     Python::attach(|py| {
@@ -6470,5 +6501,481 @@ fn both_walks_stop_at_one_depth_under_a_union_of_literals() {
                 decide(py, &schema, &nested(depth), &pool, &defs);
             }
         }
+    });
+}
+
+/// Each violation's code beside where it sits, for comparing a report.
+fn codes_at(violations: &[Violation]) -> Vec<(&'static str, String)> {
+    violations
+        .iter()
+        .map(|violation| (violation.code, violation.location()))
+        .collect()
+}
+
+/// A module counting the calls to its predicate, under a name of its own.
+fn counting<'py>(py: Python<'py>, name: &str) -> Bound<'py, PyModule> {
+    helpers(
+        py,
+        "calls = 0\n\
+         def count(x):\n\
+         \x20   global calls\n\
+         \x20   calls += 1\n\
+         \x20   return True\n",
+        name,
+    )
+}
+
+/// How many times the counting module's predicate ran.
+fn calls(module: &Bound<'_, PyModule>) -> i64 {
+    module
+        .getattr("calls")
+        .and_then(|calls| calls.extract())
+        .expect("calls")
+}
+
+/// A field decided by its own value and declared after one that is not is
+/// read first, on both input paths, closed or open under a clause that reads
+/// no value: the tag refuses the record before the field beside it runs its
+/// predicate. The report keeps the declared order and names both failures.
+#[test]
+fn a_field_decided_by_its_own_value_is_read_first() {
+    Python::attach(|py| {
+        let module = counting(py, "read_first");
+        let pool: Vec<Py<PyAny>> = vec![
+            module.getattr("count").expect("count").unbind(),
+            PyString::new(py, "x").into_any().unbind(),
+            PyString::new(py, "y").into_any().unbind(),
+        ];
+        let tag = Schema::Union(
+            vec![
+                Schema::Literal(ConstIx::new(1)),
+                Schema::Literal(ConstIx::new(2)),
+            ]
+            .into(),
+        );
+        let record = Schema::record(
+            vec![
+                field("a", checked_by(0), true),
+                field("b", tag.clone(), true),
+            ],
+            Openness::Closed,
+        );
+        let value = eval(py, "{'a': 1, 'b': 'z'}");
+        let document = json_object(vec![
+            ("a", JsonValue::Int(1)),
+            ("b", JsonValue::Str(Cow::Borrowed("z"))),
+        ]);
+        // Closed, open under a `TypedDict`'s clause, and open under the top.
+        let open = |key: Schema| {
+            Schema::keyed_map(
+                vec![
+                    field("a", checked_by(0), true),
+                    field("b", tag.clone(), true),
+                ],
+                vec![MapClause {
+                    key,
+                    value: Schema::ANYTHING,
+                }],
+            )
+        };
+        for record in [record.clone(), open(Schema::Str), open(Schema::ANYTHING)] {
+            assert!(!holds(py, &record, &value, &pool, &[]));
+            assert_eq!(calls(&module), 0, "the tag refused {record:?} first");
+            assert!(!holds_json_over(py, &record, &document, &pool));
+            assert_eq!(calls(&module), 0, "and on the JSON path");
+        }
+        // Absent, a required early field refuses first and an optional one
+        // admits, on both paths.
+        let absent = json_object(vec![("a", JsonValue::Int(1))]);
+        assert!(!holds(py, &record, &eval(py, "{'a': 1}"), &pool, &[]));
+        assert!(!holds_json_over(py, &record, &absent, &pool));
+        assert_eq!(
+            calls(&module),
+            0,
+            "the missing tag refused the record first"
+        );
+        let optional = Schema::record(
+            vec![
+                field("a", checked_by(0), true),
+                field("b", Schema::Literal(ConstIx::new(1)), false),
+            ],
+            Openness::Closed,
+        );
+        assert!(holds(py, &optional, &eval(py, "{'a': 1}"), &pool, &[]));
+        assert!(holds_json_over(py, &optional, &absent, &pool));
+
+        let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let both = Schema::record(
+            vec![
+                field("a", ints, true),
+                field("b", Schema::Literal(ConstIx::new(1)), true),
+            ],
+            Openness::Closed,
+        );
+        let (admitted, report) =
+            explain(py, &both, &eval(py, "{'a': ['x'], 'b': 'y'}"), &pool, &[]);
+        assert!(!admitted);
+        let at: Vec<String> = report.iter().map(Violation::location).collect();
+        assert_eq!(at, ["a[0]", "b"]);
+    });
+}
+
+/// The violations a union of `branches` reports on the value `value` spells,
+/// each as its code and location, asserting the union refuses it.
+fn union_report(
+    py: Python<'_>,
+    branches: Vec<Schema>,
+    value: &str,
+    pool: &[Py<PyAny>],
+) -> Vec<(&'static str, String)> {
+    let union = Schema::Union(branches.into());
+    let (admitted, violations) = explain(py, &union, &eval(py, value), pool, &[]);
+    assert!(!admitted, "{union:?} refuses {value}");
+    codes_at(&violations)
+}
+
+/// Of a union's record branches, the one explained is the one whose deciding
+/// walk got furthest: the most fields admitted, the early ones included, then
+/// a refusal inside a nested value before one at a field.
+#[test]
+fn a_union_explains_the_record_branch_that_got_furthest() {
+    Python::attach(|py| {
+        let pool: Vec<Py<PyAny>> = vec![
+            PyString::new(py, "x").into_any().unbind(),
+            PyString::new(py, "y").into_any().unbind(),
+        ];
+        let record = |fields| Schema::record(fields, Openness::Closed);
+        let x = Schema::Literal(ConstIx::new(0));
+        let y = Schema::Literal(ConstIx::new(1));
+        let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let at = |code: &'static str, location: &str| (code, location.to_owned());
+        // The tag the value carries.
+        let tagged = vec![
+            record(vec![
+                field("t", x.clone(), true),
+                field("z", Schema::Int, true),
+            ]),
+            record(vec![
+                field("t", y.clone(), true),
+                field("u", Schema::Int, true),
+                field("z", Schema::Str, true),
+            ]),
+        ];
+        assert_eq!(
+            union_report(py, tagged, "{'t': 'y', 'z': 1.5, 'u': 1}", &pool),
+            [at("string_type", "z")]
+        );
+        // A tag read before the declared order counts for its branch.
+        let early = vec![
+            record(vec![
+                field("left", ints.clone(), true),
+                field("type", x, true),
+            ]),
+            record(vec![field("left", ints, true), field("type", y, true)]),
+        ];
+        assert_eq!(
+            union_report(py, early, "{'type': 'y'}", &pool),
+            [at("missing_key", "left")]
+        );
+        // A refusal inside a nested value before one at a missing key.
+        let nested = vec![
+            record(vec![field("a", Schema::Int, true)]),
+            record(vec![field(
+                "zz",
+                record(vec![field("b", Schema::Int, true)]),
+                true,
+            )]),
+        ];
+        assert_eq!(
+            union_report(py, nested, "{'zz': {'b': 'x'}}", &pool).first(),
+            Some(&at("int_type", "zz.b"))
+        );
+    });
+}
+
+/// A record read by its entries ranks by the entries it admitted, and a
+/// record branch that is not chosen is not explained at all: its later field
+/// would run the predicate.
+#[test]
+fn a_union_explains_no_record_branch_but_the_chosen_one() {
+    Python::attach(|py| {
+        let module = counting(py, "chosen_alone");
+        let pool: Vec<Py<PyAny>> = vec![
+            module.getattr("count").expect("count").unbind(),
+            PyString::new(py, "x").into_any().unbind(),
+            PyString::new(py, "y").into_any().unbind(),
+        ];
+        let record = |fields| Schema::record(fields, Openness::Closed);
+        let open = Schema::keyed_map(
+            vec![field("a", Schema::Int, true)],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        );
+        let closed = record(vec![
+            field("a", Schema::Int, true),
+            field("b", Schema::Str, true),
+        ]);
+        assert_eq!(
+            union_report(py, vec![open.clone(), closed], "{'a': 1, 'l': 'b'}", &pool).first(),
+            Some(&("int_type", "l".to_owned()))
+        );
+        // A scanned record refused inside a field's value, before one refused
+        // at an entry.
+        let nested = Schema::keyed_map(
+            vec![field(
+                "zz",
+                record(vec![field("b", Schema::Int, true)]),
+                true,
+            )],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        );
+        assert_eq!(
+            union_report(py, vec![open, nested], "{'zz': {'b': 'x'}}", &pool).first(),
+            Some(&("int_type", "zz.b".to_owned()))
+        );
+        let x = Schema::Literal(ConstIx::new(1));
+        let y = Schema::Literal(ConstIx::new(2));
+        let branches = vec![
+            record(vec![field("t", x, true), field("z", checked_by(0), true)]),
+            record(vec![field("t", y, true), field("u", Schema::Str, true)]),
+        ];
+        union_report(py, branches, "{'t': 'y', 'z': 1}", &pool);
+        assert_eq!(
+            calls(&module),
+            0,
+            "the branch refused at its tag ran nothing"
+        );
+    });
+}
+
+/// A field the declared loop refuses is not counted as admitted, though the
+/// pre-pass read it first: a key whose equality answers once is found by the
+/// pre-pass and missed by the declared loop, and its branch ranks by the one
+/// field before it, below a branch that admitted two.
+#[test]
+fn a_field_refused_on_its_second_reading_is_not_admitted() {
+    Python::attach(|py| {
+        let module = helpers(
+            py,
+            "class Once(str):\n\
+             \x20   __hash__ = str.__hash__\n\
+             \x20   def __eq__(self, other):\n\
+             \x20       answered = self.__dict__.get('answered', False)\n\
+             \x20       self.answered = True\n\
+             \x20       return not answered and str.__eq__(self, other)\n",
+            "equal_once",
+        );
+        let pool: Vec<Py<PyAny>> = vec![PyString::new(py, "x").into_any().unbind()];
+        let ints = || Schema::list(SeqShape::homogeneous(Schema::Int));
+        let tagged = Schema::record(
+            vec![
+                field("a", ints(), true),
+                field("t", Schema::Literal(ConstIx::new(0)), true),
+            ],
+            Openness::Closed,
+        );
+        let wider = Schema::record(
+            vec![
+                field("a", ints(), true),
+                field("c", ints(), false),
+                field("z", ints(), true),
+            ],
+            Openness::Closed,
+        );
+        let value = PyDict::new(py);
+        value.set_item("a", vec![1i64]).expect("a");
+        let key = module
+            .getattr("Once")
+            .and_then(|class| class.call1(("t",)))
+            .expect("the key");
+        value.set_item(key, "x").expect("t");
+        let union = Schema::Union(vec![tagged, wider].into());
+        let (admitted, report) = explain(py, &union, value.as_any(), &pool, &[]);
+        assert!(!admitted);
+        assert_eq!(
+            codes_at(&report).first(),
+            Some(&("missing_key", "z".to_owned()))
+        );
+    });
+}
+
+/// A union no branch admits summarizes the value once, in the error that
+/// stands for every branch: a branch refusing the value at the union's own
+/// location -- a scalar kind, a literal, a container kind, a class, a class
+/// met with its attributes -- is decided without a report of its own, so its
+/// mismatch never renders it.
+#[test]
+fn a_refused_union_summarizes_the_value_once() {
+    Python::attach(|py| {
+        let module = helpers(
+            py,
+            "class Seen:\n\
+             \x20   reprs = 0\n\
+             \x20   def __repr__(self):\n\
+             \x20       Seen.reprs += 1\n\
+             \x20       return 'Seen()'\n\
+             class Other:\n\
+             \x20   pass\n\
+             class Point:\n\
+             \x20   x = 0\n",
+            "summarized_once",
+        );
+        let seen = module.getattr("Seen").expect("the class");
+        let pool: Vec<Py<PyAny>> = vec![
+            module.getattr("Other").expect("the class").unbind(),
+            PyInt::new(py, 0i64).into_any().unbind(),
+            module.getattr("Point").expect("the class").unbind(),
+        ];
+        let union = Schema::Union(
+            vec![
+                Schema::Int,
+                Schema::Str,
+                Schema::Literal(ConstIx::new(1)),
+                Schema::list(SeqShape::homogeneous(Schema::Int)),
+                Schema::Instance(ClassIx::new(0)),
+                // A class met with the attributes it declares, a dataclass.
+                Schema::meet([
+                    Schema::Instance(ClassIx::new(2)),
+                    Schema::AttrRecord {
+                        fields: vec![field("x", Schema::Int, true)].into(),
+                    },
+                ]),
+            ]
+            .into(),
+        );
+        let value = seen.call0().expect("an instance");
+        for mode in [WalkMode::Explain, WalkMode::ExplainFailFast] {
+            let before = count_of(&module, "Seen", "reprs");
+            let (admitted, report) = explain_in(py, &union, &value, &pool, &[], mode);
+            assert!(!admitted);
+            assert_eq!(
+                report.iter().map(|v| v.code).collect::<Vec<_>>(),
+                ["union_error"]
+            );
+            assert_eq!(count_of(&module, "Seen", "reprs") - before, 1, "{mode:?}");
+        }
+    });
+}
+
+/// A union with one branch left to walk explains it once: a refused chain of
+/// `checked | list[T]` runs the leaf's predicate once in every mode, where
+/// deciding each level before explaining it ran it once a level.
+#[test]
+fn a_union_explains_a_lone_walked_branch_once() {
+    Python::attach(|py| {
+        let module = helpers(
+            py,
+            "calls = 0\n\
+             def refuse(x):\n\
+             \x20   global calls\n\
+             \x20   calls += 1\n\
+             \x20   return False\n",
+            "explained_once",
+        );
+        let pool: Vec<Py<PyAny>> = vec![module.getattr("refuse").expect("refuse").unbind()];
+        let defs = vec![Schema::Union(
+            vec![
+                checked_by(0),
+                Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+            ]
+            .into(),
+        )];
+        let chain = eval(
+            py,
+            "__import__('functools').reduce(lambda x, _: [x], range(50), 1)",
+        );
+        let schema = Schema::Ref(DefIx::new(0));
+        assert!(!holds(py, &schema, &chain, &pool, &defs));
+        assert_eq!(calls(&module), 1, "the fast walk");
+        for mode in [WalkMode::Explain, WalkMode::ExplainFailFast] {
+            let before = calls(&module);
+            let (admitted, report) = explain_in(py, &schema, &chain, &pool, &defs, mode);
+            assert!(!admitted);
+            // The leaf's union, refused at its own location, at the bottom.
+            assert_eq!(
+                report.first().map(|v| (v.code, v.path.len())),
+                Some(("union_error", 50))
+            );
+            assert_eq!(calls(&module) - before, 1, "{mode:?}");
+        }
+    });
+}
+
+/// A value a union admits builds no report whatever its earlier branches are:
+/// a list, a set, a tuple of another element, a meet and a complement before
+/// the matching branch, each refusing the value only below its kind, which an
+/// explaining walk would summarize.
+#[test]
+fn a_union_decides_every_branch_before_it_explains_one() {
+    Python::attach(|py| {
+        let module = helpers(
+            py,
+            "class Seen:\n\
+             \x20   reprs = 0\n\
+             \x20   def __repr__(self):\n\
+             \x20       Seen.reprs += 1\n\
+             \x20       return 'Seen()'\n",
+            "decides_first",
+        );
+        let seen = module.getattr("Seen").expect("the class");
+        let pool: Vec<Py<PyAny>> = vec![
+            seen.clone().unbind(),
+            PyInt::new(py, 0i64).into_any().unbind(),
+        ];
+        let instance = Schema::Instance(ClassIx::new(0));
+        let of = |element: Schema| Schema::list(SeqShape::homogeneous(element));
+        let cases = [
+            (of(Schema::Int), of(instance.clone()), "[Seen()]"),
+            (
+                Schema::set(Schema::Int),
+                Schema::set(instance.clone()),
+                "{Seen()}",
+            ),
+            (
+                Schema::tuple(SeqShape::homogeneous(Schema::Int)),
+                Schema::tuple(SeqShape::homogeneous(instance.clone())),
+                "(Seen(),)",
+            ),
+            (
+                Schema::Intersection(
+                    vec![
+                        of(Schema::Int),
+                        Schema::Complement(Arc::new(of(Schema::Literal(ConstIx::new(1))))),
+                    ]
+                    .into(),
+                ),
+                of(instance.clone()),
+                "[Seen()]",
+            ),
+            (
+                Schema::Complement(Arc::new(instance.clone())),
+                instance,
+                "Seen()",
+            ),
+        ];
+        let globals = PyDict::new(py);
+        globals.set_item("Seen", &seen).expect("Seen");
+        for (earlier, matching, value) in cases {
+            let union = Schema::Union(vec![earlier, matching].into());
+            let code = std::ffi::CString::new(value).expect("no interior nul");
+            let value = py.eval(&code, Some(&globals), None).expect("the value");
+            for mode in [WalkMode::Explain, WalkMode::ExplainFailFast] {
+                let (admitted, violations) = explain_in(py, &union, &value, &pool, &[], mode);
+                assert!(
+                    admitted && violations.is_empty(),
+                    "{union:?} admits {value}"
+                );
+            }
+        }
+        assert_eq!(
+            count_of(&module, "Seen", "reprs"),
+            0,
+            "no branch summarized a value the union admits"
+        );
     });
 }

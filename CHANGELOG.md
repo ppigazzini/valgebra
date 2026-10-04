@@ -17,8 +17,21 @@ answer of its own, or a repair to a change not yet released.
 - fix: a refutation stands on members that stay apart
 - fix: a literal is its constant at its exact type
 - fix: a walk that stops is not a non-member
+- fix: a union over records does not re-walk
 
 -->
+
+### Changed
+
+- **A union's report names the record branch that admitted the most.** Of a
+  union's record branches, the one explained is the one whose check admitted
+  the most fields before refusing the value -- the fields decided by their own
+  value read first -- then one refused inside a field's nested value, the
+  earliest on a tie, where it was the earliest whose first failure lay
+  deepest. A value tagged for one record of a union is
+  reported against that record rather than against the first one: `{"t": "y",
+  "z": 1.5}` against `{"t": Literal["x"], "z": int} | {"t": Literal["y"], "z":
+  str}` reports `z`, not the tag.
 
 ### Fixed
 
@@ -75,6 +88,24 @@ answer of its own, or a repair to a change not yet released.
   branch takes: a value whose union of literals sat one level past the bound
   was a member to `is_valid` and `in` and refused with `recursion_limit` by
   `validate` and `ensure`. Both refuse it.
+- **A union of records told apart by a tag is linear in the value.** Fields are
+  read sorted by name, so a tag such as `type` beside a recursive `left` was
+  read after the child, and each branch the tag refused walked the whole child
+  first: `is_valid` on a valid value of four such branches took a second at
+  ten levels and did not return at twenty, on the object and the JSON path
+  alike. The check reads a field decided by its own value first.
+- **`validate` on a refused union of records is linear in the value.** Each
+  refused record branch was explained in full, its recursive field included,
+  so the default report on a refused chain of such a union doubled per level:
+  a third of a second at eighteen levels of a three-hundred-byte value. One
+  record branch is explained.
+- **A union runs no `__repr__` of a value it admits.** A branch before the one
+  that matched was explained -- a named tuple, a list, a set, a tuple, a meet
+  or a complement -- and explaining it rendered the value: a `__repr__` that
+  raised `MemoryError` made `validate` raise for a member, and a 20,000-element
+  member of `list[int] | list[Slow]` ran 20,000 of them. 0.0.16 settled this
+  for record and class branches; the union is decided before any branch is
+  explained.
 
 ## [0.0.16] - 2026-10-04
 

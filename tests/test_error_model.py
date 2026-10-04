@@ -2,12 +2,12 @@ import copy
 import dataclasses
 import json
 import pickle
-from typing import Annotated, Literal, TypedDict
+from typing import Annotated, Literal, NamedTuple, TypedDict
 
 import annotated_types as at
 import pytest
 
-from valgebra import ValidationError, Validator, union
+from valgebra import ValidationError, Validator, complement, intersection, union
 
 
 def test_error_carries_scalar_attributes() -> None:
@@ -169,9 +169,10 @@ def test_a_value_a_union_admits_is_never_summarized() -> None:
     `validate` explained a union by walking each branch in explaining mode, and
     a branch refusing the value summarized it -- running the value's
     `__repr__`, or a field's, once for each branch before the one that matched.
-    A repr that raised `MemoryError` made `validate` raise for a member. A
-    branch refusing by its kind or its class is decided without a report, and
-    a record branch is explained only where no branch admits the value.
+    A repr that raised `MemoryError` made `validate` raise for a member. The
+    union is decided before any branch is explained, whatever the branch's
+    kind: a named tuple, a meet, a complement, a list, a set or a tuple before
+    the matching branch read the repr as a record or a class once did.
     """
     reprs = []
 
@@ -197,6 +198,9 @@ def test_a_value_a_union_admits_is_never_summarized() -> None:
     class Holds(TypedDict):
         a: Seen
 
+    class Pair(NamedTuple):
+        a: int
+
     for schema, value in [
         (int | Seen, Seen()),
         (list[int | Seen], [Seen(), Seen()]),
@@ -212,6 +216,14 @@ def test_a_value_a_union_admits_is_never_summarized() -> None:
         (list[Counts | Holds], [{"a": Seen()}, {"a": 1}]),
         (dict[str, int] | dict[str, Seen], {"k": Seen()}),
         (union({"a": int}, {"a": Unrepresentable}), {"a": Unrepresentable()}),
+        (Pair | Seen, Seen()),
+        (Pair | Unrepresentable, Unrepresentable()),
+        (union(intersection(int, complement(Literal[0])), Seen), Seen()),
+        (union(complement(Seen), Seen), Seen()),
+        (list[int] | list[Seen], [Seen()]),
+        (set[int] | set[Seen], {Seen()}),
+        (tuple[int] | tuple[Seen], (Seen(),)),
+        (list[int] | list[Unrepresentable], [Unrepresentable()]),
     ]:
         compiled = Validator(schema)
         compiled.validate(value)

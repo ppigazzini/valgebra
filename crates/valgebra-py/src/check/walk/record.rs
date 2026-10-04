@@ -25,7 +25,7 @@ use super::{
     record_stop, stop,
 };
 use crate::check::ctx::Ctx;
-use crate::check::index::RecordPlan;
+use crate::check::index::{RecordPlan, decided_by_its_value};
 use crate::check::violation::{at_key, key_segment, located, summarize_value, type_mismatch};
 use crate::codes::{
     DICT_TYPE, EXTRA_FORBIDDEN, MISSING_ATTRIBUTE, MISSING_KEY, MUTATED_DURING_VALIDATION,
@@ -219,6 +219,15 @@ fn stored_copy<'py>(dict: &Bound<'py, PyDict>, ctx: Ctx<'_>) -> Option<Bound<'py
 pub(super) struct Decided {
     /// The dict's entry count when the deciding walk read it.
     entries: usize,
+    /// How many fields the deciding walk admitted before it refused, in the
+    /// order it read them, or how many entries where it scanned the dict: what
+    /// a union reads to choose the record branch it explains.
+    admitted: usize,
+    /// Whether the refusal lay inside the value of a field that is not decided
+    /// by its own value -- a record, a sequence, a reference -- rather than at
+    /// a field: the walk went below the record there, as far as the union's
+    /// choice can tell without explaining it.
+    inside: bool,
     /// Where the explaining walk may resume, and what the deciding walk had
     /// counted by then. `None` when no by-keys reading ran.
     resume: Option<Resume>,
@@ -237,6 +246,13 @@ struct Resume {
 }
 
 impl Decided {
+    /// How far the deciding walk got before it refused: the fields or entries
+    /// it admitted, then whether it refused inside a structured field's value.
+    /// A union explains the record branch that got furthest.
+    pub(super) fn progress(&self) -> (usize, bool) {
+        (self.admitted, self.inside)
+    }
+
     /// Where to start, and with what count, in a value still holding `entries`
     /// keys.
     fn resume_at(&self, entries: usize) -> (usize, usize) {
@@ -440,23 +456,54 @@ fn keyed_map_asks_for_its_keys(
     let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
     with_critical_section(dict.as_any(), || {
         let entries = dict.len();
-        // Where the explaining walk would resume if this one refuses, kept as it
-        // goes so that refusing costs nothing extra to record.
-        let stopped = |position: usize, present: usize| {
+        // Where the explaining walk would resume if this one refuses, and how
+        // far this one got, kept as it goes so that refusing costs nothing
+        // extra to record.
+        let stopped = |admitted: usize, position: usize, present: usize, inside: bool| {
             if let Some(keep) = decided {
                 keep.entries = entries;
+                keep.admitted = admitted;
+                keep.inside = inside;
                 keep.resume = Some(Resume { position, present });
             }
         };
-        let mut present = 0usize;
         let room = ctx.room_to_descend();
+        // A field decided by its own value and declared after one that is not
+        // -- a tag beside a recursive child -- is read first, so a branch the
+        // tag refuses walks nothing below it ([`RecordPlan::early`]). A refusal
+        // here read no declared prefix, and the explaining walk starts at the
+        // first field.
+        for (passed, &position) in plan.early.iter().enumerate() {
+            let field = fields.get(position)?;
+            let key = plan.keys.get(position)?.bind(dict.py());
+            let refused = match dict.get_item(key) {
+                Ok(Some(value)) => !field_holds(&field.schema, &Value::Py(&value), room, &mut sub),
+                Ok(None) => field.required,
+                Err(err) if is_fatal(&err, dict.py()) => {
+                    record_fatal(err, ctx);
+                    return Some(false);
+                }
+                Err(_) => return None,
+            };
+            if refused {
+                stopped(passed, 0, 0, false);
+                return Some(false);
+            }
+        }
+        // How far a refusal at `position` got: the declared fields before it,
+        // and the early ones after it, which were read first.
+        let admitted = |position: usize| {
+            position + plan.early.iter().filter(|&&early| early > position).count()
+        };
+        let mut present = 0usize;
         for (position, field) in fields.iter().enumerate() {
             let key = plan.keys.get(position)?.bind(dict.py());
             match dict.get_item(key) {
                 Ok(Some(value)) => {
                     present += 1;
                     if !field_holds(&field.schema, &Value::Py(&value), room, &mut sub) {
-                        stopped(position, present - 1);
+                        let inside = !decided_by_its_value(&field.schema);
+                        stopped(admitted(position), position, present - 1, inside);
                         return Some(false);
                     }
                 }
@@ -464,7 +511,7 @@ fn keyed_map_asks_for_its_keys(
                 // the field is optional.
                 Ok(None) if !field.required => {}
                 Ok(None) => {
-                    stopped(position, present);
+                    stopped(admitted(position), position, present, false);
                     return Some(false);
                 }
                 // A failed probe is not an answer -- an unhashable key cannot be
@@ -478,7 +525,7 @@ fn keyed_map_asks_for_its_keys(
                 Err(_) => return None,
             }
         }
-        stopped(fields.len(), present);
+        stopped(fields.len(), fields.len(), present, false);
         if dict.len() != entries {
             // The value changed while it was being read, so there is no reading
             // to answer from: not a member, exactly as the scan answers it, and
@@ -539,15 +586,22 @@ fn keyed_map_matches_py(
     let Some(ref dict) = stored(dict, ctx) else {
         return false;
     };
+    let mut decided = decided;
     if let Some(plan) = ctx.records.get(&(fields.as_ptr() as usize)) {
         if let Some(answered) =
-            keyed_map_asks_for_its_keys(fields, defaults, dict, ctx, plan, decided)
+            keyed_map_asks_for_its_keys(fields, defaults, dict, ctx, plan, decided.as_deref_mut())
         {
             return answered;
         }
-        keyed_map_scan(fields, defaults, dict, ctx, plan.required, |name| {
-            plan.by_name.get(name).copied()
-        })
+        keyed_map_scan(
+            fields,
+            defaults,
+            dict,
+            ctx,
+            plan.required,
+            decided,
+            |name| plan.by_name.get(name).copied(),
+        )
     } else {
         let declared: FxHashMap<&str, usize> = fields
             .iter()
@@ -555,7 +609,7 @@ fn keyed_map_matches_py(
             .map(|(i, f)| (&*f.name, i))
             .collect();
         let required = fields.iter().filter(|f| f.required).count();
-        keyed_map_scan(fields, defaults, dict, ctx, required, |name| {
+        keyed_map_scan(fields, defaults, dict, ctx, required, decided, |name| {
             declared.get(name).copied()
         })
     }
@@ -565,13 +619,16 @@ fn keyed_map_matches_py(
 /// declared-field index through `lookup` (a precomputed plan or a freshly built
 /// map). A key that resolves checks its value against that field; any other key
 /// must be covered by a default clause. The record matches iff every entry
-/// matches and every required field was seen.
+/// matches and every required field was seen. How many entries it admitted is
+/// kept in `decided`, where a union asks, as the by-keys reading keeps how many
+/// fields it admitted.
 fn keyed_map_scan(
     fields: &[Field],
     defaults: &[MapClause],
     dict: &Bound<'_, PyDict>,
     ctx: Ctx<'_>,
     mut required_remaining: usize,
+    decided: Option<&mut Decided>,
     lookup: impl Fn(&str) -> Option<usize>,
 ) -> bool {
     // Scratch buffers for the whole record, not one pair per field: a fast walk
@@ -580,6 +637,8 @@ fn keyed_map_scan(
     let mut unwritten = Unwritten::default();
     let mut sub = unwritten.frame(ctx);
     let room = ctx.room_to_descend();
+    let mut admitted = 0usize;
+    let mut inside = false;
     let scan = scan_dict(dict, |key, val| {
         // A non-string key, or a string carrying a lone surrogate (which cannot
         // equal a field name, since names are valid UTF-8 by build-time check),
@@ -595,6 +654,7 @@ fn keyed_map_scan(
         match index.and_then(|i| fields.get(i)) {
             Some(field) => {
                 if !field_holds(&field.schema, &Value::Py(val), room, &mut sub) {
+                    inside = !decided_by_its_value(&field.schema);
                     return ControlFlow::Break(());
                 }
                 if field.required {
@@ -610,8 +670,13 @@ fn keyed_map_scan(
                 }
             }
         }
+        admitted += 1;
         ControlFlow::Continue(())
     });
+    if let Some(keep) = decided {
+        keep.admitted = admitted;
+        keep.inside = inside;
+    }
     read_whole(&scan, ctx) && required_remaining == 0
 }
 
@@ -688,6 +753,21 @@ pub(super) fn keyed_map_matches_json(
                 // A closed record has no clause to cover an undeclared key; an
                 // open one's top clause covers it by definition.
                 None if !open => return false,
+                None => {}
+            }
+        }
+        // The early fields first, as the object path reads them.
+        for &position in &plan.early {
+            let (Some(field), Some(value)) = (fields.get(position), found.get(position)) else {
+                return false;
+            };
+            match value {
+                Some(value) => {
+                    if !field_holds(&field.schema, &Value::Json(py, value), room, &mut sub) {
+                        return false;
+                    }
+                }
+                None if field.required => return false,
                 None => {}
             }
         }

@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 import textwrap
+from typing import Literal
 
 import pytest
 
@@ -14,6 +15,20 @@ def test_record_aggregates_every_field_failure() -> None:
         schema.validate({"a": "x", "b": 1, "c": "y"})
     codes = [item["code"] for item in info.value.errors]
     assert codes == ["int_type", "string_type", "int_type"]
+
+
+def test_a_record_read_tag_first_still_reports_every_field() -> None:
+    """A field decided by its own value is read first, and the report is whole.
+
+    The deciding walk reads `b`, a literal, before `a`, a list, so it refuses
+    the record before it reaches `a`. The explaining walk resumes where the
+    deciding walk stopped only where everything before that point was read;
+    here `a` was not, and its failure is reported beside `b`'s.
+    """
+    schema = Validator({"a": list[int], "b": Literal["x"]})
+    with pytest.raises(ValidationError) as info:
+        schema.validate({"a": ["x"], "b": "y"})
+    assert [item["path"] for item in info.value.errors] == [("a", 0), ("b",)]
 
 
 def test_sequence_aggregates_every_element_failure() -> None:

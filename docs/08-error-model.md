@@ -168,6 +168,33 @@ When no branch makes any progress past the union's own location — for example
 is no closer branch, so a single `union_error` is the honest report. A
 `complement` likewise reports one failure at its location.
 
+Of several **record** branches, one is explained: the one that admitted the most
+of the value before refusing it — the most fields, read with the fields decided
+by their own value first, or the most entries where a record is read by its
+entries — then one refused inside a field's nested value before one refused at
+a field, the earliest on a tie. So a value tagged for one record of a union is
+reported against that record:
+
+```python
+from typing import Literal
+
+from valgebra import ValidationError, union
+
+shapes = union(
+    {"kind": Literal["circle"], "r": float},
+    {"kind": Literal["square"], "side": float},
+)
+try:
+    shapes.validate({"kind": "square", "side": "two"})
+except ValidationError as err:
+    assert err.errors[0]["path"] == ("side",)
+    assert err.errors[0]["code"] == "float_type"
+```
+
+A value the union admits builds no report at all: the union is decided before
+any branch is explained, so explaining a branch never runs the `__repr__` of a
+value another branch admits.
+
 Under `fail_fast` each branch is walked to its first failure and no further,
 since that is all the choice reads, so refusing a union costs a fail-fast walk
 of each branch rather than the size of the value. Without it every branch is

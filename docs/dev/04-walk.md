@@ -141,6 +141,23 @@ its walk records -- with a tie keeping the earliest branch so the choice is
 deterministic. When no branch makes progress — every branch a flat type mismatch
 — it falls back to one union error.
 
+**The union is decided before it is explained.** `explain_union` decides every
+branch before it explains any (`refused_branches`) -- a record branch by its own
+deciding pass, which keeps where it stopped, and any other on the fast path --
+and a value one of them admits returns with no branch explained. A fatal signal
+a branch raises while they are decided unwinds the walk before any is
+explained. Explaining a branch renders the
+value, which runs its `__repr__`, so a member whose matching branch came after a
+list, a set, a tuple, a meet, a complement or a named tuple ran it, and a repr
+raising `MemoryError` made `validate` raise for a member. What it costs a
+refused value is one fast walk of each branch that is not a record, beside the
+explaining one; a record branch's deciding pass is the one it always had. Each
+branch is asked what it answers without a walk first, and where one branch is
+left to walk, deciding it first protects no other branch, so it is explained
+once: a union over a recursive branch, `int | list[T]`, otherwise walked the
+levels below every level it explained, and a refused chain cost the square of
+its depth (`a_union_explains_a_lone_walked_branch_once`).
+
 **A branch the walk could not answer for keeps its own report.** A branch whose
 first failure says the *walk* stopped -- `recursion_limit`, `recursion_loop`,
 `mutated_during_validation` or `predicate_error`, the codes `walk_declined`
@@ -155,11 +172,9 @@ the branches it read, or the summary.
 literal, and any branch whose kind refuses the value before its constraints or
 contents are read fail at the union's own location with a mismatch, and such a
 failure reaches a report only as the union's label. `decided_quietly` settles
-those branches without explaining them, so a value the union admits builds no
-violation and its `__repr__` never runs: explaining the `int` branch of
-`int | Foo` would summarize a `Foo` the next branch admits, and a repr that
-raised a fatal signal would make `validate` raise for a member. It holds each
-level the branch's own walk would enter, so at the depth bound the branch is
+those branches without explaining them, so a refused value builds no violation
+for them and runs no `__repr__` the report would discard. It holds each level
+the branch's own walk would enter, so at the depth bound the branch is
 explained and reports the bound, which a report does read.
 
 A class is such a branch: its walk is one `isinstance`, which `decided_quietly`
@@ -170,18 +185,37 @@ The meet's walk asks the class again where it admits, and `isinstance` against
 a class `type` made reads nothing of a value it admits, where another
 metaclass's `__instancecheck__` is code that would then run twice.
 
-**A record branch is explained only once the union is refused.** A record's
-walk is two passes already, one that decides and one that explains, resuming
-where the first stopped, and its failure lies inside the value, where a report
-does read it. `explain_union` asks each record branch's deciding pass in branch
-order beside the other branches, and the explaining passes, in branch order,
-only once no branch has admitted the value. A value the union admits builds no
-report for a record branch before the one that matched, and a value it refuses
-gets the report each branch explained in turn would give: the choice reads the
-same branch reports in the same order. A fatal signal a later branch raises
-stops every explaining pass that waits for it, as it stops every later walk.
+**One record branch is explained.** A record's walk is two passes already, one
+that decides and one that explains, resuming where the first stopped, and its
+failure lies inside the value, where a report does read it. `explain_union`
+asks each record branch's deciding pass beside the other branches, and explains
+one of them: the one whose deciding pass admitted the most before refusing --
+fields, in the order the plan reads them, or entries where the record is read
+by scanning its entries -- then one that refused inside a structured field's
+value before one that refused at a field, the earliest on a tie
+(`chosen_record`, `Decided::progress`). Explaining
+each walked every field of every branch, a branch refused at its tag walking
+its recursive child all the same, so a refused chain of a union of records
+doubled per level. The chosen branch's report then stands beside the other
+branches' by the progress rule above. A fatal signal raised while one branch is
+explained stops the explaining of the rest, as it stops every later walk.
 `a_refused_union_reports_what_its_chosen_branch_reports_alone` in
-`check/walk/interpreter.rs` holds the report to the chosen branch's own.
+`check/walk/interpreter.rs` holds the report to the chosen branch's own, and
+`a_union_explains_the_record_branch_that_got_furthest` the choice.
+
+**A record's deciding pass reads its tag first.** Fields are stored sorted by
+name, so a tag such as `type` beside a recursive `left` was read after the
+child, and a union of records told apart by the tag walked the whole child in
+every branch the tag refused: branches to the power of the depth. The record
+plan lists the fields decided by their own value (a scalar, a literal, a union
+of them) that are declared after one that is not (`RecordPlan::early`), and the
+deciding pass reads those first, on both input paths, before the declared loop
+it always ran. The list is empty for most records, which then pay nothing; a
+record with one reads each early field twice. A refusal among the early fields
+read no declared prefix, so the explaining pass starts at the first field; a
+refusal in the declared loop resumes where it stopped, as before, and the
+report keeps the declared order. How far a refusal got counts the early fields
+it had read.
 
 **Each branch is walked in the caller's mode.** The choice reads the first
 failure only, which a walk stopped there has measured, so under fail-fast a

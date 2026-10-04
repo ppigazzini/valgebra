@@ -35,6 +35,47 @@ pub(crate) struct RecordPlan {
     /// a percent. Interning costs a hash and a probe of the interpreter's own
     /// table, once per field per validator.
     pub(crate) keys: Vec<Py<PyString>>,
+    /// The fields the deciding walk reads before the declared order: each one
+    /// decided by its own value and declared after one that is not, in
+    /// declared order.
+    ///
+    /// Fields are stored sorted by name, so a tag such as `type` beside a
+    /// recursive `left` is read after the child, and a union of records told
+    /// apart by the tag walked the whole child in every branch it refused:
+    /// branches to the power of the depth. Read first, a tag refuses a wrong
+    /// branch in one comparison whatever it is called. Empty for every record
+    /// whose declared order already reads them first, which is most of them,
+    /// and then the deciding walk is the declared loop alone.
+    pub(crate) early: Box<[usize]>,
+}
+
+/// Whether a field is decided by its own value, without a walk below it: a
+/// scalar kind, a literal, or a union of them.
+pub(crate) fn decided_by_its_value(schema: &Schema) -> bool {
+    match schema {
+        Schema::NoneType
+        | Schema::Bool
+        | Schema::Int
+        | Schema::Float
+        | Schema::Str
+        | Schema::Bytes
+        | Schema::Literal(_) => true,
+        Schema::Union(members) => members.iter().all(decided_by_its_value),
+        _ => false,
+    }
+}
+
+/// The fields a record's deciding walk reads first ([`RecordPlan::early`]).
+fn early_fields(fields: &[valgebra_core::Field]) -> Box<[usize]> {
+    let decided = |at: &usize| {
+        fields
+            .get(*at)
+            .is_some_and(|f| decided_by_its_value(&f.schema))
+    };
+    (0..fields.len())
+        .skip_while(decided)
+        .filter(decided)
+        .collect()
 }
 
 /// The interned attribute names of one [`Schema::AttrRecord`] node, in field
@@ -214,6 +255,7 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
                             .iter()
                             .map(|f| PyString::intern(py, &f.name).unbind())
                             .collect(),
+                        early: early_fields(fields),
                     });
             }
             for f in fields.iter() {

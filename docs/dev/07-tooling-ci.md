@@ -667,7 +667,8 @@ export PROPTEST_MAX_SHRINK_TIME=1000
 export PROPTEST_RNG_SEED="${PROPTEST_RNG_SEED:-$RANDOM}"
 cargo mutants --package valgebra-py --file <the files the change touches> \
   --features interpreter-tests -j 4 --timeout-multiplier 20 \
-  --output sweep -- -- --skip recursion_deeper_than_the_bound_is_refused
+  --output sweep -- -- --skip recursion_deeper_than_the_bound_is_refused \
+  --skip the_two_readings_agree_at_the_walks_depth_bound
 python scripts/mutation_gate.py --baseline walk --new-only --out sweep/mutants.out
 ```
 
@@ -690,7 +691,9 @@ it, in the baseline beside it.
 
 **Read a mutation score with its skip list.** A test that exists to prove a
 bound runs past any timeout the sweep sets under a mutation that removes the
-bound, so the whole run returns no verdict. Each such test leaves the *sweep*
+bound, so the whole run returns no verdict; so does one that walks a union of
+two walked branches to the depth bound, under a mutation that makes the union's
+deciding walk explain. Each such test leaves the *sweep*
 and stays in the test lane, marked `SWEEP-SKIP` in its own source with the
 reason; `tests/test_sweep_skips.py` owns the list and holds the marks and the
 workflow's skip list to each other in both directions. A mutant whose

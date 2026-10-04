@@ -1290,7 +1290,8 @@ jobs:
             --features interpreter-tests -j 2 --timeout-multiplier 20 \
             --shard "${{ matrix.shard }}/3" \
             --output walk-diff-mutants \
-            -- -- --skip recursion_deeper_than_the_bound_is_refused
+            -- -- --skip recursion_deeper_than_the_bound_is_refused \
+            --skip the_two_readings_agree_at_the_walks_depth_bound
           status=$?
           set -e
           case "$status" in
@@ -1909,7 +1910,10 @@ jobs:
       # finish is a rig fault; skipping the one case that makes them unbounded
       # buys a judged verdict for every mutant, at the cost of the two
       # depth-bound survivors only that case can kill. Both are recorded in the
-      # baseline with this reason.
+      # baseline with this reason. The two-readings case leaves it for the same
+      # reason: it walks a union of two walked branches to the depth bound, and
+      # a mutation that makes the union's deciding walk explain walks every level
+      # twice. Every mutant it would hang on, the rest of the suite catches.
       - name: Sweep the membership walk
         run: |
           uv sync --locked --no-install-project
@@ -1939,7 +1943,8 @@ jobs:
             --file crates/valgebra-py/src/codes.rs \
             --features interpreter-tests -j 4 --timeout-multiplier 20 \
             --output walk-mutants \
-            -- -- --skip recursion_deeper_than_the_bound_is_refused
+            -- -- --skip recursion_deeper_than_the_bound_is_refused \
+            --skip the_two_readings_agree_at_the_walks_depth_bound
           status=$?
           set -e
           # Same exit-code policy as the core sweep: missed mutants and timeouts

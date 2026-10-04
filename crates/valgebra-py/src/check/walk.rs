@@ -31,6 +31,7 @@
 //! [`member`] call returns at once) and the entry point re-raises it, so an
 //! interrupted check stops instead of being silently reported as a non-member.
 
+use std::cmp::Reverse;
 use std::mem::ManuallyDrop;
 
 use pyo3::intern;
@@ -826,15 +827,15 @@ fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, 
 /// matched, and it reports what failed if it did not. Asking once makes the
 /// recursion linear, and keeps the walk a second question would throw away.
 ///
+/// A value the union admits is answered before any of that: every branch is
+/// decided before any is explained, so a member builds no report and runs no
+/// `__repr__`.
+///
 /// A record is the exception, because its walk is two passes already: one
 /// that decides and one that explains, resuming where the first stopped
-/// ([`Decided`]). The union asks each record branch's deciding pass in branch
-/// order with the other branches, and the explaining passes only once no
-/// branch has admitted the value. A value the union admits builds no report
-/// for a record branch before the one that matched, so no `__repr__` of the
-/// value or of its fields runs for one. A value it refuses has each record
-/// branch read by both passes, as a record walked alone is, and the report
-/// chooses among the same branch reports in the same order.
+/// ([`Decided`]). The union asks each record branch's deciding pass with the
+/// other branches and explains one of them, [`chosen_record`]: explaining each
+/// walked the levels below once per branch.
 fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
     // The *closest* branch -- the one that descended furthest into the value
@@ -850,48 +851,15 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
     // same branch, so the one failure fail-fast keeps is the one the full report
     // leads with. This runs only where a value is being explained.
     let base_depth = frame.path.len();
-    // The branches a report chooses among, in branch order: a record branch
-    // waits here for its explaining pass, and every other branch is explained
-    // as it is decided.
-    let mut refused: Vec<Refused<'_>> = Vec::new();
-    for (position, branch_schema) in members.iter().enumerate() {
-        if position >= CLOSEST_BRANCH_PROBE_LIMIT {
-            // Past the probe's width the branch is asked the cheap question
-            // only: a union this wide reports the closest of the branches
-            // already walked, and the rest merely decide membership.
-            if member(branch_schema, value, &mut Unwritten::default().frame(ctx)) {
-                return true;
-            }
-            continue;
-        }
-        match decided_quietly(branch_schema, value, ctx) {
-            Some(true) => return true,
-            Some(false) => continue,
-            None => {}
-        }
-        // The level `member` would open for the record, held for its deciding
-        // pass alone; where none is free the record is walked whole, and
-        // reports the bound.
-        if let Schema::KeyedMap { fields, defaults } = branch_schema
-            && let Some(_level) = ctx.descend()
-        {
-            let mut decided = Decided::default();
-            if keyed_map_matches(fields, defaults, value, ctx, Some(&mut decided)) {
-                return true;
-            }
-            refused.push(Refused::Record(fields, defaults, decided));
-            continue;
-        }
-        let mut branch = Vec::new();
-        let matched = {
-            let mut probing = Frame::new(&mut *frame.path, &mut branch, ctx);
-            member(branch_schema, value, &mut probing)
-        };
-        if matched {
-            return true;
-        }
-        refused.push(Refused::Explained(branch));
+    let Some(refused) = refused_branches(members, value, ctx) else {
+        return true;
+    };
+    // A fatal signal a branch raised while it was decided unwinds the walk
+    // before any branch is explained.
+    if ctx.signals.fatal_seen.get() {
+        return false;
     }
+    let chosen = chosen_record(&refused);
     let mut best: Option<(usize, Vec<Violation>)> = None;
     // The first branch the walk could not answer for, kept aside. A branch that
     // ran out of levels, found the value inside itself, or raised inside a
@@ -899,9 +867,22 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
     // walk stopped -- and its failure sits at the union's own location, so the
     // progress rule below would fold it into a summary and drop the reason.
     let mut declined: Option<Vec<Violation>> = None;
-    for walked in refused {
+    for (at, walked) in refused.into_iter().enumerate() {
         let branch = match walked {
-            Refused::Explained(branch) => branch,
+            Refused::Pending(branch_schema) => {
+                let mut branch = Vec::new();
+                let matched = {
+                    let mut probing = Frame::new(&mut *frame.path, &mut branch, ctx);
+                    member(branch_schema, value, &mut probing)
+                };
+                // The branch left alone admits the value, or the value moved
+                // between the two walks and the second admits it.
+                if matched {
+                    return true;
+                }
+                branch
+            }
+            Refused::Record(..) if Some(at) != chosen => continue,
             Refused::Record(fields, defaults, decided) => {
                 let mut branch = Vec::new();
                 let mut explaining = Frame::new(&mut *frame.path, &mut branch, ctx);
@@ -960,10 +941,105 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
     false
 }
 
+/// The branches of a union that refuse `value`, in branch order, for a report
+/// to choose among, or `None` where one admits it.
+///
+/// Every branch is decided before any is explained, so a value the union
+/// admits builds no report: explaining a branch renders the value, which runs
+/// its `__repr__`, and a member whose matching branch came after a list, a
+/// meet or a named tuple ran it -- and raised for a member where that
+/// `__repr__` raised. Each branch is asked first what it answers without a
+/// walk ([`decided_quietly`]). A branch left unanswered is walked: a record by
+/// its own deciding pass, which keeps where it stopped, any other on the fast
+/// path -- except where it is the only one, which deciding first protects no
+/// other branch from. That one is explained once, as the branch it is: a
+/// union over a recursive branch, `int | list[T]`, walked the levels below it
+/// twice for every level it explained, so a refused chain cost the square of
+/// its depth.
+fn refused_branches<'s>(
+    members: &'s [Schema],
+    value: &Value<'_, '_>,
+    ctx: Ctx<'_>,
+) -> Option<Vec<Refused<'s>>> {
+    const _: () = assert!(CLOSEST_BRANCH_PROBE_LIMIT <= u64::BITS as usize);
+    let probed = members.get(..CLOSEST_BRANCH_PROBE_LIMIT).unwrap_or(members);
+    // The probed branches a walk decides, one bit each.
+    let mut walked = 0u64;
+    for (position, branch_schema) in probed.iter().enumerate() {
+        match decided_quietly(branch_schema, value, ctx) {
+            Some(true) => return None,
+            Some(false) => {}
+            None => walked |= 1 << position,
+        }
+    }
+    // One bit: one branch a walk decides, and none past the probe.
+    if walked.is_power_of_two()
+        && probed.len() == members.len()
+        && let Some(alone) = probed.get(walked.trailing_zeros() as usize)
+    {
+        return Some(vec![Refused::Pending(alone)]);
+    }
+    let mut refused = Vec::new();
+    for (position, branch_schema) in members.iter().enumerate() {
+        if position >= CLOSEST_BRANCH_PROBE_LIMIT {
+            // Past the probe's width the branch is asked the cheap question
+            // only: a union this wide reports the closest of the branches
+            // already walked, and the rest merely decide membership.
+            if member(branch_schema, value, &mut Unwritten::default().frame(ctx)) {
+                return None;
+            }
+            continue;
+        }
+        if walked & (1 << position) == 0 {
+            continue;
+        }
+        // The level `member` would open for the record, held for its deciding
+        // pass alone; where none is free the record is walked whole, and
+        // reports the bound.
+        if let Schema::KeyedMap { fields, defaults } = branch_schema
+            && let Some(_level) = ctx.descend()
+        {
+            let mut decided = Decided::default();
+            if keyed_map_matches(fields, defaults, value, ctx, Some(&mut decided)) {
+                return None;
+            }
+            refused.push(Refused::Record(fields, defaults, decided));
+            continue;
+        }
+        if member(branch_schema, value, &mut Unwritten::default().frame(ctx)) {
+            return None;
+        }
+        refused.push(Refused::Pending(branch_schema));
+    }
+    Some(refused)
+}
+
+/// Which of a union's refused record branches is explained, as its position
+/// among `refused`: the one whose deciding walk got furthest -- the most
+/// fields admitted, then a refusal inside a structured field's value before
+/// one at a field itself -- the earliest on a tie ([`Decided::progress`]).
+///
+/// One is explained. Explaining each walked every field of every branch -- a
+/// branch refused at its tag walked its recursive child all the same -- so a
+/// union of records explained the levels below it once per branch, and a
+/// refused chain of them doubled per level.
+fn chosen_record(refused: &[Refused<'_>]) -> Option<usize> {
+    refused
+        .iter()
+        .enumerate()
+        .filter_map(|(at, walked)| match walked {
+            Refused::Record(_, _, decided) => Some((decided.progress(), Reverse(at))),
+            Refused::Pending(_) => None,
+        })
+        .max()
+        .map(|(_, Reverse(at))| at)
+}
+
 /// A union branch that did not admit the value, as the report reads it.
 enum Refused<'s> {
-    /// Walked in the caller's mode, with what it reported.
-    Explained(Vec<Violation>),
+    /// Decided on the fast path, to be walked in the caller's mode for what it
+    /// reports -- or the one branch a walk decides, which that walk decides.
+    Pending(&'s Schema),
     /// A record whose deciding pass refused the value, with where that pass
     /// stopped: explained once the union is refused.
     Record(&'s [Field], &'s [MapClause], Decided),
