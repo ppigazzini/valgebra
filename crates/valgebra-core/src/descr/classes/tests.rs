@@ -238,3 +238,26 @@ fn a_class_read_from_its_identity_alone_leaves_every_attribute_free() {
     assert_eq!(closed.reach("x"), Reach::Missing);
     assert_eq!(closed, Class::plain(1), "identity is the id alone");
 }
+
+/// Each kind's exact class is a class of its own, none of them the id a
+/// caller numbering its classes saturates at, and each is disjoint from a
+/// subclass of its builtin as the bindings snapshot one.
+#[test]
+fn each_kind_has_an_exact_class_of_its_own() {
+    use super::Reach;
+    use crate::kind::Kind;
+
+    for (at, kind) in Kind::ALL.iter().enumerate() {
+        let exact = Class::exact(*kind);
+        assert_eq!(exact.kind(), Some(*kind));
+        assert_ne!(exact, Class::plain(u32::MAX), "{kind:?}");
+        for other in Kind::ALL.iter().skip(at + 1) {
+            assert_ne!(exact, Class::exact(*other), "{kind:?} and {other:?}");
+        }
+        assert_eq!(exact.reach("real"), Reach::Unread);
+    }
+    let builtin = Class::plain(10);
+    let subclass = Class::new(11, Some(10), std::slice::from_ref(&builtin));
+    assert!(Class::exact(Kind::Int).disjoint_from(&subclass));
+    assert!(subclass.disjoint_from(&Class::exact(Kind::Int)));
+}

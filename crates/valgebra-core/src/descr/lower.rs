@@ -466,6 +466,12 @@ fn key_cover(key: &Schema, pool: &dyn Constants) -> Option<(Vec<Label>, Vec<Opti
 }
 
 /// The constant a pooled operand is, where a map atom could name it as a key.
+///
+/// A label is a key's value and not its type: the label `"a"` is every `str`
+/// key equal to `"a"`, a subclass's included, which is the key a record's field
+/// names, since the walk looks the name up. A literal key is the exact type
+/// alone, so reading one as a label reads it wider; [`an_empty_reading_stands`] says
+/// where that costs a proof.
 fn label_of(operand: &Operand) -> Option<Label> {
     match operand {
         Operand::NoneType => Some(Label::NoneType),
@@ -478,13 +484,161 @@ fn label_of(operand: &Operand) -> Option<Label> {
     }
 }
 
+/// Whether an empty reading of a difference stands, where literal keys were
+/// read as labels.
+///
+/// `widened` are the schemas the difference holds the values of, and
+/// `narrowed` the ones it subtracts: `a ≤ b` reads `a` widened and `b`
+/// narrowed, or `a` and `c` both widened where `b` is `¬c`.
+///
+/// A literal key of a kind with subclasses -- an `int`, a `str`, a `bytes` --
+/// becomes a label, which also holds the subclass keys equal to it
+/// (`label_of`). No descriptor tells such a key from the exact one, so
+/// swapping one for the other moves no value in or out of any descriptor, and
+/// on a dict whose keys are exact a label and its literal agree. A difference
+/// read *inhabited* therefore holds a value with exact keys, which is a value
+/// of the real difference: a refutation stands wherever the label is.
+///
+/// A difference read *empty* is a proof where every such label widens it,
+/// which is the widened side. On the narrowed side the label subtracts a
+/// subclass key's dict the real set keeps, and the proof stands only where
+/// the difference holds no such dict: every narrowed label acts on the dict at
+/// the top of the value, and a widened schema, read as a meet, has a member
+/// whose every key a literal names -- every value of the difference then has
+/// exact keys at the top. A label on a dict nested in another value, or a top
+/// a record's field or a kind's part can key, leaves the reading undecided.
+///
+/// Unfolds a reference as [`lower_unfolded`] does, so it reads the schemas
+/// that were lowered; a reference no definition resolves is cut, as lowering
+/// one refuses.
+#[must_use]
+pub fn an_empty_reading_stands(
+    widened: &[&Schema],
+    narrowed: &[&Schema],
+    definitions: &[Schema],
+    pool: &dyn Constants,
+) -> bool {
+    let unfold = |schema: &Schema, side| schema.unfolded(definitions, UNFOLDS, side);
+    let widened: Vec<Schema> = widened
+        .iter()
+        .map(|schema| unfold(schema, Polarity::Widen))
+        .collect();
+    let narrowed: Vec<Schema> = narrowed
+        .iter()
+        .map(|schema| unfold(schema, Polarity::Narrow))
+        .collect();
+    let reach = widened
+        .iter()
+        .map(|schema| narrowed_labels(schema, Polarity::Widen, pool))
+        .chain(
+            narrowed
+                .iter()
+                .map(|schema| narrowed_labels(schema, Polarity::Narrow, pool)),
+        )
+        .max()
+        .unwrap_or(Labels::None);
+    match reach {
+        Labels::None => true,
+        Labels::Top => widened.iter().any(|schema| keys_are_literals(schema, pool)),
+        Labels::Nested => false,
+    }
+}
+
+/// Where a schema read on one side subtracts a literal key read as a label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Labels {
+    /// Nowhere.
+    None,
+    /// On the dict at the top of the value, and nowhere deeper.
+    Top,
+    /// On a dict nested in another value.
+    Nested,
+}
+
+/// The farthest a literal key read as a label is subtracted, reading `schema`
+/// on `side`: a complement flips the side, and a node holding other values --
+/// a container's element, a field, a clause's value -- puts them below the top.
+/// A refinement is read as such a node: over a map it lowers to nothing, so
+/// what it holds is never a top the reading could keep.
+fn narrowed_labels(schema: &Schema, side: Polarity, pool: &dyn Constants) -> Labels {
+    let mut reach = Labels::None;
+    let mut pending = vec![(schema, side, true)];
+    while let Some((node, side, top)) = pending.pop() {
+        match node {
+            Schema::Complement(inner) => pending.push((inner, side.flipped(), top)),
+            Schema::Union(members) | Schema::Intersection(members) => {
+                pending.extend(members.iter().map(|member| (member, side, top)));
+            }
+            _ => {
+                if let Schema::KeyedMap { defaults, .. } = node
+                    && side == Polarity::Narrow
+                    && defaults
+                        .iter()
+                        .any(|clause| names_a_wide_key(&clause.key, pool))
+                {
+                    reach = reach.max(if top { Labels::Top } else { Labels::Nested });
+                }
+                pending.extend(node.children().map(|child| (child, side, false)));
+            }
+        }
+    }
+    reach
+}
+
+/// Whether every value of `schema`, read as a meet, is a dict whose every key
+/// a literal clause names: a keyed map with no field and only literal keys, or
+/// a meet holding one. Such a dict's keys are exact.
+fn keys_are_literals(schema: &Schema, pool: &dyn Constants) -> bool {
+    match schema {
+        Schema::KeyedMap { fields, defaults } => {
+            fields.is_empty()
+                && defaults
+                    .iter()
+                    .all(|clause| names_only_literals(&clause.key, pool))
+        }
+        Schema::Intersection(members) => {
+            members.iter().any(|member| keys_are_literals(member, pool))
+        }
+        _ => false,
+    }
+}
+
+/// Whether a clause's key is literals and nothing else, each one a label.
+fn names_only_literals(key: &Schema, pool: &dyn Constants) -> bool {
+    match key {
+        Schema::Literal(index) => pool.constant(*index).as_ref().and_then(label_of).is_some(),
+        Schema::Union(members) => members
+            .iter()
+            .all(|member| names_only_literals(member, pool)),
+        _ => false,
+    }
+}
+
+/// Whether a clause's key names a literal its label reads wider.
+fn names_a_wide_key(key: &Schema, pool: &dyn Constants) -> bool {
+    match key {
+        Schema::Literal(index) => matches!(
+            pool.constant(*index),
+            Some(Operand::Integer(_) | Operand::Word(..))
+        ),
+        Schema::Union(members) => members.iter().any(|member| names_a_wide_key(member, pool)),
+        _ => false,
+    }
+}
+
 /// The set holding one pooled value and nothing else.
+///
+/// The value at its exact type: a pooled constant is an exact `int`, `float`,
+/// `str` or `bytes`, and a kind also holds the builtin's subclasses, so the
+/// value is met with [`Class::exact`]. `bool` and `None` have no subclass.
 fn singleton(constant: &Operand) -> Option<Descr> {
+    let exactly =
+        |value: Descr, kind: Kind| value.intersect(&Descr::instance_of(Class::exact(kind)));
     match constant {
         Operand::Boolean(value) => Some(Descr::boolean(*value)),
-        Operand::Integer(value) => Some(Descr::integer(*value)),
-        Operand::Float(value) => Some(Descr::float(*value)),
-        Operand::Word(word, kind) => Descr::word(word, *kind),
+        Operand::Integer(value) => exactly(Descr::integer(*value), Kind::Int),
+        Operand::Float(value) => exactly(Descr::float(*value), Kind::Float),
+        Operand::Word(word, kind) => exactly(Descr::word(word, *kind)?, *kind),
         Operand::NoneType => Some(Descr::of_kind(Kind::NoneType)),
         // A class is a set of objects, not one value; a literal naming an
         // instance also pins *which* instance, which the descriptor cannot say.

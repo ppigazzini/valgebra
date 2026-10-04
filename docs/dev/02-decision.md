@@ -68,7 +68,11 @@ refuted is never lowered, because a sound second reading cannot overturn a
 proof, and lowering one costs about two orders of magnitude more than the rule
 that already answered. Its inhabited answer refutes only where no reference was
 cut: where one was, the difference was widened on the left and shrunk on the
-right, so a value found in it need be no value of the real difference.
+right, so a value found in it need be no value of the real difference. Its
+empty answer has the mirror condition: a literal key is read as a label, which
+also holds the subclass keys equal to it, so an empty difference proves the
+inclusion only where no such label is subtracted from a dict that can hold a
+subclass key (`an_empty_reading_stands` in `descr/lower.rs`).
 
 **A refutation stands on a value.** The descriptor's is direct: it proves the
 difference `a & ~b` holds one. A rule's is a mismatch of shapes -- two arities
@@ -138,7 +142,10 @@ rule has to relate a list to an int, because the two never share a slot.
 has an integer's structure *and* a class -- so `descr/lines.rs` carries each
 slot as `⋁ᵢ (structureᵢ ∧ classesᵢ ∧ attrsᵢ)`. That is a disjunctive normal form
 *inside* one kind, over a handful of lines, rather than over all twelve slots at
-once. `descr/classes.rs` holds the class order as a **snapshot**, because the
+once. A literal is a line with a class: its constant met with `Class::exact`,
+the builtin's own type, which nothing derives from and every subclass of the
+builtin is laid out apart from. `descr/classes.rs` holds the class order as a
+**snapshot**, because the
 core cannot call `issubclass` and should not want to: `ABC.register` can change
 that relation after a schema is built, and a relation that moves is not a lattice
 to reason in. Beside the order the snapshot carries what a *direct* instance can

@@ -234,6 +234,15 @@ fn plain_attributes() -> Arc<Attributes> {
     Arc::clone(PLAIN.get_or_init(|| Arc::new(Attributes::plain())))
 }
 
+/// What a builtin's direct instance carries: no dictionary, and every name
+/// answered by the builtin's own descriptors, which the core does not read.
+/// That is the reading a `__getattribute__` hook gets, [`Reach::Unread`] for
+/// every name, so a record met with the class is never proved inhabited.
+fn builtin_attributes() -> Arc<Attributes> {
+    static BUILTIN: OnceLock<Arc<Attributes>> = OnceLock::new();
+    Arc::clone(BUILTIN.get_or_init(|| Arc::new(Attributes::new(false, Hook::Getattribute))))
+}
+
 impl Class {
     /// A class deriving from `bases`, carrying the layout of the class `layout`
     /// names -- its own id, or an ancestor's -- or none.
@@ -314,6 +323,32 @@ impl Class {
     #[must_use]
     pub fn laid_out(id: u32, layout: u32) -> Class {
         Class::new(id, Some(layout), &[])
+    }
+
+    /// The values whose type is `kind`'s builtin itself: an `int` and not an
+    /// instance of an `int` subclass.
+    ///
+    /// A literal denotes its constant at the constant's exact type (`ir.rs`),
+    /// and a kind holds the builtin's subclasses as well, so `Literal[5]` is
+    /// the integer 5 met with this class. Nothing derives from it and it lays
+    /// down a layout of its own, so it is disjoint from every class carrying
+    /// another -- every subclass of the builtin among them, since each carries
+    /// the builtin's layout or one extending it. A class carrying no layout
+    /// stays undecided against it, as it does against any class.
+    ///
+    /// The ids are the top of the range, one per kind, below the `u32::MAX` a
+    /// caller saturates at; the bindings number a query's classes from zero.
+    #[must_use]
+    pub fn exact(kind: Kind) -> Class {
+        let at = Kind::ALL
+            .iter()
+            .position(|listed| *listed == kind)
+            .and_then(|at| u32::try_from(at).ok())
+            .unwrap_or(0);
+        let id = u32::MAX - 1 - at;
+        Class::laid_out(id, id)
+            .of_kind(kind)
+            .carrying(builtin_attributes())
     }
 
     /// Whether this class carries a layout, its own or an ancestor's.

@@ -17,7 +17,7 @@
 use std::cell::Cell;
 
 use crate::descr::classes::Reach;
-use crate::descr::lower::{Constants, lower_unfolded};
+use crate::descr::lower::{Constants, an_empty_reading_stands, lower_unfolded};
 use crate::ir::{ClassIx, Constraint, Constraints, DefIx, Field, Polarity, Schema};
 use crate::kind::{Kind, Region, Regions};
 use crate::verdict::Verdict;
@@ -100,9 +100,14 @@ impl Schema {
     /// may spend, and past any of those it refuses. A schema the descriptor
     /// cannot hold -- a recursive one -- refuses the same way. Either way the
     /// caller keeps the verdict the rules reached.
+    ///
+    /// A literal key read as a label under a complement can narrow the set it
+    /// should widen, and a proof over one stands only where
+    /// [`an_empty_reading_stands`] says it does.
     pub(super) fn denotes_no_value(&self, pool: &dyn Constants, defs: &[Schema]) -> bool {
         lower_unfolded(self, defs, Polarity::Widen, pool)
             .is_some_and(|set| set.emptiness() == Verdict::Empty)
+            && an_empty_reading_stands(&[self], &[], defs, pool)
     }
 
     /// The decision steps [`is_empty`](Self::is_empty) spends on this schema.

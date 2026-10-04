@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc a1817e6963a7f8a56e82a691ff790b9062c57e36e81a455357d20aaebbc0a94b # shrinks to a = Complement(Int), b = Union([Int, Str])
+cc 0583498317baa4398b26d584e54a89928fe973fa57bf857def1649e7b552dbca # shrinks to a = KeyedMap { fields: [Field { name: "a", schema: Int, required: true }], defaults: [] }, b = KeyedMap { fields: [], defaults: [MapClause { key: Literal(ConstIx(0)), value: Int }] }
+cc abd11760b4dde2413c3376297582cb6093de279ef28096af58599019f986b36a # shrinks to a = Intersection([Int, Literal(ConstIx(0)), Union([Str, Instance(ClassIx(6))])]), b = Str

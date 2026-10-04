@@ -216,9 +216,10 @@ The soundness is relative to a small, explicit trust base:
   Lt(1)]` is decided empty, and an `int` subclass whose comparisons answer `True`
   satisfies both -- a `True` no value supports. Deciding it soundly means reading
   the bounds over the *exact* builtin, which needs a schema to distinguish
-  "exactly `int`" from "an `int` or a subclass"; that distinction is not
-  expressible yet. The case is pinned as a known-unsound test rather than left
-  unwritten.
+  "exactly `int`" from "an `int` or a subclass". The set representation has that
+  class for a literal, which is the constant at its exact type, and a bound is
+  not read through it: a bound holds of the subclasses too. The case is pinned
+  as a known-unsound test rather than left unwritten.
 - **A class whose metaclass leaves `isinstance` alone holds an object.** A
   refutation about a class stands on a value of it, and nothing here can build
   one: reporting `A` not below `B` for two unrelated classes reads the

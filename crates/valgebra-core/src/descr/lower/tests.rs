@@ -1,4 +1,6 @@
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
+
+use proptest::prelude::*;
 
 use super::{BUDGET, Bounds, Constants, DEPTH, Operand, lower, lower_within};
 use crate::descr::classes::Class;
@@ -7,7 +9,7 @@ use crate::ir::{
     ClassIx, ConstIx, Constraint, Field, MapClause, Openness, OperandIx, Schema, SeqKind, SeqShape,
 };
 use crate::kind::Kind;
-use crate::verdict::Verdict;
+use crate::verdict::{Relation, Verdict};
 
 /// A pool that answers from a list, which is what the bindings do from the
 /// validator's object table.
@@ -474,12 +476,26 @@ fn the_two_agree_about_containment_where_both_decide() {
     }
 }
 
+/// The exact builtins, as values carry them: a plain `1` is an instance of
+/// exactly `int`.
+static EXACT_INT: LazyLock<Class> = LazyLock::new(|| Class::exact(Kind::Int));
+static EXACT_STR: LazyLock<Class> = LazyLock::new(|| Class::exact(Kind::Str));
+static EXACT_FLOAT: LazyLock<Class> = LazyLock::new(|| Class::exact(Kind::Float));
+
+/// An `int` subclass and a `str` one, snapshot as the bindings take one: the
+/// builtin among the bases, and its layout carried.
+static MY_INT: LazyLock<Class> =
+    LazyLock::new(|| Class::new(11, Some(10), &[Class::plain(10)]).of_kind(Kind::Int));
+static MY_STR: LazyLock<Class> =
+    LazyLock::new(|| Class::new(13, Some(12), &[Class::plain(12)]).of_kind(Kind::Str));
+
 /// A literal lowers to the singleton its pooled value names, under the kind
-/// that reads that value.
+/// that reads that value, at the value's exact type.
 ///
 /// The typing spec keeps `Literal[1]`, `Literal[True]` and `Literal["1"]`
 /// apart, and so does this: each lands in its own kind's component, so no
-/// two of them meet.
+/// two of them meet. And it keeps `Literal[1]` from an `int` subclass's `1`,
+/// which is the same kind's value and not the literal's.
 #[test]
 fn a_literal_lowers_to_the_singleton_its_kind_reads() {
     let pool = Pool(vec![
@@ -491,12 +507,16 @@ fn a_literal_lowers_to_the_singleton_its_kind_reads() {
     ]);
     let literal =
         |slot| lower(&Schema::Literal(ConstIx::new(slot)), &pool).expect("a pooled constant");
+    let exactly = |value: Value, class: &'static Class| value.of_class(class, &[]);
 
-    assert!(literal(0).admits(Value::integer(1)) && !literal(0).admits(Value::integer(2)));
+    assert!(literal(0).admits(exactly(Value::integer(1), &EXACT_INT)));
+    assert!(!literal(0).admits(exactly(Value::integer(2), &EXACT_INT)));
+    assert!(!literal(0).admits(exactly(Value::integer(1), &MY_INT)));
     assert!(literal(1).admits(Value::boolean(true)) && !literal(1).admits(Value::boolean(false)));
-    assert!(literal(2).admits(Value::word(b"a", Kind::Str)));
+    assert!(literal(2).admits(exactly(Value::word(b"a", Kind::Str), &EXACT_STR)));
+    assert!(!literal(2).admits(exactly(Value::word(b"a", Kind::Str), &MY_STR)));
     assert!(literal(3).admits(Value::of_kind(Kind::NoneType)));
-    assert!(literal(4).admits(Value::float(1.5)));
+    assert!(literal(4).admits(exactly(Value::float(1.5), &EXACT_FLOAT)));
 
     // The three the spec keeps apart stay apart, because each is a
     // different kind's component.
@@ -1499,4 +1519,490 @@ fn the_two_spellings_of_the_top_lower_to_one_descriptor() {
     let negated = |schema| lowered(Schema::Complement(Arc::new(schema)));
     assert_eq!(negated(Schema::ANY), negated(Schema::ANYTHING));
     assert_eq!(negated(Schema::ANY), Descr::nothing());
+}
+
+/// Which class a builtin scalar of the universe below is an instance of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Typed {
+    /// The builtin itself, which is what a literal names.
+    Exact,
+    /// The subclass a schema below can name ([`MY_INT`], [`MY_STR`]).
+    Named,
+    /// A subclass no schema names, which the open world holds a value of.
+    Other,
+}
+
+/// A value of the scalar universe, as Python holds it.
+#[derive(Debug, Clone, Copy)]
+enum Scalar {
+    /// `None`, which no schema here names: the value outside every kind they
+    /// do.
+    None,
+    Bool(bool),
+    Int(i64, Typed),
+    Str(&'static str, Typed),
+}
+
+/// Every scalar the drawn schemas put a boundary at, at each of the three
+/// types: the literals and bounds sit at 0, 1 and 5 and at `""` and `"a"`.
+fn scalars() -> Vec<Scalar> {
+    let typed = [Typed::Exact, Typed::Named, Typed::Other];
+    let mut values = vec![Scalar::None, Scalar::Bool(false), Scalar::Bool(true)];
+    for at in typed {
+        values.extend([-1, 0, 1, 5, 6].map(|value| Scalar::Int(value, at)));
+        values.extend(["", "a", "b"].map(|word| Scalar::Str(word, at)));
+    }
+    values
+}
+
+/// The pool the scalar schemas index: three integers, two words, a boolean
+/// and the two subclasses.
+fn scalar_pool() -> Pool {
+    Pool(vec![
+        Operand::Integer(0),
+        Operand::Integer(1),
+        Operand::Integer(5),
+        Operand::Word(b"a".to_vec(), Kind::Str),
+        Operand::Word(Vec::new(), Kind::Str),
+        Operand::Boolean(true),
+        Operand::Instance(MY_INT.clone()),
+        Operand::Instance(MY_STR.clone()),
+    ])
+}
+
+/// The scalar schemas: the kinds, every literal, the two subclasses, a bound
+/// of each sort, and what union, meet and complement make of them.
+fn scalar_schema() -> impl Strategy<Value = Schema> {
+    let operand = OperandIx::new;
+    let leaf = prop_oneof![
+        Just(Schema::Int),
+        Just(Schema::Str),
+        Just(Schema::Bool),
+        (0usize..6).prop_map(|slot| Schema::Literal(ConstIx::new(slot))),
+        (6usize..8).prop_map(|slot| Schema::Instance(ClassIx::new(slot))),
+        Just(Schema::refine(
+            Schema::Int,
+            vec![Constraint::Ge(operand(1)), Constraint::Le(operand(2))]
+        )),
+        Just(Schema::refine(
+            Schema::Int,
+            vec![Constraint::Gt(operand(0))]
+        )),
+        Just(Schema::refine(Schema::Str, vec![Constraint::MaxLen(0)])),
+        Just(Schema::refine(Schema::Str, vec![Constraint::MinLen(1)])),
+    ];
+    leaf.prop_recursive(3, 12, 3, |inner| {
+        prop_oneof![
+            prop::collection::vec(inner.clone(), 2..=3).prop_map(Schema::union),
+            prop::collection::vec(inner.clone(), 2..=3).prop_map(Schema::meet),
+            inner.prop_map(Schema::complement),
+        ]
+    })
+}
+
+/// Whether `value` is a member of `schema`, read off `ir.rs`: a literal is its
+/// constant at the constant's exact type, a kind holds its subclasses, and a
+/// bound compares the number a `bool` or an `int` is.
+fn scalar_member(schema: &Schema, value: Scalar, pool: &Pool) -> bool {
+    let number = match value {
+        Scalar::Bool(flag) => Some(i64::from(flag)),
+        Scalar::Int(number, _) => Some(number),
+        Scalar::None | Scalar::Str(..) => None,
+    };
+    let operand = |index: &OperandIx| match pool.0.get(index.get()) {
+        Some(Operand::Integer(bound)) => *bound,
+        _ => unreachable!("every bound here is an integer"),
+    };
+    match schema {
+        Schema::Int => matches!(value, Scalar::Bool(_) | Scalar::Int(..)),
+        Schema::Str => matches!(value, Scalar::Str(..)),
+        Schema::Bool => matches!(value, Scalar::Bool(_)),
+        Schema::Literal(index) => match (pool.0.get(index.get()), value) {
+            (Some(Operand::Integer(constant)), Scalar::Int(number, Typed::Exact)) => {
+                *constant == number
+            }
+            (Some(Operand::Word(constant, _)), Scalar::Str(word, Typed::Exact)) => {
+                constant.as_slice() == word.as_bytes()
+            }
+            (Some(Operand::Boolean(constant)), Scalar::Bool(flag)) => *constant == flag,
+            _ => false,
+        },
+        Schema::Instance(index) => matches!(
+            (index.get(), value),
+            (6, Scalar::Int(_, Typed::Named)) | (7, Scalar::Str(_, Typed::Named))
+        ),
+        Schema::Refine { base, constraints } => {
+            scalar_member(base, value, pool)
+                && constraints
+                    .iter()
+                    .all(|constraint| match (constraint, value) {
+                        (Constraint::Ge(index), _) => number.is_some_and(|n| n >= operand(index)),
+                        (Constraint::Le(index), _) => number.is_some_and(|n| n <= operand(index)),
+                        (Constraint::Gt(index), _) => number.is_some_and(|n| n > operand(index)),
+                        (Constraint::MaxLen(most), Scalar::Str(word, _)) => word.len() <= *most,
+                        (Constraint::MinLen(least), Scalar::Str(word, _)) => word.len() >= *least,
+                        _ => false,
+                    })
+        }
+        Schema::Union(members) => members
+            .iter()
+            .any(|member| scalar_member(member, value, pool)),
+        Schema::Intersection(members) => members
+            .iter()
+            .all(|member| scalar_member(member, value, pool)),
+        Schema::Complement(inner) => !scalar_member(inner, value, pool),
+        Schema::Anything(_) => true,
+        _ => false,
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    /// What the sets answer about two scalar schemas holds of Python's values,
+    /// subclass instances among them.
+    ///
+    /// A literal is its constant at the constant's exact type, and a kind, a
+    /// bound or a pattern also holds the builtin's subclasses -- an `int`
+    /// subclass a schema names, and one none does. A proof admits no value of
+    /// the subject outside the supertype, and a refutation has one. Read with
+    /// the literal as the kind's value, a bound at 5 and 5 was proved equal to
+    /// `Literal[5]`, and the subclass's 5 is outside the one and inside the
+    /// other.
+    #[test]
+    fn a_literal_is_read_at_its_exact_type(a in scalar_schema(), b in scalar_schema()) {
+        let pool = scalar_pool();
+        let outside: Vec<Scalar> = scalars()
+            .into_iter()
+            .filter(|value| scalar_member(&a, *value, &pool) && !scalar_member(&b, *value, &pool))
+            .collect();
+        match a.descriptor_contained_in(&b, &pool, &[]) {
+            Relation::Holds => prop_assert!(outside.is_empty(), "proved, and {outside:?} refute it"),
+            Relation::Fails => prop_assert!(!outside.is_empty(), "refuted, and no value is outside"),
+            Relation::Unknown => {}
+        }
+    }
+}
+
+/// A key of the map universe: a name, held by the exact `str` or a subclass.
+type Key = (&'static str, bool);
+
+/// What a key maps to: an `int` or a `str`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Held {
+    Int,
+    Str,
+}
+
+/// Every dict over the names `a` and `b`, each name absent or held by an
+/// exact `str` key or a subclass's, mapping to an `int` or a `str`.
+///
+/// A dict holds one of the two keys a name can be held by, never both: they
+/// compare equal.
+fn dicts() -> Vec<Vec<(Key, Held)>> {
+    let options = |name: &'static str| {
+        let mut held: Vec<Option<(Key, Held)>> = vec![None];
+        for exact in [true, false] {
+            for value in [Held::Int, Held::Str] {
+                held.push(Some(((name, exact), value)));
+            }
+        }
+        held
+    };
+    let mut dicts = Vec::new();
+    for a in options("a") {
+        for b in options("b") {
+            dicts.push(a.into_iter().chain(b).collect());
+        }
+    }
+    dicts
+}
+
+/// Whether a value schema of the maps below admits what a key maps to.
+fn holds_value(schema: &Schema, held: Held) -> bool {
+    match schema {
+        Schema::Int => held == Held::Int,
+        Schema::Str => held == Held::Str,
+        _ => true,
+    }
+}
+
+/// Whether a clause's key admits `key`: a literal the exact `str` it names, a
+/// `str` every string.
+fn admits_key(key: &Schema, (name, exact): Key, pool: &Pool) -> bool {
+    match key {
+        Schema::Str | Schema::Anything(_) => true,
+        Schema::Literal(index) => {
+            exact
+                && matches!(
+                    pool.0.get(index.get()),
+                    Some(Operand::Word(word, Kind::Str)) if word.as_slice() == name.as_bytes()
+                )
+        }
+        Schema::Union(members) => members
+            .iter()
+            .any(|member| admits_key(member, (name, exact), pool)),
+        _ => false,
+    }
+}
+
+/// Whether `dict` is a member of `schema`, read as the walk reads a keyed map:
+/// a field is looked up by name, so either key holding it is the field's, and
+/// every other key is admitted by some clause whose key admits it and whose
+/// value admits what it maps to.
+fn map_member(schema: &Schema, dict: &[(Key, Held)], pool: &Pool) -> bool {
+    match schema {
+        Schema::KeyedMap { fields, defaults } => {
+            fields.iter().all(|field| {
+                match dict.iter().find(|((name, _), _)| *name == &*field.name) {
+                    Some((_, held)) => holds_value(&field.schema, *held),
+                    None => !field.required,
+                }
+            }) && dict.iter().all(|(key, held)| {
+                fields.iter().any(|field| &*field.name == key.0)
+                    || defaults.iter().any(|clause| {
+                        admits_key(&clause.key, *key, pool) && holds_value(&clause.value, *held)
+                    })
+            })
+        }
+        Schema::Union(members) => members.iter().any(|member| map_member(member, dict, pool)),
+        Schema::Intersection(members) => {
+            members.iter().all(|member| map_member(member, dict, pool))
+        }
+        Schema::Complement(inner) => !map_member(inner, dict, pool),
+        Schema::Anything(_) => true,
+        _ => false,
+    }
+}
+
+/// The maps: a record with `a` required or optional, closed or open over
+/// `str`, a mapping over `str`, and the mappings over `Literal["a"]`,
+/// `Literal["a", "b"]` and `Literal["b"]`, with what union, meet and
+/// complement make of them.
+fn map_schema() -> impl Strategy<Value = Schema> {
+    let a = || Schema::Literal(ConstIx::new(0));
+    let b = || Schema::Literal(ConstIx::new(1));
+    let clause = |key, value| MapClause { key, value };
+    let field = |required| Field {
+        name: "a".into(),
+        schema: Schema::Int,
+        required,
+    };
+    let leaf = prop_oneof![
+        Just(Schema::keyed_map(vec![field(true)], Vec::new())),
+        Just(Schema::keyed_map(
+            vec![field(false)],
+            vec![clause(Schema::Str, Schema::Int)]
+        )),
+        Just(Schema::keyed_map(
+            Vec::new(),
+            vec![clause(Schema::Str, Schema::Int)]
+        )),
+        Just(Schema::keyed_map(
+            Vec::new(),
+            vec![clause(a(), Schema::Int)]
+        )),
+        Just(Schema::keyed_map(
+            Vec::new(),
+            vec![clause(Schema::union([a(), b()]), Schema::Int)]
+        )),
+        Just(Schema::keyed_map(
+            Vec::new(),
+            vec![clause(a(), Schema::Int), clause(Schema::Str, Schema::Str)]
+        )),
+        Just(Schema::keyed_map(
+            Vec::new(),
+            vec![clause(b(), Schema::Str)]
+        )),
+    ];
+    leaf.prop_recursive(2, 8, 2, |inner| {
+        prop_oneof![
+            prop::collection::vec(inner.clone(), 2).prop_map(Schema::union),
+            prop::collection::vec(inner.clone(), 2).prop_map(Schema::meet),
+            inner.prop_map(Schema::complement),
+        ]
+    })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    /// A literal key read as a label refutes wherever it is and proves only
+    /// on the widened side.
+    ///
+    /// The label `"a"` holds a `str` subclass's key equal to `"a"`, which a
+    /// record's field admits and `Literal["a"]` does not, so a proof over the
+    /// label on the side a difference narrows stood on nothing: `{"a": int}`
+    /// was proved below `dict[Literal["a"], int]`, and `{MyStr("a"): 1}` is in
+    /// the one and not the other. The universe holds each name at either key,
+    /// and every answer the sets give is held to it, emptiness included.
+    #[test]
+    fn a_literal_key_proves_only_where_its_label_widens(a in map_schema(), b in map_schema()) {
+        let pool = Pool(vec![
+            Operand::Word(b"a".to_vec(), Kind::Str),
+            Operand::Word(b"b".to_vec(), Kind::Str),
+        ]);
+        let dicts = dicts();
+        let outside = dicts
+            .iter()
+            .filter(|dict| map_member(&a, dict, &pool) && !map_member(&b, dict, &pool))
+            .count();
+        match a.descriptor_contained_in(&b, &pool, &[]) {
+            Relation::Holds => prop_assert_eq!(outside, 0, "proved, and a dict refutes it"),
+            Relation::Fails => prop_assert!(outside > 0, "refuted, and no dict is outside"),
+            Relation::Unknown => {}
+        }
+        if a.descriptor_contained_in(&Schema::Nothing, &pool, &[]) == Relation::Holds {
+            prop_assert!(
+                !dicts.iter().any(|dict| map_member(&a, dict, &pool)),
+                "proved empty, and a dict is a member"
+            );
+        }
+    }
+}
+
+/// Where every key of the subject is a literal's, the narrowed side's labels
+/// read only exact keys, and an empty difference proves the inclusion.
+///
+/// `dict[Literal["a"], int]` below `dict[Literal["a", "b"], int]`, and the
+/// meet that asks whether `{1: "x", True: "y"}` is two entries: it is one,
+/// `{1: "y"}`, so no dict of `dict[Literal[1, True], str]` is outside both
+/// `dict[Literal[1], str]` and `dict[Literal[True], str]`.
+#[test]
+fn a_subject_keyed_by_literals_alone_proves_through_the_labels() {
+    let pool = Pool(vec![
+        Operand::Word(b"a".to_vec(), Kind::Str),
+        Operand::Word(b"b".to_vec(), Kind::Str),
+        Operand::Integer(1),
+        Operand::Boolean(true),
+    ]);
+    let literal = |slot| Schema::Literal(ConstIx::new(slot));
+    let mapping = |key, value| Schema::keyed_map(Vec::new(), vec![MapClause { key, value }]);
+    let narrower = mapping(literal(0), Schema::Int);
+    let wider = mapping(Schema::union([literal(0), literal(1)]), Schema::Int);
+    assert_eq!(
+        narrower.descriptor_contained_in(&wider, &pool, &[]),
+        Relation::Holds
+    );
+
+    let collided = Schema::meet([
+        mapping(literal(2), Schema::Str).complement(),
+        mapping(literal(3), Schema::Str).complement(),
+        mapping(Schema::union([literal(2), literal(3)]), Schema::Str),
+    ]);
+    assert_eq!(
+        collided.descriptor_contained_in(&Schema::Nothing, &pool, &[]),
+        Relation::Holds
+    );
+}
+
+/// A literal key nested in a value proves nothing on the narrowed side, even
+/// under a subject keyed by literals: the subject's top keys are exact, and
+/// the dict below them is a record's, which holds a subclass key.
+///
+/// `dict[Literal["a"], {"b": int}]` is not below
+/// `dict[Literal["a"], dict[Literal["b"], int]]`: `{"a": {MyStr("b"): 1}}` is
+/// in the one and not the other, and the labels read the two as one set.
+#[test]
+fn a_literal_key_nested_in_a_value_proves_nothing_on_the_narrowed_side() {
+    let pool = Pool(vec![
+        Operand::Word(b"a".to_vec(), Kind::Str),
+        Operand::Word(b"b".to_vec(), Kind::Str),
+    ]);
+    let literal = |slot| Schema::Literal(ConstIx::new(slot));
+    let mapping = |key, value| Schema::keyed_map(Vec::new(), vec![MapClause { key, value }]);
+    let record = Schema::keyed_map(
+        vec![Field {
+            name: "b".into(),
+            schema: Schema::Int,
+            required: true,
+        }],
+        Vec::new(),
+    );
+    let subject = mapping(literal(0), record);
+    let supertype = mapping(literal(0), mapping(literal(1), Schema::Int));
+    assert_ne!(
+        subject.descriptor_contained_in(&supertype, &pool, &[]),
+        Relation::Holds
+    );
+    // Nor the other way: `{"a": {}}` is in the supertype, and the record
+    // requires `b`.
+    assert_ne!(
+        supertype.descriptor_contained_in(&subject, &pool, &[]),
+        Relation::Holds
+    );
+}
+
+/// A literal key behind a reference is read where the reference unfolds: the
+/// supertype `μt. dict[Literal["a"], int] | list[t]` subtracts the label `"a"`
+/// from a record's dicts as the mapping alone does, and `{MyStr("a"): 1}`
+/// keeps the record out of it.
+#[test]
+fn a_literal_key_behind_a_reference_is_read_where_it_unfolds() {
+    let pool = Pool(vec![Operand::Word(b"a".to_vec(), Kind::Str)]);
+    let mapping = Schema::keyed_map(
+        Vec::new(),
+        vec![MapClause {
+            key: Schema::Literal(ConstIx::new(0)),
+            value: Schema::Int,
+        }],
+    );
+    let reference = Schema::Ref(crate::ir::DefIx::new(0));
+    let definitions = vec![Schema::union([
+        mapping,
+        Schema::list(SeqShape::homogeneous(reference.clone())),
+    ])];
+    let record = Schema::keyed_map(
+        vec![Field {
+            name: "a".into(),
+            schema: Schema::Int,
+            required: true,
+        }],
+        Vec::new(),
+    );
+    assert_ne!(
+        record.descriptor_contained_in(&reference, &pool, &definitions),
+        Relation::Holds
+    );
+}
+
+/// A `bool` or a `None` key has no subclass, so its literal is every key of
+/// its value and a proof over its label stands: `dict[bool, int]` is below
+/// `dict[Literal[True, False], int]`, and `dict[None, int]` below
+/// `dict[Literal[None], int]`.
+#[test]
+fn a_literal_key_with_no_subclass_proves_wherever_it_is() {
+    let pool = Pool(vec![
+        Operand::Boolean(true),
+        Operand::Boolean(false),
+        Operand::NoneType,
+    ]);
+    let literal = |slot| Schema::Literal(ConstIx::new(slot));
+    let mapping = |key| {
+        Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key,
+                value: Schema::Int,
+            }],
+        )
+    };
+    assert_eq!(
+        mapping(Schema::Bool).descriptor_contained_in(
+            &mapping(Schema::union([literal(0), literal(1)])),
+            &pool,
+            &[]
+        ),
+        Relation::Holds
+    );
+    assert_eq!(
+        mapping(Schema::NoneType).descriptor_contained_in(&mapping(literal(2)), &pool, &[]),
+        Relation::Holds
+    );
 }

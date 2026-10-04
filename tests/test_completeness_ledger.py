@@ -902,12 +902,14 @@ _DECIDED = [
         id="MultipleOf(4)<=MultipleOf(2)",
     ),
     # A map's domain is the field list as written, and a key type is matched
-    # against the string atom rather than asked whether it admits the name.
+    # against the string atom rather than asked whether it admits the name. The
+    # literal is the exact `str`, which the field reads too, so the mapping is
+    # below the record; the other way a `str` subclass's `a` separates them.
     pytest.param(
         "subtype",
-        {"a": int},
         {Literal["a"]: int},
-        id="{a:int}<=dict[L[a],int]",
+        {"a?": int},
+        id="dict[L[a],int]<={a?:int}",
     ),
     pytest.param("equivalent", {"a?": nothing}, {}, id="{a?:nothing}=={}"),
     pytest.param(

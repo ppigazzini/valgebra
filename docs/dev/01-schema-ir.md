@@ -42,7 +42,10 @@ mirror reason: `int` does not subclass `float`.
 typing spec's distinction between `Literal[1]`, `Literal[True]` and
 `Literal[1.0]`. The same-type test runs **before** `==`, so a value of another
 type never reaches the comparison — which is why a raising `__eq__` is only
-observable from an object of the pooled constant's own type.
+observable from an object of the pooled constant's own type. The set
+representation reads the same singleton: the constant met with its builtin's
+exact class (`Class::exact` in `descr/classes.rs`), which no class derives
+from, so `Literal[5]` and an `int` subclass's 5 share no value there either.
 
 ## What fixes a node's carrier, and why it differs per node
 

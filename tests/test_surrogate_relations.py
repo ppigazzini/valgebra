@@ -98,8 +98,11 @@ def test_the_patterns_still_decide_against_each_other() -> None:
         Validator(Annotated[str, Regex("a")]).relation_to(Annotated[str, Regex("ab?")])
         == "subset"
     )
-    assert Validator(Annotated[str, Regex("a")]).relation_to(Literal["a"]) == "subset"
     assert Validator(Literal["a"]).relation_to(Annotated[str, Regex("a")]) == "subset"
+    # The pattern also holds a `str` subclass's "a", which the literal does not.
+    assert (
+        Validator(Annotated[str, Regex("a")]).relation_to(Literal["a"]) == "not_subset"
+    )
     assert (
         Validator(Annotated[str, Regex("ab?")]).relation_to(Annotated[str, Regex("a")])
         == "not_subset"

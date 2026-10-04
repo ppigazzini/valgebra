@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a pattern's set is every string it matches whole
 - fix: a refutation stands on members that stay apart
+- fix: a literal is its constant at its exact type
 
 -->
 
@@ -44,6 +45,20 @@ answer of its own, or a repair to a change not yet released.
   set[Literal[True]]`, though `{1, True}` is `{1}` and every set of it is in
   one of the two, and `1` with `1.0` read the same way. Those pairs are
   `undecided`; every other refutation of this shape stands.
+- **A literal is its constant at its exact type.** The relations read
+  `Literal[5]` as every `int` equal to 5, an `int` subclass's included, where
+  the walk admits the exact `int` alone: `Annotated[int, Ge(5), Le(5)]` was
+  proved equivalent to `Literal[5]`, `Annotated[str, Regex("a")]` below
+  `Literal["a"]`, and the meet of `Literal[5]` with an `int` subclass was not
+  proved empty. An `IntEnum` member equal to 5 is in the bound and not in the
+  literal, and those pairs are refuted or decided the other way. Membership was
+  right throughout.
+- **A record is not proved below a mapping keyed by literals.** `{"a": int}` was
+  `subset` of `dict[Literal["a"], int]`, and `{MyStr("a"): 1}` is in the record
+  and not in the mapping: a field reads every key equal to its name, and a
+  literal key is the exact `str`. A proof that stands on a literal key
+  subtracted from a dict a field or a kind's part can key is `undecided`; a
+  subject keyed by literals alone decides, and every refutation stands.
 
 ## [0.0.16] - 2026-10-04
 
@@ -1130,7 +1145,7 @@ each is written out below.
   )
   assert Validator(bool).is_subtype_of(Literal[True, False])
   assert Validator(bool).is_subtype_of(Annotated[int, at.Ge(0)])
-  assert Validator({"a": int}).is_subtype_of(dict[Literal["a"], int])
+  assert Validator(dict[Literal["a"], int]).is_subtype_of({"a?": int})
   assert intersection(list[int], list[str]).is_subtype_of([])
   assert Validator(tuple[int]).is_subtype_of(complement(tuple[str]))
   ```

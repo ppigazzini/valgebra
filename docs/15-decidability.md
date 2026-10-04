@@ -491,6 +491,27 @@ the shape. What is left below is what the descriptor cannot hold.
     assert Validator(dict[Literal[1], int]).relation_to(dict[int, int]) == "subset"
     ```
 
+- **A record against a mapping keyed by literals.** A record's field reads
+  every key equal to its name, a `str` subclass's included, since the walk looks
+  the name up; a `Literal["a"]` key is the exact `str` alone. The partition names
+  a key by its value, so it reads the literal as every key equal to it, and a
+  difference that subtracts such a key from a dict a field or a kind's part can
+  key may lose a dict the real one keeps. Its empty reading is no proof there,
+  and the pair comes back "not proven": `{"a": int}` against
+  `dict[Literal["a"], int]` is undecided although `{MyStr("a"): 1}` refutes it.
+  Where every key of the subject is a literal's, the literal reading is exact,
+  and a refutation stands wherever the key is.
+
+    ```python
+    from typing import Literal
+
+    from valgebra import Validator
+
+    assert Validator({"a": int}).relation_to(dict[Literal["a"], int]) == "undecided"
+    assert Validator(dict[Literal["a"], int]).is_subtype_of(dict[Literal["a", "b"], int])
+    assert Validator(dict[str, int]).relation_to(dict[Literal["a"], int]) == "not_subset"
+    ```
+
 - **Recursion, past one unfolding.** A fixpoint as the **supertype** costs a
   *refutation* rather than an inclusion, and that is the sharper half. `a ≤ b`
   is `a ∧ ¬b = ∅`, so the supertype is where a schema stands under a
@@ -715,13 +736,16 @@ assert not mu().is_subtype_of(recursive(lambda t: union(int, list[list[t]])))
 # Everything else here decides, on the sets rather than by a rule.
 pattern = Validator(Annotated[str, Regex("a")])
 assert pattern.is_subtype_of(Annotated[str, Regex("ab?")])  # L(a) <= L(ab?)
-assert pattern.is_subtype_of(Literal["a"])  # L(a) is exactly {"a"}
+# L(a) is the word "a", and a `str` subclass's "a" is in the pattern and not the
+# literal, which pins the exact type.
+assert Validator(Literal["a"]).is_subtype_of(pattern)
+assert pattern.relation_to(Literal["a"]) == "not_subset"
 assert Validator(Annotated[int, at.MultipleOf(4)]).is_subtype_of(
     Annotated[int, at.MultipleOf(2)]
 )
 assert Validator(bool).is_subtype_of(Annotated[int, at.Ge(0)])
 assert Validator(bool).is_subtype_of(Literal[True, False])
-assert Validator({"a": int}).is_subtype_of(dict[Literal["a"], int])
+assert Validator(dict[Literal["a"], int]).is_subtype_of({"a?": int})
 
 # A respelling denotes the same set, and the sets are what the relation reads --
 # even though the laws construction settles do not reach this one. `A | (A & B)`

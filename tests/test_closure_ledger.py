@@ -167,13 +167,14 @@ def test_a_generator_is_not_reachable_by_the_obvious_derivation() -> None:
     # A record is not a mapping over the union of its field types.
     assert not Validator({"a": int}).is_equivalent(dict[str, int])
     # A refinement is not its base, and a bounded interval is not the union of
-    # the literals inside it -- the second is a set the algebra reaches and the
-    # first is not.
+    # the literals inside it: a literal is its constant at the exact type, and
+    # an `int` subclass's `0` is in the interval and in no literal.
     non_empty = Validator(Annotated[str, at.MinLen(1)])
     assert not non_empty.is_equivalent(str)
-    assert Validator(Annotated[int, at.Ge(0), at.Le(1)]).is_equivalent(
-        union(Literal[0], Literal[1], Literal[True], Literal[False])
-    )
+    interval = Validator(Annotated[int, at.Ge(0), at.Le(1)])
+    literals = union(Literal[0], Literal[1], Literal[True], Literal[False])
+    assert literals.is_subtype_of(interval)
+    assert interval.relation_to(literals) == "not_subset"
     # The top is not any one kind, and the classes are not the scalars.
     assert not Validator(anything).is_equivalent(int)
     assert not Validator(int).is_equivalent(str)

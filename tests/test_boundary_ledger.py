@@ -256,6 +256,13 @@ ROWS: dict[str, Row] = {
         # length above the positions there are is decided empty.
         beside=(Annotated[tuple[int, int], at.MinLen(3)], nothing, "subset"),
     ),
+    "A record against a mapping keyed by literals.": Declines(
+        {"a": int},
+        dict[Literal["a"], int],
+        "a key's type read beside its value, which a label does not carry",
+        # A subject keyed by literals alone decides.
+        beside=(dict[Literal["a"], int], dict[Literal["a", "b"], int], "subset"),
+    ),
     "A set that needs two members Python's `==` makes one.": Declines(
         set[Literal[1, True]],
         union(set[Literal[1]], set[Literal[True]]),

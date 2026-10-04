@@ -42,11 +42,19 @@ def test_two_clauses_claiming_one_key_are_a_disjunction() -> None:
     A literal-keyed clause and a `str` clause both claim the key `k`. The
     paper's clauses are ordered and the first wins; here a key belongs when
     *some* clause admits it and its value, so `k` may carry what either clause
-    allows -- which is the deviation, stated as the set it denotes: the same
-    dicts as the record whose optional field `k` takes either type. Decided
-    equivalent by the relation, and not equal as a term, since a clause is not
-    a field.
+    allows -- which is the deviation, stated as the set it denotes: the dicts
+    of the record whose optional field `k` takes either type, where `k` is the
+    exact `str`. A field reads every key equal to its name, a `str` subclass's
+    included, and a literal reads the exact `str` alone, so the clauses are
+    below the record and a subclass's `k` carrying a `str` is in the record
+    only.
     """
+
+    class Key(str):
+        """A `str` subclass: its `k` is a key a field reads and a literal does not."""
+
+        __slots__ = ()
+
     both = Validator({Literal["k"]: str, str: int})
     assert both.is_valid({"k": "x"})  # the literal clause reads it
     assert both.is_valid({"k": 1})  # the str clause reads it
@@ -54,12 +62,16 @@ def test_two_clauses_claiming_one_key_are_a_disjunction() -> None:
     assert not both.is_valid({"k": 1.5})  # neither clause reads it
     assert not both.is_valid({"a": "x"})  # only the str clause reads `a`
     spelled = Validator({"k?": str | int, str: int})
-    assert both.is_equivalent(spelled)
+    assert both.relation_to(spelled) == "subset"
+    assert spelled.is_valid({Key("k"): "x"})
+    assert not both.is_valid({Key("k"): "x"})
     assert both != spelled
-    # An ordered reading would refuse the value the second clause admits.
+    # An ordered reading would refuse the value the second clause admits. Its
+    # field reads the subclass's `k` as well, which neither clause does.
     first_wins = Validator({"k": str, str: int})
     assert not first_wins.is_valid({"k": 1})
-    assert first_wins.relation_to(both) == "subset"
+    assert first_wins.is_valid({Key("k"): "x"})
+    assert first_wins.relation_to(both) != "subset"
     assert both.relation_to(first_wins) == "not_subset"
 
 

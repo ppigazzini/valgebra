@@ -96,6 +96,16 @@ class _HasXValue:
     x = 1
 
 
+class _Int(int):
+    """An `int` subclass: a kind holds its instances and a literal does not."""
+
+
+class _Str(str):
+    """A `str` subclass, read as `_Int` is."""
+
+    __slots__ = ()
+
+
 class _HashableList(list):
     """A hashable `list`, which is a legal member of a `set` of lists."""
 
@@ -244,6 +254,8 @@ _SEED: list[Any] = [
     "a",
     "b",
     "ab",
+    _Int(1),
+    _Str("a"),
     b"",
     b"a",
     None,

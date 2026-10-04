@@ -18,7 +18,7 @@ mod records;
 use std::cell::Cell;
 
 use crate::descr::budget;
-use crate::descr::lower::{Constants, WORK, lower_unfolded};
+use crate::descr::lower::{Constants, WORK, an_empty_reading_stands, lower_unfolded};
 use crate::ir::{Constraint, Polarity, Schema, SeqShape};
 use crate::kind::{Region, Regions};
 use crate::verdict::{Relation, Verdict};
@@ -172,12 +172,18 @@ impl Schema {
         // refuses a wide *answer*, not a long search for a narrow one -- so
         // without this the cheapest thing a caller can ask for is bounded and
         // the dearest is not.
+        //
+        // **A literal key read as a label is the same kind of widening**, and
+        // what it costs is the same half: an empty difference over a label on
+        // the narrowed side may prove nothing ([`an_empty_reading_stands`]),
+        // and is a decline where it does not. Asked only of an empty answer,
+        // which is the one it can overturn.
         let cut = !defs.is_empty() && (self.has_reference() || other.has_reference());
         let Some(mine) = lower_unfolded(self, defs, Polarity::Widen, pool) else {
             return Relation::Unknown;
         };
         if mine.emptiness() == Verdict::Empty {
-            return Relation::Holds;
+            return Relation::proven(an_empty_reading_stands(&[self], &[], defs, pool));
         }
         // `¬other` is what the difference meets, and a complement's is its
         // inner set, read on the widened side: `self ⊆ ¬inner` asks `self ∧
@@ -188,12 +194,12 @@ impl Schema {
         // meet with the inner set fits in: `{"t": int} ⊆ ¬({"t": str} ∪
         // {"t": bytes})` declines that way, while three field kinds, whose
         // complement stays negated, decide.
-        let (theirs, negate) = match other {
-            Schema::Complement(inner) => {
-                (lower_unfolded(inner, defs, Polarity::Widen, pool), false)
-            }
-            _ => (lower_unfolded(other, defs, Polarity::Narrow, pool), true),
+        let (read, side) = match other {
+            Schema::Complement(inner) => (&**inner, Polarity::Widen),
+            _ => (other, Polarity::Narrow),
         };
+        let negate = side == Polarity::Narrow;
+        let theirs = lower_unfolded(read, defs, side, pool);
         let Some(theirs) = theirs else {
             return Relation::Unknown;
         };
@@ -203,7 +209,16 @@ impl Schema {
                 .map(|difference| difference.emptiness())
         })
         .map_or(Relation::Unknown, |emptiness| {
-            if cut {
+            let (widened, narrowed): (&[&Schema], &[&Schema]) = if negate {
+                (&[self], &[read])
+            } else {
+                (&[self, read], &[])
+            };
+            if emptiness == Verdict::Empty
+                && !an_empty_reading_stands(widened, narrowed, defs, pool)
+            {
+                Relation::Unknown
+            } else if cut {
                 Relation::proven(emptiness == Verdict::Empty)
             } else {
                 Relation::of_difference(emptiness)
