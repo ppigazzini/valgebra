@@ -1054,9 +1054,10 @@ jobs:
     # cancelled.
     #
     # Twenty-four cuts halve that: nine mutants a shard, about 18 minutes by
-    # the same readings, under a ceiling of 40 that clears twice it -- the rule
-    # `docs/dev/07-tooling-ci.md` states for a sharded sweep, because a job
-    # that reaches its ceiling is cancelled and a cancelled job is red. The
+    # the same readings. A shard has since read 28.5 minutes, on 2026-10-04, so
+    # the ceiling is 60, twice that -- the rule `docs/dev/07-tooling-ci.md`
+    # states for a sharded sweep, because a job that reaches its ceiling is
+    # cancelled and a cancelled job is red. The
     # failure mode is a red lane rather than a slow one, and a sweep that has
     # to be re-sharded after every large commit is not a gate. A shard with no
     # core file to sweep ends in seconds, so the added cuts cost a push that
@@ -1065,7 +1066,7 @@ jobs:
     # see the note above on why the lines are not enough. Each shard runs its
     # own baseline, and the ratchet is already written for a partial sweep.
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     # One seed for the baseline and every mutant of this shard. A mutation is
     # caught when the tests answer differently with it than without it, so the
     # two runs have to be given the same inputs; proptest otherwise draws from
@@ -1680,13 +1681,16 @@ jobs:
     # nine minutes of margin on a shared runner -- and the next two runs put
     # six and then eight of the twelve on the ceiling at exactly 150.
     #
-    # Twenty-four ways cuts the same pile in half: about 73 minutes a shard
-    # against a budget of 150, which is the margin the ceiling was chosen for
-    # and room for the suite to double again before this is read a third time.
-    # It buys that with one more baseline build per added shard and no more
-    # total work. The alternative -- drawing the laws at fewer cases so the
-    # sweep fits -- is refused here as it was when the budget moved to 150:
-    # the sweep follows the suite, never the other way round.
+    # Twenty-four ways cut the same pile in half: about 73 minutes a shard
+    # against a budget of 150. The suite grew again, and on 2026-10-05 the
+    # slowest of the twenty-four read 94.6 minutes, a ceiling 1.6 times its
+    # reading where the rule `docs/dev/07-tooling-ci.md` states is twice.
+    # Thirty-six ways cut it by a third again, about 63 minutes a shard, which
+    # clears twice under 150 with room for the suite to grow by a fifth. It
+    # buys that with one more baseline build per added shard and no more total
+    # work. The alternative -- drawing the laws at fewer cases so the sweep
+    # fits -- is refused here as it was when the budget moved to 150: the
+    # sweep follows the suite, never the other way round.
     timeout-minutes: 150
     # One seed for the baseline and every mutant of this shard. A mutation is
     # caught when the tests answer differently with it than without it, so the
@@ -1720,7 +1724,8 @@ jobs:
       fail-fast: false
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
-                12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+                12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1753,7 +1758,7 @@ jobs:
           # twice its mean. Mutant `i` on shard `i % 12` spreads every file
           # across every shard.
           cargo mutants --package valgebra-core -j 4 --timeout-multiplier 20 \
-            --shard "${{ matrix.shard }}/24" --sharding round-robin \
+            --shard "${{ matrix.shard }}/36" --sharding round-robin \
             -- -- --skip deep_subtype_into_bottom_terminates \
             --skip subtyping_terminates_on_a_distributed_tower
           status=$?
@@ -1851,7 +1856,7 @@ jobs:
       - name: Merge the shards into one sweep
         env:
           # The sweep's shard matrix, held to it by tests/test_required_jobs.py.
-          SHARDS: "24"
+          SHARDS: "36"
         run: |
           # A whole sweep, or none. The ratchet below runs the *expiry*
           # direction -- it fails a baseline entry whose survivor is gone -- and
