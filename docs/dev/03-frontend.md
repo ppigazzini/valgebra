@@ -16,14 +16,30 @@ a *surface* is a module beside it:
 
 ## How `Annotated` metadata is read
 
-`parse_constraint` reads the constraint a marker carries by **attribute
-protocol**, and the frontend never imports `annotated_types`. A marker carrying
-`ge`, `gt`, `le`, `lt`, `min_length`, `max_length`, `multiple_of` or `pattern`
-(with its `flags`) contributes the matching constraint, so any library's marker
-of that shape works; `Probe` in `build/refine.rs` owns the names. The one
-reading by name is the refusal of a vocabulary marker the frontend does not
-check: `is_constraint_vocabulary` compares its type's `__module__` with
-`annotated_types` and its `__name__` with `DocInfo`.
+`parse_constraint` reads a constraint off **the `annotated_types` vocabulary**
+and off nothing else that carries the same names. A marker whose class derives
+from a class of that module contributes the `ge`, `gt`, `le`, `lt`,
+`min_length`, `max_length` or `multiple_of` it carries, and a subclass of `Ge`
+is read as a `Ge`; `Probe` in `build/refine.rs` owns the names. A `pattern`,
+with its `flags`, is read off valgebra's `Regex` and a compiled `re.Pattern`
+and nothing else. The frontend never imports `annotated_types`:
+`derives_from_vocabulary` compares each class in the marker's method
+resolution order by `__module__`, and `is_pattern_marker` finds its two classes
+in `sys.modules`.
+
+**An attribute name is no protocol.** msgspec's `Meta`, pydantic's `Field` and
+`AfterValidator`, and a class of a caller's own may each carry a `ge`, a
+`pattern` or a `func` and mean what their own library means by it. Read by
+name, `Meta(pattern="a+", max_length=3)` was a whole-string pattern with its
+length dropped, where msgspec searches and keeps the length; `Meta(ge=0)` was
+refused for the pattern it leaves unset; and `AfterValidator(f)` was called as
+a predicate and judged a value by the truth of what `f` returned. Each is that
+library's metadata, and is ignored, as pydantic ignores msgspec's and msgspec
+pydantic's. The vocabulary's README says how a third party joins it -- a
+`GroupedMetadata` that yields the vocabulary's markers -- and that is read:
+pydantic's `StringConstraints` is one. A proposal to read another library's
+names starts from the test it fails, `test_another_librarys_marker_is_ignored`
+in `tests/test_pydantic_boundary.py`.
 
 **A class is never read as a marker**, and is settled before any attribute of
 it is read as a value. A marker *class* exposes descriptors where an instance
@@ -33,13 +49,12 @@ value is ordered against. Calling one is the same trap a step later —
 `Kilograms(1.5)` constructs a unit marker rather than answering whether `1.5`
 belongs.
 
-A class whose instances would be read or refused as a constraint — one from
-the vocabulary, or one carrying a name a constraint is read through — is a
-marker written without its parentheses, and is **refused** with the spelling
-that was meant: ignored, it would widen the schema to its base in silence. The
-names are asked of the class itself, since the probe table asks them of a
-marker's type, which for a class is its metaclass. Any other class is metadata
-this frontend does not recognise, and is ignored.
+A class whose instances would be read or refused — a class of the vocabulary
+other than its documentation marker `DocInfo`, or a pattern marker's class —
+is a marker written without its parentheses, and is **refused** with the
+spelling that was meant: ignored, it would widen the schema to its base in
+silence. Any other class is metadata this frontend does not recognise, and is
+ignored.
 
 **A compiled validator narrows by its set**, and is read before any attribute:
 `build_refine` meets the refined base with every validator the metadata holds,
@@ -49,15 +64,23 @@ unrecognised metadata, it would widen the schema to `T` in silence.
 
 The rest are read in this order:
 
-1. a marker that is itself callable — the marker becomes the predicate;
-2. otherwise, a marker carrying a callable `func` — its `.func` becomes the
-   predicate;
-3. otherwise, a marker that contributed nothing above and carries a true
-   `__is_annotated_types_grouped_metadata__` — each marker it yields is read in
-   turn, to `MAX_GROUPING_DEPTH` levels of grouping;
-4. otherwise, a marker that contributed nothing above and comes from the
-   `annotated_types` vocabulary — refused, since it was written to narrow this
-   schema and ignoring it would admit what it excludes.
+1. a marker carrying a true `__is_annotated_types_grouped_metadata__`, on its
+   type or on itself — each marker it yields is read in turn, to `MAX_GROUPING_DEPTH` levels of
+   grouping, and nothing is read off the group itself. What a group carries as
+   attributes is its members' to say: `StringConstraints` carries a `pattern`
+   and yields it as an object of pydantic's own, which pydantic searches with,
+   and read off the group it was a whole-string match;
+2. a pattern marker — its `pattern`, with its `flags`;
+3. a marker of the vocabulary — the bounds, lengths and step it carries;
+4. a marker that is itself callable — the marker becomes the predicate;
+5. otherwise, a marker of the vocabulary carrying a callable `func` — its
+   `.func` becomes the predicate, which is `Predicate`;
+6. otherwise, a marker that contributed nothing above and whose class is itself
+   one of the vocabulary's — refused, since it was written to narrow this
+   schema and ignoring it would admit what it excludes. A class *deriving* from
+   the vocabulary is read for the vocabulary's names and otherwise ignored, as
+   the README asks of metadata a consumer does not recognise: pydantic derives
+   the object carrying `StringConstraints`' pattern from `BaseMetadata`.
 
 Metadata matching none of these is ignored, which the typing spec says a
 consumer should do with metadata it has no logic for.
@@ -66,8 +89,8 @@ consumer should do with metadata it has no logic for.
 schema is refused.** The spec leaves the reading to the consumer -- "deciding
 how to interpret the metadata (if at all) is the responsibility of the tool or
 library" -- so the refusal is this frontend's rule, not the spec's: what it
-reads there is its own statement of a set, a compiled validator, and the marker
-protocol other libraries share. Each of the four is a form other libraries
+reads there is its own statement of a set, a compiled validator, and the
+vocabulary other libraries share. Each of the four is a form other libraries
 write for their own reading -- a description, a mapping of options, a unit
 class, a list of tags -- and read as a schema, `Annotated[int, "user id"]`
 would be `int` met with the literal `"user id"`, a set with no member, and no
@@ -102,11 +125,11 @@ draws its refinements through the same module, so the pairs the generator
 draws are the pairs the frontend builds by construction rather than by two
 tables kept alike.
 
-**A name is a handle, and an absence is not an exception.** Every attribute the
-protocol asks for is asked by an interned `PyString` the interpreter already
+**A name is a handle, and an absence is not an exception.** Every attribute a
+marker is asked for is asked by an interned `PyString` the interpreter already
 holds, because text would be decoded into a fresh string and hashed before the
 lookup could begin, once per name per marker. The rule is the whole frontend's
-and not the marker protocol's: the dispatch asks `__metadata__`, `__origin__`
+and not the marker reading's: the dispatch asks `__metadata__`, `__origin__`
 and `__supertype__` the same way, a class node asks `_is_protocol` and a
 protocol `__protocol_attrs__` the same way, and each is asked *optionally* --
 `getattr_opt` rather than `hasattr` and then `getattr`, which is one lookup
@@ -118,7 +141,7 @@ the builtin `getattr` with a default (`optional_attribute` in
 3.10 and 3.11 build the error on either road. `__args__`, whose
 presence is all the dispatch reads, is asked by `hasattr`, one lookup through
 `PyObject_HasAttrWithError`. And a marker carries one or two
-of the ten names and not the rest, so absence is the common answer, and giving
+of the eleven names and not the rest, so absence is the common answer, and giving
 it by *raising* costs an exception built, thrown and dropped — four hundred of
 them to compile fifty fields. Which names a marker can carry is a property of
 its type (`Ge` is a `slots` dataclass, so `Ge.ge` is the descriptor
@@ -171,21 +194,28 @@ symmetry:
    itself a class and would otherwise be taken for an ordinary type.
 3. `Never`/`NoReturn` — the lattice bottom, absent on older Pythons and skipped
    there.
-4. **A plain type or class** — a scalar, `object`, a TypedDict, a dataclass, an
+4. `Annotated` written bare — refused, since it annotates nothing. Below 3.13 it
+   is a class, which the next step would read as an `isinstance` test no value
+   passes.
+5. **A plain type or class** — a scalar, `object`, a TypedDict, a dataclass, an
    enum, a protocol. Taken before the typing introspection below because a type
    never has a typing origin, so this skips a `get_origin` call per scalar node.
-5. **An exact `bool`, `int`, `float`, `str` or `bytes`** — a literal of itself.
-6. **An already-compiled validator**, whose pool is interned into this one.
+6. **An exact `bool`, `int`, `float`, `str` or `bytes`** — a literal of itself.
+7. **An already-compiled validator**, whose pool is interned into this one.
    Both after the type branch, because a record's fields are types and a type
    is answered there for a flag test.
-7. `Annotated[T, ...]` — the refinement metadata.
-8. Anything with a typing origin — `list[int]`, `dict[K, V]`, `tuple[...]`,
+8. `Annotated[T, ...]` — the refinement metadata.
+9. Anything with a typing origin — `list[int]`, `dict[K, V]`, `tuple[...]`,
    `X | Y`, `Literal`.
-9. PEP 695 aliases, `NewType`, native list and dict literals.
-10. Anything else — a literal of itself.
+10. PEP 695 aliases, `NewType`, native list and dict literals. An alias's value
+    and a `NewType`'s supertype are type *arguments*, read as a parametrized
+    form's are (`build_type_argument` in `build/generics.rs`): a string there
+    is a forward reference and refused, where read as a constant
+    `NewType("N", "int")` was the literal `'int'`.
+11. Anything else — a literal of itself.
 
 Moving a branch earlier is a behaviour change, not a refactor. `Any` above the
-type branch is the sharp one. Steps 5 and 6 are the moves that are not, and the
+type branch is the sharp one. Steps 6 and 7 are the moves that are not, and the
 argument is what makes them safe: an exact builtin scalar's type carries no
 `__metadata__` or `__supertype__`, `get_origin` answers `None` for it, and it is
 no container and no special form, so every arm before the fallthrough passed it
@@ -396,10 +426,15 @@ node. `Literal` interns each argument as a constant, and refuses a type, a list,
 a dict or a set: the typing spec allows `None`, an enum member, or an `int`,
 `bool`, `str` or `bytes` value, and a type or a container there would be read as
 a schema of its own rather than as a constant (`refuse_unhashable_literal` in
-`build/generics.rs`). The refusal names the spelling that was meant. A
-constant the spec does not admit there -- a float, an instance -- is read all
-the same, as the constant `Validator(c)` reads it: the set is the same
-singleton, and a static checker is what refuses the spelling.
+`build/generics.rs`). A typing form is refused the same way, with the words
+for a form (`refuse_literal_form`): `Literal[list[int]]` built `list[int]`,
+`Literal[NewType("U", int)]` built `int`, a validator its set, and on 3.10,
+where `Any` is not yet a class, `Literal[Any]` built `Any`. An exact builtin
+scalar is answered first, so a wide `Literal` asks none of the rest. The
+refusal names the spelling that was meant. A constant the spec does not admit
+there -- a float, an instance -- is read all the same, as the constant
+`Validator(c)` reads it: the set is the same singleton, and a static checker
+is what refuses the spelling.
 
 A `tuple` reads its arguments as a *shape*: `tuple[int, str]` is a fixed
 sequence of two, `tuple[int, ...]` is a homogeneous one, and `tuple[()]` is the
@@ -478,7 +513,8 @@ seedings to one answer.
 ## Three rejections that belong at compile time
 
 **A typing construct that carries no runtime value** — a `TypeVar`, a
-`ParamSpec`, a bare `Final` or `ClassVar` — is refused rather than interned as a
+`ParamSpec`, a bare `Final` or `ClassVar`, a bare `Annotated`, a
+`dataclasses.InitVar[T]` — is refused rather than interned as a
 literal. Interning it would produce a schema that admits only objects equal to
 the TypeVar, which is almost nothing, and the user would see a validation failure
 instead of a compile error.
@@ -503,9 +539,10 @@ does not parse, and wrapped it closes the anchors' group and opens one they
 close, so its alternation would escape both of them. A pattern this engine
 compiles and `re` reads as a different set is refused before the compile:
 `reject_reserved_class_syntax` in `build/dialect.rs` refuses a character class
-carrying `--`, `&&`, `~~` or a nested `[` other than a POSIX class, and a space
-or a `#` inside a class under verbose mode, each named by the reading this
-engine would give it.
+carrying `--`, `&&`, `~~` or a nested `[` other than a POSIX class, a space or
+a `#` inside a class under verbose mode, and outside a class the escapes `\<`,
+`\>` and `\b{`, which this engine reads as word boundaries and `re` as the
+characters, each named by the reading this engine would give it.
 
 ## Recursion is tied by `recursive` or by an alias
 

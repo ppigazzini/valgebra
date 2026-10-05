@@ -369,11 +369,11 @@ fn wide_interned_value(py: Python<'_>) -> Py<PyAny> {
 /// The fifty-field `TypedDict` of refined integers the annotated build shape
 /// compiles, built once.
 ///
-/// The marker is defined here rather than imported from `annotated_types`: the
-/// frontend reads a marker by its *shape* -- an object carrying `ge` is a lower
-/// bound whoever wrote it -- so a workload that names no third-party package is
-/// one this lane can run with whatever it has installed, and it compiles the
-/// same constraint either way.
+/// The marker is defined here rather than imported from `annotated_types`, and
+/// carries that package's module, which is what the frontend reads a
+/// constraint off: a workload that names no third-party package is one this
+/// lane can run with whatever it has installed, and it compiles the same
+/// constraint either way.
 fn annotated_record(py: Python<'_>) -> Py<PyAny> {
     let module = PyModule::from_code(
         py,
@@ -384,6 +384,7 @@ fn annotated_record(py: Python<'_>) -> Py<PyAny> {
              \x20       self.ge = ge\n\
              \x20   def __repr__(self):\n\
              \x20       return f'Ge({self.ge})'\n\
+             Ge.__module__ = 'annotated_types'\n\
              fields = {f'f{i}': Annotated[int, Ge(0)] for i in range(45)}\n\
              fields.update({f'o{i}': NotRequired[Annotated[int, Ge(0)]] for i in range(5)})\n\
              SPELLING = TypedDict('Wide', fields)\n",
@@ -883,6 +884,7 @@ const REFINED: &str = "from typing import Annotated\n\
      class Ge:\n\
      \x20   def __init__(self, ge):\n\
      \x20       self.ge = ge\n\
+     Ge.__module__ = 'annotated_types'\n\
      SPELLING = list[Annotated[int, Ge(1000)]]\n\
      VALUE = list(range(1000, 1064))\n";
 

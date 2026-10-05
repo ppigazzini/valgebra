@@ -8,8 +8,10 @@ A refinement narrows a base type to the subset satisfying one or more
 constraints. Write it with `Annotated[T, ...markers]`; the base `T` is checked
 first, then each constraint, except a length bound on a container, which is read
 before the elements it bounds (below). valgebra reads the
-[annotated-types](https://pypi.org/project/annotated-types/) markers
-structurally, so it has no runtime dependency on that library.
+[annotated-types](https://pypi.org/project/annotated-types/) markers by the
+module they come from, so it has no runtime dependency on that library; a
+marker another library writes for itself is that library's, and is
+[ignored](#unrecognized-markers).
 
 That is a fact about valgebra, not about your environment: the **examples** on
 this page import `annotated_types`, and `pip install valgebra` does not bring it
@@ -256,6 +258,12 @@ try:
     admits(r"[a[bc]]", "a")
 except ValueError as err:
     assert "nested set" in str(err)
+# Word-boundary escapes. `\<` is the start of a word here and the character `<`
+# to Python, so it is refused too.
+try:
+    admits(r"\<b\>", "b")
+except ValueError as err:
+    assert "the start of a word" in str(err)
 ```
 
 Four more are quiet, and each is in a class or an anchor a ported pattern is
@@ -322,6 +330,13 @@ keeps a space and a `#` there as members, and this engine ignores the space and
 starts a comment at the `#`. So under verbose mode -- `re.VERBOSE`, `(?x)`, or
 `(?x:...)` for one group -- a class carrying either raises a `ValueError` naming
 it. Escape it as `\ ` or `\#` to mean it, which both engines read as a member.
+
+Three escapes part the two outside a class. `\<` and `\>` are the start and the
+end of a word here and the characters `<` and `>` to `re`, so `\<b\>` admits
+`"b"` here and `"<b>"` there; `\b{start}` is a named word boundary here and, to
+`re`, a boundary followed by the text `{start}`. Each raises a `ValueError`
+naming what it asserts here. Write `<`, `>` or `\{` for what `re` reads, or `\b`
+for a word boundary in both.
 
 **A pattern Python spells and this engine does not is refused**, which is the
 loud direction and the one to prefer. A lookaround (`(?=...)`, `(?<=...)`), a
@@ -608,6 +623,34 @@ is harmless and carries no membership meaning. The carve-out is the
 `annotated_types` vocabulary itself: a marker from there was written to narrow
 *this* schema, so one valgebra does not check is refused rather than ignored. A
 validator is not unrecognized metadata at all: it narrows by its set, above.
+
+A constraint is read off the vocabulary's markers, `Regex` and a compiled
+`re.Pattern`, and off nothing else, whatever its attributes are called.
+msgspec's `Meta`, pydantic's `Field` and `AfterValidator`, and a class of your
+own may carry a `ge` or a `pattern` and mean what their own library means by
+it — msgspec and pydantic search with a pattern where valgebra matches it
+whole — so each is ignored, as pydantic ignores msgspec's metadata and msgspec
+pydantic's. A library joins the vocabulary the way its README says, as a
+`GroupedMetadata` yielding the vocabulary's markers, and those are read; a
+class derived from one of the vocabulary's is read as the class it derives
+from.
+
+```python
+from typing import Annotated
+
+from valgebra import Validator
+
+
+class Minimum:
+    """Another library's marker, carrying a name the vocabulary also uses."""
+
+    def __init__(self, ge: int) -> None:
+        self.ge = ge
+
+
+assert Validator(Annotated[int, Minimum(0)]) == Validator(int)
+assert Validator(Annotated[int, Minimum(0)]).is_valid(-1)
+```
 
 A **class** is never read as a marker. A marker carries its values on an
 instance — `Ge(0)` holds `ge = 0` — so the class itself holds no value to read

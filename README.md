@@ -182,7 +182,10 @@ A schema is an ordinary annotation, so valgebra reads the annotations a codebase
 **already has** and answers questions about them the interpreter cannot. Nothing
 is added to the code under study: the schemas live in the script asking the
 question, and valgebra stays a development dependency. This is the mode that
-suits an agent working on a codebase it did not write.
+suits an agent working on a codebase it did not write. A constraint is read off
+the `annotated_types` vocabulary; metadata another library writes for itself,
+such as msgspec's `Meta` or pydantic's `Field`, is that library's and is
+ignored, so a field carrying it reads as its base.
 
 The sharpest question it can settle is whether a contract the code *implies* is
 one anything *enforces*. A parameter used as a divisor must not be zero; one

@@ -24,6 +24,7 @@ with no suppression would be a row about an annotation nobody makes by mistake.
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import sys
 import typing
@@ -35,24 +36,32 @@ import pytest
 import valgebra as vg
 
 
-class _Flagged:
+class _Flagged(vg.Regex):
     """A pattern marker carrying a flag, read the way a compiled one is.
 
-    The frontend reads a marker's `pattern` and `flags`, so this stands in for
-    a compiled pattern without compiling one. Written out because the two flags
-    worth refusing cannot both be reached through `re.compile`: `re.LOCALE` is
-    valid only on a bytes pattern, which is refused one step earlier for being
-    bytes, and compiling with `re.DEBUG` runs the other engine's disassembler --
-    which prints to stdout at import, and on one supported interpreter raises
-    `IndexError` out of its own opcode table, taking collection down with it.
+    The frontend reads a pattern marker's `pattern` and `flags`, and a `Regex`
+    subclass is one, so this stands in for a compiled pattern without compiling
+    one. Written out because the two flags worth refusing cannot both be
+    reached through `re.compile`: `re.LOCALE` is valid only on a bytes pattern,
+    which is refused one step earlier for being bytes, and compiling with
+    `re.DEBUG` runs the other engine's disassembler -- which prints to stdout at
+    import, and on one supported interpreter raises `IndexError` out of its own
+    opcode table, taking collection down with it.
     """
 
+    __slots__ = ("flags",)
+
+    flags: int
+
     def __init__(self, pattern: str, flags: int) -> None:
-        self.pattern = pattern
-        self.flags = flags
+        super().__init__(pattern)
+        object.__setattr__(self, "flags", flags)
 
 
 _T = TypeVar("_T")
+
+#: A `NewType` whose supertype is written as a string, a forward reference.
+_NAMED = typing.NewType("_NAMED", "int")
 
 
 class _Generic(Protocol[_T]):
@@ -78,6 +87,46 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
         TypeVar("T"),  # ty: ignore[invalid-legacy-type-variable]
         NotImplementedError,
         "is a typing construct, not a value",
+    ),
+    # `Annotated` written bare, which below 3.13 is a class and read as an
+    # `isinstance` test no value passes.
+    (
+        "Annotated written bare annotates nothing",
+        Annotated,
+        NotImplementedError,
+        "annotates nothing",
+    ),
+    # A dataclass's constructor parameter, which is an instance of `InitVar`
+    # rather than a typing form and reached the constant fallthrough.
+    (
+        "an InitVar is a constructor parameter",
+        dataclasses.InitVar[int],
+        NotImplementedError,
+        "constructor parameter",
+    ),
+    # A string where a `NewType` names its supertype is a forward reference,
+    # not the literal it was read as.
+    (
+        "a NewType over a string",
+        _NAMED,
+        NotImplementedError,
+        "is a forward reference",
+    ),
+    # `build/generics.rs`: a typing form handed to `Literal`, which the
+    # constant reading built as the schema it names.
+    (
+        "a typing form is not a Literal argument",
+        typing.Literal[list[int]],  # ty: ignore[invalid-type-form]
+        NotImplementedError,
+        "is a typing form rather than a constant",
+    ),
+    # `build/dialect.rs`: a word-boundary escape, an assertion here and literal
+    # characters to `re`.
+    (
+        "a word-boundary escape the other engine reads as characters",
+        Annotated[str, vg.Regex(r"\<b\>")],
+        ValueError,
+        "the start of a word",
     ),
     # `build/generics.rs`: the arities. A mapping needs both halves, and a
     # container that takes one argument is not given two. `typing` guards the

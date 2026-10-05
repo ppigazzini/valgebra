@@ -124,6 +124,28 @@ def test_a_required_qualifier_survives_it_too() -> None:
     assert not schema.is_valid({"a": 1}), "`Required` must beat `total=False`"
 
 
+def test_a_qualifier_inside_annotated_survives_it_too() -> None:
+    """`Annotated[NotRequired[T], m]`: the search reads through the metadata.
+
+    `Annotated`'s origin is the type it annotates, so a search that asked only
+    for a qualifier stopped there and answered nothing, and the key was read
+    from `__required_keys__` -- which CPython fills from strings and gets wrong
+    in both directions.
+    """
+    schema = Validator(_deferred.DeferredAnnotated)
+    assert repr(schema) == (
+        "{'a': int, 'b?': Annotated[int, Ge(0)], 'c?': str, str: anything}"
+    )
+    assert schema.is_valid({"a": 1})
+    assert not schema.is_valid({"a": 1, "b": -1})
+    assert not schema.is_valid({"b": 1})
+
+    pulled_back = Validator(_deferred.DeferredAnnotatedTotalFalse)
+    assert repr(pulled_back) == "{'a?': int, 'b': Annotated[int, Ge(0)], str: anything}"
+    assert pulled_back.is_valid({"b": 0})
+    assert not pulled_back.is_valid({"a": 1}), "`Required` must beat `total=False`"
+
+
 @pytest.mark.skipif(sys.version_info < (3, 13), reason="ReadOnly marker")
 def test_a_qualifier_wrapping_a_qualifier_survives_it_too() -> None:
     """`ReadOnly[NotRequired[T]]`: the search reads through the outer one.

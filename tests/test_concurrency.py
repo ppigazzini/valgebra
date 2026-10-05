@@ -136,10 +136,15 @@ def _compile_markers(failures: list[str], seed: int) -> None:
     """
     try:
         for n in range(MARKER_TYPES):
+            # Of the vocabulary's module, the one a constraint is read off.
             marker = type(
                 f"Ge{seed}_{n}",
                 (),
-                {"__slots__": ("ge",), "__init__": lambda s, v: setattr(s, "ge", v)},
+                {
+                    "__slots__": ("ge",),
+                    "__init__": lambda s, v: setattr(s, "ge", v),
+                    "__module__": "annotated_types",
+                },
             )(n)
             bounded = Validator(Annotated[int, marker])
             assert bounded.is_valid(n) is True

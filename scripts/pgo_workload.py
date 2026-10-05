@@ -17,8 +17,8 @@ caller writes is laid out by guesswork in the shipped wheel.
 It depends only on ``valgebra`` and the standard library (no test, comparison,
 or annotation-metadata packages), so it runs in the minimal environment maturin
 sets up for ``--pgo`` -- which is why the refinements it trains are spelled
-with the native ``Regex`` and with a bound class of its own, read by its ``ge``
-as ``annotated_types.Ge`` is.
+with the native ``Regex`` and with a bound class of its own, carrying
+``annotated_types``' module and read by its ``ge`` as ``annotated_types.Ge`` is.
 Keep it quick: a few seconds is enough to accumulate representative branch
 counts.
 """
@@ -59,7 +59,14 @@ class _Pair:
 
 
 class _AtLeast:
-    """An order bound, carried as `annotated_types.Ge` carries one."""
+    """An order bound, carried as `annotated_types.Ge` carries one.
+
+    It carries that package's module too, because a constraint is read off its
+    vocabulary and no other: without it the bound is metadata the frontend
+    ignores, and the profile trains no bound at all.
+    """
+
+    __module__ = "annotated_types"
 
     def __init__(self, ge: int) -> None:
         self.ge = ge

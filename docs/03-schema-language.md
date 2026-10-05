@@ -750,8 +750,8 @@ assert Validator(Row).is_valid(row)
 
 On a `TypedDict`, `Required`,
 `NotRequired` and `ReadOnly` qualify the key rather than narrowing its type:
-required-ness is read from the qualifier where the field carries one and from
-the class otherwise, and read-only-ness is about writing the key back rather
+required-ness is read from the qualifier where the field carries one, inside an
+`Annotated` too, and from the class otherwise, and read-only-ness is about writing the key back rather
 than about which values belong. Reading the qualifier is what makes a class mean
 the same thing under `from __future__ import annotations`, where the class's own
 key sets are computed from strings and cannot see it.

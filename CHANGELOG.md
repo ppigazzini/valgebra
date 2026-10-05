@@ -20,6 +20,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a union over records does not re-walk
 - fix: the walk and a relation fit a 1 MiB stack
 - fix: a document's keys are hashed with a per-process key
+- fix: a constraint is read off the vocabulary that defines it
 
 -->
 
@@ -43,6 +44,22 @@ answer of its own, or a repair to a change not yet released.
   walked to the unfolding bound of 128, so no answer for it changes; a deeper
   body meets the walk's bound sooner -- `{"a": {"b": {"c": T}}} | int` is
   refused with `recursion_limit` from 77 unfoldings, where it was 102.
+- **A constraint is read off the `annotated_types` vocabulary alone.** A marker
+  carrying a `ge`, a `min_length`, a `pattern` or a `func` was read by those
+  names whichever library wrote it, and another library means its own thing by
+  them: msgspec's `Meta(pattern="a+", max_length=3)` became a whole-string
+  pattern with its length dropped, where msgspec searches and keeps the length;
+  `Meta(ge=0)` was refused for the pattern it leaves unset; pydantic's
+  `AfterValidator(f)` was called as a predicate and judged a value by the truth
+  of what `f` returned. A marker whose class derives from the vocabulary is
+  read for the vocabulary's names, a `pattern` off `Regex` and a compiled
+  `re.Pattern`, a `func` off `Predicate`, and any other marker is its own
+  library's metadata and is ignored, as pydantic and msgspec ignore each
+  other's. A `GroupedMetadata` is unpacked before anything is read off it:
+  pydantic's `StringConstraints` contributes its lengths, and its pattern,
+  which pydantic searches with, is ignored. A class written bare is refused
+  only where it is the vocabulary's own or a pattern marker's, and any other is
+  ignored.
 
 ### Fixed
 
@@ -132,6 +149,20 @@ answer of its own, or a repair to a change not yet released.
   long for each doubling. The table is keyed per process, and the keys are
   covered in the document's order. An ordinary wide object reads 9% to 14%
   fewer instructions than before.
+- **A qualifier inside `Annotated` says whether a `TypedDict` key is
+  required.** `Annotated[NotRequired[int], Ge(0)]` was read from the class's
+  key sets, which under `from __future__ import annotations` CPython computes
+  from strings: the key was required, and `Annotated[Required[int], Ge(0)]` in
+  a `total=False` class optional.
+- **A typing form is refused where a constant or a type argument is read.**
+  `Literal[list[int]]` built `list[int]`, `Literal[NewType("U", int)]` built
+  `int`, and on 3.10 `Literal[Any]` built `Any`; `NewType("N", "int")` and
+  `TypeAliasType("A", "int")` built the literal `'int'`; `InitVar[int]` built a
+  literal of the form object; and below 3.13 a bare `Annotated` built a class
+  test no value passes. Each is refused, naming the spelling that was meant.
+- **`\<`, `\>` and `\b{...}` are refused in a pattern.** They are word-boundary
+  assertions in this engine and literal characters to `re`, so
+  `Regex(r"\<b\>")` admitted `"b"` and refused `"<b>"`.
 
 ## [0.0.16] - 2026-10-04
 

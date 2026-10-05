@@ -305,36 +305,86 @@ pub(super) fn with_inline_flags(
     }
 }
 
-/// Whether `marker` comes from `annotated_types`, whose vocabulary a reader
-/// expects this frontend to know.
+/// Whether `ty`'s attribute `attr` is the text `want`.
 ///
-/// The typing spec says to ignore metadata a consumer does not recognise, and
-/// that is right for metadata written for someone else. A marker from the
-/// constraint vocabulary is not that: it was written to narrow this schema, and
-/// ignoring it leaves a validator that admits everything the marker excludes.
-/// The one member carrying no constraint is the documentation marker, which says
-/// nothing about which values belong.
-pub(super) fn is_unhandled_constraint(marker: &Bound<'_, PyAny>) -> PyResult<bool> {
-    is_constraint_vocabulary(&marker.get_type())
+/// Read through the string rather than into one: `extract::<String>` copies the
+/// text out so the comparison can be made against a Rust literal, which is an
+/// allocation and a free per class for an answer that is a byte compare. The
+/// names are interned, so the `getattr` builds no `str`.
+fn names(ty: &Bound<'_, PyType>, attr: &Bound<'_, PyString>, want: &str) -> PyResult<bool> {
+    Ok(unless_fatal(ty.getattr(attr).map(Some), ty.py(), None)?
+        .and_then(|value| value.cast_into::<PyString>().ok())
+        .is_some_and(|text| text.to_str().is_ok_and(|text| text == want)))
 }
 
-/// Whether `ty` is a class of the `annotated_types` constraint vocabulary.
+/// Whether `ty` derives from a class of `annotated_types`, the one constraint
+/// vocabulary this frontend reads.
+///
+/// Constraint attributes are read off a marker of that vocabulary and no other.
+/// The typing spec says to ignore metadata a consumer does not recognise, and
+/// the vocabulary's own README tells a third party how to join it -- a
+/// `GroupedMetadata` that yields its markers -- where an attribute *name* is no
+/// protocol at all: msgspec's `Meta`, pydantic's `Field` and a class of one's own
+/// may each carry a `ge` or a `pattern` and mean something else by it. pydantic
+/// and msgspec search with a pattern where this library matches it whole, and a
+/// marker read in part -- `Meta(pattern=..., max_length=3)` lost its length --
+/// admits what its own library refuses. A marker from elsewhere is ignored,
+/// which is what every library reading `Annotated` does with another's.
+///
+/// Asked along the method resolution order, so a subclass of `Ge` is read as a
+/// `Ge`, and a `GroupedMetadata` subclass from another library is unpacked.
+fn derives_from_vocabulary(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+    let py = ty.py();
+    for class in ty.mro().iter() {
+        let Ok(class) = class.cast_into::<PyType>() else {
+            continue;
+        };
+        if names(&class, intern!(py, "__module__"), "annotated_types")? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Whether `ty` is itself a class of `annotated_types` other than its
+/// documentation marker: one written to narrow a schema, which this frontend
+/// reads or refuses.
+///
+/// Asked of the class, not along its bases. A marker another library derives
+/// from the vocabulary -- pydantic's own `BaseMetadata` subclass, which its
+/// `StringConstraints` yields with a pattern in it -- is read for what it
+/// carries in the vocabulary's names and otherwise ignored, as the
+/// vocabulary's README asks of metadata a consumer does not recognise.
 fn is_constraint_vocabulary(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let py = ty.py();
-    // Read through the string rather than into one: `extract::<String>` copies
-    // the text out so the comparison can be made against a Rust literal, which
-    // is an allocation and a free per marker for an answer that is a byte
-    // compare. The names are interned, so neither `getattr` builds a `str`.
-    let names = |attr: &Bound<'_, PyString>, want: &str| -> PyResult<bool> {
-        Ok(unless_fatal(ty.getattr(attr).map(Some), py, None)?
-            .and_then(|value| value.cast_into::<PyString>().ok())
-            .is_some_and(|text| text.to_str().is_ok_and(|text| text == want)))
-    };
-    // The second name is asked only where the first says the marker is from the
-    // vocabulary: every marker written for someone else answers `false` here,
-    // and asking what such a marker is *called* decides nothing.
-    Ok(names(intern!(py, "__module__"), "annotated_types")?
-        && !names(intern!(py, "__name__"), "DocInfo")?)
+    // The second name is asked only where the first says the class is from the
+    // vocabulary: every class written for someone else answers `false` here,
+    // and asking what such a class is *called* decides nothing.
+    Ok(names(ty, intern!(py, "__module__"), "annotated_types")?
+        && !names(ty, intern!(py, "__name__"), "DocInfo")?)
+}
+
+/// Whether `ty` is a string-pattern marker: valgebra's `Regex`, or a compiled
+/// `re.Pattern`. A `pattern` is read off these two and nothing else.
+///
+/// Both are found in `sys.modules` rather than imported: an instance of either
+/// exists only once its module is loaded, and a lookup runs no module's code.
+fn is_pattern_marker(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+    let py = ty.py();
+    let modules = super::loaded_modules(py)?;
+    for (module, name) in [
+        (intern!(py, "valgebra._markers"), intern!(py, "Regex")),
+        (intern!(py, "re"), intern!(py, "Pattern")),
+    ] {
+        if let Some(module) = modules.get_item(module)?
+            && let Some(class) = module.getattr_opt(name)?
+            && let Ok(class) = class.cast_into::<PyType>()
+            && ty.is_subclass(&class)?
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// A class written where a marker goes, which is never read as one.
@@ -361,31 +411,18 @@ fn read_a_class(class: &Bound<'_, PyType>) -> PyResult<()> {
     )))
 }
 
-/// Whether a class written where a marker goes is the class of a marker.
-///
-/// Two answers make it one: the class is from the constraint vocabulary, whose
-/// instances are read or refused by name; or it carries a name a constraint is
-/// read through, which a `slots` marker class does as the descriptor for its
-/// instances' value. `flags` is not such a name, since it is read only beside
-/// `pattern`. The names are asked of the class itself, where the probe table
-/// asks them of a marker's type -- which for a class is its metaclass, and
-/// carries none of them.
+/// Whether a class written where a marker goes is the class of a marker: one
+/// whose instances are read or refused -- a class of the constraint vocabulary
+/// other than its documentation marker, or a pattern marker. A class from
+/// anywhere else is the class of metadata this frontend ignores, and is ignored
+/// itself.
 fn is_a_marker_class(class: &Bound<'_, PyType>) -> PyResult<bool> {
-    if is_constraint_vocabulary(class)? {
-        return Ok(true);
-    }
-    let py = class.py();
-    for probe in Probe::ALL {
-        if !matches!(probe, Probe::Flags) && class.getattr_opt(probe.name(py))?.is_some() {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    Ok(is_constraint_vocabulary(class)? || is_pattern_marker(class)?)
 }
 
 /// An optional attribute a refinement marker is read through.
 ///
-/// A marker carries one or two of these and not the other eight: `Ge(0)` has a
+/// A marker carries one or two of these and not the rest: `Ge(0)` has a
 /// `ge` and nothing else, and a compiled pattern has a `pattern` and `flags`.
 /// Absence is the common answer, and it was asked for by *trying*: a `getattr`
 /// for an absent name answers by raising, and `func` was asked with a bare one
@@ -409,11 +446,13 @@ pub(super) enum Probe {
     MaxLength,
     MultipleOf,
     Func,
+    /// The flag a marker standing for the constraints it yields carries.
+    Grouped,
 }
 
 impl Probe {
     /// Every probe, which is what a type is read for when it is first seen.
-    const ALL: [Self; 10] = [
+    const ALL: [Self; 11] = [
         Self::Pattern,
         Self::Flags,
         Self::Ge,
@@ -424,6 +463,7 @@ impl Probe {
         Self::MaxLength,
         Self::MultipleOf,
         Self::Func,
+        Self::Grouped,
     ];
 
     /// The attribute's name, as a handle the interpreter already holds: text
@@ -441,6 +481,7 @@ impl Probe {
             Self::MaxLength => intern!(py, "max_length"),
             Self::MultipleOf => intern!(py, "multiple_of"),
             Self::Func => intern!(py, "func"),
+            Self::Grouped => intern!(py, "__is_annotated_types_grouped_metadata__"),
         }
     }
 
@@ -450,8 +491,9 @@ impl Probe {
     }
 }
 
-/// The mask each marker type reads under, one bit per [`Probe`] plus the two
-/// above. Keyed by the type, which is what the answer is a property of.
+/// The mask each marker type reads under, one bit per [`Probe`] plus the
+/// answers [`Probes`] names about the type. Keyed by the type, which is what the
+/// answer is a property of.
 ///
 /// A shared, *mutable* Python object, which the other caches on this crate's
 /// path are not, so the free-threading argument is worth writing down: a
@@ -502,6 +544,22 @@ impl<'py> Probes<'py> {
     /// which is where a marker that is not a `slots` class puts them.
     const HAS_OWN_DICT: u16 = 1 << 15;
 
+    /// The type derives from the constraint vocabulary, whose markers are the
+    /// only ones a constraint attribute is read off.
+    const VOCABULARY: u16 = 1 << 11;
+
+    /// The type is itself a constraint class of the vocabulary, which is
+    /// refused where it carries nothing this frontend reads.
+    const CONSTRAINT_CLASS: u16 = 1 << 12;
+
+    /// The type is a string-pattern marker.
+    const PATTERN: u16 = 1 << 13;
+
+    /// Whether the marker is of the constraint vocabulary.
+    fn of_vocabulary(&self) -> bool {
+        self.mask & Self::VOCABULARY != 0
+    }
+
     /// Read how this marker answers, from its type and its own dictionary.
     pub(super) fn of(marker: &Bound<'py, PyAny>) -> PyResult<Self> {
         let py = marker.py();
@@ -545,6 +603,15 @@ impl<'py> Probes<'py> {
             .is_some_and(|dict| dict.is_instance_of::<PyDict>())
         {
             mask |= Self::HAS_OWN_DICT;
+        }
+        if derives_from_vocabulary(ty)? {
+            mask |= Self::VOCABULARY;
+        }
+        if is_constraint_vocabulary(ty)? {
+            mask |= Self::CONSTRAINT_CLASS;
+        }
+        if is_pattern_marker(ty)? {
+            mask |= Self::PATTERN;
         }
         Ok(mask)
     }
@@ -610,11 +677,11 @@ pub(super) fn parse_constraint<'py>(
 /// how the rest of this module reads a marker too: an embedded interpreter
 /// starts on the base prefix and sees no virtual environment, so importing the
 /// package to ask `isinstance` would make the answer depend on how the process
-/// was launched.
-fn groups_other_markers(marker: &Bound<'_, PyAny>) -> PyResult<bool> {
+/// was launched. The flag is a probe, read wherever the marker keeps it: on its
+/// type, in its own dictionary, or through a `__getattr__` hook.
+fn groups_other_markers<'py>(marker: &Bound<'py, PyAny>, probes: &Probes<'py>) -> PyResult<bool> {
     let py = marker.py();
-    let flag = marker.getattr_opt(intern!(py, "__is_annotated_types_grouped_metadata__"));
-    match unless_fatal(flag, py, None)? {
+    match unless_fatal(probes.get(marker, Probe::Grouped), py, None)? {
         Some(flag) => unless_fatal(flag.is_truthy(), py, false),
         None => Ok(false),
     }
@@ -689,11 +756,24 @@ fn parse_constraint_within<'py>(
     // answered from a dictionary rather than by the interpreter raising.
     let probes = Probes::of(marker)?;
 
+    // A marker standing for several constraints answers with them, which is
+    // the protocol `annotated_types` documents and how a third party joins its
+    // vocabulary. It is unpacked before anything is read off it: pydantic's
+    // `StringConstraints` is one, and yields `MinLen`, `MaxLen` and an object of
+    // its own carrying a pattern pydantic searches with, where its attributes
+    // would hand that pattern to this frontend's whole-string reading. The flag
+    // is a probe, so a marker that carries none answers without a lookup.
+    if groups_other_markers(marker, &probes)? {
+        return parse_grouped(marker, out, sets, lits, depth);
+    }
+
     // A string-pattern marker: valgebra's `Regex(...)` or a compiled
     // `re.Pattern`, both carrying the source pattern as `.pattern`. The pattern
     // is validated (anchored) here so an invalid expression fails at compile
     // time, not at first validation; the compiled regex is cached per validator.
-    if let Some(attr) = probes.get(marker, Probe::Pattern)? {
+    if probes.mask & Probes::PATTERN != 0
+        && let Some(attr) = probes.get(marker, Probe::Pattern)?
+    {
         let Ok(pattern) = attr.extract::<String>() else {
             // A pattern this frontend cannot read as text. `re` compiles one
             // against `bytes` values, and a pattern constraint here matches the
@@ -723,6 +803,51 @@ fn parse_constraint_within<'py>(
         out.push(Constraint::Regex(pattern));
         return Ok(());
     }
+    if probes.of_vocabulary() {
+        read_vocabulary(marker, &probes, out, lits)?;
+    }
+    // Predicate escape hatch: a callable marker, or `annotated_types.Predicate`,
+    // which carries its callable on `.func` and is not callable itself.
+    //
+    // Callability is how `annotated_types` tells its two marker shapes apart:
+    // `Not` defines `__call__` so a consumer calls it, and calling is what
+    // applies the negation, while `Predicate` deliberately does not. Reading
+    // `.func` from whichever marker has one drops `Not`'s negation and strips a
+    // `functools.partial` of its bound arguments -- both carry a `.func` too.
+    // A `.func` is read off the vocabulary alone: pydantic's `AfterValidator`
+    // carries one that transforms a value, and read as a predicate it judged
+    // the value by the truth of what it returned.
+    if marker.is_callable() {
+        out.push(Constraint::Predicate(lits.intern_predicate(marker)));
+    } else if probes.of_vocabulary()
+        && let Some(func) = probes.get(marker, Probe::Func)?
+        && func.is_callable()
+    {
+        out.push(Constraint::Predicate(lits.intern_predicate(&func)));
+    } else if out.len() == before && probes.mask & Probes::CONSTRAINT_CLASS != 0 {
+        // The typing spec says to ignore metadata a consumer does not
+        // recognise, and that is right for metadata written for someone else.
+        // A marker from the constraint vocabulary is not that: it was written to
+        // narrow this schema, and ignoring it leaves a validator that admits
+        // everything the marker excludes.
+        return Err(not_implemented(&format!(
+            "{} is a constraint this frontend does not check; a schema carrying \
+             it would admit the values it excludes, so it is refused rather than \
+             ignored",
+            summarize(marker)?
+        )));
+    }
+    Ok(())
+}
+
+/// Read the constraints a marker of the vocabulary carries as attributes: the
+/// order bounds, the length bounds and the step.
+fn read_vocabulary<'py>(
+    marker: &Bound<'py, PyAny>,
+    probes: &Probes<'py>,
+    out: &mut Vec<Constraint>,
+    lits: &mut Pool,
+) -> PyResult<()> {
     // Comparison bounds. One marker may carry several (e.g. an interval).
     //
     // A marker carries one of these four and not the other three, so the three
@@ -790,42 +915,6 @@ fn parse_constraint_within<'py>(
         }
         refuse_unnumbered_step(&multiple)?;
         out.push(Constraint::MultipleOf(lits.intern_operand(&multiple)));
-    }
-    // Predicate escape hatch: a callable marker, or `annotated_types.Predicate`,
-    // which carries its callable on `.func` and is not callable itself.
-    //
-    // Callability is how `annotated_types` tells its two marker shapes apart:
-    // `Not` defines `__call__` so a consumer calls it, and calling is what
-    // applies the negation, while `Predicate` deliberately does not. Reading
-    // `.func` from whichever marker has one drops `Not`'s negation and strips a
-    // `functools.partial` of its bound arguments — both carry a `.func` too.
-    if marker.is_callable() {
-        out.push(Constraint::Predicate(lits.intern_predicate(marker)));
-    } else if let Some(func) = probes.get(marker, Probe::Func)?
-        && func.is_callable()
-    {
-        out.push(Constraint::Predicate(lits.intern_predicate(&func)));
-    } else if out.len() == before && groups_other_markers(marker)? {
-        // A marker standing for several constraints answers with them, which is
-        // the protocol `annotated_types` documents and what a caller writes
-        // their own against. `Interval` and `Len` carry their bounds as
-        // attributes too, so the probes above have already read them and this
-        // arm is reached only by a marker whose constraints live nowhere else --
-        // which is why the question is asked here rather than before them. Read
-        // first, it cost an attribute lookup on every marker a schema carries,
-        // and a build of one annotated record spends that on each of them.
-        //
-        // Without the arm, a marker written this way is metadata the frontend
-        // does not recognise, which the typing spec says to ignore -- leaving a
-        // schema that admits everything the marker was written to exclude.
-        return parse_grouped(marker, out, sets, lits, depth);
-    } else if out.len() == before && is_unhandled_constraint(marker)? {
-        return Err(not_implemented(&format!(
-            "{} is a constraint this frontend does not check; a schema carrying \
-             it would admit the values it excludes, so it is refused rather than \
-             ignored",
-            summarize(marker)?
-        )));
     }
     Ok(())
 }

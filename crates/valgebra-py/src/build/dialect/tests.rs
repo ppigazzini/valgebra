@@ -72,6 +72,12 @@ fn a_reserved_form_is_refused_by_the_operator_it_would_have_read() {
         // Outside verbose mode a `#` is a member and starts no comment, so the
         // operator after it is reached.
         ("[#&&x]", "set intersection"),
+        // Word-boundary escapes outside a class, which `re` reads as the
+        // literal characters: `\<b\>` admits `"b"` here and `"<b>"` there.
+        (r"\<b\>", "the start of a word"),
+        (r"a\>", "the end of a word"),
+        (r"\b{start}a", "a named word boundary"),
+        (r"[a]\<", "the start of a word"),
     ] {
         let err = reject_reserved_class_syntax(pattern)
             .expect_err("a reserved form is refused rather than read");
@@ -91,6 +97,14 @@ fn a_reserved_form_is_refused_by_the_operator_it_would_have_read() {
 #[test]
 fn a_form_the_two_engines_agree_on_is_left_alone() {
     for pattern in [
+        // The escapes this scan leaves alone: inside a class an escaped `<` or
+        // `>` is a member to `re` and a parse error here, which the compile
+        // reports loudly; a `\b` is a boundary in both; and a doubled
+        // backslash before a `<` is a literal backslash and a literal `<`.
+        r"[\<\>]",
+        r"\bword\b",
+        r"\\<",
+        r"a\{b",
         // Outside a class, three literals to both engines.
         "a--b",
         "a&&b",

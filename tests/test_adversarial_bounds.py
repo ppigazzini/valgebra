@@ -943,8 +943,11 @@ def test_a_marker_type_past_the_cache_bound_is_still_read() -> None:
     # recomputed -- so it is spelled here, and a bound raised past this is a
     # bound whose test stops reaching the far side.
     past_the_cache = 4 * 256
+    # Of the vocabulary's module, the one a constraint is read off.
     made = [
-        type(f"Bound{n}", (), {"__slots__": (), "ge": n})()
+        type(
+            f"Bound{n}", (), {"__slots__": (), "ge": n, "__module__": "annotated_types"}
+        )()
         for n in range(past_the_cache)
     ]
     for n, marker in enumerate(made):

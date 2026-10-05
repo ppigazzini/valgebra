@@ -184,19 +184,27 @@ def test_a_marker_class_is_refused_with_the_spelling_that_was_meant(
         Validator(annotation)
 
 
-def test_a_class_carrying_a_constraint_name_is_a_marker_class() -> None:
-    """The names a constraint is read through decide it, not the library.
+def test_a_marker_from_outside_the_vocabulary_is_ignored_whatever_it_carries() -> None:
+    """The library decides it, not the names a marker carries.
 
-    A class holding a `pattern` is one whose instances this frontend reads as a
-    pattern, so the class is that marker without its parentheses.
+    A constraint is read off `annotated_types`' markers and no other, so a class
+    holding a `pattern` or a `ge` is metadata written for someone else, ignored
+    bare or instantiated as the typing spec says. A class of the vocabulary
+    written bare is still the marker without its parentheses, and refused.
     """
 
     class Email:
         pattern = r".+@.+"
 
-    with pytest.raises(NotImplementedError, match="write Email"):
-        Validator(Annotated[str, Email])
-    assert Validator(Annotated[str, Email()]).is_valid("a@b")
+    class Floor:
+        def __init__(self) -> None:
+            self.ge = 0
+
+    assert Validator(Annotated[str, Email]) == Validator(str)
+    assert Validator(Annotated[str, Email()]) == Validator(str)
+    assert Validator(Annotated[int, Floor()]) == Validator(int)
+    with pytest.raises(NotImplementedError, match="write MinLen"):
+        Validator(Annotated[str, at.MinLen])
 
 
 def test_a_class_marker_beside_a_real_constraint_leaves_it_standing() -> None:
@@ -576,10 +584,16 @@ def test_a_marker_is_read_however_its_type_keeps_its_names() -> None:
     answers through `__getattr__` for names no dictionary holds. Two markers of
     one type carrying *different* names is the sharp one -- a remembered answer
     taken from the first would read the second as carrying nothing.
+
+    Each double carries the vocabulary's module, the one a constraint is read
+    off: `annotated_types` ships one of the four shapes, and the reading has to
+    hold for a subclass that keeps its names another way.
     """
 
     class Hook:
         """Answers for `ge` and holds nothing."""
+
+        __module__ = "annotated_types"
 
         def __getattr__(self, name: str) -> int:
             if name == "ge":
@@ -590,15 +604,19 @@ def test_a_marker_is_read_however_its_type_keeps_its_names() -> None:
     assert hooked.is_valid(3)
     assert not hooked.is_valid(2)
 
-    class Slotted:
+    class Slotted(at.BaseMetadata):
         __slots__ = ("ge",)
 
     # The class carries the descriptor and the instance never filled it, so
-    # there is no bound to read and the annotation is its base.
+    # there is no bound to read and the annotation is its base. A subclass of
+    # the vocabulary's base, as another library's marker is: one of the
+    # vocabulary's own classes carrying nothing would be refused instead.
     assert Validator(Annotated[int, Slotted()]) == Validator(int)
 
     class Loose:
         """A marker whose value lives in its own dictionary, not its class."""
+
+        __module__ = "annotated_types"
 
     lower = Loose()
     lower.ge = 5  # ty: ignore[unresolved-attribute]

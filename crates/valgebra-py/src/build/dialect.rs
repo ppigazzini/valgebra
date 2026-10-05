@@ -25,6 +25,12 @@
 //! under -- the fact a reader porting the pattern needs, and for two of the
 //! three a sentence `re` has already shown them.
 //!
+//! Three escapes part the two outside a class, the same quiet way: `\<` and
+//! `\>` are the start and end of a word here and a literal `<` and `>` to `re`,
+//! and `\b{start}` is a named word boundary here and, to `re`, a boundary
+//! followed by the literal `{start}`. `\<b\>` admits `"b"` here and `"<b>"`
+//! there. Each is refused by what it asserts here.
+//!
 //! Verbose mode is the fifth. Both engines ignore whitespace and read `#` as a
 //! comment outside a class, and inside one they part: `re` keeps a space and a
 //! `#` as members, and this engine ignores the space and starts a comment at
@@ -96,8 +102,23 @@ pub(crate) fn reject_reserved_class_syntax(pattern: &str) -> PyResult<()> {
             }
             // An escape carries its character with it, whichever side of a
             // class it is on: `[\[&&x]` holds an operator and no nested set.
+            // Outside a class three escapes are assertions here and literals
+            // to `re`: `\<` and `\>` the start and end of a word, and `\b{`
+            // the start of a named word boundary, where `re` reads a boundary
+            // and a literal `{`.
             '\\' => {
-                cursor.next();
+                let escaped = cursor.next().map(|(_, symbol)| symbol);
+                let boundary = match escaped {
+                    Some('<') => Some(("\\<", "the start of a word", "`<`")),
+                    Some('>') => Some(("\\>", "the end of a word", "`>`")),
+                    Some('b') if cursor.peek().map(|&(_, symbol)| symbol) == Some('{') => {
+                        Some(("\\b{", "a named word boundary", "`\\b\\{`"))
+                    }
+                    _ => None,
+                };
+                if let Some(boundary) = boundary.filter(|_| !inside) {
+                    return Err(word_boundary(boundary, pattern, at));
+                }
             }
             '[' if !inside => {
                 inside = true;
@@ -201,6 +222,22 @@ fn verbose_member(here: char, pattern: &str, index: usize) -> PyErr {
          under verbose mode: `re` reads it as a member and this engine does \
          not, so the two read the pattern as different sets. Escape it as \
          {instead} to mean it."
+    ))
+}
+
+/// The refusal for an escape this engine reads as a word-boundary assertion.
+///
+/// `boundary` is what was written, what it asserts here, and what spells the
+/// characters `re` reads, which is the meaning a ported pattern had.
+fn word_boundary(
+    (written, meaning, literal): (&str, &str, &str),
+    pattern: &str,
+    index: usize,
+) -> PyErr {
+    PyValueError::new_err(format!(
+        "{written} at position {index} in {pattern:?} is {meaning} here and \
+         literal characters to `re`, so the two read the pattern as different \
+         sets. Write {literal} for what `re` reads, or \\b for a word boundary."
     ))
 }
 

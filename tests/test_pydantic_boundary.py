@@ -20,6 +20,11 @@ What it pins down is the fragment where the difference is observable, so that
   relations between schemas rather than facts about a value. A model definition
   is not a value in an algebra, so pydantic has nowhere to put the question.
 
+A fifth group is the metadata each library writes for itself: valgebra reads a
+constraint off ``annotated_types``' markers and no other, so ``msgspec.Meta``,
+``pydantic.Field`` and pydantic's validators are ignored, as each of the two
+ignores the other's.
+
 A fourth group states valgebra's own limit in the same currency, because a page
 that only lists what the other tool cannot do is an advertisement:
 ``test_basemodel_is_an_isinstance_check`` and ``test_struct_is_an_isinstance_check``
@@ -32,8 +37,9 @@ from __future__ import annotations
 import dataclasses
 import os
 from dataclasses import dataclass
-from typing import Literal, TypedDict
+from typing import Annotated, Literal, TypedDict
 
+import annotated_types as at
 import pytest
 
 from valgebra import Validator, complement, intersection, union
@@ -393,3 +399,84 @@ def test_dataclass_and_typeddict_are_deep_checked() -> None:
         steps: int
 
     assert not Validator(Fields).is_valid({"lr": 0.1, "steps": "ten"})
+
+
+# --- another library's metadata is that library's ------------------------------
+
+
+def _even(value: int) -> int:
+    """Return an even value and raise on an odd one, as a pydantic validator does."""
+    if value % 2:
+        raise ValueError("odd")
+    return value
+
+
+#: Each row: a base, a marker another library writes for itself, and a value of
+#: the base that library refuses under the marker.
+FOREIGN_MARKERS: list[tuple[str, type, object, object]] = [
+    ("msgspec.Meta(ge=0)", int, msgspec.Meta(ge=0), -1),
+    (
+        "msgspec.Meta(pattern=..., max_length=3)",
+        str,
+        msgspec.Meta(pattern="a+", max_length=3),
+        "bbbb",
+    ),
+    ("pydantic.Field(gt=0)", int, pydantic.Field(gt=0), 0),
+    ("pydantic.AfterValidator", int, pydantic.AfterValidator(_even), 1),
+]
+
+
+def _refused_by_its_library(annotated: object, value: object) -> bool:
+    """Whether the library the marker belongs to refuses `value` under it."""
+    try:
+        TypeAdapter(annotated).validate_python(value, strict=True)
+    except pydantic.ValidationError:
+        return True
+    try:
+        msgspec.convert(value, type=annotated, strict=True)
+    except msgspec.ValidationError:
+        return True
+    return False
+
+
+@pytest.mark.parametrize(
+    ("base", "marker", "refused"),
+    [row[1:] for row in FOREIGN_MARKERS],
+    ids=[row[0] for row in FOREIGN_MARKERS],
+)
+def test_another_librarys_marker_is_ignored(
+    base: type, marker: object, refused: object
+) -> None:
+    """A marker another library writes is that library's, and valgebra reads none.
+
+    A constraint is read off ``annotated_types``' markers alone. An attribute
+    name is no protocol: ``Meta(pattern=..., max_length=3)`` was read as a
+    whole-string pattern with its length dropped, where msgspec searches and
+    keeps the length; ``Meta(ge=0)`` was refused for its unset pattern;
+    ``AfterValidator`` was called as a predicate on what it returned; and
+    ``Field(gt=0)`` was ignored all along. Each is ignored now, as pydantic
+    ignores msgspec's and msgspec pydantic's: the validator is its base's, and
+    it admits the value the marker's own library refuses.
+    """
+    annotated = Annotated[base, marker]  # ty: ignore[invalid-type-form]
+    assert Validator(annotated) == Validator(base)
+    assert Validator(annotated).is_valid(refused)
+    assert _refused_by_its_library(annotated, refused)
+
+
+def test_a_grouped_marker_from_another_library_is_read_for_its_vocabulary() -> None:
+    """A pydantic ``StringConstraints`` yields ``annotated_types`` markers.
+
+    It joins the vocabulary the way the vocabulary's README says a third party
+    does, as a ``GroupedMetadata``, and yields ``MinLen``, ``MaxLen`` and an
+    object of pydantic's own carrying the pattern, which pydantic searches with.
+    The lengths are read and the pattern is ignored, as the README asks of
+    metadata a consumer does not recognise.
+    """
+    grouped = Annotated[
+        str, pydantic.StringConstraints(min_length=1, max_length=3, pattern="a")
+    ]
+    assert Validator(grouped) == Validator(Annotated[str, at.MinLen(1), at.MaxLen(3)])
+    assert Validator(grouped).is_valid("bb")
+    assert not Validator(grouped).is_valid("")
+    assert not Validator(grouped).is_valid("bbbb")

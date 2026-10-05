@@ -794,8 +794,9 @@ pub(super) fn build_typed_dict(
 ///
 /// `Required[T]` and `NotRequired[T]` say it; every other form, `ReadOnly[T]`
 /// included, says nothing and leaves the class's key sets to answer. A qualifier
-/// may wrap another -- `ReadOnly[NotRequired[T]]` is legal -- so the search goes
-/// through the ones that carry no answer rather than stopping at the first.
+/// may wrap another -- `ReadOnly[NotRequired[T]]` is legal -- and `Annotated`
+/// may wrap either, so the search goes through the ones that carry no answer
+/// rather than stopping at the first.
 pub(super) fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<bool>> {
     let py = hint.py();
     let forms = forms(py)?;
@@ -808,6 +809,21 @@ pub(super) fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<boo
         let Some(origin) = optional_attribute(&current, intern!(py, "__origin__"))? else {
             return Ok(None);
         };
+        // An `Annotated` alias's origin is the type it annotates, which may be
+        // the qualifier: `Annotated[NotRequired[int], Ge(0)]` says the key is
+        // optional one level down. Stopping here read every annotated key from
+        // the class's key sets, which under `from __future__ import
+        // annotations` CPython fills from strings and gets wrong both ways. The
+        // alias is known by its class: asked by attribute, `__metadata__` is a
+        // raise in `typing`'s `__getattr__` on every other alias a field is
+        // written with. A class it annotates carries no qualifier.
+        if current.get_type().is(forms.annotated_alias.bind(py)) {
+            if origin.is_instance_of::<PyType>() {
+                return Ok(None);
+            }
+            current = origin;
+            continue;
+        }
         for (marker, answer) in [(&forms.required, true), (&forms.not_required, false)] {
             if let Some(marker) = marker
                 && origin.is(marker.bind(py))

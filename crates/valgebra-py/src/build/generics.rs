@@ -100,6 +100,7 @@ pub(super) fn build_parametrized(
         lits.reserve(args.len());
         for arg in args.iter() {
             refuse_unhashable_literal(&arg)?;
+            refuse_literal_form(&arg)?;
             members.push(build_schema(&arg, lits, defs)?);
         }
         return Ok(Schema::union(members));
@@ -182,6 +183,52 @@ pub(super) fn refuse_unhashable_literal(arg: &Bound<'_, PyAny>) -> PyResult<()> 
          member, or an int, bool, str or bytes value, and this one would be read \
          as a schema of its own rather than as a constant. Write {instead}"
     )))
+}
+
+/// Refuse a typing form handed to `Literal`, which the constant reading would
+/// build as the schema it names.
+///
+/// Python rejects none of these subscriptions, and each reached the schema
+/// reading: `Literal[list[int]]` built `list[int]`, `Literal[NewType("U",
+/// int)]` built `int`, `Literal[Validator(int)]` the validator's set, and on
+/// 3.10, where `Any` is not yet a class, `Literal[Any]` built `Any`. A builtin
+/// scalar is answered first, so a wide `Literal` asks none of the rest.
+pub(super) fn refuse_literal_form(arg: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = arg.py();
+    if super::is_builtin_scalar(arg) {
+        return Ok(());
+    }
+    let forms = forms(py)?;
+    let bottom = [&forms.never, &forms.noreturn]
+        .into_iter()
+        .flatten()
+        .any(|form| arg.is(form.bind(py)));
+    let form = arg.is(forms.any.bind(py))
+        || bottom
+        || is_extension_top_or_bottom(arg)?
+        || arg.is_exact_instance_of::<Validator>()
+        || arg.getattr_opt(intern!(py, "__supertype__"))?.is_some()
+        || forms
+            .type_alias_type
+            .as_ref()
+            .map_or(Ok(false), |alias| arg.is_instance(alias.bind(py)))?
+        || !forms.get_origin.bind(py).call1((arg,))?.is_none();
+    if !form {
+        return Ok(());
+    }
+    Err(not_implemented(&format!(
+        "{} is a typing form rather than a constant, and is not a Literal \
+         argument: the typing spec allows None, an enum member, or an int, \
+         bool, str or bytes value. Write the form on its own to admit its \
+         values, or a constant to admit one",
+        summarize(arg)?
+    )))
+}
+
+/// Whether `arg` is `typing_extensions`' own `Any` or `Never`, an object of its
+/// own below the release that adds each to `typing` and `typing`'s from it on.
+fn is_extension_top_or_bottom(arg: &Bound<'_, PyAny>) -> PyResult<bool> {
+    Ok(is_extension(arg, |held| &held.any)? || is_extension(arg, |held| &held.never)?)
 }
 
 /// True if `origin` is `typing.Union` (from Union/Optional) or

@@ -39,7 +39,10 @@ impl Since {
 /// The namespace a row's expression is evaluated in.
 ///
 /// `at` holds the marker doubles, named for the vocabulary they stand in
-/// for so a row reads as the line a caller would write.
+/// for so a row reads as the line a caller would write. Each double carries
+/// the vocabulary's module, because a constraint is read off that vocabulary
+/// and no other; the embedded interpreter starts on the base prefix, where
+/// `annotated_types` may not be installed.
 fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let namespace = PyDict::new(py);
     for module in ["typing", "dataclasses", "enum", "re", "types"] {
@@ -48,12 +51,14 @@ fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     py.run(
         &CString::new(
             "import types\n\
+             class namespace(types.SimpleNamespace):\n\
+             \x20   pass\n\
              class at:\n\
-             \x20   Ge = staticmethod(lambda n: types.SimpleNamespace(ge=n))\n\
-             \x20   Le = staticmethod(lambda n: types.SimpleNamespace(le=n))\n\
-             \x20   MinLen = staticmethod(\n\
-             \x20       lambda n: types.SimpleNamespace(min_length=n)\n\
-             \x20   )\n\
+             \x20   Ge = staticmethod(lambda n: namespace(ge=n))\n\
+             \x20   Le = staticmethod(lambda n: namespace(le=n))\n\
+             \x20   MinLen = staticmethod(lambda n: namespace(min_length=n))\n\
+             \x20   MultipleOf = staticmethod(lambda n: namespace(multiple_of=n))\n\
+             \x20   Predicate = staticmethod(lambda f: namespace(func=f))\n\
              class slotted:\n\
              \x20   class Ge:\n\
              \x20       __slots__ = ('ge',)\n\
@@ -71,7 +76,8 @@ fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
              \x20       raise AttributeError(name)\n\
              class Timezone:\n\
              \x20   pass\n\
-             Timezone.__module__ = 'annotated_types'\n\
+             for vocabulary in (namespace, slotted.Ge, slotted.MinLen, guarded, hooked, Timezone):\n\
+             \x20   vocabulary.__module__ = 'annotated_types'\n\
              class Kilograms:\n\
              \x20   symbol = 'kg'\n\
              class grouped:\n\
@@ -81,6 +87,27 @@ fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
              class endless:\n\
              \x20   __is_annotated_types_grouped_metadata__ = True\n\
              \x20   def __iter__(self): return iter([self])\n\
+             class Floor(namespace):\n\
+             \x20   pass\n\
+             class Tagged(Timezone):\n\
+             \x20   pass\n\
+             Floor.__module__ = Tagged.__module__ = 'elsewhere'\n\
+             class carrying(grouped):\n\
+             \x20   ge = 5\n\
+             carrying.__module__ = 'annotated_types'\n\
+             class flagged_off(namespace):\n\
+             \x20   __is_annotated_types_grouped_metadata__ = False\n\
+             class hooked_group:\n\
+             \x20   __slots__ = ('items',)\n\
+             \x20   __is_annotated_types_grouped_metadata__ = True\n\
+             \x20   def __init__(self, *items): self.items = items\n\
+             \x20   def __iter__(self): return iter(self.items)\n\
+             \x20   def __getattr__(self, name): raise AttributeError(name)\n\
+             class flagged_here:\n\
+             \x20   def __init__(self, *items):\n\
+             \x20       self.items = items\n\
+             \x20       self.__is_annotated_types_grouped_metadata__ = True\n\
+             \x20   def __iter__(self): return iter(self.items)\n\
              def nest(depth):\n\
              \x20   marker = at.Ge(0)\n\
              \x20   for _ in range(depth): marker = grouped(marker)\n\
@@ -212,15 +239,15 @@ fn each_spelling_builds_its_own_schema() {
             // constraint is read through: a unit, a tag, an enumeration.
             ("typing.Annotated[float, Kilograms]", "float"),
             (
-                "typing.Annotated[int, types.SimpleNamespace(multiple_of=3)]",
+                "typing.Annotated[int, at.MultipleOf(3)]",
                 "Annotated[int, MultipleOf(3)]",
             ),
             // A refinement carries its markers on the base it narrows, and
             // a nested one folds onto that base rather than nesting.
             ("typing.Annotated[int, at.Ge(0)]", "Annotated[int, Ge(0)]"),
             // The shapes a marker keeps its names in, which decide where the
-            // frontend reads them from. `SimpleNamespace` above keeps them in
-            // an instance dictionary; the vocabulary this stands in for ships
+            // frontend reads them from. `at` above keeps them in an instance
+            // dictionary; the vocabulary this stands in for ships
             // `slots` dataclasses, which keep them on the *type* as
             // descriptors, and a marker may answer through `__getattr__` for a
             // name no dictionary of either holds. For three releases this
@@ -235,12 +262,10 @@ fn each_spelling_builds_its_own_schema() {
                 "Annotated[str, MinLen(1)]",
             ),
             ("typing.Annotated[int, hooked()]", "Annotated[int, Ge(0)]"),
-            // Both at once: the name is on the type *and* the type has a hook,
-            // which is the one marker whose mask is exactly the bit for that
-            // name beside the hook's. A reading that compared those two the
-            // wrong way would answer "nothing carried" for precisely this
-            // shape and for no other, so the row is the shape rather than an
-            // example.
+            // Both at once: the name is on the type *and* the type has a hook.
+            // Its mask carries the vocabulary's bits beside the name's and the
+            // hook's, so the mask that is exactly those two is a grouped
+            // marker's, `hooked_group` in the vocabulary test.
             ("typing.Annotated[int, guarded(0)]", "Annotated[int, Ge(0)]"),
             (
                 "typing.Annotated[str, at.MinLen(1)]",
@@ -313,6 +338,129 @@ fn each_spelling_a_release_adds_builds_where_that_release_has_it() {
     });
 }
 
+/// A constraint is read off the vocabulary's markers and no other's: a name is
+/// no protocol, and another library's `ge`, `pattern` or `func` means what that
+/// library means by it.
+#[test]
+fn a_constraint_is_read_off_its_vocabulary_alone() {
+    Python::attach(|py| {
+        for (expression, wanted) in [
+            ("typing.Annotated[int, types.SimpleNamespace(ge=0)]", "int"),
+            (
+                "typing.Annotated[str, types.SimpleNamespace(pattern='a')]",
+                "str",
+            ),
+            (
+                "typing.Annotated[int, types.SimpleNamespace(func=bool)]",
+                "int",
+            ),
+            // A class deriving from the vocabulary is read as the class it
+            // derives from, and one carrying nothing the frontend reads is
+            // ignored rather than refused, instance or class: only the
+            // vocabulary's own classes were written to narrow a schema.
+            (
+                "typing.Annotated[int, Floor(ge=3)]",
+                "Annotated[int, Ge(3)]",
+            ),
+            ("typing.Annotated[int, Tagged()]", "int"),
+            ("typing.Annotated[int, Tagged]", "int"),
+            // The vocabulary's predicate carries its callable, and a pattern
+            // is read off a compiled one.
+            (
+                "typing.Annotated[int, at.Predicate(bool)]",
+                "Annotated[int, Predicate(...)]",
+            ),
+            (
+                "typing.Annotated[str, re.compile('a')]",
+                "Annotated[str, Regex('a')]",
+            ),
+            // A group is unpacked before anything is read off it: what it
+            // carries as attributes is its members' to say, and read off the
+            // group as well it is said twice, or differently.
+            (
+                "typing.Annotated[int, carrying(at.Ge(0))]",
+                "Annotated[int, Ge(0)]",
+            ),
+            // The flag says it, true or false, wherever the marker keeps it.
+            (
+                "typing.Annotated[int, flagged_off(ge=2)]",
+                "Annotated[int, Ge(2)]",
+            ),
+            (
+                "typing.Annotated[int, flagged_here(at.Ge(0))]",
+                "Annotated[int, Ge(0)]",
+            ),
+            // A flag on the type behind a hook, and nothing else the type
+            // carries: the one marker whose mask is exactly the probe's bit
+            // beside the hook's, now that a marker of the vocabulary carries
+            // its class's bits beside them too.
+            (
+                "typing.Annotated[int, hooked_group(at.Ge(0))]",
+                "Annotated[int, Ge(0)]",
+            ),
+        ] {
+            let got = built(py, expression).unwrap_or_else(|error| {
+                panic!("{expression} did not build: {error}");
+            });
+            assert_eq!(got, wanted, "{expression}");
+        }
+    });
+}
+
+/// A typing form is refused where a constant or a type argument is read, and
+/// so is a form that names no set at all: each was built quietly as something
+/// else.
+#[test]
+fn a_typing_form_is_refused_where_a_constant_or_a_type_argument_is_read() {
+    Python::attach(|py| {
+        let refuses = |expression: &str, wanted: &str| {
+            let error = match built(py, expression) {
+                Err(error) => error.to_string(),
+                Ok(schema) => panic!("{expression} built {schema} instead of refusing"),
+            };
+            assert!(error.contains(wanted), "{expression} refused with {error}");
+        };
+        for (expression, wanted) in [
+            ("typing.Annotated", "annotates nothing"),
+            ("dataclasses.InitVar[int]", "constructor parameter"),
+            // A supertype is a type argument, where a string is a reference.
+            ("typing.NewType('N', 'int')", "forward reference"),
+            // A typing form is no constant, whichever reading would build it.
+            ("typing.Literal[list[int]]", "rather than a constant"),
+            ("typing.Literal[typing.Any]", "rather than a constant"),
+            ("typing.Literal[typing.NoReturn]", "rather than a constant"),
+            (
+                "typing.Literal[typing.NewType('U', int)]",
+                "rather than a constant",
+            ),
+        ] {
+            refuses(expression, wanted);
+        }
+        for (since, expression, wanted) in [
+            (
+                Since(11),
+                "typing.Literal[typing.Never]",
+                "rather than a constant",
+            ),
+            (
+                Since(12),
+                "typing.Literal[typing.TypeAliasType('A', int)]",
+                "rather than a constant",
+            ),
+            // An alias's value is a type argument, as a supertype is.
+            (
+                Since(12),
+                "typing.TypeAliasType('A', 'int')",
+                "forward reference",
+            ),
+        ] {
+            if since.met(py) {
+                refuses(expression, wanted);
+            }
+        }
+    });
+}
+
 /// The forms the frontend refuses, and the message each refusal carries.
 ///
 /// A refusal is a decision about the algebra -- a construct that names no
@@ -359,6 +507,7 @@ fn each_refusal_says_what_it_refuses() {
             // the schema to its base if they were ignored.
             ("typing.Annotated[int, slotted.Ge]", "write Ge(...)"),
             ("typing.Annotated[int, Timezone]", "write Timezone(...)"),
+            ("typing.Annotated[str, re.Pattern]", "write Pattern(...)"),
             // A grouping that never bottoms out, and one nested past the bound:
             // following either to the end is a stack this library does not have.
             // A constraint put to a literal is put to the values of the kind
@@ -992,6 +1141,7 @@ fn a_builtin_number_bound_is_placed_without_asking_the_abc() {
               class Ge:\n\
               \x20   def __init__(self, ge):\n\
               \x20       self.ge = ge\n\
+              Ge.__module__ = 'annotated_types'\n\
               def arm():\n\
               \x20   asked.clear()\n\
               \x20   armed[0] = threading.get_ident()\n\
@@ -1375,6 +1525,16 @@ fn a_validator_in_the_metadata_is_met_with_the_base() {
                 "{expression}"
             );
         }
+        // A validator is no constant: in a `Literal` it is refused, where the
+        // schema reading would have built the set it checks.
+        let literal = py
+            .eval(c"typing.Literal[text]", Some(&namespace), None)
+            .expect("the literal evaluates");
+        assert!(
+            build_schema(&literal, &mut Pool::default(), &mut Vec::new())
+                .is_err_and(|err| err.to_string().contains("rather than a constant")),
+            "a validator in a Literal is refused"
+        );
     });
 }
 
@@ -1705,6 +1865,18 @@ fn a_qualifier_states_required_ness_only_from_the_outside() {
             // qualifier, so the search ends at it and never sees the
             // `Required` it holds.
             (Since(11), "list[typing.Required[int]]", None),
+            // `Annotated` carries no answer of its own either, and what it
+            // annotates may be the qualifier.
+            (
+                Since(11),
+                "typing.Annotated[typing.NotRequired[int], 1]",
+                Some(false),
+            ),
+            (
+                Since(11),
+                "typing.Annotated[typing.Required[int], 1]",
+                Some(true),
+            ),
             (Since(11), "dict[str, typing.NotRequired[int]]", None),
         ] {
             if since.met(py) {
@@ -1814,6 +1986,14 @@ fn a_typing_extensions_form_reads_as_its_typing_spelling() {
                 .is_err_and(|err| err.is_instance_of::<PyNotImplementedError>(py)),
             "Self is a construct, not a value"
         );
+        // The top and the bottom are forms in a `Literal`, as in `typing`.
+        for form in ["Any", "Never"] {
+            let refused = schema_of(&format!("typing.Literal[extensions.{form}]"));
+            assert!(
+                refused.is_err_and(|err| err.to_string().contains("a constant")),
+                "{form}"
+            );
+        }
         py.run(
             c"if stand_in:\n    del sys.modules['typing_extensions']\n",
             Some(&namespace),

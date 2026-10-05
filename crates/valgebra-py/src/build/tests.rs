@@ -163,6 +163,7 @@ fn every_variant_is_built_by_a_producer_and_the_placeholder_by_none() {
               class Ge:\n\
               \x20   def __init__(self, ge):\n\
               \x20       self.ge = ge\n\
+              Ge.__module__ = 'annotated_types'\n\
               @dataclass\n\
               class Point:\n\
               \x20   x: int\n\
@@ -251,6 +252,7 @@ from typing import Annotated, ClassVar, Generic, List, Literal, NamedTuple, Opti
 class Ge:
     def __init__(self, ge):
         self.ge = ge
+Ge.__module__ = "annotated_types"
 
 T = TypeVar("T")
 

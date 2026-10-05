@@ -31,11 +31,19 @@ fn hash_shape<H: Hasher>(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], ha
 /// Build a schema from an annotation, with the pool it indexes.
 fn compile(py: Python<'_>, expression: &str) -> (Schema, Vec<Py<PyAny>>) {
     let namespace = PyDict::new(py);
-    for module in ["typing", "types"] {
+    for module in ["typing", "types", "re"] {
         namespace
             .set_item(module, py.import(module).expect("the module imports"))
             .expect("a namespace holds it");
     }
+    // A double for the constraint vocabulary, whose module is what a
+    // constraint is read off; the embedded interpreter may not have it.
+    py.run(
+        c"class marker(types.SimpleNamespace): pass\nmarker.__module__ = 'annotated_types'\n",
+        Some(&namespace),
+        None,
+    )
+    .expect("the double defines");
     let annotation = py
         .eval(
             &CString::new(expression).expect("no interior nul"),
@@ -87,10 +95,10 @@ fn the_order_a_constant_was_pooled_in_is_not_part_of_the_schema() {
             ("{str: int, int: str}", "{int: str, str: int}"),
             // A refinement's markers are a set of constraints.
             (
-                "typing.Annotated[int, types.SimpleNamespace(ge=0), \
-                 types.SimpleNamespace(le=9)]",
-                "typing.Annotated[int, types.SimpleNamespace(le=9), \
-                 types.SimpleNamespace(ge=0)]",
+                "typing.Annotated[int, marker(ge=0), \
+                 marker(le=9)]",
+                "typing.Annotated[int, marker(le=9), \
+                 marker(ge=0)]",
             ),
             // And the plain cases, so the comparison is not passing
             // everything.
@@ -123,8 +131,8 @@ fn reading_through_the_pool_does_not_make_everything_equal() {
             ("{'a': int}", "{'a?': int}"),
             // The bound is the same number and the direction is not.
             (
-                "typing.Annotated[int, types.SimpleNamespace(ge=0)]",
-                "typing.Annotated[int, types.SimpleNamespace(le=0)]",
+                "typing.Annotated[int, marker(ge=0)]",
+                "typing.Annotated[int, marker(le=0)]",
             ),
             // A sequence's positions are ordered, unlike a union's members.
             ("tuple[int, str]", "tuple[str, int]"),
@@ -136,12 +144,12 @@ fn reading_through_the_pool_does_not_make_everything_equal() {
             // The constraints whose operand is written into the node rather
             // than pooled: their payloads are the whole difference.
             (
-                "typing.Annotated[str, types.SimpleNamespace(min_length=1)]",
-                "typing.Annotated[str, types.SimpleNamespace(min_length=2)]",
+                "typing.Annotated[str, marker(min_length=1)]",
+                "typing.Annotated[str, marker(min_length=2)]",
             ),
             (
-                "typing.Annotated[str, types.SimpleNamespace(pattern='a+')]",
-                "typing.Annotated[str, types.SimpleNamespace(pattern='b+')]",
+                "typing.Annotated[str, re.compile('a+')]",
+                "typing.Annotated[str, re.compile('b+')]",
             ),
         ] {
             assert!(!same(py, left, right), "{left} is read as {right}");
@@ -443,16 +451,16 @@ fn the_shape_hash_reads_what_each_node_holds() {
             ("{str: int}", "{str: str}"),
             ("{'a': int}", "{'a': int, str: int}"),
             (
-                "typing.Annotated[str, types.SimpleNamespace(min_length=1)]",
-                "typing.Annotated[str, types.SimpleNamespace(min_length=2)]",
+                "typing.Annotated[str, marker(min_length=1)]",
+                "typing.Annotated[str, marker(min_length=2)]",
             ),
             (
-                "typing.Annotated[str, types.SimpleNamespace(min_length=1)]",
-                "typing.Annotated[str, types.SimpleNamespace(max_length=1)]",
+                "typing.Annotated[str, marker(min_length=1)]",
+                "typing.Annotated[str, marker(max_length=1)]",
             ),
             (
-                "typing.Annotated[str, types.SimpleNamespace(pattern='a+')]",
-                "typing.Annotated[str, types.SimpleNamespace(pattern='b+')]",
+                "typing.Annotated[str, re.compile('a+')]",
+                "typing.Annotated[str, re.compile('b+')]",
             ),
             ("int | str", "int | bytes"),
             // The two pooled leaves. Every pair above differs in a node's

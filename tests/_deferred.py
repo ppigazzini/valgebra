@@ -16,7 +16,10 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import Annotated, TypedDict
+
+import typing_extensions
+from annotated_types import Ge
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required
@@ -47,6 +50,27 @@ if sys.version_info >= (3, 13):
 
         a: int
         d: ReadOnly[NotRequired[int]]
+
+
+class DeferredAnnotated(TypedDict):
+    """A qualifier inside `Annotated`, behind a string.
+
+    The resolved hint is `Annotated[NotRequired[int], ...]`, whose origin is the
+    qualified type rather than the qualifier, so a search that stopped at the
+    `Annotated` layer read the key from `__required_keys__` -- here, required.
+    `typing_extensions`' qualifiers, so the class is read on the floor too.
+    """
+
+    a: int
+    b: Annotated[typing_extensions.NotRequired[int], Ge(0)]
+    c: Annotated[typing_extensions.ReadOnly[typing_extensions.NotRequired[str]], "doc"]
+
+
+class DeferredAnnotatedTotalFalse(TypedDict, total=False):
+    """The other direction: `Annotated[Required[T], ...]` in a `total=False` class."""
+
+    a: int
+    b: Annotated[typing_extensions.Required[int], Ge(0)]
 
 
 @dataclass

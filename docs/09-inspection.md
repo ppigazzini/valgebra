@@ -7,7 +7,11 @@ description: Using valgebra to interrogate a codebase that has no schemas of its
 A schema is an ordinary annotation, so valgebra reads the annotations a codebase
 **already has** — and answers questions about them the interpreter cannot. Nothing
 is added to the code under study: the schemas live in the script asking the
-question, and valgebra stays a development dependency.
+question, and valgebra stays a development dependency. A constraint is read off
+the `annotated_types` vocabulary; metadata another library writes for itself,
+such as msgspec's `Meta` or pydantic's `Field`, is that library's and is
+ignored, so a field carrying it reads as its base, a wider set than the one
+that library enforces ([refinements](05-refinements.md#unrecognized-markers)).
 
 This page is the recipes. Each is one question, asked of one or two annotations,
 answered by set reasoning rather than by reading. They suit an agent working on a

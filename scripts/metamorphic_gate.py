@@ -236,19 +236,26 @@ class Ge:
     Written here rather than imported so the corpus depends on nothing but
     valgebra: a gate that cannot run without an optional dependency reports
     "could not run" on the lanes that lack it, which is the outcome that proves
-    the least.
+    the least. Each marker carries that package's module, because a constraint
+    is read off its vocabulary and no other.
     """
+
+    __module__ = "annotated_types"
 
     def __init__(self, ge: int) -> None:
         self.ge = ge
 
 
 class Le:
+    __module__ = "annotated_types"
+
     def __init__(self, le: int) -> None:
         self.le = le
 
 
 class MinLen:
+    __module__ = "annotated_types"
+
     def __init__(self, min_length: int) -> None:
         self.min_length = min_length
 

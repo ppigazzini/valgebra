@@ -71,7 +71,11 @@ fn build_alias(
 
     let token = fresh_self_token();
     OPEN_ALIASES.with_borrow_mut(|open| open.push((address, token, Cell::new(false))));
-    let body = build_schema(&obj.getattr(intern!(obj.py(), "__value__"))?, lits, defs);
+    // The value is a type *argument*, as a `NewType`'s supertype is: a string
+    // there is a forward reference, and `TypeAliasType("A", "int")` and `type A
+    // = "int"` were read as the literal `'int'`.
+    let body =
+        generics::build_type_argument(&obj.getattr(intern!(obj.py(), "__value__"))?, lits, defs);
     let recursive = OPEN_ALIASES
         .with_borrow_mut(Vec::pop)
         .is_some_and(|(_, _, used)| used.get());
@@ -165,6 +169,12 @@ struct Forms {
     optional: Py<PyAny>,
     union_type: Py<PyAny>,
     literal: Py<PyAny>,
+    /// `typing.Annotated` itself, which is a class below 3.13: written bare it
+    /// read as an `isinstance` test no value passes.
+    annotated: Py<PyAny>,
+    /// The class of an `Annotated[T, ...]` alias, `typing._AnnotatedAlias`,
+    /// which `typing_extensions` spells with `typing`'s own `Annotated`.
+    annotated_alias: Py<PyType>,
     /// `typing.get_origin` and `typing.get_args`, the spec's own introspection,
     /// held as the callables they are.
     ///
@@ -248,6 +258,12 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             optional: typing.getattr("Optional")?.unbind(),
             union_type: py.import("types")?.getattr("UnionType")?.unbind(),
             literal: typing.getattr("Literal")?.unbind(),
+            annotated: typing.getattr("Annotated")?.unbind(),
+            annotated_alias: typing
+                .getattr("Annotated")?
+                .get_item((py.get_type::<PyInt>(), 0))?
+                .get_type()
+                .unbind(),
             get_origin: typing.getattr("get_origin")?.unbind(),
             get_args: typing.getattr("get_args")?.unbind(),
             forward_ref: optional_form(annotationlib.as_ref().unwrap_or(&typing), "ForwardRef"),
@@ -292,8 +308,8 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
 /// Asked only where a form would otherwise be read as something else, so a
 /// schema that names none of them pays nothing for it.
 pub(crate) struct Extensions {
-    any: Option<Py<PyAny>>,
-    never: Option<Py<PyAny>>,
+    pub(crate) any: Option<Py<PyAny>>,
+    pub(crate) never: Option<Py<PyAny>>,
     type_alias_type: Option<Py<PyAny>>,
     /// The class `Self`, `LiteralString` and `Never` are instances of below
     /// 3.11, which is not `typing._SpecialForm`.
@@ -453,6 +469,17 @@ pub(crate) fn build_schema(
         }
     }
 
+    // `Annotated` written bare annotates nothing. Below 3.13 it is a class, so
+    // the dispatch below read it as an `isinstance` test no value passes; from
+    // 3.13 it is a special form and was refused as one, in words about type
+    // variables. Asked by identity, once, ahead of both.
+    if obj.is(forms.annotated.bind(py)) {
+        return Err(not_implemented(
+            "typing.Annotated written bare annotates nothing: write \
+             Annotated[T, metadata] for the type T with its metadata",
+        ));
+    }
+
     // A plain type or class (a scalar, `object`, TypedDict, dataclass, enum,
     // protocol, ...) is dispatched here, before the typing introspection below.
     // A type never has a typing origin, so taking this path first skips a
@@ -535,8 +562,12 @@ pub(crate) fn build_schema(
     // `__metadata__` arm above states the reason for. Spelled `hasattr` then
     // `getattr`, this decoded the name from UTF-8 and hashed it twice per node,
     // on the path every form that is not a class and has no origin crosses.
+    //
+    // The supertype is a type *argument*: a string there is a forward reference,
+    // and read as the constant fallthrough reads one, `NewType("N", "int")` was
+    // the literal `'int'`.
     if let Some(supertype) = obj.getattr_opt(intern!(py, "__supertype__"))? {
-        return build_schema(&supertype, lits, defs);
+        return generics::build_type_argument(&supertype, lits, defs);
     }
 
     if let Ok(list) = obj.cast::<PyList>() {
@@ -593,12 +624,17 @@ pub(crate) fn build_schema(
 /// it is. A subclass is not one -- an `IntEnum` member is an `int` -- and takes
 /// the walk every other object takes.
 fn builtin_constant(obj: &Bound<'_, PyAny>, lits: &mut Pool) -> Option<Schema> {
-    let scalar = obj.is_exact_instance_of::<PyInt>()
+    is_builtin_scalar(obj).then(|| Schema::Literal(lits.intern_const(obj)))
+}
+
+/// Whether `obj` is an exact `bool`, `int`, `float`, `str` or `bytes`: a value
+/// and never a typing form, whichever reading asks.
+pub(crate) fn is_builtin_scalar(obj: &Bound<'_, PyAny>) -> bool {
+    obj.is_exact_instance_of::<PyInt>()
         || obj.is_exact_instance_of::<PyString>()
         || obj.is_exact_instance_of::<PyBool>()
         || obj.is_exact_instance_of::<PyFloat>()
-        || obj.is_exact_instance_of::<PyBytes>();
-    scalar.then(|| Schema::Literal(lits.intern_const(obj)))
+        || obj.is_exact_instance_of::<PyBytes>()
 }
 
 /// An already-compiled validator, composed into the schema being built: its
@@ -655,6 +691,14 @@ fn build_unrecognised(
         return Ok(schema);
     }
 
+    if is_init_var(obj)? {
+        return Err(not_implemented(&format!(
+            "{} names a dataclass's constructor parameter, which is no field and \
+             no value of one: write the type it carries",
+            summarize(obj)?
+        )));
+    }
+
     if is_class_factory(obj)? {
         return Err(not_implemented(&format!(
             "{} is the base a class is declared from, not a type: pass the \
@@ -674,6 +718,23 @@ fn build_unrecognised(
     }
 
     Ok(Schema::Literal(lits.intern_const(obj)))
+}
+
+/// True if `obj` is a `dataclasses.InitVar[...]`, which is an instance of the
+/// class rather than a typing form, and so reached the constant fallthrough.
+///
+/// Looked up in `sys.modules` rather than imported: an instance exists only once
+/// the module is loaded, and importing `dataclasses` from here is the import
+/// that deadlocks against a lazy import on 3.15 (`docs/dev/08-testing.md`).
+fn is_init_var(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = obj.py();
+    let Some(module) = loaded_modules(py)?.get_item(intern!(py, "dataclasses"))? else {
+        return Ok(false);
+    };
+    match module.getattr_opt(intern!(py, "InitVar"))? {
+        Some(class) => obj.is_instance(&class),
+        None => Ok(false),
+    }
 }
 
 /// True if `obj` is `TypedDict` or `NamedTuple` itself, from either module.
