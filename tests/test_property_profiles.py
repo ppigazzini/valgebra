@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -102,4 +103,37 @@ def test_the_nightly_lane_hands_its_database_back_each_night() -> None:
     assert any(
         carries(step, "save") and step.get("if") == "always()"
         for step in steps[deep + 1 :]
+    )
+
+
+def test_every_property_file_runs_under_the_nightly_profile() -> None:
+    """A property only the merge gate draws asks the same examples forever.
+
+    The ``ci`` profile is derandomised: its draw is a function of the test's
+    source, so every push asks the same examples until the test is edited. Only
+    the nightly lane draws at random, and only in the files its deep suite
+    names. Seven files with twelve properties were left off that list -- the
+    four that hold the walk to pydantic-core and jsonschema among them -- so the
+    tree's one independent oracle answered the same 2,000 questions on every
+    push and none at night.
+    """
+    drawn = {
+        path.relative_to(ROOT).as_posix()
+        for path in TESTS.glob("test_*.py")
+        if re.search(r"^\s*@given\(", path.read_text(encoding="utf-8"), re.MULTILINE)
+    }
+    assert drawn, "no test file draws a property"
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    )
+    (deep,) = (
+        str(step["run"])
+        for step in workflow["jobs"]["nightly-fuzz"]["steps"]
+        if step.get("env", {}).get("HYPOTHESIS_PROFILE") == "nightly"
+    )
+    named = set(re.findall(r"tests/test_\w+\.py", deep))
+    missing = sorted(drawn - named)
+    assert not missing, (
+        f"property files the nightly profile never draws: {missing}. Name each "
+        "in the nightly lane's deep suite."
     )

@@ -380,7 +380,11 @@ which the nightly lane restores before its deep suite and saves after it, red or
 green, so a kept failure is replayed first on the next night; a red night also
 uploads it. `tests/test_property_profiles.py` reads each profile in a child
 interpreter with `CI` set, where the inheritance happens, and the lane's steps
-around the deep suite.
+around the deep suite. It also holds the deep suite to every file a property is
+drawn in: a file the nightly lane does not name asks only the `ci` profile's
+examples, the same ones on every push, and seven did -- the four properties
+that hold the walk to pydantic-core and jsonschema among them, which the deep
+suite asks with the oracles installed and required.
 
 ## What a use case is, and how many there are
 

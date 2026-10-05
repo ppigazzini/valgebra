@@ -1382,8 +1382,10 @@ jobs:
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.13"
-      - name: Install dev dependencies
-        run: uv sync --locked --no-install-project
+      # The bench group carries the differential oracles, pydantic-core and
+      # jsonschema, which the deep suite asks as the push lane does.
+      - name: Install dev dependencies and the differential oracles
+        run: uv sync --locked --no-install-project --group bench
       - name: Build the extension into the venv
         run: uv run --no-sync maturin develop --uv
       # The `nightly` profile keeps what fails in its example database and
@@ -1398,9 +1400,14 @@ jobs:
           path: .hypothesis/examples
           key: hypothesis-examples-${{ github.run_id }}
           restore-keys: hypothesis-examples-
+      # Every file a property is drawn in, which `tests/test_property_profiles.py`
+      # holds: the merge gate's `ci` profile draws the same examples on every
+      # push, so a file left off this list never asks a new one -- the four
+      # properties that hold the walk to pydantic-core and jsonschema were.
       - name: Deep property suite
         env:
           HYPOTHESIS_PROFILE: nightly
+          VALGEBRA_REQUIRE_DIFFERENTIAL: "1"
         run: >
           uv run --no-sync pytest
           tests/test_completeness_ledger.py
@@ -1414,6 +1421,13 @@ jobs:
           tests/test_equivalence.py
           tests/test_json_semantics.py
           tests/test_surrogate_strings.py
+          tests/test_classes.py
+          tests/test_differential.py
+          tests/test_heterogeneous_maps.py
+          tests/test_json.py
+          tests/test_operators.py
+          tests/test_projection_laws.py
+          tests/test_refinements.py
       - name: Keep the example database
         if: always()
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
