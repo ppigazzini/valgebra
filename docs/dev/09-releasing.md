@@ -43,11 +43,12 @@ happened; it is a marker, not a trigger.
 Four conditions stand between a dispatch and an upload, and each is a step or a
 job condition in `release.yml` rather than a convention:
 
-- **The smoke must pass.** Each wheel set but the musllinux ones is imported on
-  its own platform, on the floor, the newest release and the free-threaded
-  builds where the set carries a wheel for them, with every warning an error and
-  the free-threaded import required to leave the GIL off, and the product suite
-  runs on each; the sdist is compiled from source, imported and put through the
+- **The smoke must pass.** Each wheel set is loaded on its own platform -- the
+  musllinux sets in Alpine containers -- with every warning an error and the
+  free-threaded import required to leave the GIL off. The product suite runs on
+  the floor, the newest release and the free-threaded builds where the set
+  carries a wheel for them, and every release between is installed, imported
+  and checked, since each wheel is a build of its own; the sdist is compiled from source, imported and put through the
   same suite before the publish job runs. A version cannot be replaced on an
   index once uploaded, only yanked, so a broken wheel has to fail before the
   upload rather than after it.
@@ -138,10 +139,10 @@ wheels are different builds: plain rather than profile-guided, since a
 profiled extension crashes there at the walk's depth bound (`release.yml`
 says how), one per ABI tag since PyPy 8.0 changed it, and the push lane's PyPy
 leg runs the suite on a wheel it builds itself. The release smoke runs the
-product suite on every wheel set that ships but the musllinux ones, PyPy's
-included, and
-`tests/test_release_smoke.py` holds every wheel the release builds on a runner
-to a smoke row there that runs it.
+product suite on every wheel set that ships, PyPy's and the musllinux ones
+included, and `tests/test_release_smoke.py` holds every wheel set the release
+builds to a smoke row that runs it, and every release a build row names to a
+row that loads it.
 
 **Do not add PyPI as a second index while checking TestPyPI.** uv resolves a name
 from the first index that carries it, so `--extra-index-url https://pypi.org/simple/`
@@ -225,9 +226,9 @@ and a row that leaves its interpreters to the build image named too.
 
 ## What this does not cover
 
-- **A platform outside the smoke matrix.** The musllinux wheels are built and not
-  imported by CI — running them needs a musl interpreter, a lane that does not
-  exist — so the first musl install is a user's.
+- **The wheels no smoke can load.** The musllinux cp314t and pp311 wheels are
+  built and not imported: no Alpine image carries a free-threaded CPython or a
+  PyPy, so the first install of either is a user's.
 - **A source install off Linux.** `uv pip install` takes the wheel; the sdist
   path is compiled and tested once by the workflow, on Linux, and
   `--no-binary valgebra` locally is the only way to reach it on another

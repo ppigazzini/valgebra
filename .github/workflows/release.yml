@@ -278,11 +278,14 @@ jobs:
       fail-fast: false
       matrix:
         wheel:
-          # `pythons` are the interpreters each wheel set is tested on: the floor,
-          # the newest release and the free-threaded builds, where the set carries
-          # a wheel for them.
-          - { name: linux-x86_64, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t" }
-          - { name: linux-aarch64, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t" }
+          # `pythons` are the interpreters each wheel set runs the product suite
+          # on: the floor, the newest release and the free-threaded builds, where
+          # the set carries a wheel for them. `imports` are the releases between,
+          # whose wheels are installed, imported and checked: each is a build of
+          # its own, profiled on its own interpreter, and a release with none of
+          # its wheels loaded ships a build nothing ran.
+          - { name: linux-x86_64, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
+          - { name: linux-aarch64, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
           # Each PyPy wheel is smoked on the PyPy it is built for, named by the
           # release that carries the ABI: 3.11.15 is PyPy 7.3 and 3.11.16 is
           # PyPy 8.0.
@@ -290,17 +293,17 @@ jobs:
           - { name: linux-aarch64-pypy73, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-pypy73, pythons: "pypy@3.11.15" }
           - { name: linux-x86_64-pypy80, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-pypy80, pythons: "pypy@3.11.16" }
           - { name: linux-aarch64-pypy80, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-pypy80, pythons: "pypy@3.11.16" }
-          - { name: macos-x86_64, runner: macos-15-intel, artifact: wheels-macos-15-intel-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t" }
-          - { name: macos-arm64, runner: macos-latest, artifact: wheels-macos-latest-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t" }
-          - { name: windows-x64, runner: windows-latest, artifact: wheels-windows-latest-x64-native, pythons: "3.10 3.15" }
+          - { name: macos-x86_64, runner: macos-15-intel, artifact: wheels-macos-15-intel-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
+          - { name: macos-arm64, runner: macos-latest, artifact: wheels-macos-latest-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
+          - { name: windows-x64, runner: windows-latest, artifact: wheels-windows-latest-x64-native, pythons: "3.10 3.15", imports: "3.11 3.12 3.13 3.14" }
           - { name: windows-x64-freethreaded, runner: windows-latest, artifact: wheels-windows-latest-x64-freethreaded, pythons: "3.14t 3.15t" }
-          - { name: windows-arm64, runner: windows-11-arm, artifact: wheels-windows-11-arm-aarch64-native, pythons: "3.12 3.15", host: "3.12\n3.15" }
+          - { name: windows-arm64, runner: windows-11-arm, artifact: wheels-windows-11-arm-aarch64-native, pythons: "3.12 3.15", imports: "3.13 3.14", host: "3.12\n3.13\n3.14\n3.15" }
     runs-on: ${{ matrix.wheel.runner }}
     timeout-minutes: 45
-    # The musllinux wheels are not smoked here: running them needs a musl
-    # (Alpine) container with a musl interpreter, a separate lane. The glibc
-    # Linux, macOS, and Windows wheels — the platforms with no other functional
-    # coverage — are all exercised below.
+    # The musllinux wheels are smoked in `smoke-musl`, in Alpine containers: a
+    # musl wheel loads only on a musl interpreter. The glibc Linux, macOS, and
+    # Windows wheels -- the platforms with no other functional coverage -- are
+    # all exercised below.
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -332,7 +335,7 @@ jobs:
         # free-threaded interpreter the import must leave the GIL off.
         shell: bash
         env:
-          PYTHONS: ${{ matrix.wheel.pythons }}
+          PYTHONS: ${{ matrix.wheel.pythons }} ${{ matrix.wheel.imports }}
           UV_PYTHON_PREFERENCE: ${{ matrix.wheel.host && 'only-system' || 'managed' }}
         run: |
           for py in $PYTHONS; do
@@ -359,6 +362,70 @@ jobs:
               "pyyaml>=6.0.3" "syrupy>=6.1.1" "typing-extensions>=4.16.0"
             bin=".venv-$py/bin"; [ -d "$bin" ] || bin=".venv-$py/Scripts"
             "$bin/python" -m pytest -q -m "not repository" tree/tests
+          done
+
+  smoke-musl:
+    name: smoke ${{ matrix.wheel.name }}
+    needs: [wheels]
+    # The musllinux wheels, each on the musl CPython of its release in the
+    # Alpine image the Docker library publishes as `python:<release>-alpine`:
+    # the product suite on the floor and the newest release, an import and the
+    # one check on the releases between, as the glibc rows do. The aarch64
+    # set, cross-built on an x86_64 runner, runs on an arm64 one. No Alpine
+    # image carries a free-threaded CPython or a PyPy, so the cp314t and pp311
+    # musllinux wheels are built and not loaded; `tests/test_release_smoke.py`
+    # names them.
+    strategy:
+      fail-fast: false
+      matrix:
+        wheel:
+          - { name: linux-x86_64-musl, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-musllinux_1_2, pythons: "3.10 3.14", imports: "3.11 3.12 3.13" }
+          - { name: linux-aarch64-musl, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-latest-aarch64-musllinux_1_2, pythons: "3.10 3.14", imports: "3.11 3.12 3.13" }
+    runs-on: ${{ matrix.wheel.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ matrix.wheel.artifact }}
+          path: dist
+      # The checkout is for `tests/` alone, as in the glibc smoke.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: tree
+      # The same install and check as the glibc rows, in a script each
+      # container runs: the image's own pip, the matching wheel from the
+      # downloaded set with no index, and an import with every warning an
+      # error.
+      - name: Install the musl wheel in its container and import it
+        shell: bash
+        env:
+          PYTHONS: ${{ matrix.wheel.pythons }} ${{ matrix.wheel.imports }}
+        run: |
+          cat > import.sh <<'SH'
+          pip install -q --disable-pip-version-check --root-user-action=ignore --no-index --find-links /dist valgebra
+          python -W error -c "import sys, valgebra as v; assert v.Validator(int).is_valid(1); assert not v.Validator(int).is_valid('x'); assert v.Validator(list[int]).is_valid([1, 2]); assert v.Validator(int).is_valid_json('1'); print('smoke ok', sys.version.split()[0], v.__version__)"
+          SH
+          for py in $PYTHONS; do
+            docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/import.sh:/import.sh:ro" \
+              "python:$py-alpine" sh -e /import.sh
+          done
+      - name: Run the product suite on the musl wheel in its container
+        shell: bash
+        env:
+          PYTHONS: ${{ matrix.wheel.pythons }}
+        run: |
+          cat > suite.sh <<'SH'
+          pip install -q --disable-pip-version-check --root-user-action=ignore --no-index --find-links /dist valgebra
+          pip install -q --disable-pip-version-check --root-user-action=ignore \
+            "annotated-types>=0.8" "hypothesis>=6.168.3" "pytest>=9.1.1" \
+            "pyyaml>=6.0.3" "syrupy>=6.1.1" "typing-extensions>=4.16.0"
+          python -m pytest -q -p no:cacheprovider -m "not repository" /tree/tests
+          SH
+          for py in $PYTHONS; do
+            docker run --rm -e HYPOTHESIS_PROFILE=ci -w /tmp \
+              -v "$PWD/dist:/dist:ro" -v "$PWD/tree:/tree:ro" -v "$PWD/suite.sh:/suite.sh:ro" \
+              "python:$py-alpine" sh -e /suite.sh
           done
 
   sdist-smoke:
@@ -421,7 +488,7 @@ jobs:
 
   github-release:
     name: attach wheels to a github pre-release
-    needs: [wheels, sdist, smoke, sdist-smoke]
+    needs: [wheels, sdist, smoke, smoke-musl, sdist-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # A dispatch can attach the built artifacts to a deletable GitHub
@@ -462,7 +529,7 @@ jobs:
     name: publish to ${{ inputs.publish_target }}
     # The wheel and sdist smoke must pass before anything publishes: a broken wheel fails
     # its import here and blocks the upload.
-    needs: [wheels, sdist, smoke, sdist-smoke]
+    needs: [wheels, sdist, smoke, smoke-musl, sdist-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Publishing requires a deliberate dispatch that selects a real index, from

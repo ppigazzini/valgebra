@@ -129,7 +129,7 @@ for and misses the other. The ledgers:
 | `tests/test_boundary_ledger.py` | every entry of the published decidability boundary is driven by a test |
 | `tests/test_constraint_matrix.py` | every constraint is driven against every kind, narrowing it or refused |
 | `tests/test_python_lifecycle.py` | every supported interpreter is one CPython's calendar supports today |
-| `tests/test_release_smoke.py` | every wheel the release builds on a runner is smoked there; PyPy's is plain |
+| `tests/test_release_smoke.py` | every wheel the release builds is loaded, its ends tested; PyPy's is plain |
 | `tests/test_release_matrix.py` | every classified release has a wheel on every platform, or a named gap |
 | `tests/test_sdist.py` | the source distribution carries every build input and nothing else |
 | `tests/test_ledger_plants.py` | every ledger fails on the defect it exists to catch |

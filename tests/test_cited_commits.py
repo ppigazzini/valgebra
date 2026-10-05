@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -78,6 +79,11 @@ def _git(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def _is_shallow() -> bool:
+    # Asked while the file is collected, which a product run does too, on a
+    # machine that may have no git -- the release's musl smoke, in an Alpine
+    # image -- and that runs none of this file.
+    if shutil.which("git") is None:
+        return False
     return _git("rev-parse", "--is-shallow-repository").stdout.strip() == "true"
 
 

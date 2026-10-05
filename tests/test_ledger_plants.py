@@ -251,7 +251,10 @@ def _widen_the_inventory(tree: Path) -> None:
 
 
 def _empty_the_smoke_matrix(tree: Path) -> None:
-    """Leave the release's smoke matrix with no row, as a job being rewritten does."""
+    """Leave the release's smoke matrices with no row, as jobs being rewritten do.
+
+    Two: the glibc, macOS and Windows sets', and the musllinux sets'.
+    """
     path = tree / ".github" / "workflows" / "release.yml"
     text = path.read_text(encoding="utf-8")
     emptied, count = re.subn(
@@ -260,7 +263,7 @@ def _empty_the_smoke_matrix(tree: Path) -> None:
         text,
         flags=re.MULTILINE,
     )
-    if count != 1:
+    if count != 2:
         message = f"the plant did not land: {count} smoke matrices matched"
         raise AssertionError(message)
     path.write_text(emptied, encoding="utf-8")
@@ -2612,6 +2615,19 @@ PLANTS = (
             "variant: nogil }",
         ),
         trips=("test_every_smoke_row_names_a_wheel_set_the_release_builds",),
+    ),
+    Plant(
+        # A release between the ends dropped from a set's imports: its wheel
+        # ships with nothing having loaded it.
+        "tests/test_release_smoke.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            'imports: "3.13 3.14", host',
+            'imports: "3.14", host',
+        ),
+        trips=("test_every_release_a_build_row_names_is_loaded",),
     ),
     Plant(
         # The smoke matrix emptied: every check over it compares nothing.

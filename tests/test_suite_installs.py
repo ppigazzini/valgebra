@@ -1,10 +1,12 @@
 """Every suite that installs its own packages installs what the suite reads.
 
-Two suites run without the dev group: the CI leg on PyPy, and the release's
-product suite on each built wheel. Each installs a list written into its step
-by hand, and a package the list leaves out does not redden the suite -- a row
-reading an optional implementation asks `pytest.importorskip`, which skips. So
-the PEP 728 `TypedDict` rows skipped on PyPy while every CPython lane ran them.
+Three suites run without the dev group: the CI leg on PyPy, the release's
+product suite on each built wheel, and the same suite on each musllinux wheel in
+its Alpine container, through the image's own pip. Each installs a list written
+into its step by hand, and a package the list leaves out does not redden the
+suite -- a row reading an optional implementation asks `pytest.importorskip`,
+which skips. So the PEP 728 `TypedDict` rows skipped on PyPy while every
+CPython lane ran them.
 
 So each such list is read against the dev group in `pyproject.toml`, both ways:
 every package the group names is on the list or is a tool excused below with
@@ -69,7 +71,7 @@ def _jobs() -> list[tuple[str, dict]]:
 
 
 def _is_suite_install(run: str) -> bool:
-    return "uv pip install" in run and '"pytest>=' in run
+    return "pip install" in run and '"pytest>=' in run
 
 
 def _installs() -> dict[str, set[str]]:
