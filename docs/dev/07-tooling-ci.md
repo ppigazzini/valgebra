@@ -1053,6 +1053,16 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
     2 ms under the allocation bound, and are in `fuzz/seeds/decision/` as inputs
     rather than in `fuzz/artifacts/` as findings. `-malloc_limit_mb` is the flag
     that names a defect, because it fires on an allocation.
+
+    And a ceiling fails the lane only if the soak is let stop on it. Under
+    `-fork=1` libFuzzer counts a child's out-of-memory or timeout and goes on
+    (`-ignore_ooms` and `-ignore_timeouts` default to 1 in fork mode), and a
+    soak piped through `tee` ends with `tee`'s status: with one 80 MB
+    allocation planted in a copy of the target the step exited 0. The step
+    passes both flags as 0, sets `pipefail`, and names the process ceiling
+    that then decides too, at about three times the largest child the soak
+    has read. `tests/test_fuzz_lane.py` runs the step's script against a
+    stand-in soak to hold the last of these.
 - **The binding gate cannot see what the extension pays for a thread-local.**
   Its workload is an executable, which reads a thread-local with one load off a
   segment register; the extension is a shared object, which reaches one through

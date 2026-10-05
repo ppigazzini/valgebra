@@ -3194,6 +3194,35 @@ PLANTS = (
         trips=("test_the_soak_has_a_floor_beneath_its_budget",),
     ),
     Plant(
+        # The process ceiling left at libFuzzer's default.
+        "tests/test_fuzz_lane.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(tree, ".github/workflows/ci.yml", " -rss_limit_mb=4096", ""),
+        trips=("test_the_soak_names_its_process_ceiling",),
+    ),
+    Plant(
+        # A child's out-of-memory and timeout counted and carried past again.
+        "tests/test_fuzz_lane.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "-ignore_ooms=0 -ignore_timeouts=0 ",
+            "",
+        ),
+        trips=("test_the_soak_stops_on_an_out_of_memory_or_a_hang",),
+    ),
+    Plant(
+        # The pipe's failure hidden behind `tee` again. The flags all stay, so
+        # only running the script shows it.
+        "tests/test_fuzz_lane.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree, ".github/workflows/ci.yml", "          set -o pipefail\n", ""
+        ),
+        trips=("test_the_step_ends_as_the_soak_does",),
+    ),
+    Plant(
         # A node added to the IR that the generator never learns to build.
         "tests/test_fuzz_lane.py",
         ("crates/valgebra-core/src/ir.rs",),

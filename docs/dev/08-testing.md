@@ -109,7 +109,7 @@ for and misses the other. The ledgers:
 | `tests/test_doc_example_checkers.py` | every checker diagnostic on a published example is expected with a reason |
 | `tests/test_code_table.py` | every failure code is a name the table declares, and every name is used |
 | `tests/test_cited_commits.py` | every commit a tracked file cites is one a clone can reach |
-| `tests/test_fuzz_lane.py` | the fuzz soak names its allocation ceiling and forks its batches |
+| `tests/test_fuzz_lane.py` | the fuzz soak names its ceilings, forks its batches, and fails with them |
 | `tests/test_floor_names.py` | every typing and enum name read at import time, and every stdlib module imported, exists on the floor |
 | `tests/test_module_placement.py` | no inline test module is longer than a screen |
 | `tests/test_proptest_seeds.py` | every persisted proptest seed sits beside the property tests that replay it |

@@ -1544,6 +1544,17 @@ jobs:
       # on an allocation. The largest block this code can ask for is the regex
       # builder's, bounded at 8 MB, and a full soak makes none above 1 MB.
       #
+      # An out-of-memory or a timeout stops the soak and fails the step. In fork
+      # mode libFuzzer counts either in a child and carries on --
+      # `-ignore_ooms` and `-ignore_timeouts` default to 1 there -- and `tee`
+      # hid the exit status the soak ended with: with one 80 MB allocation
+      # planted in a copy of the target, the step exited 0 while printing
+      # `oom/timeout/crash: 3/0/0`. Both are off, and the pipe fails with the
+      # soak. That makes the process ceiling a verdict as well, so it is named
+      # rather than left at libFuzzer's 2,048 MB: the first child, which reads
+      # the accumulated corpus, peaked at 968 to 1,317 MB in the five nights to
+      # 2026-10-05, and 4,096 is about three times that.
+      #
       # And the seconds carry a floor. A budget says when to stop; it does not
       # say the run did anything, so a target that dies on its first input ends
       # as quietly as one that explored for the whole six minutes and the lane
@@ -1558,10 +1569,12 @@ jobs:
           # stopped for a reason nobody asked for.
           MIN_SECONDS: "288"
         run: |
+          set -o pipefail
           mkdir -p fuzz/corpus/decision
           cargo fuzz run --target x86_64-unknown-linux-gnu decision \
             fuzz/corpus/decision fuzz/seeds/decision -- \
-            -max_total_time=360 -fork=1 -malloc_limit_mb=64 2>&1 | tee soak.log
+            -max_total_time=360 -fork=1 -malloc_limit_mb=64 -rss_limit_mb=4096 \
+            -ignore_ooms=0 -ignore_timeouts=0 2>&1 | tee soak.log
           # Under `-fork=1` the child reports through the parent's summary line
           # and its closing note; both are read, because either alone has a
           # silent shape. A run with no summary executed nothing, and one whose

@@ -17,13 +17,27 @@ Held in both directions: the step must carry a fork mode, so the process ceiling
 bounds a batch rather than the whole run, and it must name the allocation
 ceiling rather than inherit one. A step that drops either fails here.
 
-LEDGER: the fuzz soak names its allocation ceiling and forks its batches
+And a ceiling has to be able to fail the lane. In fork mode libFuzzer counts an
+out-of-memory or a timeout in a child and carries on, and the step piped the
+soak through `tee`, which hid the exit status it ended with: with one 80 MB
+allocation planted in a copy of the target, the step exited 0. So the step
+turns both off, names the process ceiling that then becomes a verdict, and
+fails with the pipe -- and the last is held by running the step's own script
+against a stand-in soak, since a flag can be read where a shell option is
+only shown by what it does.
+
+LEDGER: the fuzz soak names its ceilings, forks its batches, and fails with them
 """
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -39,9 +53,24 @@ SOAK = "Fuzz the decision procedures"
 
 #: The largest single allocation the soak may make, in megabytes. Above every
 #: bound the code can ask for -- the regex builder's is eight -- and far below
-#: the process ceiling it replaces, so it fires on a runaway allocation and on
-#: nothing else.
+#: the process ceiling, so it fires on a runaway allocation and on nothing else.
 ALLOCATION_CEILING_MB = 64
+
+#: The most one batch's process may hold, in megabytes: about three times the
+#: 1,317 the first child peaked at in the five nights to 2026-10-05, since an
+#: out-of-memory now fails the lane and the sanitizer's own growth must not.
+PROCESS_CEILING_MB = 4096
+
+
+def _step() -> dict[str, Any]:
+    """Give the soak's step as the workflow declares it."""
+    spec = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    for job in spec["jobs"].values():
+        for step in job.get("steps", []):
+            if step.get("name") == SOAK:
+                return step
+    message = f"the workflow has no {SOAK!r} step"
+    raise AssertionError(message)
 
 
 def _soak_step() -> str:
@@ -51,17 +80,11 @@ def _soak_step() -> str:
     comment, and a search over the whole block reads it there after the
     command stops passing it.
     """
-    spec = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    for job in spec["jobs"].values():
-        for step in job.get("steps", []):
-            if step.get("name") == SOAK:
-                return "\n".join(
-                    line
-                    for line in str(step["run"]).splitlines()
-                    if not line.lstrip().startswith("#")
-                )
-    message = f"the workflow has no {SOAK!r} step"
-    raise AssertionError(message)
+    return "\n".join(
+        line
+        for line in str(_step()["run"]).splitlines()
+        if not line.lstrip().startswith("#")
+    )
 
 
 def test_the_soak_names_its_allocation_ceiling() -> None:
@@ -76,6 +99,96 @@ def test_the_soak_names_its_allocation_ceiling() -> None:
         f"the soak bounds one allocation at {found.group(1)} MB; this file "
         f"records {ALLOCATION_CEILING_MB}. Moving it is a decision with an "
         "argument, so move both."
+    )
+
+
+def test_the_soak_names_its_process_ceiling() -> None:
+    """Once an out-of-memory fails the lane, the process ceiling is a verdict."""
+    found = re.search(r"-rss_limit_mb=(\d+)", _soak_step())
+    assert found, (
+        "the soak leaves -rss_limit_mb at libFuzzer's 2,048 MB, which a growing "
+        "corpus crosses with no defect, and an out-of-memory fails the lane"
+    )
+    assert int(found.group(1)) == PROCESS_CEILING_MB, (
+        f"the soak bounds a batch at {found.group(1)} MB; this file records "
+        f"{PROCESS_CEILING_MB}. Moving it is a decision with an argument, so "
+        "move both."
+    )
+
+
+def test_the_soak_stops_on_an_out_of_memory_or_a_hang() -> None:
+    """Fork mode counts both in a child and carries on unless told not to."""
+    step = _soak_step()
+    for flag in ("-ignore_ooms=0", "-ignore_timeouts=0"):
+        assert flag in step, (
+            f"the soak does not pass {flag}, so under -fork=1 a child's "
+            "out-of-memory or timeout is counted and the soak goes on, and the "
+            "ceiling it names fails nothing"
+        )
+
+
+#: What a soak prints last under `-fork=1`: the parent's job line, with the
+#: rate the step's floor reads, and its closing note, with the seconds.
+_CLOSING = (
+    "#2845: cov: 7634 ft: 33350 corp: 385 exec/s: 66 oom/timeout/crash: {oom}/0/0 "
+    "time: 372s job: 8 dft_time: 0\n"
+    "INFO: fuzzed for 372 seconds, wrapping up soon\n"
+)
+
+
+# The step runs on an Ubuntu runner. On Windows, `bash` on the path is WSL's
+# launcher, which with no distribution installed prints a usage message in
+# UTF-16 and exits 1, and a shebang stand-in is no executable there anyway.
+@pytest.mark.skipif(
+    sys.platform == "win32" or shutil.which("bash") is None,
+    reason="the step is a bash script an Ubuntu runner runs",
+)
+@pytest.mark.parametrize(
+    ("printed", "status"),
+    [
+        (_CLOSING.format(oom=0), 0),
+        (
+            "==1== ERROR: libFuzzer: out-of-memory (malloc(83886080))\n"
+            + _CLOSING.format(oom=1),
+            71,
+        ),
+    ],
+    ids=["a clean soak", "an out-of-memory"],
+)
+def test_the_step_ends_as_the_soak_does(
+    tmp_path: Path, printed: str, status: int
+) -> None:
+    """The step's own script, run against a stand-in for `cargo fuzz run`.
+
+    The stand-in prints what a soak prints and exits as libFuzzer does -- 71 for
+    an out-of-memory, the planted allocation's ending -- and the script runs as
+    GitHub runs a step with no shell named, `bash -e`. A clean soak passes the
+    floor and ends 0; an out-of-memory ends the step with the soak's status
+    rather than the `tee` behind it.
+    """
+    stand_in = tmp_path / "bin" / "cargo"
+    stand_in.parent.mkdir()
+    stand_in.write_text(
+        f"#!/bin/sh\ncat <<'SOAK'\n{printed}SOAK\nexit {status}\n", encoding="utf-8"
+    )
+    stand_in.chmod(0o755)
+    step = _step()
+    environment = {
+        **os.environ,
+        **{name: str(value) for name, value in step["env"].items()},
+        "PATH": f"{stand_in.parent}{os.pathsep}{os.environ['PATH']}",
+    }
+    ended = subprocess.run(  # noqa: S603 -- the workflow's own script, test-only
+        ["bash", "-e", "-c", step["run"]],  # noqa: S607 -- the shell GitHub runs
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert ended.returncode == status, (
+        f"the soak ended {status} and the step ended {ended.returncode}: "
+        f"{ended.stderr.strip()}"
     )
 
 
