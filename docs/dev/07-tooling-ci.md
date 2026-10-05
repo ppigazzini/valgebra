@@ -603,7 +603,16 @@ the instruction budgets' bands, which cover the distance between two releases,
 and for both mutation sweeps, where a mutant on a version-gated branch is
 killable on the interpreter that takes the branch and unviable on the one that
 compiles it out. `tests/test_lane_interpreters.py` holds every lane to naming
-one.
+one. A name is a release, and the build behind it is uv's: the wrapper action
+sets `UV_PYTHON_PREFERENCE=only-managed`, since uv otherwise takes a runner
+image's own interpreter where the image has the release, and every "3.12" lane
+ran Ubuntu's 3.12.3, eleven patch releases behind the one uv installs. A lane
+that builds against its interpreter keys its Rust cache on that choice, as
+`bench` argues: `PYO3_PYTHON` is `.venv/bin/python` whichever build stands
+behind it. And uv's Windows `python.exe` reserves 2,000,000 bytes for the main
+thread's stack where python.org's reserves 3,000,000, which an unoptimized walk
+to the depth bound outgrows, so the Windows rows build the dev profile at
+`opt-level=1`.
 
 **The bench job's build cache is keyed on that interpreter too**, and a change
 that moves the lane moves the key with it. The binding workload links whichever

@@ -32,6 +32,14 @@ runs:
     # been. The first attempt is allowed to fail, so keep its `with` block and
     # the retry's identical: the retry is the same install, not a fallback to
     # some laxer one.
+    # A lane names a release, and uv takes a runner image's own interpreter for
+    # it where the image has one: every "3.12" lane ran Ubuntu's 3.12.3, of
+    # April 2024 and eleven patch releases behind, while a lane naming a
+    # release the image lacks ran uv's build of the newest patch. Every lane
+    # takes uv's build, which the uv version pinned above fixes.
+    - name: Take uv's interpreter rather than the image's
+      shell: bash
+      run: echo "UV_PYTHON_PREFERENCE=only-managed" >> "$GITHUB_ENV"
     - id: install
       uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       continue-on-error: true

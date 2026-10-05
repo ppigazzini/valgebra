@@ -256,6 +256,11 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
+          # is `.venv/bin/python` whichever build stands behind it, so a cache
+          # saved on the image's 3.12 would link this lane against that one.
+          key: managed-python
       - uses: taiki-e/install-action@861a07ce7084f55488e375df125cdc99bba60eb7 # v2.87.23
         with:
           tool: cargo-llvm-cov@0.9.1
@@ -387,8 +392,9 @@ jobs:
           # sources unchanged and skips the rebuild — so the free-threaded (3.14t)
           # leg can link against with-GIL FFI layout and fail at import with
           # "init function of _valgebra returned uninitialized object". Key the
-          # cache on the interpreter (and OS) so each ABI keeps its own build.
-          key: ${{ matrix.os }}-${{ matrix.python-version }}
+          # cache on the interpreter (and OS) so each ABI keeps its own build,
+          # and on whose build it is: uv's rather than the image's 3.12.
+          key: ${{ matrix.os }}-${{ matrix.python-version }}-managed
       - uses: $/.github/actions/setup-uv
         with:
           python-version: ${{ matrix.python-version }}
@@ -403,7 +409,19 @@ jobs:
           tool: cargo-mutants@27.1.0
       - name: Install dev dependencies
         run: uv sync --locked --no-install-project
+      # A Windows row optimizes the dev profile one level, and keeps its debug
+      # assertions. Its main thread's stack is what `python.exe` reserves --
+      # 2,000,000 bytes in uv's build, 3,000,000 in python.org's -- and the
+      # unoptimized build walks to the depth bound in more than uv's: the first
+      # row on uv's 3.14.8 overflowed in
+      # `test_a_deep_body_reaches_the_walk_bound_rather_than_the_stack`, which
+      # on Linux needs between 1.5 and 1.9 MiB unoptimized. At `opt-level=1`
+      # every walk to the bound in the suite passes on 800 KiB, so the row tests
+      # the walk rather than the executable's reserve. Linux and macOS give the
+      # main thread 8 MiB, and the value 0 is the dev profile's own.
       - name: Build the extension into the venv
+        env:
+          CARGO_PROFILE_DEV_OPT_LEVEL: ${{ matrix.os == 'windows-latest' && '1' || '0' }}
         run: uv run --no-sync maturin develop --uv
       # The binding's four corpora drive live Python objects through the
       # frontend, the walk and the oracle, and they are the tests `cargo test
@@ -498,6 +516,11 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
+          # is `.venv/bin/python` whichever build stands behind it, so a cache
+          # saved on the image's 3.12 would link this lane against that one.
+          key: managed-python
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.12"
@@ -531,6 +554,11 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
+          # is `.venv/bin/python` whichever build stands behind it, so a cache
+          # saved on the image's 3.12 would link this lane against that one.
+          key: managed-python
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.12"
@@ -556,6 +584,11 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
+          # is `.venv/bin/python` whichever build stands behind it, so a cache
+          # saved on the image's 3.12 would link this lane against that one.
+          key: managed-python
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.12"
@@ -637,6 +670,11 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
+          # is `.venv/bin/python` whichever build stands behind it, so a cache
+          # saved on the image's 3.12 would link this lane against that one.
+          key: managed-python
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.12"
@@ -1238,6 +1276,11 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
+          # is `.venv/bin/python` whichever build stands behind it, so a cache
+          # saved on the image's 3.12 would link this lane against that one.
+          key: managed-python
       # Pinned for the reason the nightly sweep gives: the mutant set is compared
       # against a committed baseline.
       - uses: taiki-e/install-action@861a07ce7084f55488e375df125cdc99bba60eb7 # v2.87.23
@@ -1931,6 +1974,11 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
+          # is `.venv/bin/python` whichever build stands behind it, so a cache
+          # saved on the image's 3.12 would link this lane against that one.
+          key: managed-python
       - uses: taiki-e/install-action@861a07ce7084f55488e375df125cdc99bba60eb7 # v2.87.23
         with:
           tool: cargo-mutants@27.1.0
@@ -2079,6 +2127,11 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
+          # is `.venv/bin/python` whichever build stands behind it, so a cache
+          # saved on the image's 3.12 would link this lane against that one.
+          key: managed-python
       - uses: taiki-e/install-action@861a07ce7084f55488e375df125cdc99bba60eb7 # v2.87.23
         with:
           tool: cargo-mutants@27.1.0

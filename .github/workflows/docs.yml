@@ -37,6 +37,11 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
+          # is `.venv/bin/python` whichever build stands behind it, so a cache
+          # saved on the image's 3.12 would link this lane against that one.
+          key: managed-python
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.12"
