@@ -1178,12 +1178,16 @@ jobs:
 
   mutants-diff-walk:
     name: mutants binding ${{ matrix.shard }}
-    # Three shards: the binding's swept files are the membership walk, the
-    # context it carries and the frontend -- a few hundred mutants that run
-    # against an embedded interpreter, and a shard of it takes minutes rather
-    # than tens of them.
+    # Three round-robin shards over the binding's swept files: about nineteen
+    # hundred mutants run against an embedded interpreter. Cut in consecutive
+    # slices, the walk's files, whose mutants build and run, fell to one shard
+    # and the rest, two thirds of their mutants unviable, to the other two: 19,
+    # 15 and past 30 minutes on 2026-10-05, the third cancelled at its ceiling,
+    # where it had read 29 one commit earlier. Round-robin gives every shard
+    # the same mix, a third of the 64 minutes and more between them, and the
+    # ceiling is about twice that.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     # One seed for the baseline and every mutant of this shard. A mutation is
     # caught when the tests answer differently with it than without it, so the
     # two runs have to be given the same inputs; proptest otherwise draws from
@@ -1288,7 +1292,7 @@ jobs:
             --file crates/valgebra-py/src/oracle.rs \
             --file crates/valgebra-py/src/codes.rs \
             --features interpreter-tests -j 2 --timeout-multiplier 20 \
-            --shard "${{ matrix.shard }}/3" \
+            --shard "${{ matrix.shard }}/3" --sharding round-robin \
             --output walk-diff-mutants \
             -- -- --skip recursion_deeper_than_the_bound_is_refused \
             --skip the_two_readings_agree_at_the_walks_depth_bound

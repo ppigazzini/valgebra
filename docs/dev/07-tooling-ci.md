@@ -899,7 +899,10 @@ ratchets once, since a survivor is a survivor
 of the *sweep* and an entry that survives nothing is known to only when every
 shard has reported. A shard's ceiling (`timeout-minutes` in `ci.yml`) is twice
 the slowest shard's reading, because a job that reaches its ceiling is
-cancelled and a cancelled job is red. Every push runs the core and walk sweeps
+cancelled and a cancelled job is red. Every sweep shards round-robin: cut in
+consecutive slices, a file's mutants fall to one shard, and one whose mutants
+build and run costs several times one whose mutants mostly do not compile --
+the binding's push sweep read 15, 19 and past 30 minutes that way. Every push runs the core and walk sweeps
 restricted to the **whole files the change touches** — bounded by the change
 rather than by the tree — and blocks the merge; the pytest sweep costs a
 rebuild and a suite run per mutant and stays on the schedule. A push sweep
