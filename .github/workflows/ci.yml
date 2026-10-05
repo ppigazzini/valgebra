@@ -1852,9 +1852,15 @@ jobs:
         run: python3 scripts/mutation_gate.py --baseline core
 
   nightly-mutants-walk:
-    name: nightly mutation report (walk)
+    name: nightly mutation sweep (walk) ${{ matrix.shard }}
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # Three round-robin shards, merged and ratcheted by the job after them, as
+    # the core and pytest sweeps are. One job swept the whole binding in 34
+    # minutes on 2026-09-26 and 47 to 52 at 0.0.15, and was cancelled at its
+    # 60-minute ceiling on 0.0.16's tree with the sweep nearly read. A third of
+    # the mutants each, beside one baseline build apiece, leaves the ceiling
+    # about twice a shard's reading.
     timeout-minutes: 60
     # One seed for the baseline and every mutant of this sweep; see
     # `mutants-diff-core` for why the two runs have to share one.
@@ -1880,6 +1886,10 @@ jobs:
       # A second finishes most of them, so a baseline failure carries a shrunk
       # case beside the seed above.
       PROPTEST_MAX_SHRINK_TIME: "1000"
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1942,6 +1952,7 @@ jobs:
             --file crates/valgebra-py/src/oracle.rs \
             --file crates/valgebra-py/src/codes.rs \
             --features interpreter-tests -j 4 --timeout-multiplier 20 \
+            --shard "${{ matrix.shard }}/3" --sharding round-robin \
             --output walk-mutants \
             -- -- --skip recursion_deeper_than_the_bound_is_refused \
             --skip the_two_readings_agree_at_the_walks_depth_bound
@@ -1953,6 +1964,49 @@ jobs:
             0 | 2 | 3) ;;
             *) exit "$status" ;;
           esac
+      # Each shard's results, for the job that ratchets the whole sweep.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: walk-mutants-${{ matrix.shard }}
+          path: walk-mutants/mutants.out
+          retention-days: 7
+
+  nightly-mutants-walk-ratchet:
+    name: nightly mutation report (walk)
+    # Ratchet the walk's survivors, merged from the shards that partition them.
+    # Runs even where a shard failed, so a broken shard is reported by that
+    # shard rather than hidden behind a ratchet that never ran.
+    needs: nightly-mutants-walk
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: walk-mutants-*
+          path: shards
+      - name: Merge the shards into one sweep
+        env:
+          # The sweep's shard matrix, held to it by tests/test_required_jobs.py.
+          SHARDS: "3"
+        run: |
+          # A whole sweep, or none -- the argument the core sweep's merge
+          # carries: the ratchet's expiry direction reads a mutant's absence as
+          # proof the tests killed it, so a shard that died before uploading
+          # would report a clean sweep over mutants nobody ran.
+          found=$(find shards -mindepth 1 -maxdepth 1 -type d -name 'walk-mutants-*' | wc -l)
+          if [ "$found" -ne "$SHARDS" ]; then
+            echo "::error::the sweep has $found of $SHARDS shards; the ratchet needs all of them"
+            exit 2
+          fi
+          mkdir -p walk-mutants/mutants.out
+          for name in caught missed timeout unviable; do
+            find shards -name "$name.txt" -exec cat {} + > "walk-mutants/mutants.out/$name.txt"
+          done
+          wc -l walk-mutants/mutants.out/*.txt
       - name: Ratchet walk survivors against the baseline
         run: |
           python3 scripts/mutation_gate.py --baseline walk --out walk-mutants/mutants.out
@@ -2225,6 +2279,7 @@ jobs:
         nightly-mutants,
         nightly-mutants-ratchet,
         nightly-mutants-walk,
+        nightly-mutants-walk-ratchet,
         nightly-mutants-pytest,
         nightly-mutants-pytest-ratchet,
         nightly-floor-names,
@@ -2281,6 +2336,8 @@ jobs:
            needs['nightly-mutants-ratchet'].result != 'skipped') ||
           (needs['nightly-mutants-walk'].result != 'success' &&
            needs['nightly-mutants-walk'].result != 'skipped') ||
+          (needs['nightly-mutants-walk-ratchet'].result != 'success' &&
+           needs['nightly-mutants-walk-ratchet'].result != 'skipped') ||
           (needs['nightly-mutants-pytest'].result != 'success' &&
            needs['nightly-mutants-pytest'].result != 'skipped') ||
           (needs['nightly-mutants-pytest-ratchet'].result != 'success' &&

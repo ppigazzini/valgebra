@@ -892,9 +892,10 @@ case back in the run without anyone editing a list.
 
 **The full sweeps are scheduled, and a diff-scoped one is not.** A full sweep is
 minutes of rebuilds and does not belong on a push, so a regression it catches is
-visible the night after. The core's full sweep runs sharded, as the diff sweep
-does (the shard count is `ci.yml`'s), each shard reporting its own slice; a job
-after them merges the slices and ratchets once, since a survivor is a survivor
+visible the night after. Each full sweep runs sharded -- the core, the walk and
+the pytest sweep alike, as the diff sweeps do (the shard counts are `ci.yml`'s)
+-- each shard reporting its own slice; a job after them merges the slices and
+ratchets once, since a survivor is a survivor
 of the *sweep* and an entry that survives nothing is known to only when every
 shard has reported. A shard's ceiling (`timeout-minutes` in `ci.yml`) is twice
 the slowest shard's reading, because a job that reaches its ceiling is
