@@ -749,9 +749,12 @@ justified by what neither typing nor the algebra can express. `open` and `close`
 rewrite **every record a schema declares, at any depth, inside its recursive
 definitions** -- the sets they produce are spellable one at a time
 (`{"a": int, anything: anything}`), and the traversal is not. They are the
-whole-schema operations the contract admits. `close` is a function of the set,
-which is a law with a test; `open` is a term rewrite, declared as one, and two
-spellings of one set can open into two ([10-theory.md](10-theory.md)).
+whole-schema operations the contract admits. Both are term rewrites, declared
+as such: two spellings of one set can open into two, and close into two -- a
+meet of two open records and the open record of their fields are one set, and
+closing them gives an empty meet and a record. What the laws hold is that
+closing commutes with absorption and that a second application gives the set
+the first did ([10-theory.md](10-theory.md)).
 
 `ensure` is `validate(x); return x` and is kept for what it reads as, typed as
 the identity it is. That is a judgement about the surface rather than about the

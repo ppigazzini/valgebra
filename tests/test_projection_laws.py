@@ -23,7 +23,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import Validator, intersection, union
+from valgebra import Validator, anything, intersection, union
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -150,15 +150,15 @@ def test_opening_is_not_a_function_of_the_set() -> None:
 
 
 # THEORY: open-and-close-read-the-region
-def test_closing_is_a_function_of_the_set() -> None:
+def test_one_term_closes_one_way_whichever_reading_wrote_it() -> None:
     """The pair the core's own rows name, and the one `close` used to part.
 
     `{"a?": Any, ...}` and `dict[Any, Any]` admit every dict, by different
     routes, and they are one term: a keyed map with no field and a catch-all
     clause. Closing sends the region no clause claims to nothing, and `[top]`
     claims every key whichever way the term was written -- so the two close to
-    one set. An operator picking a reading for that term would map one set to
-    two, which is what puts it outside the algebra.
+    one set. Two *terms* for one set are another matter, and the test below
+    holds the pair that closes apart.
     """
     free = Validator({"a?": Any}).open()
     every_dict = Validator(dict[Any, Any])
@@ -238,3 +238,48 @@ def test_closing_an_opened_schema_is_not_closing_it() -> None:
     # as the exception it is rather than as the rule.
     typed = Validator(dict[str, int])
     assert typed.open().close() == typed
+
+
+# THEORY: open-and-close-are-term-rewrites
+def test_a_meet_of_open_records_closes_apart_from_its_record() -> None:
+    """`close`, like `open`, rewrites the records a term writes.
+
+    The meet of two open records admits a dict carrying both fields and any
+    other key, which is what the open record of the two fields admits: one set,
+    two terms. Closing the meet closes each record on its own, and no dict is
+    the closed `{"a": int}` and the closed `{"b": str}` at once; closing the
+    record keeps the dict carrying both fields and nothing else. The pages once
+    called `close` a function of the set, and this is the pair that says not.
+    """
+    meet = intersection(
+        Validator({"a": int, anything: anything}),
+        Validator({"b": str, anything: anything}),
+    )
+    record = Validator({"a": int, "b": str, anything: anything})
+    assert meet.is_equivalent(record)
+    assert meet.close().is_empty()
+    assert not record.close().is_empty()
+    assert record.close().is_valid({"a": 1, "b": "x"})
+
+
+# THEORY: open-and-close-read-the-region
+def test_opening_reaches_the_record_a_mapping_maps_to() -> None:
+    """A clause's value is part of the schema, and its record opens with it."""
+    mapping = Validator({str: {"b": int}})
+    value = {"x": {"b": 1, "extra": 2}}
+    assert not mapping.is_valid(value)
+    assert mapping.open().is_valid(value)
+    assert not mapping.open().close().is_valid(value)
+
+
+def test_opening_twice_gives_the_set_once_did_and_may_respell_it() -> None:
+    """Idempotent of the set, not of the term.
+
+    The first `open` writes the catch-all and keeps the optional name; the
+    second finds the name saying what the catch-all says and drops it. Two
+    terms, one set: `==` parts them and `is_equivalent` does not.
+    """
+    once = Validator({"a?": Any}).open()
+    twice = once.open()
+    assert once.is_equivalent(twice)
+    assert once != twice

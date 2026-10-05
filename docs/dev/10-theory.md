@@ -706,25 +706,29 @@ Openness is the default of the key-type region the clauses leave over: `open`
 frees that region and `close` refuses it, and neither touches a region a clause
 claims. So a mapping opened keeps what a `str` key maps to and admits an `int`
 key with any value, and one clause is read the same whether or not a field is
-declared beside it. `close` is therefore a function of the set. `open` is not,
-in one place and by construction: it descends into a union, and a branch
-declaring no field frees every key on its own, so `{"a?": int}` and
-`{} | {"a": int}` -- one set, two spellings -- open into two.
+declared beside it. Every record is rewritten, the one a clause maps a key to
+included. What the laws hold of the sets is narrower than "a function of the
+set": closing commutes with absorption, and applying either operator twice
+gives the set applying it once gave, though not always the same term.
 **[OBLIGATION: open-and-close-read-the-region]**
 
 SOURCE: §14.6 "Operators belong on the representation built for them"
 
-HELD-BY: test_opening_a_mapping_frees_the_keys_no_clause_claims, test_a_clause_is_read_the_same_with_or_without_a_field_beside_it, test_closing_is_a_function_of_the_set, test_closing_is_a_function_of_the_set_however_it_is_spelled, closing_is_a_function_of_the_set_however_it_is_spelled, opening_widens_closing_narrows_and_the_round_trip_is_at_most_closing, opening_under_a_complement_narrows_and_closing_widens, closing_an_opened_record_is_not_closing_the_record, test_closing_an_opened_schema_is_not_closing_it
+HELD-BY: test_opening_a_mapping_frees_the_keys_no_clause_claims, test_a_clause_is_read_the_same_with_or_without_a_field_beside_it, test_one_term_closes_one_way_whichever_reading_wrote_it, test_closing_commutes_with_absorption, closing_commutes_with_absorption, opening_or_closing_twice_gives_the_set_once_did, with_records_open_reaches_the_record_a_clause_maps_to, test_opening_reaches_the_record_a_mapping_maps_to, opening_widens_closing_narrows_and_the_round_trip_is_at_most_closing, opening_under_a_complement_narrows_and_closing_widens, closing_an_opened_record_is_not_closing_the_record, test_closing_an_opened_schema_is_not_closing_it
 
 **`open` and `close` are term rewrites, and the cost is a spelling.** They read
 the clauses a term *writes* rather than the set it denotes, so two terms the
-algebra calls equal need not open alike: `{"a?": int}` and `{} | {"a": int}`
-admit the same dicts, and the branch declaring no field frees every key on its
-own. `close` is a function of the set all the same, which is what makes the
-asymmetry a property of `open` rather than of the pair. §13.4b licenses exactly
-this -- a spelling-sensitive operator is permitted provided it is declared --
-and what it forbids is one clause read two ways according to an unrelated
-field, which is incoherence rather than syntax-sensitivity.
+algebra calls equal need not open alike, or close alike. `{"a?": int}` and
+`{} | {"a": int}` admit the same dicts, and the branch declaring no field frees
+every key on its own when opened. A meet of two open records admits what the
+open record of both fields admits, and closing the meet closes each record on
+its own, to two records no dict belongs to both of. A `close` on sets would
+need the record normal form with its positive atoms merged, which is a change
+to the constructors for an operator no failing use case asks for, and
+closedness is per declaration wherever else it is spelled. §13.4b licenses
+exactly this -- a spelling-sensitive operator is permitted provided it is
+declared -- and what it forbids is one clause read two ways according to an
+unrelated field, which is incoherence rather than syntax-sensitivity.
 
 The rows below are about the **term**: what the rewrite writes, which is the
 thing a reader of `ir/transform.rs` checks against. The set the operators give
@@ -733,7 +737,7 @@ is the obligation above, and its rows ask values.
 
 SOURCE: §14.6 "Operators belong on the representation built for them"
 
-HELD-BY: opening_a_mapping_frees_the_region_no_clause_claims, with_records_open_keeps_the_region_a_mapping_claims, opening_a_record_that_claims_a_region_leaves_one_clause, the_two_readings_of_one_term_close_to_one_set, test_opening_is_not_a_function_of_the_set
+HELD-BY: opening_a_mapping_frees_the_region_no_clause_claims, with_records_open_keeps_the_region_a_mapping_claims, opening_a_record_that_claims_a_region_leaves_one_clause, the_two_readings_of_one_term_close_to_one_set, test_opening_is_not_a_function_of_the_set, test_a_meet_of_open_records_closes_apart_from_its_record
 
 **The IR is exactly as expressive as its producers.** Every variant the enum
 has is one the frontend or the fuzzer builds, and a variant no producer reaches

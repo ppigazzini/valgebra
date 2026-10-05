@@ -22,6 +22,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a document's keys are hashed with a per-process key
 - fix: a constraint is read off the vocabulary that defines it
 - fix: a repr reads back as the schema it prints
+- fix: open and close reach the record a mapping maps to
 
 -->
 
@@ -170,6 +171,14 @@ answer of its own, or a repair to a change not yet released.
   union beside a list display printed an expression that raises `TypeError`.
   Both print as `union(...)`. A record's key is spelled by Python's own `repr`,
   where a name carrying a quote printed as two fields.
+- **`open` and `close` reach the record a mapping maps to.**
+  `dict[str, {'b': int}]` opened freed the key-types beside `str` and left the
+  record every `str` key maps to closed; that record is opened with the rest,
+  and closed with it. The pages called `close` a function of the set, and it
+  rewrites the term as `open` does: a meet of two open records and the open
+  record of their fields are one set, and the meet closes to nothing. The pages
+  say so now, and that a second `open` gives the set the first did and may
+  respell it.
 
 ## [0.0.16] - 2026-10-04
 

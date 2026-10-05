@@ -4795,17 +4795,18 @@ proptest! {
     }
 
     // THEORY: open-and-close-read-the-region
-    /// Equal sets close to equal sets, whatever the term is written out of.
+    /// Closing commutes with absorption: `a` and `a | (a & b)`, one set, close
+    /// to one set.
     ///
-    /// This is what puts `close` in the algebra rather than beside it: an
-    /// operator on *sets* must send two spellings of one set to one set, and
-    /// openness is the default of the key-type region no clause claims -- a
-    /// region, which is a set of keys rather than a way of writing one.
-    ///
-    /// `open` has no such law and is not missing one. `test_projection_laws.py`
-    /// carries the pair that separates them (`{"a?": int}` against
-    /// `{} | {"a": int}`, which open into two sets), so the silence here is
-    /// deliberate.
+    /// Openness is the default of the key-type region no clause claims, and the
+    /// respelling absorption writes keeps every record of `a` as it was. That is
+    /// what this law holds, and no more: `close` is a rewrite of the term, and
+    /// two terms for one set need not close alike. A meet of two open records
+    /// is the record of their fields, and closing the meet closes each record
+    /// on its own, to two records no dict belongs to both of --
+    /// `test_a_meet_of_open_records_closes_apart_from_its_record` carries it.
+    /// This law once held every pair the draw decided equal to the same, and
+    /// that pair is the one it never drew.
     ///
     /// The respelling is **absorption**, `a | (a & b)`, and the choice is the
     /// whole worth of the law: `a | (a & a)` reads like a respelling and is
@@ -4813,7 +4814,7 @@ proptest! {
     /// `a` and the law then compares a term with itself. A law that cannot
     /// fail passes for the same reason a true one does.
     #[test]
-    fn closing_is_a_function_of_the_set_however_it_is_spelled(
+    fn closing_commutes_with_absorption(
         a in decidable_schema(),
         b in decidable_schema(),
     ) {
@@ -4842,29 +4843,31 @@ proptest! {
                 prop_assert_eq!(
                     member_full(&closed, value, &pool),
                     member_full(&respelled_closed, value, &pool),
-                    "two spellings of one set closed to two sets, parting at {:?}", value
+                    "absorption closed to two sets, parting at {:?}", value
                 );
             }
+        }
+    }
 
-            // And the pair the draw gives directly, which reaches spellings no
-            // rewrite of one term produces: two terms decided equal must close
-            // to one set as well.
-            //
-            // Decided, not sampled. Agreement over a finite spread of values is
-            // not equality of sets, and this law read it as one: it drew
-            // `union({str => anything})` against `{str => anything}`, found no
-            // value in hand to part their *openings*, and then held their
-            // closings to each other -- which is a claim about two different
-            // sets. The relation is a proof, and soundness is held next door.
-            if spelling.is_subtype_of(&b) && b.is_subtype_of(spelling) {
-                let other = b.with_records_open(Openness::Closed);
-                for value in &universe {
-                    prop_assert_eq!(
-                        member_full(&closed, value, &pool),
-                        member_full(&other, value, &pool),
-                        "two equal sets closed to two sets, parting at {:?}", value
-                    );
-                }
+    // THEORY: open-and-close-read-the-region
+    /// Applying either operator a second time gives the set the first gave.
+    ///
+    /// Of the set, not of the term: a second `open` may drop an optional name
+    /// the first one's catch-all made redundant, so `{"a"?: anything}` opens to
+    /// a record still naming `a` and then to one that does not -- two terms,
+    /// one set, and `==` tells them apart where `is_equivalent` does not.
+    #[test]
+    fn opening_or_closing_twice_gives_the_set_once_did(schema in decidable_schema()) {
+        let pool = const_pool();
+        for openness in [Openness::Open, Openness::Closed] {
+            let once = schema.with_records_open(openness);
+            let twice = once.with_records_open(openness);
+            for value in &boundary_values(&[&schema, &once, &twice]) {
+                prop_assert_eq!(
+                    member_full(&once, value, &pool),
+                    member_full(&twice, value, &pool),
+                    "{:?} a second time is another set, parting at {:?}", openness, value
+                );
             }
         }
     }

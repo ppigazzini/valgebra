@@ -234,15 +234,16 @@ def equivalent(left: Validator, right: Validator, extra: list[object]) -> bool:
 
 # THEORY: open-and-close-read-the-region
 @given(a=schemas, b=schemas, vals=value_lists)
-def test_closing_is_a_function_of_the_set_however_it_is_spelled(
+def test_closing_commutes_with_absorption(
     a: object, b: object, vals: list[object]
 ) -> None:
-    """Equal sets close to equal sets, which is what puts `close` in the algebra.
+    """`a` and `a | (a & b)`, one set, close to one set.
 
-    Openness is the default of the key-type region no clause claims, and a
-    region is a set of keys rather than a way of writing one. This law's
-    silence about `open` is deliberate: `open` parts on a pair `close` does
-    not, and `tests/test_projection_laws.py` carries it.
+    Openness is the default of the key-type region no clause claims, and the
+    respelling absorption writes keeps every record of `a` as it was. That is
+    what this law holds, and no more: `close` rewrites the term, and two terms
+    for one set need not close alike -- `tests/test_projection_laws.py` carries
+    a meet of two open records that closes apart from the record it equals.
 
     The respelling is **absorption**, `a | (a & b)`, for a second drawn `b`.
     `a | (a & a)` reads like a respelling and is not one: the constructors fold

@@ -548,6 +548,41 @@ fn with_records_open_flips_every_record_in_the_tree() {
 }
 
 // THEORY: open-and-close-read-the-region
+/// A clause belongs to the tree as a field does, and the record a mapping maps
+/// a key to is opened and closed with the rest.
+///
+/// The transform rewrote each keyed map's own clause list and descended into
+/// its fields, and stopped there: `dict[str, {"k": int}]` opened freed the keys
+/// beside `str` and left the record every `str` key maps to closed.
+#[test]
+fn with_records_open_reaches_the_record_a_clause_maps_to() {
+    let record = Schema::record(
+        vec![Field {
+            name: "k".into(),
+            schema: Schema::Int,
+            required: true,
+        }],
+        Openness::Closed,
+    );
+    let mapping = Schema::mapping(MapClause {
+        key: Schema::Str,
+        value: record,
+    });
+    let mapped_to = |schema: &Schema| match schema {
+        Schema::KeyedMap { defaults, .. } => defaults
+            .iter()
+            .find(|clause| clause.key == Schema::Str)
+            .map(|clause| clause.value.clone())
+            .expect("the str clause stays"),
+        _ => panic!("a mapping opens to a mapping: {schema:?}"),
+    };
+    let opened = mapping.with_records_open(Openness::Open);
+    assert!(record_is_open(&mapped_to(&opened)));
+    let closed = opened.with_records_open(Openness::Closed);
+    assert!(!record_is_open(&mapped_to(&closed)));
+}
+
+// THEORY: open-and-close-read-the-region
 /// `close` after `open` is **not** `close`, and the projections say so.
 ///
 /// Two closed records, `{"a"?: anything}` and `{}`, are two sets: the first
@@ -676,8 +711,9 @@ fn opening_drops_a_field_the_record_already_said() {
 /// Reading openness as the default of the region no clause claims leaves
 /// nothing to pick. `[top]` claims every key, so it *is* the unclaimed region's
 /// default whichever way the term was written, and closing sends that region to
-/// bottom in both. Which is what makes these operations of the algebra rather
-/// than term rewrites: equal sets go to equal sets.
+/// bottom in both. One term closes one way, whichever reading wrote it -- which
+/// is not to say two terms for one set do: a meet of two open records closes
+/// apart from the record of their fields.
 #[test]
 fn the_two_readings_of_one_term_close_to_one_set() {
     let free = Schema::record(

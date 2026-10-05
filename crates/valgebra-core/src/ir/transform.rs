@@ -479,8 +479,8 @@ impl Schema {
         }
     }
 
-    /// Return a copy with every record-shaped [`Schema::KeyedMap`] in the tree
-    /// set to `open`.
+    /// Return a copy with every [`Schema::KeyedMap`] in the tree set to `open`:
+    /// under a field, a clause's key or value, a union, a meet or a complement.
     ///
     /// This backs the `open`/`close` methods. **Openness is the default of the
     /// region no clause claims**: a clause is a key-type region carrying its own
@@ -490,12 +490,16 @@ impl Schema {
     /// the general one. A mapping claims one, so `dict[str, int]` opened still
     /// says what a `str` key maps to and frees only the key-types beside it.
     ///
-    /// **The labels are read on the semantic `dom` first**, which is what makes
-    /// this a function on sets. Naming a key and giving it exactly what the
-    /// record already gives every key it does not name says nothing, so
-    /// `{"a?": nothing}` and `{}` are one record -- and unless the redundant name
-    /// is dropped they open to different ones, which would make `open` map equal
-    /// sets to unequal sets and put it outside the algebra.
+    /// It is a rewrite of the term, not an operation on the set: two terms for
+    /// one set may open, or close, to two. A meet of two open records and the
+    /// record of their fields are one set, and closing the meet closes each
+    /// record on its own, to two records no dict belongs to both of.
+    ///
+    /// **The labels are read on the semantic `dom` first.** Naming a key and
+    /// giving it exactly what the record already gives every key it does not
+    /// name says nothing, so `{"a?": nothing}` and `{}` are one record -- and
+    /// unless the redundant name is dropped they open to different ones, which
+    /// would part one record by how it was written.
     #[must_use]
     pub fn with_records_open(&self, open: Openness) -> Schema {
         self.records_opened(open).unwrap_or_else(|| self.clone())
@@ -525,8 +529,15 @@ impl Schema {
                 // already says -- so the field list's own length is the right
                 // guess, and over-reserving by the one or two it drops costs a
                 // few unused slots and no allocation.
-                let wanted = clauses_over(defaults, open);
-                let dropping = fields.iter().any(|field| already_said(field, defaults));
+                //
+                // The clauses are part of the tree as well: a mapping's value may
+                // be a record, `dict[str, {"b": int}]`, and that record is opened
+                // with the rest. Read first, because the region the clauses leave
+                // over is a property of the clauses as they stand afterwards.
+                let inner = mapped_clauses(defaults, &|schema| schema.records_opened(open));
+                let current = inner.as_ref().unwrap_or(defaults);
+                let wanted = clauses_over(current, open);
+                let dropping = fields.iter().any(|field| already_said(field, current));
                 let opened = mapped_fields(fields, &|schema| schema.records_opened(open));
                 if !dropping && opened.is_none() && *defaults == wanted {
                     return None;

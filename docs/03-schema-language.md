@@ -443,11 +443,31 @@ refuses every key; that is the common case, not the general rule. A *mapping*
 claims one, so opening `dict[str, int]` keeps what a `str` key maps to and frees
 only the key-types beside it.
 
-They apply at any depth, including inside a recursive definition. They are
-projections rather than inverses: applying either twice changes nothing the
-second time, and `close` after `open` is **at most** `close` -- it returns the
-regions `open` freed wherever opening leaves the term's own names and clauses
-standing, which is everywhere but the two shapes below.
+They apply at any depth -- a record a mapping maps its keys to, and inside a
+recursive definition. They are projections rather than inverses: applying
+either twice gives the set it gave the first time, though a second `open` may
+drop a name the first one's catch-all made redundant, so the term can differ by
+`==`. And `close` after `open` is **at most** `close` -- it returns the regions
+`open` freed wherever opening leaves the term's own names and clauses standing,
+which is everywhere but the two shapes below.
+
+Both rewrite the records a schema *writes*, not the set it denotes, so two
+spellings of one set can close apart. Close the records, not their meet: a meet
+of two open records admits what the open record of their fields admits, and
+closing it closes each record on its own, which no dict satisfies at once.
+
+```python
+from valgebra import Validator, anything, intersection
+
+meet = intersection(
+    Validator({"a": int, anything: anything}),
+    Validator({"b": str, anything: anything}),
+)
+record = Validator({"a": int, "b": str, anything: anything})
+assert meet.is_equivalent(record)
+assert meet.close().is_empty()  # each record closed on its own
+assert record.close().is_valid({"a": 1, "b": "x"})
+```
 
 ```python
 from valgebra import Validator
