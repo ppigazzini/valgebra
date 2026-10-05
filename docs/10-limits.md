@@ -55,17 +55,24 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
 ```
 - **Value-walk depth.** Two bounds hold the walk inside the stack, and reaching
   either fails with `recursion_limit`: at most 128 levels of **recursive
-  unfolding**, and at most 512 levels of **descent** in total. The second is what
+  unfolding**, and at most 384 levels of **descent** in total. The second is what
   binds for a deep definition, because a recursive definition descends its whole
   body once per level of the value — so the frames a value can ask for are the
-  product of the two, not either one. A level costs about 0.6 KiB of native
-  stack in a release build, which puts the deepest walk inside the 512 KiB the
-  smallest platform default gives a thread. A thread started with less can run
-  out before the bound does, and the process ends with it: a 240-level value
-  overflowed a 128 KiB thread on CPython 3.14, and a 480-level one a 256 KiB
-  thread on PyPy. Give a thread that validates deep values the platform's
-  default stack or more. This holds on both the object path and the JSON path;
-  an over-deep JSON document is rejected by the parser as `json_invalid`.
+  product of the two, not either one. The smallest recursive body, a reference
+  under a union around one container such as `recursive(lambda t: union(int,
+  [t]))`, opens three levels an unfolding, so it is walked to the unfolding
+  bound: every value nested within it is a member.
+
+    The walk fits a **1 MiB** thread stack, the least any thread CPython
+  creates has. The shipped wheels are built with profile-guided optimization,
+  whose inlining makes a level cost 2.5 to 3 KiB on the dict and union shapes,
+  and the dearest walk, explaining a value refused at the bound, needs between
+  832 and 896 KiB there. The release smoke runs the deepest walks on a 1 MiB
+  thread on every wheel it ships. A thread given less can run out before the bound does, and the
+  process ends with it; a thread an embedding host starts at the 512 KiB
+  pthread default on macOS is one. Give a thread that validates deep values
+  1 MiB or more. This holds on both the object path and the JSON path; an
+  over-deep JSON document is rejected by the parser as `json_invalid`.
 
     The parser has a bound of its own — a couple of hundred levels of arrays and
     objects — and it sits **between** the two: wider than the unfolding bound and
@@ -79,6 +86,15 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
     three regions and their order, which is what keeps this paragraph a
     description of the tree rather than of two numbers that have since moved
     past each other.
+- **Relation depth.** A relation -- `relation_to`, `is_subtype_of`,
+  `is_equivalent`, `is_disjoint_from`, `is_empty` -- holds at most 512 levels of
+  its own recursion, and past them answers undecided, which a relation may
+  always answer. Two recursive schemas whose bodies nest 100 and 99 lists around
+  the back edge prove nothing about each other until the two cycles realign,
+  9,900 levels down, and a long chain of definitions asks its emptiness as deep:
+  each overflowed the stack before the bound. A level costs about 1 KiB on the
+  shipped wheels, so the deepest relation fits in half of a 1 MiB thread, and
+  the release smoke runs it there.
 - **Self-reference.** A value that contains itself is caught by an
   object-identity guard and fails with `recursion_loop` rather than looping
   forever.

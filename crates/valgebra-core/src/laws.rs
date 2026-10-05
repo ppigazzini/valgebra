@@ -2325,7 +2325,7 @@ proptest! {
                     &right,
                     &NoLeafRelations,
                     &[],
-                    &std::cell::Cell::new(DECISION_BUDGET),
+                    &crate::decision::Budget::new(DECISION_BUDGET),
                 ),
                 Relation::Fails,
                 "the rules refuted one side of de Morgan against the other"
@@ -2335,7 +2335,7 @@ proptest! {
                     &left,
                     &NoLeafRelations,
                     &[],
-                    &std::cell::Cell::new(DECISION_BUDGET),
+                    &crate::decision::Budget::new(DECISION_BUDGET),
                 ),
                 Relation::Fails,
                 "the rules refuted one side of de Morgan against the other"
@@ -5118,7 +5118,7 @@ proptest! {
             return Err(TestCaseError::reject("the carrier table is shorter than the draw"));
         };
         let (sub, sup) = (wrap(part.clone()), wrap(other.clone()));
-        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        let budget = crate::decision::Budget::new(DECISION_BUDGET);
         prop_assert_ne!(
             sub.subtype_relation(&sup, &CorpusOracle, &[], &budget),
             Relation::Fails,
@@ -5138,7 +5138,7 @@ proptest! {
     /// half that just gained a way to be.
     #[test]
     fn a_refuted_inclusion_is_not_one_the_sets_decide(a in schema(), b in schema()) {
-        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        let budget = crate::decision::Budget::new(DECISION_BUDGET);
         if a.subtype_relation(&b, &NoLeafRelations, &[], &budget) == Relation::Fails {
             prop_assert!(
                 a.descriptor_contained_in(&b, &NoLeafRelations, &[]) != Relation::Holds,
@@ -5212,7 +5212,7 @@ proptest! {
     ) {
         let oracle = CorpusOracle;
         let relation = |x: &Schema, y: &Schema| {
-            let budget = std::cell::Cell::new(DECISION_BUDGET);
+            let budget = crate::decision::Budget::new(DECISION_BUDGET);
             x.subtype_relation(y, &oracle, &[], &budget)
         };
         if relation(&a, &b) == Relation::Holds && relation(&b, &c) == Relation::Holds {
@@ -5245,7 +5245,7 @@ proptest! {
     #[test]
     fn the_two_deciders_agree_under_an_oracle(a in shaped_schema(), b in shaped_schema()) {
         let oracle = CorpusOracle;
-        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        let budget = crate::decision::Budget::new(DECISION_BUDGET);
         let rules = a.subtype_relation(&b, &oracle, &[], &budget);
         let sets = a.descriptor_contained_in(&b, &oracle, &[]);
         if rules == Relation::Fails {
@@ -5275,7 +5275,7 @@ proptest! {
         b in shaped_schema(),
     ) {
         if a.descriptor_contained_in(&b, &NoLeafRelations, &[]) == Relation::Fails {
-            let budget = std::cell::Cell::new(DECISION_BUDGET);
+            let budget = crate::decision::Budget::new(DECISION_BUDGET);
             prop_assert!(
                 a.subtype_relation(&b, &NoLeafRelations, &[], &budget) != Relation::Holds,
                 "the sets refuted {a:?} <= {b:?} and the rules prove it holds"
@@ -5309,7 +5309,7 @@ proptest! {
             Schema::Instance(ClassIx::new(class)),
             Schema::attr_record(fields.clone()),
         ]);
-        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        let budget = crate::decision::Budget::new(DECISION_BUDGET);
         let answers = [
             ("rules", subject.subtype_relation(&other, &CorpusOracle, &[], &budget)),
             ("sets", subject.descriptor_contained_in(&other, &CorpusOracle, &[])),
@@ -5338,7 +5338,7 @@ proptest! {
         a in schema(),
         b in schema(),
     ) {
-        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        let budget = crate::decision::Budget::new(DECISION_BUDGET);
         if a.subtype_relation(&b, &NoLeafRelations, &[], &budget) == Relation::Holds {
             prop_assert!(a.is_subtype_of(&b));
         }
@@ -5621,7 +5621,7 @@ proptest! {
         let pair = |components: &[Schema]| Schema::tuple(SeqShape::fixed(components.to_vec()));
         let tuple = pair(&subject);
         let split = Schema::union(branches.iter().map(|branch| pair(branch)));
-        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        let budget = crate::decision::Budget::new(DECISION_BUDGET);
         let rules = tuple.subtype_relation(&split, &NoLeafRelations, &[], &budget);
         let lemma = lemma_6_5(&subject, &branches);
         prop_assert_eq!(
@@ -5643,7 +5643,7 @@ proptest! {
         let triple = |components: &[Schema]| Schema::tuple(SeqShape::fixed(components.to_vec()));
         let tuple = triple(&subject);
         let split = Schema::union(branches.iter().map(|branch| triple(branch)));
-        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        let budget = crate::decision::Budget::new(DECISION_BUDGET);
         let rules = tuple.subtype_relation(&split, &NoLeafRelations, &[], &budget);
         let lemma = lemma_6_5(&subject, &branches);
         prop_assert_eq!(rules.holds(), lemma, "{:?} <= {:?}", tuple, split);
@@ -5671,7 +5671,7 @@ proptest! {
         let tuple = product(&subject);
         let split = Schema::union(branches.iter().map(|branch| product(branch)));
         prop_assert!(lemma_6_5(&subject, &branches), "the lemma refutes a covering split");
-        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        let budget = crate::decision::Budget::new(DECISION_BUDGET);
         let rules = tuple.subtype_relation(&split, &NoLeafRelations, &[], &budget);
         prop_assert!(rules.holds(), "the rules answer {:?} for {:?} <= {:?}", rules, tuple, split);
     }

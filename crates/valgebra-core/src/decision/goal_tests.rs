@@ -19,7 +19,6 @@
 //! a repeated field or position without asking again. So zero here is "the
 //! caches absorb it", not "the goal was never reached".
 
-use std::cell::Cell;
 use std::sync::Arc;
 
 /// A test-side record of the goals one query asks.
@@ -126,7 +125,7 @@ use crate::{
 };
 use goals::Counts;
 
-use super::DECISION_BUDGET;
+use super::{Budget, DECISION_BUDGET};
 
 /// Two classes that lay down no builtin layout, answered as the bindings answer
 /// a plain Python class. The matrix workload's oracle, for the matrix's pairs:
@@ -766,9 +765,9 @@ fn a_goal_reached_by_two_paths_is_derived_twice_until_the_budget_declines() {
                 "depth {depth}"
             );
         }
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         let answer = sub.subtype_relation(&sup, &PlainClasses, &[], &budget);
-        spent.push((answer, DECISION_BUDGET - budget.get()));
+        spent.push((answer, DECISION_BUDGET - budget.left()));
     }
     for (depth, pair) in spent.windows(2).enumerate().take(16) {
         assert!(pair[1].1 >= 2 * pair[0].1, "depth {}: {pair:?}", depth + 2);

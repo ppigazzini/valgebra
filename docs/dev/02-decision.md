@@ -694,6 +694,20 @@ any caller. `DECISION_BUDGET` caps the steps one query spends, past it the
 answer is undecided, and [00-architecture.md](00-architecture.md) names that
 kind of bound.
 
+**Neither bounds the stack, so a third count does.** A path is finite and can
+still be long: two fixpoints nesting 100 and 99 lists around the back edge
+return to a goal on the trail only after `lcm(100, 99)` levels, a few steps
+each, and a chain of definitions asks its emptiness as deep as the chain runs.
+`MAX_DECISION_DEPTH` counts the levels the goal recursion (a goal that reaches
+the rules) and the emptiness recursion (`empty_and_region`) hold open in one
+query, carried in its `Budget` beside the steps, one count for both since an
+emptiness question asked inside a goal runs on the same stack; past it the
+answer is undecided. A level costs about 1 KiB on the profile-guided wheel, so
+the bound fits half of a 1 MiB thread. The count costs the decision workloads
+2.5% to 3.1%, recorded as a step in `scripts/perf_budget.json`.
+`the_depth_bound_declines_and_gives_its_levels_back` holds both recursions to
+it, and the levels to being given back.
+
 What to say about the ceiling is what it is measured to reach.
 `DECISION_BUDGET` is the ceiling and is a row of the bounds table
 ([00-architecture.md](00-architecture.md)). What a shape costs is pinned as a

@@ -20,7 +20,7 @@ use crate::ir::{DefIx, Field, MapClause, Schema};
 use crate::kind::Kind;
 use crate::verdict::Relation;
 
-use super::{LeafRelations, SubtypeCx};
+use super::{Budget, LeafRelations, SubtypeCx};
 
 /// Whether the keyed maps meeting in an intersection admit no dict between them.
 ///
@@ -53,7 +53,7 @@ pub(super) fn keyed_map_meet_empty(
     oracle: &dyn LeafRelations,
     defs: &[Schema],
     visiting: &mut Vec<DefIx>,
-    budget: &Cell<u32>,
+    budget: &Budget,
 ) -> bool {
     let maps: Vec<(&[Field], bool)> = members
         .iter()

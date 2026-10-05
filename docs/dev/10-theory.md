@@ -639,9 +639,11 @@ HELD-BY: test_the_three_answers_agree_with_the_two, an_inhabited_difference_over
 **The budget declines; it never refutes.** Exhausting the work budget answers
 neither, on every path a subtyping query can take: through a product, through
 the disjointness reading, and through the shared cell an equivalence query
-carries across its two directions. **[OBLIGATION: the-budget-declines]**
+carries across its two directions. Reaching the depth bound, which holds the
+recursion inside the stack, answers neither the same way, in the goals and in
+emptiness. **[OBLIGATION: the-budget-declines]**
 
-HELD-BY: the_budget_declines_on_every_subtyping_path, an_exhausted_budget_refuses_to_spend, a_budgeted_equivalence_query_decides_the_same_or_declines, the_budget_declines_on_every_drawn_pair
+HELD-BY: the_budget_declines_on_every_subtyping_path, an_exhausted_budget_refuses_to_spend, a_budgeted_equivalence_query_decides_the_same_or_declines, the_budget_declines_on_every_drawn_pair, the_depth_bound_declines_and_gives_its_levels_back
 
 **The goals a query repeats are counted.** The decision not to memoise goals
 rests on a number: zero repeats over the workload shapes and the thirty-two

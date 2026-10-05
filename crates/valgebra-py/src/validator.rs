@@ -38,9 +38,11 @@ use crate::render::render;
 pub(crate) const MAX_SCHEMA_DEPTH: usize = 128;
 /// The most recursive definitions a constructed schema may hold. A recursive
 /// schema needs a mere handful; a validator with more is one whose definitions
-/// were chained in an unbounded loop, and the render and decision walks descend
-/// the chain one native stack frame per link (a chain of distinct definitions is
-/// invisible to the per-tree depth measure, which counts a `Ref` as a leaf).
+/// were chained in an unbounded loop, and the render walk descends the chain one
+/// native stack frame per link (a chain of distinct definitions is invisible to
+/// the per-tree depth measure, which counts a `Ref` as a leaf). The decision
+/// descends it too, and counts its own depth, because a chain inside this bound
+/// still nests deeper than a stack holds.
 pub(crate) const MAX_DEFINITIONS: usize = 128;
 /// The most schema nodes a constructed schema may hold, across its tree and every
 /// definition. Bounds a schema that is shallow but exponentially wide — a

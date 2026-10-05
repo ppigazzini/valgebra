@@ -18,6 +18,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a literal is its constant at its exact type
 - fix: a walk that stops is not a non-member
 - fix: a union over records does not re-walk
+- fix: the walk and a relation fit a 1 MiB stack
 
 -->
 
@@ -32,6 +33,15 @@ answer of its own, or a repair to a change not yet released.
   reported against that record rather than against the first one: `{"t": "y",
   "z": 1.5}` against `{"t": Literal["x"], "z": int} | {"t": Literal["y"], "z":
   str}` reports `z`, not the tag.
+- **The walk holds at most 384 levels open, from 512.** The shipped wheels are
+  built with profile-guided optimization, whose frames are four to five times
+  the plain build's, and the deepest walk at 512 levels needed 1.5 MiB of
+  stack where the limits page promised 512 KiB. At 384 it needs under 896 KiB,
+  and the page says 1 MiB, the least stack any thread CPython creates has. The
+  smallest recursive body, `recursive(lambda t: union(int, [t]))`, is still
+  walked to the unfolding bound of 128, so no answer for it changes; a deeper
+  body meets the walk's bound sooner -- `{"a": {"b": {"c": T}}} | int` is
+  refused with `recursion_limit` from 77 unfoldings, where it was 102.
 
 ### Fixed
 
@@ -106,6 +116,13 @@ answer of its own, or a repair to a change not yet released.
   member of `list[int] | list[Slow]` ran 20,000 of them. 0.0.16 settled this
   for record and class branches; the union is decided before any branch is
   explained.
+- **A relation does not overflow the stack.** Two recursive schemas whose
+  bodies nest 100 and 99 lists around the back edge, or a chain of 96
+  definitions each a hundred one-tuples deep, made `relation_to`,
+  `is_subtype_of`, `is_equivalent` and `is_empty` recurse until the process
+  died, on the main thread as on any other: the work budget counts steps, and
+  each level is a few of them. A relation holds at most 512 levels of its own
+  recursion and answers undecided past them.
 
 ## [0.0.16] - 2026-10-04
 

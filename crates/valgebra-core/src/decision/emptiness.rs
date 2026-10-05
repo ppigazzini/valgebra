@@ -14,8 +14,6 @@
 //! here decline, the question is asked once more of the *set* the schema
 //! denotes, under the lowering's bound on what building it may cost.
 
-use std::cell::Cell;
-
 use crate::descr::classes::Reach;
 use crate::descr::lower::{Constants, an_empty_reading_stands, lower_unfolded};
 use crate::ir::{ClassIx, Constraint, Constraints, DefIx, Field, Polarity, Schema};
@@ -25,8 +23,8 @@ use crate::verdict::Verdict;
 use super::constraints::{Density, bounds_unsatisfiable, longest, shortest, tightest_bounds};
 use super::records::keyed_map_meet_empty;
 use super::{
-    DECISION_BUDGET, LeafRelations, NoLeafRelations, has_complementary_pair, has_disjoint_pair,
-    spend,
+    Budget, DECISION_BUDGET, LeafRelations, NoLeafRelations, descending, has_complementary_pair,
+    has_disjoint_pair, spend,
 };
 
 impl Schema {
@@ -80,7 +78,7 @@ impl Schema {
         // asked it on every inhabited schema, and lowering one determinises
         // automata and takes products -- a third of the decision workload,
         // spent on a question already answered.
-        match self.verdict_rec(oracle, defs, &mut Vec::new(), &Cell::new(DECISION_BUDGET)) {
+        match self.verdict_rec(oracle, defs, &mut Vec::new(), &Budget::new(DECISION_BUDGET)) {
             Verdict::Empty => true,
             Verdict::Inhabited => false,
             Verdict::Unknown => self.denotes_no_value(oracle, defs),
@@ -119,15 +117,15 @@ impl Schema {
     /// about, and it is the same number on every machine.
     #[cfg(test)]
     pub(crate) fn empty_steps(&self) -> u32 {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         self.is_empty_rec(&NoLeafRelations, &[], &mut Vec::new(), &budget);
-        DECISION_BUDGET - budget.get()
+        DECISION_BUDGET - budget.left()
     }
 
     /// The emptiness verdict where the rules can look a constant or a class up.
     #[cfg(test)]
     pub(crate) fn verdict_under(&self, oracle: &dyn LeafRelations) -> Verdict {
-        self.verdict_rec(oracle, &[], &mut Vec::new(), &Cell::new(DECISION_BUDGET))
+        self.verdict_rec(oracle, &[], &mut Vec::new(), &Budget::new(DECISION_BUDGET))
     }
 
     pub(super) fn is_empty_rec(
@@ -135,7 +133,7 @@ impl Schema {
         oracle: &dyn LeafRelations,
         defs: &[Schema],
         visiting: &mut Vec<DefIx>,
-        budget: &Cell<u32>,
+        budget: &Budget,
     ) -> bool {
         self.verdict_rec(oracle, defs, visiting, budget).is_empty()
     }
@@ -154,7 +152,7 @@ impl Schema {
             &NoLeafRelations,
             &[],
             &mut Vec::new(),
-            &Cell::new(DECISION_BUDGET),
+            &Budget::new(DECISION_BUDGET),
         )
     }
 
@@ -163,7 +161,7 @@ impl Schema {
         oracle: &dyn LeafRelations,
         defs: &[Schema],
         visiting: &mut Vec<DefIx>,
-        budget: &Cell<u32>,
+        budget: &Budget,
     ) -> Verdict {
         self.empty_and_region(oracle, defs, visiting, budget).0
     }
@@ -186,7 +184,23 @@ impl Schema {
         oracle: &dyn LeafRelations,
         defs: &[Schema],
         visiting: &mut Vec<DefIx>,
-        budget: &Cell<u32>,
+        budget: &Budget,
+    ) -> (Verdict, Regions) {
+        // One level of the recursion, and a level past the depth bound is a
+        // frame the stack may not have, which proves nothing.
+        descending(budget, (Verdict::Unknown, Regions::Unknown), || {
+            self.empty_and_region_at(oracle, defs, visiting, budget)
+        })
+    }
+
+    /// [`empty_and_region`](Self::empty_and_region) one level down, inside the
+    /// level it holds.
+    fn empty_and_region_at(
+        &self,
+        oracle: &dyn LeafRelations,
+        defs: &[Schema],
+        visiting: &mut Vec<DefIx>,
+        budget: &Budget,
     ) -> (Verdict, Regions) {
         // Bound the work, sharing the budget with the caller (the subtyping
         // decision passes its own `cx.budget` in), so emptiness cannot escape the
@@ -435,7 +449,7 @@ fn intersection_verdict(
     oracle: &dyn LeafRelations,
     defs: &[Schema],
     visiting: &mut Vec<DefIx>,
-    budget: &Cell<u32>,
+    budget: &Budget,
 ) -> (Verdict, Regions) {
     let mut any_empty = false;
     let mut region = Regions::MEET_UNIT;
@@ -497,7 +511,7 @@ fn a_direct_instance_carries(
     oracle: &dyn LeafRelations,
     defs: &[Schema],
     visiting: &mut Vec<DefIx>,
-    budget: &Cell<u32>,
+    budget: &Budget,
 ) -> bool {
     fields
         .iter()
@@ -564,7 +578,7 @@ fn refinement_verdict(
     oracle: &dyn LeafRelations,
     defs: &[Schema],
     visiting: &mut Vec<DefIx>,
-    budget: &Cell<u32>,
+    budget: &Budget,
 ) -> Verdict {
     let density = density_of([base]);
     if base.is_empty_rec(oracle, defs, visiting, budget)
@@ -742,7 +756,7 @@ fn lengths_miss_the_shape(
     oracle: &dyn LeafRelations,
     defs: &[Schema],
     visiting: &mut Vec<DefIx>,
-    budget: &Cell<u32>,
+    budget: &Budget,
 ) -> bool {
     let Schema::Seq { shape, .. } = base else {
         return false;

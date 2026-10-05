@@ -47,6 +47,7 @@ from valgebra._valgebra import (
     MAX_DEFINITIONS,
     MAX_SCHEMA_DEPTH,
     MAX_SCHEMA_NODES,
+    _debug_build,
 )
 
 # `simplify` is deprecated and these exercise it deliberately: the folds it
@@ -325,6 +326,154 @@ def test_a_recursive_meet_of_records_is_decided_rather_than_overflowing() -> Non
     # The meet holds no finite value, so any answer either gives is sound: the
     # claim is that both finish.
     assert len(result.stdout.split()) == 2, result.stdout
+
+
+#: The stack a thread validating deep values needs, as the limits page states
+#: it: 1 MiB, the least any thread CPython creates has. The release smoke runs
+#: this file on every wheel it ships, which is where the figure is held. An
+#: unoptimized build spends several times a release build's stack a level --
+#: its explaining walk of a refused value at the bound needs 2 MiB -- and no
+#: wheel is one.
+_THREAD_STACK = (4 if _debug_build else 1) * 1024 * 1024
+
+
+def _on_a_thread(program: str) -> subprocess.CompletedProcess[str]:
+    """Run `program`'s `run` in a fresh interpreter, on a thread of that stack.
+
+    A child process, because the failure this guards is the stack giving out,
+    and that takes the interpreter with it. `run` prints what it found, so a
+    thread that raised -- which leaves the process's return code at 0 -- is
+    caught by its missing output.
+    """
+    source = textwrap.dedent(program) + textwrap.dedent(
+        f"""
+        import threading
+        threading.stack_size({_THREAD_STACK})
+        worker = threading.Thread(target=run)
+        worker.start()
+        worker.join()
+        """
+    )
+    return subprocess.run(  # noqa: S603 -- fixed interpreter, in-repo program
+        [sys.executable, "-c", source],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+
+
+# BOUND: MAX_WALK_DEPTH
+def test_the_deepest_walk_fits_the_documented_stack() -> None:
+    """Every walk up to the depth bound runs on a 1 MiB thread.
+
+    The smallest recursive body, whose unfolding bound refuses first, and a
+    body of three records, which meets the walk's own bound first. For each:
+    the deepest member, a value refused at the deepest level under the bound,
+    whose explaining walk is the dearest there is, and a value past the bound.
+    The profile-guided wheel needed 1.5 MiB for these at a bound of 512.
+    """
+    result = _on_a_thread(
+        """
+        from valgebra import ValidationError, Validator, recursive, union
+
+        def wrapped(levels, leaf, wrap):
+            for _ in range(levels):
+                leaf = wrap(leaf)
+            return leaf
+
+        def code(schema, value):
+            try:
+                schema.validate(value)
+            except ValidationError as error:
+                return error.code
+            return "member"
+
+        shapes = {
+            "lists": (recursive(lambda t: union(int, [t])), lambda v: [v]),
+            "records": (
+                recursive(lambda t: union(int, {"a": {"b": {"c": t}}})),
+                lambda v: {"a": {"b": {"c": v}}},
+            ),
+        }
+
+        def run():
+            for name, (schema, wrap) in shapes.items():
+                schema = Validator(schema)
+                first = next(
+                    n for n in range(1, 400)
+                    if not schema.is_valid(wrapped(n, 0, wrap))
+                )
+                print(
+                    name,
+                    schema.is_valid(wrapped(first - 1, 0, wrap)),
+                    code(schema, wrapped(first - 1, "leaf", wrap)),
+                    code(schema, wrapped(first + 20, 0, wrap)),
+                )
+            lists = Validator(shapes["lists"][0])
+            print("document", lists.is_valid_json("[" * 127 + "0" + "]" * 127))
+        """
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "lists True union_error recursion_limit",
+        "records True union_error recursion_limit",
+        "document True",
+    ], result.stderr
+
+
+# BOUND: MAX_DECISION_DEPTH
+def test_a_relation_fits_the_documented_stack() -> None:
+    """A relation the trail cannot close quickly runs on a 1 MiB thread.
+
+    Two fixpoints nesting 100 and 99 lists around the back edge meet their
+    hypothesis only after 9,900 levels of goals, and a chain of 96 definitions
+    a hundred and ten one-tuples deep asks its emptiness that deep. Each
+    overflowed the main thread's 8 MiB before the decision bounded its own
+    depth; past the bound each declines. A pair whose cycles meet under it is
+    decided.
+    """
+    result = _on_a_thread(
+        """
+        from valgebra import Validator, recursive
+
+        def nest(leaf, levels):
+            for _ in range(levels):
+                leaf = list[leaf]
+            return leaf
+
+        def cycles(p, q):
+            return (
+                recursive(lambda s: nest(s, p)),
+                recursive(lambda s: nest(s, q)),
+            )
+
+        def chain(leaf):
+            schema = Validator(leaf)
+            for _ in range(96):
+                def body(s, before=schema):
+                    inner = tuple[before, list[s]]
+                    for _ in range(110):
+                        inner = tuple[inner]
+                    return inner
+                schema = recursive(body)
+            return schema
+
+        def run():
+            a, b = cycles(100, 99)
+            print(a.relation_to(b), a.is_equivalent(b))
+            a, b = cycles(21, 20)
+            print(a.relation_to(b))
+            ints, words = chain(int), chain(int | str)
+            print(ints.relation_to(words), ints.is_empty())
+        """
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "undecided False",
+        "subset",
+        "undecided False",
+    ], result.stderr
 
 
 def test_a_recursive_value_at_the_unfolding_bound_still_validates() -> None:

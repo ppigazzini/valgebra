@@ -3,7 +3,7 @@ use std::sync::Arc;
 use super::record::{keyed_map_matches_json, scan_dict};
 use super::sequence::scan_list;
 use super::*;
-use crate::check::ctx::MAX_WALK_DEPTH;
+use crate::check::ctx::{MAX_RECURSION_DEPTH, MAX_WALK_DEPTH};
 use crate::check::index::ValidatorIndex;
 use crate::check::{WalkMode, WalkState, build_index};
 use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyModule, PyString, PyTuple};
@@ -6977,5 +6977,50 @@ fn a_union_decides_every_branch_before_it_explains_one() {
             0,
             "no branch summarized a value the union admits"
         );
+    });
+}
+
+/// The smallest recursive body is walked to the unfolding bound: a reference,
+/// the union beside its base case and the list around the back edge open three
+/// levels an unfolding, and the walk holds three for every unfolding the trail
+/// allows, so every value the trail admits is walked and the first past it is
+/// refused.
+#[test]
+fn the_smallest_recursive_body_is_walked_to_the_unfolding_bound() {
+    Python::attach(|py| {
+        let defs = vec![Schema::Union(
+            vec![
+                Schema::Int,
+                Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+            ]
+            .into(),
+        )];
+        let schema = Schema::Ref(DefIx::new(0));
+        let nested = |unfoldings: usize| {
+            eval(
+                py,
+                &format!(
+                    "__import__('functools').reduce(lambda x, _: [x], range({unfoldings}), 0)"
+                ),
+            )
+        };
+        // The outermost list is an unfolding of its own, so the deepest member
+        // nests one fewer than the trail's height.
+        assert!(decide(
+            py,
+            &schema,
+            &nested(MAX_RECURSION_DEPTH - 1),
+            &[],
+            &defs
+        ));
+        assert!(!decide(
+            py,
+            &schema,
+            &nested(MAX_RECURSION_DEPTH),
+            &[],
+            &defs
+        ));
+        let (_, report) = explain(py, &schema, &nested(MAX_RECURSION_DEPTH), &[], &defs);
+        assert_eq!(report.first().map(|v| v.code), Some("recursion_limit"));
     });
 }

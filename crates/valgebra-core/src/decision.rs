@@ -77,12 +77,77 @@ pub use crate::oracle::{LeafRelations, NoLeafRelations};
 /// interning-based procedure.
 pub(crate) const DECISION_BUDGET: u32 = 1_000_000;
 
+/// The most levels of its own recursion one decision query holds open.
+///
+/// The step budget bounds what a query costs and never how deep it goes: two
+/// recursive schemas whose bodies nest 100 and 99 lists around the back edge
+/// meet the coinductive hypothesis only after `lcm(100, 99)` levels of goals,
+/// each a chain of native frames, a few steps apiece. A goal level costs about
+/// 1 KiB of native stack on the profiled wheel and an emptiness level less,
+/// measured, so 512 of them fit in half of the 1 MiB that is the least stack
+/// any thread `CPython` creates has. Past the bound the query answers undecided,
+/// which the conservative contract always allows: a schema a caller writes
+/// unfolds a handful of levels, and only one built to nest coprime cycles or a
+/// long chain of definitions reaches it.
+pub(crate) const MAX_DECISION_DEPTH: u32 = 512;
+
+/// What one top-level query may spend: steps of work, and levels of its own
+/// recursion held open on the stack.
+///
+/// One value for the two because every recursive call is handed the budget
+/// already, so the depth travels with it. Counting a level on every goal that
+/// reaches the rules and on every emptiness question costs the decision
+/// workloads 2.5% to 3.1%, recorded as a step in `scripts/perf_budget.json`; a
+/// count kept per thread read 6% to 11%, a thread-local in a shared library
+/// being a call to find on every level, and one taken only through
+/// `verdict_rec` read less and left a union's members uncounted.
+pub(crate) struct Budget {
+    steps: Cell<u32>,
+    depth: Cell<u32>,
+}
+
+impl Budget {
+    /// A query's budget of `steps`, with no level open.
+    pub(crate) const fn new(steps: u32) -> Self {
+        Self {
+            steps: Cell::new(steps),
+            depth: Cell::new(0),
+        }
+    }
+
+    /// The steps not yet spent, which the tests that pin a cost read.
+    #[cfg(test)]
+    pub(crate) fn left(&self) -> u32 {
+        self.steps.get()
+    }
+}
+
+/// Run `descent` one level below the budget's current depth, or answer
+/// `refused` where the level would pass [`MAX_DECISION_DEPTH`].
+///
+/// The goal recursion and the emptiness recursion each descend through this
+/// once a level, and the two share the count, since an emptiness question
+/// asked deep inside a goal runs on the same stack. No guard closes the level:
+/// a query that unwinds drops its budget with it, so the count is restored on
+/// the return alone -- a guard's drop put an unwinding path on every goal and
+/// read dearer than the count itself.
+pub(super) fn descending<T>(budget: &Budget, refused: T, descent: impl FnOnce() -> T) -> T {
+    let depth = budget.depth.get();
+    if depth >= MAX_DECISION_DEPTH {
+        return refused;
+    }
+    budget.depth.set(depth + 1);
+    let answer = descent();
+    budget.depth.set(depth);
+    answer
+}
+
 /// Spend one unit of `budget`; returns `false` when it is already exhausted, the
 /// signal a budgeted decision uses to stop and report the conservative answer.
-pub(super) fn spend(budget: &Cell<u32>) -> bool {
-    match budget.get().checked_sub(1) {
+pub(super) fn spend(budget: &Budget) -> bool {
+    match budget.steps.get().checked_sub(1) {
         Some(remaining) => {
-            budget.set(remaining);
+            budget.steps.set(remaining);
             true
         }
         None => false,
@@ -237,7 +302,7 @@ impl Schema {
     /// rule whose work depends on what the oracle answers.
     #[cfg(test)]
     pub(crate) fn subtype_steps_under(&self, other: &Schema, oracle: &dyn LeafRelations) -> u32 {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         self.is_subtype_rec(
             other,
             SubtypeCx {
@@ -247,7 +312,7 @@ impl Schema {
             },
             &mut Vec::new(),
         );
-        DECISION_BUDGET - budget.get()
+        DECISION_BUDGET - budget.left()
     }
 
     /// Whether every value of `self` is also a value of `other` — set inclusion,
@@ -309,7 +374,7 @@ impl Schema {
         oracle: &dyn LeafRelations,
         defs: &[Schema],
     ) -> Relation {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         self.subtype_relation(other, oracle, defs, &budget)
             .or_else(|| self.descriptor_contained_in(other, oracle, defs))
     }
@@ -326,7 +391,7 @@ impl Schema {
         other: &Schema,
         oracle: &dyn LeafRelations,
         defs: &[Schema],
-        budget: &Cell<u32>,
+        budget: &Budget,
     ) -> Relation {
         let cx = SubtypeCx {
             oracle,
@@ -465,7 +530,12 @@ impl Schema {
         if assumptions.iter().any(|(a, b)| a == self && b == other) {
             return Relation::Holds;
         }
-        self.subtype_decide(other, supertype_regions, cx, assumptions)
+        // A level of the recursion, held while the rules descend: a pair
+        // answered above opens none, and one past the depth bound proves
+        // nothing, as one past the work bound does not.
+        descending(cx.budget, Relation::Unknown, || {
+            self.subtype_decide(other, supertype_regions, cx, assumptions)
+        })
     }
 
     /// Whether one of the lattice bounds settles `self ⊆ other`: `self` denotes
@@ -1183,7 +1253,7 @@ impl Schema {
         // Both inclusion directions share one budget, so equivalence cannot spend
         // twice the ceiling, and its verdict does not depend on which direction
         // happened to allocate a fresh allowance first.
-        self.equivalence_relation(other, oracle, defs, &Cell::new(DECISION_BUDGET))
+        self.equivalence_relation(other, oracle, defs, &Budget::new(DECISION_BUDGET))
             .holds()
     }
 
@@ -1207,7 +1277,7 @@ impl Schema {
         other: &Schema,
         oracle: &dyn LeafRelations,
         defs: &[Schema],
-        budget: &Cell<u32>,
+        budget: &Budget,
     ) -> Relation {
         let cx = SubtypeCx {
             oracle,
@@ -1231,7 +1301,7 @@ impl Schema {
 struct SubtypeCx<'a> {
     oracle: &'a dyn LeafRelations,
     defs: &'a [Schema],
-    budget: &'a Cell<u32>,
+    budget: &'a Budget,
 }
 
 /// Every unordered pair of distinct elements, each once.

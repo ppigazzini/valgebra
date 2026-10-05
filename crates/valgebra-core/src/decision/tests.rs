@@ -21,7 +21,7 @@ use crate::oracle::tests::Pure;
 /// invisible through them, since the answer comes out right for the other
 /// reason. A rule is pinned by asking it on its own.
 fn structural(sub: &Schema, sup: &Schema) -> bool {
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     sub.is_subtype_rec(
         sup,
         SubtypeCx {
@@ -92,7 +92,7 @@ fn an_unresolved_reference_is_below_a_reference_to_the_universe() {
             SubtypeCx {
                 oracle: &NoLeafRelations,
                 defs: &defs,
-                budget: &Cell::new(DECISION_BUDGET),
+                budget: &Budget::new(DECISION_BUDGET),
             },
             &mut Vec::new(),
         )
@@ -142,7 +142,7 @@ fn an_unresolved_reference_is_below_a_reference_to_the_universe() {
 #[test]
 fn a_refinement_with_no_constraint_is_decided_as_its_base_on_either_side() {
     let rules = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.is_subtype_rec(
             sup,
             SubtypeCx {
@@ -267,7 +267,7 @@ fn a_refinement_with_no_constraint_earns_the_regions_of_its_base() {
 #[test]
 fn an_attribute_record_relates_to_every_other_node() {
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     let attrs = |fields: Vec<(&str, Schema, bool)>| {
@@ -708,12 +708,12 @@ proptest! {
     /// verdict can neither fall behind the reading nor run ahead of it.
     #[test]
     fn covering_the_universe_is_the_complement_being_empty(s in schema()) {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         let via_complement = Schema::Complement(Arc::new(s.clone()))
             .is_empty_rec(&NoLeafRelations, &[], &mut Vec::new(), &budget);
         prop_assert_eq!(via_complement, s.covers_the_universe());
         // And the fast fold is below the complete reading, never past it.
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         let (_, regions) =
             s.empty_and_region(&NoLeafRelations, &[], &mut Vec::new(), &budget);
         if regions == Regions::Known(Region::ALL) {
@@ -732,7 +732,7 @@ proptest! {
                 &NoLeafRelations,
                 &[],
                 &mut Vec::new(),
-                &Cell::new(DECISION_BUDGET),
+                &Budget::new(DECISION_BUDGET),
             )
             .1;
         prop_assert_eq!(folded, s.region_set());
@@ -913,7 +913,7 @@ fn meet_is_empty(members: &[Schema]) -> bool {
         &NoLeafRelations,
         &[],
         &mut Vec::new(),
-        &Cell::new(DECISION_BUDGET),
+        &Budget::new(DECISION_BUDGET),
     )
 }
 
@@ -1042,13 +1042,13 @@ fn a_recursive_meet_of_maps_is_decided_within_its_unfoldings() {
         ]
         .into(),
     )];
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     // The meet holds no finite value: a value of the key is in both unions, so
     // it is in the fixpoint again. Declining is sound, and a claim of a value
     // is not.
     let verdict = this.verdict_rec(&NoLeafRelations, &defs, &mut Vec::new(), &budget);
     assert_ne!(verdict, Verdict::Inhabited);
-    let spent = DECISION_BUDGET - budget.get();
+    let spent = DECISION_BUDGET - budget.left();
     assert!(spent < 100, "the meet spent {spent} steps");
 }
 
@@ -1059,7 +1059,7 @@ fn a_recursive_meet_of_maps_is_decided_within_its_unfoldings() {
 /// answers behind it and a relation the rule was never meant to reach is
 /// decided anyway. Which is a better answer and a worse test.
 fn by_the_rules(sub: &Schema, sup: &Schema) -> bool {
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     sub.is_subtype_rec(
         sup,
         SubtypeCx {
@@ -1081,7 +1081,7 @@ fn empty_by_the_rules(schema: &Schema) -> bool {
 /// [`empty_by_the_rules`] with an oracle, for the arms that need one to
 /// order two pooled bounds.
 fn empty_by_the_rules_under(schema: &Schema, oracle: &dyn LeafRelations) -> bool {
-    schema.is_empty_rec(oracle, &[], &mut Vec::new(), &Cell::new(DECISION_BUDGET))
+    schema.is_empty_rec(oracle, &[], &mut Vec::new(), &Budget::new(DECISION_BUDGET))
 }
 
 /// A refinement carrying no constraint denotes exactly its base, and both
@@ -1419,7 +1419,7 @@ fn a_class_the_oracle_reads_as_a_set_has_a_value() {
     // What the reading buys: the oracle refutes the pair, and the refutation is
     // now believed rather than handed to the set representation.
     let relation = |sub: &Schema, sup: &Schema, oracle: &dyn LeafRelations| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, oracle, &[], &budget)
     };
     assert_eq!(relation(&read, &hooked, &Pure), Relation::Fails);
@@ -1477,7 +1477,7 @@ fn a_class_is_disjoint_by_the_layout_its_oracle_reads() {
     // The relation the reading decides: a container below a class of another
     // layout is refuted, and the subject has values to refute with.
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &Kinded, &[], &budget)
     };
     assert_eq!(relation(&list_of_int, &laid_out), Relation::Unknown);
@@ -2334,7 +2334,7 @@ fn a_subject_with_no_value_is_below_a_shape_it_cannot_match() {
     // subject has a value to offer. A subject with none is below every set,
     // including one whose shape it could never take.
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     let empty_list = Schema::list(SeqShape::fixed([]));
@@ -2688,7 +2688,7 @@ fn a_refutation_about_a_part_with_no_value_is_not_one() {
         ),
     ];
     for (label, sub, sup) in cases {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         assert_ne!(
             sub.subtype_relation(&sup, &NoLeafRelations, &[], &budget),
             Relation::Fails,
@@ -2714,7 +2714,7 @@ fn a_refutation_about_a_part_with_no_value_is_not_one() {
             true,
         )])))
     };
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
         deeper(&narrow).subtype_relation(&deeper(&wide), &NoLeafRelations, &[], &budget),
         Relation::Unknown,
@@ -2790,7 +2790,7 @@ fn a_record_below_the_complement_of_a_record_union_is_decided_at_every_width() {
 #[test]
 fn a_required_key_the_subject_does_not_declare_refutes_the_inclusion() {
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     let field = |name: &str, required: bool| Field {
@@ -2835,7 +2835,7 @@ fn a_required_key_the_subject_does_not_declare_refutes_the_inclusion() {
 #[test]
 fn a_clause_answers_for_an_optional_field_only_where_its_key_admits_the_name() {
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &Kinded, &[], &budget)
     };
     // A record declaring `a?: str` beside a clause that covers the subject's,
@@ -2894,7 +2894,7 @@ fn a_clause_answers_for_an_optional_field_only_where_its_key_admits_the_name() {
 #[test]
 fn an_arm_that_declines_hands_the_pair_to_the_reading_below() {
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     let bounded = Schema::refine(
@@ -2942,7 +2942,7 @@ fn an_arm_that_declines_hands_the_pair_to_the_reading_below() {
 #[test]
 fn a_refinement_as_the_supertype_carries_its_base_s_refutation() {
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     let bounded_list = Schema::refine(
@@ -3029,7 +3029,7 @@ fn the_oracle_answers_a_refinement_before_its_base_is_read() {
     }
     let literal = Schema::Literal(ConstIx::new(0));
     let refined = Schema::refine(Schema::Str, vec![Constraint::Predicate(PredIx::new(0))]);
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
         literal.subtype_relation(&refined, &Proving, &[], &budget),
         Relation::Holds,
@@ -3037,7 +3037,7 @@ fn the_oracle_answers_a_refinement_before_its_base_is_read() {
     );
     // Without that oracle the same pair is unproven: the base is a string and a
     // literal the core cannot read is not outside it.
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
         literal.subtype_relation(&refined, &NoLeafRelations, &[], &budget),
         Relation::Unknown
@@ -3055,7 +3055,7 @@ fn the_oracle_answers_a_refinement_before_its_base_is_read() {
 #[test]
 fn a_pair_that_shares_no_value_is_refuted() {
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     let list_of_int = Schema::list(SeqShape::homogeneous(Schema::Int));
@@ -3091,7 +3091,7 @@ fn a_pair_that_shares_no_value_is_refuted() {
 #[test]
 fn the_rules_refute_prove_and_decline_these() {
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     let attr = |name: &str, schema: Schema, required: bool| Schema::AttrRecord {
@@ -3289,7 +3289,7 @@ fn table_relation(subject: &[usize], supertype: &[usize], oracle: &dyn LeafRelat
         )
     };
     let (subject, supertype) = (table(subject), table(supertype));
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     subject.subtype_relation(&supertype, oracle, &[], &budget)
 }
 
@@ -3382,7 +3382,7 @@ fn a_table_is_decided_without_the_work_growing_with_it() {
     assert_eq!(refutation(64), refutation(256));
     // And the refutation is the answer, not a decline the descriptor would have
     // to settle: every constant of the subject is outside the supertype.
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
         table(64, 0).subtype_relation(&table(64, 1_000), &Sets, &[], &budget),
         Relation::Fails
@@ -3438,7 +3438,7 @@ fn an_unordered_union_of_literals_is_not_read_as_a_set() {
         None,
         "an unordered list is not a set"
     );
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
         Schema::Literal(ConstIx::new(2)).subtype_relation(&backwards, &Values, &[], &budget),
         Relation::Holds
@@ -3466,7 +3466,7 @@ fn a_constant_that_does_not_equal_itself_denotes_no_value() {
             oracle,
             &[],
             &mut Vec::new(),
-            &Cell::new(DECISION_BUDGET),
+            &Budget::new(DECISION_BUDGET),
         )
     };
     assert_eq!(verdict(&NotAValue), Verdict::Empty);
@@ -3646,7 +3646,7 @@ fn a_record_decides_the_same_whichever_field_sorts_first() {
     let opaque = Schema::Instance(ClassIx::new(0));
     let listed = Schema::list(SeqShape::homogeneous(Schema::Int));
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
 
@@ -3688,7 +3688,7 @@ fn a_region_outside_a_kind_bound_refutes() {
     let not_int = Schema::complement(Schema::Int);
     let listed = Schema::list(SeqShape::homogeneous(Schema::Int));
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
 
@@ -3740,7 +3740,7 @@ fn a_reference_under_a_union_carries_its_refutation() {
     ])];
     let node = Schema::Ref(DefIx::new(0));
     let relation = |sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         node.subtype_relation(sup, &NoLeafRelations, &defs, &budget)
     };
 
@@ -3933,7 +3933,7 @@ fn a_bound_over_the_integers_has_a_value_where_the_oracle_names_one() {
 fn a_field_no_clause_admits_refutes_the_map() {
     let listed = Schema::list(SeqShape::homogeneous(Schema::Int));
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     let with_extra = closed(vec![field("extra", Schema::Int, true)]);
@@ -3979,7 +3979,7 @@ fn a_field_no_clause_admits_refutes_the_map() {
 #[test]
 fn a_subject_inside_a_schema_is_outside_its_complement() {
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     assert_eq!(
@@ -4096,7 +4096,7 @@ fn a_class_met_with_its_attributes_is_outside_what_its_class_is() {
         ])
     };
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &Classes, &[], &budget)
     };
     let plain = dataclass(Classes::PLAIN);
@@ -4209,7 +4209,7 @@ fn a_class_that_leaves_no_room_for_a_field_is_not_read_as_carrying_it() {
         ])
     };
     let relation = |sub: &Schema, oracle: &Carrying| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(&Schema::Str, oracle, &[], &budget)
     };
     let holds_an_int = met(field("x", Schema::Int, true));
@@ -4262,7 +4262,7 @@ fn a_meet_whose_class_the_oracle_declines_is_not_refuted() {
     // `Pure` answers that the class denotes a set -- so the meet has a value
     // and the guard believes what the rules report -- and declines every
     // question about which kinds that value has.
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(plain.verdict_under(&Pure), Verdict::Inhabited);
     assert_eq!(
         plain.subtype_relation(&Schema::Str, &Pure, &[], &budget),
@@ -4299,7 +4299,7 @@ fn a_lookup_after_the_cursor_gives_up_finds_its_own_field() {
         field("a", Schema::Int, true),
         field("b", Schema::Str, true),
     ]);
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
         subject.subtype_relation(&supertype, &NoLeafRelations, &[], &budget),
         Relation::Holds
@@ -4350,7 +4350,7 @@ fn every_order_of_one_record_decides_as_every_other() {
         field("d", listed, true),
     ];
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     let record = |fields: Vec<Field>, open: bool| Schema::KeyedMap {
@@ -4399,7 +4399,7 @@ fn every_order_of_one_record_decides_as_every_other() {
 #[test]
 fn a_record_built_out_of_order_decides_as_one_in_order() {
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     let unordered = |fields: Vec<Field>| Schema::KeyedMap {
@@ -4442,7 +4442,7 @@ fn a_record_built_out_of_order_decides_as_one_in_order() {
 #[test]
 fn a_clause_key_the_rules_cannot_read_leaves_the_field_unproven() {
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     let mapping = |key: Schema, value: Schema| Schema::KeyedMap {
@@ -4527,7 +4527,7 @@ fn a_single_literal_is_a_table_of_one() {
     // And the rule *refutes* the constant the table does not carry, which is
     // what reading a bare literal as a one-element table is for: the member
     // walk beside it only ever proves.
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
         outside.subtype_relation(&table, &Distinct, &[], &budget),
         Relation::Fails
@@ -4544,12 +4544,12 @@ fn two_fixed_lengths_that_differ_are_refuted() {
     let fixed = |elements: Vec<Schema>| Schema::tuple(SeqShape::fixed(elements));
     let pair = fixed(vec![Schema::Int, Schema::Int]);
     let single = fixed(vec![Schema::Int]);
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
         pair.subtype_relation(&single, &NoLeafRelations, &[], &budget),
         Relation::Fails
     );
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
         single.subtype_relation(&pair, &NoLeafRelations, &[], &budget),
         Relation::Fails
@@ -4577,7 +4577,7 @@ fn a_refinement_pair_with_disjoint_bases_is_refuted_by_the_rules() {
         constraints: vec![constraint].into(),
     };
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
@@ -4707,7 +4707,7 @@ fn a_meet_is_read_against_what_a_reference_names() {
     // 0 names a record, and 1 names a union.
     let defs = vec![record.clone(), Schema::union([record, Schema::Str])];
     let relation = |sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         dataclass.subtype_relation(sup, &Classes, &defs, &budget)
     };
 
@@ -4770,7 +4770,7 @@ fn a_complement_names_a_witness_from_the_kinds_its_inner_schema_is_not() {
     // the row can say which kind the search may name. The guard has its own
     // rows, and the query applies it to this answer as it does to every other.
     let relation = |sub: &Schema, oracle: &dyn LeafRelations| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_by_rules(
             &class,
             SubtypeCx {
@@ -4977,7 +4977,7 @@ fn an_exhausted_budget_declines_and_does_not_refute() {
         ),
     ];
     for (subject, supertype) in pairs {
-        let full = Cell::new(DECISION_BUDGET);
+        let full = Budget::new(DECISION_BUDGET);
         assert_eq!(
             subject.subtype_relation(&supertype, &NoLeafRelations, &[], &full),
             Relation::Fails,
@@ -4985,7 +4985,7 @@ fn an_exhausted_budget_declines_and_does_not_refute() {
         );
         // And with nothing to spend, the same pair declines rather than
         // reporting the refutation it has not reached.
-        let spent = Cell::new(0);
+        let spent = Budget::new(0);
         assert_eq!(
             subject.subtype_relation(&supertype, &NoLeafRelations, &[], &spent),
             Relation::Unknown,
@@ -5000,8 +5000,8 @@ fn an_exhausted_budget_declines_and_does_not_refute() {
 fn a_shared_budget_declines_the_direction_it_cannot_reach() {
     let left = Schema::union(vec![Schema::Int, Schema::Str]);
     let right = Schema::Int;
-    // One cell for both directions, which is the shape `is_equivalent` spends.
-    let shared = Cell::new(0);
+    // One budget for both directions, which is the shape `is_equivalent` spends.
+    let shared = Budget::new(0);
     assert_eq!(
         left.subtype_relation(&right, &NoLeafRelations, &[], &shared),
         Relation::Unknown
@@ -5013,7 +5013,7 @@ fn a_shared_budget_declines_the_direction_it_cannot_reach() {
     );
     // With an allowance the two answer, and they answer differently -- which is
     // what says the declines above are the budget rather than the pair.
-    let full = Cell::new(DECISION_BUDGET);
+    let full = Budget::new(DECISION_BUDGET);
     assert_eq!(
         right.subtype_relation(&left, &NoLeafRelations, &[], &full),
         Relation::Holds
@@ -5198,7 +5198,7 @@ fn a_decision_leaves_the_trail_it_was_given() {
         (Schema::Int, reference(0)),
     ];
     for (sub, sup) in pairs {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         let mut trail = Vec::new();
         let _ = sub.is_subtype_rec(
             &sup,
@@ -5231,7 +5231,7 @@ fn a_decision_leaves_an_assumption_it_did_not_make() {
     )))];
     let seeded: Vec<(Schema, Schema)> =
         vec![(Schema::Str, Schema::Bytes), (Schema::Int, Schema::Float)];
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     let mut trail = seeded.clone();
     let _ = Schema::Ref(DefIx::new(0)).is_subtype_rec(
         &Schema::Ref(DefIx::new(0)),
@@ -5274,7 +5274,7 @@ fn a_decision_leaves_an_assumption_it_did_not_make() {
 fn an_assumption_is_read_as_the_pair_it_is() {
     let list = |element| Schema::list(SeqShape::homogeneous(element));
     let decide = |sub: &Schema, sup: &Schema, seed: Vec<(Schema, Schema)>| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         let mut trail = seed;
         sub.is_subtype_rec(
             sup,
@@ -5354,7 +5354,7 @@ fn an_assumption_is_read_as_the_pair_it_is() {
 #[test]
 fn a_union_narrowed_to_one_branch_refutes_where_that_branch_does() {
     let relation = |sub: &Schema, sup: &Schema| {
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
     let record = |ty: Schema| closed(vec![field("a", ty, true)]);
@@ -5515,7 +5515,7 @@ fn a_record_below_a_union_of_records_is_the_descriptors_answer() {
         let (subject, corners) = record_and_its_corners(width);
 
         // The structural procedure alone, with a budget it cannot exhaust.
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         assert_eq!(
             subject.subtype_relation(&corners, &NoLeafRelations, &[], &budget),
             Relation::Unknown,
@@ -5555,7 +5555,7 @@ fn a_record_below_its_corners_stops_where_the_lowering_does() {
 
     // Four: the same shape, one field wider, and nothing decides it.
     let (wide, its_corners) = record_and_its_corners(4);
-    let budget = Cell::new(DECISION_BUDGET);
+    let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
         wide.subtype_relation(&its_corners, &NoLeafRelations, &[], &budget),
         Relation::Unknown,
@@ -5633,7 +5633,7 @@ fn a_product_is_below_its_corners_and_refuted_by_a_missing_one() {
             &Schema::Union(Vec::new().into()),
             &NoLeafRelations,
             &[],
-            &Cell::new(DECISION_BUDGET),
+            &Budget::new(DECISION_BUDGET),
         ),
         Relation::Fails
     );
@@ -5669,7 +5669,7 @@ fn the_product_rule_decides_its_corners_in_a_bounded_number_of_steps() {
     let mut spent = Vec::new();
     for width in 2..=5 {
         let (product, corners) = product_and_corners(width, 0);
-        let budget = Cell::new(DECISION_BUDGET);
+        let budget = Budget::new(DECISION_BUDGET);
         let answer = product.subtype_relation(
             &Schema::Union(corners.into()),
             &NoLeafRelations,
@@ -5677,7 +5677,7 @@ fn the_product_rule_decides_its_corners_in_a_bounded_number_of_steps() {
             &budget,
         );
         assert_eq!(answer, Relation::Holds, "width {width}");
-        spent.push(DECISION_BUDGET - budget.get());
+        spent.push(DECISION_BUDGET - budget.left());
     }
     assert!(
         spent.last().is_some_and(|&five| five < 60_000),

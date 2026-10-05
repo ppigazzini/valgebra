@@ -203,15 +203,25 @@ impl Default for WalkState {
 /// makes "a value never overflows the native stack" a statement about the walk
 /// rather than about the values a caller happens to pass.
 ///
-/// The figure is the stack a walk needs. A level costs about 0.6 KiB of native
-/// stack in a release build, so 512 of them sit inside the smallest stack a
-/// platform gives a thread (512 KiB) and far inside the megabytes a main thread
-/// gets. An unoptimized build spends about 3 KiB a level and fits no such
-/// bound on a thread, which is a build nothing ships. A thread given less than
-/// the platform's default can overflow first; `docs/10-limits.md` says so. A schema at the construction depth bound reaches 128 of them
-/// against a flat value, so the ceiling is four times the depth any
-/// non-recursive schema can ask for.
-pub(crate) const MAX_WALK_DEPTH: usize = 512;
+/// The figure is three levels for every unfolding the trail allows. The
+/// smallest recursive body -- a reference, the union beside its base case, the
+/// container around the back edge, `int | list[T]` -- opens three levels an
+/// unfolding, so it is walked to the unfolding bound: every value
+/// [`MAX_RECURSION_DEPTH`] admits is walked, and the next level is refused by
+/// one bound or the other. A deeper body meets this bound first, which is what
+/// it is for.
+///
+/// What it costs is measured on the wheel that ships. The profile-guided build
+/// inlines the walk's arms into frames of 2.5 to 3 KiB a level on the dict and
+/// union shapes, against 0.6 KiB on a plain release build, and the dearest
+/// walk is the one explaining a refused value: at 384 levels it fits in 896
+/// KiB and overflows 832, under the 1 MiB that is the least stack any thread
+/// `CPython` creates has. 512 levels needed 1.5 MiB, and 255 would have
+/// refused `int | list[T]` from 85 unfoldings. An unoptimized build spends
+/// more again and fits no such figure, which is a build nothing ships. A
+/// thread given less than 1 MiB can overflow first; `docs/10-limits.md` says
+/// so.
+pub(crate) const MAX_WALK_DEPTH: usize = 3 * MAX_RECURSION_DEPTH;
 
 /// One open level of walk descent, given out by [`Ctx::descend`].
 ///

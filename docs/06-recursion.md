@@ -85,7 +85,7 @@ Recursion is bounded so it always terminates cleanly:
 - A value that **contains itself** is rejected with `recursion_loop` rather than
   looping forever (an object-identity guard).
 - A value nested **past a fixed depth** fails with `recursion_limit` rather than
-  overflowing the native stack: 128 levels of unfolding, and 512 levels of
+  overflowing the native stack: 128 levels of unfolding, and 384 levels of
   descent in total, which is the bound a deep definition body reaches first
   ([limits](10-limits.md)).
 - A **non-contractive** body — one whose recursive reference is not under a
