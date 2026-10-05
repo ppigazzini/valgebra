@@ -52,6 +52,10 @@ TRUNCATED = "<...>"
         # The nullary product. Python spells the empty subscript `tuple[()]`;
         # `tuple[]` is not an expression at all.
         (tuple[()], "tuple[()]"),
+        # A union holding a display is the call, and a name is Python's repr.
+        (union({"a": int}, {"b": str}), "union({'a': int}, {'b': str})"),
+        (union([int, str], int), "union(int, [int, str])"),
+        ({"a': str, 'zz": int}, "{\"a': str, 'zz\": int}"),
     ],
 )
 def test_repr_renders_the_annotation(schema: object, expected: str) -> None:
@@ -142,6 +146,17 @@ ROUNDTRIP_SCHEMAS = [
     Annotated[str, Regex("\x07+")],
     Annotated[str, Regex("a'b")],
     Annotated[str, Regex("\u00e9+")],
+    # A union holding a display prints as the call: `|` between two dicts is
+    # Python's merge, which read the two records back as one, and beside a list
+    # it is a `TypeError`.
+    union({"a": int}, {"b": str}),
+    union([int, str], int),
+    union(Validator({"a": int}).open(), None),
+    # A record's name is spelled as Python spells it: printed between quotes
+    # as it stood, a name carrying a quote closed the string and read back as
+    # two fields.
+    {"a': str, 'zz": int},
+    {'say "hi"': int, "b\n?": str},
 ]
 
 

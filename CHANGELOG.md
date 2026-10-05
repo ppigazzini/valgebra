@@ -21,6 +21,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the walk and a relation fit a 1 MiB stack
 - fix: a document's keys are hashed with a per-process key
 - fix: a constraint is read off the vocabulary that defines it
+- fix: a repr reads back as the schema it prints
 
 -->
 
@@ -163,6 +164,12 @@ answer of its own, or a repair to a change not yet released.
 - **`\<`, `\>` and `\b{...}` are refused in a pattern.** They are word-boundary
   assertions in this engine and literal characters to `re`, so
   `Regex(r"\<b\>")` admitted `"b"` and refused `"<b>"`.
+- **A union holding a record prints as the call that builds it.**
+  `union({'a': int}, {'b': str})` printed as `{'a': int} | {'b': str}`, which
+  Python reads as a dict merge, the one record `{'a': int, 'b': str}`, and a
+  union beside a list display printed an expression that raises `TypeError`.
+  Both print as `union(...)`. A record's key is spelled by Python's own `repr`,
+  where a name carrying a quote printed as two fields.
 
 ## [0.0.16] - 2026-10-04
 

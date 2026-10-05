@@ -183,6 +183,13 @@ fn binder(open: usize) -> String {
 /// leaves every other member exactly where it was. The rendering is the sort
 /// key because it is what the reader sees: two members that print the same
 /// print the same wherever they sit.
+///
+/// A member printed as a display -- a record `{...}` or a fixed list `[...]` --
+/// is not a type, and `|` between it and the next member is Python's own
+/// operator on the two values: `{'a': int} | {'b': str}` is a dict merge, read
+/// back quietly as the record `{'a': int, 'b': str}`, and a list beside
+/// anything is a `TypeError`. Such a union is printed as the `union(...)` call,
+/// which reads every display back as the schema it spells.
 fn render_union(
     members: &[Schema],
     render: &impl Fn(&Schema) -> PyResult<String>,
@@ -201,11 +208,18 @@ fn render_union(
             run.sort_by(|a, b| a.1.cmp(&b.1));
         }
     }
-    Ok(rendered
+    let displayed = rendered
+        .iter()
+        .any(|(_, text)| text.starts_with('{') || text.starts_with('['));
+    let texts = rendered
         .into_iter()
         .map(|(_, text)| text)
-        .collect::<Vec<_>>()
-        .join(" | "))
+        .collect::<Vec<_>>();
+    Ok(if displayed {
+        format!("union({})", texts.join(", "))
+    } else {
+        texts.join(" | ")
+    })
 }
 
 /// Render a meet, reading a class's `isinstance` atom beside its attribute
@@ -300,12 +314,16 @@ fn render_keyed_map(
     {
         return Ok(format!("dict[{}, {}]", r(&clause.key)?, r(&clause.value)?));
     }
-    // Otherwise a record/struct: named fields, then any catch-all clauses.
+    // Otherwise a record/struct: named fields, then any catch-all clauses. A
+    // name is spelled by Python's own `repr`, as a pattern is: written between
+    // two quotes as it stood, a name carrying a quote closed the string early,
+    // and `a': str, 'zz` printed as two fields.
     let mut entries: Vec<String> = fields
         .iter()
         .map(|field| {
             let suffix = if field.required { "" } else { "?" };
-            Ok(format!("'{}{}': {}", field.name, suffix, r(&field.schema)?))
+            let name = python_repr(py, &format!("{}{suffix}", field.name));
+            Ok(format!("{name}: {}", r(&field.schema)?))
         })
         .collect::<PyResult<_>>()?;
     for clause in defaults {
