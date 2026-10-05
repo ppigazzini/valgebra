@@ -31,12 +31,19 @@ valgebra-core = { workspace = true }
 # validation walk as a native object so the two paths agree by construction.
 jiter = { version = "0.17", features = ["python"] }
 # The validation walk's maps and the recursion guard are keyed by trusted
-# internal data (declared field names, value/definition ids), never attacker
-# input, so they do not need SipHash's DoS resistance. FxHash is faster to build
-# and probe, and its zero-sized build hasher drops the per-call random-seed setup
-# the default hasher pays on every walk. This is the hasher ty uses for the same
-# reason. Pinned once in the workspace so the core crate shares the version.
+# internal data (declared field names, value/definition ids), so they do not
+# need a keyed hash. FxHash is faster to build and probe, and its zero-sized
+# build hasher drops the per-call random-seed setup the default hasher pays on
+# every walk. This is the hasher ty uses for the same reason. Pinned once in the
+# workspace so the core crate shares the version.
 rustc-hash = { workspace = true }
+# The one table a document's own keys fill -- each undeclared key's last entry
+# in a wide parsed object -- needs a hash keyed per process instead: FxHash is
+# unseeded, so a document can carry keys computed offline to collide. ahash's
+# `RandomState` is keyed by the OS's randomness at its first use and costs a
+# fraction of std's SipHash; jiter already depends on it with these features,
+# so it adds no crate to the build.
+ahash = "0.8"
 # Native string-pattern refinements: the `regex` crate compiles a `Pattern(...)`
 # marker once and matches on the Rust path, off the Python-predicate slow path.
 # Its linear-time guarantee (no catastrophic backtracking) matches valgebra's

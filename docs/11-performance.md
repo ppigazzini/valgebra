@@ -442,8 +442,13 @@ schema representation](dev/01-schema-ir.md).
   `getattr_opt`, which answers without building an exception wherever the
   interpreter offers a lookup that does (`PyObject_GetOptionalAttr`, from 3.13).
 - **Internal maps hash with FxHash.** A validator's own maps are keyed by its
-  field names and by object identities, never by a caller's data, so they use
-  `rustc-hash` rather than the standard hasher and its per-map random seed.
+  field names and by object identities, so they use `rustc-hash` rather than
+  the standard hasher and its per-map random seed. The one table a document's
+  own keys fill -- the last entry of each undeclared key in a wide parsed
+  object -- hashes with `ahash` instead, keyed per process, because an
+  unseeded hash lets a document carry keys computed to collide; it is also
+  filled once a key, the position a repeat displaces read off the insert, which
+  makes the wide object 9% to 14% cheaper than the FxHash table was.
 
 ### Building a validator
 

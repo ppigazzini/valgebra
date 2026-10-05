@@ -952,6 +952,7 @@ dependencies = [
 name = "valgebra-py"
 version = "0.0.16"
 dependencies = [
+ "ahash",
  "jiter",
  "pyo3",
  "pyo3-build-config",

@@ -7,9 +7,11 @@
 //! why these live together and beside rather than inside the dispatcher.
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ops::ControlFlow;
 use std::sync::Arc;
 
+use ahash::RandomState;
 use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::sync::critical_section::with_critical_section;
@@ -880,22 +882,35 @@ fn undeclared_covered(
         }
         return true;
     }
-    // Collapse the entries to each non-field key's last value in one pass, so a
-    // document with many keys (or many duplicates) is covered linearly rather
-    // than by rescanning the tail per key.
-    let mut last_value: FxHashMap<&str, &JsonValue<'_>> = FxHashMap::default();
-    for (key, val) in entries {
-        if declares(key.as_ref()) {
-            continue;
+    // Which entries the document means, found in one pass, so a document with
+    // many keys (or many duplicates) is covered linearly rather than by
+    // rescanning the tail per key: an entry a field declares is not this
+    // check's, and one a later entry repeats is not the document's -- the table
+    // hands back the position a repeat displaces. The table is keyed by the
+    // document's own keys, so it hashes them with a hash keyed per process:
+    // `rustc-hash` is unseeded, its collisions are the same in every process,
+    // and a document can carry keys computed offline to all hash alike -- each
+    // insert then walked the whole chain, and 20,000 such keys, 0.74 MB, took
+    // half a second where ordinary ones took 2 ms. The entries are covered in
+    // the document's order, so the clauses are asked in an order the seed does
+    // not choose.
+    let mut last: HashMap<&str, usize, RandomState> =
+        HashMap::with_capacity_and_hasher(entries.len(), RandomState::new());
+    let mut skipped = vec![false; entries.len()];
+    for (position, (key, _)) in entries.iter().enumerate() {
+        let displaced = if declares(key.as_ref()) {
+            Some(position)
+        } else {
+            last.insert(key.as_ref(), position)
+        };
+        if let Some(slot) = displaced.and_then(|at| skipped.get_mut(at)) {
+            *slot = true;
         }
-        last_value.insert(key.as_ref(), val);
     }
-    for (key, val) in last_value {
-        if !covers(key, val) {
-            return false;
-        }
-    }
-    true
+    entries
+        .iter()
+        .zip(&skipped)
+        .all(|((key, val), &skipped)| skipped || covers(key.as_ref(), val))
 }
 
 /// How many entries an object may carry and still be covered where it lies.

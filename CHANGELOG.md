@@ -19,6 +19,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a walk that stops is not a non-member
 - fix: a union over records does not re-walk
 - fix: the walk and a relation fit a 1 MiB stack
+- fix: a document's keys are hashed with a per-process key
 
 -->
 
@@ -123,6 +124,14 @@ answer of its own, or a repair to a change not yet released.
   died, on the main thread as on any other: the work budget counts steps, and
   each level is a few of them. A relation holds at most 512 levels of its own
   recursion and answers undecided past them.
+- **A JSON object's keys cannot be chosen to collide.** The undeclared keys of
+  a parsed object wider than eight entries were collected into a table hashed
+  with an unseeded hash, whose collisions are the same in every process: a
+  document of 20,000 keys computed to collide, 0.74 MB, took half a second
+  against `dict[str, int]` where as many ordinary keys took 2 ms, four times as
+  long for each doubling. The table is keyed per process, and the keys are
+  covered in the document's order. An ordinary wide object reads 9% to 14%
+  fewer instructions than before.
 
 ## [0.0.16] - 2026-10-04
 

@@ -3360,6 +3360,14 @@ fn a_parsed_object_reads_its_repeats_alike_at_every_width() {
             }]
             .into(),
         };
+        // An open record whose one field takes a string the clause refuses.
+        let open = Schema::keyed_map(
+            vec![field("d", Schema::Str, false)],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        );
         let names: Vec<String> = (0..24).map(|i| format!("k{i}")).collect();
         let filler = |width: usize| -> Vec<(&str, JsonValue<'_>)> {
             names
@@ -3397,6 +3405,20 @@ fn a_parsed_object_reads_its_repeats_alike_at_every_width() {
             last_loses.push(("r", JsonValue::Str("a".into())));
             assert!(
                 !holds_json(py, &mapping, &json_object(last_loses)),
+                "width {width}"
+            );
+
+            // A key a field declares is the field's, never the clause's.
+            let mut declared = filler(width);
+            declared.push(("d", JsonValue::Str("a".into())));
+            assert!(
+                holds_json(py, &open, &json_object(declared)),
+                "width {width}"
+            );
+            let mut misdeclared = filler(width);
+            misdeclared.push(("d", JsonValue::Int(1)));
+            assert!(
+                !holds_json(py, &open, &json_object(misdeclared)),
                 "width {width}"
             );
         }

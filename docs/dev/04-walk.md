@@ -752,6 +752,18 @@ never in what it answers -- which is why the rows that hold it run either side o
 the bound and across it, and why flipping the comparison is an equivalent mutant
 the sweep excuses with that argument.
 
+Past `SMALL_OBJECT` the table is filled by the document: its keys are the
+document's own, so it hashes them with `ahash`'s `RandomState`, keyed per process
+by the OS's randomness, where every other map in the walk uses `rustc-hash`.
+`rustc-hash` is unseeded, so its collisions are every process's, and a document
+can carry keys computed to collide: 20,000 such keys, 0.74 MB, took half a second
+where ordinary ones took 2 ms, four times as long for each doubling
+(`test_a_documents_colliding_keys_are_read_in_linear_time`). The table holds
+positions, and an insert hands back the position a repeat displaces -- the entry
+the document does not mean -- so each key is hashed once. The entries are then
+covered in the document's order, so the order the clauses are asked in is the
+document's, not the seed's.
+
 The key half of the question is settled before it is asked where a *lone* clause
 is keyed by `str` or by anything: a parsed object's keys are strings by
 construction, so such a clause admits every one of them and only its value schema

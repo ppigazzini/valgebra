@@ -555,6 +555,63 @@ def test_self_referential_value_is_caught_as_a_loop() -> None:
 
 
 # BOUND: CLOSEST_BRANCH_PROBE_LIMIT
+def _colliding_keys(count: int) -> list[str]:
+    """Return `count` keys of 32 ASCII bytes that all hash alike in `rustc-hash`.
+
+    `rustc-hash` 2.x hashes a 32-byte string as `multiply_mix(SEED2 ^ middle,
+    t ^ tail)`, with `t` a function of the first sixteen bytes, so a tail equal
+    to `t` zeroes the product whatever the middle eight bytes are. The crate is
+    unseeded, so the constants below are every process's and the keys are
+    computed here, as a document's author could compute them: the first
+    sixteen-digit head whose `t` is printable will do.
+    """
+    # The two constants the head's mix reads; the seed beside the middle bytes
+    # drops out, because the product it enters is zero.
+    seed1, prevent = 0x243F6A8885A308D3, 0xA4093822299F31D0
+    word = (1 << 64) - 1
+    # Printable ASCII without the two bytes a JSON string would escape.
+    allowed = {*range(0x20, 0x22), *range(0x23, 0x5C), *range(0x5D, 0x7F)}
+    for attempt in range(10**6):
+        head = f"{attempt:016d}".encode()
+        product = (seed1 ^ int.from_bytes(head[:8], "little")) * (
+            prevent ^ int.from_bytes(head[8:], "little")
+        )
+        tail = ((product & word) ^ (product >> 64)).to_bytes(8, "little")
+        if all(byte in allowed for byte in tail):
+            break
+    return [(head + f"{i:08d}".encode() + tail).decode() for i in range(count)]
+
+
+def test_a_documents_colliding_keys_are_read_in_linear_time() -> None:
+    """A parsed object's keys are not trusted to hash apart.
+
+    The undeclared keys of a parsed object wider than eight entries go through
+    a table keyed by the document's own keys, and that table hashed with
+    `rustc-hash`, which is unseeded: 20,000 keys computed to collide, 0.74 MB,
+    took half a second where as many ordinary keys took 2 ms, and four times as
+    long for each doubling. The table is keyed per process now, so the keys
+    collide in the document only.
+    """
+    schema = Validator(dict[str, int])
+
+    def document(keys: list[str]) -> str:
+        return "{" + ",".join(json.dumps(key) + ":1" for key in keys) + "}"
+
+    count = 20_000
+    colliding = document(_colliding_keys(count))
+    ordinary = document([f"k{i:030d}x" for i in range(count)])
+    assert len(colliding) == len(ordinary)
+    slow = _fastest(lambda: schema.is_valid_json(colliding))
+    fast = _fastest(lambda: schema.is_valid_json(ordinary))
+    assert schema.is_valid_json(colliding)
+    # Generous, because a loaded machine moves a millisecond around: the
+    # colliding document read 250 times slower than the ordinary one.
+    assert slow < fast * 5 + 0.05, (
+        f"{count:,} colliding keys took {slow:.3f}s against {fast:.3f}s for "
+        "ordinary ones; the table is hashing the document's keys predictably"
+    )
+
+
 def test_wide_union_membership_is_decided_and_bounded() -> None:
     wide = union(*[Literal[i] for i in range(5000)])  # ty: ignore[invalid-type-form]
     # The value-driven work (the linear scan and the capped closest-branch probe)
