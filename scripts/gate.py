@@ -956,8 +956,9 @@ UNREACHED = {
     "mutants-diff-core": "a mutation sweep, tens of minutes",
     "mutants-diff-walk": (
         "a mutation sweep, and its verdict is the embedded interpreter's -- "
-        "run it with PYO3_PYTHON at the 3.12 `ci.yml` names, or a mutant the "
-        "lane kills reads here as a survivor"
+        "run it in a venv of the 3.12 `ci.yml` names, its `bin` first on PATH, "
+        "as docs/dev/07-tooling-ci.md's recipe does, or a mutant reads "
+        "differently here than on the lane"
     ),
 }
 

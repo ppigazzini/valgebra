@@ -652,13 +652,23 @@ sweep. The fourth holds the arguments beside the set: a note whose mutant a
 test now kills, or one spelled as no survivor line spells it, is an excuse that
 outlived what it excused.
 
-**Run it on the interpreter the lane names.** The verdict is the embedded
-interpreter's: a mutant this box's 3.14 reports as a survivor is one CPython
-3.12 kills, so a disagreement with the lane is the interpreter before it is the
-tree. The lane pins 3.12, so a local sweep does too:
+**Run it on the interpreter the lane names, with what it installs.** The
+verdict is the embedded interpreter's: a mutant this box's 3.14 reports as a
+survivor is one CPython 3.12 kills, so a disagreement with the lane is the
+interpreter before it is the tree. The lane pins 3.12, and its embedded
+interpreter imports `typing_extensions`. That interpreter takes its prefix
+from the first `python3` on `PATH`, not from `PYO3_PYTHON`, which only
+configures the build: with a bare 3.12, or a venv named by `PYO3_PYTHON` alone,
+it starts on the base prefix, where `typing_extensions` is not installed, so
+the corpus installs its stand-in and kills the mutants of the arms the lane
+cannot reach -- a sweep that passes here and a ratchet that fails there. A
+local sweep runs in a venv the lock fills, its `bin` first on `PATH`:
 
 ```bash
-export PYO3_PYTHON="$(uv python find 3.12)"
+export VALGEBRA_WALK_VENV="$PWD/../walk-venv"
+UV_PROJECT_ENVIRONMENT="$VALGEBRA_WALK_VENV" uv sync --locked --no-install-project --python 3.12
+export PATH="$VALGEBRA_WALK_VENV/bin:$PATH"
+export PYO3_PYTHON="$VALGEBRA_WALK_VENV/bin/python"
 export LD_LIBRARY_PATH="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"
 # Bound what a failing test shrinks, and draw a seed the run can report. Without
 # the first, a mutant the tests caught spends the whole budget shrinking a
@@ -666,7 +676,7 @@ export LD_LIBRARY_PATH="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.g
 export PROPTEST_MAX_SHRINK_TIME=1000
 export PROPTEST_RNG_SEED="${PROPTEST_RNG_SEED:-$RANDOM}"
 cargo mutants --package valgebra-py --file <the files the change touches> \
-  --features interpreter-tests -j 4 --timeout-multiplier 20 \
+  --features interpreter-tests -j 2 --timeout-multiplier 20 \
   --output sweep -- -- --skip recursion_deeper_than_the_bound_is_refused \
   --skip the_two_readings_agree_at_the_walks_depth_bound
 python scripts/mutation_gate.py --baseline walk --new-only --out sweep/mutants.out
