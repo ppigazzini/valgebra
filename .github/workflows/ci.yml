@@ -1170,8 +1170,14 @@ jobs:
           esac
           if [ -f core-diff-mutants/mutants.out/caught.txt ] \
             || [ -f core-diff-mutants/mutants.out/missed.txt ]; then
+            # A shard holds part of each function's mutants, and a survivor is
+            # named by its place among the ones of its description: the places
+            # are read from the listing the shards were cut from.
+            # shellcheck disable=SC2086  # $args is a built flag list, not input
+            cargo mutants --package valgebra-core $args --list --colors=never \
+              > core-diff-listed.txt
             python3 scripts/mutation_gate.py --baseline core --new-only \
-              --out core-diff-mutants/mutants.out
+              --out core-diff-mutants/mutants.out --all core-diff-listed.txt
           else
             echo "no core mutants in the files this change touches"
           fi
@@ -1274,23 +1280,25 @@ jobs:
           export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
           libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           export LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}"
+          files=(
+            --file crates/valgebra-py/src/check/walk.rs
+            --file crates/valgebra-py/src/check/walk/record.rs
+            --file crates/valgebra-py/src/check/walk/scalar.rs
+            --file crates/valgebra-py/src/check/walk/sequence.rs
+            --file crates/valgebra-py/src/check/ctx.rs
+            --file crates/valgebra-py/src/check/index.rs
+            --file crates/valgebra-py/src/input.rs
+            --file crates/valgebra-py/src/build.rs
+            --file crates/valgebra-py/src/build/classes.rs
+            --file crates/valgebra-py/src/build/generics.rs
+            --file crates/valgebra-py/src/build/refine.rs
+            --file crates/valgebra-py/src/build/dialect.rs
+            --file crates/valgebra-py/src/equality.rs
+            --file crates/valgebra-py/src/oracle.rs
+            --file crates/valgebra-py/src/codes.rs
+          )
           set +e
-          cargo mutants --package valgebra-py \
-            --file crates/valgebra-py/src/check/walk.rs \
-            --file crates/valgebra-py/src/check/walk/record.rs \
-            --file crates/valgebra-py/src/check/walk/scalar.rs \
-            --file crates/valgebra-py/src/check/walk/sequence.rs \
-            --file crates/valgebra-py/src/check/ctx.rs \
-            --file crates/valgebra-py/src/check/index.rs \
-            --file crates/valgebra-py/src/input.rs \
-            --file crates/valgebra-py/src/build.rs \
-            --file crates/valgebra-py/src/build/classes.rs \
-            --file crates/valgebra-py/src/build/generics.rs \
-            --file crates/valgebra-py/src/build/refine.rs \
-            --file crates/valgebra-py/src/build/dialect.rs \
-            --file crates/valgebra-py/src/equality.rs \
-            --file crates/valgebra-py/src/oracle.rs \
-            --file crates/valgebra-py/src/codes.rs \
+          cargo mutants --package valgebra-py "${files[@]}" \
             --features interpreter-tests -j 2 --timeout-multiplier 20 \
             --shard "${{ matrix.shard }}/3" --sharding round-robin \
             --output walk-diff-mutants \
@@ -1304,8 +1312,11 @@ jobs:
           esac
           if [ -f walk-diff-mutants/mutants.out/caught.txt ] \
             || [ -f walk-diff-mutants/mutants.out/missed.txt ]; then
+            # Named by the whole listing, for the reason the core shard gives.
+            cargo mutants --package valgebra-py "${files[@]}" --list --colors=never \
+              > walk-diff-listed.txt
             python3 scripts/mutation_gate.py --baseline walk --new-only \
-              --out walk-diff-mutants/mutants.out
+              --out walk-diff-mutants/mutants.out --all walk-diff-listed.txt
           else
             echo "no binding mutants to judge"
           fi

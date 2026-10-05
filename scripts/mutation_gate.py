@@ -8,6 +8,12 @@ general, so the honest gate is "no regression", not "no survivors".
 The baseline is a set of survivor identities, each the survivor line with its
 `:LINE:COL` position stripped, so a survivor is matched by file, function, and
 mutation rather than by a line number that drifts when unrelated code moves.
+Where one function holds several mutants of one description -- the two `||` of
+one condition -- the description names none of them, and an entry accepting one
+accepted all: so each carries its place among them as well, `#2` for the second
+in the source. The places are read from every mutant the sweep generated, which
+the four outcome files list between them; a sweep that holds only part of a
+function's mutants -- one shard -- names the whole listing with `--all`.
 
 One sweep, one baseline. The core crate and the membership walk are swept by
 separate commands with separate test harnesses, so each carries its own accepted
@@ -18,6 +24,7 @@ Usage:
     python scripts/mutation_gate.py --update            # re-record it
     python scripts/mutation_gate.py --baseline walk     # gate the walk sweep
     python scripts/mutation_gate.py --new-only          # gate a PARTIAL sweep
+    python scripts/mutation_gate.py --new-only --all listed.txt   # ... a shard
 
 `--new-only` checks the new-survivor direction alone. It is for a sweep that
 covers a subset of the mutants the baseline was recorded over -- an `--in-diff`
@@ -54,7 +61,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Sequence
 
 # Three outcomes, three exit codes; see the module docstring.
 EXIT_OK = 0
@@ -74,25 +81,79 @@ BASELINES = {
 }
 
 # `path:LINE:COL: description` -> `path: description`
-_POS = re.compile(r"^(?P<path>.+?):\d+:\d+:\s*(?P<desc>.*)$")
+_POS = re.compile(r"^(?P<path>.+?):(?P<line>\d+):(?P<col>\d+):\s*(?P<desc>.*)$")
+
+# Every verdict a sweep writes; between them they list each mutant it generated.
+_OUTCOMES = ("caught.txt", "missed.txt", "timeout.txt", "unviable.txt")
 
 
-def _identity(line: str) -> str:
-    line = line.strip()
-    m = _POS.match(line)
-    return f"{m['path']}: {m['desc']}" if m else line
+def identities(listed: Iterable[str]) -> dict[str, str]:
+    """Name each listed mutant as a baseline records it.
+
+    A mutant is its file and its description, without the position, and where
+    the listing holds several of one file and description -- one function's two
+    `||` -- each also takes its place among them by line and column, `#1` first.
+    A line that carries no position is its own name.
+    """
+    siblings: dict[str, list[tuple[int, int, str]]] = {}
+    names: dict[str, str] = {}
+    for line in listed:
+        stripped = line.strip()
+        m = _POS.match(stripped)
+        if not m:
+            names[stripped] = stripped
+            continue
+        place = (int(m["line"]), int(m["col"]), stripped)
+        siblings.setdefault(f"{m['path']}: {m['desc']}", []).append(place)
+    for name, places in siblings.items():
+        ordered = sorted(set(places))
+        for rank, (_, _, stripped) in enumerate(ordered, start=1):
+            names[stripped] = name if len(ordered) == 1 else f"{name} #{rank}"
+    return names
 
 
 def _read(out: Path, name: str) -> list[str]:
     f = out / name
     if not f.exists():
         return []
-    return [ln for ln in f.read_text().splitlines() if ln.strip()]
+    return [ln.strip() for ln in f.read_text().splitlines() if ln.strip()]
 
 
-def _measured(out: Path) -> set[str]:
+def _named(lines: list[str], names: dict[str, str]) -> list[str]:
+    """Name a sweep's lines by the listing, refusing one the listing lacks.
+
+    A line missing from the listing is a listing of some other tree or some
+    other sweep, and a place read from it would name a different mutant.
+    """
+    missing = [line for line in lines if line not in names]
+    if missing:
+        for line in missing:
+            print(f"NOT IN THE LISTING: {line}", file=sys.stderr)
+        _cannot_run(
+            f"{len(missing)} mutant(s) are not in the listing their places are "
+            "read from; name the listing of this sweep's own files with --all"
+        )
+    return [names[line] for line in lines]
+
+
+def _listed(out: Path, listing: str | None) -> list[str]:
+    """Give every mutant the sweep was cut from, which places are read among.
+
+    The outcome files list each mutant the sweep generated once between them,
+    so a whole sweep needs nothing else. A shard holds part of each function's
+    mutants and names the whole listing.
+    """
+    if listing is None:
+        return [line for name in _OUTCOMES for line in _read(out, name)]
+    path = Path(listing)
+    if not path.is_file():
+        _cannot_run(f"{listing} is absent; list the sweep's mutants first")
+    return [ln.strip() for ln in path.read_text().splitlines() if ln.strip()]
+
+
+def _measured(out: Path, names: dict[str, str]) -> set[str]:
     """Give the mutants the sweep judged to survive."""
-    return {_identity(ln) for ln in _read(out, "missed.txt")}
+    return set(_named(_read(out, "missed.txt"), names))
 
 
 def _unjudged(out: Path) -> list[str]:
@@ -105,7 +166,7 @@ def _unjudged(out: Path) -> list[str]:
     overloaded machine reads as a hole in the tests, and `--update` writes that
     reading into the baseline as a permanent excuse for a mutant nobody judged.
     """
-    return [_identity(ln) for ln in _read(out, "timeout.txt")]
+    return _read(out, "timeout.txt")
 
 
 def _cannot_run(message: str) -> None:
@@ -160,6 +221,12 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
         "--new-only", action="store_true", help="gate a partial sweep's new survivors"
     )
     parser.add_argument("--out", default="mutants.out", help="the sweep's output")
+    parser.add_argument(
+        "--all",
+        default=None,
+        help="every mutant the sweep was cut from, as `cargo mutants --list` "
+        "prints them, for a sweep holding part of them",
+    )
     return parser.parse_args(argv)
 
 
@@ -248,7 +315,7 @@ def main(argv: Sequence[str] = ()) -> int:
     out = ROOT / args.out
     _require_run(out)
     _refuse_a_rig_fault(out)
-    measured = _measured(out)
+    measured = _measured(out, identities(_listed(out, args.all)))
 
     if update:
         # Carry forward every hand-written note beside the set. The argument for
@@ -274,7 +341,9 @@ def main(argv: Sequence[str] = ()) -> int:
                         "--update` after a sweep, and only ever let this set "
                         "shrink. Entries are the survivor line without its "
                         "line:col position, so they survive unrelated code "
-                        "motion."
+                        "motion, and with its place among the mutants of one "
+                        "description in one function, `#2`, where there are "
+                        "several."
                     ),
                     **notes,
                     "survivors": sorted(measured),

@@ -34,16 +34,22 @@ LEDGER: every binding file is swept or excluded by name
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 import yaml
 
 from _toml import load
+
+if TYPE_CHECKING:
+    from types import ModuleType
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
@@ -334,18 +340,23 @@ def test_no_excused_mutant_has_outlived_its_subject() -> None:
     )
 
 
-#: `cargo mutants --list` prints `path:line:col: description`; a baseline
-#: records `path: description`, because a line number moves whenever a comment
-#: above it does. The same normalisation as
-#: `scripts/mutation_gate.py::_identity`, which is what writes those keys.
-_POSITION = re.compile(r"^(?P<path>[^:]+):\d+:\d+:\s*(?P<desc>.*)$")
+def _baseline_names() -> ModuleType:
+    """Import the gate that writes a baseline's keys; ``scripts/`` is no package.
 
-
-def _identity(line: str) -> str:
-    """Give a listed mutant the name a baseline records it under."""
-    stripped = line.strip()
-    match = _POSITION.match(stripped)
-    return f"{match['path']}: {match['desc']}" if match else stripped
+    `cargo mutants --list` prints `path:line:col: description` and a baseline
+    records `path: description`, with a place among one function's mutants of
+    one description where it holds several. The gate's own naming reads the
+    listing here, so the two cannot drift apart.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "mutation_gate", ROOT / "scripts" / "mutation_gate.py"
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest.mark.skipif(
@@ -367,7 +378,7 @@ def test_no_accepted_survivor_has_outlived_its_subject() -> None:
     A file that stays while the function moves out of it is the gap, and it is
     the one that happened.
     """
-    offered = {_identity(line) for line in _every_mutant()}
+    offered = set(_baseline_names().identities(_every_mutant()).values())
     # The listing is the detector: an empty universe would excuse every entry.
     assert len(offered) >= 100, f"the mutant listing returned {len(offered)} names"
 

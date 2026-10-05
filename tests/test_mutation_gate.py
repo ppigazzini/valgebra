@@ -30,10 +30,13 @@ def _run(  # noqa: PLR0913 - a fixture per file the gate reads, named at each ca
     extra: list[str] | None = None,
     accepted: dict[str, str] | None = None,
     timed_out: list[str] | None = None,
+    caught: list[str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     out = work / "mutants.out"
     out.mkdir(parents=True, exist_ok=True)
-    (out / "caught.txt").write_text("some/file.rs:1:1: caught mutant\n")
+    (out / "caught.txt").write_text(
+        "".join(line + "\n" for line in caught or ["some/file.rs:1:1: caught mutant"])
+    )
     (out / "missed.txt").write_text("".join(line + "\n" for line in missed))
     if timed_out is not None:
         (out / "timeout.txt").write_text("".join(line + "\n" for line in timed_out))
@@ -336,3 +339,59 @@ def test_a_survivor_still_fails_the_ratchet_beside_a_clean_timeout_file(
     result = _run(tmp_path, ["some/file.rs:1:1: a real survivor"], [], timed_out=[])
     assert result.returncode == 1, result.stdout + result.stderr
     assert "NEW SURVIVOR" in result.stdout, result.stdout
+
+
+# --- One description, several mutants ----------------------------------------
+
+#: Two mutants one function holds under one description: the `==` of two
+#: comparisons, the shape of the JSON walk's field lookup the baseline's
+#: description-only entry once accepted with its sibling.
+_FIRST = "a.rs:10:5: replace == with != in f"
+_SECOND = "a.rs:20:9: replace == with != in f"
+
+
+def test_a_sibling_of_an_accepted_survivor_is_a_new_survivor(tmp_path: Path) -> None:
+    """An entry names one of a function's same-described mutants, not each."""
+    r = _run(tmp_path, [_FIRST, _SECOND], ["a.rs: replace == with != in f #1"])
+    assert r.returncode == 1, r.stdout
+    assert "NEW SURVIVOR: a.rs: replace == with != in f #2" in r.stdout
+
+
+def test_a_sibling_takes_its_place_among_the_ones_the_tests_caught(
+    tmp_path: Path,
+) -> None:
+    """The place is among every mutant generated, whatever its verdict."""
+    r = _run(
+        tmp_path,
+        [_SECOND],
+        ["a.rs: replace == with != in f #2"],
+        caught=[_FIRST],
+    )
+    assert r.returncode == 0, r.stdout
+
+
+def test_a_shard_places_its_survivors_by_the_whole_listing(tmp_path: Path) -> None:
+    """A shard holding one sibling names it by the listing it was cut from.
+
+    Read from the shard's own outcome files the survivor is alone, takes no
+    place, and matches no entry -- or the wrong one, where the shard holds a
+    different pair of a larger set.
+    """
+    listing = tmp_path / "listed.txt"
+    listing.write_text(f"{_FIRST}\n{_SECOND}\n")
+    baseline = ["a.rs: replace == with != in f #2"]
+    whole = _run(
+        tmp_path, [_SECOND], baseline, extra=["--new-only", "--all", str(listing)]
+    )
+    assert whole.returncode == 0, whole.stdout
+    alone = _run(tmp_path, [_SECOND], baseline, extra=["--new-only"])
+    assert alone.returncode == 1, alone.stdout
+
+
+def test_a_survivor_the_listing_lacks_is_could_not_run(tmp_path: Path) -> None:
+    """A listing of another tree would place the survivor among other mutants."""
+    listing = tmp_path / "listed.txt"
+    listing.write_text(f"{_FIRST}\n")
+    r = _run(tmp_path, [_SECOND], [], extra=["--new-only", "--all", str(listing)])
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "NOT IN THE LISTING" in r.stderr

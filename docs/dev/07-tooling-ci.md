@@ -652,6 +652,18 @@ sweep. The fourth holds the arguments beside the set: a note whose mutant a
 test now kills, or one spelled as no survivor line spells it, is an excuse that
 outlived what it excused.
 
+An entry is the survivor's file and description without its position, so it
+outlives code moving around it, and where one function holds several mutants
+of one description -- the two `||` of one condition -- its place among them
+too, `#2` for the second in the source. Without the place, one entry accepted
+every sibling: at 0.0.16 eleven entries named 26 mutants between them, and a
+sibling an entry's own note said a test killed read as accepted when it
+survived. The places are read from
+every mutant the sweep generated, which its four outcome files list between
+them; a shard holds part of each function's mutants, so the push sweeps pass
+the gate the whole listing, `cargo mutants --list` over the same files, with
+`--all`.
+
 **Run it on the interpreter the lane names, with what it installs.** The
 verdict is the embedded interpreter's: a mutant this box's 3.14 reports as a
 survivor is one CPython 3.12 kills, so a disagreement with the lane is the
