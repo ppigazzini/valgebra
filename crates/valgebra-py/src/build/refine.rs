@@ -420,6 +420,83 @@ fn is_a_marker_class(class: &Bound<'_, PyType>) -> PyResult<bool> {
     Ok(is_constraint_vocabulary(class)? || is_pattern_marker(class)?)
 }
 
+/// Whether a marker is a typing form: an object whose class `typing` or
+/// `typing_extensions` defines -- an alias such as `Annotated[float, ...]`, a
+/// special form, a `NewType` -- or a `types.GenericAlias` such as `list[int]`,
+/// which is known by identity, since `PyPy` defines it in a module of its own.
+/// A `types.UnionType` such as `int | str` is not callable, and never reaches
+/// the question.
+///
+/// Every one of them is callable, and none is a predicate: calling `list[int]`
+/// with a value builds a list, and calling an `Annotated` alias calls the type
+/// it annotates. Read as predicates they judged a value by the truth of what
+/// the call returned, so `Annotated[float, at.IsFinite[float]]` admitted
+/// infinity and refused zero.
+fn is_typing_form(marker: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let ty = marker.get_type();
+    let py = ty.py();
+    let forms = super::forms(py)?;
+    if ty.is(forms.generic_alias.bind(py)) {
+        return Ok(true);
+    }
+    let module = unless_fatal(ty.getattr(intern!(py, "__module__")).map(Some), py, None)?;
+    Ok(module
+        .and_then(|module| module.cast_into::<PyString>().ok())
+        .is_some_and(|module| {
+            module
+                .to_str()
+                .is_ok_and(|module| matches!(module, "typing" | "typing_extensions"))
+        }))
+}
+
+/// Settle a typing form written where a marker goes.
+///
+/// An `Annotated` alias carries its markers for the type it annotates, and in
+/// metadata it annotates nothing: `Annotated[float, at.IsFinite]` is the alias
+/// written where its type was meant. Where the alias carries a marker this
+/// frontend would read, ignoring it would widen the schema to its base in
+/// silence, which is why a marker class written bare is refused, and it is
+/// refused the same way. Any other typing form is metadata this frontend does
+/// not recognise, and is ignored as a class is.
+fn read_a_typing_form(marker: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = marker.py();
+    let Some(metadata) = marker.getattr_opt(intern!(py, "__metadata__"))? else {
+        return Ok(());
+    };
+    for item in metadata.try_iter()? {
+        if is_read_where_written(&item?)? {
+            return Err(not_implemented(&format!(
+                "{} is an Annotated alias, which carries its constraints for the \
+                 type it annotates, and in metadata it annotates nothing; write \
+                 the alias as the type, subscripted where it is generic, or put \
+                 its markers in this metadata",
+                summarize(marker)?
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Whether an item of an `Annotated` alias's metadata is one this frontend
+/// would read, were it written in the metadata where the alias stands: a
+/// validator, a marker of the vocabulary or of a class derived from it other
+/// than its documentation marker, a pattern marker, a marker class (which is
+/// refused), or a predicate.
+fn is_read_where_written(item: &Bound<'_, PyAny>) -> PyResult<bool> {
+    if item.is_exact_instance_of::<Validator>() {
+        return Ok(true);
+    }
+    if let Ok(class) = item.cast::<PyType>() {
+        return is_a_marker_class(class);
+    }
+    let ty = item.get_type();
+    Ok(
+        (derives_from_vocabulary(&ty)? && !names(&ty, intern!(ty.py(), "__name__"), "DocInfo")?)
+            || is_pattern_marker(&ty)?
+            || (item.is_callable() && !is_typing_form(item)?),
+    )
+}
+
 /// An optional attribute a refinement marker is read through.
 ///
 /// A marker carries one or two of these and not the rest: `Ge(0)` has a
@@ -818,6 +895,9 @@ fn parse_constraint_within<'py>(
     // carries one that transforms a value, and read as a predicate it judged
     // the value by the truth of what it returned.
     if marker.is_callable() {
+        if is_typing_form(marker)? {
+            return read_a_typing_form(marker);
+        }
         out.push(Constraint::Predicate(lits.intern_predicate(marker)));
     } else if probes.of_vocabulary()
         && let Some(func) = probes.get(marker, Probe::Func)?

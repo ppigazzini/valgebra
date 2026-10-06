@@ -56,6 +56,17 @@ spelling that was meant: ignored, it would widen the schema to its base in
 silence. Any other class is metadata this frontend does not recognise, and is
 ignored.
 
+**A typing form is never read as a predicate**, though every one is callable:
+`is_typing_form` in `build/refine.rs` knows one by its class:
+`types.GenericAlias` by identity, since PyPy defines it in a module of its own,
+and any other by its module, `typing` or `typing_extensions`, which no
+predicate's class names. Called with
+a value, `list[int]` built a list and `at.IsFinite[float]` built a float, and
+the truth of what came back was the verdict: `Annotated[float,
+at.IsFinite[float]]` admitted infinity and refused zero. The rule mirrors the
+one for a class: an `Annotated` alias carrying something this frontend would
+read where the alias stands is refused, and any other typing form is ignored.
+
 **A compiled validator narrows by its set**, and is read before any attribute:
 `build_refine` meets the refined base with every validator the metadata holds,
 grouped or not, so `Annotated[T, v]` is `intersection(T, v)`. It is this

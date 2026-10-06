@@ -407,6 +407,98 @@ fn a_constraint_is_read_off_its_vocabulary_alone() {
     });
 }
 
+/// A typing form in `Annotated` metadata is not a predicate: every one is
+/// callable, and calling one builds a value rather than answering whether the
+/// value belongs. An `Annotated` alias carrying a marker this frontend reads is
+/// refused, since it was written to narrow; any other typing form is ignored.
+#[test]
+fn a_typing_form_in_metadata_is_not_a_predicate() {
+    Python::attach(|py| {
+        let namespace = namespace(py).expect("the namespace builds");
+        py.run(
+            c"class TxForm:\n\
+              \x20   def __call__(self, value): return value\n\
+              TxForm.__module__ = 'typing_extensions'\n\
+              class Call:\n\
+              \x20   def __call__(self, value): return value\n\
+              class DocInfo:\n\
+              \x20   pass\n\
+              DocInfo.__module__ = 'annotated_types'\n",
+            Some(&namespace),
+            None,
+        )
+        .expect("the stand-ins compile");
+        let int = py.get_type::<pyo3::types::PyInt>().into_any();
+        let validator = Bound::new(py, crate::complement(&int).expect("the complement builds"))
+            .expect("it binds");
+        namespace.set_item("v", validator).expect("bound");
+        let built = |expression: &str| -> PyResult<String> {
+            let annotation = py.eval(&CString::new(expression)?, Some(&namespace), None)?;
+            let mut pool = Pool::default();
+            let mut defs = Vec::new();
+            let schema = build_schema(&annotation, &mut pool, &mut defs)?;
+            render(py, &schema, pool.items(), &defs, &RefCell::default(), 0)
+        };
+        for (expression, wanted) in [
+            // A `types.GenericAlias`, a form whose class is `typing`'s or
+            // `typing_extensions`', and a union, which is not callable at all.
+            ("typing.Annotated[str, list[int]]", "str"),
+            ("typing.Annotated[int, int | str]", "int"),
+            ("typing.Annotated[str, typing.List[int]]", "str"),
+            ("typing.Annotated[int, typing.NewType('U', int)]", "int"),
+            ("typing.Annotated[int, TxForm()]", "int"),
+            // An alias carrying only what this frontend ignores: a string, a
+            // class from elsewhere, the documentation marker, a typing form.
+            ("typing.Annotated[int, typing.Annotated[int, 'doc']]", "int"),
+            (
+                "typing.Annotated[int, typing.Annotated[int, Tagged]]",
+                "int",
+            ),
+            (
+                "typing.Annotated[int, typing.Annotated[int, DocInfo()]]",
+                "int",
+            ),
+            (
+                "typing.Annotated[int, typing.Annotated[int, list[int]]]",
+                "int",
+            ),
+            // Every other callable is still a predicate.
+            (
+                "typing.Annotated[int, abs]",
+                "Annotated[int, Predicate(...)]",
+            ),
+            (
+                "typing.Annotated[int, Call()]",
+                "Annotated[int, Predicate(...)]",
+            ),
+        ] {
+            let got = built(expression).unwrap_or_else(|error| {
+                panic!("{expression} did not build: {error}");
+            });
+            assert_eq!(got, wanted, "{expression}");
+        }
+        // An alias carrying a validator, a marker of the vocabulary, one
+        // derived from it, a pattern, a marker class, or a predicate.
+        for expression in [
+            "typing.Annotated[int, typing.Annotated[int, v]]",
+            "typing.Annotated[int, typing.Annotated[int, at.Ge(1)]]",
+            "typing.Annotated[int, typing.Annotated[int, Floor(ge=3)]]",
+            "typing.Annotated[str, typing.Annotated[str, re.compile('a')]]",
+            "typing.Annotated[int, typing.Annotated[int, Timezone]]",
+            "typing.Annotated[int, typing.Annotated[int, abs]]",
+        ] {
+            let error = match built(expression) {
+                Err(error) => error.to_string(),
+                Ok(schema) => panic!("{expression} built {schema} instead of refusing"),
+            };
+            assert!(
+                error.contains("is an Annotated alias") && error.contains("annotates nothing"),
+                "{expression}: {error}"
+            );
+        }
+    });
+}
+
 /// A typing form is refused where a constant or a type argument is read, and
 /// so is a form that names no set at all: each was built quietly as something
 /// else.

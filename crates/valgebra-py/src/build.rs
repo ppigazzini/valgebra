@@ -168,6 +168,9 @@ struct Forms {
     union: Py<PyAny>,
     optional: Py<PyAny>,
     union_type: Py<PyAny>,
+    /// `types.GenericAlias`, the class of `list[int]`, which `PyPy` defines in a
+    /// module of its own, so it is known by identity rather than by module.
+    generic_alias: Py<PyAny>,
     literal: Py<PyAny>,
     /// `typing.Annotated` itself, which is a class below 3.13: written bare it
     /// read as an `isinstance` test no value passes.
@@ -257,6 +260,7 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             union: typing.getattr("Union")?.unbind(),
             optional: typing.getattr("Optional")?.unbind(),
             union_type: py.import("types")?.getattr("UnionType")?.unbind(),
+            generic_alias: py.import("types")?.getattr("GenericAlias")?.unbind(),
             literal: typing.getattr("Literal")?.unbind(),
             annotated: typing.getattr("Annotated")?.unbind(),
             annotated_alias: typing

@@ -24,6 +24,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a repr reads back as the schema it prints
 - fix: open and close reach the record a mapping maps to
 - feat: instance_of reads a class alone, whatever it declares
+- fix: a typing form in metadata is not a predicate
 
 -->
 
@@ -193,6 +194,14 @@ answer of its own, or a repair to a change not yet released.
   record of their fields are one set, and the meet closes to nothing. The pages
   say so now, and that a second `open` gives the set the first did and may
   respell it.
+- **A typing form in metadata is not a predicate.** A callable in `Annotated`
+  metadata is a predicate, and every typing form is callable: calling one with
+  a value built something, and its truth was the verdict.
+  `Annotated[float, at.IsFinite[float]]` admitted infinity and refused zero,
+  `Annotated[str, list[int]]` refused the empty string, and a bare
+  `at.IsFinite` raised for every value. A typing form is metadata this frontend
+  does not recognise, and is ignored; an `Annotated` alias carrying a marker
+  this frontend reads is refused, naming the spelling that was meant.
 
 ## [0.0.16] - 2026-10-04
 

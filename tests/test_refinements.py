@@ -1,8 +1,10 @@
 import enum
 import functools
 import json
+import math
 import operator
 import re
+import typing
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
@@ -152,6 +154,59 @@ def test_an_enum_class_is_metadata_rather_than_a_predicate() -> None:
     schema = Validator(Annotated[int, Colour])
     assert repr(schema) == "int"
     assert schema.is_valid(1)
+
+
+_UserId = typing.NewType("_UserId", int)
+
+
+@pytest.mark.parametrize(
+    ("annotation", "base", "values"),
+    [
+        # Called with a value, each built one and was judged by its truth:
+        # `list("")` refused the empty string, a `NewType` refused zero.
+        (Annotated[str, list[int]], str, ["", "ab"]),
+        (Annotated[str, typing.List[int]], str, ["", "ab"]),  # noqa: UP006
+        (Annotated[int, _UserId], int, [0, 5]),
+        (Annotated[int, typing.Literal], int, [0, 5]),
+        # An alias carrying nothing this frontend reads.
+        (Annotated[int, Annotated[int, "documentation"]], int, [0, 5]),
+    ],
+)
+def test_a_typing_form_is_metadata_rather_than_a_predicate(
+    annotation: object, base: type, values: list[object]
+) -> None:
+    """A typing form is callable, and calling it builds rather than asks.
+
+    It is metadata this frontend does not recognise, as a class is, and the
+    schema is its base.
+    """
+    schema = Validator(annotation)
+    assert schema == Validator(base)
+    assert all(schema.is_valid(value) for value in values)
+
+
+def test_an_alias_of_the_vocabulary_in_metadata_is_refused() -> None:
+    """An `Annotated` alias carries its markers for the type it annotates.
+
+    In metadata it annotates nothing. Read as a predicate, `at.IsFinite[float]`
+    called `float(value)`, admitted infinity and refused zero; ignored, it would
+    admit infinity in silence. Each alias the vocabulary exports is refused,
+    bare or subscripted, and the spelling that was meant reads.
+    """
+    aliases = [
+        getattr(at, name)
+        for name in dir(at)
+        if typing.get_origin(getattr(at, name)) is Annotated
+    ]
+    assert len(aliases) >= 9, aliases
+    for alias in aliases:
+        with pytest.raises(NotImplementedError, match="is an Annotated alias"):
+            Validator(Annotated[object, alias])
+    with pytest.raises(NotImplementedError, match="is an Annotated alias"):
+        Validator(Annotated[float, at.IsFinite[float]])
+    finite = Validator(at.IsFinite[float])
+    assert finite.is_valid(0.0)
+    assert not finite.is_valid(math.inf)
 
 
 @pytest.mark.parametrize(

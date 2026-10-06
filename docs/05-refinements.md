@@ -536,6 +536,32 @@ A schema language that reads a top-level callable as a predicate is expressing a
 different rule for a position `Annotated` metadata does not cover; valgebra's
 rule for that position is the one below.
 
+A **typing form** in metadata is not a predicate either, although every one is
+callable: calling `list[int]`, a `NewType` or an `Annotated` alias with a value
+builds something rather than answering whether the value belongs. A typing form
+is metadata this frontend does not recognise and is ignored, as a class is. An
+`Annotated` alias carrying a marker this page reads -- `at.IsFinite`, or an
+alias of your own over `at.Gt(0)` -- is refused rather than ignored: it carries
+its markers for the type it annotates, and in metadata it annotates nothing, so
+it was written where its type was meant:
+
+```python
+import math
+from typing import Annotated
+
+import annotated_types as at
+import pytest
+
+from valgebra import Validator
+
+with pytest.raises(NotImplementedError, match="is an Annotated alias"):
+    Validator(Annotated[float, at.IsFinite[float]])
+
+finite = Validator(at.IsFinite[float])  # the alias, as the type
+assert finite.is_valid(0.0)
+assert not finite.is_valid(math.inf)
+```
+
 Passed as a schema on its own, a callable is not a predicate. It is an object
 the frontend has no other reading for, so it takes the
 [fallback literal](03-schema-language.md#anything-unrecognized-is-a-literal)

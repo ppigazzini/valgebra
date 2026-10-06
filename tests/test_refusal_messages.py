@@ -374,3 +374,12 @@ def test_the_class_alone_is_refused_where_there_are_no_instances() -> None:
         vg.instance_of(int | str)
     with pytest.raises(TypeError, match="and the validator int is not one"):
         vg.instance_of(vg.Validator(int))
+
+
+def test_an_annotated_alias_in_metadata_names_what_was_meant() -> None:
+    """The alias carries its markers for its type, and in metadata has none."""
+    positive = Annotated[int, at.Gt(0)]
+    with pytest.raises(
+        NotImplementedError, match="in metadata it annotates nothing; write the alias"
+    ):
+        vg.Validator(Annotated[int, positive])
