@@ -1,11 +1,11 @@
 """The node set is minimal, and this is where that stops being a slogan.
 
 `AGENTS.md` says valgebra is "the smallest set of schema nodes whose Boolean
-closure is consistent and complete for its domain", and nothing checked it. Four
+closure is consistent and complete for its domain", and nothing checked it. Five
 of the twenty variants denote sets the others already reach -- `Bool` is
-`Literal[True] | Literal[False]`, `Nothing` is `complement(anything)` -- so read
-literally the claim was false, and read charitably it was a claim nobody had
-written down.
+`Literal[True] | Literal[False]`, `Anything` is `complement(C) | C` for any
+class -- so read literally the claim was false, and read charitably it was a
+claim nobody had written down.
 
 So the definition is restated and held: the node set is a **generating set plus
 named representatives**. A generator denotes a set no combination of the others
@@ -20,6 +20,12 @@ that no column names fails, a column naming a variant that is gone fails, and
 every representative carries the derivation it stands for -- checked by
 `is_equivalent`, in both directions, so a representative that stopped being one
 fails here rather than in a reader's head.
+
+"Reaches" is read through the relations, the same test a representative is
+held to: a combination reaches a set when the relations prove the two equal.
+Read extensionally the definition is empty, since a `Predicate` over `anything`
+denotes `{x | p(x)}` for every `p` and so reaches every set -- and the
+relations decline on such a predicate, which is why it does not count.
 
 LEDGER: every schema variant is a generator, a representative, or a marker
 """
@@ -45,6 +51,11 @@ from valgebra import (
 # The value a `Literal` of it is built from; see `REPRESENTATIVES`.
 _NONE = None
 
+
+class _Class:
+    """A class no fold knows, so a union over it keeps its spelling."""
+
+
 ROOT = Path(__file__).resolve().parent.parent
 IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
 
@@ -55,10 +66,6 @@ VARIANT = re.compile(r"^    ([A-Z][A-Za-z]*)[ ({,]", re.MULTILINE)
 # A set no combination of the others reaches. Adding one extends the algebra,
 # and the case for it is that the domain is unreachable without it.
 GENERATORS = {
-    # The lattice top. Every other set is written by narrowing it, and no
-    # combination of the rest reaches it -- `A | ~A` is *folded* to it, which is
-    # the fold naming this variant rather than deriving it.
-    "Anything",
     # The scalar kinds that are not singletons.
     "Int",
     "Float",
@@ -84,6 +91,9 @@ GENERATORS = {
 # A set the generators reach, kept because the normal form needs a form to name.
 # Each carries the derivation it stands for, checked below in both directions.
 REPRESENTATIVES = {
+    # The lattice top, and what `A | ~A` folds to. Over a class the union keeps
+    # its spelling, so the derivation is read rather than folded away.
+    "Anything": (Validator(anything), union(complement(_Class), _Class)),
     "Nothing": (nothing, complement(anything)),
     # `Literal[None]` is the derivation, and the linters rewrite that spelling
     # to `None` on sight -- which is the claim rather than a check of it. The
@@ -150,6 +160,11 @@ def test_a_representative_denotes_what_it_stands_for(name: str) -> None:
     assert derived.is_equivalent(kept), f"{name} is not what it stands for"
 
 
+def _apart(a: object, b: object) -> bool:
+    """Whether the relations refute that `a` and `b` are one set."""
+    return "not_subset" in {Validator(a).relation_to(b), Validator(b).relation_to(a)}
+
+
 def test_a_generator_is_not_reachable_by_the_obvious_derivation() -> None:
     """The other half of the claim, on the cases a reader would try.
 
@@ -158,23 +173,27 @@ def test_a_generator_is_not_reachable_by_the_obvious_derivation() -> None:
     every combination. What a test can do is refuse the *specific* derivations
     that would make one redundant, so a variant does not sit in the generator
     column because nobody tried.
+
+    Each case is a refutation. `is_equivalent` answers `False` for a pair the
+    relations cannot relate as for one they refute, so `not is_equivalent`
+    would hold a generator in its column against a derivation nobody decided.
     """
     # A sequence is not a union of the sets its elements come from, and a set is
     # not its element type: the container is part of the value.
-    assert not Validator(list[int]).is_equivalent(int)
-    assert not Validator(set[int]).is_equivalent(list[int])
-    assert not Validator(set[int]).is_equivalent(frozenset[int])
+    assert _apart(list[int], int)
+    assert _apart(set[int], list[int])
+    assert _apart(set[int], frozenset[int])
     # A record is not a mapping over the union of its field types.
-    assert not Validator({"a": int}).is_equivalent(dict[str, int])
+    assert _apart({"a": int}, dict[str, int])
     # A refinement is not its base, and a bounded interval is not the union of
     # the literals inside it: a literal is its constant at the exact type, and
     # an `int` subclass's `0` is in the interval and in no literal.
     non_empty = Validator(Annotated[str, at.MinLen(1)])
-    assert not non_empty.is_equivalent(str)
+    assert _apart(non_empty, str)
     interval = Validator(Annotated[int, at.Ge(0), at.Le(1)])
     literals = union(Literal[0], Literal[1], Literal[True], Literal[False])
     assert literals.is_subtype_of(interval)
     assert interval.relation_to(literals) == "not_subset"
     # The top is not any one kind, and the classes are not the scalars.
-    assert not Validator(anything).is_equivalent(int)
-    assert not Validator(int).is_equivalent(str)
+    assert _apart(anything, int)
+    assert _apart(int, str)

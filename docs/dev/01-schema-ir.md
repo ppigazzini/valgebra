@@ -83,7 +83,8 @@ Two columns, and a third for what is not a set at all;
   `Seq`, `Literal`, `Union`, `Complement` and the rest are here, and admitting a
   new one is the argument this section is about.
 - a **representative** denotes a set the generators do reach, and is kept because
-  the normal form has to name it. `Nothing` is `complement(anything)`, `Bool` is
+  the normal form has to name it. `Anything` is `complement(C) | C` for a class
+  `C`, and what `A | ~A` folds to; `Nothing` is `complement(anything)`, `Bool` is
   `Literal[True] | Literal[False]`, `NoneType` is `Literal[None]`, and
   `Intersection` is De Morgan of the other two — each is checked against its
   derivation, in both directions, by that ledger.
@@ -94,8 +95,17 @@ Two columns, and a third for what is not a set at all;
   either, and the ledger names both.
 
 The distinction is what keeps the claim honest. Read as "no node denotes a set
-another reaches", the sentence is false of the four representatives; read as
+another reaches", the sentence is false of the five representatives; read as
 this, it is a statement a test settles.
+
+**"Reaches" is read through the relations**, the test a representative is
+held to: a combination reaches a set when the relations prove the two equal.
+Read extensionally the definition says nothing, since a `Predicate` over
+`anything` denotes `{x | p(x)}` for every `p` and so reaches every set. The
+relations do not prove an opaque predicate equal to another set, so a
+combination through one counts for nothing. For the same reason the ledger
+holds a generator apart from a derivation by a *refutation*: `is_equivalent`
+answers `False` for a pair it cannot relate as well as for one it refutes.
 
 So a proposed node is one of exactly two things:
 
