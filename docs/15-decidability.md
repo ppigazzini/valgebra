@@ -196,10 +196,14 @@ answers `"undecided"`.
     under another. No spelling is *systematically* the one that declines.
 - **A length bound over a base that takes any length.** A string and a bytes
   take any, so a bound their lengths admit is met by a value: `Annotated[str,
-  MinLen(1)]` is the non-empty string and is decided to have one. A container
-  takes any length by repeating one element, so its element answers instead: a
-  bound of zero is met by the empty container whatever the element admits, and
-  a longer one by as many copies of an element as it asks for. That decides a
+  MinLen(1)]` is the non-empty string and is decided to have one. A list or a
+  tuple takes any length by repeating one element, so its element answers
+  instead: a bound of zero is met by the empty container whatever the element
+  admits, and a longer one by as many copies of an element as it asks for. A
+  set holds each member once, so a bound over one asks how many values its
+  element has: `set[bool]` under `MinLen(3)` is empty, `set[int]` under it has
+  a value, and an element the rules cannot count declines. A dict's bound is
+  not counted, and declines. That decides a
   fixpoint every unfolding of which needs one more element -- each element is a
   value of the fixpoint, and no finite value satisfies it. A bound over a
   *fixed* position, or over a base whose values have no length at all, is not
@@ -578,8 +582,9 @@ the shape. What is left below is what the descriptor cannot hold.
   MinLen(3)]` is decided empty and `Annotated[list[int], MaxLen(0)]` is the
   empty list. A set and a dict have a length their components do not count, and
   a bound over one of those refuses rather than being lowered as if it did.
-  Whether such a schema *has a value* is a different question and the rules
-  answer it, since a set of any length is built by repeating one element.
+  Whether a set under a bound *has a value* is a different question and the
+  rules answer it, from how many values the element has, as the bullet on a
+  length bound above says.
 
 - **A set that needs two members Python's `==` makes one.** A set of `int | str`
   is not below `set[int] | set[str]`: `{1, "a"}` is in neither. That refutation
@@ -717,9 +722,11 @@ class Pair(NamedTuple):
     y: int
 
 
-# A length bound over a set or a dict is opaque: their representations do not
-# count one. Over a word or a sequence it is decided.
+# A length bound over a set or a dict is opaque to the relations: their
+# representations do not count one. Whether a set under one has a value is
+# counted from its element's values. Over a word or a sequence it is decided.
 assert not Validator(Annotated[set[int], at.MinLen(3)]).is_empty()
+assert Validator(Annotated[set[bool], at.MinLen(3)]).is_empty()
 assert Validator(Annotated[tuple[int, int], at.MinLen(3)]).is_empty()
 # A named tuple's positions are its fields, and the schema says so, so the
 # relation is structural.

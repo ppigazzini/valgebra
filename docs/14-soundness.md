@@ -86,7 +86,11 @@ constructor. Membership unfolds the definition against the value in hand, and
 because the value is a **finite** Python object each unfolding asks about a
 strictly smaller value — so the set is defined by well-founded recursion on the
 value rather than chosen among fixpoints, and the guard is what makes that
-recursion well founded. Two further guards keep the unfolding finite in the walk:
+recursion well founded. An attribute record is the exception: its fields are
+computed by `getattr` rather than taken apart, and `(5).real is 5`, so a value
+read through one need not get smaller -- such a value is outside the model, as
+[what this argument assumes](#what-this-argument-assumes) says. Two further guards keep the unfolding finite in the
+walk:
 
 - an object-identity guard rejects a value that contains itself
   (`recursion_loop`) rather than looping, and
@@ -265,7 +269,10 @@ The soundness is relative to a small, explicit trust base:
   by finitely many unfoldings, which is what makes membership an induction on the
   value. A value that contains itself is not a large member: it is outside the
   model, which is why the identity guard reports `recursion_loop` rather than
-  deciding.
+  deciding. An attribute is computed rather than contained -- `(5).real is 5`,
+  and a property can return a new object at every read -- so through an
+  attribute record a scalar can be such a value too, and is reported the same
+  way, or by the depth bound where the attributes never repeat an object.
 - **The value holds still for the length of the call.** Membership is a claim
   about the value the walk read, so a value that changes while it is being read
   has no membership answer. A change the walk can see — a container whose size

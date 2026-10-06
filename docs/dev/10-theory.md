@@ -225,6 +225,17 @@ no metric, no lattice, and no monotonicity. **This is the argument the walk
 implements**, and it is why `recursive(lambda x: [complement(x)])` is well
 defined although `complement` is antitone and the body has no monotone `F`.
 
+**An attribute is computed, not a constructor of the value.** An attribute
+record reads its fields with `getattr`, and that order is not the substructure
+one: `(5).real is 5`, so an immutable integer is its own attribute, and a
+property can return a new object at every read. A value whose attributes lead
+back to it, or on without end, is outside the finite values the induction
+ranges over, as a list that contains itself is. The walk answers neither way
+for such a value: a protocol fixpoint whose one member `real` is the fixpoint
+reports `recursion_loop` for `5`, and `recursion_limit` for an object whose
+`real` is always new, under the fixpoint and under its complement alike. The
+decision proves that fixpoint empty, which is its answer on the finite values.
+
 Two theorems sit nearby and neither is the justification. **Banach's fixed-point
 theorem** — "a contractile map over a complete metric space has a unique
 fixpoint", quoted at Amadio & Cardelli §3.3.2 — is the metric account of
@@ -820,9 +831,10 @@ HELD-BY: a_decision_leaves_the_trail_it_was_given, an_assumption_is_read_as_the_
 **The assumption set is popped, not threaded.** Every relation proved on the
 way is discarded, so a goal reached twice by different paths is decided twice,
 and a decision leaves behind no assumption it did not make. The cost is the one
-Gapeyev, Levin & Pierce (JFP 2002, §11) give the algorithm that keeps nothing
-across its calls: a family whose every level reaches the next twice doubles its
-work per level, and the work budget is what caps it, declining the family
+an algorithm that keeps nothing across its calls pays, described here rather
+than cited -- the analysis is Gapeyev, Levin & Pierce's (JFP 2002), which the
+shelf does not hold: a family whose every level reaches the next twice doubles
+its work per level, and the work budget is what caps it, declining the family
 eighteen levels deep. **[DEVIATION: the-assumption-set-is-popped]**
 
 HELD-BY: a_decision_leaves_an_assumption_it_did_not_make, a_decision_leaves_the_trail_it_was_given, a_goal_reached_by_two_paths_is_derived_twice_until_the_budget_declines

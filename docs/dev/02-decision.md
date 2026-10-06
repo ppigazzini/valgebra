@@ -733,9 +733,11 @@ ceiling, and the pair is declined, which is the conservative answer.
 
 **A popped trail pays for every path, and one family doubles them.** The trail
 keeps no pair once its decision returns, so a goal reached by two paths is
-derived twice. Gapeyev, Levin & Pierce (JFP 2002, §11) build the family that
-turns that exponential for the algorithm that keeps nothing across its calls,
-and a second constructor spells it here: `T(n+1)` is a pair of `T(n)` and
+derived twice. A family whose every level reaches the one below twice turns
+that exponential for an algorithm that keeps nothing across its calls -- the
+analysis is Gapeyev, Levin & Pierce's (JFP 2002), which the shelf does not hold,
+so it is described here rather than cited -- and a second constructor spells it
+here: `T(n+1)` is a pair of `T(n)` and
 `list[T(n)]`, so each level reaches the one below twice. It asks two goals per
 level and spends twice the steps of the level below, and eighteen levels
 exhaust the budget and are declined:

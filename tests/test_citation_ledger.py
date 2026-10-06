@@ -85,9 +85,9 @@ ALIASES: dict[str, str | None] = {
     "Hosoya, Vouillon & Pierce": _HVP,
     "TOPLAS 2005": _HVP,
     "Nakano": "nakano-2000-modality-for-recursion",
-    # Cited for the family that makes a trail keeping nothing exponential, and
-    # held by no file here: the shelf carries it through the papers that cite
-    # it, so its section numbers are the one thing this cannot check.
+    # Named for the family that makes a trail keeping nothing exponential, and
+    # held by no file here. The pages describe the construction and give no
+    # section number, which is the rule for a source nobody here has read.
     "Gapeyev, Levin & Pierce": None,
 }
 
