@@ -186,8 +186,8 @@ A protocol and correctness release: three entries, one change and two fixes.
 
 A `Protocol` is the record of the members it declares, decorated or not, where
 it was an `isinstance` check that held only where `@runtime_checkable` sat on
-the class itself, and it relates to other schemas as a record. Three readings
-of a runtime-checkable protocol break, and the entry below names each. A
+the class itself, and it relates to other schemas as a record. Six things a
+runtime-checkable protocol did break, and the entry below names each. A
 refutation about a class stands on an instance that can carry its fields, so a
 pair refuted on a value that may not exist is `undecided`. And `validate`
 explains a union's record and class branches only for a value the union
@@ -208,16 +208,22 @@ changes.
   special method holds a callable, and a property holds what its getter's
   return annotation names.
 
-  Three readings of a runtime-checkable protocol break. A member present with a
+  Six things a runtime-checkable protocol did break. A member present with a
   value outside its type is refused, where `isinstance` admitted it. An
   instance of a class naming the protocol among its bases, with a data member
-  never assigned, is refused. And a member a `__getattr__` hook serves, a
-  getter that raises and an unassigned slot answer alike on every release,
-  where `isinstance` answered them one way on 3.10 and 3.11 and the other way
-  from 3.12. A protocol without the decorator, or inheriting its mark from a
-  base, builds where it was refused. The bare `Protocol` base, a generic
-  `Protocol[T]` and a member declared `ClassVar` or `Final` are refused, each
-  with the reason.
+  never assigned, is refused. A member a `__getattr__` hook serves, a getter
+  that raises and an unassigned slot answer alike on every release, where
+  `isinstance` answered them one way on 3.10 and 3.11 and the other way from
+  3.12. A generic runtime-checkable protocol -- `typing.SupportsAbs` and
+  `typing.SupportsRound` among them -- and one declaring a member `ClassVar` or
+  `Final` built in 0.0.15 and are refused now, each with the reason. A value
+  refused reports the member it lacks or holds wrongly: `missing_attribute` at
+  the member's path, expecting `attribute "__int__"`, where it was
+  `instance_type` at the root expecting the protocol's name, so a caller
+  branching on the code reads another one. And `repr` prints the record of the
+  members, `object(x=int)`, where it printed the protocol's name. A protocol
+  without the decorator, or inheriting its mark from a base, builds where it
+  was refused, and the bare `Protocol` base is refused, with the reason.
 
   A protocol relates as a record: a dataclass declaring its members, each at
   least as narrowly, is below it, and a protocol with more members is below one
