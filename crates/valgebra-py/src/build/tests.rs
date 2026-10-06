@@ -1,4 +1,5 @@
 use super::*;
+use pyo3::exceptions::PyTypeError;
 use valgebra_core::SeqShape;
 
 #[test]
@@ -448,6 +449,127 @@ fn a_builtin_base_holding_no_annotations_is_not_asked_for_them() {
         }
         for class in listed("others") {
             assert!(!annotates_nothing(&class), "{class} is read");
+        }
+    });
+}
+
+/// The classes `instance_of` reads, one per arm: the two that declare fields,
+/// the two shapes that look like a named tuple and are not, the classes the
+/// class step already reads as their atom, and the two it refuses.
+const INSTANCE_OF_CORPUS: &str = r#"
+import dataclasses, enum
+from typing import NamedTuple, Protocol, TypedDict
+
+@dataclasses.dataclass
+class Box:
+    a: int
+
+class Pair(NamedTuple):
+    x: int
+
+class Row(tuple):
+    pass
+
+class Fielded:
+    _fields = ("a",)
+
+class Plain:
+    a: int
+
+class Colour(enum.Enum):
+    RED = 1
+
+class Record(TypedDict):
+    a: int
+
+class HasA(Protocol):
+    a: int
+"#;
+
+/// `instance_of` reads a class alone: a dataclass and a named tuple are their
+/// atom where `Validator` meets it with the fields, every other class is the
+/// node `Validator` builds, and a `TypedDict`, a `Protocol` and anything that
+/// is not a class are refused.
+#[test]
+fn instance_of_reads_the_class_alone() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            &std::ffi::CString::new(INSTANCE_OF_CORPUS).expect("no interior NUL"),
+            c"instance_of_reads_the_class_alone.py",
+            c"instance_of_reads_the_class_alone",
+        )
+        .expect("the corpus compiles");
+        let class = |name: &str| module.getattr(name).expect("the corpus defines it");
+        let declared = |class: &Bound<'_, PyAny>| {
+            build_schema(class, &mut Pool::default(), &mut Vec::new()).expect("it builds")
+        };
+
+        for name in ["Box", "Pair"] {
+            let built = crate::instance_of(&class(name)).expect("a class");
+            assert!(matches!(built.schema, Schema::Instance(_)), "{name}");
+            assert!(
+                matches!(declared(&class(name)), Schema::Intersection(_)),
+                "{name}"
+            );
+        }
+        // A tuple subclass carrying no `_fields`, and a `_fields` on a class that
+        // is no tuple: neither declares fields, so each is the class step's atom.
+        for name in ["Row", "Fielded", "Plain", "Colour"] {
+            let built = crate::instance_of(&class(name)).expect("a class");
+            assert!(matches!(built.schema, Schema::Instance(_)), "{name}");
+            assert_eq!(built.schema, declared(&class(name)), "{name}");
+        }
+        let int = py.get_type::<PyInt>().into_any();
+        assert_eq!(
+            crate::instance_of(&int).expect("a class").schema,
+            Schema::Int
+        );
+
+        for (name, says) in [("Record", "is a TypedDict"), ("HasA", "is a Protocol")] {
+            let Err(error) = crate::instance_of(&class(name)) else {
+                panic!("{name} was read as a class alone");
+            };
+            assert!(error.is_instance_of::<PyTypeError>(py), "{name}");
+            assert!(error.to_string().contains(says), "{name}: {error}");
+        }
+        let validator = Bound::new(py, crate::instance_of(&int).expect("a class"))
+            .expect("it binds")
+            .into_any();
+        let three = 3_i32.into_pyobject(py).expect("an int").into_any();
+        for (value, says) in [(&validator, "the validator int"), (&three, " 3 ")] {
+            let Err(error) = crate::instance_of(value) else {
+                panic!("{value} was read as a class");
+            };
+            assert!(error.is_instance_of::<PyTypeError>(py));
+            assert!(error.to_string().contains(says), "{error}");
+        }
+    });
+}
+
+/// The atom of a class that declares fields prints as the call that builds it,
+/// since its name alone builds the class met with the fields; every other atom
+/// prints as the name.
+#[test]
+fn the_atom_of_a_class_with_fields_prints_as_instance_of() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            &std::ffi::CString::new(INSTANCE_OF_CORPUS).expect("no interior NUL"),
+            c"the_atom_of_a_class_with_fields_prints_as_instance_of.py",
+            c"the_atom_of_a_class_with_fields_prints_as_instance_of",
+        )
+        .expect("the corpus compiles");
+        for (name, printed) in [
+            ("Box", "instance_of(Box)"),
+            ("Pair", "instance_of(Pair)"),
+            ("Row", "Row"),
+            ("Plain", "Plain"),
+        ] {
+            let class = module.getattr(name).expect("the corpus defines it");
+            let built =
+                Bound::new(py, crate::instance_of(&class).expect("a class")).expect("it binds");
+            assert_eq!(built.repr().expect("it renders").to_string(), printed);
         }
     });
 }

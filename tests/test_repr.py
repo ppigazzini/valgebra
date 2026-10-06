@@ -253,9 +253,11 @@ def test_repr_of_class_and_recursive_forms() -> None:
     # the other members render as themselves.
     assert repr(Validator(intersection(Point, int))) == "intersection(Point, int)"
     # A meet of two classes that both carry attributes flattens to four
-    # members: each class by its name, and each attribute record on its own.
-    # A record standing alone renders in the `object(...)` form, which names
-    # the attributes it requires and is a rendering rather than a rebuild.
+    # members: each class alone, and each attribute record on its own. A class
+    # alone renders as `instance_of`, since its name would read back as the
+    # class met with its fields; a record standing alone renders in the
+    # `object(...)` form, which names the attributes it requires and is a
+    # rendering rather than a rebuild.
 
     @dataclasses.dataclass
     class Labelled:
@@ -264,7 +266,8 @@ def test_repr_of_class_and_recursive_forms() -> None:
 
     assert (
         repr(Validator(intersection(Point, Labelled)))
-        == "intersection(Point, Labelled, object(x=int), object(x=int, y=str))"
+        == "intersection(instance_of(Point), instance_of(Labelled), "
+        "object(x=int), object(x=int, y=str))"
     )
     assert (
         repr(recursive(lambda s: {"v": int, "n?": s}))

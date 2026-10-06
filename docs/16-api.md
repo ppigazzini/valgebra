@@ -19,6 +19,8 @@ from the top-level `valgebra` namespace.
 
 ::: valgebra.complement
 
+::: valgebra.instance_of
+
 The whole-schema transforms `open` and `close` are methods on the compiled
 validator (`Validator.open`/`close`), documented above, and so is `simplify`,
 which is **deprecated**: a schema is built in the lattice normal form, and what
@@ -68,12 +70,15 @@ as `tuple[()]`, a union holding a record or a list display as the `union(...)`
 call, since `|` between two dicts is Python's merge, and a key by Python's own
 `repr` — so it can be pasted into a session and read back. Seven things it
 cannot render as an expression, and two of them read back quietly: a
-**class**, which is an object rather than syntax and appears as its name; a
+**class**, which is an object rather than syntax and appears as its name -- or
+as `instance_of(Name)` where it stands alone and its name would read back as
+the class met with the fields it declares; a
 **predicate**, which is a function and appears as `Predicate(...)`, and which
 the frontend refuses where it is built; a **constant too long to print**, which
 is cut mid-string and is a syntax error where it is parsed; a **meet of two
-classes that each declare attributes**, which flattens to the two classes and
-their two attribute records, and a record standing apart from its class prints
+classes that each declare attributes**, which flattens to the two classes
+alone, printed as `instance_of(...)`, and their two attribute records, and a
+record standing apart from its class prints
 as `object(x=int)`, a form no constructor spells -- the schema does not record
 which class each record came from, so the render cannot fold them back, and a
 `Protocol` prints the same way, as the record of its members; a

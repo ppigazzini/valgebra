@@ -3,10 +3,11 @@
 use std::cell::RefCell;
 
 use pyo3::prelude::*;
-use pyo3::types::PyString;
+use pyo3::types::{PyString, PyType};
 use rustc_hash::FxHashMap;
 use valgebra_core::{CollKind, Constraint, DefIx, Field, MapClause, Schema, SeqKind, Spelling};
 
+use crate::build::declares_fields;
 use crate::errors::{class_label, summarize};
 
 /// The deepest render recursion before the walk stops and gives up. A cycle
@@ -122,7 +123,7 @@ pub(crate) fn render(
             render_meet(py, schema, members, pool, defs, active, depth)?
         }
         Schema::Complement(inner) => format!("complement({})", r(inner)?),
-        Schema::Instance(i) => pool_class_name(py, pool, i.get())?,
+        Schema::Instance(i) => render_instance(py, pool, i.get())?,
         Schema::AttrRecord { fields } => render_attr_record(py, fields, pool, defs, active, depth)?,
         Schema::Refine { base, constraints } => {
             let mut parts = vec![r(base)?];
@@ -384,6 +385,26 @@ fn pool_repr(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<Strin
         debug_assert!(false, "pool index {index} out of range");
         Ok("<unknown>".to_owned())
     }
+}
+
+/// Render a class atom: the class's name, or `instance_of(Name)` where the name
+/// alone would read back as more.
+///
+/// The name of a dataclass or a named tuple builds the class met with the
+/// fields it declares, so the atom on its own prints as the call that builds
+/// it. The class is asked, rather than the node: an atom carries no record of
+/// how it was spelled.
+fn render_instance(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<String> {
+    let name = pool_class_name(py, pool, index)?;
+    let declares = match pool.get(index).map(|class| class.bind(py).cast::<PyType>()) {
+        Some(Ok(class)) => declares_fields(class)?,
+        _ => false,
+    };
+    Ok(if declares {
+        format!("instance_of({name})")
+    } else {
+        name
+    })
 }
 
 fn pool_class_name(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<String> {

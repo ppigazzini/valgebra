@@ -25,9 +25,9 @@ mod render;
 mod validator;
 pub mod workload;
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyModule, PyTuple};
+use pyo3::types::{PyModule, PyTuple, PyType};
 use valgebra_core::{DefIx, Guarded, Schema, fresh_self_token};
 
 use crate::errors::install_lazy_attributes;
@@ -36,7 +36,7 @@ pub use crate::validator::Validator;
 
 use crate::validator::{MAX_DEFINITIONS, MAX_SCHEMA_DEPTH, MAX_SCHEMA_NODES, OpenDefinition};
 
-use crate::build::{Pool, build_schema, combine};
+use crate::build::{Pool, build_instances, build_schema, combine};
 
 /// Build a recursive schema as a checked fixpoint.
 ///
@@ -179,6 +179,45 @@ fn complement(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
     Validator::checked(inner.complement(), literals.into_items(), definitions)
 }
 
+/// The instances of a class, whatever their fields hold.
+///
+/// The set `isinstance(x, cls)` answers. `Validator(cls)` reads what a
+/// dataclass or a `NamedTuple` declares and checks each field; this reads the
+/// class alone, so an instance whose field holds another type, or was never
+/// set, is a member. For any other class it is the schema `Validator(cls)`
+/// builds: a builtin kind is read by its real type, as there.
+///
+/// Args:
+///     cls: The class.
+///
+/// Returns:
+///     A `Validator` for the instances of `cls`.
+///
+/// Raises:
+///     `TypeError`: If `cls` is not a class, or is a `TypedDict` or a
+///         `Protocol`, which have no instances of their own to check.
+#[pyfunction]
+#[pyo3(signature = (cls, /))]
+fn instance_of(cls: &Bound<'_, PyAny>) -> PyResult<Validator> {
+    let Ok(ty) = cls.cast::<PyType>() else {
+        // A validator prints as the schema it holds, which may be a class's
+        // name: say what it is, or the message reads `int is not a class`.
+        let what = if cls.is_instance_of::<Validator>() {
+            format!("the validator {}", errors::summarize(cls)?)
+        } else {
+            errors::summarize(cls)?
+        };
+        return Err(PyTypeError::new_err(format!(
+            "instance_of takes a class, and {what} is not one; the instances \
+             of several classes are union(instance_of(A), instance_of(B))"
+        )));
+    };
+    let mut literals = Pool::default();
+    let mut definitions = Vec::new();
+    let schema = build_instances(ty, &mut literals, &mut definitions)?;
+    Validator::checked(schema, literals.into_items(), definitions)
+}
+
 /// A pool-free validator wrapping a single atom (the `anything`/`nothing`
 /// lattice bounds).
 fn atom(py: Python<'_>, schema: Schema) -> PyResult<Py<Validator>> {
@@ -236,6 +275,7 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(intersection, module)?)?;
     module.add_function(wrap_pyfunction!(complement, module)?)?;
     module.add_function(wrap_pyfunction!(recursive, module)?)?;
+    module.add_function(wrap_pyfunction!(instance_of, module)?)?;
     // The lattice bounds: top admits every value, bottom admits none.
     module.add("anything", atom(py, Schema::ANYTHING)?)?;
     module.add("nothing", atom(py, Schema::Nothing)?)?;

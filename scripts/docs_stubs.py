@@ -51,7 +51,14 @@ COMPILED = "_valgebra"
 PAGE = ROOT / "site" / "16-api" / "index.html"
 #: The objects the page generates a section for, and whose docstrings it must
 #: therefore carry.
-GENERATED = ("Validator", "union", "intersection", "complement", "recursive")
+GENERATED = (
+    "Validator",
+    "union",
+    "intersection",
+    "complement",
+    "recursive",
+    "instance_of",
+)
 
 
 class InspectTheCompiledClasses(griffe.Extension):

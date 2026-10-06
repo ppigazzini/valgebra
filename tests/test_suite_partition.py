@@ -71,6 +71,7 @@ _COMBINATORS = frozenset(
         "intersection",
         "complement",
         "recursive",
+        "instance_of",
         "Validator",
     }
 )

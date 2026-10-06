@@ -189,7 +189,8 @@ spelling, which is the surface rule.
 **A class-with-record node, so that a meet of two attribute-carrying classes
 renders as its two classes.** Refused. A dataclass lowers to
 `Instance ∧ AttrRecord`, and a meet of two flattens to four members, so
-`repr(intersection(D, E))` prints the two records as `object(x=int)` forms no
+`repr(intersection(D, E))` prints the two classes alone as `instance_of(D)`
+and `instance_of(E)` and the two records as `object(x=int)` forms no
 constructor spells. A node holding the class and its record together would be
 a representative -- the meet already reaches its set -- and a representative
 goes in only where the normal form has to name it, which this one never does:

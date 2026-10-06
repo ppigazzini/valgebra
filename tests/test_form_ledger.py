@@ -59,7 +59,7 @@ from typing import (
 import annotated_types as at
 import pytest
 
-from valgebra import Regex, Validator
+from valgebra import Regex, Validator, instance_of
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -254,6 +254,8 @@ FORMS: dict[str, Reads | Refuses] = {
     # -- the class forms ----------------------------------------------------
     "`TypedDict`": Reads(Movie, {"name": "a"}, {"name": 1}),
     "dataclass": Reads(Point, Point(1), "a"),
+    # A `Point` whose field was never set: outside the dataclass, inside the class.
+    "`instance_of(C)`": Reads(instance_of(Point), object.__new__(Point), "a"),
     "`NamedTuple`": Reads(Pair, Pair(1, "a"), (1, 2)),
     "`Enum`": Reads(Colour, Colour.RED, "red"),
     "`Protocol`": Reads(HasX, Point(1), "a"),

@@ -156,6 +156,15 @@ def intersection(*schemas: object) -> Validator[object]: ...
 def complement(schema: object, /) -> Validator[object]: ...
 def recursive(builder: Callable[[Validator[Any]], object], /) -> Validator[object]: ...
 
+# The instances of a class read as the class, which is the set every checker
+# narrows `isinstance` to. mypy refuses an abstract class at `type[_S]`, so the
+# second overload keeps one typed rather than an error, as the constructor's
+# last overload does; the first overlaps it as the constructor's does.
+@overload
+def instance_of(cls: type[_S], /) -> Validator[_S]: ...  # pyright: ignore[reportOverlappingOverload]
+@overload
+def instance_of(cls: object, /) -> Validator[object]: ...
+
 anything: Validator[object]
 # The bottom: `is_valid` never answers `True` and `ensure` never returns.
 nothing: Validator[Never]
@@ -178,6 +187,7 @@ __all__ = [
     "_debug_build",
     "anything",
     "complement",
+    "instance_of",
     "intersection",
     "nothing",
     "recursive",

@@ -719,6 +719,7 @@ Membership is unaffected — the walk reads the value.
 | `TypedDict` | the dicts a record admits, **open** as the typing spec defines one; `Required`/`NotRequired`/`ReadOnly` honored, `closed=True`/`extra_items` obeyed and inherited by a subclass that gives neither |
 | dataclass | the instances of the class whose every declared field holds a value of its type |
 | `NamedTuple` | the instances of the class whose fields, by position, hold values of their types |
+| `instance_of(C)` | the instances of the class, whatever their fields hold ([below](#the-class-alone)) |
 | `Enum` | the members of the enumeration |
 | `Protocol` | the values carrying every member it declares, each holding what the member declares ([below](#a-protocol-is-the-record-of-its-members)) |
 | `NewType` | the set of the supertype it wraps |
@@ -917,6 +918,37 @@ no such footgun.
     return types cannot be inspected at runtime, so they are not enforced. `Any`
     is admitted unchecked. Everything else is decided structurally: a `list[int]`
     schema does check each element.
+
+### The class alone
+
+A dataclass or a `NamedTuple` reads as its class *and* the fields it declares,
+so an instance whose field holds another type is not a member. The class alone
+-- every instance, whatever its fields hold, which is the set `isinstance`
+answers -- is `instance_of`, since the annotation `Box` already names the
+narrower set:
+
+```python
+import json
+from dataclasses import dataclass
+
+from valgebra import Validator, instance_of
+
+
+@dataclass
+class Box:
+    a: int
+
+
+ill_typed = Box(**json.loads('{"a": "x"}'))  # nothing checks what `a` holds
+assert not Validator(Box).is_valid(ill_typed)
+assert instance_of(Box).is_valid(ill_typed)
+assert Validator(Box).is_subtype_of(instance_of(Box))
+```
+
+It reads nothing the class declares, so a dataclass whose declaration has no
+reading -- a `Final` field, a type parameter, a field naming the class itself
+-- has this one. For any other class it is what `Validator` builds. A
+`TypedDict` and a `Protocol` have no instances of their own, and are refused.
 
 ## Refinements
 

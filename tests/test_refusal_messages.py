@@ -346,3 +346,31 @@ def test_a_refusal_is_raised_before_any_value_is_walked() -> None:
         with pytest.raises(raises) as caught:
             vg.Validator(list[annotation])  # type: ignore[valid-type]  # ty: ignore[invalid-type-form]
         assert str(caught.value), name
+
+
+class _Declared(typing.TypedDict):
+    a: int
+
+
+class _Members(Protocol):
+    a: int
+
+
+def test_the_class_alone_is_refused_where_there_are_no_instances() -> None:
+    """A class with no instances of its own is refused, and so is a non-class.
+
+    A `TypedDict`'s values are dicts and a `Protocol`'s set is its members, so
+    neither has instances for `instance_of` to read; `isinstance` refuses both
+    too. A value that is not a class is refused with the spelling for several
+    classes.
+    """
+    with pytest.raises(TypeError, match="is a TypedDict, whose values are dicts"):
+        vg.instance_of(_Declared)
+    with pytest.raises(
+        TypeError, match="is a Protocol, whose set is the values carrying"
+    ):
+        vg.instance_of(_Members)
+    with pytest.raises(TypeError, match=r"union\(instance_of\(A\), instance_of\(B\)\)"):
+        vg.instance_of(int | str)
+    with pytest.raises(TypeError, match="and the validator int is not one"):
+        vg.instance_of(vg.Validator(int))

@@ -30,6 +30,7 @@ from valgebra import (
     Validator,
     anything,
     complement,
+    instance_of,
     intersection,
     recursive,
 )
@@ -1259,3 +1260,140 @@ def test_a_meet_of_two_classes_is_empty_exactly_where_python_refuses_a_subclass(
             )
             if both is not None:
                 assert Validator(met).is_valid(both())
+
+
+# -- the class alone ---------------------------------------------------------
+
+
+@dataclasses.dataclass
+class _Box:
+    a: int
+
+
+@dataclasses.dataclass(frozen=True)
+class _FrozenBox:
+    a: int
+
+
+@dataclasses.dataclass(slots=True)
+class _SlottedBox:
+    a: int
+
+
+class _SubBox(_Box):
+    pass
+
+
+class _Pair(NamedTuple):
+    x: int
+
+
+def _unset(cls: type) -> object:
+    """Build an instance of `cls` whose field was never set.
+
+    A function of this module rather than `object.__new__` itself: hypothesis
+    describes what `builds` calls, and on PyPy a builtin has no code to read.
+    """
+    return object.__new__(cls)
+
+
+def _holding(cls: type, value: object) -> object:
+    """Build an instance of `cls` whose one field holds `value`, past `__init__`."""
+    instance = object.__new__(cls)
+    object.__setattr__(instance, "a", value)
+    return instance
+
+
+_DECLARING = (_Box, _FrozenBox, _SlottedBox, _SubBox)
+
+
+@pytest.mark.parametrize("cls", _DECLARING, ids=lambda cls: cls.__name__)
+def test_the_class_alone_admits_an_instance_whatever_its_fields_hold(cls: type) -> None:
+    """`instance_of` is the set `isinstance` answers; `Validator` reads the fields."""
+    good, bad, unset = _holding(cls, 1), _holding(cls, "x"), object.__new__(cls)
+    alone, declared = instance_of(cls), Validator(cls)
+    assert [alone.is_valid(v) for v in (good, bad, unset, 1)] == [
+        True,
+        True,
+        True,
+        False,
+    ]
+    assert [declared.is_valid(v) for v in (good, bad, unset, 1)] == [
+        True,
+        False,
+        False,
+        False,
+    ]
+
+
+def test_the_class_alone_of_a_named_tuple_reads_no_position() -> None:
+    assert instance_of(_Pair).is_valid(_Pair("x"))  # ty: ignore[invalid-argument-type]
+    assert not Validator(_Pair).is_valid(_Pair("x"))  # ty: ignore[invalid-argument-type]
+    assert not instance_of(_Pair).is_valid(("x",))
+
+
+def test_a_class_whose_declaration_has_no_reading_has_a_class_alone() -> None:
+    """The class alone reads no field, so a declaration with no reading has one.
+
+    A `Final` field, a type parameter and a self-reference each refuse a
+    reading of the fields.
+    """
+    T = typing.TypeVar("T")
+
+    @dataclasses.dataclass
+    class Fixed:
+        a: typing.Final[int] = 1
+
+    @dataclasses.dataclass
+    class Generic(typing.Generic[T]):
+        a: T
+
+    @dataclasses.dataclass
+    class Node:
+        value: int
+        next: "Node | None" = None
+
+    for cls, instance in ((Fixed, Fixed()), (Generic, Generic(1)), (Node, Node(1))):
+        with pytest.raises(NotImplementedError):
+            Validator(cls)
+        assert instance_of(cls).is_valid(instance)
+        assert not instance_of(cls).is_valid(1)
+
+
+@pytest.mark.parametrize(
+    "cls", [*_DECLARING, _Pair, Color, int, list, object], ids=lambda c: c.__name__
+)
+def test_the_declaration_is_proved_below_the_class_alone(cls: type) -> None:
+    assert Validator(cls).relation_to(instance_of(cls)) == "subset"
+
+
+@pytest.mark.parametrize("cls", [Color, int, list, object], ids=lambda c: c.__name__)
+def test_a_class_that_declares_nothing_is_its_own_class_alone(cls: type) -> None:
+    assert instance_of(cls) == Validator(cls)
+
+
+_DRAWN = st.one_of(
+    st.builds(_holding, st.sampled_from(_DECLARING), st.integers() | st.text()),
+    st.builds(_Pair, st.integers() | st.text()),
+    st.builds(_unset, st.sampled_from(_DECLARING)),
+    st.integers(),
+    st.text(),
+    st.sampled_from([Color.RED, None, (1,), [1]]),
+)
+
+
+@given(value=_DRAWN)
+def test_the_class_alone_is_isinstance_and_holds_the_declaration(value: object) -> None:
+    """The two laws `instance_of` ships with, over drawn values."""
+    for cls in (*_DECLARING, _Pair, Color):
+        assert instance_of(cls).is_valid(value) == isinstance(value, cls)
+        if Validator(cls).is_valid(value):
+            assert instance_of(cls).is_valid(value)
+
+
+def test_the_class_alone_reads_back_as_itself() -> None:
+    names = {"instance_of": instance_of, "_Box": _Box, "_Pair": _Pair}
+    for cls in (_Box, _Pair):
+        built = instance_of(cls)
+        assert repr(built) == f"instance_of({cls.__name__})"
+        assert eval(repr(built), names) == built  # noqa: S307

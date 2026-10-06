@@ -8,7 +8,7 @@
 //! `docs/dev/03-frontend.md` is this module.
 
 use pyo3::PyTypeInfo;
-use pyo3::exceptions::{PyBaseException, PyException, PyValueError};
+use pyo3::exceptions::{PyBaseException, PyException, PyTypeError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
@@ -65,6 +65,47 @@ pub(super) fn is_dataclass(ty: &Bound<'_, PyType>) -> PyResult<bool> {
         .bind(py)
         .call1((ty,))?
         .is_truthy()
+}
+
+/// Whether a class declares fields the frontend reads beside the class: a
+/// dataclass, or a named tuple.
+pub(crate) fn declares_fields(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+    Ok(is_dataclass(ty)?
+        || (ty.is_subclass_of::<PyTuple>()? && ty.hasattr(intern!(ty.py(), "_fields"))?))
+}
+
+/// Build the class alone: its instances, whatever it declares.
+///
+/// [`build_type_object`] with the declaration left unread. A dataclass and a
+/// named tuple are their `isinstance` atom here, where that step meets the
+/// atom with the fields they declare; every other class is the node that step
+/// builds. A `TypedDict` has no instances and a `Protocol`'s set is the record
+/// of its members, so neither has a class alone to give, and `isinstance`
+/// refuses both too.
+pub(crate) fn build_instances(
+    ty: &Bound<'_, PyType>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let py = ty.py();
+    if ty.hasattr(intern!(py, "__required_keys__"))? {
+        return Err(PyTypeError::new_err(format!(
+            "{} is a TypedDict, whose values are dicts rather than instances of \
+             it; Validator(...) reads it as the record it declares",
+            summarize(ty.as_any())?
+        )));
+    }
+    if is_truthy_attr(ty, intern!(py, "_is_protocol"))? {
+        return Err(PyTypeError::new_err(format!(
+            "{} is a Protocol, whose set is the values carrying its members \
+             rather than instances of it; Validator(...) reads it as that record",
+            summarize(ty.as_any())?
+        )));
+    }
+    if declares_fields(ty)? {
+        return Ok(Schema::Instance(lits.intern_class(ty.as_any())));
+    }
+    build_type_object(ty, lits, defs)
 }
 
 /// Build the schema for a Python type object (a builtin, `TypedDict`, `Enum`,
@@ -143,9 +184,7 @@ pub(super) fn build_type_object(
         return Ok(Schema::Instance(lits.intern_class(ty.as_any())));
     }
     // dataclass / NamedTuple: isinstance plus a deep check of each field.
-    if is_dataclass(ty)?
-        || (ty.is_subclass_of::<PyTuple>()? && ty.hasattr(intern!(py, "_fields"))?)
-    {
+    if declares_fields(ty)? {
         return build_object(ty, lits, defs);
     }
     // Protocol: the record of the members it declares, read off the value as

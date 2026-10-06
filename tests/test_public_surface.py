@@ -64,7 +64,12 @@ def test_a_subscripted_validator_is_the_annotation_a_checker_reads() -> None:
 
 @pytest.mark.parametrize(
     ("name", "keyword"),
-    [("Validator", "schema"), ("complement", "schema"), ("recursive", "builder")],
+    [
+        ("Validator", "schema"),
+        ("complement", "schema"),
+        ("recursive", "builder"),
+        ("instance_of", "cls"),
+    ],
 )
 def test_every_module_level_argument_is_positional(name: str, keyword: str) -> None:
     # The stub writes them with `/`, and a stub that allowed a keyword would

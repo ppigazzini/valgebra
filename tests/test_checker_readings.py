@@ -120,6 +120,19 @@ ROWS: tuple[Reading, ...] = (
         ),
     ),
     Reading(
+        "instance_of_abstract",
+        ty="Validator[Shape]",
+        mypy="Validator[object]",
+        pyright="Validator[Shape]",
+        moves=(
+            "mypy refuses an abstract class where `type[_S]` is expected, so "
+            "`instance_of` falls to its `object` overload there; ty and pyright "
+            "match the class. The set is the class's instances under all three. "
+            "When mypy joins the other two, the `object` overload of "
+            "`instance_of` in `_valgebra.pyi` has no reader left and goes."
+        ),
+    ),
+    Reading(
         "newtype",
         ty="Validator[object]",
         mypy="Validator[UserId]",

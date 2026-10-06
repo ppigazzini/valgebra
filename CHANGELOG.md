@@ -23,8 +23,22 @@ answer of its own, or a repair to a change not yet released.
 - fix: a constraint is read off the vocabulary that defines it
 - fix: a repr reads back as the schema it prints
 - fix: open and close reach the record a mapping maps to
+- feat: instance_of reads a class alone, whatever it declares
 
 -->
+
+### Added
+
+- **`instance_of(C)` is the instances of a class, and reads nothing it
+  declares.** `Validator(C)` checks each field of a dataclass or a
+  `NamedTuple`; `instance_of(C)` admits every instance, an ill-typed or unset
+  field included, which is the set `isinstance` answers. It is the class atom
+  the algebra already held, with a spelling: `Validator(C)` is proved below it,
+  and a dataclass whose declaration has no reading -- a `Final` field, a type
+  parameter, a self-reference -- has this one. For a class that declares
+  nothing it is `Validator(C)`. A `TypedDict` and a `Protocol` have no
+  instances of their own and are refused, as `isinstance` refuses them. The
+  atom of a declaring class prints as `instance_of(C)`.
 
 ### Changed
 

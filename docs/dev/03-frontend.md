@@ -277,7 +277,9 @@ order of the questions, and each is asked of an attribute the runtime fills in:
 5. **An enum** is an instance check against the enumeration class.
 6. **A dataclass or a `NamedTuple`** is an instance check *plus* a deep check
    of each declared field, so a value of the right class with a field of the
-   wrong type is not a member. A dataclass's fields are an attribute record; a
+   wrong type is not a member. `instance_of` is this step with the declaration
+   left unread (`build_instances` in `build/classes.rs`): the class's atom for
+   these two, and for every other class the node this step builds. A dataclass's fields are an attribute record; a
    named tuple's are the fixed tuple shape of its positions instead
    (`named_tuple_positions` in `build/classes.rs`), which carries the arity as
    well as the types. A field the hints do not carry — a `collections`

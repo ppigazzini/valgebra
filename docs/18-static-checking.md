@@ -59,6 +59,7 @@ What each spelling reads as:
 | a class `\|` a validator, `int \| v` | `Validator[object]` under ty; under mypy and pyright a `types.UnionType`, on which a validator method is an error. Write the validator on the left: `v \| int` |
 | `union(a, b)` for validators of one type | that type; for two types ty reads their union, mypy and pyright `object` |
 | `intersection`, `complement`, `recursive` | `Validator[object]` |
+| `instance_of(C)` | `Validator[C]`, the type `isinstance` narrows to; an abstract class `object` under mypy |
 
 **A typed reading is not a buildable one.** The first row reads any class
 subscripted as `Validator` of it, and some of those are refused when built:
@@ -176,6 +177,7 @@ extend-immutable-calls = [
     "valgebra.intersection",
     "valgebra.complement",
     "valgebra.recursive",
+    "valgebra.instance_of",
 ]
 ```
 

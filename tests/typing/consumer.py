@@ -48,6 +48,7 @@ from valgebra import (
     __version__,
     anything,
     complement,
+    instance_of,
     intersection,
     nothing,
     recursive,
@@ -102,6 +103,10 @@ def build() -> Validator[object]:
     assert_type(intersection(literals, refined), Validator[object])
     assert_type(complement(literals), Validator[object])
     assert_type(recursive(lambda inner: union(int, [inner])), Validator[object])
+    # The instances of a class read as the class, as `isinstance` narrows to it;
+    # an abstract one is in `readings/instance_of_abstract.py`.
+    assert_type(instance_of(Point), Validator[Point])
+    assert_type(instance_of(int), Validator[int])
     # The two operator spellings, which are separate signatures in the stub. Two
     # typed validators join to the union of their types. A typed one beside an
     # untyped one is `int | object`, which pyright prints unsimplified and the
