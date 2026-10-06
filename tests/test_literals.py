@@ -56,3 +56,40 @@ def test_the_literal_rule_decides_which_constants_are_one() -> None:
     # is what `==` on it says.
     nan = float("nan")
     assert not Validator(nan).is_valid(nan)
+
+
+class _Near:
+    """Equal to anything within one: reflexive, symmetric, not transitive."""
+
+    def __init__(self, n: int) -> None:
+        self.n = n
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _Near) and abs(self.n - other.n) <= 1
+
+    def __hash__(self) -> int:
+        return 0
+
+    def __repr__(self) -> str:
+        return f"_Near({self.n})"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "`Literal[c] <= Literal[d]` is proved from `c == d`, a proof only where "
+        "`==` is transitive"
+    ),
+)
+# TRUST: A constant's `==` is an equivalence.
+def test_a_proof_between_constants_needs_a_transitive_equality() -> None:
+    """The known-unsound case of trusting a constant's `==` in a proof.
+
+    `_Near(1) == _Near(2)`, so the first literal is proved below the second;
+    `_Near(0)` equals the first and not the second, a value against the proof.
+    """
+    first, second, witness = Validator(_Near(1)), Validator(_Near(2)), _Near(0)
+
+    assert first.is_valid(witness), "the witness equals the first constant"
+    assert not second.is_valid(witness), "and not the second"
+    assert first.relation_to(second) != "subset"

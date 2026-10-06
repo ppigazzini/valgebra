@@ -197,6 +197,25 @@ The soundness is relative to a small, explicit trust base:
   Where a schema names a *user* class, membership is `isinstance` by definition
   and a lying `__class__` is honoured: overriding it is how a proxy is written,
   and a proxy every other consumer treats as a `Target` is one here too.
+- **A class relation holds of values whose `__class__` is their type.** The
+  walk admits a proxy -- a `wrapt.ObjectProxy`, a
+  `unittest.mock.Mock(spec=C)`, any object whose `__class__` answers another
+  class -- to the class it names, as pydantic, msgspec, typeguard and beartype
+  do. The relations read a class by its bases and the layout it lays down,
+  which a proxy does not share: two classes with distinct `__slots__` are
+  decided disjoint, and an instance of one that declares itself the other is
+  admitted by both, so their meet is decided empty beside a value it admits. A
+  proxy is outside every class relation. Reading the real type in the walk
+  would refuse every proxy and mock, which no reference does, and declining
+  the layout proofs would give up the disjointness every decided union of
+  dataclasses stands on; the case is pinned as a known-unsound test instead.
+- **An enumeration's instances are made through it.** `Colour` is decided to be
+  the union of its members because the class makes no other instance.
+  `object.__new__(Colour)` makes one past it: the walk admits it to `Colour`,
+  and no member's literal holds it, so it is outside the relation that equates
+  the two. A refutation standing on such a value is sound as it is: an
+  `IntEnum` is not below `Ge(1)` although both its members are, because
+  `int.__new__(IE, -5)` is an instance the walk admits and the bound refuses.
 - **What a value answers is a function of the value.** Membership asks a value
   questions through Python — `isinstance`, `__eq__`, a rich comparison, `__len__`,
   `%`, a predicate — and reads the answers as facts about it. A method that
@@ -268,6 +287,12 @@ The soundness is relative to a small, explicit trust base:
   scalar that is one value; for a constant whose class defines `__eq__` it is
   whatever that method admits, and for `float("nan")`, which is equal to nothing
   including itself, it is the empty set.
+- **A constant's `==` is an equivalence.** `Literal[c]` is proved below
+  `Literal[d]` from `c == d`, which is a proof only where equality is
+  transitive: a value equal to `c` is then equal to `d`. A refutation between
+  two constants is guarded -- it stands only where their type's equality is
+  Python's own -- and a proof is not, so a class whose `__eq__` is not
+  transitive is outside the relations between its constants.
 - **The values are the finite ones.** A guarded fixpoint denotes the values built
   by finitely many unfoldings, which is what makes membership an induction on the
   value. A value that contains itself is not a large member: it is outside the

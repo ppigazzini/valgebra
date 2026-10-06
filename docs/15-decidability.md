@@ -101,8 +101,11 @@ answers `"undecided"`.
   says otherwise: its members equal the integers they carry, and a meet of two of
   them stays conservative.
 - **An enumeration against the union of its members**, when every instance of
-  the class really is one of them: an `Enum` that is not a `Flag`, carrying at
-  least one member, whose members compare by identity. Then `Colour` and
+  the class really is one of them -- made through the class, which
+  `object.__new__` steps past
+  ([the trust base](14-soundness.md#what-this-argument-assumes)): an `Enum`
+  that is not a `Flag`, carrying at least one member, whose members compare by
+  identity. Then `Colour` and
   `Literal[Colour.RED, Colour.GREEN]` are one set, decided in both directions;
   the class is still what `repr` prints and what a failure names. The three
   exclusions are each a value that would stand against the union:
@@ -901,7 +904,10 @@ The refutation is the bindings' to give: two constants at two pool positions are
 two *values* only where their type's equality can be trusted, and a constant
 that does not equal itself — `float("nan")` — denotes no value at all, so
 `Literal[float("nan")]` is the empty set and is below everything. Where the
-equality cannot be trusted, the relation stays undecided rather than guessing.
+equality cannot be trusted, a refutation stays undecided rather than guessing.
+A proof does not ask: `Literal[c]` is below `Literal[d]` where `c == d`, which
+holds only of an equality that is transitive, as
+[the trust base](14-soundness.md#what-this-argument-assumes) says.
 
 What is left under the budget is the Boolean tower: a deeply nested combination
 of unions, meets and complements, where subtyping distributes over both sides

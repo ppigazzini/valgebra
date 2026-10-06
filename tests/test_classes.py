@@ -666,6 +666,41 @@ def test_a_class_met_with_its_attributes_is_read_as_a_direct_instance() -> None:
     assert Validator(Counted).relation_to(Validator(str)) == "not_subset"
 
 
+class _Left:
+    __slots__ = ("x",)
+
+
+class _Right:
+    """A proxy's spelling: an instance of one layout declaring itself the other."""
+
+    __slots__ = ("y",)
+    __class__ = property(lambda _self: _Left)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "membership in a user class is `isinstance`, which a proxy's `__class__` "
+        "answers, and a class relation is read off the layout a proxy does not "
+        "share, so a meet decided empty admits the proxy"
+    ),
+)
+# TRUST: A class relation holds of values whose `__class__` is their type.
+def test_a_meet_decided_empty_by_layout_admits_no_proxy() -> None:
+    """The known-unsound case of honouring `__class__` for a user class.
+
+    `_Left` and `_Right` lay down distinct slots, so no object is an instance of
+    both and their meet is decided empty. A `_Right` that declares itself a
+    `_Left` is admitted by both atoms, as every other runtime checker admits a
+    proxy; the relation is over the values whose `__class__` is their type.
+    """
+    proxy = _Right()
+    meet = intersection(_Left, _Right)
+
+    assert meet.is_valid(proxy), "the walk honours the declared class"
+    assert not meet.is_empty(), "so the meet is not empty"
+
+
 # TRUST: A class whose metaclass leaves `isinstance` alone holds an object.
 def test_a_class_whose_metaclass_answers_isinstance_denotes_no_set() -> None:
     """`isinstance` a metaclass computes is not the class order, so nothing reads it.

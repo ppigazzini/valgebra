@@ -144,3 +144,31 @@ def test_every_refused_kind_still_answers_membership() -> None:
         assert not Validator(cls).is_valid(object()), cls
         # And the class is still what a union with it admits.
         assert union(cls, int).is_valid(value), cls
+
+
+class _Colour(enum.Enum):
+    RED = 1
+    GREEN = 2
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "an enumeration is proved the union of its members because the class "
+        "makes no other instance, and `object.__new__` makes one past it"
+    ),
+)
+# TRUST: An enumeration's instances are made through it.
+def test_an_instance_made_past_the_class_is_one_of_its_members() -> None:
+    """The known-unsound case of reading an enumeration as its members.
+
+    `_Colour` and the union of its two members are decided one set. An
+    instance `object.__new__` builds is admitted by the class atom and by no
+    member's literal, so the inclusion has a value against it.
+    """
+    ghost = object.__new__(_Colour)
+    members = Validator(Literal[_Colour.RED, _Colour.GREEN])
+
+    assert Validator(_Colour).is_valid(ghost), "the walk asks `isinstance`"
+    assert not members.is_valid(ghost), "no member is the ghost"
+    assert Validator(_Colour).relation_to(members) != "subset"
