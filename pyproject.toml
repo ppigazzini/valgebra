@@ -39,7 +39,7 @@ classifiers = [
 [dependency-groups]
 dev = [
     "annotated-types>=0.8",
-    "hypothesis>=6.168.3",
+    "hypothesis>=6.168.5",
     "maturin>=1.15.0,<2",
     "mypy>=2.4.0",
     "pre-commit>=4.6.2",
