@@ -60,6 +60,13 @@ What each spelling reads as:
 | `union(a, b)` for validators of one type | that type; for two types ty reads their union, mypy and pyright `object` |
 | `intersection`, `complement`, `recursive` | `Validator[object]` |
 
+**A typed reading is not a buildable one.** The first row reads any class
+subscripted as `Validator` of it, and some of those are refused when built:
+`Sequence[int]`, `deque[int]`, `type[int]` and a user generic such as `Box[int]`
+type-check and raise `NotImplementedError` at the call, as
+[the forms the schema language does not list](03-schema-language.md#a-form-this-page-does-not-list)
+do.
+
 The rows that name a checker are held by `tests/test_checker_readings.py`, which
 runs all three over one fixture per row under `tests/typing/readings/` and
 compares what each reveals, at the versions the project locks: a checker release

@@ -192,10 +192,10 @@ fn atom(py: Python<'_>, schema: Schema) -> PyResult<Py<Validator>> {
 /// import instead of re-enabling it. This is sound because every shared surface
 /// is immutable or internally synchronized: a `Validator` is `frozen`, its
 /// schema, constants pool, and definitions never change after construction, and
-/// its only lazy state is a `std::sync::OnceLock` holding precompute whose
-/// Python objects are interned `str` keys -- immutable, shared, and reachable
-/// through `__traverse__` -- whose initialization the standard library
-/// serializes.
+/// its lazy state is three once-cells -- the precompute, whose Python objects
+/// are interned `str` keys, immutable, shared and reachable through
+/// `__traverse__`; the constants' keys; and the hash -- each initialized once,
+/// under the serialization its cell type provides.
 /// The validation walk keeps its recursion guard in a per-call local, so no two
 /// threads share mutable walk state.
 #[pymodule(gil_used = false)]

@@ -390,15 +390,16 @@ def check_against_budget(measured: int, recorded: int, tolerance: float) -> int:
 
 #: Every mode, each naming the example it builds and what it measures.
 #:
-#: The four shapes below `binding` are the deterministic twins of the comparison
-#: gate's wall-clock shapes. The gate compared seven shapes against another
-#: library and budgeted one of them, and the gap is how a shape moves without
-#: anything saying so: schema construction grew twelve percent over one release
-#: cycle, and no instruction count was watching the thing that grew.
+#: The four modes after `binding` -- `binding-boundary`, `binding-record`,
+#: `binding-build` and `binding-explain` -- are the deterministic twins of the
+#: comparison gate's wall-clock shapes. The gate compared seven shapes against
+#: another library and budgeted one of them, and the gap is how a shape moves
+#: without anything saying so: schema construction grew twelve percent over one
+#: release cycle, and no instruction count was watching the thing that grew.
 #:
-#: All five binding modes are the *difference* of two iteration counts, so the
-#: embedded interpreter's startup cancels; they share the pair of counts and the
-#: checksum rig, and differ only in which workload the example runs.
+#: Every binding mode is the *difference* of two iteration counts, so the
+#: embedded interpreter's startup cancels; the modes share the pair of counts and
+#: the checksum rig, and differ only in which workload the example runs.
 MODES = {
     "core": ("perf_workload", "core workload"),
     "decision": ("decision_workload", "decision workload"),

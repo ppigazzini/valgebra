@@ -876,7 +876,7 @@ impl Validator {
     /// covering every region is the top -- and `is_empty`, `is_subtype_of` and
     /// `is_equivalent` decide those, and more, without rewriting the term.
     ///
-    /// Deprecated in this release and removed in the next minor version. Ask the
+    /// Deprecated since 0.0.10 and removed in the next minor version. Ask the
     /// relation the question instead: `intersection(int, str).is_empty()` rather
     /// than `repr(intersection(int, str).simplify()) == "nothing"`.
     ///

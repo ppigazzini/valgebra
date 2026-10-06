@@ -116,7 +116,8 @@ release.
 | `tuple[T, ...]` | tuples of any length, every element in `T` |
 | `tuple[A, *tuple[B, ...]]` | a fixed prefix `A`, then zero or more `B` (see below; 3.11+) |
 | `tuple[A, B, ...]` | the same, in the spelling 3.10 can write and a static checker refuses |
-| `typing.List`, `typing.Tuple`, ... | the class each aliases, bare or parametrized |
+| `typing.List`, `typing.Tuple`, `typing.Dict`, `typing.Set`, `typing.FrozenSet` | the class each aliases, bare or parametrized |
+| `typing.Deque`, `DefaultDict`, `OrderedDict`, `Counter`, `ChainMap`, `Type` | the class each aliases when bare; parametrized, refused, as `deque[int]` is |
 
 ```python
 from valgebra import Validator
@@ -225,9 +226,12 @@ assert not Validator(Literal[1]).is_valid(1.0)
 
 `Literal` takes the values the typing spec lists -- an `int`, `str`, `bytes` or
 `bool` value, an enum member, `None` -- and a static checker refuses anything
-else there. Any other constant, a `float` or a tuple or an instance, is written
-bare: `Validator(1.0)` is the schema `Literal[1.0]` names, and a checker accepts
-it ([static checkers](18-static-checking.md)).
+else there. Any other constant, a `float` or an instance, is written bare:
+`Validator(1.0)` is the schema `Literal[1.0]` names, and a checker accepts it
+([static checkers](18-static-checking.md)). A tuple is the exception: a bare
+tuple, a named tuple's value included, is refused as a tuple literal, which
+`(int, str)` would read as a shape and a constant alike, and the constant
+`(1, 2)` is written `tuple[Literal[1], Literal[2]]`.
 
 **The constant `nan` denotes nothing.** Membership is equality, and a `nan` is
 equal to nothing at all — itself included — so the set has no member. That is not a
@@ -246,8 +250,9 @@ assert Validator(float).is_valid(nan)  # the kind still holds it
 
 ### A string inside a generic is a forward reference, and is refused
 
-The fallback reads a bare value as a literal, and that reading stops at the
-argument of a typing form. `list["Account"]` is a **forward reference** to a type
+The fallback reads a bare value as a literal, and for a string that reading
+stops at the argument of a typing form; `list[5]` is `list[Literal[5]]`.
+`list["Account"]` is a **forward reference** to a type
 named `Account`, which the typing spec resolves against the namespace the
 annotation was written in — a namespace valgebra does not have, because it is
 handed the runtime object rather than the source. Reading the string as a literal
@@ -633,7 +638,8 @@ assert field.is_valid({Key("k"): "x"})  # the field reads any key equal to it
 
 A clause's key says which keys it governs, and that must be a **type** —
 `str`, `int`, a union of them, `Any` — or a `Literal`, which names the keys one
-by one. A key narrowed by a constraint is refused where it is written:
+by one. A key narrowed by a constraint is refused where it is written, at the
+key itself; one level down -- a narrowed position of a tuple key -- it builds:
 
 ```python
 from typing import Annotated

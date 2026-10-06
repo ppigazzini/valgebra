@@ -98,6 +98,9 @@ it fails. A wrong length is such a failure: a fixed shape's arity and a
 container's length bound (`lengths_before_elements` in
 `crates/valgebra-py/src/check/walk/scalar.rs`) are read after the kind test and
 before any element, so a list refused for its length reports that alone.
+That holds inside one refinement node; a bound that is its own member of a
+meet, from `intersection` or a validator in `Annotated`'s metadata, is read
+in the meet's turn, so the report carries the elements' violations beside it.
 
 ## Rendering a schema back to an annotation
 

@@ -35,6 +35,7 @@ PRODUCT: every form the schema-language pages tabulate
 from __future__ import annotations
 
 import builtins
+import collections
 import enum
 import json
 import re
@@ -125,6 +126,15 @@ P = typing.ParamSpec("P")
 #: The refusal table's protocol cell. It names more than one form, so the row,
 #: `ALSO` and the set of such cells all key on it.
 PROTOCOL_BASES = "bare `Protocol`, and a generic `Protocol[T]`"
+
+#: The two rows of `typing` aliases: the five read bare or parametrized, and the
+#: six read bare and refused parametrized. Each names more than one form.
+TYPING_ALIASES = (
+    "`typing.List`, `typing.Tuple`, `typing.Dict`, `typing.Set`, `typing.FrozenSet`"
+)
+TYPING_ALIASES_BARE = (
+    "`typing.Deque`, `DefaultDict`, `OrderedDict`, `Counter`, `ChainMap`, `Type`"
+)
 
 
 class Parametrised(Generic[T]):
@@ -227,7 +237,8 @@ FORMS: dict[str, Reads | Refuses] = {
     "`tuple[A, *tuple[B, ...]]`": Reads(
         _UNPACKED.get("Unpacked", _tuple_prefix_tail()), (1, "a"), (1, 2)
     ),
-    "`typing.List`, `typing.Tuple`, ...": Reads(typing.List[int], [1], ["a"]),  # noqa: UP006
+    TYPING_ALIASES: Reads(typing.List[int], [1], ["a"]),  # noqa: UP006
+    TYPING_ALIASES_BARE: Reads(typing.Deque, collections.deque([1]), [1]),  # noqa: UP006
     # -- the native forms ---------------------------------------------------
     "`[T]`": Reads([int], [1, 2], ["a"]),
     "`[T, ...]`": Reads([int, ...], [1, 2], ["a"]),
@@ -302,11 +313,21 @@ FORMS: dict[str, Reads | Refuses] = {
 #: The second spelling of a cell that names two forms, so the row is not held by
 #: whichever of the pair the entry above happened to pick.
 ALSO: dict[str, list[Reads | Refuses]] = {
-    "`typing.List`, `typing.Tuple`, ...": [
+    TYPING_ALIASES: [
         Reads(typing.Tuple[int, str], (1, "a"), (1, 2)),  # noqa: UP006
     ],
     "`TypeVar`, `ParamSpec`, `TypeVarTuple`": [
         Refuses(lambda: P, A_TYPING_CONSTRUCT),
+    ],
+    TYPING_ALIASES_BARE: [
+        Refuses(
+            lambda: typing.Deque[int],  # noqa: UP006
+            "unsupported typing form with origin",
+        ),
+        Refuses(
+            lambda: typing.Type[int],  # noqa: UP006
+            "unsupported typing form with origin",
+        ),
     ],
     "`Final`, `ClassVar`": [
         Refuses(lambda: typing.ClassVar[int], "unsupported typing form with origin"),
@@ -331,8 +352,9 @@ if sys.version_info >= (3, 11):
 #: The cells that name more than one form, so the row above holds one of them
 #: and `ALSO` holds the rest.
 NAMES_MORE_THAN_ONE_FORM = {
-    "`typing.List`, `typing.Tuple`, ...",
+    TYPING_ALIASES,
     "`TypeVar`, `ParamSpec`, `TypeVarTuple`",
+    TYPING_ALIASES_BARE,
     "`Final`, `ClassVar`",
     PROTOCOL_BASES,
     "a set or frozen set literal",

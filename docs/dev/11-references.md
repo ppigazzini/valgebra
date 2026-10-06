@@ -23,10 +23,13 @@ disk. None is vendored into this tree, and none is a dependency.
   a set-theoretic type system in Rust, read for how a lattice of types is
   represented and decided. valgebra does not link them.
 
-**The three divergences from pydantic-core are enumerated in
-`tests/test_differential.py`** and are deliberate: `bool` as a subtype of `int`,
-`int` and `float` as disjoint, and exact-match `Literal` membership. Read them
-there — a second list drifts.
+**The divergences from pydantic-core on the schemas
+`tests/test_differential.py` draws are enumerated there** and are deliberate:
+`bool` as a subtype of `int`, `int` and `float` as disjoint, and exact-match
+`Literal` membership. Read them there — a second list drifts. Outside that
+fragment there are more, each a choice another page owns: `MultipleOf` refuses
+`nan` and `inf` where pydantic admits them, a `NamedTuple` refuses a plain
+tuple, and a held dataclass is re-checked (`tests/test_pydantic_boundary.py`).
 
 ## The typing spec
 

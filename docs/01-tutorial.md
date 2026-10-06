@@ -152,8 +152,9 @@ The [error model](08-error-model.md) covers aggregation and union reporting.
 You do not have to parse first. `validate_json` and `is_valid_json` read JSON on
 the Rust path and run the very same checks, so a document is judged as the value
 `json.loads` builds from it. The JSON reader is the stricter of the two: a
-non-standard float token such as `NaN`, and an escape naming a lone surrogate,
-are refused as `json_invalid` ([soundness](14-soundness.md)):
+non-standard float token such as `NaN` and an escape naming a lone surrogate
+are refused as `json_invalid`, among the documents
+[the JSON path](07-json.md) lists:
 
 ```python
 from valgebra import Validator

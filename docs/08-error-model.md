@@ -434,7 +434,8 @@ is locked by snapshot tests (the message format on the Rust side, the structured
 Messages and codes follow a fixed style so they stay predictable:
 
 - One line, present tense, of the form `expected <X>, got <Y> [<code>]`; a
-  located failure prefixes `at <path>: `.
+  located failure prefixes `at <path>: `. The value's `repr` and a class's name
+  are written as they are, so one whose text holds a newline spans lines.
 - The `code` is stable and machine-readable; it is the field to branch on, not
   the prose. Codes do not change meaning across releases.
 - `expected` names the set, `value` is a short repr of what was found, truncated

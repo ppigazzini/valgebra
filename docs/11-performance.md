@@ -337,9 +337,10 @@ and the record between 0.008 and 0.046.
 It is the only shape timing a path that raises and formats a Python exception,
 so a Python exception's cost is inside the number. It is excluded from the
 gate's drift ratchet, and `scripts/perf_compare.json` gives the reason rather
-than leaving an absent entry to mean it: a spread read on another build. On
-this one the shape spreads less than the JSON document does, which the ratchet
-holds.
+than leaving an absent entry to mean it: a spread read on another build, five
+runs between 0.86 and 1.19. On this one the shape spreads less than the JSON
+document does. The ratchet holds neither yet: it is not armed, and the gate
+judges every shape against its ceiling alone until the bench lane records one.
 
 A failing validation walks the value **twice** here -- once to decide, once to
 say which field -- where pydantic-core walks it once and collects as it goes.

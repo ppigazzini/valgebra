@@ -243,10 +243,13 @@ The soundness is relative to a small, explicit trust base:
   document both parsers build a value from, they build the same value, which is
   what makes the JSON path's denotation the object path's.
 
-  **The grammar is the stricter of the two, and the difference is named.** Two
-  documents Python's module parses are refused here: a non-standard float token
-  (`NaN`, `Infinity`, `-Infinity`) and an escape naming a lone surrogate. Each
-  is reported as `json_invalid` before a schema sees it, so the JSON path admits
+  **The grammar is the stricter of the two, and the difference is named.**
+  Documents Python's module parses and this parser refuses: a non-standard
+  float token (`NaN`, `Infinity`, `-Infinity`), a lone surrogate written as an
+  escape or held by a `str`, a document nested past the parser's depth, an
+  integer past its digit limit once the interpreter's own is lifted, and on
+  `bytes` a byte-order mark, a UTF-16 or UTF-32 encoding or bytes that are not
+  UTF-8. Each is reported as `json_invalid` before a schema sees it, so the JSON path admits
   a subset of what the object path does and never a different value
   ([the JSON path](07-json.md) states both with the queries that show them).
 - **The crates contain no `unsafe`.** Both crate roots carry

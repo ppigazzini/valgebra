@@ -10,8 +10,9 @@
 # Every parameter is positional-only, because the compiled functions take them
 # that way: naming one in a call is a `TypeError` at runtime, and a stub that
 # allowed it would type-check code that cannot run. The keyword-only `fail_fast`
-# is one exception, and `__class_getitem__`'s `key`, which is PyO3's and takes a
-# keyword too, is the other.
+# is one exception. `__class_getitem__`'s `key` and `__deepcopy__`'s `_memo` take
+# a keyword too, as PyO3 builds those two; the stub writes them positional-only,
+# which admits fewer calls than run rather than more.
 
 from collections.abc import Callable
 from types import GenericAlias

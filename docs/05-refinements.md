@@ -78,6 +78,15 @@ its length alone, whatever it holds, and its elements are never walked, so the
 bound is a size guard too. The answer is the one either order gives, since a
 member satisfies both.
 
+The guard holds where the bound and the elements are one refinement, as in
+`Annotated[list[int], at.MaxLen(3)]`. A bound carried in a meet of its own --
+`intersection(list[E], Annotated[list, at.MaxLen(3)])`, or a validator in the
+metadata, which [builds that meet](#a-validator-narrows-by-its-set) -- is one
+member of the meet, and the meet reads its members in turn, so the elements of
+an over-long list are walked before the bound refuses it. The answer is the
+same; the cost is the length of the list, and the report names a bad element
+beside `too_long`.
+
 ```python
 from typing import Annotated
 
@@ -112,7 +121,10 @@ A bound is the row to read twice, because it is the only marker whose answer
 depends on **both** values. `Annotated[set[int], Ge(0)]` is refused although a
 set has an order of its own, because a set and an integer do not compare;
 `Annotated[set[int], Ge({1})]` is the same base narrowed by a bound its values
-can be asked about, and it admits the supersets of `{1}`.
+can be asked about, and it admits the supersets of `{1}`. A complex bound is
+the one the build does not refuse: no integer orders against it or is a
+multiple of it, so `Annotated[int, Ge(1j)]` and `Annotated[int, MultipleOf(1j)]`
+build and admit nothing.
 
 A marker put to a base outside its row is refused when the validator is built,
 for the reason above: the check would raise at every value, the walk reads a

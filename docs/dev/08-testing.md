@@ -563,6 +563,15 @@ disagreement means anything -- and its answer is about a different set. The
 procedure is judged against its own denotation instead: the value model, the
 witness each refutation stands on, and the enumerated universes.
 
+**The stack a walk needs is the shipped build's, not a development build's.**
+`maturin develop` builds without optimisation, and there a walk to the depth
+bound needs 1.5 to 1.9 MiB of native stack on Linux, against the 1 MiB thread
+[the limits page](../10-limits.md) promises for the wheels. A test that runs a
+deep walk on a thread of its own overflows that thread on a development build.
+The suite runs on the main thread, which has 8 MiB on Linux and macOS; the
+Windows rows build at `opt-level=1`, where every walk to the bound in the suite
+passes on 800 KiB, since uv's Windows interpreter reserves 2,000,000 bytes.
+
 ## The limit
 
 **Adequacy is measured per harness, and every file has one.** Two of the three
