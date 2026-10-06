@@ -118,11 +118,14 @@ A failure raises `ValidationError` carrying a machine-readable `code`, the
 ```python
 from valgebra import ValidationError, Validator
 
+raised = False
 try:
     Validator({"user": {"name": str}}).validate({"user": {"name": 5}})
 except ValidationError as err:
+    raised = True
     assert err.code == "string_type"
     assert err.path == ("user", "name")
+assert raised
 ```
 
 ## Validate JSON directly

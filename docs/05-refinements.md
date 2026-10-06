@@ -86,10 +86,13 @@ import annotated_types as at
 from valgebra import ValidationError, Validator
 
 capped = Validator(Annotated[list[int], at.MaxLen(3)])
+raised = False
 try:
     capped.validate([1, 2, "x", 4, 5])
 except ValidationError as err:
+    raised = True
     assert [item["code"] for item in err.errors] == ["too_long"]
+assert raised
 ```
 
 ### Which base each marker can be asked of
@@ -167,10 +170,13 @@ import annotated_types as at
 
 from valgebra import Validator
 
+raised = False
 try:
     Validator(Annotated[int, at.MinLen(1)])
 except NotImplementedError as error:
+    raised = True
     assert "length" in str(error)
+assert raised
 
 # One branch can answer it, so this narrows rather than empties.
 narrowed = Validator(Annotated[int | str, at.MinLen(1)])
@@ -248,22 +254,31 @@ assert admits(r"\p{L}+", "ab")
 
 # Class-set operators. `--`, `&&` and `~~` combine classes here and are literal
 # characters to Python, so a class carrying one is refused rather than read.
+raised = False
 try:
     admits(r"[\w~~\d]", "a")
 except ValueError as err:
+    raised = True
     assert "set symmetric difference" in str(err)
+assert raised
 # A nested set is refused for the same reason: a union here, four literals
 # there.
+raised = False
 try:
     admits(r"[a[bc]]", "a")
 except ValueError as err:
+    raised = True
     assert "nested set" in str(err)
+assert raised
 # Word-boundary escapes. `\<` is the start of a word here and the character `<`
 # to Python, so it is refused too.
+raised = False
 try:
     admits(r"\<b\>", "b")
 except ValueError as err:
+    raised = True
     assert "the start of a word" in str(err)
+assert raised
 ```
 
 Four more are quiet, and each is in a class or an anchor a ported pattern is
@@ -451,7 +466,7 @@ one walk, and a union in it walks each branch once. A dict schema -- a record, a
 then an explaining pass that resumes at the entry the first one stopped at, so
 a predicate on or under that entry runs a second time, and one on the clause an
 undeclared key falls under runs once to find whether the clause covers the
-entry and again to report it ([dev/04-walk.md](dev/04-walk.md)). A dict schema
+entry and again to report it (`docs/dev/04-walk.md`). A dict schema
 that is a branch of a union is read the second time only where no branch admits
 the value. Without
 `fail_fast`, `validate` also reads past the first failure, running the

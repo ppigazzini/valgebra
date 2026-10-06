@@ -63,13 +63,16 @@ import pickle
 
 from valgebra import ValidationError, Validator
 
+raised = False
 try:
     Validator({"a": int}).validate({"a": "x"})
 except ValidationError as err:
+    raised = True
     restored = pickle.loads(pickle.dumps(err))
     assert restored.code == "int_type"
     assert restored.path == ("a",)
     assert restored.errors == err.errors
+assert raised
 ```
 
 That covers a `multiprocessing` worker, a process pool, a task queue, and a test
@@ -84,10 +87,13 @@ mapping entry — into `errors`, so one call reports all the problems with a val
 ```python
 from valgebra import ValidationError, Validator
 
+raised = False
 try:
     Validator({"a": int, "b": str, "c": int}).validate({"a": "x", "b": 1, "c": "y"})
 except ValidationError as err:
+    raised = True
     assert [e["path"] for e in err.errors] == [("a",), ("b",), ("c",)]
+assert raised
 ```
 
 **There is no cap on how many failures come back.** A list of twenty thousand
@@ -105,10 +111,13 @@ Pass `fail_fast=True` to stop at the first failure instead:
 ```python
 from valgebra import ValidationError, Validator
 
+raised = False
 try:
     Validator({"a": int, "b": str}).validate({"a": "x", "b": 1}, fail_fast=True)
 except ValidationError as err:
+    raised = True
     assert len(err.errors) == 1
+assert raised
 ```
 
 A node-level type mismatch (a value that is not a dict where a record is
@@ -139,10 +148,13 @@ class Point:
     x: int
 
 
+raised = False
 try:
     Validator(Point).validate(object())
 except ValidationError as err:
+    raised = True
     assert [(e["code"], e["path"]) for e in err.errors] == [("instance_type", ())]
+assert raised
 ```
 
 ## Unions report the closest branch
@@ -155,12 +167,15 @@ and that branch's own (aggregated) errors:
 ```python
 from valgebra import ValidationError, union
 
+raised = False
 try:
     union(int, {"a": int}).validate({"a": "x"})
 except ValidationError as err:
     # The value is a dict, so the record branch is closer than `int`.
+    raised = True
     assert err.errors[0]["path"] == ("a",)
     assert err.errors[0]["code"] == "int_type"
+assert raised
 ```
 
 When no branch makes any progress past the union's own location — for example
@@ -184,11 +199,14 @@ shapes = union(
     {"kind": Literal["circle"], "r": float},
     {"kind": Literal["square"], "side": float},
 )
+raised = False
 try:
     shapes.validate({"kind": "square", "side": "two"})
 except ValidationError as err:
+    raised = True
     assert err.errors[0]["path"] == ("side",)
     assert err.errors[0]["code"] == "float_type"
+assert raised
 ```
 
 A value the union admits builds no report at all: the union is decided before
@@ -251,14 +269,17 @@ import json
 from valgebra import ValidationError, Validator
 
 schema = Validator({"name": str, "age": int})
+raised = False
 try:
     schema.validate({"name": "Ada", "age": "old"})
 except ValidationError as err:
+    raised = True
     payload = json.dumps(err.errors)
     restored = json.loads(payload)
     assert restored[0]["code"] == "int_type"
     assert restored[0]["path"] == ["age"]
     assert restored[0]["expected"] == "int"
+assert raised
 ```
 
 ## When a comparison raises
@@ -343,10 +364,14 @@ schema = Validator(
 )
 
 assert schema.is_valid(grown) is False
+del grown["c"]  # the predicate added it during the check above
+raised = False
 try:
     schema.validate(grown)
 except ValidationError as error:
+    raised = True
     assert error.code == "mutated_during_validation"
+assert raised
 ```
 
 A **dict, a set and a list** are all read this way — each against a count taken

@@ -34,11 +34,14 @@ assert is_user.is_valid({"name": "Ada", "age": 36})
 assert not is_user.is_valid({"name": "Ada", "age": "unknown"})
 
 # validate() raises a structured error pointing at the offending value
+raised = False
 try:
     is_user.validate({"name": "Ada", "age": "unknown"})
 except ValidationError as err:
+    raised = True
     assert err.code == "int_type"
     assert err.path == ("age",)
+assert raised
 ```
 
 What sets valgebra apart starts when you treat schemas *as the sets they denote*.

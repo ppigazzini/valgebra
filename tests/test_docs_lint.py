@@ -82,6 +82,23 @@ def test_an_anchor_resolves_to_a_heading_of_the_page_it_names(tmp_path: Path) ->
     assert lint.check_links(page, page.read_text())
 
 
+def test_a_published_page_does_not_link_into_the_developer_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The target exists in the tree, so a file-level check passes it, and the
+    # site renders no `docs/dev/`: twelve such links answered 404 there.
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    (tmp_path / "docs" / "dev").mkdir(parents=True)
+    (tmp_path / "docs" / "dev" / "walk.md").write_text("# The walk\n")
+    page = tmp_path / "docs" / "guide.md"
+    page.write_text("see [the walk](dev/walk.md)\n")
+    assert lint.check_links(page, page.read_text())
+    # A developer page linking to another is in the repository either way.
+    inner = tmp_path / "docs" / "dev" / "other.md"
+    inner.write_text("see [the walk](walk.md)\n")
+    assert not lint.check_links(inner, inner.read_text())
+
+
 def test_a_heading_inside_a_fence_is_no_anchor(tmp_path: Path) -> None:
     (tmp_path / "there.md").write_text("```bash\n# not a heading\n```\n")
     page = tmp_path / "page.md"

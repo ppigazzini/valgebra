@@ -135,11 +135,14 @@ offending value, even deep in a nested structure:
 from valgebra import ValidationError, Validator
 
 schema = Validator({"user": {"name": str}})
+raised = False
 try:
     schema.validate({"user": {"name": 5}})
 except ValidationError as err:
+    raised = True
     assert err.code == "string_type"
     assert err.path == ("user", "name")
+assert raised
 ```
 
 The [error model](08-error-model.md) covers aggregation and union reporting.

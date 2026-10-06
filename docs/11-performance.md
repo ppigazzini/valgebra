@@ -327,7 +327,7 @@ valgebra takes two thirds of pydantic-core's time here rather than a fraction:
 neither is spending its time in the check. A document's free-form sections are
 `dict[str, V]`, and covering their keys is read two ways -- in place for a
 narrow object, through a table of last values for a wide one
-([dev/04-walk.md](dev/04-walk.md)).
+(`docs/dev/04-walk.md`).
 
 The error report spreads 0.42 to 0.48 across the twelve runs, beside the JSON
 document's 0.124 -- one run of the twelve read it at 0.78, and the other eleven
@@ -346,7 +346,7 @@ say which field -- where pydantic-core walks it once and collects as it goes.
 That is a deliberate trade for the passing path, which is the common one and
 which walks once. The second walk does not repeat the first: it resumes where
 the deciding walk stopped, since a field that matched has no violation to report
-([dev/04-walk.md](dev/04-walk.md)). Resuming rather than restarting is worth
+(`docs/dev/04-walk.md`). Resuming rather than restarting is worth
 36.8% of that walk on the instruction gate, which
 `scripts/perf_gate.py --binding-explain` measures. What the report pays beyond
 the deciding walk is one walk of the fields *after* the failure, and the
@@ -402,10 +402,11 @@ measures it against a base, and the flag a figure below names is the shape that
 reproduces it. A percentage compares a technique with the general reading it
 stands beside, which stays in the tree as the fallback.
 
-Each entry names the code that owns it. The developer pages carry the arguments
-in full: [the walk](dev/04-walk.md), [the frontend](dev/03-frontend.md), [the
-relations](dev/02-decision.md), [the error model](dev/05-errors.md) and [the
-schema representation](dev/01-schema-ir.md).
+Each entry names the code that owns it. The developer pages in the repository
+carry the arguments in full: the walk (`docs/dev/04-walk.md`), the frontend
+(`docs/dev/03-frontend.md`), the relations (`docs/dev/02-decision.md`), the
+error model (`docs/dev/05-errors.md`) and the schema representation
+(`docs/dev/01-schema-ir.md`).
 
 ### Crossing into Rust
 

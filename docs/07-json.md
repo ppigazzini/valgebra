@@ -79,10 +79,13 @@ text = Validator(str)
 assert text.is_valid(json.loads(r'"\ud800"'))  # the object path admits it
 assert not text.is_valid_json(r'"\ud800"')  # the JSON grammar does not
 
+raised = False
 try:
     text.validate_json(r'"\ud800"')
 except ValidationError as error:
+    raised = True
     assert error.code == "json_invalid"
+assert raised
 ```
 
 This equivalence is locked by tests over a corpus spanning the JSON value model.
@@ -154,10 +157,13 @@ from valgebra import ValidationError, Validator
 v = Validator(int)
 assert not v.is_valid_json("{ not json")
 
+raised = False
 try:
     v.validate_json("{ not json")
 except ValidationError as err:
+    raised = True
     assert err.code == "json_invalid"
+assert raised
 ```
 
 A non-`str`, non-`bytes` argument is a `TypeError` from `validate_json` and
@@ -264,7 +270,7 @@ loses the array is a trade and not an improvement, so the reading in place is
 the one that never loses.
 
 **A walk over the parser's events** is refused
-([dev/04-walk.md](dev/04-walk.md)): a union, a meet, a complement and a
+(`docs/dev/04-walk.md`): a union, a meet, a complement and a
 refinement read their value again, which a pull parser has moved past, and a
 stream answers differently from the tree on documents the tests hold. The
 document shape is a tree the walk reads once and drops.

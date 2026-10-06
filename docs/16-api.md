@@ -231,13 +231,16 @@ import json
 
 from valgebra import ValidationError, Validator
 
+raised = False
 try:
     Validator({"a": int, "b": str}).validate({"a": "x", "b": 1})
 except ValidationError as err:
+    raised = True
     assert err.code == "int_type"
     assert err.path == ("a",)
     assert [item["path"] for item in err.errors] == [("a",), ("b",)]
     assert json.dumps(err.errors)  # the whole report is JSON-serializable
+assert raised
 ```
 
 ## Construction limits

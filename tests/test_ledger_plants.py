@@ -2439,6 +2439,20 @@ PLANTS = (
         trips=("test_every_schema_variant_is_one_the_denotation_generator_builds",),
     ),
     Plant(
+        # A refusal example asserting only inside `except`: it passes when the
+        # call stops raising.
+        "tests/test_doc_examples.py",
+        ("README.md",),
+        lambda tree: _write(
+            tree,
+            "README.md",
+            (tree / "README.md").read_text(encoding="utf-8")
+            + "\n```python\ntry:\n    int('x')\nexcept ValueError as err:\n"
+            "    assert 'x' in str(err)\n```\n",
+        ),
+        trips=("test_every_refusal_example_fails_when_the_refusal_stops",),
+    ),
+    Plant(
         # A page renamed, and the runner still listing it by the old name.
         "tests/test_doc_examples.py",
         ("scripts/run_doc_examples.py",),

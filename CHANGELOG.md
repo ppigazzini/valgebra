@@ -1300,10 +1300,13 @@ each is written out below.
   ```python
   from valgebra import ValidationError, Validator
 
+  raised = False
   try:
       Validator(dict[int, int]).validate({1: 1, 2: "x"})
   except ValidationError as error:
+      raised = True
       assert error.errors[0]["path"] == (2,)
+  assert raised
   ```
 
 - **A validator cannot be pickled, and says what to send instead.** It holds the

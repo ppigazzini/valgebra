@@ -121,10 +121,13 @@ deep: object = 0
 for _ in range(5000):
     deep = [deep]
 assert not schema.is_valid(deep)
+raised = False
 try:
     schema.validate(deep)
 except ValidationError as error:
+    raised = True
     assert error.code == "recursion_limit"
+assert raised
 
 # A value that contains itself: caught as a loop.
 cyclic: list[object] = []
@@ -142,11 +145,14 @@ growing schema can overflow the stack or exhaust memory on its next check:
 from valgebra import Validator
 
 composed: Validator = Validator(int)
+raised = False
 try:
     for _ in range(1000):
-        composed = composed | str
+        composed = Validator([composed])
 except ValueError as error:
+    raised = True
     assert "too deep" in str(error)
+assert raised
 ```
 
 The worst-case timing of these shapes is measured by the adversarial benchmark

@@ -32,6 +32,7 @@ LEDGER: every python example in a tracked page is run or marked with a reason
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import re
 import subprocess
@@ -131,6 +132,87 @@ def test_every_example_block_asserts_what_it_shows() -> None:
     assert not silent, (
         f"example blocks that check nothing: {silent}. Assert the answer the "
         "page states, or mark the block `# no assertion:` with the reason."
+    )
+
+
+def _stops_without_returning(handler: ast.ExceptHandler) -> bool:
+    return isinstance(handler.body[-1], ast.Raise | ast.Return)
+
+
+def _raised_when_skipped(node: ast.Try, after: list[ast.stmt]) -> bool:
+    """Whether the block fails when the call in the `try` stops raising.
+
+    Four shapes do: the `try` ends on a check of its own, an `else` holds one,
+    a handler sets a name a later `assert` reads, or every handler leaves and
+    the next statement raises or asserts.
+    """
+    if isinstance(node.body[-1], ast.Raise | ast.Assert):
+        return True
+    if any(
+        isinstance(n, ast.Raise | ast.Assert) for s in node.orelse for n in ast.walk(s)
+    ):
+        return True
+    flags = {
+        target.id
+        for handler in node.handlers
+        for n in ast.walk(handler)
+        if isinstance(n, ast.Assign)
+        for target in n.targets
+        if isinstance(target, ast.Name)
+    }
+    if any(
+        isinstance(s, ast.Assert)
+        and any(isinstance(n, ast.Name) and n.id in flags for n in ast.walk(s.test))
+        for s in after
+    ):
+        return True
+    return (
+        bool(after)
+        and isinstance(after[0], ast.Raise | ast.Assert)
+        and all(_stops_without_returning(handler) for handler in node.handlers)
+    )
+
+
+def _refusals_that_cannot_fail(source: str) -> list[int]:
+    """Give the line of every `try` the block passes whether or not it raises."""
+    lines = []
+    for parent in ast.walk(ast.parse(source)):
+        for field in ("body", "orelse", "finalbody"):
+            statements = getattr(parent, field, None)
+            if not isinstance(statements, list):
+                continue
+            lines += [
+                node.lineno
+                for at, node in enumerate(statements)
+                if isinstance(node, ast.Try)
+                and node.handlers
+                and not _raised_when_skipped(node, statements[at + 1 :])
+            ]
+    return lines
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 12),
+    reason="the pages write 3.12 syntax, and the docs lane reads them on 3.12",
+)
+def test_every_refusal_example_fails_when_the_refusal_stops() -> None:
+    """An example of a refusal holds the page to it only if no refusal fails it.
+
+    A block that asserts on the error inside `except` passes when the call
+    stops raising: the handler never runs, and the block exits 0. Twenty-seven
+    did, and two of them had stopped raising -- a predicate that grows the dict
+    once, so the second call read it whole, and a loop that joins the same
+    member to a union again, which folds and never grows.
+    """
+    module = runner()
+    vacuous = [
+        f"{page.relative_to(ROOT).as_posix()} block {index} line {line}"
+        for page, index, block in module.examples()
+        for line in _refusals_that_cannot_fail(block)
+    ]
+    assert not vacuous, (
+        f"refusal examples that pass when nothing is refused: {vacuous}. Set a "
+        "flag in the handler and assert it after the `try`, as the tutorial does."
     )
 
 

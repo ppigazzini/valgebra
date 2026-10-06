@@ -56,7 +56,9 @@ product suite on every wheel set it ships but the musllinux ones, on each set's
 floor, newest and free-threaded interpreters -- the `smoke` matrix in
 `.github/workflows/release.yml` names them -- and each PyPy wheel on the PyPy it
 is built for, not only on the one the push lane builds; the musllinux wheels
-are built and never run ([dev/09-releasing.md](dev/09-releasing.md)). There is
+on the musl CPython of each release, in Alpine containers, but for the
+free-threaded and PyPy ones no Alpine image carries
+(`docs/dev/09-releasing.md` in the repository). There is
 no PyPy wheel for macOS or Windows, where the source distribution is the
 install.
 

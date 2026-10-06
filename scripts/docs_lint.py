@@ -12,6 +12,10 @@ claims:
   slugs differ, such as one spelling ``==``, cannot be linked from the site, and
   that is the point: a link that works on one renderer is a link half the
   readers follow into nothing.
+* **A link from the site into the developer set.** ``mkdocs.yml`` excludes
+  ``docs/dev/``, so a published page linking there resolves in the tree and
+  answers 404 on the site, where ``mkdocs build --strict`` reports it only at
+  INFO. Twelve did. A published page names such a page by its path instead.
 * **A named path that does not exist.** A ``crates/...``, ``scripts/...``,
   ``tests/...`` or ``.github/...`` path written in prose is a claim about this
   tree. A path holding a placeholder (``*``, ``<``, ``>``, ``...``) is skipped,
@@ -211,6 +215,15 @@ def _on_the_site(path: Path) -> bool:
     return len(parts) > 1 and parts[0] == "docs" and parts[1] != "dev"
 
 
+def _unpublished(path: Path) -> bool:
+    """Answer whether the page is in the developer set `mkdocs.yml` excludes."""
+    try:
+        parts = path.resolve().relative_to(ROOT).parts
+    except ValueError:
+        return False
+    return parts[:2] == ("docs", "dev")
+
+
 def check_links(path: Path, text: str) -> list[str]:
     problems = []
     for raw in LINK.findall(text):
@@ -221,6 +234,15 @@ def check_links(path: Path, text: str) -> list[str]:
         page = (path.parent / name).resolve() if name else path.resolve()
         if not page.exists():
             problems.append(f"dead link {target!r}")
+            continue
+        # The page resolves in the tree and not on the site, which renders
+        # neither the target nor a warning: `mkdocs build --strict` reports a
+        # link to an excluded page at INFO, and the published page answers 404.
+        if _on_the_site(path) and _unpublished(page):
+            problems.append(
+                f"link {target!r} leaves the site: `docs/dev/` is not published, "
+                "so name the page by its path in the repository"
+            )
             continue
         if not anchor or page.suffix != ".md":
             continue

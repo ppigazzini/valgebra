@@ -22,10 +22,13 @@ from collections.abc import Mapping
 
 from valgebra import Validator
 
+raised = False
 try:
     Validator(Mapping[str, int])
 except NotImplementedError as error:
+    raised = True
     assert "unsupported typing form" in str(error)
+assert raised
 ```
 
 The abstract-collection generics are the ones a reader is most likely to
@@ -36,7 +39,7 @@ of them builds, and not for one reason:
 - `Mapping[K, V]` and `Sequence[T]` are **refused**. The record and mapping
   node denotes dicts, and giving it a carrier so these build is a change the
   algebra does not admit, recorded with the test it fails
-  ([refused changes](dev/01-schema-ir.md#refused-and-the-test-each-one-fails)).
+  (the refused changes in `docs/dev/01-schema-ir.md`, in the repository).
 - `Iterable[T]` cannot be checked: reading its elements consumes an iterator,
   and a check that consumed one would change the value it was asked about.
 - `Set[T]`, `deque[T]` and `OrderedDict[K, V]` are **unbuilt**: nothing refuses
@@ -254,10 +257,13 @@ the annotation admits, so the position is refused:
 ```python
 from valgebra import Validator
 
+raised = False
 try:
     Validator(list["Account"])
 except NotImplementedError as error:
+    raised = True
     assert "forward reference" in str(error)
+assert raised
 
 # Say the type, or say the value.
 assert Validator(list[int]).is_valid([1])
