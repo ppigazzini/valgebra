@@ -13,21 +13,25 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: a pattern's set is every string it matches whole
-- fix: a refutation stands on members that stay apart
-- fix: a literal is its constant at its exact type
-- fix: a walk that stops is not a non-member
-- fix: a union over records does not re-walk
-- fix: the walk and a relation fit a 1 MiB stack
-- fix: a document's keys are hashed with a per-process key
-- fix: a constraint is read off the vocabulary that defines it
-- fix: a repr reads back as the schema it prints
-- fix: open and close reach the record a mapping maps to
-- feat: instance_of reads a class alone, whatever it declares
-- fix: a typing form in metadata is not a predicate
-- feat: a Final field of a dataclass is read as the type it wraps
-
 -->
+
+## [0.0.17] - 2026-10-06
+
+A correctness release: two additions, three changes and eighteen fixes.
+
+Several answers change, each because the old one was wrong. Relations over
+patterns and literals that were proved are refuted: a pattern's set is every
+string it matches whole, and a literal is its constant at its exact type. A
+value nested past 384 levels is refused where 512 were walked, so the walk
+fits the 1 MiB stack the shipped wheels are measured on. A complement refuses
+a value its inner walk stopped on rather than admitting it. A marker that is
+not `annotated_types`' is ignored whole, a typing form in metadata is no
+longer called as a predicate, and four forms that built quietly are refused. A
+union of records told apart by a tag, and `validate` on a refused one, are
+linear in the value. Two readings are new: `instance_of(C)`, the instances of
+a class whatever their fields hold, which a dataclass or a `NamedTuple` had no
+spelling for; and a `Final[T]` field of a dataclass, read as `T` where the
+class was refused.
 
 ### Added
 
@@ -2482,7 +2486,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.16...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.17...HEAD
+[0.0.17]: https://github.com/ppigazzini/valgebra/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/ppigazzini/valgebra/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/ppigazzini/valgebra/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/ppigazzini/valgebra/compare/v0.0.13...v0.0.14
