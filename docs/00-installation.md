@@ -84,6 +84,25 @@ process-wide interned-string cache guarded by a lock, so concurrent
 `validate_json`/`load` calls serialize briefly on that cache even though the walk
 itself does not.
 
+Three things read differently there, each measured on 3.14t:
+
+- **Threads checking one shared value contend for it.** The walk takes each
+  container's own lock to read an element, so eight threads validating the same
+  `dict[str, list[int]]` ran at about a third of one thread's throughput, where
+  eight threads each holding their own copy ran at three and a half times it.
+  Give each thread its own value, or check a shared value once.
+- **Forking a process whose threads are inside a walk can hang the child.** A
+  child forked while other threads walked a shared container hung on that
+  container's lock in 16 to 26 of 60 forks; the interpreters with a lock never
+  did. CPython already warns against forking a threaded process; start worker
+  processes with the `spawn` or `forkserver` method.
+- **A record's field names are interned for good.** A validator interns the
+  names of the fields it reads, which is what makes a field lookup one pointer
+  comparison, and the free-threaded build makes an interned string immortal: a
+  process that builds a validator per request over field names it has not seen
+  before keeps them all, about 190 bytes for each 100-character name. The
+  builds with a lock free them with the last validator that held them.
+
 ## From source
 
 Building from source additionally requires:

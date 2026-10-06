@@ -100,11 +100,13 @@ assert raised
 values of the wrong type reports twenty thousand entries, and `str()` of that
 exception is about a megabyte. That is deliberate: a cap would make `errors` a
 sample, and a caller counting entries or looking for a particular path would be
-reading a truncated list with nothing saying it was truncated. Bounding the cost
-is the caller's, and there are two ways to do it — pass `fail_fast=True`, or
-validate the value in pieces. Each individual `value` *is* bounded, at eighty
-characters of its repr followed by `...` (`SUMMARY_CHARS` in
-`crates/valgebra-py/src/errors.rs`).
+reading a truncated list with nothing saying it was truncated. A failure costs
+about 230 bytes held by the exception and about 790 once `errors` is read, so a
+document of a million wrong elements reaches three quarters of a gigabyte.
+Bounding the cost is the caller's, and there are two ways to do it — pass
+`fail_fast=True`, or validate the value in pieces. Each individual `value` *is*
+bounded, at eighty characters of its repr followed by `...` (`SUMMARY_CHARS`
+in `crates/valgebra-py/src/errors.rs`).
 
 Pass `fail_fast=True` to stop at the first failure instead:
 

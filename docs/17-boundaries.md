@@ -168,9 +168,18 @@ assert page.is_valid([{"id": 1}, {"id": 2}])
 assert not page.is_valid([{"id": 1}, {"id": "two"}])
 ```
 
-What bounds it is Python's own recursion limit, not a valgebra one: a predicate
-that re-enters without a base case raises `RecursionError` where an ordinary
-Python function would. A fatal signal is **not** turned into a verdict: a base
+What bounds it is Python's own recursion limit and the native stack, not a
+valgebra bound: the walk's depth guard is per call, so each re-entry starts a
+fresh walk on top of the frames the last one holds. On the main thread a
+predicate that re-enters without a base case raises `RecursionError`. The
+native frames between two Python calls are not what the recursion limit
+counts, though, so where each re-entry walks levels of nesting, or on a thread
+with a small stack, the native stack can run out first and the process ends.
+On the main thread, two thousand re-entries walking ten levels each ended it on
+CPython 3.12 and raised `RecursionError` on 3.15, whose own stack check catches
+the overflow while the frames between two Python calls stay under its margin;
+at 120 levels each, 3.15 ended it too, after sixty-four. Give a re-entering
+predicate a base case, and run it on a thread of 1 MiB or more. A fatal signal is **not** turned into a verdict: a base
 exception that is not an ordinary `Exception` (`KeyboardInterrupt`,
 `SystemExit`, `GeneratorExit`), and `MemoryError` and `RecursionError`,
 propagate, because a check that swallowed one would make the process
