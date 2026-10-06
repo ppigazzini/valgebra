@@ -566,11 +566,11 @@ shape rather than assumed, so `--update` leaves it alone -- one run cannot see a
 spread, and a recording that narrowed it silently would fire on noise. A shape
 whose spread is too wide to ratchet at all carries a written reason instead of
 an absent number: `error_report` spread a third of its own value on one PGO
-CPython 3.12 build (0.86 to 1.19 over five runs) and an eighth on another (0.42
-to 0.48 over twelve, the reading `docs/11-performance.md` gives), being the one
-shape timing a path that raises and formats a Python exception, so the spread
-belongs to the build as much as to the shape; and a row holds
-every shape to a tolerance or an argument in both directions.
+CPython 3.12 build (0.86 to 1.19 over five runs) and a sixteenth on another
+(0.43 to 0.46 over twelve, the reading `docs/11-performance.md` gives), being
+the one shape timing a path that raises and formats a Python exception, so the
+spread belongs to the build as much as to the shape; and a row holds every
+shape to a tolerance or an argument in both directions.
 
 **The ratchet beside the ceiling is armed from the lane.** The comparison gate
 holds each shape to a ceiling, and beside it holds the shape to the ratio it
