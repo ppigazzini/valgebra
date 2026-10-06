@@ -56,9 +56,10 @@ target class, each returns it without checking its fields by default. pydantic
 re-checks one only for a class configured to ask for it (`revalidate_instances`,
 read off the class rather than the call), and checks a later mutation only at
 the assignment it is configured to watch (`validate_assignment`); msgspec's
-checking runs on the decode path alone. A membership question can be asked
-again, of the same object,
-as many times as the contract needs. And because a schema here is a *value* in
+checking runs on the decode path alone. valgebra checks every field of a held
+instance, and asks the class alone where the caller writes `instance_of`. A
+membership question can be asked again, of the same object, as many times as
+the contract needs. And because a schema here is a *value* in
 an algebra rather than a class declaration, `is_subtype_of`,
 `is_equivalent` and `is_empty` ask about the schemas themselves, with no value
 involved. `tests/test_pydantic_boundary.py` pins each of these against pydantic,

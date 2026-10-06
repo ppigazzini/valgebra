@@ -18,7 +18,7 @@ direction their dependencies run, and the two invariants the compiler holds.
 | `crates/valgebra-py/src/errors.rs`, `render.rs` | the Python exception and the annotation render | [05-errors.md](05-errors.md) |
 | `crates/valgebra-py/src/oracle.rs` | the binding's half of `LeafRelations`: the questions the core cannot decide alone — whether a literal belongs to a set, whether two sets of constants share a value, how two bounds order, what an enumeration lists | [02-decision.md](02-decision.md) |
 | `python/valgebra/` | the Python half of the package: `__init__.py` re-exports the extension's names and is what `import valgebra` costs, `_markers.py` defines `Regex`, the one refinement marker neither typing nor `annotated_types` provides, and `_valgebra.pyi` is the stub `stubtest` holds against the built extension | [03-frontend.md](03-frontend.md) |
-| `crates/valgebra-py/src/lib.rs` | the module: what the extension exports, the three set combinators (`union`, `intersection`, `complement`), the `recursive` fixpoint, and the two lattice bounds `anything` and `nothing` | [03-frontend.md](03-frontend.md) |
+| `crates/valgebra-py/src/lib.rs` | the module: what the extension exports, the three set combinators (`union`, `intersection`, `complement`), the `recursive` fixpoint, `instance_of` for a class alone, and the two lattice bounds `anything` and `nothing` | [03-frontend.md](03-frontend.md) |
 | `crates/valgebra-py/src/workload.rs` | the instruction gate's instrument: the shapes `scripts/perf_gate.py --binding-*` measures, which no caller reaches and no suite runs, so coverage and the mutation sweep skip it by name | [07-tooling-ci.md](07-tooling-ci.md) |
 
 `crates/valgebra-core` is pure Rust. `crates/valgebra-py` is the PyO3 binding.

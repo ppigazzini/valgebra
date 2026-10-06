@@ -268,7 +268,8 @@ than take it, so a class re-checks only once its declaration, or a
 `__pydantic_config__` attribute set on it, asks to. msgspec has no such
 setting: its checking runs on the decode path, from untyped input. valgebra
 reads the schema off the class, and every call asks the same membership
-question.
+question. Where the class alone is the contract, `instance_of(cls)` asks
+that and nothing more, as `isinstance` does.
 
 **A value stays checkable after it changes.** A check that runs at construction
 answers about the value handed to the constructor. Membership is a call you
