@@ -86,9 +86,11 @@ which class each record came from, so the render cannot fold them back, and a
 every trailing `?` as optional, so `TypedDict("TD", {"a?": int})` renders
 `{'a?': int, str: anything}`, which reads back as a record whose `a` is
 optional -- a different schema, with nothing to say so; a **class met with a
-tuple shape**, the second quiet one: `intersection(MyTuple, tuple[int, str])`
-prints as `MyTuple`, because a `NamedTuple` is built as exactly that meet and
-the schema does not record whether the shape was the class's own declaration;
+declaration it did not make**, the second quiet one:
+`intersection(MyTuple, tuple[int, str])` prints as `MyTuple`, and
+`intersection(Plain, P)` for a protocol `P` as `Plain`, because a `NamedTuple`
+and a dataclass are built as exactly that meet and the schema does not record
+whether the shape or the record was the class's own declaration;
 and a **schema past the renderer's own depth bound**, which gives up and prints
 `<...>`. The bound is
 within reach: no *single* annotation can be written deep enough, since the

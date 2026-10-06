@@ -561,6 +561,50 @@ definition the body becomes, and refuses a body in which the alias occurs
 outside a structural constructor, since `type X = int | X` names no set a value
 settles. An alias that never names itself builds its body and no definition.
 
+## Refused, and the test each one fails
+
+A proposal to read a form another way starts here. Each row says what it
+fails, not that it was turned down.
+
+**Reading a dataclass or a `NamedTuple` as its class alone.** The typing spec
+names a class's type by `__class__`, and every runtime checker answers a held
+instance by `isinstance`, so the reading has precedent. It turns every verdict
+on an ill-typed instance from refuse to accept, which is a correct answer
+regressing: `test_the_class_alone_admits_an_instance_whatever_its_fields_hold`
+in `tests/test_classes.py` holds `Validator(Box)` to refusing `Box("x")`. The
+class alone is `instance_of(C)`.
+
+**A marker that widens: `Annotated[Box, Nominal]`.** pydantic's `InstanceOf`
+is this shape. Metadata here narrows its base or is ignored, so `Annotated[T,
+...]` is never wider than `T`: `test_a_validator_in_the_metadata_is_met_with_the_base`
+and `test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque` in
+`tests/test_refinements.py` are the two halves. The frontend would also have to
+read the metadata before the base it qualifies, against the order above, and
+mypy, pyright and ty all read the form as `Validator[object]`, where
+`instance_of(Box)` reads as `Validator[Box]`.
+
+**A transform: `Validator(Box).nominal()`.** A third term rewrite beside `open`
+and `close`, and the one the IR cannot define: dropping "the record the class
+brought" needs to know which record that was, and a record built from two
+classes is one interned node (`a_node_built_twice_is_one_node_in_every_family`
+in `crates/valgebra-core/src/ir/intern/tests.rs`). `open` and `close` already
+had to stop being called functions of the set
+(`test_a_meet_of_open_records_closes_apart_from_its_record` in
+`tests/test_projection_laws.py`).
+
+**A mode: `Validator(spec, fields=False)`.** Two readings of one annotation,
+chosen per call, so a nested schema could not mix them (`list[A | B]` with `A`
+read one way and `B` the other) without nesting validators.
+`tests/test_form_ledger.py` holds every tabulated form to one reading, and a
+mode would give each class row two.
+
+**A node for the class alone, or for the class with its fields.** Neither
+passes the admission test of [01-schema-ir.md](01-schema-ir.md): the first is
+`Instance`, already a generator, and the second is a meet the algebra already
+reaches. `test_every_variant_is_a_generator_a_representative_or_a_marker` in
+`tests/test_closure_ledger.py` is the row a new variant fails until it has a
+column.
+
 ## The limit
 
 **The frontend decides meaning; nothing checks it against the typing spec

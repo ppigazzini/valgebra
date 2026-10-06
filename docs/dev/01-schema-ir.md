@@ -186,6 +186,16 @@ class declares"). No node was added for it, and no combinator: the annotation
 form the typing spec gives for "an object with these attributes" is the
 spelling, which is the surface rule.
 
+**A spelling for the class alone.** `instance_of(C)` is that spelling: the
+node is `Instance`, a generator the closure ledger already held, and a class
+that declares fields -- a dataclass, a `NamedTuple` -- had no annotation
+reaching it, since the frontend reads the class's name as the class met with
+its declaration. No node was added for it. It is a combinator rather than an
+annotation form because the typing form for "the instances of `C`" is `C`
+itself, which the declaration reading takes, and the alternatives to a
+combinator are refused in [03-frontend.md](03-frontend.md), "Refused, and the
+test each one fails".
+
 **A class-with-record node, so that a meet of two attribute-carrying classes
 renders as its two classes.** Refused. A dataclass lowers to
 `Instance ∧ AttrRecord`, and a meet of two flattens to four members, so

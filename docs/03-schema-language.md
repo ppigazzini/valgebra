@@ -993,6 +993,7 @@ different schema: a key whose name ends in `?`, which
 `TypedDict("TD", {"a?": int})` declares required and which renders as
 `{'a?': int, str: anything}`, the spelling of an optional `a`
 ([above](#a-key-name-that-ends-in-a-question-mark)); and a class met with a
-tuple shape, which prints as the class alone. Do not parse a repr to
+declaration it did not make -- a tuple shape, or a protocol's record -- which
+prints as the class's name. Do not parse a repr to
 recover structure — see [inspection](09-inspection.md) for asking a schema
 questions instead.
