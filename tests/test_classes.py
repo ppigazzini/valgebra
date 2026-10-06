@@ -1335,14 +1335,14 @@ def test_the_class_alone_of_a_named_tuple_reads_no_position() -> None:
 def test_a_class_whose_declaration_has_no_reading_has_a_class_alone() -> None:
     """The class alone reads no field, so a declaration with no reading has one.
 
-    A `Final` field, a type parameter and a self-reference each refuse a
+    A bare `Final` field, a type parameter and a self-reference each refuse a
     reading of the fields.
     """
     T = typing.TypeVar("T")
 
     @dataclasses.dataclass
     class Fixed:
-        a: typing.Final[int] = 1
+        a: typing.Final = 1
 
     @dataclasses.dataclass
     class Generic(typing.Generic[T]):
@@ -1397,3 +1397,53 @@ def test_the_class_alone_reads_back_as_itself() -> None:
         built = instance_of(cls)
         assert repr(built) == f"instance_of({cls.__name__})"
         assert eval(repr(built), names) == built  # noqa: S307
+
+
+@dataclasses.dataclass
+class _Constant:
+    a: typing.Final[int] = 1
+
+
+@dataclasses.dataclass
+class _Required:
+    a: typing.Final[int]
+
+
+@dataclasses.dataclass
+class _Narrowed:
+    a: typing.Final[Annotated[int, at.Ge(0)]] = 0
+
+
+@pytest.mark.parametrize(
+    ("cls", "member", "outsider"),
+    [
+        (_Constant, _Constant(2), _holding(_Constant, "x")),
+        (_Required, _Required(2), _holding(_Required, "x")),
+        (_Narrowed, _Narrowed(1), _Narrowed(-1)),
+    ],
+    ids=["with a default", "required", "narrowed"],
+)
+def test_a_final_field_holds_the_type_it_wraps(
+    cls: type, member: object, outsider: object
+) -> None:
+    """`Final[T]` on a dataclass field is a field holding a `T`.
+
+    The typing spec's sentence: `x: Final[int]` in a dataclass body specifies a
+    field `x` that is initialized by `__init__` and not assigned to after.
+    `Final` says the name is not rebound, which is not a question about the
+    value, so the field is read as the type it wraps.
+    """
+    schema = Validator(cls)
+    assert schema.is_valid(member)
+    assert not schema.is_valid(outsider)
+
+
+def test_a_final_field_without_a_type_is_refused() -> None:
+    """A bare `Final` names no type: a checker infers one from the default."""
+
+    @dataclasses.dataclass
+    class Inferred:
+        a: typing.Final = 1
+
+    with pytest.raises(NotImplementedError, match=r"typing\.Final"):
+        Validator(Inferred)

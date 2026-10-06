@@ -25,6 +25,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: open and close reach the record a mapping maps to
 - feat: instance_of reads a class alone, whatever it declares
 - fix: a typing form in metadata is not a predicate
+- feat: a Final field of a dataclass is read as the type it wraps
 
 -->
 
@@ -35,11 +36,17 @@ answer of its own, or a repair to a change not yet released.
   `NamedTuple`; `instance_of(C)` admits every instance, an ill-typed or unset
   field included, which is the set `isinstance` answers. It is the class atom
   the algebra already held, with a spelling: `Validator(C)` is proved below it,
-  and a dataclass whose declaration has no reading -- a `Final` field, a type
-  parameter, a self-reference -- has this one. For a class that declares
+  and a dataclass whose declaration has no reading -- a bare `Final` field, a
+  type parameter, a self-reference -- has this one. For a class that declares
   nothing it is `Validator(C)`. A `TypedDict` and a `Protocol` have no
   instances of their own and are refused, as `isinstance` refuses them. The
   atom of a declaring class prints as `instance_of(C)`.
+- **A `Final[T]` field of a dataclass is a field holding a `T`.** The typing
+  spec makes `x: Final[int]` in a dataclass body a field `x` that `__init__`
+  sets and nothing assigns after, and a class carrying one was refused whole.
+  `Final` says the name is not rebound, which is not a question about the
+  value, so the field is read as the type it wraps. A bare `Final`, whose type
+  a checker infers from the default, is still refused.
 
 ### Changed
 

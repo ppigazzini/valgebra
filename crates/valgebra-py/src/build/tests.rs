@@ -573,3 +573,49 @@ fn the_atom_of_a_class_with_fields_prints_as_instance_of() {
         }
     });
 }
+
+/// A `Final[T]` field of a dataclass holds a `T`: the qualifier says the name is
+/// not rebound, and the field is read through it. A field whose hint has an
+/// origin other than `Final` is read as written, and a bare `Final` names no
+/// type and is refused.
+#[test]
+fn a_final_field_of_a_dataclass_is_read_as_its_type() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"import dataclasses\n\
+              from typing import Final\n\
+              @dataclasses.dataclass\n\
+              class Fixed:\n\
+              \x20   a: Final[int] = 1\n\
+              @dataclasses.dataclass\n\
+              class Listed:\n\
+              \x20   a: list[int]\n\
+              @dataclasses.dataclass\n\
+              class Bare:\n\
+              \x20   a: Final = 1\n",
+            c"a_final_field_of_a_dataclass_is_read_as_its_type.py",
+            c"a_final_field_of_a_dataclass_is_read_as_its_type",
+        )
+        .expect("the corpus compiles");
+        let field = |name: &str| {
+            let class = module.getattr(name).expect("the corpus defines it");
+            let schema = build_schema(&class, &mut Pool::default(), &mut Vec::new())
+                .unwrap_or_else(|error| panic!("{name}: {error}"));
+            let Schema::Intersection(members) = schema else {
+                panic!("{name} is not a class met with its fields: {schema:?}");
+            };
+            members
+                .iter()
+                .find_map(|member| match member {
+                    Schema::AttrRecord { fields } => Some(fields[0].schema.clone()),
+                    _ => None,
+                })
+                .expect("a record of the fields")
+        };
+        assert_eq!(field("Fixed"), Schema::Int);
+        assert!(matches!(field("Listed"), Schema::Seq { .. }));
+        let bare = module.getattr("Bare").expect("the corpus defines it");
+        assert!(build_schema(&bare, &mut Pool::default(), &mut Vec::new()).is_err());
+    });
+}

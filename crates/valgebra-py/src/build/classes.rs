@@ -1139,6 +1139,12 @@ pub(super) fn build_object(
         let Some(hint) = hints.get_item(&name)? else {
             continue;
         };
+        // A class is never a `Final`, and most fields are one.
+        let hint = if hint.is_instance_of::<PyType>() {
+            hint
+        } else {
+            field_hint(hint)?
+        };
         fields.push(Field {
             name: field_name(&name.str()?)?.into(),
             schema: build_schema(&hint, lits, defs)?,
@@ -1158,6 +1164,31 @@ pub(super) fn build_object(
         return Ok(parts.remove(0));
     }
     Ok(Schema::meet(parts))
+}
+
+/// The hint a field's value is read against: the hint, or the type a `Final`
+/// wraps.
+///
+/// The typing spec makes `x: Final[int]` in a dataclass body a field `x` that
+/// holds an `int` and is not assigned to after `__init__`. `Final` says the
+/// attribute is not rebound, which is not a question about the value it holds
+/// -- the reading `ReadOnly` already has on a `TypedDict` key. A bare `Final`
+/// names no type, since a checker infers one from the default, and is left to
+/// the dispatch, which refuses it. The alias's own `__origin__` is read rather
+/// than calling `typing.get_origin`, so a field pays no Python call for it.
+///
+/// A class is never a `Final`, and the caller answers one without calling
+/// this: looking a missing `__origin__` up on `int` walks its whole `__mro__`,
+/// and a fifty-field dataclass paid 7% of its build for it, and the call
+/// itself, made for every field, cost another half percent.
+fn field_hint(hint: Bound<'_, PyAny>) -> PyResult<Bound<'_, PyAny>> {
+    let py = hint.py();
+    if let Some(origin) = hint.getattr_opt(intern!(py, "__origin__"))?
+        && origin.is(forms(py)?.final_qualifier.bind(py))
+    {
+        return hint.getattr(intern!(py, "__args__"))?.get_item(0);
+    }
+    Ok(hint)
 }
 
 /// The tuple shape a named tuple's fields lay out, or `None` for a class that

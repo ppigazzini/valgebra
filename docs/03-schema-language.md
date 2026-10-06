@@ -319,7 +319,7 @@ with a message instead:
 | `Self` | names the enclosing class, which a schema is built without |
 | `LiteralString` | a property of where a string came from, which a value does not carry |
 | `TypeVar`, `ParamSpec`, `TypeVarTuple` | a variable stands for a type and is not one |
-| `Final`, `ClassVar` | a declaration about a name, not about a value |
+| `Final`, `ClassVar` | a declaration about a name, not about a value; a dataclass field's `Final[T]` is read as `T` ([classes](#classes)) |
 | `Unpack[X]` | binds element types into a `tuple[...]`, so it has no meaning alone |
 | a user `Generic[T]` parametrisation | the parameter is erased at runtime, so the type argument narrows nothing |
 | bare `Protocol`, and a generic `Protocol[T]` | the base a protocol is declared from declares no member, and a protocol over a type parameter names one set per argument |
@@ -751,7 +751,11 @@ assert not Validator(Point).is_valid(Point(1, "y"))
 What a class **declares** is not every annotation on it. A `ClassVar` annotates
 the class and an `InitVar` names a constructor parameter, so neither is an
 attribute of an instance and neither is checked; a field declared
-`init=False` is on the instance and is.
+`init=False` is on the instance and is. A field declared `Final[int]` is a field
+holding an `int`, as the typing spec says of a dataclass: `Final` says the
+attribute is not assigned to after `__init__`, which is not a question about
+the value. A bare `Final` names no type -- a checker infers one from the
+default -- and the class is refused.
 
 That last one has an edge, and it is the check-only semantics showing through:
 a field with `init=False` and **no default** is not set by the constructor, so
@@ -946,8 +950,8 @@ assert Validator(Box).is_subtype_of(instance_of(Box))
 ```
 
 It reads nothing the class declares, so a dataclass whose declaration has no
-reading -- a `Final` field, a type parameter, a field naming the class itself
--- has this one. For any other class it is what `Validator` builds. A
+reading -- a bare `Final` field, a type parameter, a field naming the class
+itself -- has this one. For any other class it is what `Validator` builds. A
 `TypedDict` and a `Protocol` have no instances of their own, and are refused.
 
 ## Refinements

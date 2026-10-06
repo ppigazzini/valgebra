@@ -290,7 +290,9 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    of each declared field, so a value of the right class with a field of the
    wrong type is not a member. `instance_of` is this step with the declaration
    left unread (`build_instances` in `build/classes.rs`): the class's atom for
-   these two, and for every other class the node this step builds. A dataclass's fields are an attribute record; a
+   these two, and for every other class the node this step builds. A field
+   hint `Final[T]` is read as `T` (`field_hint`): the typing spec makes it a
+   dataclass field holding a `T`, and `Final` says the name is not rebound. A dataclass's fields are an attribute record; a
    named tuple's are the fixed tuple shape of its positions instead
    (`named_tuple_positions` in `build/classes.rs`), which carries the arity as
    well as the types. A field the hints do not carry — a `collections`
