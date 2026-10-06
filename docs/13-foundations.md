@@ -150,7 +150,7 @@ decided — because a superset's upper bound bounds a sublanguage. It says nothi
 of the atoms that language lacks: a pattern's inclusion is regular-language
 inclusion, a bound conjunction is integer arithmetic, and a predicate or a
 hooked class answers by running code. Neither bound is paid either way: the
-procedure runs under a fixed work budget and declines past it.
+procedure runs under a budget of decision steps and declines past it.
 
 valgebra does not need that decision to validate: membership is answered
 directly by the walk, not by reducing the schema. So the library is honest about

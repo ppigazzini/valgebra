@@ -25,7 +25,8 @@ fields) is written by the developer and is trusted.
   constructor, the `|` operator, `union`, `intersection`, `complement`,
   `recursive`, and the record transforms — is bounded at construction, so no sequence of
   calls can build a schema that overflows the stack or exhausts memory on a later
-  walk. Three bounds apply, and passing any one raises `ValueError`:
+  walk. The bound is on the schema built, not on the work of building it
+  ([what the bounds do not bound](#what-the-bounds-do-not-bound)). Three bounds apply, and passing any one raises `ValueError`:
     - **depth** — at most `MAX_SCHEMA_DEPTH` levels of structural nesting,
       128 (a chain built in a loop, such as repeatedly wrapping a validator in
       a set or a union). Every node counts one level, containers and the leaf
@@ -108,6 +109,35 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   value. Without it every failure of the chosen branch is reported, so the
   report grows with the value; a service answering untrusted input with the
   report asks for it with `fail_fast`.
+
+## What the bounds do not bound
+
+Each bound above caps a size -- a depth, a count of nodes, of definitions or of
+decision steps. None caps time, and four costs grow inside them:
+
+- **A value is walked as a tree.** The identity guard is a loop guard on the
+  current path, so a sub-object reached by two paths is walked once per path.
+  `x = [x, x]` repeated twenty times is twenty lists and a million paths to
+  the value at the bottom, and each level of sharing doubles the walk. A JSON document cannot share a
+  sub-object; a value built in Python, unpickled or loaded from a YAML document
+  with aliases can.
+- **The node bound is asked of the schema that results.** The combinators
+  refuse step by step, so a loop of `|` stops at the step that crosses it. One
+  `Validator(spec)` call reads the whole annotation first: `tuple[s, s]`
+  nested twenty times names two million nodes and is built before it is refused,
+  in time and memory that double with each level. The annotation is the
+  author's.
+- **A relation's budget counts steps, not their size.** A query spends at most
+  a million decision steps, and a step whose work is linear in a leaf it reads
+  is one step whatever the leaf holds. So a relation over a large leaf costs
+  time in proportion to it inside the budget: `int` against a union of
+  thousands of literals grows with the square of their number before it
+  answers undecided.
+- **A walk does not stop for a signal.** No walk or relation asks the
+  interpreter for pending signals, so a `KeyboardInterrupt` raised while one
+  runs arrives when it returns. Asking would cost every element of every walk
+  to serve the shapes above, which a service bounds by what it accepts: a
+  document's size, a decoder without aliases, a schema it wrote.
 
 ## Rejection is clean, not catastrophic
 

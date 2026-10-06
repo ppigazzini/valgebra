@@ -626,9 +626,10 @@ impl Validator {
     /// length above a maximum), or a recursive schema with no base case (a
     /// mandatory self-reference that can never bottom out). It never reports a
     /// satisfiable schema as empty; for forms it cannot decide it returns `False`.
-    /// The decision is also bounded by a fixed work budget, so on a deeply nested
-    /// adversarial schema a `False` can mean "not proven empty within the bound"
-    /// rather than "non-empty"; a real schema decides far inside the bound.
+    /// The decision is also bounded by a budget of decision steps, so on a deeply
+    /// nested adversarial schema a `False` can mean "not proven empty within the
+    /// bound" rather than "non-empty"; a real schema decides far inside the
+    /// bound. The budget counts steps, not time.
     ///
     /// A `False` therefore carries two cases -- a value belongs, or nothing
     /// proves none does -- and telling them apart is a relation away.
@@ -658,9 +659,9 @@ impl Validator {
     /// class of a base class). For the forms it cannot decide — an alternation of
     /// sequence shapes, or a leaf relation the oracle declines — it returns
     /// `False` rather than a relation it cannot justify. The decision is bounded by
-    /// a fixed work budget, so on a deeply nested adversarial schema a `False` can
-    /// mean "not proven a subtype within the bound"; a real schema decides far
-    /// inside the bound.
+    /// a budget of decision steps, so on a deeply nested adversarial schema a
+    /// `False` can mean "not proven a subtype within the bound"; a real schema
+    /// decides far inside the bound. The budget counts steps, not time.
     ///
     /// Nothing is inferred from a predicate refinement, but one may be **called**:
     /// deciding whether a literal is a subtype of a refinement decides whether the
@@ -698,7 +699,7 @@ impl Validator {
     /// `"undecided"` is neither, and the schemas it happens for are the
     /// conservative boundary that page describes -- an alternation of sequence
     /// shapes, a leaf relation the oracle declines, a query that spends its
-    /// work budget.
+    /// budget of decision steps.
     ///
     /// What `"subset"` proves is inclusion between two sets of values, not a
     /// static checker's assignability, which is a relation between
@@ -738,8 +739,9 @@ impl Validator {
     /// `other` is any schema spec or compiled validator. Sound, like
     /// `is_subtype_of`: `True` only when the two are provably equivalent,
     /// whatever their syntax (`bool | int` is equivalent to `int`). Bounded by the
-    /// same work budget as `is_subtype_of`, so on a deeply nested adversarial
-    /// schema a `False` can mean "not proven equivalent within the bound".
+    /// same budget of decision steps as `is_subtype_of`, so on a deeply nested
+    /// adversarial schema a `False` can mean "not proven equivalent within the
+    /// bound".
     ///
     /// Mutual inclusion, so it calls back into Python wherever `is_subtype_of`
     /// does.
