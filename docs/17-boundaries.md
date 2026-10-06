@@ -102,6 +102,22 @@ a protocol of `x`, whatever a checker says about it. And a special method set on
 the instance satisfies a protocol's member as any attribute does, though `len()`
 and the other operators read it from the type.
 
+A class is its instances at run time, which is not always what a stub says.
+The stubs declare that `open()` returns a `typing.TextIO`, and no stream derives
+from that class: `isinstance(io.StringIO(), typing.TextIO)` is `False`, so
+`Validator(typing.TextIO)` admits no stream either. The class the streams do
+derive from is `io.TextIOBase`, and that is the one to write:
+
+```python
+import io
+import typing
+
+from valgebra import Validator
+
+assert not Validator(typing.TextIO).is_valid(io.StringIO())
+assert Validator(io.TextIOBase).is_valid(io.StringIO())
+```
+
 ## It cannot see a generic's arguments on a value
 
 Python erases them. A `list` at runtime is a list of whatever it holds, so
