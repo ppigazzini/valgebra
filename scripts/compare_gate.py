@@ -1,18 +1,27 @@
-"""Competitive performance gate: valgebra against pydantic-core, by ratio.
+"""Competitive performance gate: valgebra against pydantic, by ratio.
 
-The headline performance claim is that valgebra is pydantic-core-class on the
+The headline performance claim is that valgebra is as fast as pydantic on the
 check it shares. This gate measures that claim across a matrix of realistic
 schema/payload shapes and compares each shape's *ratio* of per-call time
-(valgebra / pydantic-core) against a recorded baseline. A ratio cancels the
+(valgebra / pydantic) against a recorded baseline. A ratio cancels the
 runner's absolute speed -- if the machine is slow, both libraries are slow in
 proportion -- so it survives the shared-runner noise that an absolute wall-clock
 budget cannot. Each per-call time is the minimum over many repeats, the stable
 estimator that scheduling jitter inflates but never deflates.
 
+**The pydantic side is the entry point a caller holds,** not pydantic-core:
+``TypeAdapter.validate_python`` in strict mode, called through a lambda. That
+is a Python frame and a keyword argument a direct ``SchemaValidator`` call does
+not pay, and on the scalar shape it is most of pydantic's time -- against
+``SchemaValidator`` that shape reads about 1.0, where the ceiling against the
+adapter is 0.30, on one box with a release build and no profile. A shape
+walking a container spends its time inside the core on both sides, and the
+frame moves its ratio little.
+
 **The ceiling is a claim, not a measurement.** Each shape carries the ratio it
 must stay under, chosen with headroom over what the shape measures and written
-down as what the project says of itself -- "at most this much of pydantic-core
-here". A recorded measurement would be a fourth number that travels badly: the
+down as what the project says of itself -- "at most this much of pydantic's
+time here". A recorded measurement would be a fourth number that travels badly: the
 two libraries respond differently to a PGO build and to an interpreter version,
 so a ratio recorded in one environment is not the ratio of another. The gap is
 the interpreter rather than the box: on a single machine a schema nested
@@ -22,7 +31,7 @@ of a mutable container takes that container's lock. A claim
 does not move when the environment does, and changing one is an edit somebody
 argues for.
 
-So this gate is the coarse tripwire: it catches ceding ground to pydantic-core,
+So this gate is the coarse tripwire: it catches ceding ground to pydantic,
 on any machine, with no re-recording. The fine-grained work is
 ``scripts/perf_gate.py --against``, which compares a change to its own merge
 base under cachegrind at 2%.
@@ -460,7 +469,7 @@ def _verdict(
         return EXIT_FAIL
     if over:
         print(f"\nOVER CEILING on: {', '.join(over)}")
-        print("valgebra ceded ground to pydantic-core here, or the ceiling was")
+        print("valgebra ceded ground to pydantic here, or the ceiling was")
         print("always wrong. Both are edits somebody argues for.")
         return EXIT_FAIL
     if moved:

@@ -50,7 +50,7 @@ What each spelling reads as:
 | a class: `int`, a dataclass, `list[int]`, `tuple[int, str]`, a `TypedDict` | `Validator` of that type |
 | a compiled validator | its own type |
 | `None` | `Validator[None]` |
-| a runtime-checkable `Protocol` | the protocol under ty and pyright; `object` under mypy |
+| a `Protocol`, runtime-checkable or not | the protocol under ty and pyright; `object` under mypy |
 | a `NewType` | the new type under mypy; `object` under ty and pyright |
 | `int \| None`, `Optional[int]`, `Literal[...]`, `Annotated[...]` | `Validator[object]` |
 | a dict or list literal, a constant, a value typed `object` | `Validator[object]` |
@@ -191,9 +191,17 @@ immutable and hashable, so one built there is the intended shared value.
 
 ## What this does not cover
 
-- **A checker's type is an upper bound, not the set.** `Validator(Point)` reads
-  as `Point` and admits only the points whose fields are members too; nothing
-  here makes a checker run the validator.
+- **A checker's type is an upper bound, not the set, except at a signature.**
+  `Validator(Point)` reads as `Point` and admits only the points whose fields
+  are members too; nothing here makes a checker run the validator. A callable
+  is checked for being callable and no more
+  ([a callable is not looked inside](17-boundaries.md#it-cannot-look-inside-a-callable)),
+  so where the type names a signature the set is wider than the type: a
+  protocol with a method, or a class with a field typed `Callable[[int], float]`,
+  admits a value whose method or field takes other arguments. Under ty and
+  pyright a `True` from `is_valid` narrows that value to the protocol, and the
+  call the protocol promises can raise `TypeError`; mypy reads a protocol's
+  validator as `Validator[object]` and narrows nothing.
 - **An editor shows the types, not the prose.** The stub carries no docstrings,
   as a stub does by convention (ruff's `PYI021`); the prose is on the compiled
   objects, where `help()` reads it, and on the [API reference](16-api.md).

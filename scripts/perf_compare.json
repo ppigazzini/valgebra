@@ -1,5 +1,5 @@
 {
-  "_comment": "The ratio of valgebra to pydantic-core each shape must stay under: a claim the project makes, not a measurement it recorded. The argument for the ceilings, for the recorded block beside them and for the one shape excluded from it is docs/dev/07-tooling-ci.md, under 'The competitive ratio' -- a page the documentation lint reads and this file is not. Changing a ceiling or re-recording a ratio is an edit with an argument in its commit message; scripts/perf_gate.py --against is the fine-grained gate.",
+  "_comment": "The ratio of valgebra to pydantic's strict TypeAdapter each shape must stay under: a claim the project makes, not a measurement it recorded. The argument for the ceilings, for the recorded block beside them and for the one shape excluded from it is docs/dev/07-tooling-ci.md, under 'The competitive ratio' -- a page the documentation lint reads and this file is not. Changing a ceiling or re-recording a ratio is an edit with an argument in its commit message; scripts/perf_gate.py --against is the fine-grained gate.",
   "ceilings": {
     "scalar": 0.3,
     "large_array": 0.3,

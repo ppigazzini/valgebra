@@ -60,9 +60,12 @@ class Validator(Generic[_T]):
     # The overloads say `object` wherever the static reading and the set part,
     # and a type only where every member of the set is a member of the type:
     # a compiled validator keeps its set; a class, parametrized or not, is at
-    # most the instances it names; `None` is `None`. Anything else -- a union
-    # written with `|`, a `Literal`, an `Annotated`, a native form, a constant --
-    # is `object`, since no overload before `TypeForm` can read it as a type.
+    # most the instances it names; `None` is `None`. The one exception is a
+    # signature: a protocol's method and a `Callable[...]` field are checked
+    # for being callable, so there the set is wider than the type. Anything
+    # else -- a union written with `|`, a `Literal`, an `Annotated`, a native
+    # form, a constant -- is `object`, since no overload before `TypeForm` can
+    # read it as a type.
     #
     # pyright reports the first overload as overlapping the last with a return
     # that is not assignable to it: the parameter is invariant, so a

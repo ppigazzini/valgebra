@@ -514,7 +514,8 @@ moves.
 
 ### The competitive ratio
 
-`scripts/compare_gate.py` compares per-call time against pydantic-core across a
+`scripts/compare_gate.py` compares per-call time against pydantic's strict
+`TypeAdapter.validate_python`, the entry point a caller holds, across a
 shape matrix -- the accept walk, a large array, a wide record, deep nesting, a
 JSON document, compilation, and the report a failure builds -- as a **ratio**.
 A ratio cancels the runner's absolute speed, which is what lets a wall-clock

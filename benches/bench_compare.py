@@ -1,4 +1,4 @@
-"""Comparison benchmarks: valgebra against pydantic-core and jsonschema.
+"""Comparison benchmarks: valgebra against pydantic and jsonschema.
 
 The same synthetic shapes run through three checkers so the recorded baseline in
 ``docs/11-performance.md`` is reproducible. The three do not do identical work, and

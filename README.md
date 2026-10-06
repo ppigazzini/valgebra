@@ -262,10 +262,10 @@ runs all three libraries over the same values and asserts every claim here.
 **An object you already hold is re-examined.** Handed a value that is already an
 instance of the target class, `TypeAdapter.validate_python` returns it without
 checking its fields, and `msgspec.convert` returns it under `strict` and
-`from_attributes` alike. pydantic's re-check is a *model config*
-(`revalidate_instances`), so reaching it requires pydantic to own the class
-declaration — for a dataclass declared elsewhere `TypeAdapter` raises
-`PydanticUserError` rather than ignoring the setting. msgspec has no such
+`from_attributes` alike. pydantic's re-check is a config it reads off the
+class (`revalidate_instances`): `TypeAdapter` raises `PydanticUserError` rather
+than take it, so a class re-checks only once its declaration, or a
+`__pydantic_config__` attribute set on it, asks to. msgspec has no such
 setting: its checking runs on the decode path, from untyped input. valgebra
 reads the schema off the class, and every call asks the same membership
 question.

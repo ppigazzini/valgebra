@@ -66,16 +66,32 @@ The syntax is Python 3.12 and later. On 3.10 and 3.11, write the fixpoint with
 
 ## Why classes need it
 
-A class whose own type appears in a field is recursive in the same way, but a
-class definition has no place to tie the fixpoint. Compiling such a class
-directly is rejected with a message pointing here; model it with `recursive` instead:
+A class whose own type appears in a field is recursive in the same way, and a
+class definition has no place to tie the fixpoint, so building a validator for
+one is refused with a message pointing here -- a dataclass, a `NamedTuple` and a
+`TypedDict` alike. `recursive` spells the shape as containers instead: the
+record below admits the nested dicts a recursive `TypedDict` describes, and
+refuses every instance of the dataclass, which is not a dict. No form spells
+"an instance of `Node` whose `next` is the fixpoint", so a self-referential
+dataclass or `NamedTuple` cannot be deep-checked here.
 
 ```python
+from __future__ import annotations
+
+from dataclasses import dataclass
+
 from valgebra import recursive
 
-# instead of a self-referential @dataclass Node, write the shape with recursive:
+
+@dataclass
+class Node:
+    value: int
+    next: Node | None = None
+
+
 node = recursive(lambda n: {"value": int, "next?": n})
 assert node.is_valid({"value": 1, "next": {"value": 2}})
+assert not node.is_valid(Node(1, Node(2)))  # an instance is not a dict
 ```
 
 ## Soundness guarantees

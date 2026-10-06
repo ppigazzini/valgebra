@@ -116,16 +116,29 @@ def test_constructed_instance_is_rechecked_where_pydantic_passes_it_through() ->
     assert not Validator(Config).is_valid(bad)
 
 
-def test_instance_revalidation_cannot_be_enabled_from_the_adapter() -> None:
+def test_instance_revalidation_is_read_off_the_class_not_the_adapter() -> None:
     """The re-check switch belongs to the class, not to the adapter.
 
-    ``revalidate_instances`` is a model config, so reaching it means pydantic
-    must own the class definition. For a dataclass declared elsewhere -- a
-    third-party type, or one that must stay a plain dataclass -- the adapter
-    refuses the config outright rather than ignoring it.
+    ``revalidate_instances`` is a config pydantic reads off the class: the
+    adapter refuses it outright rather than ignoring it, and a stdlib dataclass
+    carrying it as ``__pydantic_config__`` -- an attribute anyone can set, from
+    outside the declaration -- is re-checked and stays a plain dataclass.
     """
     with pytest.raises(pydantic.errors.PydanticUserError):
         TypeAdapter(Config, config=ConfigDict(revalidate_instances="always"))
+
+    @dataclass
+    class Configured:
+        lr: float
+        steps: int
+
+    Configured.__pydantic_config__ = ConfigDict(  # ty: ignore[unresolved-attribute]
+        revalidate_instances="always"
+    )
+    bad = _unchecked(Configured, lr=0.1, steps="ten")
+    with pytest.raises(pydantic.ValidationError):
+        TypeAdapter(Configured).validate_python(bad)
+    assert not pydantic.dataclasses.is_pydantic_dataclass(Configured)
 
 
 def test_pydantic_rechecks_a_class_it_owns() -> None:

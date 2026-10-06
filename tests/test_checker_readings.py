@@ -139,10 +139,23 @@ ROWS: tuple[Reading, ...] = (
         pyright="Validator[HasX]",
         moves=(
             "mypy does not match a protocol class against `type[_S]`; ty and "
-            "pyright do. A protocol validator is `isinstance` over the "
-            "protocol, which is the set the type names, so either reading is "
-            "sound. When mypy joins the other two, the protocol row of "
-            "`docs/18-static-checking.md` moves."
+            "pyright do. A protocol validator is the protocol's member record, "
+            "which reads a method member as being callable and no more, so the "
+            "typed reading is wider than the set where a member names a "
+            "signature, as `docs/18-static-checking.md` says. When mypy joins "
+            "the other two, the protocol row of that page moves."
+        ),
+    ),
+    Reading(
+        "protocol_plain",
+        ty="Validator[HasY]",
+        mypy="Validator[object]",
+        pyright="Validator[HasY]",
+        moves=(
+            "A protocol that is not runtime-checkable is the same member "
+            "record, and each checker reads it as it reads the "
+            "runtime-checkable one. When the two rows part, the protocol row "
+            "of `docs/18-static-checking.md` splits."
         ),
     ),
     Reading(

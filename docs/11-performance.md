@@ -176,7 +176,7 @@ scan, the comparison gate's list nested twenty-five deep takes 64% longer in the
 PGO wheel, 405 ns against 245 on one box, while the instruction gate, which
 builds without a profile, reads 0.9%. So the workload reads a list of records
 and a list nested twenty-five deep, and trained on them that shape reads 0.13 of
-pydantic-core's time on CPython 3.14.
+pydantic's time on CPython 3.14.
 
 The same holds for a reader the workload never enters: the lists a reader of
 their own settles -- a union of literals, one class, a union of scalars, a tuple
@@ -315,7 +315,7 @@ The table above holds four of the shapes the competitive gate judges;
 `scripts/perf_compare.json` names every one with the ceiling the project claims
 for it, and `scripts/compare_gate.py` prints each beside its ceiling. A record of
 only the wide margins would be a selection, so here are the two closest, as the
-fraction of pydantic-core's time each takes, on a PGO CPython 3.12 build:
+fraction of pydantic's time each takes, on a PGO CPython 3.12 build:
 
 | Shape | ratio | spread across runs |
 | --- | --- | --- |
@@ -323,7 +323,7 @@ fraction of pydantic-core's time each takes, on a PGO CPython 3.12 build:
 | Error report, 50-field record with one wrong field | 0.46 | 0.060 over twelve runs |
 
 The JSON document is a single pass over bytes for both libraries, which is why
-valgebra takes two thirds of pydantic-core's time here rather than a fraction:
+valgebra takes two thirds of pydantic's time here rather than a fraction:
 neither is spending its time in the check. A document's free-form sections are
 `dict[str, V]`, and covering their keys is read two ways -- in place for a
 narrow object, through a table of last values for a wide one
@@ -979,12 +979,19 @@ human; the counts belong to the budget file and are not repeated here.
 The end-to-end wall-clock suites run on the same CI lane with timing disabled,
 as a smoke test that they keep working.
 
-The headline claim — that valgebra is pydantic-core-class — is gated too, by
-`scripts/compare_gate.py`. For each shape in a matrix it measures the *ratio* of
-per-call time (valgebra over pydantic-core), taking the minimum over many repeats,
-and holds it under the ceiling `scripts/perf_compare.json` states for that shape
--- what the project claims, not what it measured -- and, where the file carries
-a ratio recorded in the same environment, within that shape's tolerance of it. A
+The headline claim — that valgebra's check is as fast as pydantic's — is gated
+too, by `scripts/compare_gate.py`. For each shape in a matrix it measures the
+*ratio* of per-call time (valgebra over pydantic's strict
+`TypeAdapter.validate_python`, called through a lambda as a caller holds it),
+taking the minimum over many repeats, and holds it under the ceiling
+`scripts/perf_compare.json` states for that shape -- what the project claims,
+not what it measured -- and, where the file carries a ratio recorded in the same
+environment, within that shape's tolerance of it. The lambda and the adapter are
+a Python frame a direct pydantic-core `SchemaValidator` call does not pay, and
+on a scalar that frame is most of pydantic's time: against `SchemaValidator`
+the scalar shape reads about 1.0, where its ceiling against the adapter is 0.30,
+on one box with a release build and no profile. So the ratio is to what a caller
+reaches, not to pydantic-core. A
 ratio cancels the runner's absolute speed: if the machine is slow, both
 libraries are slow in proportion, so the comparison survives the shared-runner
 noise an absolute budget cannot. A shape fails the merge gate when valgebra's
