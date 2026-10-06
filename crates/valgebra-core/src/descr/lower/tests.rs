@@ -1902,6 +1902,40 @@ fn a_subject_keyed_by_literals_alone_proves_through_the_labels() {
     );
 }
 
+/// A union of literal keys is read as its labels, as each literal alone is: a
+/// record is not proved below `dict[Literal["a", "b"], int]`, because
+/// `{MyStr("a"): 1}` is in the record and its key is no literal's.
+///
+/// The property above draws such a key among others; this holds the union arm
+/// of the reading on its own, since a draw can miss it.
+#[test]
+fn a_union_of_literal_keys_proves_nothing_on_the_narrowed_side() {
+    let pool = Pool(vec![
+        Operand::Word(b"a".to_vec(), Kind::Str),
+        Operand::Word(b"b".to_vec(), Kind::Str),
+    ]);
+    let literal = |slot| Schema::Literal(ConstIx::new(slot));
+    let record = Schema::keyed_map(
+        vec![Field {
+            name: "a".into(),
+            schema: Schema::Int,
+            required: true,
+        }],
+        Vec::new(),
+    );
+    let either = Schema::keyed_map(
+        Vec::new(),
+        vec![MapClause {
+            key: Schema::union([literal(0), literal(1)]),
+            value: Schema::Int,
+        }],
+    );
+    assert_ne!(
+        record.descriptor_contained_in(&either, &pool, &[]),
+        Relation::Holds
+    );
+}
+
 /// A literal key nested in a value proves nothing on the narrowed side, even
 /// under a subject keyed by literals: the subject's top keys are exact, and
 /// the dict below them is a record's, which holds a subclass key.

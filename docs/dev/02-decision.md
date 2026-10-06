@@ -72,7 +72,10 @@ right, so a value found in it need be no value of the real difference. Its
 empty answer has the mirror condition: a literal key is read as a label, which
 also holds the subclass keys equal to it, so an empty difference proves the
 inclusion only where no such label is subtracted from a dict that can hold a
-subclass key (`an_empty_reading_stands` in `descr/lower.rs`).
+subclass key (`an_empty_reading_stands` in `descr/lower.rs`). A union of
+literal keys is read as its labels, as each literal alone is, and
+`a_union_of_literal_keys_proves_nothing_on_the_narrowed_side` holds that arm
+on its own, since the property that draws such keys can miss it.
 
 **A refutation stands on a value.** The descriptor's is direct: it proves the
 difference `a & ~b` holds one. A rule's is a mismatch of shapes -- two arities
