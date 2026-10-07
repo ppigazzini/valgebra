@@ -18,13 +18,36 @@ use valgebra_core::{
 };
 
 use crate::errors::summarize;
-use crate::validator::Validator;
+use crate::validator::{MAX_SCHEMA_NODES, Validator};
+
+/// The `build_schema` recursion running on this thread, read and written once on
+/// each side of a descent.
+struct Build {
+    /// How deep it is, bounding it so a self-referential class (whose field type
+    /// names the class) fails cleanly instead of recursing until the native
+    /// stack overflows.
+    depth: Cell<usize>,
+    /// How many descents it has made, which decides how a result is counted.
+    descents: Cell<usize>,
+    /// The schema nodes it holds: what its finished descents returned that
+    /// their parents have not yet been built from.
+    ///
+    /// An annotation names a class, an alias or any annotation object once,
+    /// and the frontend builds it once per place it is named -- so a part
+    /// shared through several levels is built as a tree whose size multiplies
+    /// with each level. Holding the count to the node bound as the build goes
+    /// is what refuses that tree instead of building it.
+    held: Cell<usize>,
+}
 
 thread_local! {
-    /// Depth of the current `build_schema` recursion, bounding it so a
-    /// self-referential class (whose field type names the class) fails cleanly
-    /// instead of recursing until the native stack overflows.
-    static BUILD_DEPTH: Cell<usize> = const { Cell::new(0) };
+    static BUILD: Build = const {
+        Build {
+            depth: Cell::new(0),
+            descents: Cell::new(0),
+            held: Cell::new(0),
+        }
+    };
 
     /// The PEP 695 aliases whose bodies are being built on this thread.
     ///
@@ -120,19 +143,56 @@ fn build_alias(
 /// `checked` had already refused it.
 const MAX_BUILD_DEPTH: usize = crate::validator::MAX_SCHEMA_DEPTH + 1;
 
-/// RAII guard that bounds `build_schema` recursion. Entering past the bound is an
-/// error; leaving (including on an early `?`) restores the depth.
-struct BuildGuard;
+/// RAII guard over one `build_schema` descent: it bounds the recursion's depth
+/// and holds what the build has built to the node bound. Entering past either
+/// bound is an error; leaving (including on an early `?`) restores the depth and
+/// leaves what the descent built counted.
+///
+/// **What a result counts for.** A descent's result is built from the parts
+/// the descents below it returned and replaces them, so the count is every
+/// finished part still waiting for its parent. A leaf counts one; a result
+/// built from parts counts them and nothing of its own, which is what keeps an
+/// alias or `NotRequired[...]` -- a descent passing its one part through -- from
+/// counting that part twice; a compiled validator named in an annotation, the
+/// one form bringing many nodes in one descent, counts every node of its schema
+/// (`hold_compiled`). So the count is never more than `Validator::checked`
+/// counts of the schema returned, except where a fold drops a part -- a member a
+/// union absorbs into `Any` still counts -- and a schema within the bound is
+/// never refused here.
+///
+/// **Past as many descents as the bound, a result is counted by a walk.** A
+/// count of leaves leaves out the nodes above them, and a build that names a
+/// chain of containers from many places builds many more nodes than leaves. A
+/// build that has made more descents than the bound walks each result it
+/// returns from then on, whose nodes then count exactly; a smaller one never
+/// walks.
+///
+/// **The bound is asked as a descent begins.** A descent that finds the build
+/// holding more than the bound refuses, which is the step after the one that
+/// passed it, and the result a finished descent hands back is never replaced:
+/// the build makes nothing past the bound but the step that crossed it, and a
+/// crossing at the last step is `Validator::checked`'s to refuse.
+struct BuildGuard {
+    /// What the build held when this descent began.
+    before: usize,
+    /// Whether the build had made more descents than the node bound when this
+    /// one began, so that its result is counted by a walk.
+    walks: bool,
+    /// The nodes its result spans, where it was counted by a walk.
+    walked: Option<usize>,
+}
 
 impl BuildGuard {
     fn enter() -> PyResult<Self> {
-        let depth = BUILD_DEPTH.with(|cell| {
-            let depth = cell.get() + 1;
-            cell.set(depth);
-            depth
+        let (depth, descents, before) = BUILD.with(|build| {
+            let depth = build.depth.get() + 1;
+            build.depth.set(depth);
+            let descents = build.descents.get() + 1;
+            build.descents.set(descents);
+            (depth, descents, build.held.get())
         });
         if depth > MAX_BUILD_DEPTH {
-            BUILD_DEPTH.with(|cell| cell.set(cell.get() - 1));
+            BUILD.with(|build| build.depth.set(depth - 1));
             return Err(not_implemented(
                 format!(
                     "schema nesting is too deep to compile: the frontend descended \
@@ -144,13 +204,62 @@ impl BuildGuard {
                 .as_str(),
             ));
         }
-        Ok(BuildGuard)
+        if before > MAX_SCHEMA_NODES {
+            BUILD.with(|build| build.depth.set(depth - 1));
+            return Err(too_large(before));
+        }
+        Ok(BuildGuard {
+            before,
+            walks: descents > MAX_SCHEMA_NODES,
+            walked: None,
+        })
     }
+}
+
+/// The refusal of a build holding `held` nodes, out of the descent's line: it
+/// is built once per refused annotation and never on the way to a schema.
+#[cold]
+#[inline(never)]
+fn too_large(held: usize) -> PyErr {
+    PyValueError::new_err(format!(
+        "schema is too large: reading this annotation counts {held} nodes before it \
+         finishes, past the limit of {MAX_SCHEMA_NODES}. Each class, alias or \
+         annotation object is built once per place it is named, so a part shared \
+         through several levels multiplies the size with each; the frontend \
+         refuses at the step after the one that passes the limit rather than \
+         building the rest."
+    ))
+}
+
+/// Hold a compiled validator's schema, named in an annotation, as nodes of the
+/// descent naming it: every one of them, the top included.
+fn hold_compiled(schema: &Schema) {
+    let nodes = schema.node_count();
+    BUILD.with(|build| build.held.set(build.held.get() + nodes));
 }
 
 impl Drop for BuildGuard {
     fn drop(&mut self) {
-        BUILD_DEPTH.with(|cell| cell.set(cell.get() - 1));
+        BUILD.with(|build| {
+            let depth = build.depth.get() - 1;
+            build.depth.set(depth);
+            let held = build.held.get();
+            // A failed descent fails every descent above it, so what it leaves
+            // counted is read by no other.
+            build.held.set(if depth == 0 {
+                // The outermost leaves nothing, so the next build starts from
+                // an empty count.
+                build.descents.set(0);
+                0
+            } else if let Some(nodes) = self.walked {
+                self.before + nodes
+            } else if held == self.before {
+                // A leaf: nothing was built below it.
+                held + 1
+            } else {
+                held
+            });
+        });
     }
 }
 
@@ -450,7 +559,48 @@ pub(crate) fn build_schema(
     lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
-    let _guard = BuildGuard::enter()?;
+    let mut guard = BuildGuard::enter()?;
+    if !guard.walks {
+        return read_annotation(obj, lits, defs);
+    }
+    let built = read_apart(obj, lits, defs);
+    guard.walked = built.as_ref().ok().map(Schema::node_count);
+    built
+}
+
+/// [`read_annotation`] in a frame of its own, for a build past as many descents
+/// as the node bound, which walks each result.
+///
+/// The dispatch is inlined into [`build_schema`] for the descent every build
+/// takes, and a second copy there is a second set of slots in every unoptimized
+/// descent: with both in one frame, the 129-level chain of
+/// `the_build_descends_one_level_past_the_construction_bound` needed 2,146 KiB
+/// of stack on 3.11, past the 2 MiB a test thread is given, against 1,673 KiB
+/// with one.
+#[cold]
+#[inline(never)]
+fn read_apart(obj: &Bound<'_, PyAny>, lits: &mut Pool, defs: &mut Vec<Schema>) -> PyResult<Schema> {
+    read_annotation(obj, lits, defs)
+}
+
+/// One descent of [`build_schema`] inside its guard: the dispatch on what `obj`
+/// is.
+///
+/// Inlined at both of its call sites -- the one every descent takes, and
+/// [`read_apart`] -- because a call to a function this size costs each
+/// descent a frame of its own: the fifty-field record build of
+/// `scripts/perf_gate.py --binding-build` read +2.44% against its base with the
+/// call and +1.64% inlined.
+#[expect(
+    clippy::inline_always,
+    reason = "measured: a call per descent read +2.44% on the record build, inlined +1.64%"
+)]
+#[inline(always)]
+fn read_annotation(
+    obj: &Bound<'_, PyAny>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
     let py = obj.py();
     if obj.is_none() {
         return Ok(Schema::NoneType);
@@ -509,7 +659,9 @@ pub(crate) fn build_schema(
     // Asked exactly, which a class with no subclass answers as `cast` would,
     // without the walk of the object's `__mro__` a subclass test takes.
     if let Ok(compiled) = obj.cast_exact::<Validator>() {
-        return Ok(compose(py, compiled.get(), lits, defs));
+        let schema = compose(py, compiled.get(), lits, defs);
+        hold_compiled(&schema);
+        return Ok(schema);
     }
 
     // Annotated[T, m1, ...]: the base type T with refinement metadata.

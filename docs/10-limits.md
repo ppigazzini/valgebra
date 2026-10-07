@@ -25,8 +25,7 @@ fields) is written by the developer and is trusted.
   constructor, the `|` operator, `union`, `intersection`, `complement`,
   `recursive`, and the record transforms — is bounded at construction, so no sequence of
   calls can build a schema that overflows the stack or exhausts memory on a later
-  walk. The bound is on the schema built, not on the work of building it
-  ([what the bounds do not bound](#what-the-bounds-do-not-bound)). Three bounds apply, and passing any one raises `ValueError`:
+  walk. Three bounds apply, and passing any one raises `ValueError`:
     - **depth** — at most `MAX_SCHEMA_DEPTH` levels of structural nesting,
       128 (a chain built in a loop, such as repeatedly wrapping a validator in
       a set or a union). Every node counts one level, containers and the leaf
@@ -41,7 +40,13 @@ fields) is written by the developer and is trusted.
       back edge counts as a leaf);
     - **nodes** — at most 100,000 total schema nodes (a shallow but exponentially
       wide schema, such as combining a validator with itself in a loop, which
-      doubles its node count each step).
+      doubles its node count each step). The constructor holds it while it
+      reads: a class, an alias or any annotation object is built once per place
+      it is named, so a part shared through several levels multiplies the
+      schema's size with each, and the frontend refuses at the step after the
+      one that passes the bound rather than building the rest. It counts what
+      it holds, and a part a fold drops -- a member a union absorbs into `Any`
+      -- still counts toward the union that dropped it.
 
   A real schema stays far under all three. Structural recursion belongs in
   [`recursive`](06-recursion.md), whose back edge does not count toward the depth.
@@ -113,7 +118,7 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
 ## What the bounds do not bound
 
 Each bound above caps a size -- a depth, a count of nodes, of definitions or of
-decision steps. None caps time, and four costs grow inside them:
+decision steps. None caps time, and three costs grow inside them:
 
 - **A value is walked as a tree.** The identity guard is a loop guard on the
   current path, so a sub-object reached by two paths is walked once per path.
@@ -121,12 +126,6 @@ decision steps. None caps time, and four costs grow inside them:
   the value at the bottom, and each level of sharing doubles the walk. A JSON document cannot share a
   sub-object; a value built in Python, unpickled or loaded from a YAML document
   with aliases can.
-- **The node bound is asked of the schema that results.** The combinators
-  refuse step by step, so a loop of `|` stops at the step that crosses it. One
-  `Validator(spec)` call reads the whole annotation first: `tuple[s, s]`
-  nested twenty times names two million nodes and is built before it is refused,
-  in time and memory that double with each level. The annotation is the
-  author's.
 - **A relation's budget counts steps, not their size.** A query spends at most
   a million decision steps, and a step whose work is linear in a leaf it reads
   is one step whatever the leaf holds. So a relation over a large leaf costs
@@ -183,6 +182,27 @@ except ValueError as error:
     raised = True
     assert "too deep" in str(error)
 assert raised
+```
+
+And so is reading one annotation whose parts are shared, before the tree it
+names is built -- the level below named twice, twenty times over, is a tree of
+two million nodes:
+
+```python
+import types
+
+from valgebra import Validator
+
+shared: object = int
+for _ in range(20):
+    shared = types.GenericAlias(tuple, (shared, shared))  # tuple[shared, shared]
+refused = False
+try:
+    Validator(shared)
+except ValueError as error:
+    refused = True
+    assert "too large" in str(error)
+assert refused
 ```
 
 The worst-case timing of these shapes is measured by the adversarial benchmark

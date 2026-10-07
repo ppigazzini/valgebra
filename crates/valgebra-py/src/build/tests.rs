@@ -619,3 +619,245 @@ fn a_final_field_of_a_dataclass_is_read_as_its_type() {
         assert!(build_schema(&bare, &mut Pool::default(), &mut Vec::new()).is_err());
     });
 }
+
+/// A corpus module whose names are the annotations a test builds, named for its
+/// test so two tests never share one.
+fn corpus<'py>(py: Python<'py>, test: &str, code: &str) -> Bound<'py, PyModule> {
+    let file = std::ffi::CString::new(format!("{test}.py")).expect("a module name");
+    let name = std::ffi::CString::new(test).expect("a module name");
+    let code = std::ffi::CString::new(code).expect("a module body");
+    PyModule::from_code(py, &code, &file, &name).expect("the corpus compiles")
+}
+
+/// The nodes the schema the frontend builds from the corpus name `annotation`
+/// spans, or the refusal it met.
+fn held(module: &Bound<'_, PyModule>, annotation: &str) -> Result<usize, String> {
+    let annotation = module.getattr(annotation).expect("the corpus defines it");
+    build_schema(&annotation, &mut Pool::default(), &mut Vec::new())
+        .map(|schema| schema.node_count())
+        .map_err(|refusal| refusal.to_string())
+}
+
+/// What `Validator::checked` makes of the schema the frontend builds from the
+/// corpus name `annotation`: the nodes it spans, or the refusal either met.
+fn checked(module: &Bound<'_, PyModule>, annotation: &str) -> Result<usize, String> {
+    let annotation = module.getattr(annotation).expect("the corpus defines it");
+    let mut pool = Pool::default();
+    let mut defs = Vec::new();
+    build_schema(&annotation, &mut pool, &mut defs)
+        .and_then(|schema| Validator::checked(schema, pool.into_items(), defs))
+        .map(|validator| validator.schema.node_count())
+        .map_err(|refusal| refusal.to_string())
+}
+
+/// An annotation spanning the node bound builds, twice in a row.
+///
+/// A flat `tuple` of `n` `int`s spans `n + 1` nodes and counts `n` while it is
+/// read, its leaves. The outermost descent leaves nothing counted, so a build
+/// starts from an empty count whatever the one before it built.
+#[test]
+fn an_annotation_at_the_node_bound_builds() {
+    Python::attach(|py| {
+        let test = "an_annotation_at_the_node_bound_builds";
+        let module = corpus(
+            py,
+            test,
+            &format!("at_the_bound = tuple[(int,) * {}]\n", MAX_SCHEMA_NODES - 1),
+        );
+        for _ in 0..2 {
+            assert_eq!(held(&module, "at_the_bound"), Ok(MAX_SCHEMA_NODES));
+            assert_eq!(checked(&module, "at_the_bound"), Ok(MAX_SCHEMA_NODES));
+        }
+    });
+}
+
+/// The descent after the one that passes the bound is refused, and a build
+/// passing it at its last step is refused by `Validator::checked`.
+///
+/// One `int` past the bound's count of leaves, the tuple has no descent left
+/// to refuse it, and the frontend hands back what it built; one more, and that
+/// descent refuses, with the count it found.
+#[test]
+fn the_descent_after_the_bound_refuses_and_the_last_is_checked() {
+    Python::attach(|py| {
+        let test = "the_descent_after_the_bound_refuses_and_the_last_is_checked";
+        let module = corpus(
+            py,
+            test,
+            &format!(
+                "last = tuple[(int,) * {}]\nafter = tuple[(int,) * {}]\n",
+                MAX_SCHEMA_NODES + 1,
+                MAX_SCHEMA_NODES + 2,
+            ),
+        );
+        assert_eq!(held(&module, "last"), Ok(MAX_SCHEMA_NODES + 2));
+        let refusal = checked(&module, "last").expect_err("past the bound");
+        assert!(refusal.contains("spans 100002 nodes"), "{refusal}");
+        let refusal = held(&module, "after").expect_err("past the bound");
+        assert!(refusal.contains("counts 100001 nodes"), "{refusal}");
+        // A refused build leaves nothing counted either: the thread builds the
+        // next annotation from an empty count and the depth it started at.
+        assert_eq!(held(&module, "last"), Ok(MAX_SCHEMA_NODES + 2));
+    });
+}
+
+/// The parts a build holds count together before their parent is built from
+/// them.
+///
+/// A part of 40,000 nodes named twice fits; named three times, the build is
+/// refused at the descent after the leaf that passes the bound, before the
+/// tuple holding them is built.
+#[test]
+fn the_parts_a_build_holds_count_together() {
+    Python::attach(|py| {
+        let test = "the_parts_a_build_holds_count_together";
+        let module = corpus(
+            py,
+            test,
+            "part = tuple[(int,) * 39_999]\n\
+             twice = tuple[part, part]\n\
+             three_times = tuple[part, part, part]\n",
+        );
+        assert_eq!(held(&module, "twice"), Ok(80_001));
+        let refusal = held(&module, "three_times").expect_err("past the bound");
+        assert!(refusal.contains("counts 100001 nodes"), "{refusal}");
+    });
+}
+
+/// A class named from many places is refused at the node bound rather than
+/// built whole.
+///
+/// Four records a level, each holding the union of the level below: the
+/// classes are a graph of four a level, and the schema is a tree whose size
+/// multiplies by four each level -- 436,901 nodes at eight, 134 million at
+/// twelve. Held as it is read, the build is refused a step past the bound. Six
+/// levels fit. Eight rather than twelve, so that a mutant that stops the count
+/// builds the tree it names and fails, rather than outlasting the sweep;
+/// `tests/test_adversarial_bounds.py` reads twelve in a child process.
+#[test]
+fn a_class_named_from_many_places_is_refused_before_it_is_built() {
+    Python::attach(|py| {
+        let test = "a_class_named_from_many_places_is_refused_before_it_is_built";
+        let module = corpus(
+            py,
+            test,
+            "from typing import Literal, TypedDict\n\
+             def levels(depth):\n\
+             \x20   below = int\n\
+             \x20   for level in range(depth):\n\
+             \x20       tagged = [TypedDict(f'L{level}{tag}', {'type': Literal[tag], 'left': below}) for tag in 'abcd']\n\
+             \x20       below = tagged[0] | tagged[1] | tagged[2] | tagged[3]\n\
+             \x20   return below\n\
+             six = levels(6)\n\
+             eight = levels(8)\n",
+        );
+        assert!(checked(&module, "six").is_ok_and(|nodes| nodes <= MAX_SCHEMA_NODES));
+        let refusal = held(&module, "eight").expect_err("past the bound");
+        assert!(refusal.contains("schema is too large"), "{refusal}");
+    });
+}
+
+/// A compiled validator named in an annotation counts every node of its
+/// schema.
+///
+/// It is one descent however large its schema: a `tuple` of 59,999 `int`s is
+/// 60,000 nodes in one step, so naming it twice counts 120,000, which the next
+/// descent finds past the bound.
+#[test]
+fn a_compiled_validator_counts_every_node_it_brings() {
+    Python::attach(|py| {
+        let test = "a_compiled_validator_counts_every_node_it_brings";
+        let module = corpus(py, test, "");
+        let part = Validator::new(
+            Schema::tuple(SeqShape::fixed(vec![Schema::Int; 59_999])),
+            Vec::new(),
+            Vec::new(),
+        );
+        module
+            .add("part", Py::new(py, part).expect("a validator object"))
+            .expect("the corpus takes it");
+        py.run(
+            c"twice = tuple[part, part]\nthen_more = tuple[part, part, int]",
+            Some(&module.dict()),
+            None,
+        )
+        .expect("the annotations are written");
+        assert_eq!(held(&module, "part"), Ok(60_000));
+        assert_eq!(held(&module, "twice"), Ok(120_001));
+        let refusal = held(&module, "then_more").expect_err("past the bound");
+        assert!(refusal.contains("counts 120000 nodes"), "{refusal}");
+    });
+}
+
+/// A part a fold drops still counts toward the union that dropped it.
+///
+/// A union counts its members' leaves, read without walking what the union
+/// folded them into: `Union[part, Any]` is the top, one node, and the 99,998
+/// leaves of the part it absorbed are counted all the same -- which is what
+/// lets a result built from parts be counted without a pass over it.
+#[test]
+fn a_part_a_fold_drops_still_counts_toward_the_union_that_dropped_it() {
+    Python::attach(|py| {
+        let test = "a_part_a_fold_drops_still_counts_toward_the_union_that_dropped_it";
+        let module = corpus(
+            py,
+            test,
+            "from typing import Any, Union\n\
+             part = tuple[(int,) * 99_998]\n\
+             absorbed = Union[part, Any]\n\
+             beside = tuple[absorbed, int, int, int]\n",
+        );
+        assert_eq!(held(&module, "absorbed"), Ok(1));
+        let refusal = held(&module, "beside").expect_err("counted with its part");
+        assert!(refusal.contains("counts 100001 nodes"), "{refusal}");
+    });
+}
+
+/// Past as many descents as the bound, a container above a leaf counts too.
+///
+/// `list[int]` is two nodes and one leaf, so a part of 30,000 of them counts
+/// half of what it spans while the build is small. Three such parts span
+/// 180,003 nodes and 90,000 leaves; the build passes as many descents as the
+/// bound in the second, walks each result after, and is refused in the third,
+/// where a count of leaves alone stays under the bound and hands back a schema
+/// past it.
+#[test]
+fn a_chain_of_containers_is_counted_once_the_build_is_large() {
+    Python::attach(|py| {
+        let test = "a_chain_of_containers_is_counted_once_the_build_is_large";
+        let module = corpus(
+            py,
+            test,
+            "part = tuple[(list[int],) * 30_000]\n\
+             three = tuple[part, part, part, int]\n",
+        );
+        assert_eq!(held(&module, "part"), Ok(60_001));
+        let refusal = held(&module, "three").expect_err("past the bound");
+        assert!(refusal.contains("schema is too large"), "{refusal}");
+    });
+}
+
+/// The count turns exact at the descent after the bound's number of descents,
+/// and not at the one that reaches it.
+///
+/// The union below is the hundred-thousandth descent of its build: it counts
+/// its parts, though it folds them into `Any`, and the `int` after it finds the
+/// build past the bound. Its parts are the descents after, so they are walked,
+/// and walking the union too would count the one node it is.
+#[test]
+fn the_count_turns_exact_at_the_descent_past_the_bounds_count_of_descents() {
+    Python::attach(|py| {
+        let test = "the_count_turns_exact_at_the_descent_past_the_bounds_count_of_descents";
+        let module = corpus(
+            py,
+            test,
+            &format!(
+                "from typing import Any, Union\n\
+                 build = tuple[(int,) * {} + (Union[tuple[int], Any], int)]\n",
+                MAX_SCHEMA_NODES - 2,
+            ),
+        );
+        let refusal = held(&module, "build").expect_err("past the bound");
+        assert!(refusal.contains("counts 100001 nodes"), "{refusal}");
+    });
+}

@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a map is refuted on a key the other reads one way
 - fix: a map keyed by a complement of kinds lowers to the other kinds
+- fix: an annotation is refused at the node bound as it is read
 
 -->
 
@@ -48,6 +49,16 @@ answer of its own, or a repair to a change not yet released.
   over `bool` is refuted on `{True: 1, False: "x"}`. A key holding part of a
   kind -- the complement of a literal, `tuple[int, ...]`, a class -- declines,
   and the decidability page lists it.
+- **An annotation is refused at the node bound as it is read.**
+  `Validator(spec)` built the whole schema an annotation names before the node
+  bound was asked, and a class, an alias or any annotation object is built once
+  per place it is named -- so a part shared through several levels built a
+  tree that multiplies with each. Four `TypedDict`s a level, each holding the
+  union of the level below, took 75 seconds and 6 GB to be refused at twelve
+  levels. The frontend holds what it has built to the bound as it reads and
+  refuses a step past it, in milliseconds, with the `ValueError` it raised
+  before. A schema within the bound builds as it did; a part a fold drops
+  still counts toward the union that dropped it.
 
 ## [0.0.17] - 2026-10-06
 
