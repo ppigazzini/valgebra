@@ -447,7 +447,11 @@ the shape. What is left below is what the descriptor cannot hold.
   key is a kind or a literal lands in a part. A key written as a `complement`
   spans every kind but one, which no single part holds, and the lowering
   declines rather than spreading it — so a relation about such a map is left to
-  the rules, and a pair the rules do not decide comes back "not proven".
+  the rules. They refute one key kind at a time: a kind the subject's clause
+  holds whole, read by one of the supertype's clauses or by none, names a key
+  whose entry the two maps judge apart, so `{str: int}.open()` is outside
+  `{str: int}` on `{7: "x"}`. What comes back "not proven" is a pair whose
+  supertype covers a key kind with two clauses at once.
 
     The partition is the source's: it treats a record as a quasi-`K`-step
     function, where `K` is a *predefined finite partition* of the key domain
@@ -458,9 +462,9 @@ the shape. What is left below is what the descriptor cannot hold.
     intersections of arrow types. A complement-keyed clause is exactly an
     overlapping domain, and valgebra admits it where the source forbids it:
     the walk reads it exactly, and the comparison it needs is not built. That
-    is a gap rather than a refusal, and what it costs today is the relation --
-    a pair about such a map the rules do not decide comes back "not proven",
-    even between two spellings of every dict:
+    is a gap rather than a refusal, and what it costs is the proof a pair needs
+    where two clauses cover a key kind between them -- which comes back "not
+    proven" even between two spellings of every dict:
 
     ```python
     from valgebra import Validator, anything, complement
@@ -471,7 +475,10 @@ the shape. What is left below is what the descriptor cannot hold.
     assert free_the_rest.is_valid({"a": 1, 7: "anything at all"})
     assert not free_the_rest.is_valid({"a": "not an int"})
 
-    # The relation declines. These two admit every dict, by different spellings.
+    # A key kind the supertype reads one way refutes: `{7: "x"}`.
+    assert Validator({str: int}).open().relation_to({str: int}) == "not_subset"
+
+    # Two clauses covering every key decline. These two admit every dict.
     long_way = Validator({str: anything, not_str: anything})
     assert long_way.is_valid({7: "x"}) and Validator({object: object}).is_valid({7: "x"})
     assert not long_way.is_equivalent({object: object})
@@ -485,16 +492,20 @@ the shape. What is left below is what the descriptor cannot hold.
 
 - **A clause keyed by a float literal.** The partition names a literal key by
   its value, and it holds no float value: the typing spec admits none in a
-  `Literal`. A map keyed by `Literal[1.0]` is left to the rules, and a pair they
-  do not decide comes back "not proven" although `{0: 0}` refutes it. A key
-  literal of any other kind lands in its part.
+  `Literal`. A map keyed by `Literal[1.0]` is left to the rules, which read a
+  key by whole kinds: they refute where the literal holds none of a kind the
+  other map's key holds, and a pair they do not decide comes back "not proven"
+  although `{0.5: 0}` refutes it. A key literal of any other kind lands in its
+  part.
 
     ```python
     from typing import Literal
 
     from valgebra import Validator
 
-    assert Validator(dict[int, int]).relation_to(dict[Literal[1.0], int]) == "undecided"
+    keyed_by_a_float = Validator(dict[Literal[1.0], int])
+    assert Validator(dict[int, int]).relation_to(keyed_by_a_float) == "not_subset"
+    assert Validator(dict[float, int]).relation_to(keyed_by_a_float) == "undecided"
     assert Validator(dict[Literal[1], int]).relation_to(dict[int, int]) == "subset"
     ```
 
@@ -676,10 +687,13 @@ the shape. What is left below is what the descriptor cannot hold.
   is proved empty; at thirteen the chain reads more nodes than a lowering
   builds and is declined, since each link adds five.
 
-  **Depth bites a mapping.** The rules refute a list by its elements at any
-  depth, and a mapping only through the sets, whose lowering descends a bounded
-  nesting. `dict[str, ...]` four levels deep over `int` is `not_subset` of the
-  same chain over `str`; five levels deep answers `undecided`.
+  **Depth bites a mapping the rules do not read.** The rules refute a list by
+  its elements at any depth, and a mapping by the value its clause gives a key
+  the other map reads through one clause: `dict[str, ...]` forty levels deep
+  over `int` is `not_subset` of the same chain over `str`. A key the rules read
+  as a value rather than a kind -- a literal -- leaves the mapping to the sets,
+  whose lowering descends a bounded nesting: `dict[Literal["a"], ...]` four
+  levels deep is refuted and five levels deep answers `undecided`.
 
 - **A predicate.** Its satisfiability is undecidable (below), so neither
   representation reasons about one -- and that is a statement about the
@@ -700,10 +714,10 @@ directions, so a relation that regresses to conservatism fails there and one
 that becomes decided is added there. It also carries a strict expected-failure
 mark for a relation that holds and is not decided, so the row fails on the day
 it decides. Those rows are the bound-limited relations above — the four-field
-record and the seven-component tuple against their corners, the thirteen-link
-chain of differences, and the mapping chain five levels deep — each carrying
-the width or depth at which the bound stops it, and the two sets whose members
-are one number in two kinds; the ledger's `_LEDGERED` list owns them.
+record and the seven-component tuple against their corners and the
+thirteen-link chain of differences, each carrying the width at which the bound
+stops it, and the two sets whose members are one number in two kinds; the
+ledger's `_LEDGERED` list owns them.
 
 ```python
 from typing import Annotated, Literal, NamedTuple

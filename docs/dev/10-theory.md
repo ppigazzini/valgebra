@@ -547,11 +547,11 @@ and deviation that has a test of its own or is owed one.
 every value of `t1` is a value of `t2`, and `is_equivalent` is both directions.
 A proof from either decider admits no counterexample the walk can find, and a
 refutation from either stands on a value the walk refuses, over the structural
-fragment and over a recursive pair alike. **[LOAD-BEARING: subtyping-is-inclusion]**
+fragment, over maps keyed by every hashable kind, and over a recursive pair alike. **[LOAD-BEARING: subtyping-is-inclusion]**
 
 SOURCE: §13.0 "**Subtyping, defined.** UIN Definition 4"
 
-HELD-BY: subtyping_is_sound_over_the_structural_fragment, a_refutation_is_a_value, a_proof_over_a_fixpoint_has_no_witness_against_it, test_no_proof_is_refuted_by_a_value, test_a_claimed_refutation_stands_on_a_value
+HELD-BY: subtyping_is_sound_over_the_structural_fragment, a_refutation_is_a_value, a_map_relation_stands_on_a_dict, a_proof_over_a_fixpoint_has_no_witness_against_it, test_no_proof_is_refuted_by_a_value, test_a_claimed_refutation_stands_on_a_value
 
 **A cut reference proves and never refutes.** The descriptor decides `a <= b`
 by lowering the difference, and a recursive reference is cut to a bound: the

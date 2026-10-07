@@ -16,6 +16,7 @@ use std::cell::Cell;
 
 use rustc_hash::FxHashMap;
 
+use crate::descr::maps::KEY_KINDS;
 use crate::ir::{DefIx, Field, MapClause, Schema};
 use crate::kind::Kind;
 use crate::verdict::Relation;
@@ -105,6 +106,10 @@ pub(super) fn keyed_map_meet_empty(
 ///    catch-all at all, since a closed record admits no value with a key it does
 ///    not declare; and every catch-all clause of `a` is subsumed by one of `b`.
 ///
+/// A catch-all clause of `a` that no clause of `b` subsumes is asked for a key
+/// it admits that `b` reads one way only ([`clause_escapes`]): a refutation
+/// where some value under that key is outside `b`, a decline otherwise.
+///
 /// Sound throughout — a required supertype field a subject with a catch-all
 /// cannot guarantee present, or a clause an oracle cannot relate, is undecided
 /// rather than an unsound proof, and a refutation stands on a value of the
@@ -193,61 +198,71 @@ pub(super) fn keyed_map_subtype(
                 // An optional field `b` declares that `a` does not: a value of
                 // `a` carries that key only where one of `a`'s clauses produces
                 // it, so only a clause whose **key admits the name** has
-                // anything to say about it. A clause keyed by another kind
-                // never spells a string, so it governs nothing here and its
+                // anything to say about it. A clause whose key holds no string
+                // -- another kind, or the complement of `str` that `open` writes
+                // -- never spells the name, so it governs nothing here and its
                 // value type is beside the point; reading it anyway refutes on
                 // a value `a` does not have.
                 None => Relation::all(da.iter().map(|clause| {
                     let covers = clause
                         .value
                         .is_subtype_rec(&b_field.schema, cx, assumptions);
-                    match &clause.key {
+                    if clause.key.holds_every_value_of(Kind::Str, cx.oracle) {
                         // Every string key, so this clause does spell the name.
-                        Schema::Str | Schema::Anything(_) => covers,
-                        // A key of a settled kind that is not a string: no value
-                        // of `a` carries this name through this clause.
-                        key if key
-                            .type_tag_with(cx.oracle)
-                            .is_some_and(|kind| kind != Kind::Str) =>
-                        {
-                            Relation::Holds
-                        }
+                        covers
+                    } else if clause.key.holds_no_value_of(Kind::Str, cx.oracle) {
+                        Relation::Holds
+                    } else {
                         // A key the rules cannot read -- a string literal, a
                         // union of them -- might admit the name, so a proof
                         // carries and a refutation does not.
-                        _ => covers.proof_only(),
+                        covers.proof_only()
                     }
                 })),
             }
         }));
         // Each field `a` declares that `b` does not is read by `b` through its
-        // catch-all, so a `str`/`anything`-keyed clause of `b` must cover it.
+        // catch-all, so a clause of `b` whose key holds every string must cover
+        // it.
         //
         // A clause whose key the rules cannot read might admit the name, so
         // where `b` carries one the reading is a proof or nothing. Where every
-        // clause's key is one of the two spellings that plainly admit a string
-        // name, the covering clauses are all of them, and a refutation needs a
-        // value of the field that every one of them rejects: fields are
-        // independent, so a value of `a` carrying that key with that value is a
-        // value `b` rejects. Each clause's own refutation stands on a value of
-        // its own, so they make one only where there is at most one clause --
-        // the closed record has none. Two clauses may cover the field together,
-        // `int | str` under `str: int` and `str: str`, and refuting each in turn
-        // proves nothing about the pair. A refutation also stands on the field
-        // having a value, read the way the query reads the subject's, so a field
-        // the rules cannot tell either way declines and an empty *optional*
-        // field proves nothing against.
-        let readable_keys = db
-            .iter()
-            .all(|clause| matches!(clause.key, Schema::Str | Schema::Anything(_)));
-        let one_witness = db.len() <= 1;
+        // clause's key either holds every string or holds none, the covering
+        // clauses are the first kind, and a refutation needs a value of the
+        // field that every one of them rejects: fields are independent, so a
+        // value of `a` carrying that key with that value is a value `b`
+        // rejects, and a clause holding no string never reads the name. Each
+        // covering clause's own refutation stands on a value of its own, so
+        // they make one only where there is at most one of them -- the closed
+        // record has none. Two may cover the field together, `int | str` under
+        // `str: int` and `str: str`, and refuting each in turn proves nothing
+        // about the pair. Asking the field against the union of their values
+        // would, and is not done: that union is a term no side spelled, so the
+        // goal would fall outside the closure of the query's subterms that
+        // `DECISION_BUDGET` stands on. A refutation also stands on the field
+        // having a value, read the way the query reads the subject's, so a
+        // field the rules cannot tell either way declines and an empty
+        // *optional* field proves nothing against.
+        let (covering_clauses, unread_clause) =
+            db.iter()
+                .fold((0usize, false), |(covering, unread), clause| {
+                    if clause.key.holds_every_value_of(Kind::Str, cx.oracle) {
+                        (covering + 1, unread)
+                    } else {
+                        (
+                            covering,
+                            unread || !clause.key.holds_no_value_of(Kind::Str, cx.oracle),
+                        )
+                    }
+                });
+        let one_witness = !unread_clause && covering_clauses <= 1;
         let extra_covered = Relation::all(
             fa.iter()
                 .filter(|a_field| b_by_name.named(&a_field.name).is_none())
                 .map(|a_field| {
                     let covering = db
                         .iter()
-                        .filter(|clause| matches!(clause.key, Schema::Str | Schema::Anything(_)));
+                        .filter(|clause| clause.key.holds_every_value_of(Kind::Str, cx.oracle));
                     let answer = Relation::any(covering.map(|clause| {
                         a_field
                             .schema
@@ -255,7 +270,7 @@ pub(super) fn keyed_map_subtype(
                     }));
                     match answer {
                         Relation::Holds => Relation::Holds,
-                        Relation::Fails if readable_keys && one_witness => {
+                        Relation::Fails if one_witness => {
                             Relation::of_mismatch(a_field.schema.verdict_of(cx))
                         }
                         _ => Relation::Unknown,
@@ -265,20 +280,147 @@ pub(super) fn keyed_map_subtype(
         // Every catch-all clause of `a` (governing its non-field keys) is subsumed
         // by a clause of `b` with both key and value narrower.
         let defaults = Relation::all(da.iter().map(|mine| {
-            // One clause of `b` subsuming this one settles it; none of them
-            // doing so is a decline, since a clause pair the rules cannot
-            // relate is not a pair they have refuted.
-            Relation::proven(db.iter().any(|theirs| {
-                mine.key
+            // One clause of `b` subsuming this one settles it. None of them
+            // doing so is not yet a refutation -- the clause may be covered by
+            // several of `b`'s between them, or by a clause pair the rules
+            // cannot relate -- so the clause is asked for a key it admits and
+            // `b` reads one way only.
+            //
+            // The value inclusions the search below asks are kept for that
+            // second question, which asks one of them again whenever the key
+            // that clause reads is one `mine` holds. Asking it twice doubles
+            // the work at every level of a nested map, and a chain twenty
+            // `dict[str, ...]` deep then spends the budget on a refutation one
+            // reading names. Kept only where the answer is not a proof, since a
+            // proof ends the search, so a subsumed clause allocates nothing.
+            let mut values_asked: Vec<(&Schema, Relation)> = Vec::new();
+            let subsumed = db.iter().any(|theirs| {
+                if !mine
+                    .key
                     .is_subtype_rec(&theirs.key, cx, assumptions)
-                    .and(|| mine.value.is_subtype_rec(&theirs.value, cx, assumptions))
                     .holds()
-            }))
+                {
+                    return false;
+                }
+                let answer = mine.value.is_subtype_rec(&theirs.value, cx, assumptions);
+                if !answer.holds() {
+                    values_asked.push((&theirs.value, answer));
+                }
+                answer.holds()
+            });
+            if subsumed {
+                Relation::Holds
+            } else {
+                clause_escapes(mine, db, &mut values_asked, cx, assumptions)
+            }
         }));
         // Three conjuncts of one claim about one pair, so any one of them
         // refutes it and the order they are read in decides nothing.
         Relation::all([fields_ok, extra_covered, defaults])
     }
+}
+
+/// Whether the catch-all clause `mine` of a subject admits an entry no dict of
+/// the supertype's clauses `db` holds: `Fails` where one is found, `Unknown`
+/// where none is.
+///
+/// ICFP Lemma 4.7 refutes a map below another one key-type at a time: a key
+/// the subject's clause admits and no clause of the supertype does, or one
+/// both admit whose value the subject's clause allows and the supertype's
+/// forbids. This is that, read one **key kind** at a time. For a kind whose
+/// every value the clause's key holds, each clause of `b` either holds every
+/// value of the kind too or holds none ([`holds_every_value_of`],
+/// [`holds_no_value_of`]); a clause doing neither declines the kind. Then a
+/// key of the kind is read by at most one clause of `b`, and the witness is a
+/// value of `a` with one entry added, under a key the rule chooses:
+///
+/// - **no clause reads the kind**: any value of `mine`'s value type, which
+///   needs that type to have one;
+/// - **one clause reads it**: a value `mine` allows and that clause forbids,
+///   which is the clause's value refuted below it.
+///
+/// The key is a plain value of the kind -- `None`, `True`, `7`, `0.5`, `b""`,
+/// `()`, `frozenset()` -- and for `str` a name neither map declares as a field,
+/// which exists because fields are finitely many and the clause holds every
+/// string. Each of those is hashable, and none is a field name of `b`, so `b`
+/// reads it through its clauses alone and reads it as this says; and none is
+/// a field name of `a`, so `a` admits the entry through `mine`. The rest of
+/// the witness is a value of `a` with its undeclared keys dropped, which the
+/// witness guard around the query reads as `a` being inhabited.
+///
+/// **Two clauses reading one kind decline**, as two covering one field do
+/// above: each refutes on a value of its own, and the union of their values
+/// is a term neither side spelled, outside the closure of subterms the
+/// budget's argument counts goals in. **A kind is read whole or not at all**:
+/// a key of `tuple[list[int]]` or of a class whose instances are unhashable
+/// holds no key at all, and a key reading by values rather than kinds would
+/// refute `{U: int} <= {str: int}`, which holds because `{U: int}` admits only
+/// `{}`.
+///
+/// The finite kinds need nothing of their own. Lemma 4.7's proof assumes
+/// every key type is infinite, and `NoneType` and `bool` are not; but the rule
+/// refutes on one key, and a finite kind has one as surely as an infinite one.
+/// What a finite kind changes is the *proof*, which this does not attempt.
+///
+/// [`holds_every_value_of`]: Schema::holds_every_value_of
+/// [`holds_no_value_of`]: Schema::holds_no_value_of
+///
+/// `values_asked` holds the inclusions of `mine.value` in a clause value the
+/// caller has already asked, and gains the ones asked here: the same goal asked
+/// twice is the same work twice, and at every level of a nested map.
+fn clause_escapes<'b>(
+    mine: &MapClause,
+    db: &'b [MapClause],
+    values_asked: &mut Vec<(&'b Schema, Relation)>,
+    cx: SubtypeCx<'_>,
+    assumptions: &mut Vec<(Schema, Schema)>,
+) -> Relation {
+    // The questions a kind asks of `mine.value` repeat across kinds -- a
+    // complement key reads seven of them -- so each is asked once: its own
+    // inhabitance, and its inclusion in each clause value it is held to.
+    let mut inhabited: Option<Relation> = None;
+    for kind in KEY_KINDS {
+        if !mine.key.holds_every_value_of(kind, cx.oracle) {
+            continue;
+        }
+        let mut reader: Option<&Schema> = None;
+        let mut read_one_way = true;
+        for theirs in db {
+            if theirs.key.holds_no_value_of(kind, cx.oracle) {
+                continue;
+            }
+            if reader.is_none() && theirs.key.holds_every_value_of(kind, cx.oracle) {
+                reader = Some(&theirs.value);
+                continue;
+            }
+            read_one_way = false;
+            break;
+        }
+        if !read_one_way {
+            continue;
+        }
+        let answer = match reader {
+            None => {
+                *inhabited.get_or_insert_with(|| Relation::of_mismatch(mine.value.verdict_of(cx)))
+            }
+            Some(value) => {
+                if let Some((_, answer)) = values_asked
+                    .iter()
+                    .find(|(asked, _)| core::ptr::eq(*asked, value))
+                {
+                    *answer
+                } else {
+                    let answer = mine.value.is_subtype_rec(value, cx, assumptions);
+                    values_asked.push((value, answer));
+                    answer
+                }
+            }
+        };
+        if answer == Relation::Fails {
+            return Relation::Fails;
+        }
+    }
+    Relation::Unknown
 }
 
 /// Whether the attribute record `fa` is a subtype of `fb`: width and depth.

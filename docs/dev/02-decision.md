@@ -555,6 +555,24 @@ These are the readings that refute, each with the value it stands on:
   what it names, since it denotes that set; once and not through what it finds,
   so the walk descends only into union branches and owes termination no argument
   about cycles.
+- `clause_escapes`, and the extra-field reading of `keyed_map_subtype` — an
+  entry the subject's dict may carry and the supertype's rejects. For a field
+  only the subject declares, the entry is the field's own name with a value of
+  the field outside the one supertype clause whose key holds every string; a
+  clause whose key holds none -- the `complement(str)` that `open` writes --
+  never reads a name, and a key between the two declines. For a catch-all
+  clause of the subject no supertype clause subsumes, the entry is under a plain
+  key of a kind the clause's key holds whole -- `None`, `7`, `()`, a name
+  neither map declares -- which each supertype clause holds whole or not at
+  all, with a value outside the one clause that reads it, or any value where
+  none does: ICFP Lemma 4.7, one key kind at a time (`holds_every_value_of`,
+  `holds_no_value_of`). Kinds are read whole on purpose, because the plain key
+  is then hashable: a class or a tuple shape may hold no key at all, and `{U:
+  int}` for a class whose instances are unhashable admits `{}` alone, below
+  every map. Two clauses reading one key decline, for the reason `{"f": int |
+  str}` against `{str: int, Any: str}` does: each refutes on a value of its
+  own, and the union of their values is a term neither side spelled, outside
+  the closure of subterms the budget's argument counts goals in.
 
 **They run in a cost order, and the order is free to choose.** Each answers
 `Fails` on its own and none of them proves, so a pair that two of them refute is

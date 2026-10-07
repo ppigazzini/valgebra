@@ -168,6 +168,85 @@ impl Schema {
             && self.star_element().is_some()
     }
 
+    /// Whether every value of `kind` belongs to this schema, read off the
+    /// constructors.
+    ///
+    /// The reading a dict key needs before it can name a witness. A key schema
+    /// that holds every value of a kind holds the plain one a refutation picks
+    /// -- `None`, `7`, a name no field takes, `()` -- and that value is
+    /// hashable whatever the kind's other values are: a class with `__hash__`
+    /// set to `None` may subclass `int`, but `7` is not one of its instances.
+    /// That is why the reading goes by whole kinds and never through a class,
+    /// a literal or a shape: `tuple[list[int]]` is a set of tuples none of
+    /// which is a key, and `tuple[Any, ...]` holds `()`, which is one.
+    ///
+    /// Sound and incomplete. `false` is "not seen", never "a value of the kind
+    /// is missing": a refinement may exclude any value, and a union is read
+    /// member by member, so `Literal[True, False]` is not seen to hold every
+    /// boolean.
+    pub(super) fn holds_every_value_of(&self, kind: Kind, oracle: &dyn LeafRelations) -> bool {
+        match self {
+            Schema::Anything(_) => true,
+            Schema::NoneType => kind == Kind::NoneType,
+            Schema::Bool => kind == Kind::Bool,
+            // `bool` subclasses `int`, so every boolean is an integer.
+            Schema::Int => matches!(kind, Kind::Int | Kind::Bool),
+            Schema::Float => kind == Kind::Float,
+            Schema::Str => kind == Kind::Str,
+            Schema::Bytes => kind == Kind::Bytes,
+            Schema::Seq {
+                container: SeqKind::Tuple,
+                shape,
+            } => {
+                kind == Kind::Tuple
+                    && shape.prefix.is_empty()
+                    && matches!(shape.tail.as_deref(), Some(Schema::Anything(_)))
+            }
+            Schema::Coll {
+                container: CollKind::FrozenSet,
+                element,
+            } => kind == Kind::FrozenSet && matches!(**element, Schema::Anything(_)),
+            Schema::Union(members) => members
+                .iter()
+                .any(|member| member.holds_every_value_of(kind, oracle)),
+            Schema::Intersection(members) => members
+                .iter()
+                .all(|member| member.holds_every_value_of(kind, oracle)),
+            Schema::Complement(inner) => inner.holds_no_value_of(kind, oracle),
+            _ => false,
+        }
+    }
+
+    /// Whether no value of `kind` belongs to this schema.
+    ///
+    /// The dual of [`holds_every_value_of`](Self::holds_every_value_of), and the
+    /// two meet at a complement: `¬k` holds every value of a kind exactly where
+    /// `k` holds none. Off the connectives it is [`disjoint_with`]'s reading of
+    /// a node against a whole kind -- its tag where the core can read one, the
+    /// oracle's answer for a class -- and a refinement is read through its
+    /// base, which it is a subset of. Sound and incomplete in the same way:
+    /// `bool` holds no plain integer, and is not seen to, because the two
+    /// kinds share values.
+    ///
+    /// [`disjoint_with`]: Self::disjoint_with
+    pub(super) fn holds_no_value_of(&self, kind: Kind, oracle: &dyn LeafRelations) -> bool {
+        match self {
+            Schema::Nothing => true,
+            Schema::Union(members) => members
+                .iter()
+                .all(|member| member.holds_no_value_of(kind, oracle)),
+            Schema::Intersection(members) => members
+                .iter()
+                .any(|member| member.holds_no_value_of(kind, oracle)),
+            Schema::Complement(inner) => inner.holds_every_value_of(kind, oracle),
+            Schema::Refine { base, .. } => base.holds_no_value_of(kind, oracle),
+            _ => match self.type_tag_with(oracle) {
+                Some(tag) => !tag.shares_values_with(kind),
+                None => self.class_excludes(kind, oracle),
+            },
+        }
+    }
+
     /// Whether this schema is a class the oracle says holds no value of `kind`.
     ///
     /// A class is the one atom the core cannot read at all, and the answer is

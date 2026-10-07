@@ -4435,10 +4435,11 @@ fn a_record_built_out_of_order_decides_as_one_in_order() {
 /// A clause whose key the rules cannot read might admit the name.
 ///
 /// A field the subtype declares and the supertype does not is refuted when
-/// every clause that plainly admits a string name rejects it. "Plainly" is the
-/// whole of it: a clause keyed by something else -- a literal, a union, a
-/// refinement -- may admit the name too, and the rules do not ask. Such a
-/// supertype gets a proof or nothing, never a refutation.
+/// every clause whose key holds every string rejects it, and every other
+/// clause holds none. A clause keyed by something between -- a literal, a
+/// union carrying one, a refinement -- may admit the name or may not, and the
+/// rules do not ask. Such a supertype gets a proof or nothing, never a
+/// refutation.
 #[test]
 fn a_clause_key_the_rules_cannot_read_leaves_the_field_unproven() {
     let relation = |sub: &Schema, sup: &Schema| {
@@ -4458,13 +4459,419 @@ fn a_clause_key_the_rules_cannot_read_leaves_the_field_unproven() {
         Relation::Fails
     );
     // The same clause under a key the rules do not read declines instead: the
-    // clause may govern no key of the subject at all.
+    // literal may or may not be the name, so the clause may govern no key of
+    // the subject at all.
     assert_eq!(
         relation(
             &with_extra,
-            &mapping(Schema::union([Schema::Str, Schema::Int]), listed)
+            &mapping(
+                Schema::union([Schema::Literal(ConstIx::new(0)), Schema::Int]),
+                listed
+            )
         ),
         Relation::Unknown
+    );
+}
+
+/// A clause reads a field by whether its key holds every string or none.
+///
+/// The extra-field rule asks which of the supertype's clauses read the field's
+/// name. A key holding every string -- `str`, `anything`, a union with `str`
+/// in it, the complement of a kind that is not `str` -- reads it; a key
+/// holding no string -- another kind, the `complement(str)` that `open`
+/// writes on a mapping -- never does. Only a key that is neither leaves the
+/// field undecided. Asked of the rules alone.
+#[test]
+fn a_clause_reads_a_field_by_whether_its_key_holds_every_string_or_none() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Budget::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let not_str = Schema::Complement(Arc::new(Schema::Str));
+    let clauses = |pairs: Vec<(Schema, Schema)>| Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: pairs
+            .into_iter()
+            .map(|(key, value)| MapClause { key, value })
+            .collect::<Vec<_>>()
+            .into(),
+    };
+    let with_str = closed(vec![field("a", Schema::Str, true)]);
+    let with_int = closed(vec![field("extra", Schema::Int, true)]);
+    let listed = Schema::list(SeqShape::homogeneous(Schema::Int));
+
+    // `{"a": str}` against `{str: int}.open()`: the complement reads no name,
+    // so `str: int` alone does, and `{"a": ""}` is outside.
+    assert_eq!(
+        relation(
+            &with_str,
+            &clauses(vec![
+                (Schema::Str, Schema::Int),
+                (not_str.clone(), Schema::ANYTHING)
+            ])
+        ),
+        Relation::Fails
+    );
+    // The same supertype with a clause that takes the field proves it.
+    assert_eq!(
+        relation(
+            &with_str,
+            &clauses(vec![
+                (Schema::Str, Schema::Str),
+                (not_str.clone(), Schema::ANYTHING)
+            ])
+        ),
+        Relation::Holds
+    );
+    // A union holding every string reads the name, so its value answers.
+    assert_eq!(
+        relation(
+            &with_int,
+            &clauses(vec![(Schema::union([Schema::Str, Schema::Int]), listed)])
+        ),
+        Relation::Fails
+    );
+    // Two clauses that read the name cover `int | str` between them, so
+    // refuting each in turn names no value: `{"f": int | str}` is below
+    // `{str: int, Any: str}`, and the rules decline rather than refute.
+    assert_eq!(
+        relation(
+            &closed(vec![field(
+                "f",
+                Schema::union([Schema::Int, Schema::Str]),
+                true
+            )]),
+            &clauses(vec![
+                (Schema::Str, Schema::Int),
+                (Schema::ANYTHING, Schema::Str)
+            ])
+        ),
+        Relation::Unknown
+    );
+    // A clause between the two leaves the field to a proof or nothing.
+    assert_eq!(
+        relation(
+            &with_str,
+            &clauses(vec![
+                (Schema::Str, Schema::Int),
+                (Schema::Literal(ConstIx::new(0)), Schema::ANYTHING)
+            ])
+        ),
+        Relation::Unknown
+    );
+}
+
+/// A nested map is refuted by its values at any depth, as a list is by its
+/// elements.
+///
+/// The value a clause gives a key is asked against the one clause of the
+/// supertype that reads it, which is a goal the subsumption search has asked
+/// already. Asked twice it doubles at every level, so the budget ran out at
+/// twenty `dict[str, ...]` deep on a refutation one reading names; asked once
+/// the pair costs a step a level and refutes at forty.
+#[test]
+fn a_nested_map_is_refuted_by_its_values_at_any_depth() {
+    let nest = |leaf: Schema, depth: usize| {
+        (0..depth).fold(leaf, |inner, _| {
+            Schema::mapping(MapClause {
+                key: Schema::Str,
+                value: inner,
+            })
+        })
+    };
+    for depth in [1, 5, 20, 40] {
+        let budget = Budget::new(DECISION_BUDGET);
+        assert_eq!(
+            nest(Schema::Int, depth).subtype_relation(
+                &nest(Schema::Str, depth),
+                &NoLeafRelations,
+                &[],
+                &budget
+            ),
+            Relation::Fails,
+            "{depth} deep"
+        );
+    }
+}
+
+/// What a key schema holds of a kind, constructor by constructor.
+///
+/// Every value of the kind, or none of it: the two readings the clause rules
+/// choose a witness key by, and duals through a complement. Each row is one
+/// arm of one of the two, so a mutation of an arm is a row that fails. `false`
+/// is "not seen" in both, never the opposite claim, so the rows that read
+/// `false` on a set that does hold the kind -- `Literal[True, False]`, a
+/// refinement -- are the incompleteness the readings declare.
+#[test]
+fn the_kind_readings_of_a_key_schema() {
+    let every = |schema: &Schema, kind: Kind| schema.holds_every_value_of(kind, &Kinded);
+    let none = |schema: &Schema, kind: Kind| schema.holds_no_value_of(kind, &Kinded);
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let any_tuple = Schema::tuple(SeqShape::homogeneous(Schema::ANYTHING));
+    let int_tuple = Schema::tuple(SeqShape::homogeneous(Schema::Int));
+    let fixed_tuple = Schema::tuple(SeqShape::fixed([Schema::ANYTHING]));
+    let any_list = Schema::list(SeqShape::homogeneous(Schema::ANYTHING));
+    let any_frozenset = Schema::frozen_set(Schema::ANYTHING);
+    let int_frozenset = Schema::frozen_set(Schema::Int);
+    let any_set = Schema::set(Schema::ANYTHING);
+
+    // The top holds every value of every kind; the bottom none.
+    for kind in Kind::ALL {
+        assert!(every(&Schema::ANYTHING, kind) && !none(&Schema::ANYTHING, kind));
+        assert!(!every(&Schema::Nothing, kind) && none(&Schema::Nothing, kind));
+    }
+    // A scalar atom holds its own kind, and `int` holds the booleans too.
+    for (atom, kind) in [
+        (Schema::NoneType, Kind::NoneType),
+        (Schema::Bool, Kind::Bool),
+        (Schema::Int, Kind::Int),
+        (Schema::Float, Kind::Float),
+        (Schema::Str, Kind::Str),
+        (Schema::Bytes, Kind::Bytes),
+    ] {
+        for other in Kind::ALL {
+            let held = other == kind || (atom == Schema::Int && other == Kind::Bool);
+            assert_eq!(every(&atom, other), held, "{atom:?} every {other:?}");
+            assert_eq!(
+                none(&atom, other),
+                !kind.shares_values_with(other),
+                "{atom:?} none {other:?}"
+            );
+        }
+    }
+    // A container holds its kind whole only as the top shape of it.
+    assert!(every(&any_tuple, Kind::Tuple));
+    assert!(!every(&int_tuple, Kind::Tuple) && !every(&fixed_tuple, Kind::Tuple));
+    assert!(!every(&any_list, Kind::Tuple) && !every(&any_tuple, Kind::List));
+    assert!(every(&any_frozenset, Kind::FrozenSet));
+    assert!(!every(&int_frozenset, Kind::FrozenSet) && !every(&any_set, Kind::FrozenSet));
+    assert!(!every(&any_frozenset, Kind::Set));
+    assert!(none(&any_tuple, Kind::Str) && !none(&int_tuple, Kind::Tuple));
+    // The connectives, and the complement turning one reading into the other.
+    let int_or_str = Schema::union([Schema::Int, Schema::Str]);
+    assert!(every(&int_or_str, Kind::Str) && every(&int_or_str, Kind::Int));
+    assert!(!none(&int_or_str, Kind::Str) && none(&int_or_str, Kind::Bytes));
+    let meet = Schema::Intersection([Schema::Str, not(Schema::Int)].into());
+    assert!(every(&meet, Kind::Str) && !every(&meet, Kind::Int));
+    assert!(none(&meet, Kind::Int) && !none(&meet, Kind::Str));
+    assert!(every(&not(Schema::Str), Kind::Int) && !every(&not(Schema::Str), Kind::Str));
+    assert!(none(&not(Schema::Str), Kind::Str) && !none(&not(Schema::Str), Kind::Int));
+    // `bool` shares the integers, so `~bool` is not seen to hold them.
+    assert!(!every(&not(Schema::Bool), Kind::Int));
+    // A refinement is read through its base for exclusion, and never as whole.
+    let short = Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::MaxLen(1)].into(),
+    };
+    assert!(!every(&short, Kind::Str) && none(&short, Kind::Int) && !none(&short, Kind::Str));
+    let refined_complement = Schema::Refine {
+        base: Arc::new(not(Schema::Str)),
+        constraints: vec![Constraint::MaxLen(1)].into(),
+    };
+    assert!(none(&refined_complement, Kind::Str));
+    // A literal is read by its kind through the oracle, and never as whole.
+    let literal_str = Schema::Literal(ConstIx::new(1));
+    assert!(!every(&literal_str, Kind::Str) && none(&literal_str, Kind::Int));
+    assert!(!none(&literal_str, Kind::Str));
+    assert!(!none(&Schema::Literal(ConstIx::new(9)), Kind::Int));
+    // A class is read by its layout, where the oracle has one.
+    let list_class = Schema::Instance(ClassIx::new(0));
+    let open_class = Schema::Instance(ClassIx::new(1));
+    assert!(none(&list_class, Kind::Str) && !every(&list_class, Kind::List));
+    assert!(!none(&list_class, Kind::List) && !none(&open_class, Kind::Str));
+}
+
+/// A clause that holds no string answers for no optional field of the
+/// supertype.
+///
+/// A subject's clause can put a key the subject does not declare into a
+/// value, and an optional field of the supertype reads that key only if the
+/// clause can spell its name. `complement(str)` cannot, so `{~str: int}`
+/// carries no `"a"` and is below `{"a"?: str, ~str: int}` whatever `"a"` maps
+/// to.
+#[test]
+fn a_clause_holding_no_string_answers_for_no_optional_field() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Budget::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let not_str = Schema::Complement(Arc::new(Schema::Str));
+    let subject = Schema::mapping(MapClause {
+        key: not_str.clone(),
+        value: Schema::Int,
+    });
+    let supertype = Schema::keyed_map_within(
+        vec![field("a", Schema::Str, false)],
+        vec![MapClause {
+            key: not_str,
+            value: Schema::Int,
+        }]
+        .into(),
+    );
+    assert_eq!(relation(&subject, &supertype), Relation::Holds);
+}
+
+/// The rules' answer alone, under the oracle that kinds the pool's constants.
+fn clause_rule_answer(sub: &Schema, sup: &Schema) -> Relation {
+    let budget = Budget::new(DECISION_BUDGET);
+    sub.subtype_relation(sup, &Kinded, &[], &budget)
+}
+
+/// A map of clauses and no fields.
+fn clauses(pairs: Vec<(Schema, Schema)>) -> Schema {
+    Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: pairs
+            .into_iter()
+            .map(|(key, value)| MapClause { key, value })
+            .collect::<Vec<_>>()
+            .into(),
+    }
+}
+
+/// A subject's clause is refuted by a key it admits that the supertype reads
+/// one way only (ICFP Lemma 4.7, a key kind at a time).
+///
+/// Each row names the dict it stands on. Asked of the rules alone.
+#[test]
+fn a_clause_is_refuted_by_a_key_the_supertype_reads_one_way() {
+    let relation = clause_rule_answer;
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let str_to_int = clauses(vec![(Schema::Str, Schema::Int)]);
+    let any_tuple = Schema::tuple(SeqShape::homogeneous(Schema::ANYTHING));
+    let any_frozenset = Schema::frozen_set(Schema::ANYTHING);
+    let int_or_str = Schema::union([Schema::Int, Schema::Str]);
+
+    // No clause reads the key: `{7: "x"}`, `{(): 1}`, `{frozenset(): 1}`.
+    for (subject, witness) in [
+        (
+            clauses(vec![
+                (Schema::Str, Schema::Int),
+                (not(Schema::Str), Schema::ANYTHING),
+            ]),
+            "{7: 'x'}",
+        ),
+        (
+            clauses(vec![(Schema::ANYTHING, Schema::ANYTHING)]),
+            "{None: None}",
+        ),
+        (clauses(vec![(any_tuple, Schema::Int)]), "{(): 1}"),
+        (
+            clauses(vec![(any_frozenset, Schema::Int)]),
+            "{frozenset(): 1}",
+        ),
+    ] {
+        assert_eq!(
+            relation(&subject, &str_to_int),
+            Relation::Fails,
+            "{witness}"
+        );
+    }
+    // One clause reads it, and forbids a value the subject allows.
+    assert_eq!(
+        relation(
+            &clauses(vec![(not(Schema::Str), Schema::Int)]),
+            &clauses(vec![(not(Schema::Str), Schema::Str)])
+        ),
+        Relation::Fails,
+        "{{7: 1}}"
+    );
+    assert_eq!(
+        relation(
+            &clauses(vec![(not(Schema::Int), int_or_str.clone())]),
+            &clauses(vec![(not(Schema::Int), Schema::Str)])
+        ),
+        Relation::Fails,
+        "{{'fresh': 1}}"
+    );
+    // A `str` key is a name no field of either map takes.
+    assert_eq!(
+        relation(
+            &Schema::keyed_map_within(
+                vec![field("next", Schema::NoneType, true)],
+                vec![MapClause {
+                    key: Schema::Str,
+                    value: Schema::ANYTHING,
+                }]
+                .into(),
+            ),
+            &closed(vec![field("next", Schema::NoneType, true)])
+        ),
+        Relation::Fails,
+        "{{'next': None, 'fresh': 1}}"
+    );
+}
+
+/// The pairs the clause rule must not refute.
+///
+/// Either the pair holds -- a key type with no hashable value admits only
+/// `{}` -- or a refutation would need a reading the rule does not make: a key
+/// read by two clauses, or by one that holds part of its kind, or a key read
+/// off a constant rather than a kind. Asked of the rules alone.
+#[test]
+fn a_clause_is_not_refuted_where_no_key_is_read_one_way() {
+    let relation = clause_rule_answer;
+    let str_to_int = clauses(vec![(Schema::Str, Schema::Int)]);
+    let int_or_str = Schema::union([Schema::Int, Schema::Str]);
+    // Pairs the rule must not refute. A tuple holding a list and a list are
+    // never keys, so those subjects admit `{}` alone and are below every map;
+    // a class is read by its instances, which may be unhashable, so it is
+    // never read as a kind.
+    for subject in [
+        clauses(vec![(
+            Schema::tuple(SeqShape::fixed([Schema::list(SeqShape::homogeneous(
+                Schema::Int,
+            ))])),
+            Schema::Int,
+        )]),
+        clauses(vec![(
+            Schema::list(SeqShape::homogeneous(Schema::ANYTHING)),
+            Schema::Int,
+        )]),
+        clauses(vec![(Schema::Instance(ClassIx::new(0)), Schema::Int)]),
+    ] {
+        assert_ne!(
+            relation(&subject, &str_to_int),
+            Relation::Fails,
+            "{subject:?}"
+        );
+    }
+    // A string literal names one string, which may be a field name of the
+    // supertype -- `{Literal["a"]: int}` is below `{"a"?: int}` -- so a key
+    // read off its value and not its kind declines, whichever string it is.
+    assert_eq!(
+        relation(
+            &clauses(vec![(Schema::Literal(ConstIx::new(1)), Schema::Int)]),
+            &Schema::keyed_map_within(vec![field("a", Schema::Int, false)], Vec::new().into())
+        ),
+        Relation::Unknown
+    );
+    // Two clauses read every key: each refutes on a value of its own.
+    assert_eq!(
+        relation(
+            &clauses(vec![(Schema::ANYTHING, int_or_str)]),
+            &clauses(vec![
+                (Schema::ANYTHING, Schema::Int),
+                (Schema::ANYTHING, Schema::Str)
+            ])
+        ),
+        Relation::Unknown
+    );
+    // `bool` holds part of the integers, so no integer kind is read one way.
+    assert_eq!(
+        relation(
+            &clauses(vec![(Schema::Int, Schema::Str)]),
+            &clauses(vec![(Schema::Bool, Schema::Str)])
+        ),
+        Relation::Unknown
+    );
+    // A value type with no value puts no entry in a dict.
+    assert_ne!(
+        relation(
+            &clauses(vec![(Schema::Str, Schema::Nothing)]),
+            &closed(Vec::new())
+        ),
+        Relation::Fails
     );
 }
 
