@@ -113,3 +113,58 @@ def test_a_note_arguing_from_the_sweeps_interpreter_names_it(
         "release: a mutant equivalent on one CPython is often killable on "
         "another, which is how this class of entry goes stale."
     )
+
+
+# --- What the sweep's interpreter imports -------------------------------------
+
+#: The line that starts a sweep's embedded interpreter from the venv the lock
+#: fills, rather than from whichever `python3` the runner's `PATH` holds first.
+_VENV_FIRST = re.compile(
+    r'^\s*export PATH="\$\(dirname "\$PYO3_PYTHON"\):\$PATH"\s*$', re.MULTILINE
+)
+
+
+def _embedded_sweeps() -> dict[str, str]:
+    """Give each step that sweeps against an embedded interpreter, by its job."""
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    found: dict[str, str] = {}
+    for name, job in workflow["jobs"].items():
+        for step in job.get("steps") or []:
+            run = step.get("run") or ""
+            if "cargo mutants" in run and "interpreter-tests" in run:
+                found[name] = run
+    return found
+
+
+def test_a_sweep_starts_its_embedded_interpreter_from_the_venv() -> None:
+    """A note about what the lock installs holds only where the sweep imports it.
+
+    The walk baseline accepts the mutants of the arms for `typing_extensions`'
+    own objects, because on 3.12 that module's `Required`, `NotRequired`,
+    `Unpack`, `Any` and `Never` are `typing`'s own: the notes argue from 3.12
+    *with the module installed from the lock*. The embedded interpreter takes
+    its prefix from the first `python3` on `PATH`, and `PYO3_PYTHON` only
+    configures the build. With the venv named by `PYO3_PYTHON` alone, uv's build
+    of 3.12 starts on its bare prefix, imports no `typing_extensions`, the
+    corpus installs its stand-in, and all four mutants are caught: the nightly
+    read four entries stale, and the notes stayed correct the whole time.
+
+    So every sweep that embeds its interpreter puts the venv first on `PATH`
+    before it runs, as the tooling page's recipe does.
+    """
+    sweeps = _embedded_sweeps()
+    assert set(sweeps) >= {"nightly-mutants-walk", "mutants-diff-walk"}, sorted(sweeps)
+    unstarted = sorted(
+        job
+        for job, run in sweeps.items()
+        if not (
+            (line := _VENV_FIRST.search(run)) is not None
+            and line.start() < run.index("cargo mutants")
+        )
+    )
+    assert not unstarted, (
+        f"sweeps whose embedded interpreter starts outside the venv: {unstarted}. "
+        "Export the venv's `bin` first on `PATH` before `cargo mutants`, or the "
+        "interpreter imports what the runner's first `python3` has rather than "
+        "what the baseline's notes argue from."
+    )

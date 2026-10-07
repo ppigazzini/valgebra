@@ -1324,6 +1324,10 @@ jobs:
           export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
           libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           export LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}"
+          # The venv first on `PATH`, for the reason the nightly sweep gives:
+          # the embedded interpreter starts from it, and imports what the
+          # baseline's notes argue from.
+          export PATH="$(dirname "$PYO3_PYTHON"):$PATH"
           files=(
             --file crates/valgebra-py/src/check/walk.rs
             --file crates/valgebra-py/src/check/walk/record.rs
@@ -2025,6 +2029,13 @@ jobs:
           export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
           libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           export LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}"
+          # The embedded interpreter takes its prefix from the first `python3`
+          # on `PATH`; `PYO3_PYTHON` only configures the build. The baseline's
+          # notes argue from this venv, where the lock installs
+          # `typing_extensions`. Started on uv's bare build, the interpreter
+          # imports none, the corpus installs its stand-in, and the mutants the
+          # notes accept for that module's arms read as caught.
+          export PATH="$(dirname "$PYO3_PYTHON"):$PATH"
           set +e
           # The same files the push lane sweeps, because this is where
           # their baseline comes from: a file the ratchet judges and the
