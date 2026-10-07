@@ -872,10 +872,11 @@ fn two_spellings_of_one_keyed_map_are_one_term() {
 /// value are one clause over the union of their keys -- which is the whole key
 /// space, so it is the catch-all a record opened has always had.
 ///
-/// Spelling it as two costs the pair: a clause keyed by a complement is a shape
-/// the descriptor's map lowering declines, so the same set written the long way
-/// is decided one way and not the other. The merge is what keeps `open` inside
-/// the decided fragment.
+/// Spelling it as two is one set under two terms, and where the region claimed
+/// holds a literal it costs the pair: the region freed is the literal's
+/// complement, which the descriptor's map lowering declines, so the same set
+/// written the long way is decided one way and not the other. The merge is
+/// what keeps `open` inside the decided fragment there.
 #[test]
 fn opening_a_record_that_claims_a_region_leaves_one_clause() {
     let claimed = MapClause {

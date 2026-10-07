@@ -508,9 +508,10 @@ the catch-all an opening writes already says, so it goes -- and it has to, or
 `{"a?": anything}` and `{}`, one set once opened, would close to two. Two
 clauses carrying one value are one clause over the union of their keys, so
 opening `dict[str, anything]` gives a single clause over every key -- and that
-has to be so too, since the long spelling is keyed by a complement, a shape
-[the set representation declines](15-decidability.md). Neither is recoverable,
-so closing afterwards lands on the smaller term:
+has to be so too: where the keys claimed hold a literal, the long spelling is
+keyed by the literal's complement, a shape [the set representation
+declines](15-decidability.md). Neither is recoverable, so closing afterwards
+lands on the smaller term:
 
 ```python
 from valgebra import Validator
@@ -707,10 +708,11 @@ assert not partly_open.is_valid({"name": "Ada", "age": "old"})
 assert Validator({"name": str, str: int}).open().is_equivalent(partly_open)
 ```
 
-A schema written this way leaves the [decided
-fragment](15-decidability.md): a clause keyed by a complement is one the set
-representation declines, so relations about it fall back to the rules.
-Membership is unaffected — the walk reads the value.
+A complement of whole kinds stays in the [decided
+fragment](15-decidability.md): the set representation reads `complement(str)`
+as every other kind. A complement of a literal holds part of a kind, which it
+declines, so relations about such a map fall back to the rules. Membership is
+unaffected either way — the walk reads the value.
 
 ## Classes
 

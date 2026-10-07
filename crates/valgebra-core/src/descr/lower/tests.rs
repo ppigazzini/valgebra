@@ -2040,3 +2040,216 @@ fn a_literal_key_with_no_subclass_proves_wherever_it_is() {
         Relation::Holds
     );
 }
+
+/// One key of each part of the key partition, each in a dict mapping it to
+/// `1`: `None`, `True`, `7`, `0.5`, `"a"`, `b"a"`, `()`, `frozenset()`, and a
+/// value of no listed kind last.
+const ONE_KEY_OF_EACH_PART: [&[(Value, Value)]; 9] = [
+    &[(Value::of_kind(Kind::NoneType), Value::integer(1))],
+    &[(Value::boolean(true), Value::integer(1))],
+    &[(Value::integer(7), Value::integer(1))],
+    &[(Value::float(0.5), Value::integer(1))],
+    &[(Value::word(b"a", Kind::Str), Value::integer(1))],
+    &[(Value::word(b"a", Kind::Bytes), Value::integer(1))],
+    &[(Value::sequence(&[], Kind::Tuple), Value::integer(1))],
+    &[(Value::sequence(&[], Kind::FrozenSet), Value::integer(1))],
+    &[(Value::other(), Value::integer(1))],
+];
+
+/// A key schema built from whole kinds: each hashable kind, a tuple and a
+/// frozenset of anything, both ends, and unions and complements of those,
+/// written as the constructors leave them rather than folded.
+fn whole_kind_key() -> impl Strategy<Value = Schema> {
+    let atom = prop_oneof![
+        Just(Schema::NoneType),
+        Just(Schema::Bool),
+        Just(Schema::Int),
+        Just(Schema::Float),
+        Just(Schema::Str),
+        Just(Schema::Bytes),
+        Just(Schema::tuple(SeqShape::homogeneous(Schema::ANYTHING))),
+        Just(Schema::frozen_set(Schema::ANYTHING)),
+        Just(Schema::ANYTHING),
+        Just(Schema::Nothing),
+    ];
+    atom.prop_recursive(3, 8, 2, |inner| {
+        prop_oneof![
+            inner
+                .clone()
+                .prop_map(|key| Schema::Complement(Arc::new(key))),
+            prop::collection::vec(inner, 2).prop_map(|members| Schema::Union(members.into())),
+        ]
+    })
+}
+
+/// Whether a key schema of [`whole_kind_key`] holds `key`, read off what each
+/// form denotes rather than off the partition.
+fn holds_key(schema: &Schema, key: &Value) -> bool {
+    match schema {
+        Schema::Anything(_) => true,
+        Schema::Nothing => false,
+        Schema::NoneType => key.kind == Some(Kind::NoneType),
+        Schema::Bool => key.kind == Some(Kind::Bool),
+        // Every boolean is an integer.
+        Schema::Int => matches!(key.kind, Some(Kind::Int | Kind::Bool)),
+        Schema::Float => key.kind == Some(Kind::Float),
+        Schema::Str => key.kind == Some(Kind::Str),
+        Schema::Bytes => key.kind == Some(Kind::Bytes),
+        Schema::Seq { .. } => key.kind == Some(Kind::Tuple),
+        Schema::Coll { .. } => key.kind == Some(Kind::FrozenSet),
+        Schema::Union(members) => members.iter().any(|member| holds_key(member, key)),
+        Schema::Complement(inner) => !holds_key(inner, key),
+        other => unreachable!("not a key of whole kinds: {other:?}"),
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    // THEORY: records-maps-and-structs
+    /// A key of whole kinds lowers, and admits a key of each part exactly
+    /// where its schema holds that key.
+    ///
+    /// ICFP 2023's footnote 15 lets a map's domain be a union of key types,
+    /// and a complement of whole kinds is the union of the other parts -- the
+    /// part for a key of no listed kind among them, which no key schema
+    /// names. The answer is held to what each form denotes rather than to the
+    /// partition, so a complement subtracting the wrong parts, or leaving the
+    /// classes out, admits a dict its schema refuses or refuses one it admits.
+    #[test]
+    fn a_key_of_whole_kinds_opens_the_parts_it_holds(key in whole_kind_key()) {
+        let map = Schema::mapping(MapClause {
+            key: key.clone(),
+            value: Schema::Int,
+        });
+        let lowered = lower(&map, &empty_pool());
+        prop_assert!(lowered.is_some(), "{:?} does not lower", key);
+        let lowered = lowered.expect("held above");
+        for entry in ONE_KEY_OF_EACH_PART {
+            let (held, _) = entry[0];
+            prop_assert_eq!(
+                lowered.admits(Value::dict(entry)),
+                holds_key(&key, &held),
+                "{:?} keyed by {:?}",
+                key,
+                held
+            );
+        }
+    }
+}
+
+/// A key holding part of a kind refuses, under a complement too.
+///
+/// The default is a function on the parts, so a key that splits one has
+/// nowhere to land: a tuple of narrower elements, the empty tuple alone, a
+/// tuple with a pinned first element, a frozenset of narrower members, a
+/// class, and the complement of a literal -- which holds a `str` subclass's
+/// key equal to `"a"` and not the exact one, where the label holds both.
+#[test]
+fn a_key_holding_part_of_a_kind_refuses() {
+    let pool = Pool(vec![Operand::Word(b"a".to_vec(), Kind::Str)]);
+    let not = |key| Schema::Complement(Arc::new(key));
+    let ints = || Schema::tuple(SeqShape::homogeneous(Schema::Int));
+    for key in [
+        ints(),
+        Schema::tuple(SeqShape::fixed([])),
+        Schema::tuple(SeqShape::prefix_tail([Schema::Int], Schema::ANYTHING)),
+        Schema::frozen_set(Schema::Int),
+        Schema::Instance(ClassIx::new(0)),
+        not(Schema::Literal(ConstIx::new(0))),
+        not(ints()),
+        not(Schema::Union(
+            vec![Schema::Str, Schema::Literal(ConstIx::new(0))].into(),
+        )),
+    ] {
+        let map = Schema::mapping(MapClause {
+            key: key.clone(),
+            value: Schema::Int,
+        });
+        assert!(lower(&map, &pool).is_none(), "{key:?}");
+    }
+}
+
+/// A complement beside a finite part leaves the part's keys finite.
+///
+/// ICFP 2023 reads every key type as infinite, so a constraint the default
+/// cannot meet is met by a key no label names. `None`'s part holds one key
+/// and `bool`'s two, and the complement `open` writes beside either leaves
+/// them so: `{None: int | str}` opened is below the union of `{None: int}`
+/// and `{None: str}` opened, since its one key holds one of the two, and the
+/// same over `bool` is not, on `{True: 1, False: "x"}`.
+#[test]
+fn a_complement_beside_a_finite_part_leaves_its_keys_finite() {
+    let pool = empty_pool();
+    let opened = |part: &Schema, value| {
+        Schema::keyed_map(
+            Vec::new(),
+            vec![
+                MapClause {
+                    key: part.clone(),
+                    value,
+                },
+                MapClause {
+                    key: Schema::Complement(Arc::new(part.clone())),
+                    value: Schema::ANYTHING,
+                },
+            ],
+        )
+    };
+    for (part, answer) in [
+        (Schema::NoneType, Relation::Holds),
+        (Schema::Bool, Relation::Fails),
+    ] {
+        let both = opened(&part, Schema::union([Schema::Int, Schema::Str]));
+        let either = Schema::union([opened(&part, Schema::Int), opened(&part, Schema::Str)]);
+        assert_eq!(
+            both.descriptor_contained_in(&either, &pool, &[]),
+            answer,
+            "{part:?}"
+        );
+    }
+}
+
+/// A complement opens the part for a key of no listed kind, and a class
+/// subject is read against the map it lowers to.
+///
+/// `complement(str)` holds every key that is not a string, a class
+/// instance's included, so `{~str: int}` is outside the map keyed by every
+/// listed kind but `str` -- on `{object(): 1}` -- and the other way is an
+/// inclusion. A class whose instances are no dict is outside every map, and
+/// `Plain` against `{~str: int}` is refuted on `Plain()`.
+#[test]
+fn a_complement_key_opens_the_part_for_a_key_of_no_listed_kind() {
+    let pool = Pool(vec![Operand::Instance(Class::new(0, None, &[]))]);
+    let keyed = |key| {
+        Schema::mapping(MapClause {
+            key,
+            value: Schema::Int,
+        })
+    };
+    let not_str = keyed(Schema::Complement(Arc::new(Schema::Str)));
+    let listed = keyed(Schema::union([
+        Schema::NoneType,
+        Schema::Bool,
+        Schema::Int,
+        Schema::Float,
+        Schema::Bytes,
+        Schema::tuple(SeqShape::homogeneous(Schema::ANYTHING)),
+        Schema::frozen_set(Schema::ANYTHING),
+    ]));
+    assert_eq!(
+        not_str.descriptor_contained_in(&listed, &pool, &[]),
+        Relation::Fails
+    );
+    assert_eq!(
+        listed.descriptor_contained_in(&not_str, &pool, &[]),
+        Relation::Holds
+    );
+    assert_eq!(
+        Schema::Instance(ClassIx::new(0)).descriptor_contained_in(&not_str, &pool, &[]),
+        Relation::Fails
+    );
+}

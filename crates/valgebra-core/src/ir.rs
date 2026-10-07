@@ -519,12 +519,13 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
 /// name is what a `TypedDict` builds, and freeing the key-types beside it gives
 /// two clauses carrying `anything` between them.
 ///
-/// It costs the pair rather than the answer to leave them apart. A clause keyed
-/// by a *complement* is a shape the set representation declines
-/// (`docs/15-decidability.md`), so the same set written the long way stops being
-/// decided -- and the long way is what opening a record would otherwise produce,
-/// which is the common case. Where the values differ there is nothing to fold
-/// and the complement stands, which is the mapping case the page records.
+/// Leaving them apart costs a pair its answer where the region claimed holds a
+/// literal: the region freed is then the literal's complement, a key holding
+/// part of a kind, which the set representation declines
+/// (`docs/15-decidability.md`), so the same set written the long way stops
+/// being decided. Over whole kinds the long way is decided too, and the fold
+/// is the shorter term. Where the values differ there is nothing to fold and
+/// the complement stands, which is the mapping case the page records.
 fn merge_by_value(clauses: &mut Vec<MapClause>) {
     let mut folded: Vec<MapClause> = Vec::with_capacity(clauses.len());
     for clause in clauses.drain(..) {

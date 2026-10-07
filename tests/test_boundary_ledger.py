@@ -223,13 +223,13 @@ ROWS: dict[str, Row] = {
         union(int, complement(int)), anything, "subset"
     ),
     # -- sound but conservative ----------------------------------------------
-    "A clause keyed by a complement.": Declines(
+    "A clause keyed by part of a kind.": Declines(
         dict,
-        {str: anything, complement(str): anything},
-        "a part of the key partition for a key-type spanning every kind but one",
-        # The entry's own contrast: a key kind the supertype reads through one
-        # clause or none refutes, the rules' half of the entry -- `{0.5: 1}`.
-        beside=({complement(str): int}, dict[int, int], "not_subset"),
+        {Literal["a"]: anything, complement(Literal["a"]): anything},
+        "a part of the key partition for a key-type holding part of a kind",
+        # The entry's own contrast: a complement of a whole kind is the other
+        # parts, and the same two clauses over `str` decide.
+        beside=(dict, {str: anything, complement(str): anything}, "subset"),
     ),
     "A clause keyed by a float literal.": Declines(
         dict[float, int],

@@ -187,6 +187,16 @@ representation, and it is the sentence to read rather than this table. Every
 listed kind has a representation that separates its values; `Coarse` survives
 only where it is exact.
 
+**A map's key lands in the parts of the key partition it holds whole**
+(`key_cover` in `descr/lower.rs`): a kind, a `tuple` or `frozenset` of
+anything, a union of those, and a complement of one, which opens the parts its
+inner leaves -- the part for a key of no listed kind among them, so
+`complement(str)` holds `{object(): 1}`. A literal is a label. A key holding
+part of a kind -- a narrower tuple, a class, the complement of a literal --
+refuses, because the default is a function on the parts and such a key splits
+one; [15-decidability.md](../15-decidability.md) lists what that leaves to the
+rules.
+
 **What no component holds is a cycle**, which is why a recursive schema is
 lowered by unfolding its body once, with a lattice bound where the reference was
 (`UNFOLDS` in `descr/lower.rs`), and belongs to the rules past that. The other

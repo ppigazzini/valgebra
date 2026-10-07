@@ -14,6 +14,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a map is refuted on a key the other reads one way
+- fix: a map keyed by a complement of kinds lowers to the other kinds
 
 -->
 
@@ -33,6 +34,20 @@ answer of its own, or a repair to a change not yet released.
   `{}` and is never refuted, and two clauses reading one kind decline. A nested
   `dict[str, ...]` is refuted at any depth, where five levels deep answered
   `undecided`.
+- **A map keyed by a complement of kinds is decided.** A relation about a map
+  whose key was a `complement` -- the clause `open` writes on a mapping -- was
+  left to the clause rules, and a pair they could not read answered
+  `undecided`: a plain class against `{complement(str): int}` or `{str:
+  int}.open()`, `dict` against `{str: Any, complement(str): Any}`, and
+  `{complement(bool): int}` against `{complement(int): int, int: int}`. The set
+  representation reads a complement of whole kinds as the other kinds, a class
+  instance among them -- so `{complement(str): int}` is outside the map keyed
+  by every listed kind on `{object(): 1}` -- and a `tuple` or `frozenset` key
+  as its kind. `None` and `bool` keep their finite keys: `{None: int | str}`
+  opened is below `{None: int}` opened or `{None: str}` opened, and the same
+  over `bool` is refuted on `{True: 1, False: "x"}`. A key holding part of a
+  kind -- the complement of a literal, `tuple[int, ...]`, a class -- declines,
+  and the decidability page lists it.
 
 ## [0.0.17] - 2026-10-06
 

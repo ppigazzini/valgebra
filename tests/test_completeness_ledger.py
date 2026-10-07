@@ -752,8 +752,8 @@ _DECIDED = [
     pytest.param("refutes", _CHAIN, int, id="mu:chain!<=int"),
     # A key the subject's clause holds a whole kind of, which the supertype
     # reads through one clause or none: ICFP Lemma 4.7, a key kind at a time.
-    # The set representation declines every one of these -- a complement key, a
-    # recursive supertype -- so the rules are the decider, and the value that
+    # The rules refute each; against a recursive supertype the set
+    # representation declines, and they are the only decider. The value that
     # refutes is listed beside each row.
     pytest.param(
         "refutes",
@@ -791,6 +791,61 @@ _DECIDED = [
         {complement(int): union(int, str)},
         {complement(int): str},
         id="key:complement-key-names!<=",  # {"x": 1}
+    ),
+    # A key-type the partition holds as parts: a complement of whole kinds is
+    # the other kinds and the part for a key of no listed kind, a class
+    # instance, and a tuple or a frozenset of anything is its kind whole. The
+    # sets decide these where the rules read no key kind one way.
+    pytest.param(
+        "refutes", _Plain, {complement(str): int}, id="key:class!<=complement-key"
+    ),  # _Plain()
+    pytest.param(
+        "refutes",
+        _Plain,
+        Validator({str: int}).open(),
+        id="key:class!<=opened-mapping",  # _Plain()
+    ),
+    pytest.param(
+        "refutes", _Plain, {tuple: int}, id="key:class!<=tuple-key"
+    ),  # _Plain()
+    pytest.param(
+        "refutes",
+        {complement(str): int},
+        {union(None, bool, int, float, bytes, tuple, frozenset): int},
+        id="key:complement-key!<=every-listed-kind",  # {_Plain(): 1}
+    ),
+    pytest.param(
+        "refutes",
+        {complement(bool): int},
+        {complement(int): int},
+        id="key:complement-bool!<=complement-int",  # {1: 1}
+    ),
+    pytest.param(
+        "subtype",
+        {complement(bool): int},
+        {complement(int): int, int: int},
+        id="key:complement-bool<=complement-int-and-int",
+    ),
+    pytest.param(
+        "subtype",
+        dict,
+        {str: anything, complement(str): anything},
+        id="key:dict<=two-clauses-covering-every-key",
+    ),
+    # The finite parts keep their keys: `None` is one key and `bool` two, so a
+    # value of two kinds under the one is a value of one of them, and under the
+    # two may be one of each.
+    pytest.param(
+        "subtype",
+        Validator({None: union(int, str)}).open(),
+        union(Validator({None: int}).open(), Validator({None: str}).open()),
+        id="key:none-part<=union-of-its-values",
+    ),
+    pytest.param(
+        "refutes",
+        Validator({bool: union(int, str)}).open(),
+        union(Validator({bool: int}).open(), Validator({bool: str}).open()),
+        id="key:bool-part!<=union-of-its-values",  # {True: 1, False: "x"}
     ),
     # Divisibility, which the steps decide between them: every multiple of `a`
     # is a multiple of `b` exactly when `b` divides `a`. The rules read the two
