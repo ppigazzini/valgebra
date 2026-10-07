@@ -750,6 +750,48 @@ _DECIDED = [
         id="mu:record-with-a-fixpoint-field!<=its-siblings",
     ),
     pytest.param("refutes", _CHAIN, int, id="mu:chain!<=int"),
+    # A key the subject's clause holds a whole kind of, which the supertype
+    # reads through one clause or none: ICFP Lemma 4.7, a key kind at a time.
+    # The set representation declines every one of these -- a complement key, a
+    # recursive supertype -- so the rules are the decider, and the value that
+    # refutes is listed beside each row.
+    pytest.param(
+        "refutes",
+        Validator({str: int}).open(),
+        {str: int},
+        id="key:opened-mapping!<=mapping",  # {7: "x"}
+    ),
+    pytest.param(
+        "refutes",
+        {"a": str},
+        Validator({str: int}).open(),
+        id="key:record!<=opened-mapping",  # {"a": ""}
+    ),
+    pytest.param(
+        "refutes", {str: bytes}, _JSON, id="key:str-to-bytes!<=json"
+    ),  # {"a": b""}
+    pytest.param("refutes", dict, _JSON, id="key:dict!<=json"),  # {7: 1}
+    pytest.param(
+        "refutes", {tuple: int}, {str: int}, id="key:tuple-key!<=str-key"
+    ),  # {(): 1}
+    pytest.param(
+        "refutes",
+        recursive(lambda t: union(None, {"next": t, str: Any})),
+        _CHAIN,
+        id="key:open-chain!<=chain",  # {"next": None, "x": 1}
+    ),
+    pytest.param(
+        "refutes",
+        {complement(str): int},
+        {complement(str): str},
+        id="key:complement-key-values!<=",  # {7: 1}
+    ),
+    pytest.param(
+        "refutes",
+        {complement(int): union(int, str)},
+        {complement(int): str},
+        id="key:complement-key-names!<=",  # {"x": 1}
+    ),
     # Divisibility, which the steps decide between them: every multiple of `a`
     # is a multiple of `b` exactly when `b` divides `a`. The rules read the two
     # steps rather than the values they name, so the answer does not depend on
@@ -986,8 +1028,10 @@ _DECIDED = [
         None,
         id="empty:open-record-minus-a-chain-of-12",
     ),
-    # A list is refuted by its rules at any depth, a mapping through the sets,
-    # whose lowering descends a bounded nesting: four mappings deep is inside it.
+    # A list is refuted by its rules at any depth, and a mapping is too: the
+    # value its clause gives a key is asked against the one clause that reads
+    # that key, a level at a time, so the nesting a lowering descends does not
+    # bound it.
     pytest.param(
         "refutes",
         _nested(int, 127, mapping=False),
@@ -1094,15 +1138,19 @@ _LEDGERED: list[object] = [
         id="empty:open-record-minus-a-chain-of-13",
         marks=_missed("the chain reads more schema nodes than a lowering builds"),
     ),
-    # The mapping chain one level past the row above: the rules refute a
-    # mapping only through the set representation, and five levels is past the
-    # nesting a lowering descends (`DEPTH`, `descr/lower.rs`).
+    # Past the nesting a lowering descends (`DEPTH`, `descr/lower.rs`), which
+    # is where the set representation stops reading a mapping.
     pytest.param(
         "refutes",
         _nested(int, 5, mapping=True),
         _nested(str, 5, mapping=True),
         id="refute:mappings-5-deep-over-int<=over-str",
-        marks=_missed("the chain nests deeper than a lowering descends"),
+    ),
+    pytest.param(
+        "refutes",
+        _nested(int, 40, mapping=True),
+        _nested(str, 40, mapping=True),
+        id="refute:mappings-40-deep-over-int<=over-str",
     ),
     # A set of `1` and `True` is a set of one member, since `{1, True}` is
     # `{1}`, so every set of either is a set of one of them. The two members a

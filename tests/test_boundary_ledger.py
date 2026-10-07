@@ -224,16 +224,15 @@ ROWS: dict[str, Row] = {
     ),
     # -- sound but conservative ----------------------------------------------
     "A clause keyed by a complement.": Declines(
-        {complement(str): int},
-        dict[int, int],
+        dict,
+        {str: anything, complement(str): anything},
         "a part of the key partition for a key-type spanning every kind but one",
-        # The entry's own contrast: opening a *record* frees the regions its
-        # clauses do not claim, which is one catch-all clause rather than a
-        # complement, and the relation stays decided.
-        beside=(Validator({"a": int}).open(), dict, "subset"),
+        # The entry's own contrast: a key kind the supertype reads through one
+        # clause or none refutes, the rules' half of the entry -- `{0.5: 1}`.
+        beside=({complement(str): int}, dict[int, int], "not_subset"),
     ),
     "A clause keyed by a float literal.": Declines(
-        dict[int, int],
+        dict[float, int],
         dict[Literal[1.0], int],  # ty: ignore[invalid-type-form]
         "a label of the key partition for a float value",
         # The entry's own contrast: a literal key of another kind lands in its

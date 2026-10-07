@@ -373,3 +373,38 @@ def test_one_key_cannot_witness_two_clauses_of_a_union() -> None:
     assert (
         Validator({"a": int | str, "b": int | str}).relation_to(cover) == "not_subset"
     )
+
+
+class _UnhashableInt(int):
+    """An `int` whose instances are no dict key."""
+
+    __hash__ = None  # type: ignore[assignment]
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        pytest.param(_UnhashableInt, id="int-subclass-without-hash"),
+        pytest.param(tuple[list[int]], id="tuple-of-a-list"),
+        pytest.param(list, id="list"),
+    ],
+)
+def test_a_key_type_with_no_hashable_value_is_never_refuted(key: object) -> None:
+    """A map keyed by a type no value of which is hashable admits `{}` alone.
+
+    So it is below every map, and a rule that reads its key as the kind the
+    type is built on -- `int`, `tuple` -- names a key that is not one. The
+    clause rules read a key by whole kinds for that reason, and these are the
+    pairs a reading by values would refute.
+    """
+    subject = Validator({key: int})
+    assert subject.is_valid({})
+    assert subject.relation_to({str: int}) != "not_subset"
+
+
+def test_a_literal_key_named_by_a_field_is_never_refuted() -> None:
+    """`{Literal["x"]: int}` is below `{"x?": int}`: the field reads the key."""
+    subject = Validator({Literal["x"]: int})
+    assert subject.relation_to({"x?": int}) != "not_subset"
+    assert subject.is_valid({"x": 1})
+    assert Validator({"x?": int}).is_valid({"x": 1})

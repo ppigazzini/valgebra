@@ -547,11 +547,11 @@ and deviation that has a test of its own or is owed one.
 every value of `t1` is a value of `t2`, and `is_equivalent` is both directions.
 A proof from either decider admits no counterexample the walk can find, and a
 refutation from either stands on a value the walk refuses, over the structural
-fragment and over a recursive pair alike. **[LOAD-BEARING: subtyping-is-inclusion]**
+fragment, over maps keyed by every hashable kind, and over a recursive pair alike. **[LOAD-BEARING: subtyping-is-inclusion]**
 
 SOURCE: §13.0 "**Subtyping, defined.** UIN Definition 4"
 
-HELD-BY: subtyping_is_sound_over_the_structural_fragment, a_refutation_is_a_value, a_proof_over_a_fixpoint_has_no_witness_against_it, test_no_proof_is_refuted_by_a_value, test_a_claimed_refutation_stands_on_a_value
+HELD-BY: subtyping_is_sound_over_the_structural_fragment, a_refutation_is_a_value, a_map_relation_stands_on_a_dict, a_proof_over_a_fixpoint_has_no_witness_against_it, test_no_proof_is_refuted_by_a_value, test_a_claimed_refutation_stands_on_a_value
 
 **A cut reference proves and never refutes.** The descriptor decides `a <= b`
 by lowering the difference, and a recursive reference is cut to a bound: the
@@ -624,7 +624,7 @@ carrier, `nan`, the newline, the empty container. **[LOAD-BEARING: each-kind-is-
 
 SOURCE: §14.5 "Each kind's representation should be closed under complement"
 
-HELD-BY: descr/integers/tests.rs::the_lattice_laws_hold_of_the_integers, the_lattice_laws_hold_of_the_floats, the_lattice_laws_hold_of_the_languages, the_lattice_laws_hold_of_the_sequences, descr/sets/tests.rs::the_lattice_laws_hold_of_the_sets, the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_objects, the_lattice_laws_hold_of_the_values, the_complement_laws_hold_of_the_values, an_emptiness_is_refused_by_every_boundary_value, the_universe_separates_a_pair_inside_a_shape, the_universe_separates_a_pair_inside_a_position, the_universe_separates_a_pair_spelled_through_a_wrapper, test_each_kinds_top_is_decided_at_the_value_that_decides_it, test_a_hashable_subclass_of_an_unhashable_kind_is_a_set_member, test_a_class_whose_metaclass_runs_isinstance_declines_every_relation
+HELD-BY: descr/integers/tests.rs::the_lattice_laws_hold_of_the_integers, the_lattice_laws_hold_of_the_floats, the_lattice_laws_hold_of_the_languages, the_lattice_laws_hold_of_the_sequences, descr/sets/tests.rs::the_lattice_laws_hold_of_the_sets, the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_objects, the_lattice_laws_hold_of_the_values, the_complement_laws_hold_of_the_values, an_emptiness_is_refused_by_every_boundary_value, the_universe_separates_a_pair_inside_a_shape, the_universe_separates_a_pair_inside_a_position, the_universe_separates_a_pair_at_the_tail_of_a_position, the_universe_separates_a_pair_spelled_through_a_wrapper, test_each_kinds_top_is_decided_at_the_value_that_decides_it, test_a_hashable_subclass_of_an_unhashable_kind_is_a_set_member, test_a_class_whose_metaclass_runs_isinstance_declines_every_relation
 
 **A node built alike is one handle.** Interning shares the nodes of two schemas
 built the same way, so the trail's comparisons short-circuit on pointer

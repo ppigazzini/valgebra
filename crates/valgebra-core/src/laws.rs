@@ -3312,6 +3312,15 @@ const CROSS_DEPTH: usize = 2;
 /// *there* with one of its positions taken from the other schema's element at
 /// that position. Bounded the way the flat crossing is -- each position, a
 /// capped set of candidates, and [`CROSS_DEPTH`] levels of it.
+///
+/// A tailed shape is filled at one slot of its tail as well, the one past its
+/// prefix that [`a_member`] builds, since a member carries the tail's values
+/// only there. A variadic tuple inside a list is separated on that slot alone:
+/// `list[tuple[M, ...], t]`, with `M` a map whose `str` keys take floats, is
+/// refuted below `list[tuple[{}, ...], t]` by a list whose head is
+/// `({"a": 1.0},)`. The subject's own tuple holds that value, behind the empty
+/// map and the non-members a clause admitting no value is probed with, and the
+/// quarter-cap a position reads through cut it.
 fn crossed_position(mine: &Schema, theirs: &Schema, out: &mut Vec<Obj>, fuel: usize) -> Vec<Obj> {
     let (
         Schema::Seq {
@@ -3323,10 +3332,10 @@ fn crossed_position(mine: &Schema, theirs: &Schema, out: &mut Vec<Obj>, fuel: us
     else {
         return Vec::new();
     };
-    if fuel == 0 || ours.tail.is_some() {
-        return Vec::new(); // no fuel, or no fixed width to fill
+    if fuel == 0 {
+        return Vec::new();
     }
-    let Some(base): Option<Vec<Obj>> = ours
+    let Some(mut base): Option<Vec<Obj>> = ours
         .prefix
         .iter()
         .map(|element| a_member(element, MEMBER_FUEL))
@@ -3334,6 +3343,13 @@ fn crossed_position(mine: &Schema, theirs: &Schema, out: &mut Vec<Obj>, fuel: us
     else {
         return Vec::new(); // a position with no member of its own builds no value
     };
+    // The tail's slot where the tail has a member; one it has none of is a
+    // slot no member of the shape fills.
+    base.extend(
+        ours.tail
+            .as_deref()
+            .and_then(|tail| a_member(tail, MEMBER_FUEL)),
+    );
     let mut made = Vec::new();
     for position in 0..base.len() {
         let Some(element) = other
@@ -3344,16 +3360,14 @@ fn crossed_position(mine: &Schema, theirs: &Schema, out: &mut Vec<Obj>, fuel: us
         else {
             continue;
         };
+        let Some(own) = ours.prefix.get(position).or(ours.tail.as_deref()) else {
+            continue;
+        };
         let mut fill: Vec<Obj> = candidates(&element, out)
             .into_iter()
             .take(CAP_PER_NODE / 4)
             .collect();
-        fill.extend(crossed_position(
-            &ours.prefix[position],
-            &element,
-            out,
-            fuel - 1,
-        ));
+        fill.extend(crossed_position(own, &element, out, fuel - 1));
         for value in fill {
             let mut items = base.clone();
             items[position] = value;
@@ -3527,6 +3541,71 @@ fn the_universe_separates_a_pair_inside_a_position() {
             Schema::Ref(DefIx::new(1)),
         ]),
     };
+    // The premise the law carries: a pair that is not refuted asserts nothing.
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
+}
+
+// THEORY: each-kind-is-closed
+/// The universe separates a pair at the tail of a position.
+///
+/// The row above with a variadic tuple at the outer position. Its members
+/// carry the tail's values at the slots past the prefix and nowhere else, so
+/// the pair is told apart there or not at all: `list[tuple[M, ...], t]`, with
+/// `M` a map whose `str` keys take floats, is refuted below `list[tuple[{},
+/// ...], t]` because a dict of `M` with an entry is not the empty one, and the
+/// witness is a list whose head is `({"a": 1.0},)`.
+///
+/// The crossing stopped at a shape with a tail, as having no fixed width to
+/// fill, and the subject's own tuple carried the map that separates them
+/// behind the empty one and the non-members of `M`'s first clause, which
+/// admits no value. The quarter-cap a position reads through cut it. The pair
+/// came out of the nightly lane at eight thousand cases, held as drawn: the
+/// clause admitting no value ahead of the one that admits floats is what
+/// crowds the caps.
+#[test]
+fn the_universe_separates_a_pair_at_the_tail_of_a_position() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let head = |map: Schema| Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape::fixed([
+            Schema::Seq {
+                container: SeqKind::Tuple,
+                shape: SeqShape::homogeneous(map),
+            },
+            Schema::Ref(DefIx::new(1)),
+        ]),
+    };
+    let a = head(Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![
+            MapClause {
+                key: Schema::Literal(ConstIx::new(3)),
+                value: Schema::Nothing,
+            },
+            MapClause {
+                key: Schema::Str,
+                value: Schema::Float,
+            },
+        ]
+        .into(),
+    });
+    let b = head(Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: Vec::new().into(),
+    });
     // The premise the law carries: a pair that is not refuted asserts nothing.
     assert_eq!(
         a.subtype_relation_under(&b, &NoLeafRelations, &defs),
@@ -4991,6 +5070,197 @@ proptest! {
     }
 }
 
+/// A key a drawn clause may carry: every hashable kind whole, the shapes and
+/// constants the clause rules must not read as a kind, and the connectives
+/// over them, a complement above all -- which is what `open` writes on a map.
+fn drawn_key() -> impl Strategy<Value = Schema> {
+    let atom = prop_oneof![
+        Just(Schema::Str),
+        Just(Schema::Int),
+        Just(Schema::Bool),
+        Just(Schema::NoneType),
+        Just(Schema::Float),
+        Just(Schema::Bytes),
+        Just(Schema::ANYTHING),
+        Just(Schema::tuple(SeqShape::homogeneous(Schema::ANYTHING))),
+        Just(Schema::frozen_set(Schema::ANYTHING)),
+        // A tuple of a list is never a key, so its clause admits no entry.
+        Just(Schema::tuple(SeqShape::fixed([Schema::list(
+            SeqShape::homogeneous(Schema::Int)
+        )]))),
+        Just(Schema::list(SeqShape::homogeneous(Schema::Int))),
+        // `"a"`, a name a drawn map may declare, and `0`.
+        Just(Schema::Literal(ConstIx::new(3))),
+        Just(Schema::Literal(ConstIx::new(0))),
+    ];
+    atom.prop_recursive(2, 6, 2, |inner| {
+        prop_oneof![
+            inner
+                .clone()
+                .prop_map(|key| Schema::Complement(Arc::new(key))),
+            proptest::collection::vec(inner.clone(), 1..3)
+                .prop_map(|members| Schema::Union(members.into())),
+            proptest::collection::vec(inner, 1..3)
+                .prop_map(|members| Schema::Intersection(members.into())),
+        ]
+    })
+}
+
+/// A value a drawn field or clause may hold: a few scalar kinds, both bounds,
+/// a union and a complement, and the constant `0`.
+fn drawn_entry_value() -> impl Strategy<Value = Schema> {
+    prop_oneof![
+        Just(Schema::Int),
+        Just(Schema::Str),
+        Just(Schema::Bytes),
+        Just(Schema::NoneType),
+        Just(Schema::ANYTHING),
+        Just(Schema::Nothing),
+        Just(Schema::union([Schema::Int, Schema::Str])),
+        Just(Schema::Complement(Arc::new(Schema::Int))),
+        Just(Schema::Literal(ConstIx::new(0))),
+    ]
+}
+
+/// A map over [`drawn_key`]: up to two fields named `a` and `b`, and up to
+/// three clauses.
+fn drawn_map() -> impl Strategy<Value = Schema> {
+    let field = (0usize..2, drawn_entry_value(), proptest::bool::ANY).prop_map(
+        |(name, schema, required)| Field {
+            name: ["a", "b"][name].into(),
+            schema,
+            required,
+        },
+    );
+    let clause =
+        (drawn_key(), drawn_entry_value()).prop_map(|(key, value)| MapClause { key, value });
+    (
+        proptest::collection::vec(field, 0..3),
+        proptest::collection::vec(clause, 0..4),
+    )
+        .prop_map(|(mut fields, defaults)| {
+            fields.sort_by(|one, two| one.name.cmp(&two.name));
+            fields.dedup_by(|one, two| one.name == two.name);
+            Schema::KeyedMap {
+                fields: fields.into(),
+                defaults: defaults.into(),
+            }
+        })
+}
+
+/// The keys a dict of [`dicts_of`] carries: a plain value of every hashable
+/// kind, the two names a drawn map may declare, and `"z"`, which none does.
+fn universe_keys() -> [Obj; 10] {
+    [
+        Obj::None,
+        Obj::Bool(true),
+        Obj::Int(7),
+        Obj::Float(0.5),
+        Obj::Str("a"),
+        Obj::Str("b"),
+        Obj::Str("z"),
+        Obj::Bytes(0),
+        Obj::Tuple(Vec::new()),
+        Obj::FrozenSet(Vec::new()),
+    ]
+}
+
+/// The values a dict of [`dicts_of`] maps a key to: one of every kind a drawn
+/// value type tells apart, and a list, which none of the scalars holds.
+fn universe_values() -> [Obj; 9] {
+    [
+        Obj::None,
+        Obj::Bool(true),
+        Obj::Int(0),
+        Obj::Int(7),
+        Obj::Float(0.5),
+        Obj::Str("a"),
+        Obj::Str(""),
+        Obj::Bytes(0),
+        Obj::List(Vec::new()),
+    ]
+}
+
+/// Whether a dict of any keys belongs to a map, read off the map's denotation.
+///
+/// [`member_full`]'s reading of a map with the key generalised from a name to
+/// a value: a key is a field's when it is the string the field is named, and
+/// is otherwise read by the clauses, one of which must hold both it and its
+/// value.
+fn dict_member(map: &Schema, dict: &[(Obj, Obj)], pool: &[Obj]) -> bool {
+    let Schema::KeyedMap { fields, defaults } = map else {
+        return false;
+    };
+    let named = |key: &Obj, name: &str| matches!(key, Obj::Str(text) if *text == name);
+    fields.iter().all(
+        |field| match dict.iter().find(|(key, _)| named(key, &field.name)) {
+            Some((_, value)) => member_full(&field.schema, value, pool),
+            None => !field.required,
+        },
+    ) && dict.iter().all(|(key, value)| {
+        fields.iter().any(|field| named(key, &field.name))
+            || defaults.iter().any(|clause| {
+                member_full(&clause.key, key, pool) && member_full(&clause.value, value, pool)
+            })
+    })
+}
+
+/// The dicts a refutation of `map` as a subject may stand on.
+///
+/// Each carries the map's required fields, each with the first value of the
+/// universe the field holds, and then one change: nothing, one field set to
+/// another value it holds, or one entry more under a key no field takes. A
+/// subject with a required field the universe cannot fill gives none, and a
+/// refutation about it then fails here, which is the reading its emptiness
+/// asks for.
+fn dicts_of(map: &Schema, pool: &[Obj]) -> Vec<Vec<(Obj, Obj)>> {
+    let Schema::KeyedMap { fields, .. } = map else {
+        return Vec::new();
+    };
+    let values = universe_values();
+    let member_of = |schema: &Schema| {
+        values
+            .iter()
+            .filter(|value| member_full(schema, value, pool))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let mut base = Vec::new();
+    for field in fields.iter().filter(|field| field.required) {
+        let Some(value) = member_of(&field.schema).into_iter().next() else {
+            return Vec::new();
+        };
+        base.push((Obj::Str(static_name(&field.name).unwrap_or("a")), value));
+    }
+    let mut dicts = vec![base.clone()];
+    for field in fields.iter() {
+        let name = Obj::Str(static_name(&field.name).unwrap_or("a"));
+        for value in member_of(&field.schema) {
+            let mut dict: Vec<(Obj, Obj)> = base
+                .iter()
+                .filter(|(key, _)| *key != name)
+                .cloned()
+                .collect();
+            dict.push((name.clone(), value));
+            dicts.push(dict);
+        }
+    }
+    for key in universe_keys() {
+        if fields
+            .iter()
+            .any(|field| matches!(&key, Obj::Str(text) if *text == &*field.name))
+        {
+            continue;
+        }
+        for value in &values {
+            let mut dict = base.clone();
+            dict.push((key.clone(), value.clone()));
+            dicts.push(dict);
+        }
+    }
+    dicts
+}
+
 /// The structural fragment with a reference into [`fixpoint_defs`] among its
 /// leaves, so a drawn schema reaches a fixpoint with a word branch and one
 /// whose reference sits under a complement.
@@ -5036,6 +5306,41 @@ proptest! {
                 "{:?} <= {:?} is refuted and no value of the universe refutes it",
                 a, b
             );
+        }
+    }
+
+    // THEORY: subtyping-is-inclusion
+    /// A relation between two maps stands on a dict, whatever kinds key it.
+    ///
+    /// [`a_refutation_is_a_value`] draws maps keyed by strings, because its
+    /// value model names a key by a string; a refutation the clause rules make
+    /// about a key of another kind -- `{7: "x"}` against `{str: int}`, `{(): 1}`
+    /// against a map keyed by no tuple -- names a value that model has no way
+    /// to write. This draws the keys the clause rules read and the ones they
+    /// must leave alone (every hashable kind, the complements `open` writes,
+    /// unions and meets of them, a tuple holding a list, a list, a literal) and
+    /// holds both answers to a universe of dicts keyed by plain values of every
+    /// hashable kind and by a name no drawn map declares: a refutation has a
+    /// dict in the subject and outside the supertype, and a proof has none.
+    #[test]
+    fn a_map_relation_stands_on_a_dict(a in drawn_map(), b in drawn_map()) {
+        let pool = const_pool();
+        let answer = a.subtype_relation_under(&b, &NoLeafRelations, &[]);
+        let escaping = dicts_of(&a, &pool)
+            .into_iter()
+            .find(|dict| dict_member(&a, dict, &pool) && !dict_member(&b, dict, &pool));
+        match answer {
+            Relation::Fails => prop_assert!(
+                escaping.is_some(),
+                "{:?} <= {:?} is refuted and no dict of the universe refutes it",
+                a, b
+            ),
+            Relation::Holds => prop_assert!(
+                escaping.is_none(),
+                "{:?} <= {:?} is proved and {:?} is in the one and not the other",
+                a, b, escaping
+            ),
+            Relation::Unknown => {}
         }
     }
 

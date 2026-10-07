@@ -13,7 +13,26 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: a map is refuted on a key the other reads one way
+
 -->
+
+### Fixed
+
+- **A map is refuted on a key the other reads one way.** A relation between two
+  maps was left undecided wherever a refutation needed a key the subject's
+  clause admits: `{str: int}.open()` against `{str: int}`, `dict` and `{str:
+  bytes}` against a recursive JSON schema, `{tuple: int}` against `{str: int}`,
+  and `{"a": str}` against `{str: int}.open()` all answered `undecided`, though
+  `{7: "x"}`, `{7: 1}`, `{"a": b""}`, `{(): 1}` and `{"a": ""}` refute them.
+  The rules read a key schema by whole kinds -- one that holds every value of
+  a kind, or none -- and refute where the supertype reads such a kind through
+  one clause or none: an entry under a plain key of that kind is in the
+  subject and outside the supertype. A key type with no hashable value, such
+  as `tuple[list[int]]` or a class whose instances are unhashable, admits only
+  `{}` and is never refuted, and two clauses reading one kind decline. A nested
+  `dict[str, ...]` is refuted at any depth, where five levels deep answered
+  `undecided`.
 
 ## [0.0.17] - 2026-10-06
 
