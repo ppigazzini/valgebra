@@ -200,10 +200,14 @@ impl Validator {
     /// the `Validator(...)` constructor, the `|`/`union`/`intersection`/
     /// `complement` combinators, `recursive`, and `simplify` — routes through
     /// here, so no public call can build a schema that overflows the stack or
-    /// exhausts memory on a later walk. A schema reaching this point grew by one
-    /// step from operands already within the bounds, so it is at most one step
-    /// past them — shallow and small enough that measuring it and dropping it when
-    /// a bound is exceeded are themselves safe.
+    /// exhausts memory on a later walk. A combinator's schema reaching this point
+    /// grew by one step from operands already within the bounds, so it is at most
+    /// one step past them — shallow and small enough that measuring it and
+    /// dropping it when a bound is exceeded are themselves safe. The constructor's
+    /// schema is a whole annotation read in one call, which no step bounds; the
+    /// frontend holds what it builds to the node bound as it reads (`BuildGuard`
+    /// in `build.rs`) and refuses at the step after the one that passes it, so
+    /// that schema arrives here at most one step past the bound too.
     pub(crate) fn checked(
         schema: Schema,
         literals: Vec<Py<PyAny>>,

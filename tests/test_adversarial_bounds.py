@@ -26,6 +26,7 @@ import subprocess
 import sys
 import textwrap
 import time
+import types
 from typing import TYPE_CHECKING, Annotated, Literal
 
 import pytest
@@ -706,6 +707,71 @@ def test_a_schema_of_exactly_the_node_ceiling_builds() -> None:
     # One record further is two nodes past it, and refused by name.
     with pytest.raises(ValueError, match="too large"):
         union(*at_the_ceiling, Validator({"last": int}), Validator(int))
+
+
+def test_an_annotation_of_exactly_the_node_ceiling_builds() -> None:
+    """The constructor's door holds the bound where the combinators' does.
+
+    One `Validator(spec)` call reads a whole annotation, and the frontend holds
+    what it builds to the node bound as it reads. A flat `tuple` of `n` `int`s
+    spans `n + 1` nodes, so the tuple at the ceiling builds and one element
+    more is refused by name. Spelled as the alias object, since the length is
+    the bound's and no checker reads a type form computed at run time.
+    """
+    Validator(types.GenericAlias(tuple, (int,) * (MAX_SCHEMA_NODES - 1)))
+    with pytest.raises(ValueError, match="too large"):
+        Validator(types.GenericAlias(tuple, (int,) * MAX_SCHEMA_NODES))
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="the high-water mark is read from `resource`"
+)
+def test_a_class_named_from_many_places_is_refused_before_it_is_built() -> None:
+    """A shared part is refused at the node bound, not after it is built whole.
+
+    Four records a level, each holding the union of the level below: 48
+    classes, and a schema that multiplies by four with each level -- 134
+    million nodes at twelve, gigabytes of them built whole. Held as it is
+    read, the build stops a step past the bound, and six levels, within it,
+    build. A child process, because the failure this guards is memory, and
+    the high-water mark is the process's.
+    """
+    program = textwrap.dedent(
+        """
+        import resource
+        from typing import Literal, TypedDict
+        from valgebra import Validator
+        def levels(depth):
+            below = int
+            for level in range(depth):
+                tagged = [
+                    TypedDict(f"L{level}{tag}", {"type": Literal[tag], "left": below})
+                    for tag in "abcd"
+                ]
+                below = tagged[0] | tagged[1] | tagged[2] | tagged[3]
+            return below
+        Validator(levels(6))
+        before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        try:
+            Validator(levels(12))
+        except ValueError as error:
+            assert "too large" in str(error), error
+        else:
+            raise AssertionError("twelve levels built")
+        print(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - before)
+        """
+    )
+    result = subprocess.run(  # noqa: S603 -- fixed interpreter, in-repo program
+        [sys.executable, "-c", program],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    # `ru_maxrss` is in kibibytes on Linux and in bytes on macOS.
+    unit = 1 if sys.platform == "darwin" else 1024
+    assert int(result.stdout) < 100 * 1024 * 1024 // unit, result.stdout
 
 
 def test_a_pattern_whose_determinisation_explodes_answers_in_bounded_time() -> None:

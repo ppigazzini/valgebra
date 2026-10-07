@@ -574,6 +574,47 @@ definition the body becomes, and refuses a body in which the alias occurs
 outside a structural constructor, since `type X = int | X` names no set a value
 settles. An alias that never names itself builds its body and no definition.
 
+## A shared part is built per use, and held to the node bound as it is
+
+An annotation names a class, an alias or any annotation object once, and the
+frontend builds it once per place it is named: `build_typed_dict` reads a
+class's hints and builds every field on each call, so a non-recursive class is
+its schema inline at every reference. A definition instead would change `==`
+and `repr`, and a reference lowers to the bottom under a complement, so the
+relations would decide less. The cost is that a part shared through several
+levels is a tree whose size multiplies with each, and `Validator::checked`
+measures a schema only once one `Validator(spec)` call has built all of it.
+
+So the build holds what it has built to `MAX_SCHEMA_NODES` as it goes
+(`BuildGuard` in `build.rs`). Each descent's result replaces the parts it was
+built from, so the count is every finished part still waiting for its parent,
+and a descent that finds it past the bound refuses -- the step after the one
+that passed it, which leaves a crossing at the last step to `checked`. What a
+result counts for is chosen so the count never passes what `checked` counts:
+
+- **Its leaves.** A leaf counts one and a result built from parts counts them,
+  so an alias or `NotRequired[...]`, which passes its one part through, does
+  not count it twice -- a count of one per descent would, and would refuse a
+  wide record of them that the bound admits. A compiled validator named in an
+  annotation is one descent and counts every node of its schema.
+- **Its nodes, past as many descents as the bound.** A count of leaves leaves
+  out the containers above them, and a chain of containers named from many
+  places builds many more nodes than leaves; from that point each result is
+  walked and counts exactly. A build with fewer descents never walks.
+
+A part a fold drops -- a member a union absorbs into `Any` -- still counts
+toward the union that dropped it, which is the one way the count passes what
+`checked` would read. The cost is a few instructions a descent, which
+`scripts/perf_gate.py --binding-build` reads as +1.64% on a fifty-field
+record. A placement reading the result where it is handed back costs that
+shape above two percent -- the result's copy, or a second call frame -- which
+is why the count is kept beside the result rather than read off it, and the
+dispatch is inlined into the descent every build takes. A build that walks its
+results reads through a second copy in a frame of its own: two copies in one
+frame are two sets of slots in every unoptimized descent, and the 129-level
+chain at the depth bound then needs 2,146 KiB of stack on 3.11, past the 2 MiB
+a test thread is given, against 1,673 KiB with one.
+
 ## Refused, and the test each one fails
 
 A proposal to read a form another way starts here. Each row says what it
