@@ -432,15 +432,21 @@ fn map(
 /// overlapping domains, but in that case, there would not be any difference
 /// between record types and an intersection of function types whose codomain may
 /// contain an undefined value". Refusing is what keeps the default a function.
+///
+/// A complement of whole parts is the other parts. The parts are a partition
+/// of the keys, so a key outside every part `inner` opens is in one of the
+/// rest, the part for a key of no listed kind among them: `~str` opens seven
+/// kinds and the classes, `~int` neither `int` nor `bool`, and `~bool` opens
+/// `int`, whose part holds no boolean. That is a union of key types, which is
+/// all the paper's footnote 15 asks of a map's domain. A complement of a
+/// constant cuts a part, so it is refused with the constant.
 fn key_cover(key: &Schema, pool: &dyn Constants) -> Option<(Vec<Label>, Vec<Option<Kind>>)> {
     let part = |kind: Kind| Some((Vec::new(), vec![Some(kind)]));
+    let every_part = || KEY_KINDS.iter().copied().map(Some).chain([None]);
     match key {
         Schema::Nothing => Some((Vec::new(), Vec::new())),
         // Every part, the one for a key of no listed kind included.
-        Schema::Anything(_) => Some((
-            Vec::new(),
-            KEY_KINDS.iter().copied().map(Some).chain([None]).collect(),
-        )),
+        Schema::Anything(_) => Some((Vec::new(), every_part().collect())),
         Schema::NoneType => part(Kind::NoneType),
         Schema::Bool => part(Kind::Bool),
         // A `bool` key **is** an `int` key: `{True: 1}` is a dict whose key is
@@ -450,6 +456,28 @@ fn key_cover(key: &Schema, pool: &dyn Constants) -> Option<(Vec<Label>, Vec<Opti
         Schema::Float => part(Kind::Float),
         Schema::Str => part(Kind::Str),
         Schema::Bytes => part(Kind::Bytes),
+        // A tuple or a frozenset of anything is every key of its kind: a key
+        // is hashable, and a hashable tuple is still a tuple. Any other shape
+        // holds part of the kind or none of it: `tuple[list[int]]` is no key.
+        Schema::Seq {
+            container: SeqKind::Tuple,
+            shape,
+        } if shape.prefix.is_empty()
+            && matches!(shape.tail.as_deref(), Some(Schema::Anything(_))) =>
+        {
+            part(Kind::Tuple)
+        }
+        Schema::Coll {
+            container: CollKind::FrozenSet,
+            element,
+        } if matches!(**element, Schema::Anything(_)) => part(Kind::FrozenSet),
+        Schema::Complement(inner) => {
+            let (named, opened) = key_cover(inner, pool)?;
+            named.is_empty().then(|| {
+                let rest = every_part().filter(|slot| !opened.contains(slot));
+                (Vec::new(), rest.collect())
+            })
+        }
         Schema::Literal(index) => Some((vec![label_of(&pool.constant(*index)?)?], Vec::new())),
         Schema::Union(members) => {
             let mut labels = Vec::new();

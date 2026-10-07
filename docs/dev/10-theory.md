@@ -172,7 +172,7 @@ is a single clause with no fields.
 
 SOURCE: §3 "The model behind `Schema::KeyedMap`"; §13.3 "**The representation Theorem 4.2 produces.**"
 
-HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition
+HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition, a_key_of_whole_kinds_opens_the_parts_it_holds
 
 **Castagna & Duboc §7.1: a gradual type is two static types.** Every gradual
 `t` is `t_down ∨ (? ∧ t_up)` and is represented by **two** descriptors, with

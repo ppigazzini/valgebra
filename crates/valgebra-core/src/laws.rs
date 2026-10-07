@@ -2891,6 +2891,9 @@ enum Obj {
     Set(Vec<Obj>),
     FrozenSet(Vec<Obj>),
     Map(Vec<(&'static str, Obj)>),
+    /// A value of no listed kind, hashable: `object()`, the key a dict keyed
+    /// by a complement of kinds may carry and a dict keyed by kinds may not.
+    Object,
 }
 
 /// The fixed constant pool that generated `Literal` and bound indices point
@@ -5010,6 +5013,16 @@ fn drawn_key() -> impl Strategy<Value = Schema> {
             SeqShape::homogeneous(Schema::Int)
         )]))),
         Just(Schema::list(SeqShape::homogeneous(Schema::Int))),
+        // Every listed kind and no class, which a complement of kinds is not.
+        Just(Schema::union([
+            Schema::NoneType,
+            Schema::Int,
+            Schema::Float,
+            Schema::Str,
+            Schema::Bytes,
+            Schema::tuple(SeqShape::homogeneous(Schema::ANYTHING)),
+            Schema::frozen_set(Schema::ANYTHING),
+        ])),
         // `"a"`, a name a drawn map may declare, and `0`.
         Just(Schema::Literal(ConstIx::new(3))),
         Just(Schema::Literal(ConstIx::new(0))),
@@ -5070,8 +5083,9 @@ fn drawn_map() -> impl Strategy<Value = Schema> {
 }
 
 /// The keys a dict of [`dicts_of`] carries: a plain value of every hashable
-/// kind, the two names a drawn map may declare, and `"z"`, which none does.
-fn universe_keys() -> [Obj; 10] {
+/// kind, the two names a drawn map may declare, `"z"`, which none does, and a
+/// value of no listed kind.
+fn universe_keys() -> [Obj; 11] {
     [
         Obj::None,
         Obj::Bool(true),
@@ -5083,6 +5097,7 @@ fn universe_keys() -> [Obj; 10] {
         Obj::Bytes(0),
         Obj::Tuple(Vec::new()),
         Obj::FrozenSet(Vec::new()),
+        Obj::Object,
     ]
 }
 

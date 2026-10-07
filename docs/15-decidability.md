@@ -442,31 +442,38 @@ decline the **descriptor** is asked: it holds each kind as a set, so `a ≤ b` i
 `a ∧ ¬b = ∅` and the answer comes out of the sets rather than out of a rule about
 the shape. What is left below is what the descriptor cannot hold.
 
-- **A clause keyed by a complement.** The set representation partitions a
+- **A clause keyed by part of a kind.** The set representation partitions a
   dict's keys **by kind** and gives each part its own default, so a clause whose
-  key is a kind or a literal lands in a part. A key written as a `complement`
-  spans every kind but one, which no single part holds, and the lowering
-  declines rather than spreading it — so a relation about such a map is left to
-  the rules. They refute one key kind at a time: a kind the subject's clause
-  holds whole, read by one of the supertype's clauses or by none, names a key
-  whose entry the two maps judge apart, so `{str: int}.open()` is outside
-  `{str: int}` on `{7: "x"}`. What comes back "not proven" is a pair whose
-  supertype covers a key kind with two clauses at once.
+  key is a kind, a literal, or a union or complement of kinds lands in parts:
+  `complement(str)` opens every other kind and the part for a key of no listed
+  kind, a class instance. A key holding *part* of a kind has no part to land in
+  -- a tuple or a frozenset of narrower elements; a class; the complement of
+  `Literal["a"]`, which holds a `str` subclass's key equal to `"a"` and not the
+  exact one, where a label holds both -- and the lowering declines rather than
+  approximating, so a relation about such a map is left to the rules. They
+  refute one key kind at a time: a kind the subject's clause holds whole, read
+  by one of the supertype's clauses or by none, names a key whose entry the two
+  maps judge apart, so `{str: int}.open()` is outside `{str: int}` on `{7:
+  "x"}`. What comes back "not proven" is a pair whose supertype reads a key
+  kind in part, or with two clauses at once.
 
     The partition is the source's: it treats a record as a quasi-`K`-step
     function, where `K` is a *predefined finite partition* of the key domain
     and the catch-all is split across its parts, and it forbids overlapping
-    domains in one map as "both a design and an implementation choice". It
-    also says a theory of maps with overlapping domains is possible, and that
-    comparing two records under it needs the machinery for comparing
-    intersections of arrow types. A complement-keyed clause is exactly an
-    overlapping domain, and valgebra admits it where the source forbids it:
-    the walk reads it exactly, and the comparison it needs is not built. That
-    is a gap rather than a refusal, and what it costs is the proof a pair needs
-    where two clauses cover a key kind between them -- which comes back "not
-    proven" even between two spellings of every dict:
+    domains in one map as "both a design and an implementation choice". A union
+    of parts is a domain it admits, and a complement of whole kinds is the union
+    of the other parts. A key holding part of a kind is not, and it may overlap
+    another clause: the source says a theory of maps with overlapping domains is
+    possible, and that comparing two records under it needs the machinery for
+    comparing intersections of arrow types. valgebra admits such a key where the
+    source has no part for it: the walk reads it exactly, and the comparison it
+    needs is not built. That is a gap rather than a refusal, and what it costs
+    is the proof a pair needs where a key kind is read in part -- which comes
+    back "not proven" even between two spellings of every dict:
 
     ```python
+    from typing import Literal
+
     from valgebra import Validator, anything, complement
 
     not_str = complement(Validator(str))
@@ -475,20 +482,25 @@ the shape. What is left below is what the descriptor cannot hold.
     assert free_the_rest.is_valid({"a": 1, 7: "anything at all"})
     assert not free_the_rest.is_valid({"a": "not an int"})
 
+    # A complement of a whole kind is the other kinds, and the sets decide it.
+    assert Validator({str: anything, not_str: anything}).is_equivalent({object: object})
     # A key kind the supertype reads one way refutes: `{7: "x"}`.
     assert Validator({str: int}).open().relation_to({str: int}) == "not_subset"
 
-    # Two clauses covering every key decline. These two admit every dict.
-    long_way = Validator({str: anything, not_str: anything})
-    assert long_way.is_valid({7: "x"}) and Validator({object: object}).is_valid({7: "x"})
-    assert not long_way.is_equivalent({object: object})
+    # A complement of a literal holds part of `str`. These two admit every dict.
+    not_a = complement(Validator(Literal["a"]))
+    long_way = Validator({Literal["a"]: anything, not_a: anything})
+    every_dict = Validator(dict)
+    assert long_way.is_valid({"a": 1, 7: "x"}) and every_dict.is_valid({"a": 1, 7: "x"})
+    assert every_dict.relation_to(long_way) == "undecided"
     ```
 
     This is the shape `open` writes on a **mapping**: freeing the key-types a
-    clause leaves over means a clause over the complement of the ones it claims.
-    Opening a *record* stays decided, because the regions it frees and the ones
-    its clauses claim cover every key with one value between them, which is one
-    catch-all clause rather than two.
+    clause leaves over means a clause over the complement of the ones it claims,
+    which is whole kinds for `dict[str, int]` and part of one for
+    `dict[Literal["a"], int]`. Opening a *record* stays decided, because the
+    regions it frees and the ones its clauses claim cover every key with one
+    value between them, which is one catch-all clause rather than two.
 
 - **A clause keyed by a float literal.** The partition names a literal key by
   its value, and it holds no float value: the typing spec admits none in a
