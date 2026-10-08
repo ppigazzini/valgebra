@@ -85,5 +85,7 @@
   "_binding_nullable_comment": "Sixty-four integers and `None`, alternating, against `list[int | None]` per iteration: a list whose element is one scalar kind or `None`, read by a loop of its own for that kind beside the one a single scalar kind takes. The walk shape reads only that one, so a cost added per element of a nullable list reads as nothing on every shape beside this. A union of two scalars neither of which is `None` is read by the loop over the union's branches, which no shape reads.",
   "binding_nullable_workload_irefs": 138200035,
   "_binding_set_comment": "A `set[str]` of sixty-four strings walked per iteration: a set, which has no positions and is read through its own iterator, so none of the sequence shapes reaches its reader, and a cost added per element of a set reads as nothing on every one of them.",
-  "binding_set_workload_irefs": 603100035
+  "binding_set_workload_irefs": 603100035,
+  "_binding_explain_list_comment": "`validate` over ten thousand integers whose last element is a string: the explaining walk over a homogeneous list that is refused, which every other list shape measured accepting. Recorded on uv's CPython 3.14, the interpreter the bench job runs, as the walk budget is and for the walk's reason: 3.14 reads a list of integers in place, one pass that finds and reports the failure, and below 3.14 -- and on the free-threaded builds -- the explaining reader takes a snapshot, finds the failure in it, and reads the whole list again in place to report it. The same shape counts 737,158,525 instructions on CPython 3.12, more than twice this. RECORDED BEFORE any change to that reading, so a change to the refusing path is measured against the reading it replaces.",
+  "binding_explain_list_workload_irefs": 332245462
 }

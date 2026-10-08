@@ -110,6 +110,15 @@ pub enum BindingShape {
     /// the failing path that pays for itself there and charges the accepting
     /// one would have read as a pure win.
     ExplainAccept,
+    /// `validate` over ten thousand integers whose last element is a string:
+    /// the explaining walk over a homogeneous list that is refused.
+    ///
+    /// Every other list shape here accepts, so what a refusal costs the list
+    /// reader -- the case `validate` exists for -- was measured by nothing:
+    /// where a snapshot pays, the explaining reader copies the list, finds the
+    /// failure, and reads the whole list again in place to report it. Recorded
+    /// before any change to that reading, for the reason `ExplainAccept` was.
+    ExplainList,
     /// Compiling a fifty-field `TypedDict` of `Annotated[int, Ge(0)]`: the
     /// frontend's *other* work, and the half [`Build`](BindingShape::Build)
     /// never reaches.
@@ -275,6 +284,7 @@ impl BindingShape {
             "explain" => BindingShape::Explain,
             "open" => BindingShape::Open,
             "explain-accept" => BindingShape::ExplainAccept,
+            "explain-list" => BindingShape::ExplainList,
             "annotated" => BindingShape::Annotated,
             "keys" => BindingShape::Keys,
             "object" => BindingShape::Object,
@@ -724,6 +734,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
         BindingShape::Pattern => pattern_walk(py, iters),
         BindingShape::ExplainAccept => explaining_record(py, iters, Wrong::No),
         BindingShape::Explain => explaining_record(py, iters, Wrong::Yes),
+        BindingShape::ExplainList => explaining_list(py, iters),
         BindingShape::Annotated | BindingShape::Object | BindingShape::Protocol => {
             let spelling = match shape {
                 BindingShape::Annotated => annotated_record(py),
@@ -1020,6 +1031,39 @@ fn explaining_record(py: Python<'_>, iters: usize, wrong: Wrong) -> u64 {
             .set_item("f37", "not an int")
             .expect("replacing one key always succeeds");
     }
+    settle_the_heap(py);
+    let mut checksum: u64 = 0;
+    for _ in 0..iters {
+        let state = WalkState::new();
+        let mut out = Vec::new();
+        let ok = member(
+            std::hint::black_box(&validator.schema),
+            &Value::Py(std::hint::black_box(&obj)),
+            &mut Frame::new(
+                &mut Vec::new(),
+                &mut out,
+                validator.context(py, &state, WalkMode::Explain),
+            ),
+        );
+        checksum = checksum
+            .wrapping_add(u64::from(ok))
+            .wrapping_add(out.len() as u64);
+    }
+    checksum
+}
+
+/// Ten thousand integers whose last element is a string, walked in explain
+/// mode: one violation, at the end, after every element before it passed.
+fn explaining_list(py: Python<'_>, iters: usize) -> u64 {
+    let schema = Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape::homogeneous(Schema::Int),
+    };
+    let validator = Validator::new(schema, Vec::new(), Vec::new());
+    let list = PyList::new(py, 0..10_000_i64).expect("a fresh list of i64 always builds");
+    list.set_item(9_999, "not an int")
+        .expect("replacing the last element always succeeds");
+    let obj = list.into_any();
     settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
