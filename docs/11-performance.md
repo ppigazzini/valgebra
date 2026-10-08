@@ -310,6 +310,26 @@ three.
 That is why the ceiling file holds a second set for the free-threaded build:
 what the project claims of that build is what that build can hold.
 
+### Threads on the free-threaded build
+
+A `Validator` is immutable, so every thread can share one. What decides how
+the free-threaded build scales is what the **values** the threads check share.
+Measured on CPython 3.14.6t with a release build, eight threads on a
+sixteen-thread machine, each checking its value forty times, as the work the
+eight finish against what one thread finishes in the same time:
+
+| What the eight threads check | Throughput, against one thread |
+| --- | --- |
+| one value, shared | 0.72x to 0.78x over five shapes: the walk takes each container's lock to read it, so the threads take turns |
+| a `copy.deepcopy` each, which shares the elements | 1.4x for a `list[int]`, whose every element's reference count all eight write; 2.3x to 4.9x for a dict, a list of records and a list of unions |
+| a `list[int]` each, of its own `int` objects | 4.6x to 5.3x |
+| a JSON document each, parsed from one shared string | 3.5x to 6.1x |
+
+So a server checking each request's own payload scales with its threads, and
+eight threads checking one shared structure do less than one would. The
+[installation page](00-installation.md#free-threaded-cpython) says what to do
+about the second.
+
 ### The closest races
 
 The table above holds four of the shapes the competitive gate judges;

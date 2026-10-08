@@ -63,6 +63,13 @@ other:
 * **The llms.txt manifest.** A page in the site's ``nav`` that the ``llmstxt``
   sections of ``mkdocs.yml`` do not name fails, and the reverse; so does a
   manifest line whose summary is not its page's ``description:``.
+* **The packages the examples import.** A package an example imports, beyond
+  the standard library and valgebra, that no ``pip install`` line of the
+  installation page names fails, and so does a package such a line installs
+  that no example imports. An example runs as printed only where what it
+  imports is installed, and the installation page is where a reader learns
+  what that is. A module is read as the distribution its name spells with
+  ``-`` for ``_``, which every package the examples import follows.
 
 Three classes stay out of its reach, and they are the common ones: a real
 symbol attributed to the wrong file, a list in prose with the wrong count or
@@ -80,11 +87,13 @@ not run.
 from __future__ import annotations
 
 import argparse
+import ast
 import functools
 import json
 import re
 import subprocess
 import sys
+import textwrap
 import unicodedata
 from pathlib import Path
 
@@ -875,6 +884,83 @@ def check_llms_manifest() -> list[str]:
     return problems
 
 
+#: The page that says what to install, relative to the root.
+INSTALL_PAGE = "docs/00-installation.md"
+#: A fenced python block, which is what the example runner executes.
+PYTHON_BLOCK = re.compile(r"```python\n(.*?)```", re.DOTALL)
+#: What a ``pip install`` line installs: every word after it but an option.
+PIP_INSTALL = re.compile(r"^[^\S\n]*pip install ([^\n#]+)", re.MULTILINE)
+
+
+def _example_pages() -> list[Path]:
+    """Give every page whose examples the example runner executes."""
+    return [
+        ROOT / "README.md",
+        ROOT / "CHANGELOG.md",
+        *sorted((ROOT / "docs").rglob("*.md")),
+    ]
+
+
+def example_packages() -> dict[str, set[str]]:
+    """Name every package an example imports beyond the standard library.
+
+    Keyed by the distribution the module's name spells, with the pages that
+    import it. Read through the parse rather than a pattern, so an import in a
+    string or a comment is not one, and a block that does not parse is left to
+    the example runner, which reports it.
+    """
+    found: dict[str, set[str]] = {}
+    for page in _example_pages():
+        if not page.exists():
+            continue
+        for block in PYTHON_BLOCK.findall(page.read_text(encoding="utf-8")):
+            try:
+                tree = ast.parse(textwrap.dedent(block))
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    modules = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.level == 0:
+                    modules = [node.module or ""]
+                else:
+                    continue
+                for module in modules:
+                    top = module.partition(".")[0]
+                    if not top or top == "valgebra" or top in sys.stdlib_module_names:
+                        continue
+                    found.setdefault(top.replace("_", "-"), set()).add(
+                        page.relative_to(ROOT).as_posix()
+                    )
+    return found
+
+
+def check_example_installs() -> list[str]:
+    """Hold the installation page's packages to the examples' imports, both ways."""
+    page = ROOT / INSTALL_PAGE
+    if not page.exists():
+        return []
+    named = {
+        word
+        for line in PIP_INSTALL.findall(page.read_text(encoding="utf-8"))
+        for word in line.split()
+        if not word.startswith("-")
+    } - {"valgebra"}
+    imported = example_packages()
+    problems = [
+        f"{INSTALL_PAGE}: an example imports {package} "
+        f"({', '.join(sorted(imported[package]))}), and no `pip install` line "
+        "here names it"
+        for package in sorted(imported.keys() - named)
+    ]
+    problems += [
+        f"{INSTALL_PAGE}: a `pip install` line names {package}, which no "
+        "example imports"
+        for package in sorted(named - imported.keys())
+    ]
+    return problems
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -957,6 +1043,7 @@ def main(argv: list[str]) -> int:
         + check_history(prose)
     ]
     failures += check_index("docs/dev") + check_index("docs")
+    failures += check_example_installs()
     failures += check_ledger_table()
     failures += check_product_table()
     failures += check_bounds_ledger()
