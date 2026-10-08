@@ -1867,6 +1867,42 @@ proptest! {
     }
 }
 
+/// A complement reads a label on the side it flips to. `{"a": int}` is not
+/// proved below `dict[Literal["a"], int]`: the label stands on the narrowed
+/// side, where it subtracts the dict keyed by a `str` subclass's `"a"`, which
+/// the record holds. Read through two complements, `~dict[Literal["a"], int]`
+/// below `~{"a": int}` is the same question, and the complement on the widened
+/// side puts the label on the narrowed one again, so it is not proved either.
+#[test]
+fn a_complement_reads_a_label_on_the_side_it_flips_to() {
+    let pool = Pool(vec![Operand::Word(b"a".to_vec(), Kind::Str)]);
+    let record = Schema::keyed_map(
+        vec![Field {
+            name: "a".into(),
+            schema: Schema::Int,
+            required: true,
+        }],
+        Vec::new(),
+    );
+    let mapping = Schema::keyed_map(
+        Vec::new(),
+        vec![MapClause {
+            key: Schema::Literal(ConstIx::new(0)),
+            value: Schema::Int,
+        }],
+    );
+    assert_ne!(
+        record.descriptor_contained_in(&mapping, &pool, &[]),
+        Relation::Holds
+    );
+    assert_ne!(
+        mapping
+            .complement()
+            .descriptor_contained_in(&record.complement(), &pool, &[]),
+        Relation::Holds
+    );
+}
+
 /// Where every key of the subject is a literal's, the narrowed side's labels
 /// read only exact keys, and an empty difference proves the inclusion.
 ///
