@@ -783,6 +783,20 @@ program that builds validators per request, and to no validation call.
   (`homogeneous_tuple_explained`), and `validate` on a thousand-element
   `tuple[int, ...]` costs 46% fewer instructions than through the reading of
   each position's schema.
+- **A refused list is read once up to where it fails.** Where the explaining
+  walk reads a list through a snapshot, the snapshot's test stops at the first
+  element it refuses, and the walk reads the list in place from that element
+  on (`list_explained` in `check/walk/sequence.rs`): nothing has run before it,
+  so the elements the test passed are not read again. On CPython 3.12,
+  `validate` on ten thousand integers refused at the last element costs 41%
+  fewer instructions than read in place from the start, refused at the middle
+  22% fewer, `fail_fast` there 28% fewer, and a list of one class refused at
+  the last 42% fewer. A list that belongs costs what it cost, and one refused
+  at its first elements within a few percent of it: a `list[int | None]`
+  refused at its second element, 2.9% more. CPython 3.14 and 3.15 read the
+  list in place from the start, where no snapshot pays. Reading only the
+  elements the snapshot refused is not taken, since the walk of one may change
+  the others (`docs/dev/04-walk.md` in the repository).
 - **A union explains no branch for a value it admits.** Only a refused
   value's report reads the branches that did not match, so a branch that fails
   at the union's own location -- a scalar, a literal, a container of another

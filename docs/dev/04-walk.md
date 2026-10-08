@@ -587,10 +587,24 @@ walk too: each element is its test, and one that fails is walked at its own
 location, which records what the walk records of it (`list_explained`,
 `tuple_explained`). No element can raise before the one that fails -- a test
 runs no Python, and only a failing element's summary can, which fails the
-sequence first. A list that belongs is read through the deciding walk's snapshot
-where one pays, since a snapshot every element passes is the whole answer; a
-list holding an element that fails is read in place over the general walk's
-count, so one that moves reports the move. Read in place, the list that belongs
+sequence first. A list is read through the deciding walk's snapshot where one
+pays: a snapshot every element passes is the whole answer, and one holding an
+element its test refuses names where the walk is needed. Nothing has run before
+that element -- a test runs no Python -- so the list is read in place from it,
+against the snapshot's count (`refused_past`, `scan_list_from`), and each
+element from there as the list holds it when the scan reaches it: a write a
+summary or an `isinstance` hook makes to the list is read as the general walk
+reads it, and a list that moves reports the move. A list refused at its first
+element is the general scan's from the start. Read in place from the start, a
+list of ten thousand integers refused at its last element cost `validate` 68%
+more instructions on CPython 3.12, the elements before the failure read twice.
+Walking only the elements the snapshot refused, and taking the rest as the
+copy holds them, reads fewer elements still, and is refused: the walk of an
+element the test refuses runs Python, and an element the copy passed may no
+longer be one. An `isinstance` hook that admits its element and writes a
+non-member past it leaves `validate` admitting a list `is_valid` refuses,
+which `a_refused_list_is_explained_where_it_fails` holds.
+Read in place, the list that belongs
 costs `validate` twice what `is_valid` takes on 3.12, for fewer instructions: an
 owned handle per element is a reference count written on a different object each
 time. A tuple whose every position is one scalar kind is read with that kind's

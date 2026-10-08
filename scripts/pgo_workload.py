@@ -102,6 +102,7 @@ def _lists_with_readers() -> None:
     _run(days.is_valid, [[datetime.date(2020, 1, 1)] * 24, [1]], 2000)
     optional = Validator(list[int | None])
     _run(optional.is_valid, [[1, None] * 12, [1, "x"]], 2000)
+    _explain(optional.validate, [[1, None] * 12], 500)
     names = Validator(list[str | None])
     _run(names.is_valid, [["a", None] * 12, ["a", 1]], 2000)
     keys = Validator(list[int | str])
@@ -145,11 +146,17 @@ def main(argv: list[str]) -> None:
         text = "{" + ", ".join(f'"f{i}": {i}' for i in range(width)) + "}"
         _run(rec.is_valid_json, [text, text.replace(": 0", ': "x"', 1)], 1500)
 
-    # Homogeneous and heterogeneous sequences of varied length.
+    # Homogeneous and heterogeneous sequences of varied length, decided and
+    # explained: `validate` reads a list of one kind through a loop of its own,
+    # the elements before the first that fails through its test, and the rest
+    # in place -- most of a list refused at its second element, which is what
+    # that scan reads most, and only the failure of one refused at its last.
     for length in (8, 64, 1000):
         ints = Validator(list[int])
         data: list[object] = list(range(length))
         _run(ints.is_valid, [data, [*data[:-1], "x"]], max(50, 20000 // length))
+        refused = [[data[0], "x", *data[2:]], [*data[:-1], "x"]]
+        _explain(ints.validate, [data, *refused], max(20, 5000 // length))
         json_text = "[" + ", ".join(str(n) for n in range(length)) + "]"
         _run(ints.is_valid_json, [json_text], max(50, 10000 // length))
     pair = Validator(tuple[int, str])

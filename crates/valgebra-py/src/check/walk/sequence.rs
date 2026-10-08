@@ -342,34 +342,34 @@ fn scalar_list_matches(
 /// read. The scan and its count are the general walk's, so a list that moves
 /// reports the move as the general walk does.
 ///
-/// **A list that belongs is read through the deciding walk's snapshot.** Where
-/// a snapshot pays ([`snapshot_pays`]), an exact list is copied to a tuple and
-/// its elements read borrowed, as [`scalar_list_loop`] reads them: an element
-/// that passes records nothing, so a snapshot every element passes, over a
-/// count that did not move, is the whole answer. Read in place, each element
-/// was an owned handle, and on 3.12 `validate` took twice the time `is_valid`
-/// took over a thousand integers, for fewer instructions. A list holding an
-/// element that fails is read in place from its start instead: the failing
-/// element's summary runs Python, which may move the list, and the in-place
-/// scan reads it as the general walk does.
+/// **A list is read through the deciding walk's snapshot.** Where a snapshot
+/// pays ([`snapshot_pays`]), an exact list is copied to a tuple and its
+/// elements read borrowed, as [`scalar_list_loop`] reads them: an element that
+/// passes records nothing, so a snapshot every element passes, over a count
+/// that did not move, is the whole answer. Read in place, each element was an
+/// owned handle, and on 3.12 `validate` took twice the time `is_valid` took
+/// over a thousand integers, for fewer instructions. A snapshot holding an
+/// element its test refuses names where the in-place scan starts: see
+/// [`explained_through_snapshot`].
 ///
 /// Out of line, beside the deciding loop rather than inside it: inlined into
 /// [`scalar_list_matches`], it moved the PGO wheel's layout of that loop, and
 /// `is_valid` on ten thousand integers took 5% longer.
 #[inline(never)]
-fn list_explained(
-    list: &Bound<'_, PyList>,
+fn list_explained<'py>(
+    list: &Bound<'py, PyList>,
     schema: &Schema,
     admits: impl Fn(&Value<'_, '_>) -> bool,
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
     let ctx = frame.ctx;
-    if let Some(answer) = admitted_through_snapshot(list, &admits, value, frame) {
-        return answer;
-    }
+    let from = match explained_through_snapshot(list, &admits, value, frame) {
+        ControlFlow::Break(answer) => return answer,
+        ControlFlow::Continue(from) => from,
+    };
     let mut ok = true;
-    let scan = scan_list(list, |at, item| {
+    let visit = |at, item: &Bound<'py, PyAny>| {
         if admits(&Value::Py(item)) {
             return ControlFlow::Continue(());
         }
@@ -379,7 +379,11 @@ fn list_explained(
         } else {
             ControlFlow::Continue(())
         }
-    });
+    };
+    let scan = match from {
+        Some((start, items)) => scan_list_from(list, start, items, visit),
+        None => scan_list(list, visit),
+    };
     match scan {
         Scan::Complete => ok,
         Scan::Stopped => false,
@@ -425,6 +429,69 @@ fn admitted_through_snapshot(
             Some(false)
         }
     }
+}
+
+/// Where an explaining walk reads `list` from: `Break` with the answer where a
+/// snapshot settles it -- every element passes `admits` and the count held, the
+/// move reported where it did not, or `false` where the copy could not be made,
+/// a fatal signal recorded -- and otherwise `Continue` with the position the
+/// in-place scan starts at and the count it holds the list to, `None` where no
+/// snapshot is taken and the scan starts at the start against its own count.
+///
+/// The snapshot is read by `admits` alone, which runs no Python, so nothing
+/// has run between the copy and the first element it refuses: the list in
+/// place holds what the copy holds up to there, and the scan starts at that
+/// element, against the copy's count. From there on a walk may run Python --
+/// a summary, a predicate, an `isinstance` hook -- that writes to the list,
+/// and the scan reads each element as the list holds it when it is reached,
+/// as the general walk reads it. Read in place from the start, a refused
+/// `list[int]` of ten thousand elements failing at its last cost `validate`
+/// 68% more instructions on the 3.12 wheel, a second pass of owned handles
+/// over what the snapshot had already read.
+fn explained_through_snapshot(
+    list: &Bound<'_, PyList>,
+    admits: &impl Fn(&Value<'_, '_>) -> bool,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> ControlFlow<bool, Option<(usize, usize)>> {
+    if !(snapshot_pays(list.len()) && list.is_exact_instance_of::<PyList>()) {
+        return ControlFlow::Continue(None);
+    }
+    match list.as_sequence().to_tuple() {
+        Ok(snapshot) => {
+            let mut items = snapshot.iter_borrowed();
+            if items.all(|item| admits(&Value::Py(&item))) {
+                ControlFlow::Break(list.len() == snapshot.len() || mutated(value, frame))
+            } else {
+                let unread = items.len();
+                ControlFlow::Continue(refused_past(snapshot, unread))
+            }
+        }
+        Err(err) => {
+            record_fatal(err, frame.ctx);
+            ControlFlow::Break(false)
+        }
+    }
+}
+
+/// Where the in-place scan of a list its snapshot refused starts, and the
+/// count it holds the list to: past the elements the snapshot passed, the
+/// refused one and the `unread` after it left to read, and `None` where the
+/// first element is the one refused, which the general scan reads from the
+/// start against its own count.
+///
+/// The snapshot is taken by value and released here, before the scan, so a
+/// summary that drops its last other reference releases the element as it
+/// would in place. Released where the test's two exits meet instead, it kept
+/// the position the test stopped at alive through the loop: an instruction an
+/// element on a list that belongs, 4% more of them for `validate` on ten
+/// thousand integers on the 3.12 wheel.
+#[inline(never)]
+pub(super) fn refused_past(snapshot: Bound<'_, PyTuple>, unread: usize) -> Option<(usize, usize)> {
+    let len = snapshot.len();
+    drop(snapshot);
+    let first = len - unread - 1;
+    (first > 0).then_some((first, len))
 }
 
 /// [`list_explained`] for a tuple, whose elements are read borrowed and cannot
@@ -1359,7 +1426,68 @@ pub(super) fn scan_list<'py>(
     list: &Bound<'py, PyList>,
     visit: impl FnMut(usize, &Bound<'py, PyAny>) -> ControlFlow<()>,
 ) -> Scan {
-    with_critical_section(list.as_any(), || scan_held_list(list, visit))
+    with_critical_section(list.as_any(), || scan_held_list(list, 0, list.len(), visit))
+}
+
+/// [`scan_list`] from position `start`, at least one, against the count
+/// `items` the caller read the list at: an element before `start` is not asked
+/// for, and a list whose count is not `items` is unreadable, as one that moves
+/// during the scan is. A scan from the start is [`scan_list`].
+///
+/// The explaining walk reads a list through a snapshot up to the first element
+/// the snapshot's test refuses, and from that element in place
+/// ([`list_explained`]). Nothing the walk runs comes between the two, so on a
+/// build with a global lock the list holds the snapshot's count when the scan
+/// starts. The count is compared before each element and where the iterator
+/// ends, which is [`scan_list`]'s rule, and the loop is spelled apart from
+/// [`scan_list`]: every other reader of a list in place is laid out from that
+/// spelling. Here the iterator's own bound ends the loop. Spelled as
+/// [`scan_list`] is, against a position that starts where the snapshot
+/// stopped, both bounds were tested at every element, two instructions an
+/// element on the 3.12 wheel.
+#[cfg(not(Py_GIL_DISABLED))]
+fn scan_list_from<'py>(
+    list: &Bound<'py, PyList>,
+    start: usize,
+    items: usize,
+    mut visit: impl FnMut(usize, &Bound<'py, PyAny>) -> ControlFlow<()>,
+) -> Scan {
+    with_critical_section(list.as_any(), || {
+        if list.len() != items {
+            return Scan::Unreadable;
+        }
+        let mut iter = list.iter();
+        if iter.nth(start - 1).is_none() {
+            return Scan::Unreadable;
+        }
+        let mut at = start;
+        loop {
+            if list.len() != items {
+                return Scan::Unreadable;
+            }
+            let Some(item) = iter.next() else {
+                return Scan::Complete;
+            };
+            if visit(at, &item).is_break() {
+                return Scan::Stopped;
+            }
+            at += 1;
+        }
+    })
+}
+
+/// [`scan_list_from`] on a free-threaded build, where another thread may move
+/// the list between the snapshot and the scan, and the count taken with the
+/// snapshot is held from the scan's first item; the list is held for the
+/// scan and read by `scan_held_list`.
+#[cfg(Py_GIL_DISABLED)]
+fn scan_list_from<'py>(
+    list: &Bound<'py, PyList>,
+    start: usize,
+    items: usize,
+    visit: impl FnMut(usize, &Bound<'py, PyAny>) -> ControlFlow<()>,
+) -> Scan {
+    with_critical_section(list.as_any(), || scan_held_list(list, start, items, visit))
 }
 
 /// Visit a list's items by position inside the critical section [`scan_list`]
@@ -1378,26 +1506,41 @@ pub(super) fn scan_list<'py>(
 /// The count is re-read after each item rather than before it. That is the
 /// same reading: nothing runs between taking the count and asking for the
 /// first item, and the re-read after the last item is the one the scan ends on.
+/// A scan from a later position ([`scan_list_from`]) reads from `start` against
+/// the snapshot's count, which another thread may have moved before the section
+/// was taken, so the count is read once more where the scan ends without an
+/// item: a list cut to `start` or shorter reads none, and without it would
+/// read as complete.
 #[cfg(Py_GIL_DISABLED)]
 fn scan_held_list<'py>(
     list: &Bound<'py, PyList>,
+    start: usize,
+    items: usize,
     mut visit: impl FnMut(usize, &Bound<'py, PyAny>) -> ControlFlow<()>,
 ) -> Scan {
-    let items = list.len();
-    let mut at = 0;
-    list.iter()
-        .find_map(|item| {
-            let flow = visit(at, &item);
-            at += 1;
-            if flow.is_break() {
-                Some(Scan::Stopped)
-            } else if list.len() != items {
-                Some(Scan::Unreadable)
-            } else {
-                None
-            }
-        })
-        .unwrap_or(Scan::Complete)
+    let mut iter = list.iter();
+    if let Some(before) = start.checked_sub(1) {
+        iter.nth(before);
+    }
+    let mut at = start;
+    iter.find_map(|item| {
+        let flow = visit(at, &item);
+        at += 1;
+        if flow.is_break() {
+            Some(Scan::Stopped)
+        } else if list.len() != items {
+            Some(Scan::Unreadable)
+        } else {
+            None
+        }
+    })
+    .unwrap_or_else(|| {
+        if list.len() == items {
+            Scan::Complete
+        } else {
+            Scan::Unreadable
+        }
+    })
 }
 
 /// Visit a set's or frozenset's elements, reporting rather than panicking when

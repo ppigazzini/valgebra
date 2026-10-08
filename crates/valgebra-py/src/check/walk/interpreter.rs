@@ -5268,6 +5268,177 @@ fn a_list_of_each_scalar_kind_is_explained_by_its_own_test() {
     });
 }
 
+/// A refused list is walked at the elements that fail, read where the list
+/// holds them: every failure at its index in order, the first alone when the
+/// walk stops there, an element a summary has since replaced with a member
+/// passed over, one it has replaced with a non-member reported, and a list a
+/// summary has cut short reported as moved. An element the test refuses and
+/// the walk admits runs Python too, and a non-member it writes past itself
+/// refuses the list in both modes. Forty elements, a width the explaining
+/// reader takes a snapshot of below 3.14, and reads in place on 3.14 and
+/// after, with one answer either way.
+#[test]
+fn a_refused_list_is_explained_where_it_fails() {
+    Python::attach(|py| {
+        let list = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let paths = |violations: &[Violation]| -> Vec<Vec<PathSegment>> {
+            violations.iter().map(|v| v.path.clone()).collect()
+        };
+        let value = evaluate(py, "[*range(3), 'a', *range(10), 'b', *range(30)]");
+        let (ok, violations) = explain(py, &list, &value, &[], &[]);
+        assert!(!ok);
+        assert_eq!(
+            paths(&violations),
+            vec![vec![PathSegment::Index(3)], vec![PathSegment::Index(14)]]
+        );
+        let (ok, violations) = explain_in(py, &list, &value, &[], &[], WalkMode::ExplainFailFast);
+        assert!(!ok);
+        assert_eq!(paths(&violations), vec![vec![PathSegment::Index(3)]]);
+
+        let namespace = PyDict::new(py);
+        py.run(
+            c"class Edits:\n\
+              \x20   def __init__(self, target, edit):\n\
+              \x20       self.target, self.edit = target, edit\n\
+              \x20   def __repr__(self):\n\
+              \x20       self.edit(self.target)\n\
+              \x20       return 'Edits()'\n\
+              def value(edit):\n\
+              \x20   target = list(range(40))\n\
+              \x20   target[5] = Edits(target, edit)\n\
+              \x20   target[20] = 'x'\n\
+              \x20   return target\n\
+              def replace(target):\n\
+              \x20   target[20] = 0\n\
+              def spoil(target):\n\
+              \x20   target[30] = 'y'\n\
+              def cut(target):\n\
+              \x20   del target[1:]\n\
+              class Meta(type):\n\
+              \x20   def __instancecheck__(cls, obj):\n\
+              \x20       edit = getattr(obj, 'edit', None)\n\
+              \x20       if edit is None:\n\
+              \x20           return type.__instancecheck__(cls, obj)\n\
+              \x20       edit(obj.target)\n\
+              \x20       return True\n\
+              class Point(metaclass=Meta):\n\
+              \x20   pass\n\
+              def points(edit):\n\
+              \x20   target = [Point() for _ in range(40)]\n\
+              \x20   target[5] = Edits(target, edit)\n\
+              \x20   return target\n\
+              def spoil_point(target):\n\
+              \x20   target[30] = 7\n",
+            Some(&namespace),
+            None,
+        )
+        .expect("the corpus defines");
+        let edited = |edit: &str| {
+            py.eval(
+                &std::ffi::CString::new(format!("value({edit})")).expect("no nul"),
+                Some(&namespace),
+                None,
+            )
+            .expect("the value builds")
+        };
+        let (_, violations) = explain(py, &list, &edited("replace"), &[], &[]);
+        assert_eq!(paths(&violations), vec![vec![PathSegment::Index(5)]]);
+        let (_, violations) = explain(py, &list, &edited("spoil"), &[], &[]);
+        assert_eq!(
+            paths(&violations),
+            vec![
+                vec![PathSegment::Index(5)],
+                vec![PathSegment::Index(20)],
+                vec![PathSegment::Index(30)]
+            ]
+        );
+        let (_, violations) = explain(py, &list, &edited("cut"), &[], &[]);
+        let codes: Vec<&str> = violations.iter().map(|v| v.code).collect();
+        assert_eq!(codes, vec!["int_type", "mutated_during_validation"]);
+        assert_eq!(
+            paths(&violations),
+            vec![vec![PathSegment::Index(5)], vec![]]
+        );
+
+        let pool: Vec<Py<PyAny>> = vec![
+            namespace
+                .get_item("Point")
+                .expect("the namespace reads")
+                .expect("Point")
+                .unbind(),
+        ];
+        let points = Schema::list(SeqShape::homogeneous(Schema::Instance(ClassIx::new(0))));
+        let spoiled = |edit: &str| {
+            py.eval(
+                &std::ffi::CString::new(format!("points({edit})")).expect("no nul"),
+                Some(&namespace),
+                None,
+            )
+            .expect("the value builds")
+        };
+        assert!(!holds(py, &points, &spoiled("spoil_point"), &pool, &[]));
+        let (ok, violations) = explain(py, &points, &spoiled("spoil_point"), &pool, &[]);
+        assert!(!ok);
+        assert_eq!(paths(&violations), vec![vec![PathSegment::Index(30)]]);
+    });
+}
+
+/// The in-place scan of a refused list starts past what its snapshot passed:
+/// at the element refused, with the count the snapshot held, and from the
+/// start where the first element is the one refused.
+#[test]
+fn a_refused_snapshot_names_where_the_in_place_scan_starts() {
+    use super::sequence::refused_past;
+    Python::attach(|py| {
+        let snapshot = PyTuple::new(py, 0..5).expect("a tuple builds");
+        assert_eq!(refused_past(snapshot.clone(), 2), Some((2, 5)));
+        assert_eq!(refused_past(snapshot.clone(), 0), Some((4, 5)));
+        assert_eq!(refused_past(snapshot, 4), None);
+    });
+}
+
+/// A list subclass is read through its storage, never its `__iter__`: the
+/// readers of a list of one class take a snapshot of an exact list only, so
+/// a subclass whose iterator yields members holds the non-members it stores,
+/// deciding and explaining, below the snapshot's band and inside it.
+#[test]
+fn a_list_subclass_is_read_through_its_storage_by_the_class_readers() {
+    Python::attach(|py| {
+        let namespace = PyDict::new(py);
+        py.run(
+            c"class Point:\n\
+              \x20   pass\n\
+              class Lying(list):\n\
+              \x20   def __iter__(self):\n\
+              \x20       return iter([Point() for _ in range(len(self))])\n",
+            Some(&namespace),
+            None,
+        )
+        .expect("the corpus defines");
+        let pool: Vec<Py<PyAny>> = vec![
+            namespace
+                .get_item("Point")
+                .expect("the namespace reads")
+                .expect("Point")
+                .unbind(),
+        ];
+        let points = Schema::list(SeqShape::homogeneous(Schema::Instance(ClassIx::new(0))));
+        for width in [3, 20] {
+            let value = py
+                .eval(
+                    &std::ffi::CString::new(format!("Lying([7] * {width})")).expect("no nul"),
+                    Some(&namespace),
+                    None,
+                )
+                .expect("the value builds");
+            assert!(!holds(py, &points, &value, &pool, &[]), "{width} elements");
+            let (ok, violations) = explain(py, &points, &value, &pool, &[]);
+            assert!(!ok, "{width} elements");
+            assert_eq!(violations.len(), width);
+        }
+    });
+}
+
 /// A set and a frozenset of each scalar kind answer alike in both modes
 /// through the kind's own scan, deciding and explaining: every element
 /// passing, or one failing, which the report names.
