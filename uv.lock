@@ -2295,6 +2295,14 @@ docs = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
 ]
+test = [
+    { name = "annotated-types" },
+    { name = "hypothesis" },
+    { name = "pytest" },
+    { name = "pyyaml" },
+    { name = "syrupy" },
+    { name = "typing-extensions" },
+]
 
 [package.metadata]
 
@@ -2325,6 +2333,14 @@ docs = [
     { name = "mkdocs-llmstxt", specifier = ">=0.5" },
     { name = "mkdocs-material", specifier = ">=9.7.7,<10" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.6" },
+]
+test = [
+    { name = "annotated-types", specifier = ">=0.8" },
+    { name = "hypothesis", specifier = ">=6.168.5" },
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "syrupy", specifier = ">=6.1.1" },
+    { name = "typing-extensions", specifier = ">=4.16.0" },
 ]
 
 [[package]]

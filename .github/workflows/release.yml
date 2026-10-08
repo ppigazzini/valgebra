@@ -356,10 +356,13 @@ jobs:
           PYTHONS: ${{ matrix.wheel.pythons }}
           HYPOTHESIS_PROFILE: ci
         run: |
+          # The `test` group at the versions the lock holds, as the PyPy lane
+          # installs it: a release on the index fails no release until the
+          # lock takes it.
+          uv export --project tree --locked --only-group test --no-emit-project \
+            -o suite.txt
           for py in $PYTHONS; do
-            uv pip install --python ".venv-$py" \
-              "annotated-types>=0.8" "hypothesis>=6.168.5" "pytest>=9.1.1" \
-              "pyyaml>=6.0.3" "syrupy>=6.1.1" "typing-extensions>=4.16.0"
+            uv pip install --python ".venv-$py" -r suite.txt
             bin=".venv-$py/bin"; [ -d "$bin" ] || bin=".venv-$py/Scripts"
             "$bin/python" -m pytest -q -m "not repository" tree/tests
           done
@@ -393,6 +396,13 @@ jobs:
         with:
           persist-credentials: false
           path: tree
+      # For the export of the suite's packages from the lock alone: the
+      # containers install with their own pip. The upstream action, for the
+      # reason the glibc smoke gives.
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.14"
+          enable-cache: false
       # The same install and check as the glibc rows, in a script each
       # container runs: the image's own pip, the matching wheel from the
       # downloaded set with no index, and an import with every warning an
@@ -415,16 +425,19 @@ jobs:
         env:
           PYTHONS: ${{ matrix.wheel.pythons }}
         run: |
+          # The `test` group at the versions the lock holds, as the glibc smoke
+          # installs it, exported here and read by each container's pip.
+          uv export --project tree --locked --only-group test --no-emit-project \
+            -o suite.txt
           cat > suite.sh <<'SH'
           pip install -q --disable-pip-version-check --root-user-action=ignore --no-index --find-links /dist valgebra
-          pip install -q --disable-pip-version-check --root-user-action=ignore \
-            "annotated-types>=0.8" "hypothesis>=6.168.5" "pytest>=9.1.1" \
-            "pyyaml>=6.0.3" "syrupy>=6.1.1" "typing-extensions>=4.16.0"
+          pip install -q --disable-pip-version-check --root-user-action=ignore -r /suite.txt
           python -m pytest -q -p no:cacheprovider -m "not repository" /tree/tests
           SH
           for py in $PYTHONS; do
             docker run --rm -e HYPOTHESIS_PROFILE=ci -w /tmp \
               -v "$PWD/dist:/dist:ro" -v "$PWD/tree:/tree:ro" -v "$PWD/suite.sh:/suite.sh:ro" \
+              -v "$PWD/suite.txt:/suite.txt:ro" \
               "python:$py-alpine" sh -e /suite.sh
           done
 
@@ -481,9 +494,11 @@ jobs:
         env:
           HYPOTHESIS_PROFILE: ci
         run: |
-          uv pip install \
-            "annotated-types>=0.8" "hypothesis>=6.168.5" "pytest>=9.1.1" \
-            "pyyaml>=6.0.3" "syrupy>=6.1.1" "typing-extensions>=4.16.0"
+          # The `test` group at the versions the lock holds, as the wheel
+          # smokes install it.
+          uv export --project tree --locked --only-group test --no-emit-project \
+            -o suite.txt
+          uv pip install -r suite.txt
           .venv/bin/python -m pytest -q -m "not repository" tree/tests
 
   github-release:

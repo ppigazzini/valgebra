@@ -114,11 +114,13 @@ VIRTUAL_ENV=/tmp/vg uv pip install --index-url https://test.pypi.org/simple/ "va
 
 Then run the suite against the installed wheel rather than a local build. Nothing
 puts `python/` on the path, so the tests import whichever `valgebra` the
-environment holds — install the dev group's test dependencies into the same
-environment first, **from PyPI and in their own install**:
+environment holds — install the test group into the same environment first,
+at the lock's versions, **from PyPI and in their own install**, as the release
+smokes do:
 
 ```bash
-VIRTUAL_ENV=/tmp/vg uv pip install --group dev   # from the repository root
+uv export --locked --only-group test --no-emit-project -o /tmp/vg-test.txt   # from the repository root
+VIRTUAL_ENV=/tmp/vg uv pip install -r /tmp/vg-test.txt
 /tmp/vg/bin/python -m pytest -q
 ```
 
@@ -126,8 +128,9 @@ VIRTUAL_ENV=/tmp/vg uv pip install --group dev   # from the repository root
 under test, and resolving them against TestPyPI serves whatever anyone last
 uploaded there — an ancient `syrupy` beside a `pytest` too old to start it. Only
 valgebra comes from the index being checked; everything else comes from PyPI,
-where it comes from in every other environment. The group is read from `pyproject.toml` rather than
-listed here, so it cannot drift from the one the lanes install.
+where it comes from in every other environment. The group and its versions are
+read from the lock rather than listed here, so they cannot drift from what the
+lanes install.
 
 A test that needs a dependency the environment lacks skips rather than fails, so
 read the skip list: a suite whose oracles are absent has checked less than the
