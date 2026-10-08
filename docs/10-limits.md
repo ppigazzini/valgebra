@@ -67,7 +67,8 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   product of the two, not either one. The smallest recursive body, a reference
   under a union around one container such as `recursive(lambda t: union(int,
   [t]))`, opens three levels an unfolding, so it is walked to the unfolding
-  bound: every value nested within it is a member.
+  bound: 127 lists nested around an `int` are a member, the `int` being the
+  128th unfolding, and 128 lists are refused.
 
     The walk fits a **1 MiB** thread stack, the least any thread CPython
   creates has. The shipped wheels are built with profile-guided optimization,
