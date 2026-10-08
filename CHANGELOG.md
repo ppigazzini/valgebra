@@ -18,8 +18,24 @@ answer of its own, or a repair to a change not yet released.
 - fix: an annotation is refused at the node bound as it is read
 - fix: deprecated and Unit in metadata are ignored
 - fix: a callable where a schema goes is refused
+- feat: a generic type alias is read applied to its arguments
 
 -->
+
+### Added
+
+- **A generic type alias is read applied to its arguments.** `Pair[int]` from
+  `type Pair[T] = tuple[T, T]` was refused as an unsupported form with origin
+  `Pair`; it reads as `tuple[int, int]`, the body with the arguments in place
+  of its parameters, for a `typing_extensions.TypeAliasType` too. A parameter
+  given no argument takes its default, and an alias whose every parameter has
+  one reads bare. A recursive generic alias, `type Tree[T] = T |
+  list[Tree[T]]`, ties one fixpoint per list of arguments. A surplus or a
+  missing argument, a bare alias whose parameter has no default, a
+  `ParamSpec` or `TypeVarTuple` parameter, and an alias applying itself to an
+  argument that nests its own parameter each raise `NotImplementedError` by
+  the alias's name. A parameter's bound is a checker's to hold and is not
+  read.
 
 ### Changed
 

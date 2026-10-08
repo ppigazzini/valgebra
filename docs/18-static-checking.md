@@ -54,6 +54,7 @@ What each spelling reads as:
 | a `NewType` | the new type under mypy; `object` under ty and pyright |
 | `int \| None`, `Optional[int]`, `Literal[...]`, `Annotated[...]` | `Validator[object]` |
 | a dict or list literal, a constant, a value typed `object` | `Validator[object]` |
+| a generic `type` alias applied, `Pair[int]` | `Validator[object]`: the stub has no overload for an alias, and `Validator(tuple[int, int])` is what reads as its body |
 | `Any` | gradual: `Any` under mypy, `Unknown` under ty, `object` under pyright |
 | `a \| b` for two typed validators | the union of their types |
 | a class `\|` a validator, `int \| v` | `Validator[object]` under ty; under mypy and pyright a `types.UnionType`, on which a validator method is an error. Write the validator on the left: `v \| int` |

@@ -3899,8 +3899,10 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "crates/valgebra-py/src/build/interpreter.rs",
-            "if !Since(12).met(py) {",
-            "if py.version_info() < (3, 12) {",
+            "fn a_self_naming_alias_ties_its_own_fixpoint() {\n"
+            "    Python::attach(|py| {\n        if !Since(12).met(py) {",
+            "fn a_self_naming_alias_ties_its_own_fixpoint() {\n"
+            "    Python::attach(|py| {\n        if py.version_info() < (3, 12) {",
         ),
         trips=("test_a_corpus_spells_its_release_where_this_can_read_it",),
     ),

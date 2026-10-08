@@ -17,8 +17,8 @@ use valgebra_core::{Field, MapClause, Schema, SeqShape};
 
 use super::classes::{field_name, is_truthy_attr};
 use super::{
-    Pool, build_constant, build_schema, checked_key, forms, is_extension, is_forward_reference,
-    not_implemented,
+    Pool, build_applied_alias, build_constant, build_schema, checked_key, forms, is_extension,
+    is_forward_reference, is_type_alias, not_implemented,
 };
 use crate::errors::summarize;
 use crate::validator::Validator;
@@ -126,10 +126,17 @@ pub(super) fn build_parametrized(
     if is_field_qualifier(origin)? {
         return build_type_argument(&single_arg(args, alias, QUALIFIER_INSTEAD)?, lits, defs);
     }
+    // A generic PEP 695 alias applied to its arguments, `Pair[int]`: the body
+    // with the arguments substituted. Asked last, since no other origin here is
+    // an alias and an alias costs an instance check per spelling.
+    if is_type_alias(origin)? {
+        return build_applied_alias(origin, args, alias, lits, defs);
+    }
     Err(not_implemented(&format!(
         "unsupported typing form with origin {}; the subscripted forms read are \
          list, set, frozenset, dict, tuple, Union, Optional, Literal, Annotated, \
-         Callable, and the TypedDict qualifiers Required, NotRequired and ReadOnly",
+         Callable, a generic type alias, and the TypedDict qualifiers Required, \
+         NotRequired and ReadOnly",
         summarize(origin)?
     )))
 }

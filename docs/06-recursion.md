@@ -64,6 +64,41 @@ for the reason the next section gives: it denotes no set a value settles.
 The syntax is Python 3.12 and later. On 3.10 and 3.11, write the fixpoint with
 `recursive`.
 
+## A generic alias, applied
+
+A generic alias is read applied to its arguments: `Pair[int]` from
+`type Pair[T] = tuple[T, T]` is `tuple[int, int]`, the body with the argument in
+place of its parameter. A parameter given no argument takes its default, which
+may name an earlier parameter, and an alias whose every parameter has one reads
+bare as its defaults. The runtime counts no arguments, so a surplus or a
+missing one is refused by the alias's name, and so is a bare alias with a
+parameter no default stands for, since PEP 695 reads that as `Any`, "which is
+rarely the intent". A parameter's bound or constraints are a checker's to hold
+and are not read: `Bounded[str]` from `type Bounded[T: int] = list[T]` is
+`list[str]`. A `ParamSpec` or a `TypeVarTuple` parameter stands for no single
+type and is refused.
+
+A recursive generic alias ties one fixpoint per list of arguments it meets.
+`Tree[int]` is a fresh object at every read, and the body it substitutes to
+names an equal `Tree[int]`, which is the back edge:
+
+```python
+from valgebra import Validator
+
+type Pair[T] = tuple[T, T]
+type Tree[T] = T | list[Tree[T]]
+
+assert Validator(Pair[int]) == Validator(tuple[int, int])
+ints = Validator(Tree[int])
+assert ints.is_valid([1, [2, [3]]])
+assert not ints.is_valid([1, ["a"]])
+```
+
+An alias that applies itself to an argument nesting its own parameter --
+`type Nest[T] = T | list[Nest[list[T]]]` -- meets a new list of arguments at
+every unfolding, so no fixpoint ties it, and it is refused before it is built.
+mypy refuses the same shape at its definition.
+
 ## Why classes need it
 
 A class whose own type appears in a field is recursive in the same way, and a

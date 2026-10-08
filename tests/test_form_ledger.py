@@ -206,7 +206,9 @@ def _account(balance: object) -> Account:
 #: what it aliases is an ordinary schema.
 _ALIAS: dict[str, Any] = {}
 if sys.version_info >= (3, 12):
-    exec("type Alias = list[int]", {}, _ALIAS)  # noqa: S102 - a fixed literal
+    exec(  # noqa: S102 - a fixed literal
+        "type Alias = list[int]\ntype Pair[T] = tuple[T, T]", {}, _ALIAS
+    )
 
 
 def _tuple_prefix_tail() -> GenericAlias:
@@ -279,6 +281,11 @@ FORMS: dict[str, Reads | Refuses] = {
         Account, _account("not a balance"), "a"
     ),
     "PEP 695 `type` alias": Reads(_ALIAS.get("Alias", list[int]), [1], ["a"]),
+    "a generic alias applied, `Pair[int]`": Reads(
+        _ALIAS["Pair"][int] if "Pair" in _ALIAS else tuple[int, int],
+        (1, 2),
+        (1, "a"),
+    ),
     # -- the refinement markers ---------------------------------------------
     "`Ge(n)`": Reads(Annotated[int, at.Ge(2)], 2, 1),
     "`Gt(n)`": Reads(Annotated[int, at.Gt(2)], 3, 2),
