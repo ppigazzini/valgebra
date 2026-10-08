@@ -854,6 +854,156 @@ fn a_self_naming_alias_ties_its_own_fixpoint() {
     });
 }
 
+/// Define the aliases `source` writes and read each expression as a schema.
+///
+/// The `type` statement is 3.12 syntax, so the source is run rather than
+/// written here, and the caller skips where the interpreter cannot parse it.
+fn alias_reader<'py>(
+    py: Python<'py>,
+    source: &str,
+) -> impl Fn(&str) -> PyResult<(Schema, Vec<Schema>)> + 'py {
+    let namespace = PyDict::new(py);
+    py.run(
+        &CString::new(source).expect("a source with no interior nul"),
+        Some(&namespace),
+        None,
+    )
+    .expect("the aliases define");
+    move |expression: &str| {
+        let form = py.eval(&CString::new(expression)?, Some(&namespace), None)?;
+        let mut pool = Pool::default();
+        let mut defs = Vec::new();
+        build_schema(&form, &mut pool, &mut defs).map(|schema| (schema, defs))
+    }
+}
+
+/// A generic alias applied to its arguments is its body with them substituted.
+///
+/// Through the body's own parameter order, so a body naming its parameters in
+/// another order than the alias declares them is not transposed; a body naming
+/// a generic class bare is left the class it names; and the count the runtime
+/// never checks is checked here, each refusal naming the alias.
+#[test]
+fn a_generic_alias_is_its_body_with_the_arguments_substituted() {
+    Python::attach(|py| {
+        if !Since(12).met(py) {
+            return;
+        }
+        let read = alias_reader(
+            py,
+            "class Box[T]:\n\
+             \x20   pass\n\
+             type Pair[T] = tuple[T, T]\n\
+             type Swap[T, U] = dict[U, T]\n\
+             type Two[T, U] = dict[T, U]\n\
+             type Boxes[T] = list[Box]\n\
+             type Spread[*Ts] = tuple[*Ts]\n",
+        );
+        let schema = |expression: &str| read(expression).expect(expression).0;
+        let refusal = |expression: &str| match read(expression) {
+            Err(refusal) => refusal.to_string(),
+            Ok((schema, _)) => panic!("{expression} built {schema:?}"),
+        };
+        assert_eq!(schema("Pair[int]"), schema("tuple[int, int]"));
+        assert_eq!(schema("Swap[str, int]"), schema("dict[int, str]"));
+        assert_eq!(schema("list[Pair[str]]"), schema("list[tuple[str, str]]"));
+        // `Box` names a parameter of its own, which no argument here stands for.
+        assert_eq!(schema("Boxes[int]"), schema("list[Box]"));
+        assert!(
+            refusal("Pair[int, str]")
+                .ends_with("Pair takes 1 type argument, and Pair[int, str] gives it 2"),
+            "{}",
+            refusal("Pair[int, str]")
+        );
+        assert!(
+            refusal("Two[int]").ends_with(
+                "Two takes 2 type arguments, and Two[int] gives it 1: U has no default \
+                 to stand in"
+            ),
+            "{}",
+            refusal("Two[int]")
+        );
+        assert!(
+            refusal("Pair").ends_with(
+                "Pair is a generic alias, and its parameter T has no default: write \
+                 Pair[...] with the type it stands for"
+            ),
+            "{}",
+            refusal("Pair")
+        );
+        let spread = refusal("Spread[int]");
+        assert!(spread.contains("Spread declares Ts"), "{spread}");
+    });
+}
+
+/// A recursive generic alias ties one fixpoint per argument list it meets.
+///
+/// `Tree[int]` is a fresh object at each read, and the body it substitutes to
+/// names an equal one, which is the back edge; an alias alternating its
+/// arguments meets the first list again one unfolding on, and one applied to
+/// an argument naming none of its parameters settles on that list. One whose
+/// argument nests its own parameter meets a new list at every unfolding and is
+/// refused before it is built.
+#[test]
+fn a_recursive_generic_alias_is_tied_by_its_arguments() {
+    Python::attach(|py| {
+        if !Since(12).met(py) {
+            return;
+        }
+        let read = alias_reader(
+            py,
+            "type Tree[T] = T | list[Tree[T]]\n\
+             type Swapping[T, U] = None | dict[T, Swapping[U, T]]\n\
+             type Settles[T] = T | list[Settles[int]]\n\
+             type Nest[T] = T | list[Nest[list[T]]]\n",
+        );
+        let (tree, defs) = read("Tree[int]").expect("a regular recursive alias builds");
+        assert!(matches!(tree, Schema::Ref(_)), "{tree:?} is no fixpoint");
+        assert_eq!(defs.len(), 1, "one argument list, one definition");
+        assert_eq!(read("Tree[int]").expect("again").0, tree);
+        let (swapping, defs) = read("Swapping[int, str]").expect("alternating builds");
+        assert!(matches!(swapping, Schema::Ref(_)), "{swapping:?}");
+        assert_eq!(defs.len(), 1, "{defs:?}");
+        // An argument naming no parameter of the alias settles on one list a
+        // step on, and is tied there.
+        let (settles, defs) = read("Settles[str]").expect("a concrete argument builds");
+        assert!(matches!(settles, Schema::Union(_)), "{settles:?}");
+        assert_eq!(defs.len(), 1, "{defs:?}");
+        let refusal = match read("Nest[int]") {
+            Err(refusal) => refusal.to_string(),
+            Ok((schema, _)) => panic!("Nest[int] built {schema:?}"),
+        };
+        assert!(
+            refusal.contains("Nest applies itself to Nest[list[T]]"),
+            "{refusal}"
+        );
+    });
+}
+
+/// A parameter missing an argument takes its default, which may name an
+/// earlier parameter, and an alias whose every parameter has one reads bare.
+#[test]
+fn a_default_stands_in_for_a_missing_argument() {
+    Python::attach(|py| {
+        // `typing_extensions` gives a type variable a default on 3.12, where
+        // the `type` statement has no syntax for one.
+        if !Since(12).met(py) || py.import("typing_extensions").is_err() {
+            return;
+        }
+        let read = alias_reader(
+            py,
+            "import typing, typing_extensions\n\
+             T = typing_extensions.TypeVar('T', default=int)\n\
+             U = typing_extensions.TypeVar('U', default=T)\n\
+             Same = typing.TypeAliasType('Same', dict[T, U], type_params=(T, U))\n",
+        );
+        let schema = |expression: &str| read(expression).expect(expression).0;
+        assert_eq!(schema("Same"), schema("dict[int, int]"));
+        assert_eq!(schema("Same[str]"), schema("dict[str, str]"));
+        assert_eq!(schema("Same[str, bytes]"), schema("dict[str, bytes]"));
+    });
+}
+
 /// What a base's values can be asked, per constraint and per base.
 ///
 /// The four `carries_*` predicates decide whether a marker narrows a base or
@@ -2102,6 +2252,7 @@ fn a_typing_extensions_form_reads_as_its_typing_spelling() {
               \x20       def __init__(self, name, value):\n\
               \x20           self.__name__ = name\n\
               \x20           self.__value__ = value\n\
+              \x20           self.__type_params__ = ()\n\
               \x20   for name in ('Never', 'Self', 'Required', 'NotRequired', 'ReadOnly', 'Unpack'):\n\
               \x20       setattr(extensions, name, _SpecialForm())\n\
               \x20   extensions._SpecialForm = _SpecialForm\n\

@@ -2,6 +2,7 @@
 //! native container forms, and already-compiled validators.
 
 use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use pyo3::PyTypeInfo;
@@ -50,15 +51,27 @@ thread_local! {
     };
 
     /// The PEP 695 aliases whose bodies are being built on this thread.
-    ///
-    /// One entry per alias, holding the object's address, the self-reference
-    /// token standing for it while its body is read, and whether that token was
-    /// handed out. An alias reached again while its own body is being built is
-    /// the fixpoint's back edge, and this is what tells the two apart -- the
-    /// address, because an alias is one object and `__value__` yields the same
-    /// one however many times it is read.
-    static OPEN_ALIASES: RefCell<Vec<(usize, u64, Cell<bool>)>> =
-        const { RefCell::new(Vec::new()) };
+    static OPEN_ALIASES: RefCell<Vec<OpenAlias>> = const { RefCell::new(Vec::new()) };
+}
+
+/// One alias whose body is being built, and the token standing for it.
+///
+/// An alias reached again while its own body is being built is the fixpoint's
+/// back edge, and this is what tells the two apart. A plain alias is found by
+/// its address, because it is one object and `__value__` yields the same one
+/// however many times it is read. A generic one is found by its address and
+/// the arguments it is applied to, compared by Python equality: `Tree[int]` is
+/// a fresh object at every read, and the substituted body names an equal one.
+struct OpenAlias {
+    address: usize,
+    /// The type arguments it is applied to, defaults filled in; `None` for an
+    /// alias declaring no parameter.
+    arguments: Option<Py<PyTuple>>,
+    token: u64,
+    /// Whether the token was handed out, which makes the body a definition.
+    /// Shared, so the lookup that finds the entry can mark it after the
+    /// borrow it was found under has ended.
+    used: Rc<Cell<bool>>,
 }
 
 /// Build the body of a PEP 695 alias, tying the knot where it names itself.
@@ -72,36 +85,159 @@ thread_local! {
 /// names itself builds exactly what it did before -- one schema, no definition,
 /// nothing to resolve.
 ///
-/// The contractivity check is the same one `recursive` runs, for the same
-/// reason: `type X = int | X` names a set no value settles, and a walk over it
-/// would not terminate.
+/// A generic alias written bare is its defaults, as PEP 696 reads it, and is
+/// refused where a parameter has none: PEP 695 gives a bare one "an implied
+/// type argument of Any, which is rarely the intent".
 fn build_alias(
     obj: &Bound<'_, PyAny>,
     lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
-    let address = obj.as_ptr() as usize;
-    if let Some(token) = OPEN_ALIASES.with_borrow(|open| {
+    if !type_parameters(obj)?.is_empty() {
+        return build_applied_alias(obj, &PyTuple::empty(obj.py()), obj, lits, defs);
+    }
+    tie_alias(
+        obj,
+        None,
+        &obj.getattr(intern!(obj.py(), "__value__"))?,
+        lits,
+        defs,
+    )
+}
+
+/// Build a generic PEP 695 alias applied to its type arguments, `Pair[int]`.
+///
+/// The arguments are substituted into the body through the body's own
+/// `__parameters__`, which lists its type variables in the order the body
+/// first names them: `type Swap[T, U] = dict[U, T]` indexed in the alias's
+/// order would come out transposed. A parameter with no argument takes its
+/// default, which may name an earlier one, and the runtime checks no count, so
+/// a missing or a surplus argument is refused here by the alias's name. Bounds
+/// and constraints on a parameter are a checker's to hold and are not read.
+///
+/// `spelling` is the annotation as written -- the alias itself where it is
+/// bare -- carried for the refusals.
+pub(super) fn build_applied_alias(
+    alias: &Bound<'_, PyAny>,
+    args: &Bound<'_, PyTuple>,
+    spelling: &Bound<'_, PyAny>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let py = alias.py();
+    let name = declared_name(alias)?;
+    let parameters = type_parameters(alias)?;
+    let type_var = forms(py)?.type_var.bind(py);
+    let count = parameters.len();
+    let s = if count == 1 { "" } else { "s" };
+    // A parameter that is no type variable is refused before any count, since
+    // what counts as one argument for it is not a type.
+    for parameter in parameters.iter() {
+        if !parameter.get_type().is(type_var) {
+            return Err(not_implemented(&format!(
+                "{name} declares {}, which stands for a list of types or a \
+                 signature rather than for one type, so no argument here \
+                 substitutes it: write the alias over TypeVars alone",
+                declared_name(&parameter)?
+            )));
+        }
+    }
+    if args.len() > parameters.len() {
+        return Err(not_implemented(&format!(
+            "{name} takes {count} type argument{s}, and {} gives it {}",
+            summarize(spelling)?,
+            args.len()
+        )));
+    }
+    let mut arguments: Vec<Bound<'_, PyAny>> = Vec::with_capacity(parameters.len());
+    for (index, parameter) in parameters.iter().enumerate() {
+        if let Ok(argument) = args.get_item(index) {
+            arguments.push(argument);
+            continue;
+        }
+        let Some(default) = default_of(&parameter)? else {
+            return Err(not_implemented(&if args.is_empty() {
+                format!(
+                    "{name} is a generic alias, and its parameter {} has no \
+                     default: write {name}[...] with the type it stands for",
+                    declared_name(&parameter)?
+                )
+            } else {
+                format!(
+                    "{name} takes {count} type argument{s}, and {} gives it {}: {} \
+                     has no default to stand in",
+                    summarize(spelling)?,
+                    args.len(),
+                    declared_name(&parameter)?
+                )
+            }));
+        };
+        arguments.push(substitute(&default, &parameters, &arguments)?);
+    }
+    let arguments = PyTuple::new(py, arguments)?;
+    let value = alias.getattr(intern!(py, "__value__"))?;
+    refuse_a_growing_argument(alias, &name, &value, &parameters)?;
+    let body = substitute(&value, &parameters, &arguments.iter().collect::<Vec<_>>())?;
+    tie_alias(alias, Some(&arguments), &body, lits, defs)
+}
+
+/// An open alias as a lookup copies it out of the list: the arguments it is
+/// applied to, its token, and the flag that says the token was handed out.
+type Found = (Option<Py<PyTuple>>, u64, Rc<Cell<bool>>);
+
+/// Build an alias's body as the fixpoint the alias binds.
+///
+/// The contractivity check is the same one `recursive` runs, for the same
+/// reason: `type X = int | X` names a set no value settles, and a walk over it
+/// would not terminate.
+fn tie_alias(
+    alias: &Bound<'_, PyAny>,
+    arguments: Option<&Bound<'_, PyTuple>>,
+    body: &Bound<'_, PyAny>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let py = alias.py();
+    let address = alias.as_ptr() as usize;
+    // The arguments are compared outside the borrow: an equality is Python
+    // code, and code that builds a validator would borrow the list again.
+    let open: Vec<Found> = OPEN_ALIASES.with_borrow(|open| {
         open.iter()
-            .find(|(at, _, _)| *at == address)
-            .map(|(_, token, used)| {
-                used.set(true);
-                *token
+            .filter(|entry| entry.address == address)
+            .map(|entry| {
+                let held = entry.arguments.as_ref().map(|held| held.clone_ref(py));
+                (held, entry.token, Rc::clone(&entry.used))
             })
-    }) {
+            .collect()
+    });
+    for (held, token, used) in open {
+        // One address is one alias, which declares parameters or does not, so
+        // arguments are held on both sides or on neither.
+        if let (Some(held), Some(these)) = (held, arguments)
+            && !held.bind(py).eq(these)?
+        {
+            continue;
+        }
+        used.set(true);
         return Ok(Schema::SelfRef(token));
     }
 
     let token = fresh_self_token();
-    OPEN_ALIASES.with_borrow_mut(|open| open.push((address, token, Cell::new(false))));
+    OPEN_ALIASES.with_borrow_mut(|open| {
+        open.push(OpenAlias {
+            address,
+            arguments: arguments.map(|these| these.clone().unbind()),
+            token,
+            used: Rc::new(Cell::new(false)),
+        });
+    });
     // The value is a type *argument*, as a `NewType`'s supertype is: a string
     // there is a forward reference, and `TypeAliasType("A", "int")` and `type A
     // = "int"` were read as the literal `'int'`.
-    let body =
-        generics::build_type_argument(&obj.getattr(intern!(obj.py(), "__value__"))?, lits, defs);
+    let body = generics::build_type_argument(body, lits, defs);
     let recursive = OPEN_ALIASES
         .with_borrow_mut(Vec::pop)
-        .is_some_and(|(_, _, used)| used.get());
+        .is_some_and(|entry| entry.used.get());
     let body = body?;
     if !recursive {
         return Ok(body);
@@ -124,6 +260,158 @@ fn build_alias(
     }
     defs.push(resolved);
     Ok(Schema::Ref(ref_id))
+}
+
+/// Whether `obj` is a PEP 695 alias, `typing`'s or `typing_extensions`'.
+pub(super) fn is_type_alias(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = obj.py();
+    if let Some(alias_type) = &forms(py)?.type_alias_type
+        && obj.is_instance(alias_type.bind(py))?
+    {
+        return Ok(true);
+    }
+    match extensions(py)?.and_then(|held| held.type_alias_type.as_ref()) {
+        Some(alias_type) => obj.is_instance(alias_type.bind(py)),
+        None => Ok(false),
+    }
+}
+
+/// An alias's declared type parameters, the empty tuple for a plain one.
+fn type_parameters<'py>(alias: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
+    Ok(alias
+        .getattr(intern!(alias.py(), "__type_params__"))?
+        .cast_into::<PyTuple>()?)
+}
+
+/// The name an alias or a type parameter declares, for the refusals that name
+/// it: a `TypeVar` prints as `~T` below 3.12 and is declared `T`.
+fn declared_name(alias: &Bound<'_, PyAny>) -> PyResult<String> {
+    Ok(alias
+        .getattr(intern!(alias.py(), "__name__"))?
+        .str()?
+        .to_string())
+}
+
+/// A type variable's default, as PEP 696 declares one, or `None`.
+///
+/// Asked through `has_default`, which a variable without a default answers
+/// `False` and a release older than PEP 696 does not carry at all -- its
+/// `TypeVar` has no default to give.
+fn default_of<'py>(parameter: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let py = parameter.py();
+    let Some(has_default) = parameter.getattr_opt(intern!(py, "has_default"))? else {
+        return Ok(None);
+    };
+    if !has_default.call0()?.is_truthy()? {
+        return Ok(None);
+    }
+    parameter.getattr(intern!(py, "__default__")).map(Some)
+}
+
+/// Substitute `arguments` for the `parameters` they stand for in `value`.
+///
+/// A parameter is replaced outright, and a form naming one is indexed by its
+/// own `__parameters__`, each replaced by its argument. A form naming none of
+/// them is left as written: a generic class has `__parameters__` of its own,
+/// and indexing it would turn the class into an application of it.
+fn substitute<'py>(
+    value: &Bound<'py, PyAny>,
+    parameters: &Bound<'py, PyTuple>,
+    arguments: &[Bound<'py, PyAny>],
+) -> PyResult<Bound<'py, PyAny>> {
+    let argument_for = |variable: &Bound<'py, PyAny>| {
+        parameters
+            .iter()
+            .position(|parameter| parameter.is(variable))
+            .and_then(|at| arguments.get(at))
+    };
+    if let Some(argument) = argument_for(value) {
+        return Ok(argument.clone());
+    }
+    let Some(variables) = value.getattr_opt(intern!(value.py(), "__parameters__"))? else {
+        return Ok(value.clone());
+    };
+    let Ok(variables) = variables.cast_into::<PyTuple>() else {
+        return Ok(value.clone());
+    };
+    if !variables
+        .iter()
+        .any(|variable| argument_for(&variable).is_some())
+    {
+        return Ok(value.clone());
+    }
+    let replaced: Vec<Bound<'py, PyAny>> = variables
+        .iter()
+        .map(|variable| argument_for(&variable).cloned().unwrap_or(variable))
+        .collect();
+    value.get_item(PyTuple::new(value.py(), replaced)?)
+}
+
+/// Refuse a body that applies its own alias to an argument nesting one of
+/// the alias's parameters.
+///
+/// `type Nest[T] = T | list[Nest[list[T]]]` unfolds `Nest[int]` into
+/// `Nest[list[int]]` and that into `Nest[list[list[int]]]`: every unfolding is
+/// an alias the build has not met, so no key repeats and no fixpoint ties it.
+/// mypy refuses the shape where it is defined ("type variable nesting on right
+/// hand side"), and the same rule is asked here before the body is built. A
+/// recursion over the parameters alone, or over arguments naming none of them,
+/// repeats a key and is tied.
+///
+/// The body is walked through a list rather than the native stack, since an
+/// annotation can be nested deeper than a stack holds before the build's own
+/// depth bound refuses it.
+fn refuse_a_growing_argument(
+    alias: &Bound<'_, PyAny>,
+    name: &str,
+    value: &Bound<'_, PyAny>,
+    parameters: &Bound<'_, PyTuple>,
+) -> PyResult<()> {
+    let py = alias.py();
+    let forms = forms(py)?;
+    let mut pending = vec![value.clone()];
+    while let Some(form) = pending.pop() {
+        let Ok(args) = forms
+            .get_args
+            .bind(py)
+            .call1((&form,))?
+            .cast_into::<PyTuple>()
+        else {
+            continue;
+        };
+        if forms.get_origin.bind(py).call1((&form,))?.is(alias) {
+            for argument in args.iter() {
+                let bare = parameters.iter().any(|parameter| parameter.is(&argument));
+                if !bare && names_a_parameter(&argument, parameters)? {
+                    return Err(not_implemented(&format!(
+                        "{name} applies itself to {}, an argument nesting its own \
+                         type parameter, so every unfolding is an alias not met \
+                         before and no schema ties the recursion: recur on the \
+                         parameters alone",
+                        summarize(&form)?
+                    )));
+                }
+            }
+        }
+        pending.extend(args.iter());
+    }
+    Ok(())
+}
+
+/// Whether `argument` names one of `parameters` anywhere inside it.
+fn names_a_parameter(
+    argument: &Bound<'_, PyAny>,
+    parameters: &Bound<'_, PyTuple>,
+) -> PyResult<bool> {
+    let Some(variables) = argument.getattr_opt(intern!(argument.py(), "__parameters__"))? else {
+        return Ok(false);
+    };
+    let Ok(variables) = variables.cast_into::<PyTuple>() else {
+        return Ok(false);
+    };
+    Ok(variables
+        .iter()
+        .any(|variable| parameters.iter().any(|parameter| parameter.is(&variable))))
 }
 
 /// The most levels of schema nesting the frontend descends while compiling.
@@ -298,6 +586,10 @@ struct Forms {
     /// held since the first one.
     get_origin: Py<PyAny>,
     get_args: Py<PyAny>,
+    /// `typing.TypeVar`, the one kind of type parameter an alias's arguments
+    /// substitute, asked by exact type: `typing_extensions`' `TypeVarTuple` is
+    /// an instance of it below 3.11.
+    type_var: Py<PyAny>,
     /// `typing.ForwardRef`, and the four classes a type variable or special
     /// form is an instance of, in the order they are asked.
     forward_ref: Option<Py<PyAny>>,
@@ -381,6 +673,7 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
                 .unbind(),
             get_origin: typing.getattr("get_origin")?.unbind(),
             get_args: typing.getattr("get_args")?.unbind(),
+            type_var: typing.getattr("TypeVar")?.unbind(),
             forward_ref: optional_form(annotationlib.as_ref().unwrap_or(&typing), "ForwardRef"),
             type_variables: ["TypeVar", "ParamSpec", "TypeVarTuple", "_SpecialForm"]
                 .iter()

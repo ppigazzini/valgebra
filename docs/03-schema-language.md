@@ -769,6 +769,7 @@ unaffected either way — the walk reads the value.
 | `Protocol` | the values carrying every member it declares, each holding what the member declares ([below](#a-protocol-is-the-record-of-its-members)) |
 | `NewType` | the set of the supertype it wraps |
 | PEP 695 `type` alias | the set of the aliased type, and ties the fixpoint where the alias names itself ([recursion](06-recursion.md)) |
+| a generic alias applied, `Pair[int]` | the set of its body with the arguments in place of its parameters, a missing one taking its default ([recursion](06-recursion.md#a-generic-alias-applied)) |
 
 ```python
 import enum

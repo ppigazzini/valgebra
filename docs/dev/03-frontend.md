@@ -432,6 +432,22 @@ itself, which no schema reads. The arm sits after every container, union,
 `Literal` and `Callable` arm and before the field qualifiers, whose origins it
 never matches, so a form that builds never reaches it.
 
+**A generic alias applied is its body with the arguments in place.** The last
+origin asked is a PEP 695 alias, `typing`'s or `typing_extensions`'
+(`build_applied_alias` in `build.rs`), so a form any other arm reads pays
+nothing for it. The runtime keeps the alias, its parameters and its body, and
+checks none of them: `Pair[int, str]` builds. So the arm refuses a parameter
+that is no `TypeVar`, asked by exact type since `typing_extensions`'
+`TypeVarTuple` is an instance of `TypeVar` below 3.11; counts the arguments
+against the parameters; fills a missing one from its default, which may name
+an earlier parameter; and substitutes through the body's own `__parameters__`,
+which lists its type variables in the order the body first names them -- in
+the alias's order `type Swap[T, U] = dict[U, T]` comes out transposed. A form
+naming none of the alias's parameters is left as written, since a generic
+class carries `__parameters__` of its own and indexing it would apply it. A
+bare generic alias is its defaults, and refused naming `Pair[...]` where a
+parameter has none. Bounds and constraints are not read.
+
 **The forms are resolved without waiting on another thread's import.** On 3.15
 `typing` serves `ForwardRef` through its module `__getattr__`, which reaches
 `annotationlib` through a lazy import, and the interpreter resolves a lazy
@@ -586,12 +602,19 @@ naming `recursive(...)` as the way to express it. The bound exists so that case
 fails cleanly instead of overflowing the native stack.
 
 A PEP 695 alias is its own binder, so the fixpoint it names needs no call.
-`build_alias` in `build.rs` stands a token for the alias while its body is
-built -- the alias is one object, found again by its address in
-`OPEN_ALIASES` -- turns every occurrence of the token into a reference to the
-definition the body becomes, and refuses a body in which the alias occurs
-outside a structural constructor, since `type X = int | X` names no set a value
-settles. An alias that never names itself builds its body and no definition.
+`tie_alias` in `build.rs` stands a token for the alias while its body is
+built, turns every occurrence of the token into a reference to the definition
+the body becomes, and refuses a body in which the alias occurs outside a
+structural constructor, since `type X = int | X` names no set a value settles.
+An alias that never names itself builds its body and no definition. A plain
+alias is one object, found again by its address in `OPEN_ALIASES`. A generic
+one applied is a fresh object at every read, so it is found by its alias's
+address and its arguments, compared by Python equality: the body `Tree[int]`
+substitutes to names an equal `Tree[int]`, and one alternating its arguments
+meets the first list again an unfolding later. An alias applying itself to an
+argument that nests one of its own parameters meets a new list at every
+unfolding, so no key repeats; `refuse_a_growing_argument` refuses the body
+before it is built, by mypy's rule, rather than leaving it to the depth bound.
 
 ## A shared part is built per use, and held to the node bound as it is
 
@@ -697,6 +720,31 @@ wherever a schema is read, naming `Annotated[T, fn]` and `Literal[fn]`, and the
 `tests/test_refinements.py`, and
 `a_callable_is_no_schema_and_a_literal_names_it` in
 `crates/valgebra-py/src/build/interpreter.rs`.
+
+**Reading a bare generic alias as its parameters' `Any`.** PEP 695 gives a
+generic alias written without arguments "an implied type argument of Any,
+which is rarely the intent", and a schema reading it so would admit every value
+where its parameter stands. A bare alias whose every parameter has a default is
+those defaults; one with a parameter no default stands for is refused naming
+the application: `test_a_count_the_runtime_accepts_is_refused_by_the_aliases_name`
+in `tests/test_generic_aliases.py` and
+`a_generic_alias_is_its_body_with_the_arguments_substituted` in
+`crates/valgebra-py/src/build/interpreter.rs`.
+
+**Leaving a recursive alias whose argument grows to the depth bound.**
+`type Nest[T] = T | list[Nest[list[T]]]` names no finite schema: no list of
+arguments repeats, so no fixpoint ties it. pydantic recurses to a
+`RecursionError`, beartype answers `False` to every value and typeguard `True`,
+in silence; mypy alone refuses it at the definition, and its rule is the one
+taken, before the body is built rather than at the depth bound, whose message
+names a class: `test_an_alias_recurring_on_a_growing_argument_is_refused` and
+`a_recursive_generic_alias_is_tied_by_its_arguments`.
+
+**Substituting a `ParamSpec` or a `TypeVarTuple` parameter.** Each stands for a
+list of types or a signature rather than for one type, and the schema language
+has no form an argument list for one becomes: `Callable` checks callability
+alone. An alias declaring one is refused by name:
+`test_a_parameter_that_is_no_type_variable_is_refused`.
 
 **A node for the class alone, or for the class with its fields.** Neither
 passes the admission test of [01-schema-ir.md](01-schema-ir.md): the first is
