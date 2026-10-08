@@ -134,9 +134,12 @@ cell by cell.
 
 `Interval` and `Len` expand to the bounds they carry (below), and `Not` wraps a
 predicate. A marker from `annotated_types` that is **not** in this table names a
-constraint valgebra does not check — `Timezone` and `Unit` are the two — and is
-refused when the validator is built rather than ignored: ignoring it would leave
-a schema that admits exactly the values the marker was written to exclude.
+constraint valgebra does not check — `Timezone` is the one — and is refused when
+the validator is built rather than ignored: ignoring it would leave a schema
+that admits exactly the values the marker was written to exclude. Two of the
+vocabulary's markers exclude no value and are ignored: `Unit`, which names what
+a number is measured in and leaves the reading to the consumer, and the
+documentation marker, so `Annotated[float, Unit("m")]` is `float`.
 
 **A bound excludes `nan`.** Every comparison against a not-a-number is false,
 `>=` included, so a bounded float set never holds one while the bare kind does.
@@ -560,6 +563,35 @@ with pytest.raises(NotImplementedError, match="is an Annotated alias"):
 finite = Validator(at.IsFinite[float])  # the alias, as the type
 assert finite.is_valid(0.0)
 assert not finite.is_valid(math.inf)
+```
+
+PEP 702's `deprecated` is ignored the same way. `typing_extensions.deprecated`
+is that module's own below 3.13 and the standard library's `warnings.deprecated`
+from it, and on every release `Annotated[int, deprecated("...")]` is `int`.
+
+**A decorator function is called.** What this frontend tells apart from a
+predicate is an *object* whose class is a typing form or the standard library's
+`deprecated`. A function is a function, and nothing about one says whether it
+asks or decorates: `math.isfinite` and `typing.final` are both the standard
+library's. So a decorator in metadata is called with the value.
+`dataclasses.dataclass`, `abc.abstractmethod` and `typing.no_type_check` raise
+for a value that is neither a class nor a function, and refuse every value;
+`typing.final` and `typing.override` return what they are given, and refuse
+`0`:
+
+```python
+import typing
+from typing import Annotated
+
+from typing_extensions import deprecated
+
+from valgebra import Validator
+
+assert Validator(Annotated[int, deprecated("use the account id")]) == Validator(int)
+
+final = Validator(Annotated[int, typing.final])  # called, as a predicate is
+assert final.is_valid(5)
+assert not final.is_valid(0)
 ```
 
 Passed as a schema on its own, a callable is not a predicate. It is an object

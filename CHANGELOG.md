@@ -16,6 +16,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a map is refuted on a key the other reads one way
 - fix: a map keyed by a complement of kinds lowers to the other kinds
 - fix: an annotation is refused at the node bound as it is read
+- fix: deprecated and Unit in metadata are ignored
 
 -->
 
@@ -59,6 +60,18 @@ answer of its own, or a repair to a change not yet released.
   refuses a step past it, in milliseconds, with the `ValueError` it raised
   before. A schema within the bound builds as it did; a part a fold drops
   still counts toward the union that dropped it.
+- **`deprecated` and `Unit` in metadata are ignored.** `Annotated[int,
+  typing_extensions.deprecated("...")]` refused every value from Python 3.13,
+  where `typing_extensions` re-exports the standard library's decorator: its
+  class lives in `warnings`, which the frontend did not read as a typing form,
+  so it was called as a predicate and raised. `Annotated[float,
+  annotated_types.Unit("m")]` was refused as a constraint valgebra does not
+  check, though `Unit` names what a number is measured in and excludes no
+  value. Both are ignored, as a typing form and the documentation marker are; a
+  group yielding `Unit` beside a bound reads as the bound, and `Timezone` is
+  still refused. A decorator *function* in metadata, such as
+  `dataclasses.dataclass` or `typing.final`, cannot be told from a predicate
+  and is called, which the refinements page states.
 
 ## [0.0.17] - 2026-10-06
 
