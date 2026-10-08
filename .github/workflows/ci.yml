@@ -285,6 +285,14 @@ jobs:
           # The interpreter-backed Rust tests link libpython, so point pyo3 at the
           # uv interpreter and put its library directory on the loader path.
           export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
+          # And start the embedded interpreter from the venv, as the sweeps do:
+          # it takes its prefix from the first `python3` on `PATH`, which
+          # `setup-uv` makes uv's bare 3.12, and `PYO3_PYTHON` configures the
+          # build alone. From the bare prefix the corpus would import no
+          # `typing_extensions` and install its stand-in, and the figure would
+          # measure the stand-in's arms where the Python suite above reads the
+          # module the lock installs.
+          export PATH="$(dirname "$PYO3_PYTHON"):$PATH"
           libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           LD_LIBRARY_PATH="$libdir:$LD_LIBRARY_PATH" \
             cargo test -p valgebra-py --features interpreter-tests
@@ -305,16 +313,19 @@ jobs:
           # A corpus is a table and a loop: it runs by construction, arrives at
           # full coverage, and lifts the figure for the code around it. They are
           # 4,048 of the 8,668 lines this was computed over -- nearly half the
-          # number described the tests. Excluded, the binding reads 97.00% of
-          # lines and 93.77% of regions -- measured with the flow above, against
-          # a cleaned profile in a target directory of its own, which is the
-          # only reading that is the lane's. The suites draw, so a figure moves
-          # in its third digit between runs.
+          # number described the tests. Excluded, the binding reads 97.28% of
+          # lines and 93.28% of regions -- measured with the flow above on
+          # 2026-10-08, against a cleaned profile in a target directory of its
+          # own, which is the only reading that is the lane's. The suites draw,
+          # so a figure moves in its third digit between runs.
           #
           # The region floor is the one that notices a branch with an arm nobody
-          # reached, and it is three points below the line figure here. Both sit
-          # about a point under the measurement, which is the tolerance a figure
-          # carries between machines and no more.
+          # reached, and it is three points below the line figure here. The line
+          # floor sits about a point under its figure, which is the tolerance a
+          # figure carries between machines and no more; the region floor sits
+          # nearer, because the arms for `typing_extensions`' own objects go
+          # unreached on 3.12 with the module installed, as the walk baseline's
+          # notes say of their mutants.
           # `tests/test_coverage_scope.py` holds this scope to the corpus files
           # the tree has, in both directions.
           ignore='valgebra-core|valgebra-py/src/workload\.rs|/interpreter\.rs$|tests\.rs$'

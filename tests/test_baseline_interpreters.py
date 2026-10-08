@@ -168,3 +168,48 @@ def test_a_sweep_starts_its_embedded_interpreter_from_the_venv() -> None:
         "interpreter imports what the runner's first `python3` has rather than "
         "what the baseline's notes argue from."
     )
+
+
+#: An embedded interpreter started from the base installation, as the `python`
+#: job's corpora start theirs: an interpreter with no environment to live in,
+#: reading its standard library from the prefix it is handed.
+_BASE_HOME = re.compile(r'\bPYTHONHOME="\$base"')
+
+
+def _interpreter_steps() -> dict[str, str]:
+    """Give each step that embeds an interpreter in a test binary, by job and step."""
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    return {
+        f"{name}: {step.get('name', '')}": str(step.get("run") or "")
+        for name, job in workflow["jobs"].items()
+        for step in job.get("steps") or []
+        if "--features interpreter-tests" in str(step.get("run") or "")
+    }
+
+
+def test_every_embedded_interpreter_names_its_prefix() -> None:
+    """A step linking the interpreter says which installation it starts from.
+
+    The prefix decides what the interpreter imports: from the venv, the module
+    the lock installs; from the base installation, the standard library alone,
+    where the corpus installs its stand-in for `typing_extensions`. Both are
+    readings a lane may want -- the sweeps' baseline notes argue from the first,
+    the `python` job's corpora read the second on every release -- and neither
+    is the one a step gets by naming nothing, which is whatever the runner's
+    `PATH` holds first. So each step names exactly one, before it runs the
+    tests: the venv's `bin` first on `PATH`, or `PYTHONHOME` at the base.
+    """
+    steps = _interpreter_steps()
+    assert len(steps) >= 4, sorted(steps)
+    unnamed = []
+    for where, run in sorted(steps.items()):
+        at = run.index("--features interpreter-tests")
+        venv = (line := _VENV_FIRST.search(run)) is not None and line.start() < at
+        base = (home := _BASE_HOME.search(run)) is not None and home.start() < at
+        if venv == base:
+            unnamed.append(f"{where} ({'both' if venv else 'neither'})")
+    assert not unnamed, (
+        f"steps embedding an interpreter without naming one prefix: {unnamed}. "
+        "Export the venv's `bin` first on `PATH`, or hand the base installation "
+        "as `PYTHONHOME`, before the tests run."
+    )
