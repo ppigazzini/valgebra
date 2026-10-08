@@ -599,7 +599,10 @@ fn two_members_python_equates_do_not_make_a_set() {
 }
 
 /// And where nothing equates the members, the set is there: one member each
-/// of two kinds, of one kind, or of two number kinds with room to choose.
+/// of two kinds, of one kind, or of two number kinds with room to choose. An
+/// escape holding one number in two kinds is a choice between the two rather
+/// than a collision, since the set takes one of them: `{1, 2}` escapes both
+/// `{2}` and `{1, True}`.
 #[test]
 fn members_nothing_equates_make_a_set() {
     let int = Descr::of_kind(Kind::Int);
@@ -614,7 +617,8 @@ fn members_nothing_equates_make_a_set() {
         vec![int.clone(), float],
         vec![flags, words.clone()],
         vec![none, int.clone()],
-        vec![two, yes],
+        vec![two.clone(), yes.clone()],
+        vec![two, either(&[one, yes])],
         vec![int, words, Descr::of_kind(Kind::Bytes)],
     ] {
         let line = escaping(&either(&parts), &parts);
