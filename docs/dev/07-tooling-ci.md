@@ -688,10 +688,13 @@ it starts on the base prefix, where `typing_extensions` is not installed, so
 the corpus installs its stand-in and kills the mutants of the arms the lane
 cannot reach -- a sweep that passes here and a ratchet that fails there. Both
 walk lanes put their venv's `bin` first on `PATH` for that reason, since uv's
-build of 3.12 has no `typing_extensions` of its own, and
+build of 3.12 has no `typing_extensions` of its own, and so does `binding
+coverage`, whose figure would otherwise count the stand-in's arms.
 `tests/test_baseline_interpreters.py` holds every sweep that embeds an
-interpreter to doing so. A local sweep runs in a venv the lock fills, its `bin`
-first on `PATH`:
+interpreter to doing so, and every other step that embeds one to naming its
+prefix: the venv first, or the base installation as `PYTHONHOME`, which is how
+the `python` job's corpora read each release. A local sweep runs in a venv the
+lock fills, its `bin` first on `PATH`:
 
 ```bash
 export VALGEBRA_WALK_VENV="$PWD/../walk-venv"
