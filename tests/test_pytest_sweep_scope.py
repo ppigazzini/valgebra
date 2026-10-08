@@ -92,6 +92,12 @@ def _lane(naming: str) -> str:
     return holding[0]
 
 
+def _condition(lane: str) -> str:
+    """Give a job's `if:`, with the continuation lines of a folded one."""
+    found = re.search(r"^( *)if:.*(?:\n\1 +\S.*)*", lane, re.MULTILINE)
+    return found.group() if found else ""
+
+
 def test_every_file_excused_to_pytest_is_examined_there() -> None:
     """The sentence and the measurement name the same files."""
     excused, examined = _excused_to_pytest(), _examined()
@@ -201,7 +207,7 @@ def test_a_lane_runs_the_sweep_off_the_merge_path() -> None:
     lane = _lane("mutants-pytest.toml")
     assert f"--features {FEATURE}" in lane, "the lane does not enable the wrapper"
     assert VENV in lane, f"the lane does not give the sweep a {VENV}"
-    assert re.search(r"^\s*if:.*(schedule|workflow_dispatch)", lane, re.MULTILINE), (
+    assert re.search(r"schedule|workflow_dispatch", _condition(lane)), (
         "the sweep costs a suite run per mutant and must not sit on the merge path"
     )
 
@@ -212,7 +218,7 @@ def test_a_lane_ratchets_what_the_sweep_finds() -> None:
     assert "scripts/mutation_gate.py --baseline pytest" in lane, (
         "the ratchet does not run the gate against the pytest baseline"
     )
-    assert re.search(r"^\s*if:.*(schedule|workflow_dispatch)", lane, re.MULTILINE), (
+    assert re.search(r"schedule|workflow_dispatch", _condition(lane)), (
         "the ratchet runs where its sweep does"
     )
 

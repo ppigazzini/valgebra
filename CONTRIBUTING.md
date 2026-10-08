@@ -235,8 +235,9 @@ stage, and `tests/test_required_jobs.py` holds that the job runs on every event
 and has a free-threaded leg. [docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md)
 says why each interpreter is a lane of its own.
 
-Scheduled lanes run the deep property suites, a libFuzzer soak over the
-core, and three mutation sweeps — the core crate, the membership walk under an
+Scheduled lanes, on `github_ci` by a dispatch from the scheduled run on
+`main`, run the deep property suites, a libFuzzer soak over the core, and three
+mutation sweeps — the core crate, the membership walk under an
 embedded interpreter, and the files the shipped extension is the only caller of,
 swept with the Python suite as the test command — whose survivors are ratcheted
 against their own committed baselines: a survivor the baseline does not accept fails the lane, and so does a
