@@ -1109,10 +1109,20 @@ jobs:
     # caught when the tests answer differently with it than without it, so the
     # two runs have to be given the same inputs; proptest otherwise draws from
     # the OS per run, and a law that fails on a rare shape marks mutants caught
-    # on its own. The run id makes the draw differ between runs, so the sweep
-    # still explores, and a baseline failure carries the seed that found it.
+    # on its own.
+    #
+    # And one seed for every push. A gate that draws afresh judges an untouched
+    # file differently from one push to the next: a mutant only some draws kill
+    # is caught on one run and a new survivor on the next, with nothing in the
+    # tree changed. Under a fixed seed that mutant is a survivor the first time
+    # and every time, and what it wants is a test that fails on it whatever the
+    # draw. Exploring is the nightly's, which draws from its run id and whose
+    # new survivor is a report rather than a block. The value is arbitrary, and
+    # moving it re-draws every verdict, so a new one lands with a sweep of the
+    # core under it. `tests/test_required_jobs.py` holds both push sweeps to one
+    # literal and both nightlies to the run id.
     env:
-      PROPTEST_RNG_SEED: ${{ github.run_id }}
+      PROPTEST_RNG_SEED: "0"
       # And its shrinking is bounded, because a sweep reads no counterexample.
       # A mutant's verdict is whether the tests fail, never on what input, and
       # proptest shrinks a failure for as long as it takes -- `max_shrink_time`
@@ -1233,14 +1243,10 @@ jobs:
     # ceiling is about twice that.
     runs-on: ubuntu-latest
     timeout-minutes: 50
-    # One seed for the baseline and every mutant of this shard. A mutation is
-    # caught when the tests answer differently with it than without it, so the
-    # two runs have to be given the same inputs; proptest otherwise draws from
-    # the OS per run, and a law that fails on a rare shape marks mutants caught
-    # on its own. The run id makes the draw differ between runs, so the sweep
-    # still explores, and a baseline failure carries the seed that found it.
+    # One seed for the baseline and every mutant of this shard, and the same
+    # literal on every push, for the reasons `mutants-diff-core` gives.
     env:
-      PROPTEST_RNG_SEED: ${{ github.run_id }}
+      PROPTEST_RNG_SEED: "0"
       # And its shrinking is bounded, because a sweep reads no counterexample.
       # A mutant's verdict is whether the tests fail, never on what input, and
       # proptest shrinks a failure for as long as it takes -- `max_shrink_time`
@@ -1758,7 +1764,10 @@ jobs:
     # two runs have to be given the same inputs; proptest otherwise draws from
     # the OS per run, and a law that fails on a rare shape marks mutants caught
     # on its own. The run id makes the draw differ between runs, so the sweep
-    # still explores, and a baseline failure carries the seed that found it.
+    # explores, and a baseline failure carries the seed that found it. A push
+    # sweep fixes its seed instead, for the reasons `mutants-diff-core` gives,
+    # so a mutant only some draws kill is found here, as a report, rather than
+    # on a push, as a block.
     env:
       PROPTEST_RNG_SEED: ${{ github.run_id }}
       # And its shrinking is bounded, because a sweep reads no counterexample.
@@ -1956,8 +1965,9 @@ jobs:
     # the mutants each, beside one baseline build apiece, leaves the ceiling
     # about twice a shard's reading.
     timeout-minutes: 60
-    # One seed for the baseline and every mutant of this sweep; see
-    # `mutants-diff-core` for why the two runs have to share one.
+    # One seed for the baseline and every mutant of this sweep, drawn from the
+    # run id as the core's nightly draws it; see `mutants-diff-core` for why
+    # the two runs share one and a push fixes it.
     env:
       PROPTEST_RNG_SEED: ${{ github.run_id }}
       # And its shrinking is bounded, because a sweep reads no counterexample.

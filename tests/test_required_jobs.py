@@ -295,6 +295,89 @@ def test_the_binding_sweep_triggers_on_every_file_it_sweeps() -> None:
     )
 
 
+#: The variable proptest reads its seed from.
+SEED = "PROPTEST_RNG_SEED"
+
+#: The seed a nightly draws: a new one each run.
+RUN_ID = "${{ github.run_id }}"
+
+#: The page whose local sweep recipes reproduce the push lanes.
+TOOLING = ROOT / "docs" / "dev" / "07-tooling-ci.md"
+
+
+def _seeds(jobs: dict) -> dict[str, str]:
+    """Read the seed each job that sets one draws, by its job name."""
+    seeds = {}
+    for name, job in jobs.items():
+        for step in job["steps"]:
+            assert SEED not in (step.get("env") or {}), (
+                f"a step of {name} sets its own {SEED}; the job's one seed is "
+                "what makes the baseline and every mutant draw alike"
+            )
+        if SEED in (job.get("env") or {}):
+            seeds[name] = str(job["env"][SEED])
+    return seeds
+
+
+def test_a_push_sweep_draws_one_literal_and_a_nightly_its_run_id() -> None:
+    """A push sweep's verdict is the tree's, and a nightly's explores.
+
+    A property law kills some mutants on some draws only, so a push sweep that
+    draws from its run id judges an untouched file differently from one push
+    to the next, and blocks a merge on a draw. Under one literal, a mutant the
+    literal's draw does not kill survives every time, and a deterministic test
+    kills it. The nightly keeps the run id, since finding those mutants is its
+    work and its new survivor is a report rather than a block.
+    """
+    jobs = _workflow()["jobs"]
+    seeds = _seeds(jobs)
+    off_the_push = _not_on_a_push(jobs)
+    pushed = {name: seed for name, seed in seeds.items() if name not in off_the_push}
+    nightly = {name: seed for name, seed in seeds.items() if name in off_the_push}
+    assert {"mutants-diff-core", "mutants-diff-walk"} <= set(pushed), sorted(seeds)
+    assert {"nightly-mutants", "nightly-mutants-walk"} <= set(nightly), sorted(seeds)
+    literals = set(pushed.values())
+    assert len(literals) == 1, f"the push sweeps draw different seeds: {pushed}"
+    (literal,) = literals
+    assert literal.isdigit(), (
+        f"a push sweep draws {literal!r}; a push's seed is a literal, so the "
+        "same tree draws the same cases on every push"
+    )
+    explores = {name: seed for name, seed in nightly.items() if seed != RUN_ID}
+    assert not explores, (
+        f"nightly sweeps that do not draw from the run id: {explores}. A nightly "
+        "that fixes its seed never finds a mutant only some draws kill."
+    )
+
+
+def test_the_local_sweep_draws_the_push_lanes_seed() -> None:
+    """A local sweep of the files a change touches draws what the lane draws.
+
+    The tooling page's recipes for the two push sweeps are how a change is
+    checked before it is pushed, and a recipe drawing its own seed reproduces
+    a different sweep: a mutant only some draws kill passes here and survives
+    there. The recipes are the page's fenced blocks that judge a partial sweep
+    with `--new-only`, which is what makes one a push sweep.
+    """
+    jobs = _workflow()["jobs"]
+    pushed = {
+        seed for name, seed in _seeds(jobs).items() if name not in _not_on_a_push(jobs)
+    }
+    page = TOOLING.read_text(encoding="utf-8")
+    blocks = re.findall(r"```bash\n(.*?)```", page, re.DOTALL)
+    recipes = [
+        block for block in blocks if "cargo mutants" in block and "--new-only" in block
+    ]
+    assert len(recipes) >= 2, f"the page carries {len(recipes)} push sweep recipes"
+    for recipe in recipes:
+        drawn = re.findall(rf"^export {SEED}=(\S+)$", recipe, re.MULTILINE)
+        assert drawn, f"a push sweep recipe draws no seed of its own:\n{recipe}"
+        assert set(drawn) <= pushed, (
+            f"a push sweep recipe draws {drawn} and the push lanes draw "
+            f"{sorted(pushed)}:\n{recipe}"
+        )
+
+
 def test_every_supported_interpreter_runs_on_every_event() -> None:
     """The job that carries the supported interpreters runs on a push.
 
