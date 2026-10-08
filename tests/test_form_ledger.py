@@ -187,6 +187,20 @@ class Colour(enum.Enum):
 
 UserId = typing.NewType("UserId", int)
 
+
+class Account:
+    """A class of no form the frontend reads: its set is its instances."""
+
+    balance: int
+
+
+def _account(balance: object) -> Account:
+    """Build an `Account` holding `balance`, which nothing checks."""
+    account = Account()
+    account.balance = balance  # ty: ignore[invalid-assignment]
+    return account
+
+
 #: A PEP 695 alias, written through `exec` because the syntax is a parse error
 #: on the floor this project supports. The alias is the form the table names;
 #: what it aliases is an ordinary schema.
@@ -260,6 +274,10 @@ FORMS: dict[str, Reads | Refuses] = {
     "`Enum`": Reads(Colour, Colour.RED, "red"),
     "`Protocol`": Reads(HasX, Point(1), "a"),
     "`NewType`": Reads(UserId, 1, "a"),
+    # An instance whose field holds the wrong type: the field is never read.
+    "any other class (a pydantic `BaseModel`, a msgspec `Struct`, your own)": Reads(
+        Account, _account("not a balance"), "a"
+    ),
     "PEP 695 `type` alias": Reads(_ALIAS.get("Alias", list[int]), [1], ["a"]),
     # -- the refinement markers ---------------------------------------------
     "`Ge(n)`": Reads(Annotated[int, at.Ge(2)], 2, 1),

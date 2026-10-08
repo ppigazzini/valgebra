@@ -77,7 +77,14 @@ assert Validator(int).is_valid(True)
 # int does not subclass float, so an int is not a float
 assert not Validator(float).is_valid(1)
 assert Validator(float).is_valid(1.0)
+assert Validator(float | int).is_valid(1)  # what a checker accepts there
 ```
+
+**`float` departs from the typing spec here.** The spec gives a checker a
+shortcut -- "when an argument is annotated as having type float, an argument of
+type int is acceptable" -- so a checker reads a `float` annotation as `float |
+int`. valgebra checks the object a caller holds, and an `int` is not a `float`
+instance: write `float | int` for the set a checker accepts there.
 
 ## `Any` versus `object`
 
@@ -285,6 +292,15 @@ as one of the forms above becomes `Literal[that object]`, so `Validator(x)`
 denotes `{x}` for any `x` valgebra has no other reading for. That is what makes
 `Validator("active")` mean the string rather than an error, and it applies to a
 module or an instance just the same.
+
+**A string at the top is a departure from the typing spec.** The spec's grammar
+reads a string where a type goes as a `string_annotation` -- the annotation
+written as text, to be parsed and evaluated -- and a checker reads
+`x: "Account"` as the class `Account`. A schema is built at run time from a
+value in hand, so valgebra reads a string at the top as that value, which is
+the one reading a caller writing `Validator("active")` means. Inside a typing
+form the string stays the forward reference the spec makes it, and is refused
+([above](#a-string-inside-a-generic-is-a-forward-reference-and-is-refused)).
 
 A **callable** that is not a class is refused instead. Written where a schema
 goes it is a predicate one position too far out, or a constant without its
@@ -677,22 +693,32 @@ assert Validator({"ab": int}).is_valid({"ab": 1})
 A narrowed key names *part* of a type, and two such clauses can overlap without
 either containing the other — which is a question this map model does not answer
 the same way twice. To constrain the keys themselves, check them beside the
-mapping rather than inside it:
+mapping rather than inside it. A record's declared keys are named, not shaped,
+so a check of the keys a clause reads exempts them by name:
 
 ```python
 from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import Validator
+from valgebra import Validator, intersection
 
 key_shape = Validator(Annotated[str, at.MinLen(2)])
-short_codes = Validator(
-    Annotated[dict[str, int], at.Predicate(lambda d: all(map(key_shape.is_valid, d)))]
-)
 
+
+def keys_in(key_schema: Validator, *fields: str) -> at.Predicate:
+    """Hold every key a mapping carries, but the named fields, to `key_schema`."""
+    return at.Predicate(lambda d: all(k in fields or key_schema.is_valid(k) for k in d))
+
+
+short_codes = Validator(Annotated[dict[str, int], keys_in(key_shape)])
 assert short_codes.is_valid({"ab": 1})
 assert not short_codes.is_valid({"a": 1})
+
+# `n` is a field the record declares, so the key check leaves it to the record.
+counted = intersection({"n": int, str: int}, Annotated[dict, keys_in(key_shape, "n")])
+assert counted.is_valid({"n": 1, "ab": 2})
+assert not counted.is_valid({"n": 1, "a": 2})
 ```
 
 The mapping is still a `dict[str, int]` to every relation — the predicate is
@@ -738,6 +764,7 @@ unaffected either way — the walk reads the value.
 | dataclass | the instances of the class whose every declared field holds a value of its type |
 | `NamedTuple` | the instances of the class whose fields, by position, hold values of their types |
 | `instance_of(C)` | the instances of the class, whatever their fields hold ([below](#the-class-alone)) |
+| any other class (a pydantic `BaseModel`, a msgspec `Struct`, your own) | the instances of the class, as `isinstance` answers: what its fields hold is not read, whatever the class's own library validates ([below](#the-class-alone)) |
 | `Enum` | the members of the enumeration |
 | `Protocol` | the values carrying every member it declares, each holding what the member declares ([below](#a-protocol-is-the-record-of-its-members)) |
 | `NewType` | the set of the supertype it wraps |

@@ -199,6 +199,27 @@ assert narrowed.is_valid("a")
 assert not narrowed.is_valid(5)
 ```
 
+The constraint narrows the whole union, so a branch whose values cannot answer
+it is left out rather than let through. That is the reading of `Optional` too:
+`Annotated[Optional[int], Ge(0)]` refuses `None`, where pydantic applies the
+bound to the `int` alone and admits it. Put the bound on the branch it narrows,
+and the `None` beside it stays:
+
+```python
+from typing import Annotated, Optional
+
+import annotated_types as at
+
+from valgebra import Validator
+
+whole = Validator(Annotated[Optional[int], at.Ge(0)])
+assert not whole.is_valid(None)  # `None` has no order against `0`
+branch = Validator(Optional[Annotated[int, at.Ge(0)]])
+assert branch.is_valid(None)
+assert branch.is_valid(3)
+assert not branch.is_valid(-1)
+```
+
 `Regex` is valgebra's own marker (`from valgebra import Regex`), since
 `annotated-types` defines none for strings. The match is **anchored** — the whole
 string must match, like `re.fullmatch` — and runs natively in Rust with a
@@ -432,6 +453,28 @@ so such a step names a schema no value belongs to. Both are rejected with a
 `ValueError` when the validator is built, rather than rejecting every value at
 check time. `int`, `float`, `Decimal` and `Fraction` steps all divide as they
 read.
+
+**A float step is exact.** `value % n == 0` is Python's own `%`, with no
+tolerance added, and a binary float holds no `0.1`: `0.3 % 0.1` is
+`0.09999999999999998`. So `Annotated[float, MultipleOf(0.1)]` admits `0.1` and
+`0.2` and refuses `0.3` and `1.0`. A step meant in decimal places wants a
+decimal base, whose `%` is exact in those places:
+
+```python
+from decimal import Decimal
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import Validator
+
+tenths = Validator(Annotated[float, at.MultipleOf(0.1)])
+assert tenths.is_valid(0.2)
+assert not tenths.is_valid(0.3)  # 0.3 % 0.1 is not 0.0
+decimal_tenths = Validator(Annotated[Decimal, at.MultipleOf(Decimal("0.1"))])
+assert decimal_tenths.is_valid(Decimal("0.3"))
+assert not decimal_tenths.is_valid(Decimal("0.15"))
+```
 
 The compound markers `Interval` and `Len` expand to the bounds they carry, so
 `Interval(ge=0, le=10)` contributes `Ge(0)` and `Le(10)`, and `Len(2, 4)`

@@ -225,6 +225,14 @@ EXPECTED: tuple[Expected, ...] = (
     Expected(
         "ruff",
         "docs/05-refinements.md",
+        "UP045",
+        2,
+        "`Optional[int]` is the spelling a model moved from pydantic carries, "
+        "shown with the bound around it and on its branch",
+    ),
+    Expected(
+        "ruff",
+        "docs/05-refinements.md",
         "UP035",
         1,
         "`deprecated` comes from `typing_extensions`, which serves it on every "
