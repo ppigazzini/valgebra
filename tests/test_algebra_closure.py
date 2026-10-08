@@ -32,6 +32,17 @@ def test_a_literal_int_is_disjoint_from_a_literal_bool() -> None:
     assert intersection(Literal[1], Literal[True]).is_empty()
 
 
+# THEORY: the-kind-partition-overlaps-at-bool
+def test_a_boolean_is_an_integer_and_no_other_kind_is() -> None:
+    # The one pair of kinds that share values: every boolean is an integer, so
+    # the meet is the booleans, and with the integers taken away nothing is left.
+    assert intersection(bool, int).is_equivalent(bool)
+    assert intersection(bool, complement(int)).is_empty()
+    assert intersection(int, complement(bool)).is_valid(2)
+    for other in (None, float, str, bytes):
+        assert intersection(bool, other).is_empty()
+
+
 def test_an_enum_literal_meet_is_decided_by_how_the_members_compare() -> None:
     # An enumeration's members compare by identity unless the class says
     # otherwise, and two distinct objects are then two values -- so the meet is

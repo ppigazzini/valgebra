@@ -2091,6 +2091,28 @@ fn an_attribute_record_is_inhabited_by_its_fields() {
     );
 }
 
+// THEORY: the-kind-partition-overlaps-at-bool
+/// The kinds are a partition but for one pair: `bool` subclasses `int`, so a
+/// meet of the two holds every boolean, and `bool` beside a negated `int` holds
+/// none. Built as raw meets, so no fold the constructor applies answers for the
+/// deciders: the rules read the pair through the kinds and the set
+/// representation through the region an integer admits, and each is asked.
+#[test]
+fn a_boolean_is_the_one_kind_another_kind_holds() {
+    let meet = |members: [Schema; 2]| Schema::Intersection(members.into());
+    let both = meet([Schema::Bool, Schema::Int]);
+    assert_eq!(both.verdict(), Verdict::Inhabited);
+    assert!(!both.denotes_no_value(&NoLeafRelations, &[]));
+    let apart = meet([Schema::Bool, Schema::Int.complement()]);
+    assert!(apart.is_empty());
+    assert!(apart.denotes_no_value(&NoLeafRelations, &[]));
+    // The other integers remain beside the booleans.
+    assert!(!meet([Schema::Int, Schema::Bool.complement()]).is_empty());
+    for other in [Schema::NoneType, Schema::Float, Schema::Str, Schema::Bytes] {
+        assert_eq!(meet([Schema::Bool, other]).verdict(), Verdict::Empty);
+    }
+}
+
 /// A boolean base is bounded to the integers, so it counts them too. Sound but
 /// not complete: the rule sees the integers in the interval, not the two
 /// values `bool` actually has, so an interval holding an integer that is
