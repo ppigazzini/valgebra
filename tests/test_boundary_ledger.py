@@ -247,6 +247,15 @@ ROWS: dict[str, Row] = {
         # another kind shares nothing with it, so it is below its complement.
         beside=(bytes, complement(_CHAIN), "subset"),
     ),
+    "A meet with a recursive reference.": Declines(
+        intersection(_CHAIN, {"next": int}),
+        nothing,
+        "a meet that unfolds a reference among its members, under a trail of "
+        "the meets it has met",
+        # What one unfolding does reach: a member of another kind meets no
+        # value of the fixpoint, so the meet is decided empty.
+        beside=(intersection(_CHAIN, int), nothing, "subset"),
+    ),
     "A length bound over a set or a dict, in the sets.": Declines(
         Annotated[set[int], at.MinLen(1)],
         Annotated[set[int], at.MinLen(2)],

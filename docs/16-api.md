@@ -35,6 +35,14 @@ opening it keeps `str` keys mapping to integers and frees the rest, and an open
 `TypedDict` claims it too, through the `str: anything` clause its reading
 carries.
 
+Opening a mapping writes the freed region as a clause keyed by the complement
+of the keys it claims. Where those are whole kinds -- `dict[str, int]` -- the
+relations decide the result like any other map. Where they are literals --
+`dict[Literal["a"], int]` -- the complement is part of `str`, which the set
+representation has no part for, and a relation about the result may answer
+`"undecided"` ([decidability](15-decidability.md)). Membership is exact either
+way.
+
 A fixed-length list is the native `[A, B]` literal (see the [schema
 language](03-schema-language.md)).
 
