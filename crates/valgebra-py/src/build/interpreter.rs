@@ -556,6 +556,45 @@ fn metadata_that_excludes_no_value_is_ignored() {
     });
 }
 
+/// A callable that is no class is refused wherever a schema is read -- the top,
+/// an element, a field, a type argument, a union member -- and a `Literal`
+/// names it as the one object it is. The callables the dispatch refuses for
+/// what they are keep that refusal inside a `Literal` too: a special form, a
+/// class factory, and from 3.13 `Annotated` written bare.
+#[test]
+fn a_callable_is_no_schema_and_a_literal_names_it() {
+    Python::attach(|py| {
+        let refused = |expression: &str, wanted: &str| {
+            let error = match built(py, expression) {
+                Err(error) => error.to_string(),
+                Ok(schema) => panic!("{expression} built {schema} instead of refusing"),
+            };
+            assert!(error.contains(wanted), "{expression} refused with {error}");
+        };
+        for expression in [
+            "abs",
+            "[abs]",
+            "{'a': abs}",
+            "list[abs]",
+            "typing.Union[int, abs]",
+        ] {
+            refused(expression, "a callable is not a schema");
+        }
+        assert_eq!(
+            built(py, "typing.Literal[abs]").expect("a callable constant builds"),
+            "Literal[<built-in function abs>]"
+        );
+        refused("typing.Literal[typing.ClassVar]", "typing construct");
+        refused(
+            "typing.Literal[typing.TypedDict]",
+            "the base a class is declared from",
+        );
+        if Since(13).met(py) {
+            refused("typing.Literal[typing.Annotated]", "annotates nothing");
+        }
+    });
+}
+
 /// A typing form is refused where a constant or a type argument is read, and
 /// so is a form that names no set at all: each was built quietly as something
 /// else.

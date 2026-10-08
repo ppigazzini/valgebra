@@ -256,6 +256,52 @@ def test_a_function_is_a_predicate_whatever_module_defines_it() -> None:
     assert not final.is_valid(0)
 
 
+def test_a_callable_is_refused_where_a_schema_is_read() -> None:
+    """A callable in a schema's place names no set, and the refusal says which do.
+
+    Read as the constant it is, `intersection(Record, check)` would be the
+    record met with one function object: a set with no member, which the
+    decisions leave undecided, so nothing would say so. The two spellings the
+    refusal names are the predicate and the constant, and each reads.
+    """
+
+    class Record(typing.TypedDict):
+        kind: str
+
+    def kind_is_known(value: Record) -> bool:
+        return value["kind"] in {"a", "b"}
+
+    refusal = (
+        r"is callable, and a callable is not a schema: write Annotated\[T, fn\] "
+        r"for the values of T it accepts, or Literal\[fn\] for the object itself"
+    )
+    for build in (
+        lambda: Validator(kind_is_known),
+        lambda: intersection(Record, kind_is_known),
+        lambda: Validator([kind_is_known]),
+        lambda: Validator({"check": kind_is_known}),
+        lambda: Validator(list[kind_is_known]),  # ty: ignore[invalid-type-form]
+        lambda: Validator(functools.partial(operator.eq, 1)),
+    ):
+        with pytest.raises(NotImplementedError, match=refusal):
+            build()
+    refined = Validator(Annotated[Record, kind_is_known])
+    assert refined.is_valid({"kind": "a"})
+    assert not refined.is_valid({"kind": "z"})
+
+
+def test_a_literal_names_a_callable_as_the_object_it_is() -> None:
+    """`Literal[fn]` is the constant spelling the refusal points to."""
+
+    def kind_is_known(value: object) -> bool:
+        return value == "a"
+
+    itself = Validator(Literal[kind_is_known])  # ty: ignore[invalid-type-form]
+    assert itself.is_valid(kind_is_known)
+    assert not itself.is_valid("a")
+    assert Validator(Literal[kind_is_known, 1]).is_valid(1)  # ty: ignore[invalid-type-form]
+
+
 def test_an_alias_of_the_vocabulary_in_metadata_is_refused() -> None:
     """An `Annotated` alias carries its markers for the type it annotates.
 

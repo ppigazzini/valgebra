@@ -17,7 +17,8 @@ use valgebra_core::{Field, MapClause, Schema, SeqShape};
 
 use super::classes::{field_name, is_truthy_attr};
 use super::{
-    Pool, build_schema, checked_key, forms, is_extension, is_forward_reference, not_implemented,
+    Pool, build_constant, build_schema, checked_key, forms, is_extension, is_forward_reference,
+    not_implemented,
 };
 use crate::errors::summarize;
 use crate::validator::Validator;
@@ -101,7 +102,7 @@ pub(super) fn build_parametrized(
         for arg in args.iter() {
             refuse_unhashable_literal(&arg)?;
             refuse_literal_form(&arg)?;
-            members.push(build_schema(&arg, lits, defs)?);
+            members.push(build_constant(&arg, lits, defs)?);
         }
         return Ok(Schema::union(members));
     }
