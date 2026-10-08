@@ -216,6 +216,14 @@ EXPECTED: tuple[Expected, ...] = (
     ),
     Expected(
         "ruff",
+        "docs/05-refinements.md",
+        "UP035",
+        1,
+        "`deprecated` comes from `typing_extensions`, which serves it on every "
+        "release the page covers; the floor's `warnings` has it only from 3.13",
+    ),
+    Expected(
+        "ruff",
         "docs/08-error-model.md",
         "S301",
         1,

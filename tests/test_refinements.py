@@ -4,6 +4,7 @@ import json
 import math
 import operator
 import re
+import sys
 import typing
 from dataclasses import dataclass
 from typing import Annotated, Literal
@@ -183,6 +184,76 @@ def test_a_typing_form_is_metadata_rather_than_a_predicate(
     schema = Validator(annotation)
     assert schema == Validator(base)
     assert all(schema.is_valid(value) for value in values)
+
+
+def test_deprecated_in_metadata_is_metadata_rather_than_a_predicate() -> None:
+    """PEP 702's decorator is callable, and calling it decorates rather than asks.
+
+    `typing_extensions.deprecated` is that module's class below 3.13 and the
+    standard library's from it, whose call raises for anything but a class or a
+    function: read as a predicate, it would refuse every value on the releases
+    where it is the standard library's. It is metadata this frontend does not
+    recognise on every release, and the schema is its base.
+    """
+    extensions = pytest.importorskip("typing_extensions")
+    marker = extensions.deprecated("read the account id instead")
+    if sys.version_info >= (3, 13):
+        assert type(marker).__module__ in {"warnings", "_py_warnings"}
+    for annotation in (Annotated[int, marker], Annotated[int, Annotated[int, marker]]):
+        schema = Validator(annotation)
+        assert schema == Validator(int)
+        assert schema.is_valid(0)
+        assert schema.is_valid(5)
+
+
+def test_a_unit_is_metadata_that_narrows_nothing() -> None:
+    """`at.Unit` names what a number is measured in, and excludes no value.
+
+    The vocabulary leaves reading the unit to the consumer and makes no use of
+    it itself, so it is ignored as its documentation marker is: written as an
+    instance, as its class, or inside an alias, and yielded by a group beside a
+    bound, which reads as the bound. `Timezone` excludes values, and a schema
+    ignoring it would admit them, so it is still refused.
+    """
+
+    class NonNegativeMetres(at.GroupedMetadata):
+        def __iter__(self) -> typing.Iterator[object]:
+            yield at.Unit("m")
+            yield at.Ge(0)
+
+    for annotation in (
+        Annotated[float, at.Unit("m")],
+        Annotated[float, at.Unit],
+        Annotated[float, Annotated[float, at.Unit("m")]],
+    ):
+        assert Validator(annotation) == Validator(float)
+    metres = Validator(Annotated[float, NonNegativeMetres()])
+    assert metres == Validator(Annotated[float, at.Ge(0)])
+    assert metres.is_valid(1.5)
+    assert not metres.is_valid(-1.5)
+    with pytest.raises(NotImplementedError, match="does not check"):
+        Validator(Annotated[str, at.Timezone(None)])
+
+
+def test_a_function_is_a_predicate_whatever_module_defines_it() -> None:
+    """A function in metadata is called, and nothing about it says what for.
+
+    `math.isfinite` and `str.isdigit` are the standard library's and are the
+    predicates they look like. `typing.final` is the standard library's too, and
+    is a decorator returning what it is given, so it admits a truthy value and
+    refuses `0`. A function carries no mark telling the two apart, and a list of
+    modules whose functions are ignored drops the first two with the third:
+    this is the limit `docs/05-refinements.md` states.
+    """
+    finite = Validator(Annotated[float, math.isfinite])
+    assert finite.is_valid(1.0)
+    assert not finite.is_valid(math.inf)
+    digits = Validator(Annotated[str, str.isdigit])
+    assert digits.is_valid("12")
+    assert not digits.is_valid("a")
+    final = Validator(Annotated[int, typing.final])
+    assert final.is_valid(5)
+    assert not final.is_valid(0)
 
 
 def test_an_alias_of_the_vocabulary_in_metadata_is_refused() -> None:

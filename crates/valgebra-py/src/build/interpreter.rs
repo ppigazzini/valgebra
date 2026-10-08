@@ -45,7 +45,7 @@ impl Since {
 /// `annotated_types` may not be installed.
 fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let namespace = PyDict::new(py);
-    for module in ["typing", "dataclasses", "enum", "re", "types"] {
+    for module in ["typing", "dataclasses", "enum", "re", "types", "warnings"] {
         namespace.set_item(module, py.import(module)?)?;
     }
     py.run(
@@ -76,8 +76,17 @@ fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
              \x20       raise AttributeError(name)\n\
              class Timezone:\n\
              \x20   pass\n\
-             for vocabulary in (namespace, slotted.Ge, slotted.MinLen, guarded, hooked, Timezone):\n\
+             class Unit:\n\
+             \x20   def __init__(self, unit): self.unit = unit\n\
+             for vocabulary in (namespace, slotted.Ge, slotted.MinLen, guarded, hooked, Timezone, Unit):\n\
              \x20   vocabulary.__module__ = 'annotated_types'\n\
+             class deprecated:\n\
+             \x20   def __init__(self, message): self.message = message\n\
+             \x20   def __call__(self, value): raise TypeError(value)\n\
+             class py_deprecated(deprecated):\n\
+             \x20   pass\n\
+             deprecated.__module__ = 'warnings'\n\
+             py_deprecated.__module__ = '_py_warnings'\n\
              class Kilograms:\n\
              \x20   symbol = 'kg'\n\
              class grouped:\n\
@@ -496,6 +505,54 @@ fn a_typing_form_in_metadata_is_not_a_predicate() {
                 "{expression}: {error}"
             );
         }
+    });
+}
+
+/// Metadata that excludes no value is ignored wherever it is written: the
+/// standard library's `deprecated`, whose class `warnings` defines from 3.13 and
+/// `_py_warnings` from 3.14 and whose call raises for a value, and the
+/// vocabulary's `Unit`, which names what a number is measured in. Read as
+/// narrowing, the first would be a predicate refusing every value and the second
+/// a constraint refused for what it would admit; and a group yielding `Unit`
+/// beside a bound is the bound. A vocabulary marker that does narrow is still
+/// refused where this frontend does not check it.
+#[test]
+fn metadata_that_excludes_no_value_is_ignored() {
+    Python::attach(|py| {
+        let reads = |expression: &str, wanted: &str| {
+            let got = built(py, expression).unwrap_or_else(|error| {
+                panic!("{expression} did not build: {error}");
+            });
+            assert_eq!(got, wanted, "{expression}");
+        };
+        let bound = built(py, "typing.Annotated[int, at.Ge(0)]").expect("a bound builds");
+        for (expression, wanted) in [
+            ("typing.Annotated[int, deprecated('x')]", "int"),
+            ("typing.Annotated[int, py_deprecated('x')]", "int"),
+            (
+                "typing.Annotated[int, typing.Annotated[int, deprecated('x')]]",
+                "int",
+            ),
+            ("typing.Annotated[float, Unit('m')]", "float"),
+            ("typing.Annotated[float, Unit]", "float"),
+            (
+                "typing.Annotated[float, typing.Annotated[float, Unit('m')]]",
+                "float",
+            ),
+            (
+                "typing.Annotated[int, grouped(Unit('m'), at.Ge(0))]",
+                bound.as_str(),
+            ),
+            ("typing.Annotated[int, Unit('m'), at.Ge(0)]", bound.as_str()),
+        ] {
+            reads(expression, wanted);
+        }
+        if Since(13).met(py) {
+            reads("typing.Annotated[int, warnings.deprecated('x')]", "int");
+        }
+        let refusal = built(py, "typing.Annotated[int, Timezone()]")
+            .expect_err("a marker that narrows is refused");
+        assert!(refusal.to_string().contains("does not check"), "{refusal}");
     });
 }
 

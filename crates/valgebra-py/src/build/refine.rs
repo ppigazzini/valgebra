@@ -346,9 +346,9 @@ fn derives_from_vocabulary(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     Ok(false)
 }
 
-/// Whether `ty` is itself a class of `annotated_types` other than its
-/// documentation marker: one written to narrow a schema, which this frontend
-/// reads or refuses.
+/// Whether `ty` is itself a class of `annotated_types` other than the two that
+/// narrow nothing: one written to narrow a schema, which this frontend reads or
+/// refuses.
 ///
 /// Asked of the class, not along its bases. A marker another library derives
 /// from the vocabulary -- pydantic's own `BaseMetadata` subclass, which its
@@ -357,11 +357,23 @@ fn derives_from_vocabulary(ty: &Bound<'_, PyType>) -> PyResult<bool> {
 /// vocabulary's README asks of metadata a consumer does not recognise.
 fn is_constraint_vocabulary(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let py = ty.py();
-    // The second name is asked only where the first says the class is from the
+    // The name is asked only where the module says the class is from the
     // vocabulary: every class written for someone else answers `false` here,
     // and asking what such a class is *called* decides nothing.
-    Ok(names(ty, intern!(py, "__module__"), "annotated_types")?
-        && !names(ty, intern!(py, "__name__"), "DocInfo")?)
+    Ok(names(ty, intern!(py, "__module__"), "annotated_types")? && !narrows_nothing(ty)?)
+}
+
+/// Whether `ty` is named as one of the two markers of the vocabulary that
+/// exclude no value: `DocInfo`, which documents an annotation, and `Unit`, which
+/// names what a number is measured in and leaves the reading to the consumer.
+///
+/// Each is ignored as metadata written for someone else is. Refusing one as a
+/// constraint this frontend does not check would refuse it for admitting the
+/// values it excludes, and it excludes none.
+fn narrows_nothing(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+    let py = ty.py();
+    Ok(names(ty, intern!(py, "__name__"), "DocInfo")?
+        || names(ty, intern!(py, "__name__"), "Unit")?)
 }
 
 /// Whether `ty` is a string-pattern marker: valgebra's `Regex`, or a compiled
@@ -413,7 +425,7 @@ fn read_a_class(class: &Bound<'_, PyType>) -> PyResult<()> {
 
 /// Whether a class written where a marker goes is the class of a marker: one
 /// whose instances are read or refused -- a class of the constraint vocabulary
-/// other than its documentation marker, or a pattern marker. A class from
+/// other than the two that narrow nothing, or a pattern marker. A class from
 /// anywhere else is the class of metadata this frontend ignores, and is ignored
 /// itself.
 fn is_a_marker_class(class: &Bound<'_, PyType>) -> PyResult<bool> {
@@ -427,11 +439,24 @@ fn is_a_marker_class(class: &Bound<'_, PyType>) -> PyResult<bool> {
 /// A `types.UnionType` such as `int | str` is not callable, and never reaches
 /// the question.
 ///
+/// And the decorator PEP 702 puts in `warnings`, whose class that module defines
+/// from 3.13 -- `_py_warnings` from 3.14, where the pure-Python implementation
+/// lives -- and which `typing_extensions` re-exports there, so
+/// `typing_extensions.deprecated("...")` has `typing_extensions`' class below
+/// 3.13 and the standard library's at it. `deprecated` is the one callable class
+/// either module defines.
+///
 /// Every one of them is callable, and none is a predicate: calling `list[int]`
-/// with a value builds a list, and calling an `Annotated` alias calls the type
-/// it annotates. Read as predicates they judged a value by the truth of what
-/// the call returned, so `Annotated[float, at.IsFinite[float]]` admitted
-/// infinity and refused zero.
+/// with a value builds a list, calling an `Annotated` alias calls the type it
+/// annotates, and calling a `deprecated` decorates a class or a function and
+/// raises for anything else. Read as predicates they would judge a value by what
+/// the call does: `Annotated[float, at.IsFinite[float]]` would admit infinity
+/// and refuse zero, and `Annotated[int, deprecated("...")]` would refuse every
+/// value from 3.13.
+///
+/// A decorator *function* is not one of them and cannot be told from a
+/// predicate: `dataclasses.dataclass`, `abc.abstractmethod` and `typing.final`
+/// are each a `builtins.function`, as a predicate is, and are called.
 fn is_typing_form(marker: &Bound<'_, PyAny>) -> PyResult<bool> {
     let ty = marker.get_type();
     let py = ty.py();
@@ -443,9 +468,12 @@ fn is_typing_form(marker: &Bound<'_, PyAny>) -> PyResult<bool> {
     Ok(module
         .and_then(|module| module.cast_into::<PyString>().ok())
         .is_some_and(|module| {
-            module
-                .to_str()
-                .is_ok_and(|module| matches!(module, "typing" | "typing_extensions"))
+            module.to_str().is_ok_and(|module| {
+                matches!(
+                    module,
+                    "typing" | "typing_extensions" | "warnings" | "_py_warnings"
+                )
+            })
         }))
 }
 
@@ -480,7 +508,7 @@ fn read_a_typing_form(marker: &Bound<'_, PyAny>) -> PyResult<()> {
 /// Whether an item of an `Annotated` alias's metadata is one this frontend
 /// would read, were it written in the metadata where the alias stands: a
 /// validator, a marker of the vocabulary or of a class derived from it other
-/// than its documentation marker, a pattern marker, a marker class (which is
+/// than the two that narrow nothing, a pattern marker, a marker class (which is
 /// refused), or a predicate.
 fn is_read_where_written(item: &Bound<'_, PyAny>) -> PyResult<bool> {
     if item.is_exact_instance_of::<Validator>() {
@@ -490,11 +518,9 @@ fn is_read_where_written(item: &Bound<'_, PyAny>) -> PyResult<bool> {
         return is_a_marker_class(class);
     }
     let ty = item.get_type();
-    Ok(
-        (derives_from_vocabulary(&ty)? && !names(&ty, intern!(ty.py(), "__name__"), "DocInfo")?)
-            || is_pattern_marker(&ty)?
-            || (item.is_callable() && !is_typing_form(item)?),
-    )
+    Ok((derives_from_vocabulary(&ty)? && !narrows_nothing(&ty)?)
+        || is_pattern_marker(&ty)?
+        || (item.is_callable() && !is_typing_form(item)?))
 }
 
 /// An optional attribute a refinement marker is read through.

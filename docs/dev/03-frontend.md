@@ -50,8 +50,8 @@ value is ordered against. Calling one is the same trap a step later —
 belongs.
 
 A class whose instances would be read or refused — a class of the vocabulary
-other than its documentation marker `DocInfo`, or a pattern marker's class —
-is a marker written without its parentheses, and is **refused** with the
+other than the two that exclude no value, or a pattern marker's class — is a
+marker written without its parentheses, and is **refused** with the
 spelling that was meant: ignored, it would widen the schema to its base in
 silence. Any other class is metadata this frontend does not recognise, and is
 ignored.
@@ -66,6 +66,22 @@ the truth of what came back was the verdict: `Annotated[float,
 at.IsFinite[float]]` admitted infinity and refused zero. The rule mirrors the
 one for a class: an `Annotated` alias carrying something this frontend would
 read where the alias stands is refused, and any other typing form is ignored.
+
+PEP 702's `deprecated` is read with them. `typing_extensions` re-exports the
+standard library's from 3.13, whose class `warnings` defines -- `_py_warnings`
+from 3.14, where the pure-Python implementation lives -- so the two modules are
+in the list: `deprecated` is the one callable class either defines. Its call
+raises for a value that is neither a class nor a function, so read as a
+predicate, `Annotated[int, deprecated("...")]` would refuse every value from
+3.13 and be `int` below it, where the class is `typing_extensions`' own.
+
+**A decorator function is a predicate.** What the rule recognises is an
+*object* whose class is a typing form's or `deprecated`'s. A decorator is a
+`builtins.function`, as a predicate is, and its module says nothing about what
+it does: `typing.final` and `math.isfinite` are both the standard library's.
+So `dataclasses.dataclass`, `abc.abstractmethod` and `typing.no_type_check` in
+metadata are called and refuse every value, and `typing.final` and
+`typing.override` refuse `0`. The refinements page states the limit.
 
 **A compiled validator narrows by its set**, and is read before any attribute:
 `build_refine` meets the refined base with every validator the metadata holds,
@@ -88,7 +104,10 @@ The rest are read in this order:
    `.func` becomes the predicate, which is `Predicate`;
 6. otherwise, a marker that contributed nothing above and whose class is itself
    one of the vocabulary's — refused, since it was written to narrow this
-   schema and ignoring it would admit what it excludes. A class *deriving* from
+   schema and ignoring it would admit what it excludes. `DocInfo` and `Unit`
+   exclude no value, so `narrows_nothing` exempts them by name and each is
+   ignored: one documents an annotation, and the other names what a number is
+   measured in and leaves the reading to the consumer. A class *deriving* from
    the vocabulary is read for the vocabulary's names and otherwise ignored, as
    the README asks of metadata a consumer does not recognise: pydantic derives
    the object carrying `StringConstraints`' pattern from `BaseMetadata`.
@@ -651,6 +670,15 @@ chosen per call, so a nested schema could not mix them (`list[A | B]` with `A`
 read one way and `B` the other) without nesting validators.
 `tests/test_form_ledger.py` holds every tabulated form to one reading, and a
 mode would give each class row two.
+
+**Ignoring a decorator function in metadata.** `dataclasses.dataclass` or
+`typing.final` written in metadata is called, and refuses values it was never
+written to judge. Telling one from a predicate needs a mark a function does not
+carry: by module, a list of the modules whose functions are ignored also drops
+the standard library's predicates, and by name it is a list without end.
+`test_a_function_is_a_predicate_whatever_module_defines_it` in
+`tests/test_refinements.py` holds `math.isfinite` and `str.isdigit` to the
+predicates they are, beside `typing.final` read the same way.
 
 **A node for the class alone, or for the class with its fields.** Neither
 passes the admission test of [01-schema-ir.md](01-schema-ir.md): the first is
