@@ -680,6 +680,24 @@ the standard library's predicates, and by name it is a list without end.
 `tests/test_refinements.py` holds `math.isfinite` and `str.isdigit` to the
 predicates they are, beside `typing.final` read the same way.
 
+**Reading a callable where a schema goes, as its constant or as a
+predicate.** As its constant -- the fallthrough's reading of any object -- the
+schema a caller meant by `intersection(record, check)`, the record narrowed by
+the check, is the record met with one function object: a set with no member,
+which the decisions leave undecided, so nothing says so. fishtest carries a
+test reading each schema's `repr` for a function constant, to catch exactly
+that. As a predicate, the position is a type's, where the typing spec's grammar
+has no production for a function, and of the references msgspec and beartype
+refuse one there, typeguard ignores it, and pydantic's `TypeAdapter(fn)`
+validates the function's arguments. A callable that is no class is refused
+wherever a schema is read, naming `Annotated[T, fn]` and `Literal[fn]`, and the
+`Literal` arm reads its arguments through `build_constant`, which interns one:
+`test_a_callable_is_refused_where_a_schema_is_read` and
+`test_a_literal_names_a_callable_as_the_object_it_is` in
+`tests/test_refinements.py`, and
+`a_callable_is_no_schema_and_a_literal_names_it` in
+`crates/valgebra-py/src/build/interpreter.rs`.
+
 **A node for the class alone, or for the class with its fields.** Neither
 passes the admission test of [01-schema-ir.md](01-schema-ir.md): the first is
 `Instance`, already a generator, and the second is a meet the algebra already

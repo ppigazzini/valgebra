@@ -155,7 +155,8 @@ const MAX_BUILD_DEPTH: usize = crate::validator::MAX_SCHEMA_DEPTH + 1;
 /// alias or `NotRequired[...]` -- a descent passing its one part through -- from
 /// counting that part twice; a compiled validator named in an annotation, the
 /// one form bringing many nodes in one descent, counts every node of its schema
-/// (`hold_compiled`). So the count is never more than `Validator::checked`
+/// (`hold_whole`), as a `Literal`'s callable constant, built without a descent
+/// of its own, counts its one. So the count is never more than `Validator::checked`
 /// counts of the schema returned, except where a fold drops a part -- a member a
 /// union absorbs into `Any` still counts -- and a schema within the bound is
 /// never refused here.
@@ -231,9 +232,10 @@ fn too_large(held: usize) -> PyErr {
     ))
 }
 
-/// Hold a compiled validator's schema, named in an annotation, as nodes of the
-/// descent naming it: every one of them, the top included.
-fn hold_compiled(schema: &Schema) {
+/// Hold a schema a descent brings whole as nodes of that descent: every one of
+/// them, the top included. A compiled validator named in an annotation is one,
+/// and a `Literal`'s callable constant ([`build_constant`]) another.
+fn hold_whole(schema: &Schema) {
     let nodes = schema.node_count();
     BUILD.with(|build| build.held.set(build.held.get() + nodes));
 }
@@ -660,7 +662,7 @@ fn read_annotation(
     // without the walk of the object's `__mro__` a subclass test takes.
     if let Ok(compiled) = obj.cast_exact::<Validator>() {
         let schema = compose(py, compiled.get(), lits, defs);
-        hold_compiled(&schema);
+        hold_whole(&schema);
         return Ok(schema);
     }
 
@@ -873,7 +875,49 @@ fn build_unrecognised(
         )));
     }
 
+    // A callable that is no class, which the type branch answered: a function,
+    // a bound method, a `partial`, an object defining `__call__`. The typing
+    // spec's grammar for a type has no production for one, and the constant
+    // reading gave it the set holding that one object, which no value a caller
+    // checks is: `intersection(record, check)` was the record met with a
+    // function, a set with no member, and nothing said so. What was meant is
+    // one of two spellings, and each reads it: a predicate in `Annotated`
+    // metadata, or the object itself in `Literal` ([`build_constant`]).
+    if obj.is_callable() {
+        return Err(not_implemented(&format!(
+            "{} is callable, and a callable is not a schema: write \
+             Annotated[T, fn] for the values of T it accepts, or Literal[fn] for \
+             the object itself",
+            summarize(obj)?
+        )));
+    }
+
     Ok(Schema::Literal(lits.intern_const(obj)))
+}
+
+/// A `Literal` argument: the one object it is.
+///
+/// Read as [`build_schema`] reads an object, except a callable, which the
+/// constant fallthrough refuses where a schema is read and which a `Literal`
+/// names as itself. It is interned here and counted as the leaf it is, without
+/// a descent: a second caller of the guard's entry costs every descent of a
+/// build its inlining, and the fifty-field record build of
+/// `scripts/perf_gate.py --binding-build` read +1.77% with one, +0.00% without.
+/// Two kinds of callable keep the reading the dispatch gives them, which is a
+/// refusal of their own: `TypedDict` and `NamedTuple`, which are functions, and
+/// a special form such as `ClassVar` -- `Annotated` written bare among them from
+/// 3.13, and a class below it, which the `Literal` arm refuses as a type.
+pub(super) fn build_constant(
+    obj: &Bound<'_, PyAny>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    if obj.is_callable() && !is_class_factory(obj)? && !is_typing_construct(obj)? {
+        let constant = Schema::Literal(lits.intern_const(obj));
+        hold_whole(&constant);
+        return Ok(constant);
+    }
+    build_schema(obj, lits, defs)
 }
 
 /// True if `obj` is a `dataclasses.InitVar[...]`, which is an instance of the

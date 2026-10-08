@@ -594,13 +594,20 @@ assert final.is_valid(5)
 assert not final.is_valid(0)
 ```
 
-Passed as a schema on its own, a callable is not a predicate. It is an object
-the frontend has no other reading for, so it takes the
+Passed as a schema on its own, a callable is **refused**. Read as the
 [fallback literal](03-schema-language.md#anything-unrecognized-is-a-literal)
-form and denotes the one function object:
+reads an object, it would denote the one function object, and
+`intersection(Record, kind_is_known)` would be a schema admitting nothing that
+nothing reports: `is_empty` answering `False` is "no, or not yet proven" (see
+the [decidability boundary](15-decidability.md#the-contract)), and the meet of a
+record with a literal is one it does not decide. The refusal names the two
+spellings that were meant, the refinement as `Annotated` and the constant as
+`Literal`:
 
 ```python
 from typing import Annotated, TypedDict
+
+import pytest
 
 from valgebra import Validator, intersection
 
@@ -613,22 +620,13 @@ def kind_is_known(value):
     return value["kind"] in {"a", "b"}
 
 
-checked = intersection(Record, kind_is_known)  # NOT a refinement of Record
-assert not checked.is_valid({"kind": "a"})  # a dict is not that function
-assert not checked.is_empty()  # nor is emptiness a warning: see below
+with pytest.raises(NotImplementedError, match="a callable is not a schema"):
+    intersection(Record, kind_is_known)
 
 refined = Validator(Annotated[Record, kind_is_known])  # the refinement
 assert refined.is_valid({"kind": "a"})
 assert not refined.is_valid({"kind": "z"})
 ```
-
-The first schema admits nothing, and nothing reports it. `is_empty` returning
-`False` is not a claim that the set is inhabited — a negative answer from any
-decision is "no, or not yet proven" (see the
-[decidability boundary](15-decidability.md#the-contract)), and the meet of a
-record with a literal is one it does not decide. So the failure mode is a schema
-that silently rejects every value. Write the refinement as `Annotated`, and the
-callable narrows the base rather than replacing it.
 
 `annotated_types.Not` wraps a predicate and denotes the values it rejects:
 

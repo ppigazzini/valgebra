@@ -115,7 +115,15 @@ EXPECTED: tuple[Expected, ...] = (
     Expected(
         "ty", "docs/03-schema-language.md", "invalid-argument-type", 1, _WRONG_POINT
     ),
-    Expected("ty", "docs/03-schema-language.md", "invalid-type-form", 1, _SHORT_TUPLE),
+    Expected(
+        "ty",
+        "docs/03-schema-language.md",
+        "invalid-type-form",
+        2,
+        f"{_SHORT_TUPLE}; and `Literal[positive]` is the constant spelling of a "
+        "function this library reads, which the refusal of `Validator(positive)` "
+        "names and the spec's `Literal` does not allow",
+    ),
     Expected(
         "ty",
         "docs/03-schema-language.md",

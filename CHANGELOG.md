@@ -17,8 +17,22 @@ answer of its own, or a repair to a change not yet released.
 - fix: a map keyed by a complement of kinds lowers to the other kinds
 - fix: an annotation is refused at the node bound as it is read
 - fix: deprecated and Unit in metadata are ignored
+- fix: a callable where a schema goes is refused
 
 -->
+
+### Changed
+
+- **A callable where a schema goes is refused.** `Validator(fn)`,
+  `intersection(Record, fn)`, `[fn]`, `{"key": fn}` and `list[fn]` read a
+  function, a bound method, a `partial` or a callable object as the constant
+  it is, a set holding that one object -- so a meet meant to narrow a record by
+  a check admitted nothing, and the decisions, which leave a meet with a
+  literal undecided, could not say so. Each raises `NotImplementedError`
+  naming the two spellings that were meant: `Annotated[T, fn]` for the values
+  of `T` the callable accepts, and `Literal[fn]` for the object itself, which
+  reads as the constant. `Annotated` metadata reads a callable as a predicate,
+  as it did, and a class is read as the class it is.
 
 ### Fixed
 

@@ -284,9 +284,25 @@ The literal form is also the **fallback**: an object the frontend does not read
 as one of the forms above becomes `Literal[that object]`, so `Validator(x)`
 denotes `{x}` for any `x` valgebra has no other reading for. That is what makes
 `Validator("active")` mean the string rather than an error, and it applies to a
-function, a module or an instance just the same:
+module or an instance just the same.
+
+A **callable** that is not a class is refused instead. Written where a schema
+goes it is a predicate one position too far out, or a constant without its
+`Literal`, and read as the fallback reads an object it would be the set holding
+the one function object, which no value a caller checks is: a meet with it
+admits nothing, and nothing says so. The typing spec's grammar for a type has
+no production for a function either. Each meaning has its spelling, and the
+refusal names both: as `Annotated` metadata the callable is a predicate
+narrowing a base (see
+[refinements](05-refinements.md#a-bare-callable-is-metadata-only)), and in a
+`Literal` it is the object itself. A class is callable too, and is read as the
+class it is.
 
 ```python
+from typing import Annotated, Literal
+
+import pytest
+
 from valgebra import Validator
 
 
@@ -294,17 +310,17 @@ def positive(value):
     return value > 0
 
 
-schema = Validator(positive)
-assert repr(schema).startswith("Literal[")
-assert schema.is_valid(positive)  # the function object itself
-assert not schema.is_valid(1)  # not a predicate: 1 is not that function
-```
+with pytest.raises(NotImplementedError, match="a callable is not a schema"):
+    Validator(positive)
 
-A callable is the case worth naming, because the same callable **is** a
-predicate one position inward, as `Annotated` metadata — see
-[refinements](05-refinements.md#a-bare-callable-is-metadata-only). At the top
-level there is no base for it to narrow, so the fallback applies and the schema
-denotes the single function object.
+checked = Validator(Annotated[int, positive])  # the values it accepts
+assert checked.is_valid(1)
+assert not checked.is_valid(-1)
+
+itself = Validator(Literal[positive])  # the function object
+assert itself.is_valid(positive)
+assert not itself.is_valid(1)
+```
 
 ### The forms that are refused rather than read as a literal
 
