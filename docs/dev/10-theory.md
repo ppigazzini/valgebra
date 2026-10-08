@@ -564,8 +564,9 @@ SOURCE: §13.1 "**The polarity cut is one-directional.**"
 
 HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding
 
-**Kinds decompose emptiness.** Positives of mixed kind make a clause empty
-outright, negatives of another kind are dropped, and each kind is then an
+**Kinds decompose emptiness.** Positives of two kinds that share no value make
+a clause empty outright -- every pair but `bool` and `int`, a deviation below --
+negatives of another kind are dropped, and each kind is then an
 independent question -- which is what lets every kind carry its own
 representation and the whole be a product over them. `Kind` is the one
 partition both deciders read; `Region` is derived from it, never maintained
@@ -844,6 +845,18 @@ two labels to the partition, so an atom requiring both under distinct values
 holds no dict, and the descriptor reads it that way. **[DEVIATION: the-key-partition-is-by-kind]**
 
 HELD-BY: an_atom_requiring_a_key_and_its_boolean_holds_no_dict, a_want_with_one_viable_witness_requires_that_key, a_labelled_key_witnesses_a_wanted_key
+
+**The kind partition overlaps at `bool`.** The source's kinds are its three
+constructors, and no value has two of them. Here the basic kind is split eleven
+ways, and `bool` subclasses `int`, so every boolean is an integer: a meet of the
+two is the booleans rather than empty, and `bool` met with `~int` is empty. The
+rules read the pair through `Kind::shares_values_with`, the one exception it
+names, and the set representation through the region an integer admits, which
+holds the booleans (`Kind::admitted_regions`). A rule reading two kinds as two
+disjoint sets would prove `bool & int` empty, which `True` refutes.
+**[DEVIATION: the-kind-partition-overlaps-at-bool]**
+
+HELD-BY: a_boolean_is_the_one_kind_another_kind_holds, test_a_boolean_is_an_integer_and_no_other_kind_is
 
 **A constraint no fresh key meets is read beside the others.** ICFP 2023's (11)
 reads each constraint of a map atom's `S` on its own, against the default,
