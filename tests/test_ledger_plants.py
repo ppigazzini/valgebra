@@ -599,17 +599,34 @@ UNREQUIRED_JOB = """jobs:
 
 PLANTS = (
     Plant(
-        # A package the suite reads, gone from the PyPy leg's list: the rows
-        # reading it skip there, and nothing else in the lane goes red.
+        # A package the suite reads, moved from the test group into the dev
+        # group's own list: every suite installed apart from dev skips the rows
+        # reading it, and nothing else in those lanes goes red.
+        "tests/test_suite_installs.py",
+        ("pyproject.toml",),
+        lambda tree: _edits(
+            tree,
+            "pyproject.toml",
+            ('    "syrupy>=6.1.1",\n', ""),
+            (
+                '    { include-group = "test" },\n',
+                '    { include-group = "test" },\n    "syrupy>=6.1.1",\n',
+            ),
+        ),
+        trips=("test_the_dev_group_is_the_test_group_and_its_tools",),
+    ),
+    Plant(
+        # A package installed by hand beside the lock, at a bound the index
+        # resolves anew on every run.
         "tests/test_suite_installs.py",
         (".github/workflows/ci.yml",),
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            ' "typing-extensions>=4.16.0"\n      - name: pytest',
-            "\n      - name: pytest",
+            "VIRTUAL_ENV=.pypy uv pip install -r suite.txt\n",
+            'VIRTUAL_ENV=.pypy uv pip install -r suite.txt "hypothesis>=6.168.5"\n',
         ),
-        trips=("test_every_hand_written_install_names_what_the_suite_reads",),
+        trips=("test_every_suite_apart_installs_the_test_group_from_the_lock",),
     ),
     Plant(
         # A seed file at the path of a source file with no property test in it,
@@ -3630,17 +3647,20 @@ PLANTS = (
             '    "pytest-xdist": "spreads the suite over cores, which'
             ' no lane asks for",\n',
         ),
-        trips=("test_every_excused_tool_is_in_the_dev_group",),
+        trips=("test_the_dev_group_is_the_test_group_and_its_tools",),
     ),
     Plant(
-        # A pin respelled so the scan's key stops matching: the release's
-        # installs drop out of the ledger, which reads the rest as all there is.
+        # An export that resolves anew rather than reading the lock: a lock the
+        # project has moved past is re-resolved against the index in silence.
         "tests/test_suite_installs.py",
         (".github/workflows/release.yml",),
         lambda tree: _replace_all(
-            tree, ".github/workflows/release.yml", '"pytest>=', '"pytest~='
+            tree,
+            ".github/workflows/release.yml",
+            "--project tree --locked --only-group",
+            "--project tree --only-group",
         ),
-        trips=("test_the_scan_reads_the_installs_that_are_there",),
+        trips=("test_every_suite_apart_installs_the_test_group_from_the_lock",),
     ),
     Plant(
         # A method the stub ships before the binding documents it.

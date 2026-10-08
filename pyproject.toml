@@ -37,25 +37,32 @@ classifiers = [
 ]
 
 [dependency-groups]
-dev = [
+# What the test suite reads, and no tool besides. A suite that runs without the
+# dev group -- on PyPy, and on each wheel a release builds -- installs this
+# group at the versions the lock holds, so a release on the index reddens no
+# lane until the lock takes it.
+test = [
     "annotated-types>=0.8",
     "hypothesis>=6.168.5",
-    "maturin>=1.15.0,<2",
-    "mypy>=2.4.0",
-    "pre-commit>=4.6.2",
-    "pyright>=1.1.414",
     "pytest>=9.1.1",
-    "pytest-cov>=7.1.0",
     # `scripts/gate.py` and the ledger that holds it read the workflow, and a
     # workflow is YAML: parsing it with a regex is how a gate ends up disagreeing
     # with the lane it claims to reproduce.
     "pyyaml>=6.0.3",
-    "ruff>=0.16.10",
     "syrupy>=6.1.1",
-    "ty>=0.0.84",
     # The suite reads a PEP 728 `TypedDict` from each implementation that takes
     # its keywords, and `typing_extensions` takes them on every release.
     "typing-extensions>=4.16.0",
+]
+dev = [
+    { include-group = "test" },
+    "maturin>=1.15.0,<2",
+    "mypy>=2.4.0",
+    "pre-commit>=4.6.2",
+    "pyright>=1.1.414",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.10",
+    "ty>=0.0.84",
 ]
 # The wall-clock harness and the external comparison points: the libraries the
 # benchmarks time valgebra against, and the same libraries the boundary suite

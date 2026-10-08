@@ -931,12 +931,16 @@ first, which imports it and builds the annotation forms whose compilation
 reaches a type object: that is the *link*, and it fails with one line naming the
 form rather than in a stack of test output.
 
-Then it runs the suite, with the packages it reads installed by a list in the
-step rather than by the dev group, which carries the checkers and the build
-tools too. `tests/test_suite_installs.py` holds that list, and the release
-smoke's, to the dev group less the tools it excuses by name: a package left
-off would not redden the lane, because a row reading an optional
-implementation skips where it is absent.
+Then it runs the suite, with the packages it reads installed from the `test`
+dependency group, which the dev group includes beside the checkers and the
+build tools, at the versions `uv.lock` holds (`uv export --locked`). A list
+written into the step would resolve against the index on every run, and a
+release of any package on it would redden a push with nothing in the tree
+changed. `tests/test_suite_installs.py` holds this install and the release
+smokes' to the export, and the dev group to the test group and the tools it
+excuses by name: a package the suite reads, left out of the group, would not
+redden a lane, because a row reading an optional implementation skips where it
+is absent.
 
 The link is not the only property that differs there: `cpyext` implements
 `PyTuple_Size` through the object's own `__len__`, so a walk that trusts that
