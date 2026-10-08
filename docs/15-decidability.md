@@ -579,6 +579,21 @@ the shape. What is left below is what the descriptor cannot hold.
     assert tree.relation_to(union(meet, list[tree])) == "subset"
     ```
 
+    The record rule refutes a map whatever the supertype's recursion. It reads
+    one key kind at a time, and where the subject's clause holds a kind whole,
+    a value the supertype's clause for that kind refuses -- or any value, where
+    no clause of the supertype reads the kind -- makes an entry the two maps
+    judge apart. So `{str: bytes}` is outside a JSON schema on `{"a": b""}`, and
+    `dict` on `{7: None}`, whose key no clause of it reads.
+
+    ```python
+    from valgebra import Validator, recursive, union
+
+    json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    assert Validator({str: bytes}).relation_to(json_value) == "not_subset"
+    assert Validator(dict).relation_to(json_value) == "not_subset"
+    ```
+
     Branches are dropped where one of them **refutes**, which is the answer the
     narrowing carries back from the branch it leaves. A union no branch of
     which refutes narrows to a smaller union of declines, so the readings that
@@ -600,6 +615,27 @@ the shape. What is left below is what the descriptor cannot hold.
     relation that needs the body *twice* — a fixpoint below a
     differently-written fixpoint whose bodies only agree after two steps — and
     there the coinductive rule is the whole of the answer.
+
+- **A meet with a recursive reference.** `intersection(chain, {"next": int})`
+  is empty -- a chain's `next` is `None` or a chain -- and neither
+  representation proves it. The rules read the members of a meet one at a
+  time, and a reference is a member they do not unfold into the meet; the
+  descriptor unfolds the reference once and cuts it to the top, which meets
+  `{"next": int}`. A meet the reference shares a value with is declined the
+  same way, so neither answer is given. A meet with a member of another kind is
+  decided, since one unfolding reads every kind the fixpoint admits:
+
+    ```python
+    from valgebra import intersection, nothing, recursive, union
+
+    chain = recursive(lambda t: union(None, {"next": t}))
+    no_value = intersection(chain, {"next": int})
+    assert no_value.relation_to(nothing) == "undecided"  # empty, and not proved
+    one_value = intersection(chain, {"next": {"next": None}})
+    assert one_value.is_valid({"next": {"next": None}})
+    assert one_value.relation_to(nothing) == "undecided"
+    assert intersection(chain, int).is_empty()  # no chain is an int
+    ```
 
 - **A length bound over a set or a dict, in the sets.** A length is not a word's alone, and
   two of the kinds that have one state it: a word's length is a pattern over
@@ -728,8 +764,8 @@ mark for a relation that holds and is not decided, so the row fails on the day
 it decides. Those rows are the bound-limited relations above — the four-field
 record and the seven-component tuple against their corners and the
 thirteen-link chain of differences, each carrying the width at which the bound
-stops it, and the two sets whose members are one number in two kinds; the
-ledger's `_LEDGERED` list owns them.
+stops it — the two sets whose members are one number in two kinds, and the two
+meets with a recursive reference; the ledger's `_LEDGERED` list owns them.
 
 ```python
 from typing import Annotated, Literal, NamedTuple

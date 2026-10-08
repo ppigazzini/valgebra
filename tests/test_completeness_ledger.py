@@ -62,6 +62,9 @@ from valgebra import (
 # A recursive schema, reused below to record a reflexivity hole.
 _RECURSIVE = recursive(lambda t: union(None, {"value": int, "next": t}))
 
+# The chain a meet with a reference is asked about.
+_CHAIN = recursive(lambda t: union(None, {"next": t}))
+
 # A fixpoint whose body carries a meet against a union beside the recursive
 # member: the shape whose unfolding, as a union, the deciders decline to place
 # below it, while each member alone is decided.
@@ -1224,6 +1227,25 @@ _LEDGERED: list[object] = [
         union(set[Literal[1]], set[Validator(1.0)]),  # ty: ignore[invalid-type-form]
         id="set:set[1|1.0]<=set[1]|set[1.0]",
         marks=_missed("the members it takes are one number in two kinds"),
+    ),
+    # A meet with a recursive reference, both ways: empty where the record
+    # asks of `next` what no chain holds, and inhabited where it asks what one
+    # does. The rules read a meet's members one at a time and never unfold a
+    # reference into it, and the set representation cuts the reference to the
+    # top after one unfolding, which meets any record.
+    pytest.param(
+        "empty",
+        intersection(_CHAIN, {"next": int}),
+        None,
+        id="empty:chain&{next:int}",
+        marks=_missed("a meet does not unfold a reference among its members"),
+    ),
+    pytest.param(
+        "refutes",
+        intersection(_CHAIN, {"next": {"next": None}}),
+        nothing,
+        id="refute:chain&{next:{next:None}}<=nothing",
+        marks=_missed("a meet does not unfold a reference among its members"),
     ),
 ]
 

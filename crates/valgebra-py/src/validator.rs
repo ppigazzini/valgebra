@@ -833,6 +833,13 @@ impl Validator {
     /// key to an `int` and frees only the keys that are not strings.
     /// `open` and `close` are idempotent projections rather than inverses.
     ///
+    /// Opening a mapping writes the freed region as a clause keyed by the
+    /// complement of the keys it claims. Over whole kinds the relations decide
+    /// the result like any other map. Over literals, which is what
+    /// `dict[Literal["a"], int]` claims, the complement holds part of a kind,
+    /// and a relation about the result may answer `"undecided"`. Membership is
+    /// exact either way.
+    ///
     /// **These two read the schema, not the set it denotes.** Every relation on
     /// this surface answers about the set, so two spellings of one set give one
     /// answer; these rewrite the records the schema is written out of, and two
