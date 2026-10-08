@@ -93,12 +93,12 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
     description of the tree rather than of two numbers that have since moved
     past each other.
 - **Relation depth.** A relation -- `relation_to`, `is_subtype_of`,
-  `is_equivalent`, `is_disjoint_from`, `is_empty` -- holds at most 512 levels of
-  its own recursion, and past them answers undecided, which a relation may
-  always answer. Two recursive schemas whose bodies nest 100 and 99 lists around
-  the back edge prove nothing about each other until the two cycles realign,
-  9,900 levels down, and a long chain of definitions asks its emptiness as deep:
-  each overflowed the stack before the bound. A level costs about 1 KiB on the
+  `is_equivalent`, `is_empty` -- holds at most 512 levels of its own recursion,
+  and past them answers undecided, which a relation may always answer. Two
+  recursive schemas whose bodies nest 100 and 99 lists around the back edge
+  prove nothing about each other until the two cycles realign, 9,900 levels
+  down, and a long chain of definitions asks its emptiness as deep: each
+  overflowed the stack before the bound. A level costs about 1 KiB on the
   shipped wheels, so the deepest relation fits in half of a 1 MiB thread, and
   the release smoke runs it there.
 - **Self-reference.** A value that contains itself is caught by an
