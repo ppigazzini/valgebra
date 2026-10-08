@@ -699,11 +699,12 @@ UV_PROJECT_ENVIRONMENT="$VALGEBRA_WALK_VENV" uv sync --locked --no-install-proje
 export PATH="$VALGEBRA_WALK_VENV/bin:$PATH"
 export PYO3_PYTHON="$VALGEBRA_WALK_VENV/bin/python"
 export LD_LIBRARY_PATH="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"
-# Bound what a failing test shrinks, and draw a seed the run can report. Without
-# the first, a mutant the tests caught spends the whole budget shrinking a
-# counterexample nobody reads and returns a timeout instead of a verdict.
+# Bound what a failing test shrinks, and draw the push lanes' seed. Without the
+# first, a mutant the tests caught spends the whole budget shrinking a
+# counterexample nobody reads and returns a timeout instead of a verdict;
+# without the second, the sweep draws what the lane does not.
 export PROPTEST_MAX_SHRINK_TIME=1000
-export PROPTEST_RNG_SEED="${PROPTEST_RNG_SEED:-$RANDOM}"
+export PROPTEST_RNG_SEED=0
 cargo mutants --package valgebra-py --file <the files the change touches> \
   --features interpreter-tests -j 2 --timeout-multiplier 20 \
   --output sweep -- -- --skip recursion_deeper_than_the_bound_is_refused \
@@ -716,7 +717,7 @@ skips are the two termination proofs:
 
 ```bash
 export PROPTEST_MAX_SHRINK_TIME=1000
-export PROPTEST_RNG_SEED="${PROPTEST_RNG_SEED:-$RANDOM}"
+export PROPTEST_RNG_SEED=0
 cargo mutants --package valgebra-core --file <the files the change touches> \
   -j 4 --timeout-multiplier 20 --output sweep \
   -- -- --skip deep_subtype_into_bottom_terminates \
@@ -727,6 +728,21 @@ python scripts/mutation_gate.py --baseline core --new-only --out sweep/mutants.o
 The target is never zero. Equivalent mutants exist and are undecidable in
 general, so an accepted survivor carries the argument for why no test can kill
 it, in the baseline beside it.
+
+**A push sweep draws one seed, and a nightly a new one each night.** A
+property law kills some mutants on some draws and not on others, so a sweep
+that draws afresh judges an untouched file differently from one push to the
+next: a mutant caught on one run is a new survivor on the next, and the merge
+blocks on a draw. Both push sweeps read one literal, so a mutant its draw does
+not kill survives every time, and the remedy is a test that fails on it
+whatever the draw, which is the better test anyway. The nightly sweeps draw
+from their run id, which is how such a mutant is found, as a report rather
+than a block. The literal is arbitrary, and moving it re-draws every push
+verdict, so a new one lands with a sweep under it of the mutants only a draw
+kills. A nightly's logs name those: a caught mutant whose log shows nothing
+failing but a property is one. `tests/test_required_jobs.py` holds both push
+sweeps to one literal, both nightlies to the run id, and the recipes above to
+the lanes' literal.
 
 **Read a mutation score with its skip list.** A test that exists to prove a
 bound runs past any timeout the sweep sets under a mutation that removes the

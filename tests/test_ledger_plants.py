@@ -2833,6 +2833,34 @@ PLANTS = (
         trips=("test_the_gate_names_no_job_the_workflow_lacks",),
     ),
     Plant(
+        # A push sweep drawing from its run id again: an untouched file judged
+        # one way on one push and the other way on the next.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "# literal and both nightlies to the run id.\n    env:\n"
+            '      PROPTEST_RNG_SEED: "0"',
+            "# literal and both nightlies to the run id.\n    env:\n"
+            "      PROPTEST_RNG_SEED: ${{ github.run_id }}",
+        ),
+        trips=("test_a_push_sweep_draws_one_literal_and_a_nightly_its_run_id",),
+    ),
+    Plant(
+        # The local recipe drawing its own seed, so a mutant only some draws
+        # kill passes here and survives on the push.
+        "tests/test_required_jobs.py",
+        ("docs/dev/07-tooling-ci.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/07-tooling-ci.md",
+            "export PROPTEST_RNG_SEED=0\ncargo mutants --package valgebra-core",
+            'export PROPTEST_RNG_SEED="$RANDOM"\ncargo mutants --package valgebra-core',
+        ),
+        trips=("test_the_local_sweep_draws_the_push_lanes_seed",),
+    ),
+    Plant(
         # A test module subscripting a typing form with a validator, which on
         # the floor is a collection error that takes the module with it.
         "tests/test_suite_partition.py",
