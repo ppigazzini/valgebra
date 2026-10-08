@@ -547,3 +547,39 @@ def test_an_llms_line_that_is_its_page_description_passes(
     monkeypatch.setattr(lint, "ROOT", tmp_path)
     _synthetic_manifest(tmp_path, "What the page is.")
     assert lint.check_llms_manifest() == []
+
+
+def _synthetic_examples(root: Path, imports: str, installs: str) -> None:
+    """Write a page whose example imports `imports`, and an install page."""
+    (root / "docs").mkdir()
+    (root / "docs" / "guide.md").write_text(
+        f"# Guide\n\n```python\n{imports}\nimport json\n```\n"
+    )
+    (root / "docs" / "00-installation.md").write_text(
+        "# Installation\n\n```bash\npip install valgebra\n"
+        f"pip install {installs}\n```\n"
+    )
+
+
+def test_an_example_import_the_install_page_does_not_name_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A reader installs what the page says and runs the example, which then
+    # stops at its first line.
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    _synthetic_examples(tmp_path, "import some_package.sub", "annotated-types")
+    problems = lint.check_example_installs()
+    assert any("imports some-package" in problem for problem in problems), problems
+    assert any("names annotated-types" in problem for problem in problems), problems
+
+
+def test_an_install_page_naming_what_the_examples_import_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The standard library and valgebra itself want no line, and a module's
+    # underscores are its distribution's hyphens.
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    _synthetic_examples(
+        tmp_path, "from annotated_types import Ge\nimport valgebra", "annotated-types"
+    )
+    assert lint.check_example_installs() == []

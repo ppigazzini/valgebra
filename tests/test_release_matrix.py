@@ -55,11 +55,11 @@ GAPS: dict[tuple[str, str], str] = {
 UNNAMED: dict[str, str] = {
     "ubuntu-latest x86_64 musllinux_1_2": (
         "`--find-interpreter` builds for what the musllinux image carries: in "
-        "0.0.15, 3.10 through 3.14 and 3.14t"
+        "0.0.17, 3.10 through 3.14, 3.14t and PyPy 7.3"
     ),
     "ubuntu-latest aarch64 musllinux_1_2": (
         "`--find-interpreter` builds for what the musllinux image carries: in "
-        "0.0.15, 3.10 through 3.14 and 3.14t"
+        "0.0.17, 3.10 through 3.14, 3.14t and PyPy 7.3"
     ),
 }
 
