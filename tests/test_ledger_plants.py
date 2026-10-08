@@ -2525,8 +2525,11 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "    if: github.event_name == 'schedule' || github.event_name =="
-            " 'workflow_dispatch'\n    runs-on: ubuntu-latest\n    # Six shards",
+            "    needs: nightly-dispatch\n    if: >-\n      !cancelled() && "
+            "(github.event_name == 'workflow_dispatch' ||\n      "
+            "(github.event_name == 'schedule' &&\n      "
+            "needs['nightly-dispatch'].outputs.main_differs == 'true'))\n"
+            "    runs-on: ubuntu-latest\n    # Six shards",
             "    runs-on: ubuntu-latest\n    # Six shards",
         ),
         trips=("test_a_lane_runs_the_sweep_off_the_merge_path",),
@@ -2859,6 +2862,25 @@ PLANTS = (
             'export PROPTEST_RNG_SEED="$RANDOM"\ncargo mutants --package valgebra-core',
         ),
         trips=("test_the_local_sweep_draws_the_push_lanes_seed",),
+    ),
+    Plant(
+        # A nightly lane that runs on `main` whatever its tip, so a night whose
+        # two tips agree reads one tree twice.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "it is an early-warning lane.\n"
+            "    needs: nightly-dispatch\n    if: >-\n      !cancelled() && "
+            "(github.event_name == 'workflow_dispatch' ||\n      "
+            "(github.event_name == 'schedule' &&\n      "
+            "needs['nightly-dispatch'].outputs.main_differs == 'true'))\n",
+            "it is an early-warning lane.\n"
+            "    if: github.event_name == 'schedule' || "
+            "github.event_name == 'workflow_dispatch'\n",
+        ),
+        trips=("test_the_nightly_runs_on_the_branch_development_is_on",),
     ),
     Plant(
         # A test module subscripting a typing form with a validator, which on

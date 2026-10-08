@@ -378,6 +378,80 @@ def test_the_local_sweep_draws_the_push_lanes_seed() -> None:
         )
 
 
+#: The job the scheduled run dispatches the nightly from.
+DISPATCH = "nightly-dispatch"
+
+#: The output it names `main`'s own nightly by, as a lane's condition reads it.
+DIFFERS = f"needs['{DISPATCH}'].outputs.main_differs == 'true'"
+
+#: The branch a schedule fires on.
+DEFAULT_BRANCH = "main"
+
+
+def test_the_nightly_runs_on_the_branch_development_is_on() -> None:
+    """The scheduled run dispatches the nightly on the development branch.
+
+    A schedule fires on the default branch alone, and development is on the
+    other branch the push trigger names, which `main` follows at a release cut:
+    a nightly that read `main` alone would read a release window's commits
+    after they shipped. So the scheduled job dispatches the workflow on that
+    branch, which runs the branch's own copy of the workflow, and every other
+    scheduled lane runs on `main` only where `main`'s tip is not the branch's.
+    A lane reads that from the dispatcher, or, a ratchet, from the sweep it
+    ratchets, which reads it in turn.
+    """
+    workflow = _workflow()
+    jobs = workflow["jobs"]
+    dispatcher = jobs[DISPATCH]
+    assert " ".join(str(dispatcher["if"]).split()) == (
+        "github.event_name == 'schedule'"
+    ), "the dispatcher runs on a schedule and on nothing else"
+    assert dispatcher["permissions"].get("actions") == "write", (
+        "dispatching a run needs `actions: write`, at the dispatcher's level"
+    )
+    dispatching = [
+        step
+        for step in dispatcher["steps"]
+        if "gh workflow run ci.yml" in str(step.get("run", ""))
+    ]
+    assert len(dispatching) == 1, "the dispatcher dispatches the workflow once"
+    (step,) = dispatching
+    assert '--ref "$BRANCH"' in step["run"], step["run"]
+    # PyYAML reads the bare key `on` as the boolean it spells in YAML 1.1.
+    triggers = workflow.get("on", workflow.get(True))
+    pushed = triggers["push"]["branches"]
+    branch = step["env"]["BRANCH"]
+    assert branch in pushed, f"{branch} is not a branch a push runs on: {pushed}"
+    assert branch != DEFAULT_BRANCH, "the dispatch names the branch the schedule runs"
+
+    scheduled = {
+        name
+        for name, job in jobs.items()
+        if "github.event_name == 'schedule'" in str(job.get("if", ""))
+    } - {DISPATCH}
+    assert len(scheduled) >= 8, f"only {sorted(scheduled)} read as scheduled"
+    unread = []
+    for name in sorted(scheduled):
+        job = jobs[name]
+        condition = " ".join(str(job["if"]).split())
+        needs = job.get("needs", [])
+        needed = [needs] if isinstance(needs, str) else list(needs)
+        if DISPATCH in needed:
+            if DIFFERS not in condition:
+                unread.append(f"{name} needs the dispatcher and reads no output of it")
+            continue
+        sweeps = [need for need in needed if DISPATCH in str(jobs[need].get("needs"))]
+        if not sweeps or any(
+            f"needs['{sweep}'].result != 'skipped'" not in condition for sweep in sweeps
+        ):
+            unread.append(f"{name} reads neither the dispatcher nor a sweep that does")
+    assert not unread, (
+        "scheduled jobs that run on `main` whatever its tip: "
+        + "; ".join(unread)
+        + ". Where the tips agree, the dispatched run reads the same tree."
+    )
+
+
 def test_every_supported_interpreter_runs_on_every_event() -> None:
     """The job that carries the supported interpreters runs on a push.
 

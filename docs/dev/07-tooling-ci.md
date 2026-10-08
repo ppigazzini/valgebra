@@ -845,16 +845,30 @@ standard: a detector that cannot be shown to fail is not evidence.
 
 ## The lanes
 
-`.github/workflows/ci.yml` runs them; read the job set there. Five properties of
-the arrangement are worth stating because they are decisions rather than
+`.github/workflows/ci.yml` runs them; read the job set there. The properties of
+the arrangement stated here are the ones that are decisions rather than
 mechanism:
 
 **`main` receives a commit the push lane passed.** A push to `github_ci` runs
 the workflow, and `main` moves to a commit only once its `ci` check is green
 there, by a fast-forward to that same commit, so the hash the check was read on
 is the one `main` carries. A red push lane is repaired on `github_ci`. A push
-to `main` runs the workflow too, and the nightly runs on the default branch,
-over what has landed.
+to `main` runs the workflow too.
+
+**The nightly runs where development is.** A schedule fires on the default
+branch alone, and a nightly that read `main` alone would read a release
+window's commits after they shipped. So the scheduled run's first job,
+`nightly-dispatch`, dispatches the workflow on `github_ci`, and a dispatch runs
+that branch's own copy of `ci.yml`: a scheduled job checking `github_ci` out
+would run `main`'s copy against the other tree, and a change to the workflow
+on `github_ci` would read as a false red or a skip. The nightly lanes run on
+`main` as well only where its tip is not `github_ci`'s, since the dispatched
+run reads that tree otherwise; each reads the dispatcher's output, or the
+result of the sweep it ratchets. The dispatched run's push sweeps take their
+base from `main`'s tip, as any dispatch does (`scripts/change_base.py`), so a
+night also sweeps every file the next release cut will push.
+`tests/test_required_jobs.py` holds the dispatch to the push trigger's other
+branch and every scheduled lane to that reading.
 
 **A skipped job cannot pass.** The `ci` aggregator lists every required job in
 `needs:` *and* fails unless each result is `success` rather than merely
@@ -947,10 +961,10 @@ case back in the run without anyone editing a list.
 
 **The full sweeps are scheduled, and a diff-scoped one is not.** A full sweep is
 minutes of rebuilds and does not belong on a push, so a regression it catches is
-visible the night after. Each full sweep runs sharded -- the core, the walk and
-the pytest sweep alike, as the diff sweeps do (the shard counts are `ci.yml`'s)
--- each shard reporting its own slice; a job after them merges the slices and
-ratchets once, since a survivor is a survivor
+visible the night after the push that carried it. Each full sweep runs sharded
+-- the core, the walk and the pytest sweep alike, as the diff sweeps do (the
+shard counts are `ci.yml`'s) -- each shard reporting its own slice; a job
+after them merges the slices and ratchets once, since a survivor is a survivor
 of the *sweep* and an entry that survives nothing is known to only when every
 shard has reported. A shard's ceiling (`timeout-minutes` in `ci.yml`) is twice
 the slowest shard's reading, because a job that reaches its ceiling is
