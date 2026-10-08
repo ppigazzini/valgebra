@@ -74,7 +74,7 @@ that defines it -- so a rename dates the entry.
 | **witness** | a value that settles a relation by example: one inside the subtype and outside the supertype disproves inclusion. A `False` with no witness is the probe's subject ([08-testing.md](08-testing.md)) |
 | **detached surface** | a `Cargo.toml` outside the root workspace, which no workspace-wide command reaches ([07-tooling-ci.md](07-tooling-ci.md)) |
 
-## Eight collisions, and both senses are live
+## Collisions, and both senses are live
 
 Say which one you mean.
 
@@ -82,6 +82,7 @@ Say which one you mean.
 |---|---|---|
 | **gate** | a CI step that asserts | the local build-health command set, which is a preview of the merge gate rather than a single check |
 | **oracle** | an independent judge in a test | `LeafRelations`, the trait the decision procedure asks about a class or a value |
+| **close** | of the algebra: the combinators' results stay inside the schemas, so they **close** into a lattice (the README's first paragraph) | `close`, the transform that refuses the key-type region no clause claims, so a record admits only the keys it declares |
 | **budget** | the committed instruction count a workload is held to | `DECISION_BUDGET`, the work ceiling one decision query may spend. Not `Bounds`, which holds a *build* rather than a query |
 | **ledger** | a list held to the tree in both directions | the completeness ledger, which is that shape but about *relations* rather than about files |
 | **snapshot** | a recorded expected output a test compares against, held by `syrupy` under `tests/__snapshots__` | the copy a container walk takes of a value's storage before reading it, so a `__len__` that lies or a mutation mid-walk cannot change what was measured |

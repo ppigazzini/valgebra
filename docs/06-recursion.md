@@ -103,7 +103,9 @@ Recursion is bounded so it always terminates cleanly:
 - A value nested **past a fixed depth** fails with `recursion_limit` rather than
   overflowing the native stack: 128 levels of unfolding, and 384 levels of
   descent in total, which is the bound a deep definition body reaches first
-  ([limits](10-limits.md)).
+  ([limits](10-limits.md)). Under `recursive(lambda t: union(int, [t]))`, 127
+  lists nested around an `int` are a member and 128 are not: the `int` at the
+  bottom is the 128th unfolding.
 - A **non-contractive** body — one whose recursive reference is not under a
   structural constructor — is rejected when the validator is built, not at
   validation time.

@@ -76,8 +76,12 @@ expression that builds the same schema — a recursive schema as the `recursive`
 call it is, an open record as the catch-all entry it carries, the nullary product
 as `tuple[()]`, a union holding a record or a list display as the `union(...)`
 call, since `|` between two dicts is Python's merge, and a key by Python's own
-`repr` — so it can be pasted into a session and read back. Seven things it
-cannot render as an expression, and two of them read back quietly: a
+`repr` — so it can be pasted into a session that holds the names it prints and
+read back. A refinement marker prints by its bare name, `Ge(0)` rather than
+`at.Ge(0)`, so that session imports each marker by name, as
+`from annotated_types import Ge` does, rather than through the
+`import annotated_types as at` these pages write. Seven things it cannot render
+as an expression, and two of them read back quietly: a
 **class**, which is an object rather than syntax and appears as its name -- or
 as `instance_of(Name)` where it stands alone and its name would read back as
 the class met with the fields it declares; a

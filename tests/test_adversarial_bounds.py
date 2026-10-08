@@ -490,6 +490,24 @@ def test_a_recursive_value_at_the_unfolding_bound_still_validates() -> None:
     assert schema.is_valid(node)
 
 
+def test_the_unfolding_bound_admits_127_lists_and_refuses_128() -> None:
+    # The pages name the boundary by its value rather than by the count alone:
+    # around an `int` at the bottom, which is itself an unfolding, 127 lists are
+    # a member of the smallest recursive body and 128 are refused.
+    schema = Validator(recursive(lambda t: union(int, [t])))
+
+    def nested(lists: int) -> object:
+        value: object = 0
+        for _ in range(lists):
+            value = [value]
+        return value
+
+    assert schema.is_valid(nested(127))
+    with pytest.raises(ValidationError) as info:
+        schema.validate(nested(128))
+    assert info.value.code == "recursion_limit"
+
+
 def test_deeply_nested_json_is_rejected_cleanly() -> None:
     schema = Validator(recursive(lambda j: union(int, [j])))
     document = "[" * 5000 + "1" + "]" * 5000
