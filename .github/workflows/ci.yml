@@ -1104,10 +1104,14 @@ jobs:
     # cancelled.
     #
     # Twenty-four cuts halve that: nine mutants a shard, about 18 minutes by
-    # the same readings. A shard has since read 28.5 minutes, on 2026-10-04, so
-    # the ceiling is 60, twice that -- the rule `docs/dev/07-tooling-ci.md`
-    # states for a sharded sweep, because a job that reaches its ceiling is
-    # cancelled and a cancelled job is red. The
+    # the same readings. The slowest reading is a push to `main`, which sweeps
+    # every file a release window touched where a push to `github_ci` sweeps
+    # one change's: 51.3 minutes on 2026-10-06, against 28.5 for the slowest
+    # `github_ci` push, on 2026-10-04. So the ceiling is 105, twice the slowest
+    # -- the rule `docs/dev/07-tooling-ci.md` states for a sharded sweep,
+    # because a job that reaches its ceiling is cancelled and a cancelled job
+    # is red -- read on the push that sweeps the most rather than on the one
+    # that comes most often. The
     # failure mode is a red lane rather than a slow one, and a sweep that has
     # to be re-sharded after every large commit is not a gate. A shard with no
     # core file to sweep ends in seconds, so the added cuts cost a push that
@@ -1116,7 +1120,7 @@ jobs:
     # see the note above on why the lines are not enough. Each shard runs its
     # own baseline, and the ratchet is already written for a partial sweep.
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 105
     # One seed for the baseline and every mutant of this shard. A mutation is
     # caught when the tests answer differently with it than without it, so the
     # two runs have to be given the same inputs; proptest otherwise draws from
@@ -1251,10 +1255,11 @@ jobs:
     # and the rest, two thirds of their mutants unviable, to the other two: 19,
     # 15 and past 30 minutes on 2026-10-05, the third cancelled at its ceiling,
     # where it had read 29 one commit earlier. Round-robin gives every shard
-    # the same mix, a third of the 64 minutes and more between them, and the
-    # ceiling is about twice that.
+    # the same mix, a third of the work between them. The suite a mutant runs
+    # has grown since, and the slowest shard read 43.5 minutes on 2026-10-08,
+    # so the ceiling is 90, twice that, by the rule the core's sweep states.
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 90
     # One seed for the baseline and every mutant of this shard, and the same
     # literal on every push, for the reasons `mutants-diff-core` gives.
     env:
