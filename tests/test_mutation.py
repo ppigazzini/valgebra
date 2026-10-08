@@ -164,6 +164,66 @@ def test_a_list_that_was_never_a_member_is_not_made_one_by_shrinking() -> None:
     assert schema.is_valid(target) is False
 
 
+class _Shrinking:
+    """A non-integer whose summary empties the list it sits in, past itself."""
+
+    def __init__(self, target: list[object]) -> None:
+        self.target = target
+
+    def __repr__(self) -> str:
+        del self.target[1:]
+        return "_Shrinking()"
+
+
+class _Summarized:
+    """A non-integer that counts how often a report summarizes it."""
+
+    calls = 0
+
+    def __repr__(self) -> str:
+        type(self).calls += 1
+        return "_Summarized()"
+
+
+def test_a_list_moved_by_a_failing_elements_summary_is_reported() -> None:
+    """A summary is the Python a refused `list[int]` runs, and it can move the list.
+
+    Thirty-two elements, a width the explaining walk reads through a snapshot
+    below 3.14: the snapshot names the two that fail, and the walk reads each
+    where the list holds it. The first one's summary cuts the list short, so
+    the second is read from a list that moved, and the report says so.
+    """
+    target: list[object] = list(range(32))
+    target[5] = _Shrinking(target)
+    target[20] = "x"
+    with pytest.raises(ValidationError) as info:
+        Validator(list[int]).validate(target)
+    assert [item["path"] for item in info.value.errors] == [(5,), ()]
+    assert [item["code"] for item in info.value.errors] == ["int_type", MUTATED]
+
+
+def test_a_refused_list_summarizes_each_failure_once_and_no_member() -> None:
+    """Each element that fails is summarized once, and an element that passes never.
+
+    Read through a snapshot or in place, the walk asks a passing element its
+    type alone, and a failing one its summary for the report: three failures in
+    forty elements are three summaries, at their own positions, in order.
+    """
+    value: list[object] = list(range(40))
+    for position in (3, 17, 39):
+        value[position] = _Summarized()
+    _Summarized.calls = 0
+    with pytest.raises(ValidationError) as info:
+        Validator(list[int]).validate(value)
+    assert [item["path"] for item in info.value.errors] == [(3,), (17,), (39,)]
+    assert _Summarized.calls == 3
+    _Summarized.calls = 0
+    with pytest.raises(ValidationError) as info:
+        Validator(list[int]).validate(value, fail_fast=True)
+    assert [item["path"] for item in info.value.errors] == [(3,)]
+    assert _Summarized.calls == 1
+
+
 def test_a_tuple_needs_no_guard() -> None:
     """A tuple cannot be resized, so its walk keeps the plain iterator."""
     seen: list[object] = []

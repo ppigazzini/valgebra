@@ -93,12 +93,13 @@ exclude_re = [
     # 3.14t, the interpreter tests kill each of their mutants -- a count read as
     # moved, a position or an entry count that steps backwards or stands still,
     # and a stop at the count taken never or at once -- and the 3.14t lane's
-    # product suite reads both scans on every push. `scan_list` and
-    # `scan_dict` each have a body for each kind of build, and what `cargo
-    # mutants` offers for either whole body is a `Scan`, which has no default:
-    # the sweep's build refuses it for the body it compiles and never sees the
-    # free-threaded one, so the exclusion takes no mutant a build could judge.
-    "check/walk/sequence\\.rs:.*: (replace (scan_list|scan_held_list) -> .*|.* in scan_held_list)$",
+    # product suite reads both scans on every push. `scan_list`,
+    # `scan_list_from` and `scan_dict` each have a body for each kind of
+    # build, and what `cargo mutants` offers for any whole body is a `Scan`,
+    # which has no default: the sweep's build refuses it for the body it
+    # compiles and never sees the free-threaded one, so the exclusion takes no
+    # mutant a build could judge.
+    "check/walk/sequence\\.rs:.*: (replace (scan_list|scan_list_from|scan_held_list) -> .*|.* in scan_held_list)$",
     "check/walk/record\\.rs:.*: (replace (scan_dict|scan_held_dict) -> .*|.* in scan_held_dict)$",
     # A function with a body for each side of 3.13 -- `type_has`, which asks
     # PyO3's `hasattr` from 3.13 and the builtin `hasattr` below it -- has one
