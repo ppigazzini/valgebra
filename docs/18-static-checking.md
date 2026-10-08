@@ -66,7 +66,10 @@ subscripted as `Validator` of it, and some of those are refused when built:
 `Sequence[int]`, `deque[int]`, `type[int]` and a user generic such as `Box[int]`
 type-check and raise `NotImplementedError` at the call, as
 [the forms the schema language does not list](03-schema-language.md#a-form-this-page-does-not-list)
-do.
+do. The `instance_of` row is read the same way: `instance_of(TD)` for a
+`TypedDict` type-checks as `Validator[TD]` and raises `TypeError` at the call,
+as `instance_of` of a `Protocol` does, since neither class has instances of its
+own ([the class alone](03-schema-language.md#the-class-alone)).
 
 The rows that name a checker are held by `tests/test_checker_readings.py`, which
 runs all three over one fixture per row under `tests/typing/readings/` and

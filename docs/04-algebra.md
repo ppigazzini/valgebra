@@ -144,7 +144,10 @@ assert not shape.is_valid(1.5)  # matches no case, falls to the default
 "At least one of these keys is present", and its siblings, are also algebra. A
 record that merely asserts a key is present is an open record requiring it —
 `Validator({key: anything}).open()` — and the cardinality follows from `union`,
-`intersection`, and `complement`:
+`intersection`, and `complement`. A complement holds every value outside its
+argument, the values that are not dicts included, so "not both" is met with
+`dict` to stay a statement about mappings; `exactly_one` needs no guard, since
+each of its branches is already a meet with a record:
 
 ```python
 from valgebra import Validator, anything, complement, intersection, union
@@ -159,10 +162,12 @@ assert at_least_one.is_valid({"a": 1})
 assert at_least_one.is_valid({"b": 2, "x": 0})
 assert not at_least_one.is_valid({"x": 0})
 
-at_most_one = complement(intersection(has("a"), has("b")))  # not both
+at_most_one = intersection(dict, complement(intersection(has("a"), has("b"))))
 assert at_most_one.is_valid({"a": 1})
 assert at_most_one.is_valid({})
 assert not at_most_one.is_valid({"a": 1, "b": 2})
+assert not at_most_one.is_valid(5)  # the complement alone admits it
+assert complement(intersection(has("a"), has("b"))).is_valid(5)
 
 exactly_one = union(
     intersection(has("a"), complement(has("b"))),
