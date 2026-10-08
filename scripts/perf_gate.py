@@ -22,7 +22,7 @@ Two ways to compare, and the relative one is the merge gate:
   wide enough not to flake is too wide to see a real 5% regression. That is what
   ``--against`` exists to fix, and why the merge gate uses it.
 
-Three workloads, and thirty shapes across them:
+Three workloads, and thirty-one shapes across them:
 
 * The default **core** workload (`perf_workload`, pure Rust) measures the schema
   operations and is fully deterministic, so its budget is tight.
@@ -33,7 +33,7 @@ Three workloads, and thirty shapes across them:
   (`--decision-matrix`).
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
-  twenty-five shapes: the membership walk (`--binding`), the call boundary
+  twenty-six shapes: the membership walk (`--binding`), the call boundary
   alone (`--binding-boundary`), the walk over a wide record
   (`--binding-record`), the same walk over a value whose keys are interned
   (`--binding-keys`), the same fields declared by an open record
@@ -51,9 +51,10 @@ Three workloads, and thirty shapes across them:
   Python spelling (`--binding-build`), compiling one written as a `TypedDict`
   of refined integers (`--binding-annotated`), compiling a fifty-field
   dataclass (`--binding-object`), compiling a fifty-member protocol
-  (`--binding-protocol`), relating two dataclasses (`--binding-relation`), and
+  (`--binding-protocol`), relating two dataclasses (`--binding-relation`),
   explaining a failure in a record (`--binding-explain`) or accepting one in
-  the same mode (`--binding-explain-accept`). Most are the deterministic twin
+  the same mode (`--binding-explain-accept`), and explaining a refused list
+  (`--binding-explain-list`). Most are the deterministic twin
   of a shape the comparison gate times, so a wall-clock movement there can be
   confirmed or refuted here. They embed CPython, whose startup is not a fixed
   instruction count, so each is measured as the *difference* between two
@@ -412,6 +413,7 @@ MODES = {
     "binding-build": ("binding_workload", "binding record build"),
     "binding-explain": ("binding_workload", "binding record explain"),
     "binding-explain-accept": ("binding_workload", "binding record explain accept"),
+    "binding-explain-list": ("binding_workload", "binding refused list explain"),
     "binding-open": ("binding_workload", "binding open record walk"),
     "binding-annotated": ("binding_workload", "binding annotated build"),
     "binding-object": ("binding_workload", "binding dataclass build"),
@@ -445,6 +447,7 @@ BINDING_ITERATIONS = {
     "binding-build": (4_000, 1_000),
     "binding-explain": (8_000, 2_000),
     "binding-explain-accept": (20_000, 5_000),
+    "binding-explain-list": (2_000, 500),
     "binding-open": (20_000, 5_000),
     "binding-annotated": (300, 100),
     "binding-object": (2_000, 500),
@@ -473,6 +476,7 @@ BINDING_SHAPES = {
     "binding-build": "build",
     "binding-explain": "explain",
     "binding-explain-accept": "explain-accept",
+    "binding-explain-list": "explain-list",
     "binding-open": "open",
     "binding-annotated": "annotated",
     "binding-object": "object",

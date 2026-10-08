@@ -817,6 +817,7 @@ jobs:
               --binding-build --binding-annotated --binding-object \
               --binding-protocol --binding-relation \
               --binding-subclass --binding-explain --binding-explain-accept \
+              --binding-explain-list \
               --binding-open --binding-json --binding-pattern \
               --binding-recursive --binding-json-reject --binding-json-union \
               --binding-json-open --binding-json-deep --binding-deep \
@@ -845,6 +846,7 @@ jobs:
               --binding-build --binding-annotated --binding-object \
               --binding-protocol --binding-relation \
               --binding-subclass --binding-explain --binding-explain-accept \
+              --binding-explain-list \
               --binding-open --binding-json --binding-pattern \
               --binding-recursive --binding-json-reject --binding-json-union \
               --binding-json-open --binding-json-deep --binding-deep \

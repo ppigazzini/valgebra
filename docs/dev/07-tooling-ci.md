@@ -277,7 +277,7 @@ gate only catches what it exercises:
   `--binding-json-open`, `--binding-json-deep`, `--binding-pattern`,
   `--binding-build`, `--binding-annotated`, `--binding-object`,
   `--binding-protocol`, `--binding-relation`,
-  `--binding-explain`, `--binding-explain-accept`) —
+  `--binding-explain`, `--binding-explain-accept`, `--binding-explain-list`) —
   membership over a live Python value, the call boundary alone, a wide record
   closed, the same record walked over a value whose keys are interned, the
   record open the way a `TypedDict` is, a `dict[str, int]` read through its
@@ -288,8 +288,9 @@ gate only catches what it exercises:
   clause, and against a recursive schema -- matching a string against a compiled
   pattern, building a validator from its Python spelling, compiling one written
   as a `TypedDict` of refined integers, compiling a fifty-field dataclass or a
-  fifty-member protocol, relating two dataclasses, and explaining a failure in a
-  record or accepting one in the same mode. The walk is the shipped
+  fifty-member protocol, relating two dataclasses, explaining a failure in a
+  record or accepting one in the same mode, and explaining a refused list. The
+  walk is the shipped
   hot path neither pure-Rust workload reaches; schema construction grew twelve
   percent over a release cycle while only the walk was counted, and an open
   record was read a third dearer than a closed one while only the closed one
