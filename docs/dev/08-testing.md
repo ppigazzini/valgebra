@@ -114,6 +114,7 @@ for and misses the other. The ledgers:
 | `tests/test_module_placement.py` | no inline test module is longer than a screen |
 | `tests/test_proptest_seeds.py` | every persisted proptest seed sits beside the property tests that replay it |
 | `tests/test_suite_installs.py` | every suite apart from dev installs the test group at the lock's versions |
+| `tests/test_api_names_in_docs.py` | every method a user page names on a validator is one it has |
 | `tests/test_theory_ledger.py` | every load-bearing theory result names a test, and every name is one; the rows that read the argument itself skip where it is absent, which is every lane |
 | `tests/test_use_case_ledger.py` | every public name and every error code is named by the suite, or accepted with a reason |
 | `tests/test_bound_ledger.py` | every declared bound is driven by a test, or accepted with a reason |

@@ -2844,6 +2844,44 @@ PLANTS = (
         trips=("test_the_binding_sweep_triggers_on_every_file_it_sweeps",),
     ),
     Plant(
+        # A relation the API never had, listed beside the four it has: the
+        # sentence runs nowhere, so no example fails on it.
+        "tests/test_api_names_in_docs.py",
+        ("docs/10-limits.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/10-limits.md",
+            "`is_equivalent`, `is_empty` -- holds",
+            "`is_equivalent`, `is_disjoint_from`, `is_empty` -- holds",
+        ),
+        trips=("test_every_name_listed_beside_a_method_is_the_apis",),
+    ),
+    Plant(
+        # A method respelled in a sentence that calls it on a validator.
+        "tests/test_api_names_in_docs.py",
+        ("docs/03-schema-language.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/03-schema-language.md",
+            "adding or removing an `.open()`",
+            "adding or removing an `.opened()`",
+        ),
+        trips=("test_every_name_written_as_a_method_is_one",),
+    ),
+    Plant(
+        # A span pattern that matches nothing, so the two scans read no page
+        # and pass every one.
+        "tests/test_api_names_in_docs.py",
+        ("tests/test_api_names_in_docs.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_api_names_in_docs.py",
+            'SPAN = re.compile(r"`([^`\\n]+)`")',
+            'SPAN = re.compile(r"``([^`\\n]+)``")',
+        ),
+        trips=("test_the_scan_reads_the_names_that_are_there",),
+    ),
+    Plant(
         # A job renamed, and the gate still waiting on the old name.
         "tests/test_required_jobs.py",
         (".github/workflows/ci.yml",),
