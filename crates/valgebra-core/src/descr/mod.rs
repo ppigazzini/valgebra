@@ -752,7 +752,7 @@ impl Descr {
         };
         let lattice = RecordLattice::instance_of(class);
         let mut descr = Descr::nothing();
-        if let Some(slot) = descr.kinds.get_mut(Descr::position(kind)) {
+        if let Some(slot) = descr.kinds.get_mut(kind.position()) {
             *slot = Lines::objects(&Component::top(kind), lattice);
         }
         descr
@@ -778,17 +778,10 @@ impl Descr {
         Some(descr)
     }
 
-    fn position(kind: Kind) -> usize {
-        Kind::ALL
-            .iter()
-            .position(|listed| *listed == kind)
-            .unwrap_or(0)
-    }
-
     fn component(&self, kind: Kind) -> &Lines {
         static EMPTY: OnceLock<Lines> = OnceLock::new();
         self.kinds
-            .get(Descr::position(kind))
+            .get(kind.position())
             .unwrap_or_else(|| EMPTY.get_or_init(Lines::bottom))
     }
 
@@ -820,7 +813,7 @@ impl Descr {
     }
 
     fn put(&mut self, kind: Kind, structure: Component) {
-        if let Some(slot) = self.kinds.get_mut(Descr::position(kind)) {
+        if let Some(slot) = self.kinds.get_mut(kind.position()) {
             *slot = Lines::everything(structure);
         }
     }
@@ -915,11 +908,13 @@ impl Descr {
     /// whose only use is to be asked whether it is empty, and the components
     /// already answer that one at a time.
     ///
-    /// It never refuses where the built form can, which is the one difference
-    /// worth stating: a build past its allowance answers `None` and the
-    /// constraint declines with it, while a read spends nothing and has nothing
-    /// to run out of. So a base at the edge of the allowance is narrowed rather
-    /// than declined -- more decided, not decided differently.
+    /// It builds nothing a meet would not, which is the one difference worth
+    /// stating: a meet builds a descriptor to ask it one question, while this
+    /// asks each component that question where it stands. A component held as
+    /// a complement still has to be expanded to answer, and that expansion is
+    /// charged to the allowance like any other product, so a read can run out
+    /// as a build can -- and where it does, the component reads as not empty
+    /// and the kinds are not all within, which is the answer that declines.
     pub(crate) fn within(&self, kinds: &[Kind]) -> bool {
         self.kinds.iter().zip(Kind::ALL).all(|(lines, kind)| {
             kinds.contains(&kind) || lines.emptiness(Whole::Kind(kind)) == Verdict::Empty
@@ -1048,7 +1043,9 @@ impl Guard for Arc<Descr> {
     /// It cannot refuse -- the [`Guard`] contract has it total -- so the charge
     /// is what makes the *next* operation refuse instead.
     fn complement(&self) -> Arc<Descr> {
-        budget::spend();
+        // The answer is not read here: an allowance this exhausts refuses the
+        // next charge, which is the one that can refuse.
+        let _ = budget::spend();
         Arc::new(Descr::complement(self))
     }
 

@@ -1,4 +1,5 @@
 use super::{IntSet, MAX_PERIOD, gcd, lcm};
+use crate::descr::interval::IntervalSet;
 use proptest::prelude::*;
 
 /// Union and meet inside the test corpus, where the bound is out of reach.
@@ -27,7 +28,7 @@ const REACH: i64 = 9;
 /// the period reads a set whose only members lie past it as empty, which is
 /// agreement on an accident.
 fn window(a: &IntSet, b: &IntSet) -> core::ops::RangeInclusive<i64> {
-    let period = lcm(a.modulus, b.modulus);
+    let period = lcm(a.modulus, b.modulus).expect("two periods in the bound share one in range");
     // A period past the bound cannot be materialised, so it cannot be
     // compared either. Clamping keeps the window finite where the assertion
     // is compiled out; reaching it at all is the bug the assertion names.
@@ -296,7 +297,7 @@ fn a_step_past_the_period_bound_is_refused() {
 fn two_steps_meeting_past_the_period_bound_are_refused() {
     for (a, b) in [(64, 81), (4093, 4096), (3, MAX_PERIOD), (63, 65)] {
         let (left, right) = (step(a), step(b));
-        let shared = lcm(a, b);
+        let shared = lcm(a, b).expect("two periods in the bound share one in range");
         let past = shared > MAX_PERIOD;
         assert_eq!(
             left.intersect(&right).is_none(),
@@ -355,11 +356,16 @@ fn the_periods_meet_at_their_least_common_multiple() {
     assert_eq!(gcd(12, 18), 6);
     assert_eq!(gcd(7, 1), 1);
     assert_eq!(gcd(5, 5), 5);
-    assert_eq!(lcm(4, 6), 12);
-    assert_eq!(lcm(3, 3), 3);
-    assert_eq!(lcm(1, 7), 7);
+    assert_eq!(lcm(4, 6), Some(12));
+    assert_eq!(lcm(3, 3), Some(3));
+    assert_eq!(lcm(1, 7), Some(7));
     // Coprime periods multiply, which is the case that grows fastest.
-    assert_eq!(lcm(3, 5), 15);
+    assert_eq!(lcm(3, 5), Some(15));
+    // A multiple past the range is no period, and the answer says so rather
+    // than naming one: a combination over it refuses, and two sets are read as
+    // two.
+    assert_eq!(lcm(i64::MAX, 2), None);
+    assert_eq!(lcm(i64::MAX, i64::MAX), Some(i64::MAX));
 }
 
 /// Two spellings of one set are one set in two places.
@@ -433,7 +439,10 @@ fn equality_is_not_transitive_where_two_periods_cannot_meet() {
     };
     // 64 and 162 are each a multiple of two, and meet at 5,184.
     let (coarse, plain, fine) = (evens_at(64), step(2), evens_at(162));
-    assert!(lcm(64, 162) > MAX_PERIOD, "the pair has no shared period");
+    assert!(
+        lcm(64, 162).is_some_and(|period| period > MAX_PERIOD),
+        "the pair has no shared period"
+    );
 
     assert_eq!(coarse, plain);
     assert_eq!(plain, fine);
@@ -478,4 +487,25 @@ fn no_three_sets_are_ordered_in_a_cycle() {
             }
         }
     }
+}
+
+/// A finished table is a set only where it is one class per residue of a
+/// period the representation holds, and each half of that refuses alone.
+#[test]
+fn a_table_is_a_set_only_at_one_class_per_residue_of_a_held_period() {
+    let classes = |count: usize| vec![IntervalSet::all(); count];
+    assert!(IntSet::from_table(4, classes(4)).is_some());
+    assert!(
+        IntSet::from_table(4, classes(3)).is_none(),
+        "a period the representation holds, and a class short"
+    );
+    let past = usize::try_from(MAX_PERIOD + 1).expect("the bound is a count");
+    assert!(
+        IntSet::from_table(MAX_PERIOD + 1, classes(past)).is_none(),
+        "a class per residue, of a period past the bound"
+    );
+    assert!(
+        IntSet::from_table(0, classes(0)).is_none(),
+        "no period at all"
+    );
 }

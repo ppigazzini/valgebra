@@ -90,9 +90,10 @@ impl IntSet {
     /// A set with one class per residue, built by `of`, for a period the
     /// representation holds.
     ///
-    /// Only the constructors whose period is one reach this directly; anything
-    /// deriving a period from another set's goes through
-    /// [`try_build`](Self::try_build), which refuses rather than asserting.
+    /// Reached only by a constructor that knows its period is inside the bound
+    /// -- a period of one, or a step [`multiple_of`](Self::multiple_of) has
+    /// checked; a period derived from another set's goes through
+    /// [`from_table`](Self::from_table), which refuses rather than asserting.
     fn build(modulus: i64, of: impl Fn(i64) -> IntervalSet) -> IntSet {
         debug_assert!(modulus >= 1, "a modulus is at least one");
         debug_assert!(
@@ -100,20 +101,23 @@ impl IntSet {
             "a period of {modulus} materialises that many classes, past the \
              {MAX_PERIOD} this representation holds"
         );
-        build_unchecked(modulus, of)
+        IntSet {
+            modulus,
+            classes: (0..modulus).map(of).collect(),
+        }
     }
 
-    /// The same, for a period that may be past the bound: `None` where it is.
+    /// The set a finished table spells, or `None` where the table is not one
+    /// class per residue of a period this representation holds.
     ///
     /// The refusal is the whole point. Clamping the period here would build a
     /// table for a *different* set and hand it back as this one -- the shape of
     /// wrong answer this representation exists to avoid -- and asserting would
     /// turn a composition a caller is entitled to write into a panic on the
     /// debug builds every contributor runs.
-    fn try_build(modulus: i64, of: impl Fn(i64) -> IntervalSet) -> Option<IntSet> {
-        (1..=MAX_PERIOD)
-            .contains(&modulus)
-            .then(|| build_unchecked(modulus, of))
+    fn from_table(modulus: i64, classes: Vec<IntervalSet>) -> Option<IntSet> {
+        ((1..=MAX_PERIOD).contains(&modulus) && i64::try_from(classes.len()).ok() == Some(modulus))
+            .then_some(IntSet { modulus, classes })
     }
 
     /// The empty set.
@@ -182,8 +186,9 @@ impl IntSet {
     pub fn holds(&self, value: i64) -> bool {
         // `value = residue + modulus * k`, and the class holds that `k`.
         let residue = value.rem_euclid(self.modulus);
-        self.classes
-            .get(usize::try_from(residue).unwrap_or(0))
+        usize::try_from(residue)
+            .ok()
+            .and_then(|index| self.classes.get(index))
             .is_some_and(|class| class.holds(value.div_euclid(self.modulus)))
     }
 
@@ -222,23 +227,26 @@ impl IntSet {
             return Some(Cow::Borrowed(&self.classes));
         }
         let stride = modulus / self.modulus;
-        (1..=MAX_PERIOD).contains(&modulus).then(|| {
-            Cow::Owned(
-                (0..modulus)
-                    .map(|residue| {
-                        let old = residue.rem_euclid(self.modulus);
-                        let step = (residue - old) / self.modulus;
-                        self.classes
-                            .get(usize::try_from(old).unwrap_or(0))
-                            .map_or_else(IntervalSet::empty, |class| class.preimage(step, stride))
-                    })
-                    .collect(),
-            )
-        })
+        if !(1..=MAX_PERIOD).contains(&modulus) {
+            return None;
+        }
+        // Each new class reads the old class its residue lands in, which a
+        // table of one class per residue always has: a residue it lacks refuses
+        // rather than reading that class as empty.
+        (0..modulus)
+            .map(|residue| {
+                let old = residue.rem_euclid(self.modulus);
+                let step = (residue - old) / self.modulus;
+                let class = self.classes.get(usize::try_from(old).ok()?)?;
+                Some(class.preimage(step, stride))
+            })
+            .collect::<Option<Vec<_>>>()
+            .map(Cow::Owned)
     }
 
-    /// The period two sets share, where their classes line up.
-    fn common(&self, other: &IntSet) -> i64 {
+    /// The period two sets share, where their classes line up, or `None`
+    /// where it is past the range of an `i64`.
+    fn common(&self, other: &IntSet) -> Option<i64> {
         lcm(self.modulus, other.modulus)
     }
 
@@ -249,15 +257,20 @@ impl IntSet {
         other: &IntSet,
         op: fn(&IntervalSet, &IntervalSet) -> IntervalSet,
     ) -> Option<IntSet> {
-        let modulus = self.common(other);
+        let modulus = self.common(other)?;
         let (mine, theirs) = (self.table_at(modulus)?, other.table_at(modulus)?);
-        let combined = IntSet::try_build(modulus, |residue| {
-            let index = usize::try_from(residue).unwrap_or(0);
-            match (mine.get(index), theirs.get(index)) {
-                (Some(a), Some(b)) => op(a, b),
-                _ => IntervalSet::empty(),
-            }
-        })?;
+        // Two tables of one period pair up residue by residue, and the pairing
+        // is a table of that period only where both hold one class per residue.
+        if mine.len() != theirs.len() {
+            return None;
+        }
+        let combined = IntSet::from_table(
+            modulus,
+            mine.iter()
+                .zip(theirs.iter())
+                .map(|(a, b)| op(a, b))
+                .collect(),
+        )?;
         Some(combined.without_a_step())
     }
 
@@ -327,7 +340,9 @@ impl PartialEq for IntSet {
     /// lifting is exact, so this is equality of the sets rather than of two
     /// spellings.
     fn eq(&self, other: &IntSet) -> bool {
-        let modulus = self.common(other);
+        let Some(modulus) = self.common(other) else {
+            return false;
+        };
         // Past the bound neither table can be read in the other's coordinates.
         // Two sets that reach here carry two periods -- one period meets itself
         // under the bound every set is built to -- so they are two spellings,
@@ -363,32 +378,17 @@ impl PartialOrd for IntSet {
     }
 }
 
-/// The least common multiple of two positive integers.
+/// The least common multiple of two positive integers, or `None` where it is
+/// past the range of an `i64`.
 ///
-/// Saturating, because the product of two periods can leave the range: a
-/// saturated modulus is wrong, so the caller is kept from reaching one by the
-/// frontend's bound on how large a step may be. The debug assertion says which
-/// invariant is broken if it ever is.
-fn lcm(a: i64, b: i64) -> i64 {
+/// No two periods here reach that: each is at most [`MAX_PERIOD`], so their
+/// product is far inside the range. `None` is what a broken bound reads as,
+/// and the callers refuse on it -- a combination declines, and two sets are
+/// read as two -- rather than carrying a modulus no set has.
+fn lcm(a: i64, b: i64) -> Option<i64> {
     let divisor = gcd(a, b);
     debug_assert!(divisor > 0, "a modulus is at least one");
-    let reduced = a / divisor.max(1);
-    reduced.checked_mul(b).unwrap_or_else(|| {
-        debug_assert!(false, "the periods {a} and {b} have no representable lcm");
-        a.max(b)
-    })
-}
-
-/// One class per residue, with no check on the period.
-///
-/// The two constructors above differ only in how they answer a period the
-/// representation cannot hold -- an assertion, or a refusal -- and share the
-/// table they build once it is known to be one.
-fn build_unchecked(modulus: i64, of: impl Fn(i64) -> IntervalSet) -> IntSet {
-    IntSet {
-        modulus,
-        classes: (0..modulus).map(of).collect(),
-    }
+    (a / divisor.max(1)).checked_mul(b)
 }
 
 /// The greatest common divisor of two positive integers, by Euclid.

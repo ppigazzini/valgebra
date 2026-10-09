@@ -158,3 +158,14 @@ fn every_kind_lands_in_the_partition_and_the_scalars_land_apart() {
     assert!(!all_complements.is_empty());
     assert_eq!(all_complements, union.complement());
 }
+
+/// A kind's position is its place in `Kind::ALL`, which every per-kind table in
+/// the set representation is indexed by: a kind read at another's place is a
+/// slot of the other kind.
+#[test]
+fn every_kind_sits_at_its_own_position() {
+    for (place, kind) in Kind::ALL.into_iter().enumerate() {
+        assert_eq!(kind.position(), place, "{kind:?}");
+    }
+    assert_eq!(Kind::ALL.len(), Kind::Dict.position() + 1);
+}

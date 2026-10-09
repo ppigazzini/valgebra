@@ -243,6 +243,17 @@ impl Kind {
         Kind::FrozenSet,
         Kind::Dict,
     ];
+
+    /// This kind's place in [`ALL`](Self::ALL), read off its discriminant.
+    ///
+    /// `ALL` lists the kinds in the order they are declared, so the place is the
+    /// discriminant and no search finds it: a search has a miss to answer, and
+    /// a miss read as the first place is a slot of another kind.
+    /// `every_kind_sits_at_its_own_position` holds the two orders together.
+    #[must_use]
+    pub const fn position(self) -> usize {
+        self as usize
+    }
 }
 
 impl Kind {
