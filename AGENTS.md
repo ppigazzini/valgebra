@@ -94,6 +94,16 @@ hold the changed code. The whole suite is too slow to run on every change, and
 the owner's push runs it on GitHub CI, on every interpreter the matrix names; a
 red lane there is read and fixed in the commit that caused it.
 
+**An iteration takes minutes, not hours.** While the code is still changing,
+run only fast tests: `cargo test -p <crate> --lib -- <filter>` on one
+interpreter, and the pytest files that hold the change. The heavy instruments
+-- a PGO wheel build or a timed comparison, `scripts/perf_gate.py`, a mutation
+sweep, coverage, the corpora across interpreters -- run once, on the final
+code, and only the one the change needs: the gate for a hot-path change, a
+`cargo mutants -F <fn>` sweep for new logic. A question about generated code
+is answered from its assembly or one cachegrind count, not a gate run per
+variant. The full suite, coverage and whole-file sweeps are CI's.
+
 Those are the fast ones, and they run in **your** clone. Before pushing, run the
 merge gate's own steps in a clone shaped like the runner's:
 
