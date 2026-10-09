@@ -367,7 +367,10 @@ corpus of its own driving every question below
 - `literals_disjoint` — do these two constants share a value, the one-pair form
   of the question above;
 - `compare` — order two pooled refinement bounds;
-- `no_int_between` — does the open interval between two bounds admit no integer;
+- `no_int_between` — does the interval between two bounds admit no integer.
+  Read both ways: `bounds_unsatisfiable` takes `Some(true)` as an empty integer
+  refinement, and `bounded_integer_verdict` takes `Some(false)` as an integer
+  that is a value of one;
 - `divides` — does one pooled step divide another, which settles an inclusion
   between two `MultipleOf` refinements: every multiple of `m` is a multiple of
   `s` when `s` divides `m`, whatever the size of either. The operator is `%`,
@@ -441,27 +444,25 @@ exists. `tests/test_classes.py` holds the layout rule to the interpreter over
 drawn class orders -- a meet is empty exactly where `type("E", (C, D), {})`
 raises -- and holds the decorator to nothing.
 
-`NoLeafRelations` is the core's default and decides nothing. Where **every** call
-site of a question reads one of the two answers as the conservative one, its
-`None` and that answer are indistinguishable, and a mutation replacing the
-default with it cannot be killed by any test. That is a property of the call
-sites rather than of the default, and it holds for the questions this table
-names -- `.cargo/mutants.toml` excludes exactly their mutants, and
-`tests/test_oracle_ledger.py` holds the table and the exclusions to each other:
+`NoLeafRelations` is the core's default and decides nothing: it declines every
+question, and that is the contract rather than an omission, because an answer
+from it would be a claim about a value the core cannot see.
+`the_default_oracle_declines_every_question` in
+`crates/valgebra-core/src/oracle/tests.rs` asserts the decline of each default,
+so a mutation replacing a default with an answer fails there, and
+`.cargo/mutants.toml` excuses no oracle default from the sweep.
+`tests/test_oracle_ledger.py` holds both halves: every default that declines is
+asserted by that test, and the sweep excuses none.
 
-| question | its one reading | the unkillable default |
-|---|---|---|
-| `no_int_between` | `== Some(true)` | `Some(false)` |
-| `class_admits_kind` | `== Some(false)` | `Some(true)` |
-| `direct_instance_of_kind`, `kind_derives_from` | `== Some(false)` | `Some(true)` |
-
-The other direction of each is killable and is swept: it turns a declined
-question into a claim, which is the unsound direction. `leaf_subtype` is **not**
-on this table, and the reason is its call sites: one of the three reads
-`== Some(false)` as a refutation, so a default of `Some(false)` refutes a pair
-the oracle declined, and the sweep kills it in about a minute.
-`.cargo/mutants.toml` carries the same argument beside each excluded row, and
-`tests/test_oracle_ledger.py` holds this list to the trait in both directions.
+Which answer a rule reads as a proof belongs to the reader, and one question can
+have a reader for each. `no_int_between` has two, so a default answering it
+either way decides `int` under bounds the core cannot read: `Some(false)` names
+a value under `Ge(inf)`, which holds none, and `Some(true)` empties `Ge(0)` with
+`Le(10)`, which holds eleven integers.
+`the_core_alone_decides_no_order_bound_over_the_integers` in
+`crates/valgebra-core/src/decision/tests.rs` holds that decision to unknown.
+`tests/test_oracle_ledger.py` also holds the list above to the trait in both
+directions.
 
 ## When a class is the union of the values it lists
 

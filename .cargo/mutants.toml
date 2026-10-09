@@ -132,32 +132,12 @@ exclude_re = [
     # the machine: the mutant reads as caught on one runner and as surviving on
     # another, which is a target no baseline can hold steady.
     "replace && with \\|\\| in member",
-    # An oracle default is unkillable only where *every* call site collapses
-    # cannot-decide into the answer the mutant returns, and that is a claim
-    # about the call sites rather than about the default: a question that grows
-    # a site reading the other answer has a killable default, and belongs in the
-    # sweep. `leaf_subtype` and `literals_disjoint` are both that case.
-    #
-    # `no_int_between` has one site, `== Some(true)`, so cannot-decide and
-    # decided-against are one conservative verdict there and no test can tell
-    # them apart. Its `Some(true)` mutant IS killable and stays in the sweep: it
-    # turns a declined question into a claim, which is the unsound direction.
-    #
-    # `class_admits_kind` is the same argument with the polarity reversed. Its
-    # one call site reads `== Some(false)`, because a class that cannot hold a
-    # kind is the answer that refutes, so cannot-decide and *admits* collapse
-    # there and `Some(true)` is the unkillable one. `Some(false)` stays in the
-    # sweep, and is the unsound direction: it would refute every pair holding a
-    # class no oracle reads.
-    "replace LeafRelations::no_int_between -> Option<bool> with Some\\(false\\)",
-    "replace LeafRelations::class_admits_kind -> Option<bool> with Some\\(true\\)",
-    # The two questions about a class asked of a *direct* instance read their
-    # `Some(false)` as the refutation, so `Some(true)` collapses into the
-    # decline at their one call site each and is the unkillable one. Their
-    # `Some(false)` stays in the sweep and is the unsound direction: it would
-    # refute every class the oracle cannot read.
-    "replace LeafRelations::direct_instance_of_kind -> Option<bool> with Some\\(true\\)",
-    "replace LeafRelations::kind_derives_from -> Option<bool> with Some\\(true\\)",
+    # No `LeafRelations` default is excused. Each declines every question, and
+    # `the_default_oracle_declines_every_question` fails on a default replaced
+    # by an answer, whichever answer the question's readers take as a proof:
+    # `no_int_between` has a reader for each. `tests/test_oracle_ledger.py`
+    # holds both halves -- every declining default is asserted there, and none
+    # is excused here.
     # The guard that lets a lone clause govern a parsed object's keys by its
     # value alone, read as always FALSE. Every object then takes the general
     # reading, which asks the clause about the key as well -- and for a clause

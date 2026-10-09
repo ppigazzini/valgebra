@@ -4160,6 +4160,40 @@ fn a_bound_over_the_integers_has_a_value_where_the_oracle_names_one() {
     );
 }
 
+/// The core alone neither names an integer under an order bound nor proves
+/// there is none.
+///
+/// `no_int_between` is read both ways: `Some(true)` empties an integer
+/// refinement and `Some(false)` names a value of one. `NoLeafRelations` places
+/// no operand on the integer line, and an operand it cannot read may be
+/// anything: a default of `Some(false)` names a value under `Ge(inf)`, which
+/// holds none, and one of `Some(true)` empties `Ge(0)` with `Le(10)`, which
+/// holds eleven integers. So a bounded `int` stays unknown without an oracle,
+/// on one bound or on two.
+#[test]
+fn the_core_alone_decides_no_order_bound_over_the_integers() {
+    let bounded = |constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: constraints.into(),
+    };
+    let at = OperandIx::new;
+
+    for constraints in [
+        vec![Constraint::Ge(at(0))],
+        vec![Constraint::Gt(at(0))],
+        vec![Constraint::Le(at(0))],
+        vec![Constraint::Lt(at(0))],
+        vec![Constraint::Gt(at(0)), Constraint::Lt(at(1))],
+        vec![Constraint::Ge(at(0)), Constraint::Le(at(1))],
+    ] {
+        assert_eq!(
+            bounded(constraints.clone()).verdict_under(&NoLeafRelations),
+            Verdict::Unknown,
+            "{constraints:?} is decided without an oracle"
+        );
+    }
+}
+
 /// A field no clause of the supertype can admit refutes the map.
 ///
 /// A field the subtype declares and the supertype does not is read by the

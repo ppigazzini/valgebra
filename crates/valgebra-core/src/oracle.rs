@@ -67,10 +67,11 @@ pub trait LeafRelations: Constants {
 
     /// Whether no integer lies between the pool values at `lo` and `hi`, under the
     /// strictness of each bound (`lo_strict` excludes `lo`, `hi_strict` excludes
-    /// `hi`). The core asks this only for an integer-discrete refinement base, so a
-    /// `Some(true)` proves the interval admits no integer and the refinement is
-    /// empty. `None` leaves the discreteness rule conservative — the default, so a
-    /// core with no value oracle never decides on integer adjacency.
+    /// `hi`). The core asks this only for an integer-discrete refinement base, and
+    /// reads both answers: `Some(true)` proves the interval admits no integer and
+    /// the refinement is empty, and `Some(false)` names an integer in it, which is
+    /// a value of the refinement. `None` decides neither — the default, so a core
+    /// with no value oracle never decides on integer adjacency.
     fn no_int_between(
         &self,
         _lo: OperandIx,
