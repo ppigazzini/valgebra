@@ -46,6 +46,100 @@ from valgebra import (
 # A bound validator method; `...` admits is_valid/validate/is_valid_json alike.
 Check = Callable[..., object]
 
+#: Every shape the comparison gate times and the instruction gate counts, and
+#: the functions below whose calls take the same reading in the profiled build:
+#: the entry point the shape calls, a schema of its form, a value of its kind.
+#: The comparison gate's shapes are named as `scripts/perf_compare.json` names
+#: them, the instruction gate's as `MODES` in `scripts/perf_gate.py` does.
+#: `tests/test_pgo_training.py` holds the two tables to both gates and to the
+#: functions `main` runs.
+TRAINED: dict[str, tuple[str, ...]] = {
+    "scalar": ("_scalars",),
+    "large_array": ("_sequences",),
+    "wide_record": ("_records",),
+    "deep_nesting": ("_containers",),
+    "build": ("_records",),
+    "error_report": ("_records",),
+    "decision": ("_relations",),
+    "decision-refute": ("_relations",),
+    "decision-repeat": ("_relations",),
+    "decision-matrix": ("_relations",),
+    "binding": ("_sequences",),
+    "binding-boundary": ("_scalars",),
+    "binding-record": ("_records",),
+    "binding-build": ("_records",),
+    "binding-explain": ("_records",),
+    "binding-explain-accept": ("_records",),
+    "binding-explain-list": ("_sequences",),
+    "binding-open": ("_containers",),
+    "binding-annotated": ("_containers", "_lists_with_readers"),
+    "binding-object": ("_lists_with_readers", "_relations"),
+    "binding-relation": ("_relations",),
+    "binding-keys": ("_documents",),
+    "binding-pattern": ("_lists_with_readers",),
+    "binding-deep": ("_containers",),
+    "binding-refined": ("_lists_with_readers",),
+    "binding-mapping": ("_mappings",),
+    "binding-nullable": ("_lists_with_readers",),
+}
+
+#: The JSON shapes' common reason: training any of them re-weights the profile
+#: every timed shape is laid out by.
+_JSON_UNTRAINED = (
+    "A parsed JSON array of records is read element by element through the "
+    "general loop of `json_array_matches` in "
+    "`crates/valgebra-py/src/check/walk/sequence.rs`, and the calls here read "
+    "JSON records and JSON arrays of one scalar kind, which a loop of their own "
+    "takes. The wheel lays the general loop out by the inliner's guess, as the "
+    "list scan of a nested list was before it was trained; training it "
+    "re-weights the profile every timed shape is laid out by, so it is read on "
+    "the comparison gate before and after rather than added here."
+)
+
+#: The shapes no call here takes the reading of, each with what it reads. The
+#: shipped wheel lays each one's path out without counts.
+UNTRAINED: dict[str, str] = {
+    "json_document": _JSON_UNTRAINED,
+    "binding-json": _JSON_UNTRAINED,
+    "binding-json-reject": _JSON_UNTRAINED,
+    "binding-json-union": (
+        "A union of two record kinds over parsed JSON objects, each element "
+        "asked of the second branch after failing the first: no call here "
+        "validates a JSON document against a union. " + _JSON_UNTRAINED
+    ),
+    "binding-json-open": (
+        "JSON records read through a key-type clause: no call here validates a "
+        "JSON document against a record with a catch-all. " + _JSON_UNTRAINED
+    ),
+    "binding-json-deep": (
+        "A recursive schema over a parsed document: no call here validates JSON "
+        "against a reference. " + _JSON_UNTRAINED
+    ),
+    "binding-recursive": (
+        "A value walked against a recursive schema, entering the reference and "
+        "its trail per level: `_relations` builds a recursive schema and relates "
+        "it, and no call here walks a value against one."
+    ),
+    "binding-set": (
+        "A `set[str]` read through its own iterator: no call here validates a set."
+    ),
+    "binding-subclass": (
+        "A named tuple read against `tuple[int, ...]`, through the length "
+        "accessor a subclass inherits: the calls here read named tuples against "
+        "their own class and plain tuples against a tuple schema."
+    ),
+    "binding-protocol": (
+        "Compiling a protocol, whose members `typing` lists and the frontend "
+        "classifies name by name: no call here builds a validator from a "
+        "protocol."
+    ),
+    "core": (
+        "The simplifier, the composition remap and the record transform, run "
+        "directly in Rust: the calls here reach the simplifier through `union`, "
+        "`intersection` and `complement`, and no call opens or closes a record."
+    ),
+}
+
 
 class _Point(NamedTuple):
     x: int
@@ -124,13 +218,7 @@ def _lists_with_readers() -> None:
     _run(worded.is_valid, [["ab", "cd"] * 12, ["ab", "1"]], 2000)
 
 
-def main(argv: list[str]) -> None:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
-    parser.parse_args(argv)
+def _records() -> None:
     # Closed records of a few widths, with optional keys, valid and invalid.
     for width in (4, 16, 50):
         spec: dict[str, object] = {f"f{i}": int for i in range(width)}
@@ -146,6 +234,8 @@ def main(argv: list[str]) -> None:
         text = "{" + ", ".join(f'"f{i}": {i}' for i in range(width)) + "}"
         _run(rec.is_valid_json, [text, text.replace(": 0", ': "x"', 1)], 1500)
 
+
+def _sequences() -> None:
     # Homogeneous and heterogeneous sequences of varied length, decided and
     # explained: `validate` reads a list of one kind through a loop of its own,
     # the elements before the first that fails through its test, and the rest
@@ -162,6 +252,8 @@ def main(argv: list[str]) -> None:
     pair = Validator(tuple[int, str])
     _run(pair.is_valid, [(1, "a"), (1, 2), ("a", "b")], 5000)
 
+
+def _containers() -> None:
     # Lists whose elements are containers, which the homogeneous shapes above
     # never reach: those take a loop of their own, and every other list is read
     # through the general one. A list of records, and a list nested as deep as
@@ -179,8 +271,9 @@ def main(argv: list[str]) -> None:
         deep_schema = list[deep_schema]  # type: ignore[valid-type]
         deep_value = [deep_value]
     _run(Validator(deep_schema).is_valid, [deep_value, [[1]]], 4000)
-    _lists_with_readers()
 
+
+def _documents() -> None:
     # Nested documents (records of lists of records), valid and invalid.
     nested = Validator({"user": {"name": str, "age?": int}, "tags": list[str]})
     _run(
@@ -194,6 +287,8 @@ def main(argv: list[str]) -> None:
         4000,
     )
 
+
+def _unions() -> None:
     # Literal unions (string enum and integer codes) and a structural union.
     status = Validator(Literal["pending", "active", "paused", "finished", "failed"])
     _run(status.is_valid, ["active", "failed", "unknown", 1], 8000)
@@ -202,11 +297,14 @@ def main(argv: list[str]) -> None:
     scalar_or_none = Validator(int | str | None)
     _run(scalar_or_none.is_valid, [1, "a", None, 1.5], 8000)
 
-    # Mappings.
+
+def _mappings() -> None:
     mapping = Validator({str: int})
     big_map = {f"k{i}": i for i in range(50)}
     _run(mapping.is_valid, [big_map, {**big_map, "bad": "x"}], 1500)
 
+
+def _scalars() -> None:
     # Scalars across the type lattice.
     scalars: list[tuple[object, object, object]] = [
         (int, 7, "x"),
@@ -217,6 +315,22 @@ def main(argv: list[str]) -> None:
     for schema, ok, bad in scalars:
         _run(Validator(schema).is_valid, [ok, bad], 12000)
 
+
+def main(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.parse_args(argv)
+    _records()
+    _sequences()
+    _containers()
+    _lists_with_readers()
+    _documents()
+    _unions()
+    _mappings()
+    _scalars()
     _relations()
 
 
