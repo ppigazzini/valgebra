@@ -148,7 +148,15 @@ xfail_strict = true
 # carry the `repository` marker, so `-m "not repository"` is the product suite
 # and `-m repository` is the project's own audit. `tests/test_suite_partition.py`
 # holds the two apart in both directions.
-markers = ["repository: reads the repository rather than exercising the library"]
+#
+# A few checks of the audit read the interpreter running them as well as the
+# tree: a table dated by release, a fingerprint naming the build, a page parsed
+# with the running release's grammar. They carry `interpreter` as well, so CI
+# reads them on every leg and the rest of the audit on one.
+markers = [
+    "repository: reads the repository rather than exercising the library",
+    "interpreter: a repository check whose answer is the running interpreter's",
+]
 
 [tool.ruff]
 target-version = "py310"

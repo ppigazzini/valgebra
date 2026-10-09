@@ -437,6 +437,7 @@ def test_every_name_read_is_one_the_table_dates() -> None:
     )
 
 
+@pytest.mark.interpreter
 def test_the_table_agrees_with_this_interpreter() -> None:
     """Hold every row to the interpreter running it, in both directions.
 
@@ -471,6 +472,7 @@ def test_the_table_agrees_with_this_interpreter() -> None:
     )
 
 
+@pytest.mark.interpreter
 def test_every_stdlib_module_imported_is_one_the_table_dates() -> None:
     """A table derived from the tree's imports goes stale when an import is added.
 
@@ -489,6 +491,7 @@ def test_every_stdlib_module_imported_is_one_the_table_dates() -> None:
     )
 
 
+@pytest.mark.interpreter
 def test_the_stdlib_rows_agree_with_this_interpreter() -> None:
     """The module half of the row above, held the same way and by the same matrix.
 

@@ -49,6 +49,15 @@ pytestmark = pytest.mark.repository
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = load(ROOT / "pyproject.toml")
 WORKFLOW_TEXT = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+#: The workflow's own variables. A step reading the floor as `${{ env.FLOOR }}`
+#: states the floor as much as one spelling it out, so the text is read with
+#: each such expression filled in.
+WORKFLOW_ENV = yaml.safe_load(WORKFLOW_TEXT).get("env") or {}
+WORKFLOW_READ = re.sub(
+    r"\$\{\{\s*env\.(\w+)\s*\}\}",
+    lambda found: str(WORKFLOW_ENV[found.group(1)]),
+    WORKFLOW_TEXT,
+)
 FLOOR_NAMES = json.loads(
     (ROOT / "tests" / "floor_names.json").read_text(encoding="utf-8")
 )
@@ -164,11 +173,12 @@ FLOORS = {
         MANIFEST["project"]["requires-python"].removeprefix(">=")
     ),
     "ruff's target-version": _minor(MANIFEST["tool"]["ruff"]["target-version"]),
+    "the FLOOR variable in ci.yml": _minor(str(WORKFLOW_ENV["FLOOR"])),
     "the ty floor leg in ci.yml": _one(
-        r"ty check python/ --python-version (3\.\d+)$", WORKFLOW_TEXT, "ci.yml"
+        r"ty check python/ --python-version (3\.\d+)$", WORKFLOW_READ, "ci.yml"
     ),
     "the typed consumer's first mypy target in ci.yml": _one(
-        r"for target in (3\.\d+) 3\.\d+; do$", WORKFLOW_TEXT, "ci.yml"
+        r"for target in (3\.\d+) 3\.\d+; do$", WORKFLOW_READ, "ci.yml"
     ),
     "the floor of tests/floor_names.json": _minor(FLOOR_NAMES["floor"]),
     "the python job's oldest leg": min(_matrix()),
@@ -180,7 +190,7 @@ NEWEST = {
         MANIFEST["tool"]["ty"]["environment"]["python-version"]
     ),
     "the typed consumer's last mypy target in ci.yml": _one(
-        r"for target in 3\.\d+ (3\.\d+); do$", WORKFLOW_TEXT, "ci.yml"
+        r"for target in 3\.\d+ (3\.\d+); do$", WORKFLOW_READ, "ci.yml"
     ),
     "the reach of tests/floor_names.json": _minor(FLOOR_NAMES["known_through"]),
 }

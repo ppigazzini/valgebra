@@ -106,8 +106,8 @@ def _validators_in_typing_forms(tree: ast.Module) -> list[str]:
     return found
 
 
-def _is_marked(tree: ast.Module) -> bool:
-    """Answer whether the module sets `pytestmark` to the repository marker."""
+def _is_marked(tree: ast.Module, marker: str = "repository") -> bool:
+    """Answer whether the module's `pytestmark` carries the marker."""
     for node in tree.body:
         if not isinstance(node, ast.Assign):
             continue
@@ -116,7 +116,7 @@ def _is_marked(tree: ast.Module) -> bool:
             for target in node.targets
         ):
             continue
-        return "repository" in ast.dump(node.value)
+        return marker in ast.dump(node.value)
     return False
 
 
@@ -167,6 +167,83 @@ def test_the_marker_is_registered() -> None:
     config = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "--strict-markers" in config
     assert "repository: " in config
+    assert "interpreter: " in config
+
+
+#: What a test reads off the interpreter running it, as `sys.<name>`.
+_RUNNING = frozenset(
+    {"version_info", "implementation", "stdlib_module_names", "_is_gil_enabled"}
+)
+
+
+def _carries(node: ast.FunctionDef, marker: str) -> bool:
+    """Answer whether a test is decorated with `pytest.mark.<marker>`."""
+    return any(
+        ast.unparse(decorator).split("(")[0] == f"pytest.mark.{marker}"
+        for decorator in node.decorator_list
+    )
+
+
+def _reads_the_interpreter(node: ast.FunctionDef) -> bool:
+    """Answer whether a test, or a decorator on it, reads what is running it."""
+    return any(
+        isinstance(inner, ast.Attribute)
+        and isinstance(inner.value, ast.Name)
+        and inner.value.id == "sys"
+        and inner.attr in _RUNNING
+        for inner in ast.walk(node)
+    )
+
+
+def _unmarked_readers(tree: ast.Module) -> list[str]:
+    """Name the repository checks that read the interpreter and do not say so."""
+    audit, every_leg = _is_marked(tree), _is_marked(tree, "interpreter")
+    return [
+        node.name
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name.startswith("test_")
+        and (audit or _carries(node, "repository"))
+        and not (every_leg or _carries(node, "interpreter"))
+        and _reads_the_interpreter(node)
+    ]
+
+
+def test_a_check_reading_the_interpreter_runs_on_every_leg() -> None:
+    """The audit is read on one leg, and a check about the release on all of them.
+
+    CI runs the repository checks on the floor alone, since the tree they read
+    answers the same everywhere, and the ones marked `interpreter` on every
+    leg. A table dated by release and held to the running one is a different
+    check on each leg; read on the floor alone, it is the floor's check only,
+    and one skipped below 3.12 is read on no leg at all.
+    """
+    offenders = {
+        path.name: found
+        for path in sorted(TESTS.glob("test_*.py"))
+        if (found := _unmarked_readers(ast.parse(path.read_text(encoding="utf-8"))))
+    }
+    assert not offenders, (
+        "repository checks that read the running interpreter and lack the "
+        f"`interpreter` marker: {offenders}. Mark them, so every leg reads them."
+    )
+
+
+def test_a_reading_of_the_interpreter_is_read_from_the_syntax() -> None:
+    # The readings the check turns on: an attribute of `sys` in the body or in a
+    # decorator is one, the same words in a string are not, and a product test
+    # runs on every leg already.
+    audit = "pytestmark = pytest.mark.repository\n"
+    gated = "@pytest.mark.skipif(sys.version_info < (3, 12), reason='')\n"
+    assert _unmarked_readers(ast.parse(f"{audit}{gated}def test_x(): pass\n")) == [
+        "test_x"
+    ]
+    quoted = f"{audit}def test_x(): 'sys.version_info'\n"
+    assert _unmarked_readers(ast.parse(quoted)) == []
+    said = f"{audit}@pytest.mark.interpreter\ndef test_x(): sys.version_info\n"
+    assert _unmarked_readers(ast.parse(said)) == []
+    product = "def test_x(): sys.stdlib_module_names\n"
+    assert _unmarked_readers(ast.parse(product)) == []
 
 
 def test_an_import_is_read_from_the_syntax_and_not_the_text() -> None:

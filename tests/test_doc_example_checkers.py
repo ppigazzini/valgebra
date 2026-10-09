@@ -72,11 +72,16 @@ def reading() -> Any:
     return read
 
 
+# The two rows that read what the checkers report. mypy parses with the
+# running interpreter, and only 3.12 and later parse every block: on the floor
+# its reading is set aside, so these two read on every leg.
+@pytest.mark.interpreter
 def test_every_diagnostic_is_expected_and_every_row_reported(reading: Any) -> None:
     wrong = checker().problems(reading.found, reading.checkers)
     assert not wrong, "\n".join(wrong)
 
 
+@pytest.mark.interpreter
 @pytest.mark.parametrize("name", ["ty", "mypy", "pyright", "ruff"])
 def test_each_checker_reported_something(reading: Any, name: str) -> None:
     """A parser that read nothing would pass the ledger vacuously."""

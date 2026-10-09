@@ -91,8 +91,9 @@ made, `pytest` runs the files that test what it touches -- the suite of the
 changed module, the ledgers that read a changed file, the doc-example checkers
 for a changed example -- and `cargo test` the corpus or the named tests that
 hold the changed code. The whole suite is too slow to run on every change, and
-the owner's push runs it on GitHub CI, on every interpreter the matrix names; a
-red lane there is read and fixed in the commit that caused it.
+the owner's push runs it on GitHub CI: the product suite on every interpreter
+the matrix names, the repository audit on the floor's; a red lane there is read
+and fixed in the commit that caused it.
 
 **An iteration takes minutes, not hours.** While the code is still changing,
 run only fast tests: `cargo test -p <crate> --lib -- <filter>` on one
