@@ -77,6 +77,10 @@ _MEET_MEMBER_FIXPOINT = recursive(
 # sits at the first link rather than past an unfolding.
 _CHAIN = recursive(lambda t: union(None, {"next": t}))
 _CHAIN_WITH_A_FIELD = recursive(lambda t: union(None, {"next": t, "v?": int}))
+# The chain written with the reference inside the key's union, as a record
+# that names itself is spelled, and a chain of one key the meets below ask of.
+_LINK = recursive(lambda t: {"next": union(t, None)})
+_NESTED = recursive(lambda t: union(None, {"a": t}))
 
 
 class _Colour(enum.Enum):
@@ -753,6 +757,40 @@ _DECIDED = [
         id="mu:record-with-a-fixpoint-field!<=its-siblings",
     ),
     pytest.param("refutes", _CHAIN, int, id="mu:chain!<=int"),
+    # A meet with a recursive reference, both ways and in both spellings of a
+    # chain: empty where the record asks of `next` what no chain holds, and
+    # inhabited where it asks what one does. The reference is unfolded into
+    # the meet, and the meet of its key unfolds it again, under a goal of its
+    # own rather than the reference's.
+    pytest.param(
+        "empty", intersection(_CHAIN, {"next": int}), None, id="mu:chain&{next:int}"
+    ),
+    pytest.param(
+        "refutes",
+        intersection(_CHAIN, {"next": {"next": None}}),
+        nothing,
+        id="mu:chain&{next:{next:None}}!<=nothing",
+    ),
+    pytest.param(
+        "empty",
+        intersection(_LINK, {"next": {"next": int}}),
+        None,
+        id="mu:link&{next:{next:int}}",
+    ),
+    pytest.param(
+        "refutes",
+        intersection(_LINK, {"next": {"next": None}}),
+        nothing,
+        id="mu:link&{next:{next:None}}!<=nothing",
+    ),
+    # The meet the reference's own trail would read empty: `{"a": None}` is in
+    # it, and the key asks `t & (None | {"a": None})`, a goal of its own.
+    pytest.param(
+        "refutes",
+        intersection(_NESTED, {"a": union(None, {"a": None})}),
+        nothing,
+        id="mu:t&{a:None|{a:None}}!<=nothing",
+    ),
     # A key the subject's clause holds a whole kind of, which the supertype
     # reads through one clause or none: ICFP Lemma 4.7, a key kind at a time.
     # The rules refute each; against a recursive supertype the set
@@ -1227,25 +1265,6 @@ _LEDGERED: list[object] = [
         union(set[Literal[1]], set[Validator(1.0)]),  # ty: ignore[invalid-type-form]
         id="set:set[1|1.0]<=set[1]|set[1.0]",
         marks=_missed("the members it takes are one number in two kinds"),
-    ),
-    # A meet with a recursive reference, both ways: empty where the record
-    # asks of `next` what no chain holds, and inhabited where it asks what one
-    # does. The rules read a meet's members one at a time and never unfold a
-    # reference into it, and the set representation cuts the reference to the
-    # top after one unfolding, which meets any record.
-    pytest.param(
-        "empty",
-        intersection(_CHAIN, {"next": int}),
-        None,
-        id="empty:chain&{next:int}",
-        marks=_missed("a meet does not unfold a reference among its members"),
-    ),
-    pytest.param(
-        "refutes",
-        intersection(_CHAIN, {"next": {"next": None}}),
-        nothing,
-        id="refute:chain&{next:{next:None}}<=nothing",
-        marks=_missed("a meet does not unfold a reference among its members"),
     ),
 ]
 

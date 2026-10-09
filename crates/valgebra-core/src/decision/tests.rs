@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use super::records::keyed_map_meet_empty;
+use super::records::keyed_map_meet_verdict;
 use super::*;
 use crate::descr::classes::{Class, Reach};
 use crate::descr::lower::Operand;
@@ -908,13 +908,14 @@ fn open(fields: Vec<Field>) -> Schema {
 }
 
 fn meet_is_empty(members: &[Schema]) -> bool {
-    keyed_map_meet_empty(
+    keyed_map_meet_verdict(
         members,
         &NoLeafRelations,
         &[],
         &mut Vec::new(),
         &Budget::new(DECISION_BUDGET),
     )
+    .is_empty()
 }
 
 /// The two rules ICFP formulae (11) and (12) give for a meet of record atoms,
@@ -1049,6 +1050,225 @@ fn a_recursive_meet_of_maps_is_decided_within_its_unfoldings() {
     let verdict = this.verdict_rec(&NoLeafRelations, &defs, &mut Vec::new(), &budget);
     assert_ne!(verdict, Verdict::Inhabited);
     let spent = DECISION_BUDGET - budget.left();
+    assert!(spent < 100, "the meet spent {spent} steps");
+}
+
+/// The rules' verdict on `schema` under `defs`, and the steps it spent.
+fn rules_verdict(schema: &Schema, defs: &[Schema]) -> (Verdict, u32) {
+    let budget = Budget::new(DECISION_BUDGET);
+    let verdict = schema.verdict_rec(&NoLeafRelations, defs, &mut Vec::new(), &budget);
+    (verdict, DECISION_BUDGET - budget.left())
+}
+
+// THEORY: two-fixpoints-one-procedure
+/// A meet with a reference is decided by unfolding the reference into it.
+///
+/// `chain = None | {"next": chain}`. Its meet with `{"next": int}` is empty: a
+/// link's `next` is `None` or a link, and neither is an `int`. Its meet with
+/// `{"next": {"next": None}}` holds that record. Each is the definition's
+/// branches met with the record, and a link met with the record asks the meet
+/// of the chain with the record's key, which is a meet with a reference again.
+/// The rules decide both, so neither waits for the descriptor, which cuts the
+/// reference to the top and reads each meet as the record alone.
+#[test]
+fn a_meet_with_a_reference_is_its_definition_met_with_the_rest() {
+    let chain = Schema::Ref(DefIx::new(0));
+    let defs = vec![Schema::union([
+        Schema::NoneType,
+        closed(vec![field("next", chain.clone(), true)]),
+    ])];
+    let meet = |other: Schema| Schema::Intersection(vec![chain.clone(), other].into());
+    let next = |schema: Schema| closed(vec![field("next", schema, true)]);
+    assert_eq!(
+        rules_verdict(&meet(next(Schema::Int)), &defs).0,
+        Verdict::Empty
+    );
+    assert_eq!(
+        rules_verdict(&meet(next(next(Schema::NoneType))), &defs).0,
+        Verdict::Inhabited
+    );
+    // A record that asks what the chain holds three links down, and one that
+    // asks a chain longer than any it holds of a kind it does not.
+    let deep = next(next(next(Schema::NoneType)));
+    assert_eq!(rules_verdict(&meet(deep), &defs).0, Verdict::Inhabited);
+    let deep_int = next(next(next(Schema::Int)));
+    assert_eq!(rules_verdict(&meet(deep_int), &defs).0, Verdict::Empty);
+    // An optional key the record adds is left out of the dict that witnesses it.
+    let wider = closed(vec![
+        field("next", Schema::NoneType, true),
+        field("v", Schema::Int, false),
+    ]);
+    assert_eq!(rules_verdict(&meet(wider), &defs).0, Verdict::Inhabited);
+}
+
+/// The reference a meet unfolds is not the reference resolved alone.
+///
+/// `t = None | {"a": t}` and `X = {"a": None | {"a": None}}`: `{"a": None}` is
+/// in both. Unfolding `t` into the meet asks `t ∧ (None | {"a": None})` of the
+/// key, and that `t` is read as a meet of its own. Read as the reference already
+/// being resolved -- the cycle a lone reference reads back as empty -- the key
+/// and the meet would read empty.
+#[test]
+fn a_meet_unfolds_a_reference_under_its_own_goal() {
+    let t = Schema::Ref(DefIx::new(0));
+    let defs = vec![Schema::union([
+        Schema::NoneType,
+        closed(vec![field("a", t.clone(), true)]),
+    ])];
+    let x = closed(vec![field(
+        "a",
+        Schema::union([
+            Schema::NoneType,
+            closed(vec![field("a", Schema::NoneType, true)]),
+        ]),
+        true,
+    )]);
+    let meet = Schema::Intersection(vec![t.clone(), x].into());
+    assert_eq!(rules_verdict(&meet, &defs).0, Verdict::Inhabited);
+    // Asked from inside the reference's own resolution, the answer is the same.
+    let defs = vec![
+        Schema::union([Schema::NoneType, closed(vec![field("a", t.clone(), true)])]),
+        meet,
+    ];
+    assert_eq!(
+        rules_verdict(&Schema::Ref(DefIx::new(1)), &defs).0,
+        Verdict::Inhabited
+    );
+}
+
+/// A meet the rules unfold reads a goal it holds open as empty, and that is what
+/// decides two chains with different ends.
+///
+/// `t = None | {"a": t}` and `u = int | {"a": u}`: a value of both ends in a
+/// value of both, and `None` and `int` share none, so they meet in nothing. The
+/// meet unfolds `t`, and the link branch met with `u` asks the meet of the two
+/// keys, `t ∧ u`, which is the goal being decided. Read as empty there, the
+/// least fixpoint over finite values, the meet is empty. Not read so, each
+/// round asks it again until the depth bound declines.
+#[test]
+fn two_chains_with_different_ends_meet_in_nothing() {
+    let (t, u) = (Schema::Ref(DefIx::new(0)), Schema::Ref(DefIx::new(1)));
+    let defs = vec![
+        Schema::union([Schema::NoneType, closed(vec![field("a", t.clone(), true)])]),
+        Schema::union([Schema::Int, closed(vec![field("a", u.clone(), true)])]),
+    ];
+    let meet = Schema::Intersection(vec![t, u].into());
+    assert_eq!(rules_verdict(&meet, &defs).0, Verdict::Empty);
+}
+
+/// A meet of closed maps is inhabited where the keys they require meet in a
+/// value, whatever its members read as alone.
+///
+/// The first map requires `a` of a union whose first branch is a bound the core
+/// cannot read, and whose second, a reference to `str`, holds a string. Read
+/// alone, the map stops at the first branch and is unknown. Its key met with the
+/// second map's `anything` distributes over the union and finds the string. The
+/// dict holding `a` with that string is in both maps: each declares `a`, and
+/// neither requires another key.
+#[test]
+fn a_meet_of_closed_maps_is_inhabited_where_its_keys_meet() {
+    let defs = vec![Schema::Str];
+    let opaque = Schema::Refine {
+        base: Arc::new(Schema::ANYTHING),
+        constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
+    };
+    let first = closed(vec![field(
+        "a",
+        Schema::Union(vec![opaque, Schema::Ref(DefIx::new(0))].into()),
+        true,
+    )]);
+    let second = closed(vec![field("a", Schema::ANYTHING, true)]);
+    assert_ne!(
+        rules_verdict(&first, &defs).0,
+        Verdict::Inhabited,
+        "the row stands on a member the rules leave unknown alone"
+    );
+    let meet = Schema::Intersection(vec![first, second].into());
+    assert_eq!(rules_verdict(&meet, &defs).0, Verdict::Inhabited);
+}
+
+/// A meet the keys of its closed maps would name a value for is not named one
+/// where a member is no closed map.
+///
+/// `{"a": int}` met with `dict[str, str]` holds nothing -- `a` would be an `int`
+/// and a `str` -- and the map's clause is what says so, which the rule cannot
+/// read off a name. Met with a class, the meet holds what the class's instances
+/// are, which the core cannot see. Either way the dict the keys name need not be
+/// in the meet, and the rule names none.
+#[test]
+fn an_open_map_or_a_class_beside_closed_maps_names_no_value() {
+    let record = closed(vec![field("a", Schema::Int, true)]);
+    let with_a_clause = Schema::Intersection(
+        vec![
+            record.clone(),
+            Schema::mapping(MapClause {
+                key: Schema::Str,
+                value: Schema::Str,
+            }),
+        ]
+        .into(),
+    );
+    assert_ne!(rules_verdict(&with_a_clause, &[]).0, Verdict::Inhabited);
+    let wider = closed(vec![
+        field("a", Schema::Int, true),
+        field("b", Schema::Str, false),
+    ]);
+    let with_a_class =
+        Schema::Intersection(vec![record, wider, Schema::Instance(ClassIx::new(0))].into());
+    assert_ne!(rules_verdict(&with_a_class, &[]).0, Verdict::Inhabited);
+}
+
+/// A chain spelled as a recursive record, its reference inside the key's
+/// union, decides as the chain spelled around the union does.
+///
+/// `Node = {"next": Node | None}`. The meet with `{"next": int}` asks `(Node |
+/// None) ∧ int` of the key, which names no reference among its members; the
+/// union holds one, and is distributed as the definition was.
+#[test]
+fn a_union_holding_a_reference_is_distributed_into_the_meet() {
+    let node = Schema::Ref(DefIx::new(0));
+    let defs = vec![closed(vec![field(
+        "next",
+        Schema::union([node.clone(), Schema::NoneType]),
+        true,
+    )])];
+    let meet = |other: Schema| Schema::Intersection(vec![node.clone(), other].into());
+    let next = |schema: Schema| closed(vec![field("next", schema, true)]);
+    assert_eq!(
+        rules_verdict(&meet(next(Schema::Int)), &defs).0,
+        Verdict::Empty
+    );
+    assert_eq!(
+        rules_verdict(&meet(next(next(Schema::NoneType))), &defs).0,
+        Verdict::Inhabited
+    );
+    // A union that holds no reference is left to the rules as it was.
+    let unfolded = Schema::union([
+        closed(vec![field("next", Schema::Int, true)]),
+        Schema::NoneType,
+    ]);
+    let plain = Schema::Intersection(vec![unfolded, next(Schema::Int)].into());
+    assert_eq!(rules_verdict(&plain, &[]).0, Verdict::Unknown);
+}
+
+/// A meet reached again while it is being decided reads as empty, and the
+/// decision ends.
+///
+/// `s = {"a": s}` and `u = {"a": u}` hold no finite value, and neither does
+/// their meet: unfolding `s` meets `{"a": s}` with `u`, unfolding `u` meets two
+/// records whose key asks `s ∧ u` again. The goal comes back, and a value of it
+/// would need a smaller value of itself.
+#[test]
+fn a_meet_met_again_while_it_is_open_reads_empty() {
+    let s = Schema::Ref(DefIx::new(0));
+    let u = Schema::Ref(DefIx::new(1));
+    let defs = vec![
+        closed(vec![field("a", s.clone(), true)]),
+        closed(vec![field("a", u.clone(), true)]),
+    ];
+    let meet = Schema::Intersection(vec![s, u].into());
+    let (verdict, spent) = rules_verdict(&meet, &defs);
+    assert_eq!(verdict, Verdict::Empty);
     assert!(spent < 100, "the meet spent {spent} steps");
 }
 

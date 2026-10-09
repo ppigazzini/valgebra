@@ -19,11 +19,14 @@ use rustc_hash::FxHashMap;
 use crate::descr::maps::KEY_KINDS;
 use crate::ir::{DefIx, Field, MapClause, Schema};
 use crate::kind::Kind;
-use crate::verdict::Relation;
+use crate::verdict::{Relation, Verdict};
 
 use super::{Budget, LeafRelations, SubtypeCx};
 
-/// Whether the keyed maps meeting in an intersection admit no dict between them.
+/// What the keyed maps meeting in an intersection admit between them: `Empty`
+/// where no dict is in every map, `Inhabited` where every member is a closed
+/// map and the dict the rules below name is in all of them, and `Unknown`
+/// otherwise -- every member a map or not.
 ///
 /// ICFP formula (12) meets two record atoms pointwise -- field by field, clause
 /// by clause -- and formula (11) makes the result empty when a field's type is.
@@ -39,6 +42,18 @@ use super::{Budget, LeafRelations, SubtypeCx};
 /// least the empty record expression", and two optional fields are the same case
 /// -- the empty dict satisfies both.
 ///
+/// **The converse is read off the same keys, where every member is a closed
+/// map.** The dict holding exactly the required keys, each with a value in the
+/// meet of the types its maps give it, is in every map: each map declares each
+/// of those keys (a closed map lacking one empties the meet above), requires
+/// none besides, and admits the value it is given. So the meet is inhabited
+/// where every required key's types meet in a value, and nothing else of a
+/// member needs reading: every closed map declares every required key, or the
+/// meet is empty above, so no key is one map's alone. A map with clauses gives
+/// a key it does not declare a value
+/// the clause decides, which the core cannot read off a name, so the converse
+/// declines on one.
+///
 /// A map with clauses is not read as closed here. Deciding whether a clause
 /// admits a given name means comparing a bare `String` against a key schema,
 /// which the core cannot do, so any clause at all leaves the map open and the
@@ -49,13 +64,13 @@ use super::{Budget, LeafRelations, SubtypeCx};
 /// resolved is read as the cycle it is, as the field of a single map reads it.
 /// A fresh list there unfolds the reference again: a recursive meet of two maps
 /// reaches this rule once per unfolding, with nothing to stop it but the stack.
-pub(super) fn keyed_map_meet_empty(
+pub(super) fn keyed_map_meet_verdict(
     members: &[Schema],
     oracle: &dyn LeafRelations,
     defs: &[Schema],
     visiting: &mut Vec<DefIx>,
     budget: &Budget,
-) -> bool {
+) -> Verdict {
     let maps: Vec<(&[Field], bool)> = members
         .iter()
         .filter_map(|member| match member {
@@ -64,7 +79,7 @@ pub(super) fn keyed_map_meet_empty(
         })
         .collect();
     if maps.len() < 2 {
-        return false;
+        return Verdict::Unknown;
     }
     // Every type the maps give a key, and whether any of them requires it.
     let mut keys: FxHashMap<&str, (Vec<&Schema>, bool)> = FxHashMap::default();
@@ -75,18 +90,28 @@ pub(super) fn keyed_map_meet_empty(
             entry.1 |= field.required;
         }
     }
-    keys.iter()
-        .filter(|(_, (_, required))| *required)
-        .any(|(name, (types, _))| {
-            let types_cannot_hold = types.len() > 1 && {
-                let meet = Schema::Intersection(types.iter().copied().cloned().collect());
-                meet.is_empty_rec(oracle, defs, visiting, budget)
-            };
-            types_cannot_hold
-                || maps.iter().any(|(fields, closed)| {
-                    *closed && !fields.iter().any(|field| *field.name == **name)
-                })
-        })
+    let mut required_hold = Verdict::Inhabited;
+    for (name, (types, _)) in keys.iter().filter(|(_, (_, required))| *required) {
+        let held = if types.len() > 1 {
+            let meet = Schema::Intersection(types.iter().copied().cloned().collect());
+            meet.verdict_rec(oracle, defs, visiting, budget)
+        } else {
+            Verdict::Inhabited
+        };
+        if held.is_empty()
+            || maps.iter().any(|(fields, closed)| {
+                *closed && !fields.iter().any(|field| *field.name == **name)
+            })
+        {
+            return Verdict::Empty;
+        }
+        required_hold = Verdict::every([required_hold, held].into_iter());
+    }
+    if maps.len() == members.len() && maps.iter().all(|(_, closed)| *closed) {
+        required_hold
+    } else {
+        Verdict::Unknown
+    }
 }
 
 /// Whether keyed-map `a` (fields `fa`, default clauses `da`) is a subtype of

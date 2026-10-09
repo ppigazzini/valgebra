@@ -14,6 +14,8 @@
 //! here decline, the question is asked once more of the *set* the schema
 //! denotes, under the lowering's bound on what building it may cost.
 
+use std::cell::RefCell;
+
 use crate::descr::classes::Reach;
 use crate::descr::lower::{Constants, an_empty_reading_stands, lower_unfolded};
 use crate::ir::{ClassIx, Constraint, Constraints, DefIx, Field, Polarity, Schema};
@@ -21,7 +23,7 @@ use crate::kind::{Kind, Region, Regions};
 use crate::verdict::Verdict;
 
 use super::constraints::{Density, bounds_unsatisfiable, longest, shortest, tightest_bounds};
-use super::records::keyed_map_meet_empty;
+use super::records::keyed_map_meet_verdict;
 use super::{
     Budget, DECISION_BUDGET, LeafRelations, NoLeafRelations, descending, has_complementary_pair,
     has_disjoint_pair, spend,
@@ -126,6 +128,17 @@ impl Schema {
     #[cfg(test)]
     pub(crate) fn verdict_under(&self, oracle: &dyn LeafRelations) -> Verdict {
         self.verdict_rec(oracle, &[], &mut Vec::new(), &Budget::new(DECISION_BUDGET))
+    }
+
+    /// The rules' emptiness verdict with references resolved through `defs`.
+    #[cfg(test)]
+    pub(crate) fn verdict_under_defs(&self, defs: &[Schema]) -> Verdict {
+        self.verdict_rec(
+            &NoLeafRelations,
+            defs,
+            &mut Vec::new(),
+            &Budget::new(DECISION_BUDGET),
+        )
     }
 
     pub(super) fn is_empty_rec(
@@ -469,12 +482,16 @@ fn intersection_verdict(
             break;
         }
     }
+    let mut maps_hold = Verdict::Unknown;
     let empty = any_empty
         || region.known().is_some_and(Region::is_empty)
         || has_complementary_pair(members, oracle)
         || has_disjoint_pair(members, oracle)
         || intersection_bounds_unsatisfiable(members, oracle)
-        || keyed_map_meet_empty(members, oracle, defs, visiting, budget);
+        || {
+            maps_hold = keyed_map_meet_verdict(members, oracle, defs, visiting, budget);
+            maps_hold.is_empty()
+        };
     let verdict = if empty {
         Verdict::Empty
     } else if let Some((class, fields)) = class_with_attributes(members) {
@@ -486,9 +503,174 @@ fn intersection_verdict(
             members_hold
         }
     } else {
-        region.verdict()
+        match region.verdict() {
+            // A meet of closed maps is inhabited where the keys they require
+            // meet in a value (`keyed_map_meet_verdict`), whatever its members
+            // read as alone: a member's fold stops at the first branch of a
+            // union it cannot settle, where the meet of a key's types is
+            // distributed over that union and reads every branch.
+            Verdict::Unknown => maps_hold,
+            settled => settled,
+        }
+    };
+    let verdict = match verdict {
+        Verdict::Unknown => meet_through_a_reference(members, oracle, defs, visiting, budget)
+            .unwrap_or(Verdict::Unknown),
+        settled => settled,
     };
     (verdict, region)
+}
+
+/// A meet the rules leave undecided, decided by unfolding a reference among
+/// its members into it, or `None` where no member is a reference a definition
+/// resolves.
+///
+/// A meet is a set of values, and a reference denotes its definition, so `t ∧
+/// X` is the definition met with `X` and a definition that is a union is the
+/// union of its branches met with `X`: empty where every branch's meet is,
+/// inhabited where one is. A branch's meet is a meet like any other, so the
+/// rules read it as they read this one -- a branch of another kind than `X`
+/// meets nothing, two records meet key by key, and a key's meet reaches this
+/// again where its types name the reference. A union among a meet's members is
+/// distributed the same way where it holds a reference itself, since the
+/// reference is as often written inside one -- `{"next": Node | None}` -- as
+/// around it, and below an unfolding, where the key of a branch's meet is as
+/// often a union of the definition's own -- `t ∧ (None | {"a": None})` asks
+/// `None ∧ (None | {"a": None})`. Elsewhere a union is left to the rules, so a
+/// query with no reference in a meet pays nothing here.
+///
+/// The meet is the goal, its members sorted and without repeats -- the members
+/// of a meet are a set -- held open while the path below decides it
+/// ([`OpenMeet`]) and read as empty where the path reaches it again. That is the least fixpoint read inductively, as a reference reached
+/// again on `visiting` is: a value is a finite tree, so a value of the meet
+/// that needed a value of the same meet below it needs a smaller one, and a
+/// smallest value needs none. The goal is popped when it is decided and
+/// remembered nowhere, since what it answered rested on the goals open above
+/// it. Its members are drawn from the schema's subterms and the definitions',
+/// so a query has finitely many, and a path holds each at most once.
+///
+/// **The meet is its own goal and never the reference's.** Under `t = None |
+/// {"a": t}` the meet `t ∧ {"a": None | {"a": None}}` asks of its key `t ∧
+/// (None | {"a": None})`, which holds `None`. Reading that `t` as the
+/// reference already being resolved -- pushing it on `visiting` here -- reads
+/// the key, and the meet holding `{"a": None}`, empty.
+///
+/// Asked only where the rules decline, so a meet they decide keeps its answer.
+fn meet_through_a_reference(
+    members: &[Schema],
+    oracle: &dyn LeafRelations,
+    defs: &[Schema],
+    visiting: &mut Vec<DefIx>,
+    budget: &Budget,
+) -> Option<Verdict> {
+    let unfolding = members
+        .iter()
+        .enumerate()
+        .find_map(|(at, member)| match member {
+            Schema::Ref(id) => defs.get(id.get()).map(|body| match body {
+                Schema::Union(branches) => (at, &branches[..]),
+                body => (at, std::slice::from_ref(body)),
+            }),
+            _ => None,
+        });
+    let (at, branches) = if let Some(unfolding) = unfolding {
+        unfolding
+    } else {
+        let (at, branches) = members
+            .iter()
+            .enumerate()
+            .find_map(|(at, member)| match member {
+                Schema::Union(branches) => Some((at, &branches[..])),
+                _ => None,
+            })?;
+        let holds_a_reference = branches
+            .iter()
+            .any(|branch| matches!(branch, Schema::Ref(_)));
+        if !(holds_a_reference || OpenMeet::any_open(budget)) {
+            return None;
+        }
+        (at, branches)
+    };
+    let mut goal = members.to_vec();
+    goal.sort();
+    goal.dedup();
+    let Some(_open) = OpenMeet::open(budget, goal) else {
+        return Some(Verdict::Empty);
+    };
+    let mut verdict = Verdict::Empty;
+    for branch in branches {
+        let mut meet = match branch {
+            Schema::Intersection(inner) => inner.to_vec(),
+            branch => vec![branch.clone()],
+        };
+        meet.extend(
+            members
+                .iter()
+                .enumerate()
+                .filter(|(other, _)| *other != at)
+                .map(|(_, member)| member.clone()),
+        );
+        let (held, _) =
+            Schema::Intersection(meet.into()).empty_and_region(oracle, defs, visiting, budget);
+        verdict = Verdict::any([verdict, held].into_iter());
+        if verdict == Verdict::Inhabited {
+            break;
+        }
+    }
+    Some(verdict)
+}
+
+thread_local! {
+    /// The meets open on this thread's emptiness paths, each beside the address
+    /// of the budget of the query that opened it.
+    ///
+    /// A meet goal is a hypothesis of one query's path and of no other, and a
+    /// query can start inside another on the same thread -- a class relation
+    /// the oracle asks of Python can ask one -- so each is read only by the
+    /// query whose budget opened it, which is live, and so at an address no
+    /// other live budget has. Held here rather than on the budget or beside
+    /// `visiting`: a list on either is built and dropped by every query and
+    /// every question a subtyping rule asks, which read 2.2% more instructions
+    /// on the relation matrix as a field of `visiting` and 6.9% more on the
+    /// decision workload as one of the budget, where this list is reached only
+    /// by a meet being unfolded.
+    static OPEN_MEETS: RefCell<Vec<(usize, Vec<Schema>)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A meet held open on [`OPEN_MEETS`] while the path below decides it, and
+/// closed when that is decided, however the path ends.
+struct OpenMeet;
+
+impl OpenMeet {
+    /// Whether the query `budget` belongs to holds a meet open.
+    fn any_open(budget: &Budget) -> bool {
+        let query = std::ptr::from_ref(budget) as usize;
+        OPEN_MEETS.with_borrow(|open| open.iter().any(|(owner, _)| *owner == query))
+    }
+
+    /// Open `goal` for the query `budget` belongs to, or `None` where that
+    /// query holds it open already.
+    fn open(budget: &Budget, goal: Vec<Schema>) -> Option<Self> {
+        let query = std::ptr::from_ref(budget) as usize;
+        OPEN_MEETS.with_borrow_mut(|open| {
+            if open
+                .iter()
+                .any(|(owner, held)| *owner == query && *held == goal)
+            {
+                return None;
+            }
+            open.push((query, goal));
+            Some(Self)
+        })
+    }
+}
+
+impl Drop for OpenMeet {
+    fn drop(&mut self) {
+        OPEN_MEETS.with_borrow_mut(|open| {
+            open.pop();
+        });
+    }
 }
 
 /// Whether a direct instance of `class` can carry the record it is met with.

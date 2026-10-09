@@ -241,6 +241,29 @@ answers `"undecided"`.
   the two agree because a value is finite. A fixpoint is decided below its own
   unfolding, so a `recursive` schema and the body written out around it relate
   in both directions.
+- **A meet with a recursive reference.** A reference denotes its definition,
+  so a meet with one is the definition met with the rest, and a definition that
+  is a union is the union of its branches each met with the rest. The meet of
+  two records then asks the meet of each key's types, which unfolds the
+  reference again where a key names it, and a meet reached again while it is
+  being decided is read as empty: a value is finite, so one that needed a value
+  of the same meet below it would need a smaller one. The meet is its own goal,
+  never the reference's -- the key of `t & {"a": None | {"a": None}}`, for `t =
+  None | {"a": t}`, asks `t & (None | {"a": None})`, which `{"a": None}` is in,
+  and reading that `t` as the reference already open would read the meet
+  empty. A reference written inside a key's union, the way a record that names
+  itself is spelled, decides the same way:
+
+    ```python
+    from valgebra import intersection, nothing, recursive, union
+
+    chain = recursive(lambda t: union(None, {"next": t}))
+    assert intersection(chain, {"next": int}).is_empty()
+    one_value = intersection(chain, {"next": {"next": None}})
+    assert one_value.relation_to(nothing) == "not_subset"
+    link = recursive(lambda t: {"next": union(t, None)})
+    assert intersection(link, {"next": {"next": int}}).is_empty()
+    ```
 - **The complement laws, where the constructors reach them.** `complement`
   cancels a complement, `union` folds a join carrying a schema beside its own
   complement, and `intersection` folds the meet of that pair, all where the
@@ -615,27 +638,6 @@ the shape. What is left below is what the descriptor cannot hold.
     relation that needs the body *twice* — a fixpoint below a
     differently-written fixpoint whose bodies only agree after two steps — and
     there the coinductive rule is the whole of the answer.
-
-- **A meet with a recursive reference.** `intersection(chain, {"next": int})`
-  is empty -- a chain's `next` is `None` or a chain -- and neither
-  representation proves it. The rules read the members of a meet one at a
-  time, and a reference is a member they do not unfold into the meet; the
-  descriptor unfolds the reference once and cuts it to the top, which meets
-  `{"next": int}`. A meet the reference shares a value with is declined the
-  same way, so neither answer is given. A meet with a member of another kind is
-  decided, since one unfolding reads every kind the fixpoint admits:
-
-    ```python
-    from valgebra import intersection, nothing, recursive, union
-
-    chain = recursive(lambda t: union(None, {"next": t}))
-    no_value = intersection(chain, {"next": int})
-    assert no_value.relation_to(nothing) == "undecided"  # empty, and not proved
-    one_value = intersection(chain, {"next": {"next": None}})
-    assert one_value.is_valid({"next": {"next": None}})
-    assert one_value.relation_to(nothing) == "undecided"
-    assert intersection(chain, int).is_empty()  # no chain is an int
-    ```
 
 - **A length bound over a set or a dict, in the sets.** A length is not a word's alone, and
   two of the kinds that have one state it: a word's length is a pattern over

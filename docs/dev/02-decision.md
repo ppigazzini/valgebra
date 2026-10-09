@@ -710,7 +710,18 @@ automaton's states, with the trail as its `Γ`.
 Emptiness is the same argument over one side. A verdict recurses into children
 or unfolds a reference its `visiting` list does not hold, and the meet of a
 key's types the record-meet rule asks is smaller than the meet it came from and
-is read under the same list.
+is read under the same list. A meet the rules decline with a reference among
+its members unfolds the reference into itself (`meet_through_a_reference` in
+`decision/emptiness.rs`): each branch of the definition met with the other
+members, and a union among a meet's members distributed the same way where it
+holds a reference or a meet is already being unfolded. The meet is a goal of
+its own, its members sorted and without repeats, held open beside the query's
+budget while the path below decides it, and it answers only for itself: under
+`t = None | {"a": t}`, the key of `t ∧ {"a": None | {"a": None}}` asks `t ∧
+(None | {"a": None})`, which holds `{"a": None}` and which the reference's goal
+on `visiting` would read empty. A meet's members are subterms of the schema
+and the definitions, so a query has finitely many meet goals, and a goal met
+again on its path is answered by hypothesis as a reference is.
 
 `decision/goal_tests.rs` holds the premise: every goal the recorder sees is in
 `C`, over the product rule's widest shapes, the union rule's narrowing, and
