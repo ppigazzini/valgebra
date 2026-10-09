@@ -1,8 +1,9 @@
 """Run the merge gate's own commands, in the clone the merge gate gets.
 
 `AGENTS.md` lists a build-health gate: a handful of commands a developer runs in
-a full clone with a warm virtual environment. CI is forty-odd jobs in *shallow*
-clones with pinned tool versions on three operating systems. A local clone
+a full clone with a warm virtual environment. CI is every job of `ci.yml`, each
+leg of a matrix a job of its own, in *shallow* clones with pinned tool versions
+on three operating systems. A local clone
 carries tags and a checkout does not, so a check that reads `git describe`
 answers one way in each -- and a difference of that shape stays invisible until
 a push finds it.

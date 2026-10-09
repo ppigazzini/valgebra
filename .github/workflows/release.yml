@@ -38,11 +38,12 @@ jobs:
   wheels:
     name: wheels (${{ matrix.platform.runner }} ${{ matrix.platform.target }} ${{ matrix.platform.manylinux || matrix.platform.variant || 'native' }})
     runs-on: ${{ matrix.platform.runner }}
-    # Twice the slowest row's reading, as a sweep shard's ceiling is twice its
-    # slowest shard's: the macos-15-intel row builds eight interpreters with a
-    # profile each and reads 34 to 47 minutes, and a row that reaches the
-    # ceiling is cancelled with the release waiting on it.
-    timeout-minutes: 90
+    # Twice the slowest row's reading, rounded up, as a sweep shard's ceiling
+    # is twice its slowest shard's: the macos-15-intel row builds eight
+    # interpreters with a profile each and read 34.7 to 50.9 minutes in the six
+    # release runs that built 0.0.15, 0.0.16 and 0.0.17, and a row that reaches
+    # the ceiling is cancelled with the release waiting on it.
+    timeout-minutes: 105
     strategy:
       fail-fast: false
       matrix:
