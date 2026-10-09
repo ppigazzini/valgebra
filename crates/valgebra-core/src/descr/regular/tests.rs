@@ -614,3 +614,66 @@ fn a_complement_is_already_minimal() {
     assert!(bytes.complement().is_empty());
     assert_eq!(bytes.complement().complement(), bytes);
 }
+
+/// A table whose lookups land outside it stops a debug build where it is
+/// minimised, rather than reading the missing state as state zero.
+///
+/// The passes answer a miss with zero because a well-formed table has none,
+/// and that is a different language wherever it does happen; the assertion is
+/// what makes the answer about the table rather than about a lookup.
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "a table is minimised as it was built")]
+fn a_table_with_a_transition_off_it_stops_a_debug_build() {
+    let malformed = super::Dfa {
+        classes: vec![0; 256],
+        class_count: 1,
+        transitions: vec![5],
+        accepting: vec![true],
+    };
+    let _ = malformed.minimal();
+}
+
+/// Each clause of a well-formed table refuses a table that breaks it alone, at
+/// the edge of the clause: a transition to the state one past the last, a class
+/// equal to the class count, a row short by one, a byte with no class, and no
+/// state at all. The table they are made from is well formed, with its last
+/// state and its last class in use.
+#[test]
+fn each_defect_of_a_table_is_one_well_formed_refuses() {
+    let good = || super::Dfa {
+        classes: (0..256).map(|byte| u16::from(byte % 2 == 1)).collect(),
+        class_count: 2,
+        transitions: vec![1, 0, 1, 1],
+        accepting: vec![false, true],
+    };
+    assert!(good().well_formed());
+    let mut off_the_table = good();
+    off_the_table.transitions[1] = 2;
+    let mut class_past_the_count = good();
+    class_past_the_count.classes[3] = 2;
+    let mut short_row = good();
+    short_row.transitions.pop();
+    let mut byte_without_a_class = good();
+    byte_without_a_class.classes.pop();
+    let no_state = super::Dfa {
+        classes: vec![0; 256],
+        class_count: 1,
+        transitions: Vec::new(),
+        accepting: Vec::new(),
+    };
+    let no_class = super::Dfa {
+        class_count: 0,
+        ..good()
+    };
+    for (defect, table) in [
+        ("a transition off the table", off_the_table),
+        ("a class past the count", class_past_the_count),
+        ("a short row", short_row),
+        ("a byte without a class", byte_without_a_class),
+        ("no state", no_state),
+        ("no class", no_class),
+    ] {
+        assert!(!table.well_formed(), "{defect}");
+    }
+}
