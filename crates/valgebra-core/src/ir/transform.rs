@@ -411,7 +411,7 @@ impl Schema {
                     return None;
                 }
                 Some(Schema::Refine {
-                    base: moved_base.map_or_else(|| Arc::clone(base), Arc::new),
+                    base: moved_base.map_or_else(|| Arc::clone(base), share_node),
                     constraints: moved_constraints.unwrap_or_else(|| Arc::clone(constraints)),
                 })
             }

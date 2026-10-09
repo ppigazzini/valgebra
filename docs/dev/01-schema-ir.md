@@ -324,10 +324,13 @@ it moves. A definitions index moves the same way under both, which is what makes
 one walk enough. Two walks identical but for the leaf action would put every
 payload site in both, and a site reached by one and missed by the other is a
 wrong index neither the types nor an exhaustive `match` can see: the compiler
-forces an arm per variant and cannot check that the arm moved anything. `Schema::map_children`
-holds the other half of that argument — it is the single place each variant's
-child schemas are written down, so a walk that only descends inherits the child
-set instead of restating it. `Schema::remapped_by` takes no wildcard on purpose:
+forces an arm per variant and cannot check that the arm moved anything. The
+child set holds the other half of that argument. It is written in two places,
+`mapped_children` for a walk that rebuilds (behind `Schema::map_children`) and
+`push_children` for one that only reads, both exhaustive, so a walk that only
+descends inherits the child set instead of restating it, and
+`the_functor_and_the_traversal_describe_the_same_children` holds the two to one
+set. `Schema::remapped_by` takes no wildcard on purpose:
 a future variant carrying a pooled index must be a compile error there rather
 than a node that silently keeps an index into the wrong pool.
 
@@ -424,9 +427,14 @@ no such shape reaches it.
 
 That assumption is why a transform that *descends* must refold. Opening the
 records in `{a: int} | ~{a: int}` maps both sides to one schema beside its own
-complement: a shape construction promises never survives it. Reindexing is the
-exception and stays raw — it relabels pool slots, and a relabelling that changed
-the shape would not be one.
+complement: a shape construction promises never survives it, so
+`records_opened` refolds what it rebuilt. The other rewrites stay raw, sorting
+and deduplicating a member list they rebuild and neither flattening nor folding
+it. Reindexing, resolving a self-reference and renumbering definitions relabel
+a pool slot or a reference, and a relabelling that changed the shape would not
+be one. Unfolding a reference does change it -- a definition's union can land
+inside a union -- and its one reader is the lowering to the set representation,
+which takes a shape as it comes.
 
 The cost is that `repr`, `==` and the reported error follow the schema as
 *built*, not as written: `intersection(int, complement(int))` is `nothing` and
