@@ -1592,6 +1592,84 @@ fn a_dataclass_declares_what_fields_returns() {
     });
 }
 
+/// A class is a dataclass exactly where `dataclasses.is_dataclass` says so.
+///
+/// The frontend asks the attribute that function reads rather than calling
+/// it, so the two are held together over the classes that could part them: a
+/// dataclass and a subclass that inherits its table undecorated, a class
+/// carrying a table by hand, a class whose metaclass answers every attribute,
+/// and the classes the dispatch meets beside them -- a plain class, a named
+/// tuple, a `TypedDict`, an enum and a builtin. A metaclass whose attribute
+/// lookup raises raises through both.
+#[test]
+fn a_class_is_a_dataclass_where_is_dataclass_says_so() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"import dataclasses, enum, typing\n\
+              @dataclasses.dataclass\n\
+              class Plain:\n\
+              \x20   a: int\n\
+              class Inherited(Plain):\n\
+              \x20   b: int = 0\n\
+              class ByHand:\n\
+              \x20   __dataclass_fields__ = {}\n\
+              class Answering(type):\n\
+              \x20   def __getattr__(cls, name):\n\
+              \x20       return name\n\
+              class Answered(metaclass=Answering):\n\
+              \x20   pass\n\
+              class Raising(type):\n\
+              \x20   def __getattr__(cls, name):\n\
+              \x20       raise RuntimeError(name)\n\
+              class Raised(metaclass=Raising):\n\
+              \x20   pass\n\
+              class Bare:\n\
+              \x20   a: int\n\
+              Pair = typing.NamedTuple('Pair', [('a', int), ('b', str)])\n\
+              class Keys(typing.TypedDict):\n\
+              \x20   a: int\n\
+              class Colour(enum.Enum):\n\
+              \x20   RED = 1\n\
+              builtin = int\n",
+            c"is_dataclass_corpus.py",
+            c"is_dataclass_corpus",
+        )
+        .expect("the corpus compiles");
+        let called = py
+            .import("dataclasses")
+            .and_then(|dataclasses| dataclasses.getattr("is_dataclass"))
+            .expect("the stdlib has the call");
+        for class in [
+            "Plain",
+            "Inherited",
+            "ByHand",
+            "Answered",
+            "Raised",
+            "Bare",
+            "Pair",
+            "Keys",
+            "Colour",
+            "builtin",
+        ] {
+            let ty = module.getattr(class).expect("the class is defined");
+            let ty = ty.cast::<PyType>().expect("a class");
+            let asked = is_dataclass(ty).map_err(|error| error.to_string());
+            let answered = called
+                .call1((ty,))
+                .and_then(|answer| answer.is_truthy())
+                .map_err(|error| error.to_string());
+            assert_eq!(asked, answered, "{class}");
+        }
+        let plain = module.getattr("Plain").expect("defined");
+        assert_eq!(
+            is_dataclass(plain.cast::<PyType>().expect("a class")).ok(),
+            Some(true),
+            "the corpus holds a dataclass the reading answers yes for"
+        );
+    });
+}
+
 /// A class whose fields are declared builds the record beside the class,
 /// and one whose are not is the class alone.
 ///

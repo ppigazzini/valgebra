@@ -146,9 +146,10 @@ pub enum BindingShape {
     /// asks a question of the standard library.
     ///
     /// The two build shapes beside it read a `dict` and a `TypedDict`, and
-    /// neither reaches a class at all. A dataclass does: the frontend asks
-    /// `dataclasses.is_dataclass` about it, reads its fields through
-    /// `get_type_hints`, and reads the class's own declared order. Nothing
+    /// neither reaches a class at all. A dataclass does: the frontend asks it
+    /// for the `__dataclass_fields__` that `dataclasses.is_dataclass` reads,
+    /// reads its fields through `get_type_hints`, and reads the class's own
+    /// declared order. Nothing
     /// counted any of that -- which is how putting the `dataclasses` import
     /// back at the top of the frontend cost a build that compiles *no*
     /// dataclass 6.45%, and had to be found with a profiler because no shape

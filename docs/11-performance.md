@@ -486,14 +486,20 @@ program that builds validators per request, and to no validation call.
   one is a lookup rather than a scan.
 - **The `typing` forms are resolved once per interpreter** (`forms` in
   `build.rs`), and `dataclasses` is imported on the first dataclass a program
-  compiles (`IS_DATACLASS` in `build/classes.rs`). Held among the forms, its
-  import would leave tracked objects behind that lengthen every later
+  compiles (`DATACLASS_READING` in `build/classes.rs`). Held among the forms,
+  its import would leave tracked objects behind that lengthen every later
   garbage-collection pass, and a build that compiles no dataclass would read
   6.45% dearer on `--binding-build`. The table of loaded modules is held too
   (`loaded_modules` in `build.rs`): a `TypedDict` from CPython 3.15, and one
   `typing_extensions` builds on any release, asks it once per class for the
   sentinel that says no `extra_items` were given, and importing `sys` to ask
   is 12% of compiling a three-field one.
+- **A class is asked whether it is a dataclass by its attribute**
+  (`is_dataclass` in `build/classes.rs`). `dataclasses.is_dataclass` is
+  `hasattr(cls, "__dataclass_fields__")` once its argument is a class, on every
+  interpreter the matrix runs, so the attribute is asked in its place: a class
+  node pays no Python call for it, and a schema naming classes and no dataclass
+  never imports the module (`--binding-object`, `--binding-protocol`).
 - **A class's annotations are read as written** wherever evaluating them would
   hand each one back unchanged (`annotations_as_written` in `build/classes.rs`).
   `typing.get_type_hints` exists to evaluate forward references, and on a class
