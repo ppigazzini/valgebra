@@ -19,6 +19,7 @@ LEDGER: the merge gate requires every job the workflow defines
 from __future__ import annotations
 
 import ast
+import functools
 import itertools
 import os
 import re
@@ -88,43 +89,231 @@ def test_every_job_is_required_by_the_gate() -> None:
     )
 
 
-def test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may() -> None:
-    """The gate reads every job's result, and only those may be `skipped`.
+def _python(expression: str) -> str:
+    """Spell a workflow expression in Python's grammar, without changing its sense.
 
-    A push skips the scheduled jobs and the ones a dispatch input asks for, so
-    the gate has to accept that answer from them -- and from nothing else, since
-    `skipped` from a job a push does run is a job that did not run. What both
-    readings refuse is everything else, which is where a **cancellation** lives:
-    a job that reaches its timeout is reported cancelled rather than failed, and
-    one that nothing waits on takes a whole scheduled run red without a red job
-    to point at.
+    The operators become Python's, and a job named with a hyphen is read by
+    index, since `needs.rust-lint` is a subtraction to Python.
     """
-    jobs = _workflow()["jobs"]
-    gate = jobs[GATE]
-    condition = " ".join(str(gate["steps"][0]["if"]).split())
-    off_the_push = _not_on_a_push(jobs)
-    assert off_the_push, "no job reads as off the push; the pattern has gone stale"
-    for name in sorted(set(gate["needs"])):
-        # Either spelling the expression language offers, since the condition
-        # uses both and which one a name takes is not this ledger's business.
-        spellings = (f"needs['{name}'].result", f"needs.{name}.result")
-        reads = [reading for reading in spellings if reading in condition]
-        assert reads, f"the gate does not read {name}'s result"
-        allows_skipped = any(
-            f"{reading} != 'skipped'" in condition for reading in reads
+    text = expression.strip().removeprefix("${{").removesuffix("}}")
+    text = re.sub(r"\bneeds\.([\w-]+)", r"needs['\1']", text)
+    text = text.replace("&&", " and ").replace("||", " or ")
+    return " ".join(re.sub(r"!(?!=)", " not ", text).split())
+
+
+#: The status functions, as they answer on a run nobody cancelled.
+STATUS = {"always": True, "cancelled": False}
+
+
+def _leaf(node: ast.expr, context: dict, expression: str) -> object:
+    """Read a value: a string, a property of the context, or a status function."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.Name):
+        return context.get(node.id, "")
+    if isinstance(node, (ast.Attribute, ast.Subscript)):
+        owner = _leaf(node.value, context, expression)
+        key = (
+            node.attr
+            if isinstance(node, ast.Attribute)
+            else _leaf(node.slice, context, expression)
         )
-        if name in off_the_push:
-            assert allows_skipped, (
-                f"{name} is not run by a push and the gate demands success from "
-                "it, which fails every push"
-            )
-        else:
-            assert not allows_skipped, (
-                f"{name} runs on a push and the gate accepts `skipped` from it"
-            )
-        assert any(f"{reading} != 'success'" in condition for reading in reads), (
-            f"the gate does not refuse a non-success from {name}"
+        return owner.get(key, "") if isinstance(owner, dict) else ""
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in STATUS
+    ):
+        return STATUS[node.func.id]
+    message = f"the ledger cannot read {ast.unparse(node)!r} in {expression!r}"
+    raise AssertionError(message)
+
+
+def _evaluate(expression: str, context: dict) -> object:
+    """Evaluate a workflow expression as the runner does, on a run not cancelled.
+
+    A property nothing set reads as the empty string, which is what an output a
+    step never wrote reads as, and a skipped job's outputs. A form this does not
+    read fails here rather than reading as true.
+    """
+
+    def value(node: ast.expr) -> object:
+        if isinstance(node, ast.BoolOp):
+            conjunction = isinstance(node.op, ast.And)
+            result: object = conjunction
+            for operand in node.values:
+                result = value(operand)
+                if bool(result) != conjunction:
+                    break
+            return result
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            return not value(node.operand)
+        if (
+            isinstance(node, ast.Compare)
+            and len(node.ops) == 1
+            and isinstance(node.ops[0], (ast.Eq, ast.NotEq))
+        ):
+            same = value(node.left) == value(node.comparators[0])
+            return same == isinstance(node.ops[0], ast.Eq)
+        return _leaf(node, context, expression)
+
+    return value(_tree(expression))
+
+
+@functools.cache
+def _tree(expression: str) -> ast.expr:
+    """Parse an expression once: the gate's is read a few hundred times a row."""
+    return ast.parse(_python(expression), mode="eval").body
+
+
+#: The runs a workflow sees, as the event and what the dispatcher answered: a
+#: push; a dispatch; a night handed to the development branch, with `main`'s
+#: tip beside it and on it; and a night with no branch to hand it to.
+RUNS = {
+    "a push": ("push", {}),
+    "a dispatch": ("workflow_dispatch", {}),
+    "a night handed on, main behind": (
+        "schedule",
+        {"main_differs": "true", "dispatched": "true"},
+    ),
+    "a night handed on, main on the branch": (
+        "schedule",
+        {"main_differs": "false", "dispatched": "true"},
+    ),
+    "a night with no branch": (
+        "schedule",
+        {"main_differs": "true", "dispatched": "false"},
+    ),
+}
+
+
+def _needs(job: dict) -> list[str]:
+    needs = job.get("needs", [])
+    return [needs] if isinstance(needs, str) else list(needs)
+
+
+def _results(run: str, **planted: str) -> dict[str, dict]:
+    """Give each job's result on a run, and the dispatcher's outputs.
+
+    Each job runs where its condition holds, reading the results of the jobs it
+    needs, and a job that runs succeeds unless `planted` names another result
+    for it. A condition with no status function in it holds only where every
+    job it needs succeeded, as the runner reads one.
+    """
+    jobs = _jobs()
+    event, answered = RUNS[run]
+    done: dict[str, dict] = {}
+    pending = [name for name in jobs if name != GATE]
+    while pending:
+        name = next(
+            name for name in pending if all(need in done for need in _needs(jobs[name]))
         )
+        pending.remove(name)
+        needs = {need: done[need] for need in _needs(jobs[name])}
+        condition = str(jobs[name].get("if", ""))
+        context = {"github": {"event_name": event}, "needs": needs, "inputs": {}}
+        runs = bool(_evaluate(condition, context)) if condition else True
+        if not re.search(r"\b(always|cancelled|success|failure)\(", condition):
+            runs = runs and all(need["result"] == "success" for need in needs.values())
+        result = planted.get(name, "success") if runs else "skipped"
+        outputs = answered if name == DISPATCH and runs else {}
+        done[name] = {"result": result, "outputs": outputs}
+    return done
+
+
+@functools.cache
+def _jobs() -> dict:
+    """Read the workflow's jobs once for the rows that model whole runs."""
+    return _workflow()["jobs"]
+
+
+def _gate_fails(results: dict[str, dict], event: str) -> bool:
+    """Answer whether the aggregator's failing step runs on these results."""
+    gate = _jobs()[GATE]
+    context = {"github": {"event_name": event}, "needs": results}
+    return bool(_evaluate(str(gate["steps"][0]["if"]), context))
+
+
+def test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may() -> None:
+    """The gate passes every run whose jobs did what they should, and no other.
+
+    A run skips the jobs it does not run -- a push the scheduled ones and the
+    ones a dispatch input asks for, a night handed to the development branch
+    the push jobs -- so the gate has to accept that answer from them, and from
+    nothing else, since `skipped` from a job the run does run is a job that did
+    not run. What every run refuses is a failure and a **cancellation**: a job
+    that reaches its timeout is reported cancelled rather than failed, and one
+    nothing waits on takes a whole scheduled run red without a red job to point
+    at.
+
+    Read by evaluating the gate's condition on each run, rather than by
+    matching its text: the same `!= 'skipped'` allows a skip in one clause and
+    demands one in another.
+
+    A nightly lane is accepted `skipped` on every run, the ones that run it
+    among them: which nights run it is its own condition's to say, and
+    `test_the_nightly_runs_on_the_branch_development_is_on` holds those.
+    """
+    needs = _workflow()["jobs"][GATE]["needs"]
+    pushed = {
+        name for name, read in _results("a push").items() if read["result"] == "success"
+    }
+    wrong = []
+    for run, (event, _) in RUNS.items():
+        healthy = _results(run)
+        if _gate_fails(healthy, event):
+            wrong.append(f"{run}: every job did what it should, and the gate fails")
+        for name in needs:
+            ran = healthy[name]["result"] == "success" and name in pushed
+            for result in ("failure", "cancelled", *(("skipped",) if ran else ())):
+                planted = {**healthy, name: {**healthy[name], "result": result}}
+                if not _gate_fails(planted, event):
+                    wrong.append(f"{run}: {name} reads {result} and the gate passes")
+    assert not wrong, "\n".join(wrong)
+
+
+def test_a_night_handed_to_the_development_branch_runs_no_push_job_here() -> None:
+    """A push job runs on a night only where no run was handed to the branch.
+
+    The dispatched run reads every push job on the development branch, so the
+    scheduled run reading them again reads `main`'s tip: the tree the branch
+    replaces at its next fast-forward, red on what the branch has repaired. On
+    a night with no branch to hand it to, the scheduled run is the only one,
+    and it reads them. And a push job that did run on a handed-on night is a
+    red gate, since its reading is the one the hand-off exists to stop.
+    """
+    push = sorted(
+        name for name, read in _results("a push").items() if read["result"] == "success"
+    )
+    assert len(push) >= 20, f"only {push} run on a push"
+    wrong = []
+    for run, (event, answered) in RUNS.items():
+        results = _results(run)
+        handed_on = answered.get("dispatched") == "true"
+        for name in push:
+            ran = results[name]["result"] == "success"
+            if ran == handed_on:
+                wrong.append(f"{run}: {name} {'runs' if ran else 'does not run'}")
+            planted = {**results, name: {**results[name], "result": "success"}}
+            if handed_on and not _gate_fails(planted, event):
+                wrong.append(f"{run}: {name} ran on main, and the gate passes")
+    assert not wrong, "\n".join(wrong)
+
+
+def test_the_gate_and_a_condition_are_read_as_the_runner_reads_them() -> None:
+    # The readings the two rows above turn on: a hyphenated name read by dot, an
+    # output nothing wrote, a status function, and a form the reader refuses.
+    context = {
+        "github": {"event_name": "push"},
+        "needs": {"rust-lint": {"result": "skipped", "outputs": {}}},
+    }
+    assert _evaluate("needs.rust-lint.result != 'success'", context)
+    assert _evaluate("needs['rust-lint'].outputs.dispatched != 'true'", context)
+    assert not _evaluate("needs['rust-lint'].outputs.dispatched == 'false'", context)
+    assert _evaluate("!cancelled() && github.event_name != 'schedule'", context)
+    assert not _evaluate("${{ github.event_name == 'schedule' }}", context)
+    with pytest.raises(AssertionError, match="cannot read"):
+        _evaluate("contains(github.event_name, 'push')", context)
 
 
 def test_every_need_is_read_by_the_condition() -> None:
@@ -541,6 +730,70 @@ def test_the_nightly_runs_on_the_branch_development_is_on() -> None:
         + "; ".join(unread)
         + ". Where the tips agree, the dispatched run reads the same tree."
     )
+
+
+def _dispatch(tmp_path: Path, listed: str, dispatching: int) -> tuple[int, str]:
+    """Run the dispatcher's step with `git` and `gh` stood in; give its outputs.
+
+    `listed` is what the stand-in `git ls-remote` answers: `main` (the branch
+    at `main`'s commit), `ahead` (at another), or `absent` (exit 2, a
+    repository without the branch). `dispatching` is the stand-in `gh`'s exit.
+    """
+    (step,) = [
+        step
+        for step in _workflow()["jobs"][DISPATCH]["steps"]
+        if "gh workflow run" in str(step.get("run", ""))
+    ]
+    stand_ins = tmp_path / "bin"
+    stand_ins.mkdir()
+    main, ahead = "a" * 40, "b" * 40
+    tip, status = {"main": (main, 0), "ahead": (ahead, 0), "absent": ("", 2)}[listed]
+    for name, script in {
+        "git": f'[ -n "{tip}" ] && printf "{tip}\\trefs/heads/x\\n"; exit {status}',
+        "gh": f"exit {dispatching}",
+    }.items():
+        (stand_ins / name).write_text(f"#!/bin/sh\n{script}\n", encoding="utf-8")
+        (stand_ins / name).chmod(0o755)
+    bash = shutil.which("bash")
+    assert bash is not None, "bash runs every step of the workflow"
+    outputs = tmp_path / "outputs"
+    done = subprocess.run(  # noqa: S603  # the tree's own step, with stand-ins
+        [bash, "--noprofile", "--norc", "-eo", "pipefail", "-c", step["run"]],
+        cwd=tmp_path,
+        env={
+            "PATH": f"{stand_ins}:{os.environ.get('PATH', '')}",
+            "GITHUB_SHA": main,
+            "GITHUB_OUTPUT": str(outputs),
+            **{key: "stand-in" for key in step["env"] if key != "BRANCH"},
+            "BRANCH": step["env"]["BRANCH"],
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    written = outputs.read_text(encoding="utf-8") if outputs.exists() else ""
+    return done.returncode, " ".join(sorted(written.split()))
+
+
+@pytest.mark.parametrize(
+    ("listed", "dispatching", "answer"),
+    [
+        ("main", 0, (0, "dispatched=true main_differs=false")),
+        ("ahead", 0, (0, "dispatched=true main_differs=true")),
+        ("absent", 0, (0, "dispatched=false main_differs=true")),
+        ("ahead", 1, (1, "main_differs=true")),
+    ],
+)
+def test_the_dispatcher_says_whether_it_handed_the_night_on(
+    tmp_path: Path, listed: str, dispatching: int, answer: tuple[int, str]
+) -> None:
+    """`dispatched` is `true` where a run was dispatched and `false` where none was.
+
+    The push jobs read it on a night: `false` runs them on `main`, the only run
+    that night, and `true` leaves them to the dispatched one. A dispatch that
+    failed writes neither, and the dispatcher's own red says why.
+    """
+    assert _dispatch(tmp_path, listed, dispatching) == answer
 
 
 def test_every_supported_interpreter_runs_on_every_event() -> None:

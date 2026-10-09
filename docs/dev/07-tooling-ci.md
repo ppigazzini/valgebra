@@ -876,6 +876,16 @@ night also sweeps every file the next release cut will push.
 `tests/test_required_jobs.py` holds the dispatch to the push trigger's other
 branch and every scheduled lane to that reading.
 
+**The push jobs run on `main`'s night only where nothing was dispatched.** The
+dispatched run reads every push job on the development tree, and on `main`'s
+tip they read a tree the next fast-forward replaces: the scheduled run of
+2026-10-09 was red on `main` in eleven push jobs, on a ruff row the branch had
+already repaired. So each push job reads the dispatcher's `dispatched` output
+and runs on a schedule only where it is `false`, a repository without the
+branch, where the scheduled run is the only one. The bench job's recorded
+budgets read a dispatch as well as a schedule, so a night records them in the
+run it dispatches.
+
 **A skipped job cannot pass.** The `ci` aggregator lists every required job in
 `needs:` *and* fails unless each result is `success` rather than merely
 not-failure. The duplicated list is a deliberate second copy.
@@ -886,8 +896,12 @@ silence -- so a ratchet behind a timeout runs nowhere while every lane reads
 green. The aggregate therefore waits on the scheduled
 jobs too, allowing one answer more from them than from the others — `skipped`,
 which is what a push gives a job it does not run — and refusing everything
-else. `tests/test_required_jobs.py` reads which jobs those are from their own
-conditions and holds each reading to the kind of job it is.
+else. On a night handed to the development branch the push jobs answer
+`skipped` and nothing else, since one that ran read `main`'s tip.
+`tests/test_required_jobs.py` evaluates the gate's condition on five runs -- a
+push, a dispatch, a night handed on with `main` behind the branch and with
+`main` on it, and a night with no branch -- each job's result planted in turn,
+and runs the dispatcher's step with `git` and `gh` stood in.
 
 **Every supported interpreter runs on every event.** The release ships a wheel
 built per version against a version-specific ABI, so each interpreter is a

@@ -84,6 +84,10 @@ env:
 jobs:
   rust-lint:
     name: rust lint
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -120,6 +124,10 @@ jobs:
 
   rust-test:
     name: rust test (${{ matrix.os }})
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     strategy:
       fail-fast: false
       matrix:
@@ -155,6 +163,10 @@ jobs:
 
   rust-msrv:
     name: rust msrv
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -179,6 +191,10 @@ jobs:
 
   rust-doc:
     name: rust doc
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -211,6 +227,10 @@ jobs:
 
   rust-coverage:
     name: rust coverage
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -276,6 +296,10 @@ jobs:
 
   binding-coverage:
     name: binding coverage
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -390,6 +414,10 @@ jobs:
       python ${{ matrix.python-version }} (${{ matrix.os }})${{
       (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10') &&
       ', full history' || '' }}
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     # 3.15 is the newest supported release. 3.14t (free-threaded) is a
     # supported lane: the extension declares `gil_used = false`, imports without
     # re-enabling the GIL -- `test_a_free_threaded_build_keeps_the_gil_off_after_import`
@@ -576,6 +604,10 @@ jobs:
 
   differential:
     name: differential
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -614,6 +646,10 @@ jobs:
 
   metamorphic:
     name: metamorphic
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -644,6 +680,10 @@ jobs:
 
   doc-examples:
     name: doc examples
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -674,6 +714,10 @@ jobs:
 
   pypy:
     name: pypy 3.11
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # The extension is built for PyPy and published for it, and nothing on a
@@ -735,6 +779,10 @@ jobs:
 
   docs:
     name: docs
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -775,6 +823,10 @@ jobs:
 
   bench:
     name: bench
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -892,9 +944,11 @@ jobs:
       # And the recorded numbers, on the nightly only. They are a record of one
       # environment rather than a gate -- the same commit re-measures 5% away on
       # another machine -- so they are read where a drift over months is worth
-      # seeing and nowhere a merge waits on them.
+      # seeing and nowhere a merge waits on them. A night runs this job in the
+      # run it dispatches on the development branch, and in its own scheduled
+      # run only where it dispatched none, so the step reads both events.
       - name: Recorded instruction-count budgets (nightly)
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         continue-on-error: true
         run: |
           uv run --no-sync python scripts/perf_gate.py
@@ -1027,6 +1081,10 @@ jobs:
 
   bench-free-threaded:
     name: bench (free-threaded)
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # A supported lane that nothing times is one the project makes claims about
@@ -1061,6 +1119,10 @@ jobs:
 
   wheel:
     name: wheel (linux)
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -1158,6 +1220,10 @@ jobs:
   # cannot drift apart.
   mutants-diff-core:
     name: mutants core ${{ matrix.shard }}
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     # Sharded because one large file is more mutants than a push-time job can
     # carry, and cut as widely as the readings say. Three shards were measured
     # too few: a change touching `decision.rs`, `ir.rs` and `lib.rs` together
@@ -1315,6 +1381,10 @@ jobs:
 
   mutants-diff-walk:
     name: mutants binding ${{ matrix.shard }}
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     # Three round-robin shards over the files of `BINDING_SWEPT` the change
     # touches, run against an embedded interpreter. Cut in consecutive slices,
     # the walk's files, whose mutants build and run, fell to one shard and the
@@ -1463,6 +1533,12 @@ jobs:
   nightly-dispatch:
     name: nightly dispatch
     if: github.event_name == 'schedule'
+    # The night is handed to the development branch, whose dispatched run reads
+    # every push job and every nightly lane there. So a push job runs on this
+    # scheduled run only where nothing was dispatched -- a repository without
+    # the branch -- and reads `dispatched` to know. `main`'s own tip, behind the
+    # branch or beside it, is a tree the next fast-forward replaces, and its
+    # push jobs would redden on what the branch has already repaired.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Dispatching a run writes to the repository's actions, and no other job
@@ -1472,6 +1548,7 @@ jobs:
       contents: read
     outputs:
       main_differs: ${{ steps.dispatch.outputs.main_differs }}
+      dispatched: ${{ steps.dispatch.outputs.dispatched }}
     steps:
       - name: Dispatch the nightly on the development branch
         id: dispatch
@@ -1498,6 +1575,9 @@ jobs:
           echo "main at $GITHUB_SHA, $BRANCH at ${tip:-no commit}"
           if [ -n "$tip" ]; then
             gh workflow run ci.yml --repo "$REPO" --ref "$BRANCH"
+            echo "dispatched=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dispatched=false" >> "$GITHUB_OUTPUT"
           fi
 
   nightly-fuzz:
@@ -2420,6 +2500,10 @@ jobs:
 
   fuzz-build:
     name: fuzz build
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     # Compile-only check that the libFuzzer targets still build against the
     # current core, on every run. The fuzz workspace is detached, so the merge
     # build/clippy/test never reach it and a renamed schema variant would break a
@@ -2464,6 +2548,10 @@ jobs:
 
   cargo-deny:
     name: cargo deny
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     # Supply-chain audit of the dependency tree: RustSec advisories, license
     # policy, unknown sources, and wildcard/duplicate bans, over both the main
     # workspace and the detached fuzz workspace. Runs on the daily schedule too,
@@ -2485,6 +2573,10 @@ jobs:
 
   pip-audit:
     name: pip audit
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     # Supply-chain audit of the locked Python dependencies (dev, bench, and docs
     # groups — everything CI installs) against the PyPI advisory database.
     runs-on: ubuntu-latest
@@ -2503,6 +2595,10 @@ jobs:
 
   zizmor:
     name: zizmor
+    needs: nightly-dispatch
+    if: >-
+      !cancelled() && (github.event_name != 'schedule' ||
+      needs['nightly-dispatch'].outputs.dispatched == 'false')
     # Static analysis of the workflows themselves: template injection, credential
     # persistence, over-broad permissions, and unpinned actions.
     runs-on: ubuntu-latest
@@ -2575,8 +2671,15 @@ jobs:
       # Everything else is refused, **cancellation included** -- a job that
       # reaches its timeout is reported cancelled rather than failed, so a
       # cancellation nothing waits on leaves a red nightly reading green.
+      #
+      # On a night handed to the development branch the push jobs run there
+      # and not here, so here each must read `skipped` and nothing else: one
+      # that ran read `main`'s tip, which is what the hand-off exists to stop.
+      # On every other run -- a push, a dispatch, a night with no branch to
+      # hand it to -- each must read `success`, and `skipped` is refused.
       - name: Fail unless every required job succeeded
         if: >-
+          (needs['nightly-dispatch'].outputs.dispatched != 'true' && (
           needs.rust-lint.result != 'success' ||
           needs.rust-test.result != 'success' ||
           needs.rust-msrv.result != 'success' ||
@@ -2597,7 +2700,29 @@ jobs:
           needs.mutants-diff-walk.result != 'success' ||
           needs.cargo-deny.result != 'success' ||
           needs.pip-audit.result != 'success' ||
-          needs.zizmor.result != 'success' ||
+          needs.zizmor.result != 'success')) ||
+          (needs['nightly-dispatch'].outputs.dispatched == 'true' && (
+          needs.rust-lint.result != 'skipped' ||
+          needs.rust-test.result != 'skipped' ||
+          needs.rust-msrv.result != 'skipped' ||
+          needs.rust-doc.result != 'skipped' ||
+          needs.pypy.result != 'skipped' ||
+          needs.rust-coverage.result != 'skipped' ||
+          needs.binding-coverage.result != 'skipped' ||
+          needs.python.result != 'skipped' ||
+          needs.differential.result != 'skipped' ||
+          needs.metamorphic.result != 'skipped' ||
+          needs.doc-examples.result != 'skipped' ||
+          needs.docs.result != 'skipped' ||
+          needs.bench.result != 'skipped' ||
+          needs['bench-free-threaded'].result != 'skipped' ||
+          needs.wheel.result != 'skipped' ||
+          needs.fuzz-build.result != 'skipped' ||
+          needs.mutants-diff-core.result != 'skipped' ||
+          needs.mutants-diff-walk.result != 'skipped' ||
+          needs.cargo-deny.result != 'skipped' ||
+          needs.pip-audit.result != 'skipped' ||
+          needs.zizmor.result != 'skipped')) ||
           (needs['pgo-compare'].result != 'success' &&
            needs['pgo-compare'].result != 'skipped') ||
           (needs['nightly-dispatch'].result != 'success' &&

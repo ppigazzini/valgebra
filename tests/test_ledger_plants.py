@@ -250,6 +250,21 @@ def _widen_the_inventory(tree: Path) -> None:
     path.write_text(head + found + widened + cut + tail, encoding="utf-8")
 
 
+def _read_no_result_of_one_job(tree: Path) -> None:
+    """Take every reading of one job's result out of the gate's condition.
+
+    Both: a push job is read on a night handed to the development branch as
+    well as on every other run, and a gate reading it once reads it still.
+    """
+    for reading in ("success", "skipped"):
+        _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            f"          needs.rust-msrv.result != '{reading}' ||\n",
+            "",
+        )
+
+
 def _empty_the_smoke_matrix(tree: Path) -> None:
     """Leave the release's smoke matrices with no row, as jobs being rewritten do.
 
@@ -973,6 +988,67 @@ PLANTS = (
             "matrix.python-version == '3.11') &&\n      ', full history'",
         ),
         trips=("test_the_leg_that_takes_the_history_says_so_in_its_name",),
+    ),
+    Plant(
+        # A push job that runs on every night: on one handed to the development
+        # branch it reads `main`'s tip, which the hand-off exists to stop.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "    name: rust lint\n    needs: nightly-dispatch\n    if: >-\n"
+            "      !cancelled() && (github.event_name != 'schedule' ||\n"
+            "      needs['nightly-dispatch'].outputs.dispatched == 'false')\n",
+            "    name: rust lint\n    needs: nightly-dispatch\n"
+            "    if: ${{ !cancelled() }}\n",
+        ),
+        trips=(
+            "test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may",
+            "test_a_night_handed_to_the_development_branch_runs_no_push_job_here",
+        ),
+    ),
+    Plant(
+        # The gate's handed-on reading short of one push job: that job running
+        # on `main` on a handed-on night, red or green, passes.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "          needs.rust-lint.result != 'skipped' ||\n",
+            "",
+        ),
+        trips=(
+            "test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may",
+            "test_a_night_handed_to_the_development_branch_runs_no_push_job_here",
+        ),
+    ),
+    Plant(
+        # The push jobs held to `success` on every run: a handed-on night,
+        # whose push jobs skip by design, reads red.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "          (needs['nightly-dispatch'].outputs.dispatched != 'true' && (\n",
+            "          ((\n",
+        ),
+        trips=("test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may",),
+    ),
+    Plant(
+        # A dispatcher that answers nothing where it dispatched nothing: the
+        # one night the push jobs must run on `main`, they do not.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            '            echo "dispatched=false" >> "$GITHUB_OUTPUT"\n',
+            "            true\n",
+        ),
+        trips=("test_the_dispatcher_says_whether_it_handed_the_night_on",),
     ),
     Plant(
         # The repository audit on every leg: the condition that keeps it to the
@@ -2889,12 +2965,7 @@ PLANTS = (
         # A job the gate waits on whose result its condition no longer reads.
         "tests/test_required_jobs.py",
         (".github/workflows/ci.yml",),
-        lambda tree: _edit(
-            tree,
-            ".github/workflows/ci.yml",
-            "          needs.rust-msrv.result != 'success' ||\n",
-            "",
-        ),
+        _read_no_result_of_one_job,
         trips=("test_every_need_is_read_by_the_condition",),
     ),
     Plant(
@@ -4165,6 +4236,7 @@ UNPLANTED: dict[str, str] = {
         "test_required_jobs.py",
         OWN_PLANT,
         "test_a_selection_and_a_condition_are_read_as_the_runner_reads_them",
+        "test_the_gate_and_a_condition_are_read_as_the_runner_reads_them",
     ),
     **_excuse(
         "test_suite_partition.py",
