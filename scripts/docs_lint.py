@@ -836,6 +836,98 @@ def check_bounds_ledger() -> list[str]:
     return problems
 
 
+#: A row of the bounds table, whole: where, bound, value, kind, what it stops,
+#: and what measures it.
+BOUND_HOLDER_ROW = re.compile(
+    r"^\| `([^`]+)` \| `([^`]+)` \| `[^`]+` \| [^|]+ \| [^|]+ \| ([^|\n]+) \|$",
+    re.MULTILINE,
+)
+#: A path a holder cell names: a source file or a test file, in backticks.
+HOLDER_PATH = re.compile(r"`([^`\s]+\.(?:rs|py))`")
+
+
+def own_tests(where: str) -> list[Path]:
+    """Give the test modules of the source file `where`, as Rust resolves them.
+
+    The file's own text from its inline test module on is one, read through
+    `before_the_test_module`'s marker, and a `#[cfg(test)] mod name;` is a
+    file: a sibling of `mod.rs` or `lib.rs`, and `x/name.rs` beside any other
+    `x.rs`. A file whose tests sit in another module's corpus has none of its
+    own, and a row saying "its own tests" for it names nothing.
+    """
+    source = ROOT / where
+    if not source.is_file():
+        return []
+    text = source.read_text(encoding="utf-8")
+    found: list[Path] = []
+    if TEST_MODULE_START.search(text):
+        found.append(source)
+    for name in TEST_MODULE.findall(text):
+        if source.stem in {"mod", "lib", "main"}:
+            candidate = source.parent / f"{name}.rs"
+        else:
+            candidate = source.parent / source.stem / f"{name}.rs"
+        if candidate.is_file():
+            found.append(candidate)
+    return found
+
+
+def holder_texts(where: str, cell: str) -> list[str]:
+    """Read the text of every holder a row's last cell names.
+
+    "Its own tests" is the bound's own file's test modules; a path followed by
+    "tests" is that file's test modules; any other path is the file itself.
+    The inline test module of a source file is read from where it starts, so
+    the definition a file opens with names nothing.
+    """
+    paths: list[Path] = []
+    if "its own tests" in cell:
+        paths += own_tests(where)
+    for named in HOLDER_PATH.findall(cell):
+        if f"`{named}` tests" in cell:
+            paths += own_tests(named)
+        elif (ROOT / named).is_file():
+            paths.append(ROOT / named)
+    texts = []
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        start = TEST_MODULE_START.search(text)
+        texts.append(text[start.start() :] if path.suffix == ".rs" and start else text)
+    return texts
+
+
+def check_bound_holders() -> list[str]:
+    """Hold every row of the bounds table to a holder that names its bound.
+
+    The table's last column says what measures each bound, and nothing read it:
+    a row named a test file that does not mention the constant, or "its own
+    tests" for a file with no test module, and read as complete. A holder that
+    names the bound -- by identifier in a Rust test, in a `# BOUND:` marker, or
+    in the prose of the test that drives it -- is a link a reader can follow
+    from either end, and a row whose holders all fail to name it is a claim
+    nobody checked. At least one holder must name it: a row may also name a gate
+    that measures the bound's cost without spelling it.
+    """
+    page = ROOT / "docs" / "dev" / "00-architecture.md"
+    if not page.exists():
+        return []
+    rows = BOUND_HOLDER_ROW.findall(page.read_text(encoding="utf-8"))
+    problems = [
+        f"docs/dev/00-architecture.md: the row for {name} in {where} names no "
+        "holder that names it"
+        for where, name, cell in rows
+        if not any(
+            re.search(rf"\b{re.escape(name)}\b", text)
+            for text in holder_texts(where, cell)
+        )
+    ]
+    if not rows:
+        problems.append(
+            "docs/dev/00-architecture.md: no row of the bounds table read whole"
+        )
+    return problems
+
+
 #: A page's one-line summary in its front matter.
 DESCRIPTION = re.compile(r"^description: (.+)$", re.MULTILINE)
 
@@ -1047,6 +1139,7 @@ def main(argv: list[str]) -> int:
     failures += check_ledger_table()
     failures += check_product_table()
     failures += check_bounds_ledger()
+    failures += check_bound_holders()
     failures += check_llms_manifest()
 
     if failures:

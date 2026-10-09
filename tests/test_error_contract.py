@@ -261,6 +261,7 @@ def test_a_long_value_is_cut_at_the_summary_bound_and_says_it_was() -> None:
     and the `...` is what stops a reader taking the cut text for the value. The
     number is pinned rather than described: a summary that grew would make a
     report of a thousand failures a different size, and nothing else would say.
+    It is `SUMMARY_CHARS` in `crates/valgebra-py/src/errors.rs`.
     """
     long = "x" * 500
     with pytest.raises(ValidationError) as caught:

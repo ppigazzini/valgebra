@@ -314,9 +314,11 @@ def test_a_bytes_refinement_is_explained_at_its_own_bound() -> None:
 #: The widths where the scalar list walk changes how it reads the value.
 #:
 #: Below the first it reads in place, between them it reads a copy, above the
-#: second it reads in place again. The numbers are the walk's own, restated
-#: here because a test asserting behaviour at a boundary has to name it -- and
-#: `tests/test_bounds_ledger.py` holds the pair to the constants.
+#: second it reads in place again. The numbers are `SNAPSHOT_MIN_ELEMENTS` and
+#: `SNAPSHOT_MAX_ELEMENTS` in `crates/valgebra-py/src/check/walk/sequence.rs`,
+#: restated here because a test asserting behaviour at a boundary has to name
+#: it; the bounds table in `docs/dev/00-architecture.md` names this file as
+#: what measures them.
 SNAPSHOT_BAND = (16, 262_144)
 
 
