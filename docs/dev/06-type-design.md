@@ -226,8 +226,8 @@ writes it.
 4. **Make the mutation fail.** Break the code on purpose in the way the type
    exists to stop, and check the compiler rejects it. A type that has not been
    seen to reject something is a claim, not a guarantee.
-5. Run `python scripts/perf_gate.py` and `python scripts/perf_gate.py --binding`.
-   The direction is not predictable from the source.
+5. Run `python scripts/perf_gate.py --against HEAD` and the same with
+   `--binding`. The direction is not predictable from the source.
 6. Add a row here. A type added without one makes this page quietly wrong.
 
 ## What a compile error does NOT stop

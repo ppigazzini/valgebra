@@ -854,7 +854,7 @@ jobs:
           key: python-3.14
       - name: Install valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
-        # The ceilings in `scripts/perf_compare.json` and the bands in
+        # The ceilings in `scripts/perf_compare.json` and the counts in
         # `scripts/perf_budget.json` are claims about a ratio and a count on
         # *this* interpreter, and a ratio is a property of the interpreter as
         # much as of the code. Moving this lane moves what every one of them
@@ -910,15 +910,15 @@ jobs:
         env:
           BASE: ${{ steps.base.outputs.sha }}
       # The same gate for the binding hot paths, in every shape the binding
-      # budget records: the membership walk, the call boundary alone, the walk
+      # workload names: the membership walk, the call boundary alone, the walk
       # over a wide record, building one, explaining a failure in one and
       # accepting one, the JSON document accepted, rejected, read through a
       # union and through a key-type clause, and against a recursive schema, the
       # compiled pattern, a value nested twenty-five deep, refined elements, and
       # the reference a recursive schema enters. Schema construction grows twelve
       # percent over a release cycle where only the walk is counted, which is
-      # what the shapes beside it are for, and a budget no flag here passes is a
-      # ceiling nothing crosses. Every shape is measured against one build of
+      # what the shapes beside it are for, and a shape no flag here passes is a
+      # count nothing reads. Every shape is measured against one build of
       # the base, since the build is the expensive half. The workload embeds the
       # interpreter, so PYO3_PYTHON selects it at build time and its library
       # directory goes on the loader path at run time; each shape subtracts two
@@ -941,34 +941,6 @@ jobs:
               --against "$BASE"
         env:
           BASE: ${{ steps.base.outputs.sha }}
-      # And the recorded numbers, on the nightly only. They are a record of one
-      # environment rather than a gate -- the same commit re-measures 5% away on
-      # another machine -- so they are read where a drift over months is worth
-      # seeing and nowhere a merge waits on them. A night runs this job in the
-      # run it dispatches on the development branch, and in its own scheduled
-      # run only where it dispatched none, so the step reads both events.
-      - name: Recorded instruction-count budgets (nightly)
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        continue-on-error: true
-        run: |
-          uv run --no-sync python scripts/perf_gate.py
-          uv run --no-sync python scripts/perf_gate.py --decision
-          uv run --no-sync python scripts/perf_gate.py --decision-refute
-          uv run --no-sync python scripts/perf_gate.py --decision-repeat
-          uv run --no-sync python scripts/perf_gate.py --decision-matrix
-          py="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
-          libdir="$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
-          PYO3_PYTHON="$py" LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}" \
-            uv run --no-sync python scripts/perf_gate.py \
-              --binding --binding-boundary --binding-record --binding-keys \
-              --binding-build --binding-annotated --binding-object \
-              --binding-protocol --binding-relation \
-              --binding-subclass --binding-explain --binding-explain-accept \
-              --binding-explain-list \
-              --binding-open --binding-json --binding-pattern \
-              --binding-recursive --binding-json-reject --binding-json-union \
-              --binding-json-open --binding-json-deep --binding-deep \
-              --binding-refined --binding-mapping --binding-nullable --binding-set
       # Smoke-run the wall-clock benches once (timing disabled) so the suites
       # keep working; their numbers are recorded by hand in the performance
       # page. The files are named bench_*, so override the collection pattern.

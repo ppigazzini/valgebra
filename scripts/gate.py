@@ -77,7 +77,6 @@ NEEDS_A_RUNNER = {
     "Instruction-count regression gate": "cachegrind, and a second build of the base",
     "Decision-path instruction-count regression gate": "cachegrind, as above",
     "Binding-path instruction-count regression gate": "cachegrind, as above",
-    "Recorded instruction-count budgets (nightly)": "cachegrind, and nightly only",
     "Smoke-run the benchmarks": "needs the optimized wheel above",
     "Competitive comparison gate": "needs the optimized wheel above",
     "Record the competitive ratios": (
@@ -311,7 +310,7 @@ NOTES_STEPS = (
 #: **The hole this fills is measured.** A change to the decision procedure
 #: that read sound and cost seventy-one times the instructions -- 6.45 billion
 #: against 89.8 million on the relation matrix -- passed this script with
-#: forty-five steps green, because every instruction budget lives in the
+#: forty-five steps green, because every instruction count lives in the
 #: `bench` lane and that lane is excused by name for wanting cachegrind and a
 #: base built beside the head. The lane is right to be excused: it also wants
 #: a profiled wheel, a second interpreter and a system package installed with

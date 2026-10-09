@@ -2,12 +2,15 @@
 
 A gate that cannot be shown to fail is not evidence. These drive the decision
 logic of ``scripts/perf_gate.py`` directly -- no cachegrind, no build -- so each
-refusal is exercised: a count over the ceiling, a count under the floor (the
+refusal is exercised: a change dearer than its base, a workload that changed
+between the two, a new shape over or under its recorded band (under it is the
 shape a workload that stopped doing the work produces), a workload checksum that
 does not match, and output the gate cannot read at all.
 
-The under-floor case is the one a one-sided budget misses: a hollow workload
-measures low and reads as an improvement it never earned.
+The under-floor case is the one a one-sided band misses: a hollow workload
+measures low and reads as an improvement it never earned. And a command line
+naming nothing to compare with is refused, since the recorded counts are a
+record rather than a gate.
 """
 
 from __future__ import annotations
@@ -118,6 +121,65 @@ def test_a_step_the_file_has_outlived_is_refused() -> None:
     # And the live shape of the same record: a budget inside the window stays.
     inside = dict(outlived, binding_build_workload_irefs=1_181_988_860)
     assert not gate.stale_steps(inside)
+
+
+def test_a_command_line_names_a_base_or_a_recording() -> None:
+    """The gate compares a change with its base, or records; it judges nothing else.
+
+    A bare invocation would measure the core workload against its recorded
+    count, a reading of another machine, and answer as if it were a gate.
+    `argparse` refuses it with exit 2, the gate's "could not run", and refuses
+    the two together, since a comparison records nothing.
+    """
+    for argv in ([], ["--binding"], ["--against", "HEAD", "--update"]):
+        with pytest.raises(SystemExit) as excinfo:
+            gate._arguments(argv)  # noqa: SLF001
+        assert excinfo.value.code == gate.EXIT_CANNOT_RUN, argv
+    assert gate._arguments(["--against", "HEAD"]).against == "HEAD"  # noqa: SLF001
+    assert gate._arguments(["--update", "--decision"]).update  # noqa: SLF001
+
+
+def _record() -> dict:
+    return {
+        "core_workload_irefs": BUDGET,
+        "core_workload_checksum": 134000,
+        "tolerance": TOLERANCE,
+        "binding_set_workload_irefs": BUDGET,
+        "binding_tolerance": 0.3,
+    }
+
+
+def test_a_new_shape_is_held_to_its_recorded_count() -> None:
+    """A shape the base does not carry is judged against the record, both ways.
+
+    There is no base count, so the count the commit adding the shape recorded
+    stands in, inside the band a change of machine needs. Under it is the
+    workload that stopped doing the work; over it, a shape measuring other work.
+    """
+    record = _record()
+    core = gate.Measurement(irefs=1_050_000, checksum=134000)
+    assert gate.judge_new(core, record, "core") == gate.EXIT_OK
+    over = gate.Measurement(irefs=1_100_001, checksum=134000)
+    assert gate.judge_new(over, record, "core") == gate.EXIT_FAIL
+    hollow = gate.Measurement(irefs=899_999, checksum=134000)
+    assert gate.judge_new(hollow, record, "core") == gate.EXIT_FAIL
+    # The checksum first: a count inside the band of other work is other work.
+    other = gate.Measurement(irefs=BUDGET, checksum=133999)
+    assert gate.judge_new(other, record, "core") == gate.EXIT_FAIL
+    # A binding shape carries the wider band, and its checksum is its own.
+    wide = gate.Measurement(irefs=1_250_000, checksum=134000)
+    assert gate.judge_new(wide, record, "binding-set") == gate.EXIT_OK
+    assert gate.judge_new(wide, record, "core") == gate.EXIT_FAIL
+
+
+def test_a_new_shape_with_no_recorded_count_cannot_be_judged() -> None:
+    # Neither a pass nor a regression: the commit adding a shape records it, and
+    # one that did not left the gate nothing to read.
+    record = _record()
+    read = gate.Measurement(irefs=BUDGET, checksum=134000)
+    assert gate.judge_new(read, record, "binding-deep") == gate.EXIT_CANNOT_RUN
+    del record["core_workload_checksum"]
+    assert gate.judge_new(read, record, "core") == gate.EXIT_CANNOT_RUN
 
 
 def test_a_count_inside_the_band_passes() -> None:
@@ -384,8 +446,8 @@ def test_every_binding_shape_has_iterations_and_a_budget() -> None:
     """A shape the gate can name is one it can measure and judge.
 
     Three tables have to agree: the mode, the iteration pair it runs at, and the
-    budget key it reads. A shape in one and not the others is a mode that either
-    cannot run or cannot fail, and both look like a pass.
+    key its count is recorded under. A shape in one and not the others is a mode
+    that either cannot run or, new to a change, cannot be judged.
     """
     budget = json.loads(
         (ROOT / "scripts" / "perf_budget.json").read_text(encoding="utf-8")
@@ -395,9 +457,12 @@ def test_every_binding_shape_has_iterations_and_a_budget() -> None:
         assert mode in gate.BINDING_ITERATIONS, f"{mode} has no iteration pair"
         high, low = gate.BINDING_ITERATIONS[mode]
         assert high > low > 0, f"{mode} iterations do not difference"
-        key = f"{mode.replace('-', '_')}_workload_irefs"
-        assert key in budget, f"{mode} has no recorded budget under {key}"
-        assert budget[key] > 0
+    for mode in gate.MODES:
+        key = gate.record_key(mode)
+        assert budget.get(key, 0) > 0, f"{mode} has no recorded count under {key}"
+        if mode not in gate.BINDING_SHAPES:
+            checksum = gate.checksum_key(mode)
+            assert budget.get(checksum, 0) > 0, f"{mode} records no {checksum}"
 
 
 def _bench_steps() -> list[str]:
@@ -410,9 +475,9 @@ def _bench_steps() -> list[str]:
 
 
 def test_every_binding_shape_is_measured_by_a_lane() -> None:
-    """A budget no lane reads is a ceiling nothing can cross.
+    """A shape no lane measures is a count nothing reads.
 
-    A shape with a mode, an iteration pair and a recorded budget still measures
+    A shape with a mode, an iteration pair and a recorded count still measures
     nothing until a step passes its flag, and the three tables above cannot see
     that. A mutation survivor accepted on the strength of one of these counts is
     accepted on a count no push takes.
@@ -424,25 +489,10 @@ def test_every_binding_shape_is_measured_by_a_lane() -> None:
     }
     missing = sorted(set(gate.BINDING_SHAPES) - passed)
     assert not missing, (
-        f"binding shapes with a budget that no bench step measures: {missing}. "
-        f"Add the flag to both gate steps of the bench job in "
+        f"binding shapes with a recorded count that no bench step measures: "
+        f"{missing}. Add the flag to the binding gate step of the bench job in "
         f".github/workflows/ci.yml, or drop the shape."
     )
-
-
-def test_the_regression_gate_measures_every_shape_the_nightly_records() -> None:
-    """The gate against the merge base and the nightly record read one set.
-
-    A shape recorded nightly and not gated drifts between releases with every
-    lane green; a shape gated and not recorded has no history to read the drift
-    against.
-    """
-    steps = _bench_steps()
-    assert len(steps) == 2, "the bench job runs two gate steps"
-    gated, recorded = (
-        {flag[2:] for flag in re.findall(r"--binding[a-z-]*", step)} for step in steps
-    )
-    assert gated == recorded, sorted(gated ^ recorded)
 
 
 def _merge_base_step() -> str:
@@ -616,7 +666,10 @@ def test_a_base_more_than_one_commit_back_is_read_as_a_batch(tmp_path: Path) -> 
     note, batch = gate.describe_window(1)
     assert not batch
     assert "1 commit" in note
-    assert not gate.describe_window(0)[1]
+    # `--against HEAD` reads an uncommitted change, which is no commit at all.
+    note, batch = gate.describe_window(0)
+    assert not batch
+    assert "no commit" in note
     note, batch = gate.describe_window(None)
     assert batch
     assert "unknown" in note
