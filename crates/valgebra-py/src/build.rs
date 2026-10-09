@@ -134,7 +134,7 @@ pub(super) fn build_applied_alias(
     // what counts as one argument for it is not a type.
     for parameter in parameters.iter() {
         if !parameter.get_type().is(type_var) {
-            return Err(not_implemented(&format!(
+            return Err(not_implemented(format!(
                 "{name} declares {}, which stands for a list of types or a \
                  signature rather than for one type, so no argument here \
                  substitutes it: write the alias over TypeVars alone",
@@ -143,7 +143,7 @@ pub(super) fn build_applied_alias(
         }
     }
     if args.len() > parameters.len() {
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "{name} takes {count} type argument{s}, and {} gives it {}",
             summarize(spelling)?,
             args.len()
@@ -156,7 +156,7 @@ pub(super) fn build_applied_alias(
             continue;
         }
         let Some(default) = default_of(&parameter)? else {
-            return Err(not_implemented(&if args.is_empty() {
+            return Err(not_implemented(if args.is_empty() {
                 format!(
                     "{name} is a generic alias, and its parameter {} has no \
                      default: write {name}[...] with the type it stands for",
@@ -383,7 +383,7 @@ fn refuse_a_growing_argument(
             for argument in args.iter() {
                 let bare = parameters.iter().any(|parameter| parameter.is(&argument));
                 if !bare && names_a_parameter(&argument, parameters)? {
-                    return Err(not_implemented(&format!(
+                    return Err(not_implemented(format!(
                         "{name} applies itself to {}, an argument nesting its own \
                          type parameter, so every unfolding is an alias not met \
                          before and no schema ties the recursion: recur on the \
@@ -1130,7 +1130,7 @@ fn build_unrecognised(
     // matching nothing a caller has. The same refusal a type *argument* already
     // gives, reached at the top level too.
     if is_forward_reference(obj)? {
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "{} is a forward reference, and a schema is built from the types \
              themselves: resolve the annotation first with typing.get_type_hints(\
              ..., include_extras=True), or write the type rather than its name",
@@ -1143,7 +1143,7 @@ fn build_unrecognised(
     }
 
     if is_init_var(obj)? {
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "{} names a dataclass's constructor parameter, which is no field and \
              no value of one: write the type it carries",
             summarize(obj)?
@@ -1151,7 +1151,7 @@ fn build_unrecognised(
     }
 
     if is_class_factory(obj)? {
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "{} is the base a class is declared from, not a type: pass the \
              TypedDict or named tuple class itself, or tuple[...] for the fields a \
              named tuple lays out",
@@ -1160,7 +1160,7 @@ fn build_unrecognised(
     }
 
     if is_typing_construct(obj)? {
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "{} is a typing construct, not a value: a type variable, ParamSpec, \
              TypeVarTuple, or special form (such as Final or ClassVar) cannot be a \
              schema; use a concrete type",
@@ -1177,7 +1177,7 @@ fn build_unrecognised(
     // one of two spellings, and each reads it: a predicate in `Annotated`
     // metadata, or the object itself in `Literal` ([`build_constant`]).
     if obj.is_callable() {
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "{} is callable, and a callable is not a schema: write \
              Annotated[T, fn] for the values of T it accepts, or Literal[fn] for \
              the object itself",
@@ -1537,7 +1537,7 @@ fn checked_key(schema: &Schema, spelling: &Bound<'_, PyAny>) -> PyResult<()> {
     if !narrows_its_keys(schema) {
         return Ok(());
     }
-    Err(not_implemented(&format!(
+    Err(not_implemented(format!(
         "{} narrows the keys it governs, and a map key must be a key type or a \
          Literal: write dict[str, V] to key every string, or dict[Literal[\"a\"], V] \
          (or {{\"a\": V}}) to key one. To constrain the keys themselves, check them \
@@ -1559,8 +1559,10 @@ fn narrows_its_keys(schema: &Schema) -> bool {
     }
 }
 
-pub(crate) fn not_implemented(message: &str) -> PyErr {
-    PyNotImplementedError::new_err(message.to_owned())
+/// The refusal of a form this frontend has no reading for, carrying the message
+/// as it was built: a `format!` at the call site is moved in, not copied.
+pub(crate) fn not_implemented(message: impl Into<String>) -> PyErr {
+    PyNotImplementedError::new_err(message.into())
 }
 
 // Needs a live interpreter; compiled and run only under the `interpreter-tests`
@@ -1585,11 +1587,10 @@ pub(crate) fn not_implemented(message: &str) -> PyErr {
 /// interpreter starts on the base prefix and does not see a virtual
 /// environment's packages, so importing `annotated_types` would make this corpus
 /// depend on how the harness was launched. It costs nothing to do without: the
-/// frontend reads a marker by *attribute* -- `ge`, `min_length`, `pattern` --
-/// which is the contract the vocabulary's classes meet, so an object carrying
-/// the attribute exercises the same arm. The one arm that reads a marker's
-/// identity is the refusal for a vocabulary member this frontend does not check,
-/// and it reads `type(marker).__module__`, which a class here can set.
+/// frontend reads a marker's constraint off a class whose method resolution
+/// order names `annotated_types` as its `__module__`, never by importing the
+/// module, so a class here that sets its `__module__` to that name exercises
+/// the same arm as the vocabulary's own.
 mod classes;
 mod dialect;
 mod generics;

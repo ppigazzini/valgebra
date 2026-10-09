@@ -274,7 +274,7 @@ schema naming none of them pays nothing for it.
 
 ## What a class declares
 
-Dispatch step 4 takes any plain type, and what it builds depends on what the
+Dispatch step 5 takes any plain type, and what it builds depends on what the
 class *says about itself* rather than on what it is called. The order is the
 order of the questions, and each is asked of an attribute the runtime fills in:
 
@@ -422,7 +422,7 @@ import of `sys` there is 12% of compiling a three-field one, and of one built by
 
 ## What a parametrized form says
 
-Dispatch step 8 takes anything with a typing origin, and reads the origin
+Dispatch step 9 takes anything with a typing origin, and reads the origin
 before the arguments. The origins are compared by identity against the forms
 resolved once, at the first build — `typing` is imported once, not once per
 node — and a form this frontend does not know is a refusal rather than a guess.
