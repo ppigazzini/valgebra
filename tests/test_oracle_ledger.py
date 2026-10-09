@@ -6,17 +6,17 @@ the moment a question is added: two of the trait's ten reached the tree with the
 readings that rest on them and never reached the page, and the page went on
 saying there were five.
 
-The other half of the drift is worse than an omission. The page claimed a
-mutation of one oracle default "cannot be killed by any test", which is true only
-where *every* call site collapses the declined answer into the one the mutant
-returns -- a property of the call sites, not of the default. `leaf_subtype` grew
-a site that reads `Some(false)` as a refutation and left that class; the page did
-not notice, and `.cargo/mutants.toml` had already recorded the mutant as killed.
-A page and the gate that holds it said opposite things.
+The sweep is the other half. A mutation of an oracle default is excusable only
+where no test can tell the default's `None` from the mutant's answer, and that
+argument rests on the call sites: a question that grows a reader of the other
+answer turns an excused mutant into a decided one, which `leaf_subtype` did
+with a refutation and `no_int_between` with a value. So the argument is not
+made at all. Every default declines, `the_default_oracle_declines_every_question`
+asserts it of each, and a default that answers fails there whatever reads it.
 
-So both directions are held here: every method is on the page, every name on the
-page is a method, and the page's table of unkillable defaults is the sweep's
-exclusion list.
+So these are held here: every method is on the page, every name on the page is
+a method, every default that declines is asserted to, and the sweep excuses
+none.
 """
 
 from __future__ import annotations
@@ -38,6 +38,9 @@ RULES = ROOT / "crates" / "valgebra-core" / "src" / "decision.rs"
 #: refutation the page lists is defined.
 READINGS = ROOT / "crates" / "valgebra-core" / "src" / "decision" / "readings.rs"
 SWEEP = ROOT / ".cargo" / "mutants.toml"
+#: Where every default is asserted to decline.
+PIN = ROOT / "crates" / "valgebra-core" / "src" / "oracle" / "tests.rs"
+PIN_TEST = "the_default_oracle_declines_every_question"
 
 # This file reads the tree rather than the library: it holds a shipped page to
 # the trait and to the sweep's configuration, and exercises no schema.
@@ -47,9 +50,12 @@ pytestmark = pytest.mark.repository
 _METHOD = re.compile(r"^    fn ([a-z_][a-z0-9_]*)\s*\(", re.MULTILINE)
 # A page row: a list item opening with the method name in backticks, em-dashed.
 _ROW = re.compile(r"^- `([a-z_][a-z0-9_]*)` [-—]", re.MULTILINE)
-# The unkillable table's first column, which may name more than one question.
-_TABLE_ROW = re.compile(
-    r"^\| (`[a-z_, `]+`) \| `([^`]+)` \| `([^`]+)` \|", re.MULTILINE
+# A trait method whose default body is `None`: a signature, which holds no
+# brace and no semicolon, then a body of that one word. The semicolon is what
+# stops a required method -- `leaf_subtype`, which has no body -- from running
+# on into the next method's and answering for it.
+_DECLINING = re.compile(
+    r"^    fn ([a-z_][a-z0-9_]*)\s*\([^{;]*\{\s*None\s*\}", re.MULTILINE
 )
 
 
@@ -98,69 +104,49 @@ def test_the_page_lists_each_question_once() -> None:
     assert len(rows) == len(set(rows)), f"duplicated rows: {sorted(rows)}"
 
 
-def test_an_unkillable_default_is_one_the_sweep_excludes() -> None:
-    """The page's table of unkillable defaults is the sweep's exclusion list.
+def _declining_defaults() -> set[str]:
+    return set(_DECLINING.findall(_trait_source()))
 
-    A default is unkillable only where every call site reads the declined answer
-    and the mutant's answer alike. The page states which three questions are in
-    that class and which answer each; `.cargo/mutants.toml` excludes exactly
-    those mutants. Either file drifting from the other is the failure this test
-    exists for, and it has happened once.
+
+def _pinned() -> set[str]:
+    """Read the questions the pin test asks the default oracle."""
+    source = PIN.read_text(encoding="utf-8")
+    start = source.index(f"fn {PIN_TEST}()")
+    body = source[start : source.index("\n}\n", start)]
+    return set(re.findall(r"\boracle\.([a-z_][a-z0-9_]*)\(", body))
+
+
+def test_every_declining_default_is_held_to_its_decline() -> None:
+    """A default that declines is asserted to, so one that answers fails.
+
+    That is what lets the sweep take every default: a mutation replacing one
+    with an answer fails the pin whichever answer it is and whatever reads it.
+    A question added with a declining default and no row in the pin is killed
+    only where a decision happens to read the answer the mutant gives, which
+    is the argument the sweep stopped resting on.
     """
-    page = PAGE.read_text(encoding="utf-8")
-    sweep = "\n".join(load(SWEEP)["exclude_re"])
-    rows = _TABLE_ROW.findall(page)
-    assert rows, "the page's table of unkillable defaults did not parse"
-
-    claimed: set[tuple[str, str]] = set()
-    for questions, _reading, answer in rows:
-        for question in re.findall(r"`([a-z_]+)`", questions):
-            claimed.add((question, answer))
-
-    assert claimed, "the table named no question"
-    for question, answer in sorted(claimed):
-        assert question in _methods(), (
-            f"the table names {question}, which is not a question"
-        )
-        # The exclusion spells the mutant `cargo mutants --list` offers, with
-        # the parentheses escaped for the regex the sweep reads the entry as.
-        escaped = answer.replace("(", r"\(").replace(")", r"\)")
-        wanted = f"replace LeafRelations::{question} -> Option<bool> with {escaped}"
-        assert wanted in sweep, (
-            f"the page calls {question}'s {answer} default unkillable, "
-            f"and the sweep does not exclude it"
-        )
+    declining = _declining_defaults()
+    assert len(declining) >= 8, f"the trait scan found only {sorted(declining)}"
+    pinned = _pinned()
+    assert pinned, f"`{PIN_TEST}` asks no question; the scan read nothing"
+    missing = sorted(declining - pinned)
+    assert not missing, f"`{PIN_TEST}` does not assert that {missing} decline"
 
 
-def test_a_question_the_sweep_excuses_is_one_the_page_explains() -> None:
-    sweep = "\n".join(load(SWEEP)["exclude_re"])
-    excluded = re.findall(
-        r"replace LeafRelations::([a-z_]+) -> Option<bool> with (\w+)", sweep
+def test_the_sweep_excuses_no_oracle_default() -> None:
+    exclusions = load(SWEEP)["exclude_re"]
+    assert exclusions, "the sweep's exclusions did not parse"
+    excused = sorted(
+        {
+            question
+            for entry in exclusions
+            for question in re.findall(r"LeafRelations::([a-z_]+)", entry)
+        }
     )
-    assert excluded, "no oracle default is excluded; this test has nothing to hold"
-    page = PAGE.read_text(encoding="utf-8")
-    table = page[
-        page.index("| question |") : page.index("\n\n", page.index("| question |"))
-    ]
-    for question, _answer in excluded:
-        assert f"`{question}`" in table, (
-            f"the sweep excuses {question}'s default; the page's table does not name it"
-        )
-
-
-@pytest.mark.parametrize("reading", ["leaf_subtype"])
-def test_a_question_that_left_the_unkillable_class_is_swept(reading: str) -> None:
-    # `leaf_subtype` was in the table until a call site read `Some(false)` as a
-    # refutation. The page says so in prose; this holds the consequence.
-    sweep = SWEEP.read_text(encoding="utf-8")
-    assert f"replace LeafRelations::{reading} -> Option<bool>" not in sweep, (
-        f"{reading}'s default is excluded again; the page says its mutant dies"
+    assert not excused, (
+        f"the sweep excuses the default of {excused}; every default declines and "
+        f"`{PIN_TEST}` kills one that answers, so none is excused"
     )
-    page = PAGE.read_text(encoding="utf-8")
-    table = page[
-        page.index("| question |") : page.index("\n\n", page.index("| question |"))
-    ]
-    assert f"`{reading}`" not in table, f"{reading} is back in the unkillable table"
 
 
 # A reading named on the page as one that refutes, in backticks at a list item.
