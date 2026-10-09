@@ -953,6 +953,12 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   a machine word, it is still 4.6% dearer on CPython 3.14, and an `int` past
   the word raises on every read, nearly four times the cost; only a `float`,
   whose value is a field, reads cheaper.
+- **A JSON string cache of keys only, or none**: jiter's default caches every
+  string it parses, and parsing alone on CPython 3.14, a 1.5 MiB document of
+  ninety thousand distinct strings reads 18% faster caching keys only and 28%
+  faster caching none. The others read slower: 1.8 MiB of records 7.5% and
+  9.4%, 1.1 MiB of strings drawn from fifty twice the time, sixty thousand
+  one-key objects 4.6% and 29%.
 - **Answering a union of scalars by the element's exact type**, from a table
   of the builtin types the union's kinds admit built once per list: a list of a
   thousand `int | str` costs 25% fewer instructions in the PGO wheel, but an
