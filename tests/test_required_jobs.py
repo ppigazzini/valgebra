@@ -18,6 +18,8 @@ LEDGER: the merge gate requires every job the workflow defines
 
 from __future__ import annotations
 
+import ast
+import itertools
 import os
 import re
 import shutil
@@ -573,3 +575,191 @@ def test_every_supported_interpreter_runs_on_every_event() -> None:
             "the classifiers promise free threading and no leg of the python job "
             f"is a free-threaded build: {versions}"
         )
+
+
+#: The jobs that run the suite whole, rather than files of it they name.
+SUITES = ("python", "pypy", "binding-coverage")
+
+#: The kinds of test the two markers draw apart, as the marks each carries.
+KINDS = {
+    "the product suite": {"repository": False, "interpreter": False},
+    "the repository audit": {"repository": True, "interpreter": False},
+    "the checks reading the interpreter": {"repository": True, "interpreter": True},
+}
+
+#: A step running pytest, and the marker expression it selects with, if any.
+_PYTEST = re.compile(r"(?:^|\s)(?:uv run [^\n]*?|[\w./-]*python -m )pytest\b")
+_MARKERS = re.compile(r"""\s-m\s+(?:"([^"]*)"|'([^']*)')""")
+
+#: One clause of a step's condition: a leg's key against a literal or a variable.
+_CLAUSE = re.compile(
+    r"(?P<key>matrix\.[\w-]+)\s*==\s*(?:'(?P<literal>[^']*)'|env\.(?P<variable>\w+))"
+)
+
+
+def _selects(expression: str, marks: dict[str, bool]) -> bool:
+    """Answer whether `-m expression` runs a test carrying `marks`.
+
+    pytest's grammar for it -- `not`, `and`, `or`, parentheses, names -- is a
+    subset of Python's, so the tree is Python's own and only the reading is
+    written here. A step with no expression runs every test.
+    """
+
+    def value(node: ast.expr) -> bool:
+        if isinstance(node, ast.BoolOp):
+            values = [value(inner) for inner in node.values]
+            return all(values) if isinstance(node.op, ast.And) else any(values)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            return not value(node.operand)
+        if isinstance(node, ast.Name):
+            return marks[node.id]
+        message = f"the ledger cannot read {ast.unparse(node)!r} in {expression!r}"
+        raise AssertionError(message)
+
+    return not expression or value(ast.parse(expression, mode="eval").body)
+
+
+def _legs(job: dict) -> list[dict[str, str]]:
+    """Give each leg of a job as the `matrix.*` values its expressions read.
+
+    Expanded as the runner expands a matrix: an `include` row widens every
+    combination of the lists whose values it agrees with, and is a leg of its
+    own where it agrees with none.
+    """
+    matrix = (job.get("strategy") or {}).get("matrix") or {}
+    axes = {key: value for key, value in matrix.items() if key != "include"}
+    legs = [
+        {f"matrix.{key}": str(value) for key, value in zip(axes, values, strict=True)}
+        for values in itertools.product(*axes.values())
+    ]
+    combinations = list(legs)
+    listed = {f"matrix.{key}" for key in axes}
+    for row in matrix.get("include", []):
+        named = {f"matrix.{key}": str(value) for key, value in row.items()}
+        widened = [
+            leg
+            for leg in combinations
+            if all(leg[key] == named[key] for key in listed & named.keys())
+        ]
+        for leg in widened:
+            leg.update(named)
+        if not widened:
+            legs.append(named)
+    return legs
+
+
+def _holds(condition: str, leg: dict[str, str], variables: dict) -> bool:
+    """Answer whether a step's `if:` holds on a leg; a step with none always runs.
+
+    Read as the steps that gate on a leg write it, a conjunction of equalities;
+    a clause of another shape fails here rather than being read as true.
+    """
+    body = condition.strip().removeprefix("${{").removesuffix("}}").strip()
+    if not body:
+        return True
+    holds = True
+    for clause in body.split("&&"):
+        found = _CLAUSE.fullmatch(clause.strip())
+        assert found, f"the ledger cannot read {clause.strip()!r} in {condition!r}"
+        named = found["variable"]
+        wanted = found["literal"] if named is None else str(variables[named])
+        holds = holds and leg.get(found["key"]) == wanted
+    return holds
+
+
+def _reads(workflow: dict) -> dict[tuple[str, str], dict[str, int]]:
+    """Count, for each leg of each suite job, the steps that run each kind."""
+    variables = workflow.get("env") or {}
+    counts = {}
+    for name in SUITES:
+        job = workflow["jobs"][name]
+        for leg in _legs(job) or [{}]:
+            selections = [
+                "".join(found.groups(""))
+                if (found := _MARKERS.search(str(step["run"])))
+                else ""
+                for step in job["steps"]
+                if _PYTEST.search(str(step.get("run", "")))
+                and _holds(str(step.get("if", "")), leg, variables)
+            ]
+            where = (name, " ".join(leg.values()))
+            counts[where] = {
+                kind: sum(_selects(expression, marks) for expression in selections)
+                for kind, marks in KINDS.items()
+            }
+    return counts
+
+
+def test_the_floor_leg_reads_the_audit_and_every_leg_the_rest() -> None:
+    """The repository audit runs once a push, and nothing else a leg reads is lost.
+
+    The audit reads the tree, which answers the same on every leg, so one leg
+    reads it: the floor's, which takes the whole history the audit's history
+    checks need and installs the `cargo-mutants` two of its checks list with.
+    Measured on one interpreter, the audit was 313 of the suite's 385 seconds,
+    so the other legs each skip most of what they ran.
+
+    What each leg must still read is its own: the product suite, and the
+    checks marked `interpreter`, whose answer is the running interpreter's.
+    Each once, since two selections that overlap read a test twice.
+    """
+    workflow = _workflow()
+    reads = _reads(workflow)
+    floor = ("python", f"ubuntu-latest {workflow['env']['FLOOR']}")
+    assert floor in reads, f"the python job runs no floor leg: {sorted(reads)}"
+
+    def expected(where: tuple[str, str], kind: str) -> int:
+        if kind == "the repository audit":
+            return int(where == floor)
+        # Binding coverage measures the extension, which a check reading the
+        # interpreter does not exercise, so it reads the product suite alone.
+        if kind == "the checks reading the interpreter":
+            return int(where[0] != "binding-coverage")
+        return 1
+
+    wrong = sorted(
+        f"{' '.join(where).strip()}: {kind} {count} time(s), not {wanted}"
+        for where, read in reads.items()
+        for kind, count in read.items()
+        if count != (wanted := expected(where, kind))
+    )
+    assert not wrong, (
+        f"legs reading a kind of test a wrong number of times: {wrong}. The floor "
+        "leg reads the audit and no other leg does; every leg reads the product "
+        "suite and the checks that read the interpreter, once each."
+    )
+
+
+def test_a_selection_and_a_condition_are_read_as_the_runner_reads_them() -> None:
+    # The readings the row above turns on. A marker expression is evaluated, not
+    # matched; a condition comparing a leg with a variable is read as its value;
+    # an include row naming a leg's values widens that leg.
+    product, audit, reader = KINDS.values()
+    assert _selects("not repository or interpreter", reader)
+    assert not _selects("not repository or interpreter", audit)
+    assert _selects("repository and not interpreter", audit)
+    assert not _selects("repository and not interpreter", product)
+    assert _selects("", audit)
+    leg = {"matrix.os": "ubuntu-latest", "matrix.python-version": "3.10"}
+    floor = "${{ matrix.os == 'ubuntu-latest' && matrix.python-version == env.FLOOR }}"
+    assert _holds(floor, leg, {"FLOOR": "3.10"})
+    assert not _holds(floor, leg, {"FLOOR": "3.11"})
+    with pytest.raises(AssertionError, match="cannot read"):
+        _holds("${{ contains(matrix.os, 'ubuntu') }}", leg, {})
+    job = {
+        "strategy": {
+            "matrix": {
+                "os": ["ubuntu-latest"],
+                "python-version": ["3.10", "3.11"],
+                "include": [
+                    {"os": "ubuntu-latest", "python-version": "3.10", "floor": True},
+                    {"os": "macos-latest", "python-version": "3.14"},
+                ],
+            }
+        }
+    }
+    assert [" ".join(leg.values()) for leg in _legs(job)] == [
+        "ubuntu-latest 3.10 True",
+        "ubuntu-latest 3.11",
+        "macos-latest 3.14",
+    ]

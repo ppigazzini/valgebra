@@ -191,6 +191,7 @@ def _refusals_that_cannot_fail(source: str) -> list[int]:
     return lines
 
 
+@pytest.mark.interpreter
 @pytest.mark.skipif(
     sys.version_info < (3, 12),
     reason="the pages write 3.12 syntax, and the docs lane reads them on 3.12",

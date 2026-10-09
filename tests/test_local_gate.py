@@ -500,7 +500,7 @@ def test_a_job_left_out_whole_is_one_the_workflow_has_and_says_why() -> None:
 
 
 def _matrix_interpreters() -> list[str]:
-    """Read the interpreters the python lane runs, floor first."""
+    """Read the interpreters the python lane runs."""
     matrix = gate.workflow()["jobs"]["python"]["strategy"]["matrix"]
     versions = [str(version) for version in matrix["python-version"]]
     assert versions, "the python lane names no interpreter"
@@ -522,7 +522,8 @@ def test_the_gate_builds_the_floor_interpreter_the_matrix_names() -> None:
     where a stale floor tests *less* than it claims. Held by refusing the
     literal anywhere in the gate.
     """
-    floor = _matrix_interpreters()[0]
+    floor = str(gate.workflow()["env"]["FLOOR"])
+    assert floor in _matrix_interpreters(), f"the floor {floor} is no leg of the lane"
     assert gate.floor_interpreter() == floor
 
     source = GATE.read_text(encoding="utf-8")
@@ -554,7 +555,8 @@ def test_the_floor_interpreter_runs_the_product_suite() -> None:
     assert ran, f"the floor interpreter is built and nothing runs on it: {commands}"
     assert "not repository" in ran[0], (
         f"the floor runs {ran[0]!r}, which is not the product suite -- the "
-        f"repository checks read the tree and answer the same on any release"
+        f"repository checks read the tree and answer the same on any release, "
+        f"but for the ones marked `interpreter`"
     )
 
 

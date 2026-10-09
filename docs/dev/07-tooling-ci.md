@@ -71,10 +71,12 @@ not carry collects on the caller's release and fails collection on the floor,
 taking every job there with it. The floor is the end of the range where that
 lands, because the suite is written on the newest release the tree supports and
 read on the oldest. So the gate makes a second environment on the floor
-`ci.yml` names, builds the extension into it, and runs the **product** suite
-there; the repository checks read the tree and answer the same on any release,
-so they run once. Which release the floor is stays in `ci.yml`: the gate reads
-it, and `tests/test_local_gate.py` refuses a copy of the number in
+`ci.yml` names, builds the extension into it, and runs there what a CI leg
+other than the floor reads: the **product** suite, and the repository checks
+marked `interpreter`. The rest of the audit reads the tree and answers the same
+on any release, so it runs once. Which release the floor is stays in `ci.yml`,
+as its `FLOOR`: the gate reads it, and `tests/test_local_gate.py` refuses a
+copy of the number in
 `scripts/gate.py`, because a stale floor is the one kind of stale that tests
 less than it claims while staying green.
 
@@ -108,7 +110,7 @@ reproduces; the count is the table's rather than this sentence's:
 | the terminal's own variables | yes, `runner_environment` | `FORCE_COLOR` turned `pip-audit` red against a clean dependency tree |
 | the machine's git identity | yes, `deep_clone` and `NO_IDENTITY` | a checkout configures no `user.name`, this repository has one in its own `.git/config`, and a ledger that plants a commit with `git commit-tree` passed here and failed there |
 | the interpreter the lane names | partly: `PYO3_PYTHON` follows the caller's, and the gate's closing line says so | the mutation lanes name CPython 3.12 in `ci.yml` and the cachegrind lane 3.14; a local sweep on 3.14 read two mutants as survivors that the lane kills, which is half an hour spent on a difference that was the interpreter |
-| the *release* of the interpreter, not only the caller's | yes, at the floor: the gate builds it beside the caller's and runs the product suite on it | `typing.Self`, `LiteralString` and `Unpack` are 3.11 members; a test module naming them collected here on 3.14, failed to collect on the floor, and took nine jobs red with it |
+| the *release* of the interpreter, not only the caller's | yes, at the floor: the gate builds it beside the caller's and runs the product suite and the checks marked `interpreter` on it | `typing.Self`, `LiteralString` and `Unpack` are 3.11 members; a test module naming them collected here on 3.14, failed to collect on the floor, and took nine jobs red with it |
 | the operating system and architecture | no | a macOS or Windows leg fails where Linux does not, and nothing local sees it |
 | the pinned tool versions | no, for the tools `taiki-e/install-action` installs | `ci.yml` installs `cargo-deny`, `cargo-llvm-cov` and `cargo-mutants` at versions it names, and the gate runs whichever is on the caller's `PATH`; a `uvx` step carries its pin in its own command, so the gate runs the lane's version of it |
 | the build of the interpreter, not only its version | no: a rule answers it instead | `sys.stdlib_module_names` is the build's, not the release's -- this box's 3.12 lists the Windows-only `_wmi` and a runner's does not, so a table of every name reported a difference between two builds as a moved row. The floor table records the modules this tree imports, which are portable by construction |
@@ -911,6 +913,31 @@ answers the reader's question wrongly, which is worse than not answering it.
 The same leg installs `cargo-mutants` at the version the sweeps pin, so the two
 checks in `tests/test_mutation_scope.py` that list the mutants a sweep is
 offered, and skip without it, run there too.
+
+**And that leg alone reads the repository audit.** The audit reads the tree,
+the workflow and the scripts, which answer the same on every leg, and it is
+most of what the suite costs: on one interpreter, 313 of 385 seconds. So the
+floor leg reads it in a step of its own, and every leg reads the product suite
+and the checks marked `interpreter`, the few whose answer is the running
+interpreter's (`docs/dev/08-testing.md` names them). `pypy` reads what a leg
+reads. `binding coverage` reads the product suite alone: with this lane's flow
+on 2026-10-09 the binding left the same 930 of 13,576 regions unreached with
+the audit and without it.
+`test_the_floor_leg_reads_the_audit_and_every_leg_the_rest` in
+`tests/test_required_jobs.py` evaluates each step's selection and condition on
+each leg, and holds the audit to the floor leg and every other kind to once a
+leg. Each pytest step lists its thirty slowest tests, so what the suite costs
+is read off a run's log.
+
+**The floor is one variable.** `ci.yml`'s `FLOOR` names it, and the steps that
+answer once for every release -- ruff, both `ty` runs, stubtest, a caller's
+strict types, the audit, the checkout of the whole history -- run on the leg
+whose interpreter equals it. The job's name cannot read the variable, so it
+spells the release, and `tests/test_changelog_ledger.py` holds it to the
+checkout's condition. `tests/test_version_gates.py` holds every release a step
+compares a leg with to one the job's matrix runs: a floor that moved past the
+release one step names would leave that step skipped on every leg, and a
+skipped step is a green one.
 
 **The manylinux wheel is installed on every push.** The `wheel (linux)` job
 builds the manylinux wheels from the image a release builds them in, then

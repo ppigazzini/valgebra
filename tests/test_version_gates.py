@@ -28,6 +28,11 @@ prerelease leg runs under `continue-on-error`, because a prerelease that breaks
 is news rather than a defect -- so a gate whose only interpreter above it is
 that one is a gate nothing enforces.
 
+The workflow gates too, one level up: a step runs on the leg whose interpreter
+it names, `matrix.python-version == env.FLOOR`. That gate has one side, and it
+must stand on it -- a release the job's matrix does not run is a step that
+runs on no leg, and a step that does not run reads green.
+
 LEDGER: every release a version gate names has an enforced lane on each side
 """
 
@@ -117,6 +122,26 @@ def _rust_gates() -> dict[int, list[str]]:
     return found
 
 
+def _workflow() -> dict:
+    return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+
+
+#: One of the workflow's own variables, read where a value is the whole of it.
+_VARIABLE = re.compile(r"\$\{\{\s*env\.(\w+)\s*\}\}")
+
+
+def _legs(job: dict) -> list[str]:
+    """Give every interpreter a job's matrix runs, its `include` rows among them."""
+    matrix = (job.get("strategy") or {}).get("matrix") or {}
+    versions = [str(value) for value in matrix.get("python-version", [])]
+    versions += [
+        str(entry["python-version"])
+        for entry in matrix.get("include", [])
+        if "python-version" in entry
+    ]
+    return versions
+
+
 def _lanes() -> dict[str, bool]:
     """Give every interpreter the workflow installs, and whether it is enforced.
 
@@ -124,21 +149,17 @@ def _lanes() -> dict[str, bool]:
     value is what the lane's `continue-on-error` says about that version rather
     than whether the lane exists.
     """
-    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    workflow = _workflow()
+    variables = workflow.get("env") or {}
     lanes: dict[str, bool] = {}
     for job in (workflow.get("jobs") or {}).values():
-        strategy = job.get("strategy") or {}
-        matrix = strategy.get("matrix") or {}
-        versions = [str(value) for value in matrix.get("python-version", [])]
-        versions += [
-            str(entry["python-version"])
-            for entry in matrix.get("include", [])
-            if "python-version" in entry
-        ]
+        versions = _legs(job)
         for step in job.get("steps") or []:
             with_ = step.get("with") if isinstance(step, dict) else None
             if isinstance(with_, dict) and "python-version" in with_:
                 named = str(with_["python-version"])
+                if found := _VARIABLE.fullmatch(named):
+                    named = str(variables[found.group(1)])
                 if named and "matrix." not in named:
                     versions.append(named)
         forgiven = job.get("continue-on-error", False)
@@ -213,6 +234,95 @@ def test_every_gate_has_an_enforced_lane_on_each_side(spelling: str) -> None:
         f"releases gated on with no lane below them: {ungated}. The guard is "
         "taken on no interpreter, so it states a difference nothing reads."
     )
+
+
+#: A leg's interpreter compared with a release, as a workflow expression spells
+#: one: against a quoted literal, or against one of the workflow's variables.
+_COMPARED = re.compile(
+    r"matrix\.python-version\s*[!=]=\s*"
+    r"(?:'(?P<literal>[^']*)'|env\.(?P<variable>\w+))"
+)
+
+
+def _strings(node: object) -> list[str]:
+    """Collect every string a job carries: its name, a step's `if:`, an input."""
+    if isinstance(node, str):
+        return [node]
+    if isinstance(node, dict):
+        return [text for value in node.values() for text in _strings(value)]
+    if isinstance(node, list):
+        return [text for value in node for text in _strings(value)]
+    return []
+
+
+def _compared(workflow: dict) -> list[tuple[str, str, str]]:
+    """Give every release a job compares a leg's interpreter with.
+
+    Each comes with its job and with the text it was read from. A variable is
+    read as its value, and one the workflow does not define reads as nothing,
+    which no matrix runs.
+    """
+    variables = workflow.get("env") or {}
+    found = []
+    for name, job in (workflow.get("jobs") or {}).items():
+        for text in _strings(job):
+            for match in _COMPARED.finditer(text):
+                named = match["variable"]
+                release = (
+                    match["literal"] if named is None else str(variables.get(named, ""))
+                )
+                found.append((name, release, " ".join(text.split())))
+    return found
+
+
+def _off_the_matrix(workflow: dict) -> list[str]:
+    """Name every comparison with a release the comparing job's matrix lacks."""
+    jobs = workflow.get("jobs") or {}
+    return [
+        f"{name}: {release or 'nothing'} in {text!r}"
+        for name, release, text in _compared(workflow)
+        if release not in _legs(jobs[name])
+    ]
+
+
+def test_every_release_a_step_is_gated_on_is_a_leg() -> None:
+    """A step gated on a release no leg runs is a step that never runs.
+
+    The python job runs the steps that answer once for every release on its
+    floor leg alone: the linters, both type checks, the stub against the built
+    extension, a caller's strict types, the repository audit, and the checkout
+    of the whole history it needs. A floor that moved past the release one of
+    them names would leave that step skipped on every leg, and a skipped step
+    is a green one -- the stub's only gate among them. So the release each is
+    compared with is held to the legs the job runs.
+    """
+    workflow = _workflow()
+    compared = _compared(workflow)
+    # Read from the file, so it is shown to have been read: a pattern that
+    # matched nothing would leave the rule below quantified over nothing.
+    assert len(compared) >= 9, f"the workflow compares a leg {len(compared)} time(s)"
+    wrong = _off_the_matrix(workflow)
+    assert not wrong, (
+        f"steps gated on a release their job's matrix does not run: {wrong}. "
+        "The step runs on no leg and reads green; name a leg the matrix runs."
+    )
+
+
+def test_a_release_off_the_matrix_is_found_spelled_either_way() -> None:
+    # The floor moved and one gate left behind, in each spelling a gate takes:
+    # a literal, the variable, and a variable the workflow no longer defines.
+    def workflow(gate: str, floor: str = "3.11") -> dict:
+        job = {
+            "strategy": {"matrix": {"python-version": ["3.11", "3.12"]}},
+            "steps": [{"run": "true", "if": f"${{{{ {gate} }}}}"}],
+        }
+        return {"env": {"FLOOR": floor}, "jobs": {"python": job}}
+
+    assert _off_the_matrix(workflow("matrix.python-version == env.FLOOR")) == []
+    assert _off_the_matrix(workflow("matrix.python-version == '3.12'")) == []
+    assert _off_the_matrix(workflow("matrix.python-version == env.FLOOR", "3.10"))
+    assert _off_the_matrix(workflow("matrix.python-version == '3.10'"))
+    assert _off_the_matrix(workflow("matrix.python-version == env.FLOR"))
 
 
 def _compares_outside_the_helper(source: str) -> list[int]:

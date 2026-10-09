@@ -123,6 +123,7 @@ def test_a_shape_with_no_recorded_ratio_is_not_judged() -> None:
     assert moved == []
 
 
+@pytest.mark.interpreter
 def test_the_environment_names_what_moves_a_ratio() -> None:
     # Both locks, not one: the free-threaded build is the environment this
     # fingerprint exists to tell apart, and asserting "gil" here failed on

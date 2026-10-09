@@ -15,7 +15,7 @@ marker:
 ```bash
 pytest -m "not repository"   # the product suite
 pytest -m repository         # the project's own audit
-pytest                       # both, which is what CI runs
+pytest                       # both, which CI's floor leg runs
 ```
 
 The split is worth drawing for two reasons. A repository check counted as a
@@ -142,18 +142,28 @@ prose is a second copy of this table, and the lint does not keep one.
 
 **Which interpreter reads them.** A ledger is a repository check: it reads the
 tree, the workflow and the scripts, none of which answers differently by
-release. So every leg of the python matrix runs the whole list, and the reading
-is the same on each -- with exceptions that can be read only once.
-`test_changelog_ledger.py`, `test_commit_messages.py` and
-`test_cited_commits.py` read the history back to the last release tag, and
-`actions/checkout` takes one commit and no tags; the **floor** leg takes the
-whole history so those run somewhere, and its name says so, since otherwise the
-one result that did not skip is indistinguishable from the ones that did. The
-two checks in `test_mutation_scope.py` that list the mutants a sweep is offered
-need `cargo-mutants`, which the same leg alone installs. `scripts/gate.py`
-builds that same floor beside the caller's interpreter before a push -- and runs
-the *product* suite on it, not this list, for the reason the first sentence
-gives.
+release. So one leg of the python matrix reads the audit, the **floor**'s, and
+it is the leg the audit needs. `test_changelog_ledger.py`,
+`test_commit_messages.py` and `test_cited_commits.py` read the history back to
+the last release tag, and `actions/checkout` takes one commit and no tags, so
+that leg takes the whole history, and its name says so; the two checks in
+`test_mutation_scope.py` that list the mutants a sweep is offered need
+`cargo-mutants`, which the same leg installs. The audit is most of what the
+suite costs -- 313 of 385 seconds, measured on one interpreter -- and reading
+it on every leg paid for one answer eleven times.
+
+A few checks read the interpreter running them as well as the tree, and those
+are the exception. `test_floor_names.py` holds its table to the running
+release, `test_compare_ratchet.py` names the running build in a fingerprint,
+and the pages written in 3.12 syntax are parsed by `test_doc_examples.py`, and
+read by mypy in `test_doc_example_checkers.py`, with a grammar the floor does
+not have. They carry the `interpreter` marker as well, and every leg reads
+them. `test_suite_partition.py` holds that a repository check reading
+`sys.version_info`, `sys.implementation` or `sys.stdlib_module_names` carries
+it, and a plant whose every tripped check carries it runs where they do.
+`scripts/gate.py` builds the floor beside the caller's interpreter before a
+push and runs the product suite and the marked checks on it, which is what a
+leg other than the floor reads.
 
 **And two directions no runner can read at all.** The theory ledger holds the
 tracked page to the maintainer's working notes, and the citation ledger holds a

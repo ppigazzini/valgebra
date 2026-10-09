@@ -416,7 +416,7 @@ def perf_failures() -> list[str]:
 
 
 def floor_interpreter() -> str:
-    """Read the oldest interpreter the python matrix runs.
+    """Read the oldest interpreter the python matrix runs: `ci.yml`'s `FLOOR`.
 
     The floor is `ci.yml`'s to name, and it is read here rather than written
     down: a second copy of the number stops moving when the floor moves, and it
@@ -424,12 +424,11 @@ def floor_interpreter() -> str:
     an interpreter nothing supports and reporting the suite green on it.
     `tests/test_local_gate.py` refuses the literal anywhere in this file.
     """
-    matrix = workflow()["jobs"]["python"]["strategy"]["matrix"]
-    versions = [str(version) for version in matrix["python-version"]]
-    if not versions:
-        message = "the python lane names no interpreter"
+    floor = str((workflow().get("env") or {}).get("FLOOR", ""))
+    if not floor:
+        message = "the workflow names no FLOOR"
         raise RuntimeError(message)
-    return versions[0]
+    return floor
 
 
 def floor_environment() -> dict[str, str]:
@@ -475,10 +474,11 @@ def floor_steps() -> tuple[tuple[str, str, str], ...]:
     have fails at *collection* and takes every job on that interpreter with it.
     Three did, in one push, from a green local run.
 
-    The **product** suite alone. The repository checks read the tree, the
-    workflow and the scripts; none of that answers differently by release, and
-    running them twice would double the slowest half of the gate to re-derive
-    the same verdict.
+    The **product** suite, and the repository checks marked `interpreter`,
+    which is what a CI leg other than the floor reads. The rest of the audit
+    reads the tree, the workflow and the scripts; none of that answers
+    differently by release, and running it twice would double the slowest half
+    of the gate to re-derive the same verdict.
 
     Repeatable. The environment is cached under a path carrying the release, so
     a second run reuses it rather than refusing to touch it -- which is what
@@ -506,7 +506,10 @@ def floor_steps() -> tuple[tuple[str, str, str], ...]:
         (
             f"python {floor}",
             "The product suite, on the floor interpreter",
-            "uv run --no-sync pytest -q -p no:cacheprovider -m 'not repository'",
+            (
+                "uv run --no-sync pytest -q -p no:cacheprovider "
+                "-m 'not repository or interpreter'"
+            ),
         ),
     )
 

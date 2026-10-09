@@ -279,11 +279,12 @@ def test_the_leg_that_takes_the_history_says_so_in_its_name() -> None:
     )
 
 
-#: The interpreter the floor leg runs, which is the leg that takes the history.
-FLOOR = "3.10"
+#: The interpreter the floor leg runs, which is the leg that takes the history:
+#: the workflow's own `FLOOR`, so a floor that moves moves this reading too.
+FLOOR = str(_workflow()["env"]["FLOOR"])
 
 #: A workflow expression of the one shape this ledger reads: a parenthesised
-#: conjunction of `lhs == 'literal'` tests choosing between two quoted results.
+#: conjunction of `lhs == rhs` tests choosing between two quoted results.
 _TERNARY = re.compile(
     r"\$\{\{\s*\((?P<cond>.+?)\)\s*&&\s*'(?P<then>[^']*)'"
     r"\s*\|\|\s*'(?P<other>[^']*)'\s*\}\}"
@@ -291,7 +292,29 @@ _TERNARY = re.compile(
 # `python-version` carries a hyphen, so an identifier is not `\w` alone -- a
 # pattern that stops at one reads `matrix.python-version` as `version` and finds
 # no such key in the context, which is a condition that quietly never holds.
-_TEST = re.compile(r"(?P<lhs>[\w.-]+)\s*==\s*'(?P<rhs>[^']*)'")
+# The right-hand side is a literal or one of the workflow's own variables.
+_TEST = re.compile(
+    r"(?P<lhs>[\w.-]+)\s*==\s*(?:'(?P<rhs>[^']*)'|env\.(?P<variable>\w+))"
+)
+
+
+def _tests(condition: str) -> frozenset[tuple[str, str]]:
+    """Read a conjunction of `lhs == rhs` tests, each variable filled in.
+
+    Every clause must be one. A clause this could not read would drop out of
+    the conjunction, and a condition on the floor leg would read as one true on
+    every ubuntu leg.
+    """
+    variables = _workflow().get("env") or {}
+    tests = []
+    for clause in condition.split("&&"):
+        found = _TEST.fullmatch(clause.strip())
+        assert found, f"the ledger cannot read {clause.strip()!r} in {condition!r}"
+        named = found["variable"]
+        tests.append(
+            (found["lhs"], found["rhs"] if named is None else str(variables[named]))
+        )
+    return frozenset(tests)
 
 
 def _expression(text: str, context: dict[str, str]) -> str:
@@ -303,9 +326,7 @@ def _expression(text: str, context: dict[str, str]) -> str:
     """
     match = _TERNARY.fullmatch(text.strip())
     assert match, f"the ledger cannot read this fetch-depth expression: {text!r}"
-    tests = _TEST.findall(match["cond"])
-    assert tests, f"no equality test in {match['cond']!r}"
-    holds = all(context.get(lhs) == rhs for lhs, rhs in tests)
+    holds = all(context.get(lhs) == rhs for lhs, rhs in _tests(match["cond"]))
     return match["then"] if holds else match["other"]
 
 
@@ -325,7 +346,15 @@ def _only_ternary(text: str, what: str) -> re.Match[str]:
 
 
 def _equalities(match: re.Match[str]) -> frozenset[tuple[str, str]]:
-    """Read the `lhs == 'rhs'` tests an arm's condition is built from."""
-    tests = _TEST.findall(match["cond"])
-    assert tests, f"no equality test in {match['cond']!r}"
-    return frozenset(tests)
+    """Read the `lhs == rhs` tests an arm's condition is built from."""
+    return _tests(match["cond"])
+
+
+def test_a_condition_is_read_whole_and_a_variable_filled_in() -> None:
+    # The two readings the rows above turn on: a variable is its value, so the
+    # name that spells the floor and the checkout that reads it compare equal,
+    # and a clause of another shape is refused rather than dropped.
+    spelled = _tests(f"matrix.python-version == '{FLOOR}'")
+    assert _tests("matrix.python-version == env.FLOOR") == spelled
+    with pytest.raises(AssertionError, match="cannot read"):
+        _tests("matrix.os == 'ubuntu-latest' && startsWith(matrix.os, 'ubuntu')")

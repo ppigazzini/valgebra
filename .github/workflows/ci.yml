@@ -49,6 +49,14 @@ env:
   # scheduled libFuzzer soak stays on floating `nightly` so it still warns about
   # future nightly/fuzzer breakage.
   FUZZ_NIGHTLY: nightly-2026-09-25
+  # The oldest release the package supports. The python matrix runs it as a
+  # leg, and the steps that answer once for every release -- the linters, the
+  # type checkers, the stub, the repository audit -- run on that leg and name
+  # it through this, so a floor that moves is this line and the matrix's list.
+  # `tests/test_python_lifecycle.py` holds it to `requires-python`, and
+  # `tests/test_version_gates.py` holds every release a step compares a leg
+  # with to one the job's matrix runs.
+  FLOOR: "3.10"
   # The binding files the two binding sweeps examine, one per line. The
   # nightly sweeps every one and records the baseline; a push sweeps the ones
   # its change touches and is judged against that baseline. So the two read
@@ -298,13 +306,21 @@ jobs:
       # binding-internal Rust unit tests (interner, index remap, fast-path
       # decision) that need an embedded interpreter. The whole flow runs in one
       # shell so the coverage environment survives across the build and runs.
+      #
+      # The product suite, without the repository audit. The audit reads the
+      # tree, and its plants rerun product ledgers on a broken copy of it, so
+      # it loads the extension; measured with this flow on 2026-10-09, the
+      # binding read 930 of 13,576 regions unreached with the audit and the
+      # same 930 without it, and the audit took 313 seconds to the product
+      # suite's 72.
       - name: Measure binding coverage via the Python suite and Rust unit tests
         run: |
           cargo llvm-cov clean --workspace
           source <(cargo llvm-cov show-env --export-prefix)
           uv sync --locked --no-install-project
           uv run --no-sync maturin develop --uv
-          uv run --no-sync pytest --deselect tests/test_concurrency.py
+          uv run --no-sync pytest -m "not repository" \
+            --deselect tests/test_concurrency.py --durations=30
           # The interpreter-backed Rust tests link libpython, so point pyo3 at the
           # uv interpreter and put its library directory on the loader path.
           export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
@@ -363,10 +379,13 @@ jobs:
 
   python:
     # The trailing arm is not decoration: one leg of nine checks out the whole
-    # history (below), and the checks that read it skip on the other eight. Nine
-    # results with the same shape of name give a reader no way to tell which one
-    # ran them, so the leg that does says so. The condition is the checkout's,
-    # spelled once more here and held to it by `tests/test_changelog_ledger.py`.
+    # history (below) and reads the repository audit, the checks that read the
+    # history among them, and the other eight read neither. Nine results with
+    # the same shape of name give a reader no way to tell which one ran them, so
+    # the leg that does says so. The condition is the checkout's, spelled once
+    # more here and held to it by `tests/test_changelog_ledger.py`. It spells
+    # the floor rather than reading `env.FLOOR`: an expression in a job's
+    # `name` may read `matrix` and not `env`.
     name: >-
       python ${{ matrix.python-version }} (${{ matrix.os }})${{
       (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10') &&
@@ -412,7 +431,7 @@ jobs:
           # `tests/test_changelog_ledger.py` holds the depth here. Quoted,
           # because `0` is falsy in a workflow expression and an unquoted
           # `&& 0 || 1` is always 1.
-          fetch-depth: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10') && '0' || '1' }}
+          fetch-depth: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == env.FLOOR) && '0' || '1' }}
       - uses: $/.github/actions/setup-rust
         with:
           toolchain: stable
@@ -438,7 +457,7 @@ jobs:
       # no lane runs them. One leg is enough: the listing is the source's,
       # not the interpreter's. Pinned as the sweeps pin it.
       - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
-        if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10' }}
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == env.FLOOR }}
         with:
           tool: cargo-mutants@27.1.0
       - name: Install dev dependencies
@@ -489,34 +508,51 @@ jobs:
       # Coverage over the Python package surface is gated at 100% (configured in
       # pyproject.toml); the compiled extension's coverage is the separate
       # binding-coverage lane.
+      #
+      # Every leg reads the product suite, and the repository checks whose
+      # answer is the running interpreter's: a table dated by release, a page
+      # parsed with the release's grammar. The rest of the audit reads the tree,
+      # which answers the same on every leg, so the floor leg reads it once,
+      # below. `tests/test_required_jobs.py` holds the two selections to that.
+      # Each run lists its thirty slowest tests, so what the suite costs is
+      # read off a log rather than believed.
       - name: pytest
         env:
           HYPOTHESIS_PROFILE: ci
-        run: uv run --no-sync pytest --cov=valgebra --cov-report=term-missing
+        run: >-
+          uv run --no-sync pytest -m "not repository or interpreter"
+          --cov=valgebra --cov-report=term-missing --durations=30
+      - name: The repository audit
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == env.FLOOR }}
+        env:
+          HYPOTHESIS_PROFILE: ci
+        run: >-
+          uv run --no-sync pytest -m "repository and not interpreter"
+          --durations=30
       # ruff and ty are static and pinned to a target version, so their result
       # does not depend on the runner's Python; run them once on the floor.
       - name: Ruff lint
-        if: ${{ matrix.python-version == '3.10' }}
+        if: ${{ matrix.python-version == env.FLOOR }}
         run: uv run --no-sync ruff check .
       - name: Ruff format
-        if: ${{ matrix.python-version == '3.10' }}
+        if: ${{ matrix.python-version == env.FLOOR }}
         run: uv run --no-sync ruff format --check .
       - name: ty type check
-        if: ${{ matrix.python-version == '3.10' }}
+        if: ${{ matrix.python-version == env.FLOOR }}
         run: uv run --no-sync ty check
       # The whole tree is read at the newest supported release, because the
       # suite names typing members later releases added. The shipped package is
       # read again at the floor `requires-python` claims, which is the reading a
       # caller on that release gets; one setting cannot answer both, so both run.
       - name: ty type check, at the supported floor
-        if: ${{ matrix.python-version == '3.10' }}
-        run: uv run --no-sync ty check python/ --python-version 3.10
+        if: ${{ matrix.python-version == env.FLOOR }}
+        run: uv run --no-sync ty check python/ --python-version ${{ env.FLOOR }}
       # The stub is checked against the *built* extension, so this one is not
       # runner-independent the way the two above are: it imports the module and
       # compares every signature, and a mismatch is a stub that type-checks code
       # the runtime rejects. Run on the floor, where the wheel is already built.
       - name: Stub matches the extension
-        if: ${{ matrix.python-version == '3.10' }}
+        if: ${{ matrix.python-version == env.FLOOR }}
         run: uv run --no-sync python -m mypy.stubtest valgebra._valgebra
       # And the stub is checked from the other side: a caller's own strictly
       # typed code, which is what a typed downstream project runs. stubtest says
@@ -529,9 +565,9 @@ jobs:
       # checker's own view of the standard library moves between them. Static,
       # so the runner is the floor and the target flag is what varies.
       - name: A caller's strict types, on the floor and on the current
-        if: ${{ matrix.python-version == '3.10' }}
+        if: ${{ matrix.python-version == env.FLOOR }}
         run: |
-          for target in 3.10 3.15; do
+          for target in ${{ env.FLOOR }} 3.15; do
             uv run --no-sync mypy --strict --python-version="$target" \
               tests/typing/consumer.py python/valgebra
             uv run --no-sync pyright --pythonversion "$target" \
@@ -687,10 +723,15 @@ jobs:
         run: |
           uv export --locked --only-group test --no-emit-project -o suite.txt
           VIRTUAL_ENV=.pypy uv pip install -r suite.txt
+      # The suite a CPython leg other than the floor reads: the product suite
+      # and the repository checks whose answer is the interpreter's. The rest of
+      # the audit reads the tree, and the floor leg reads it.
       - name: pytest
         env:
           HYPOTHESIS_PROFILE: ci
-        run: .pypy/bin/python -m pytest -q
+        run: >-
+          .pypy/bin/python -m pytest -q -m "not repository or interpreter"
+          --durations=30
 
   docs:
     name: docs
@@ -1631,7 +1672,7 @@ jobs:
           # supported release runs it. Pinned to the floor because that is the
           # one every lane here can assume is installed, and a lane that lets
           # the image choose is a lane whose answer moves with the image.
-          python-version: "3.10"
+          python-version: ${{ env.FLOOR }}
       # The same scope the merge gate's line and region floors read, so the
       # three figures are about one set of files. `tests/test_coverage_scope.py`
       # holds that scope to the corpus files the tree has.

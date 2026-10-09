@@ -938,8 +938,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "scripts/gate.py",
-            "    return versions[0]",
-            '    return "3.10"',
+            'floor = str((workflow().get("env") or {}).get("FLOOR", ""))',
+            'floor = "3.10"',
         ),
         trips=("test_the_gate_builds_the_floor_interpreter_the_matrix_names",),
     ),
@@ -958,6 +958,74 @@ PLANTS = (
             "\n      (matrix.os == 'macos-latest'",
         ),
         trips=("test_the_leg_that_takes_the_history_says_so_in_its_name",),
+    ),
+    Plant(
+        # The same name, left behind by a floor that moved. The checkout reads
+        # `env.FLOOR` and the name cannot, so the name is the one place the
+        # release is spelled -- and a ledger reading only literals would read
+        # the checkout's condition as true on every ubuntu leg.
+        "tests/test_changelog_ledger.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "matrix.python-version == '3.10') &&\n      ', full history'",
+            "matrix.python-version == '3.11') &&\n      ', full history'",
+        ),
+        trips=("test_the_leg_that_takes_the_history_says_so_in_its_name",),
+    ),
+    Plant(
+        # The repository audit on every leg: the condition that keeps it to the
+        # floor's is gone, and every leg reads the same answer again.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "      - name: The repository audit\n        if: ${{ matrix.os == "
+            "'ubuntu-latest' && matrix.python-version == env.FLOOR }}\n",
+            "      - name: The repository audit\n",
+        ),
+        trips=("test_the_floor_leg_reads_the_audit_and_every_leg_the_rest",),
+    ),
+    Plant(
+        # The legs reading the product suite alone: a check whose answer is the
+        # running interpreter's is read on the floor and nowhere else.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            'uv run --no-sync pytest -m "not repository or interpreter"',
+            'uv run --no-sync pytest -m "not repository"',
+        ),
+        trips=("test_the_floor_leg_reads_the_audit_and_every_leg_the_rest",),
+    ),
+    Plant(
+        # One step left behind by a floor that moved: it compares the leg with
+        # a release the matrix no longer runs, so it runs on no leg, green.
+        "tests/test_version_gates.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "name: Ruff lint\n        if: ${{ matrix.python-version == env.FLOOR }}",
+            "name: Ruff lint\n        if: ${{ matrix.python-version == '3.9' }}",
+        ),
+        trips=("test_every_release_a_step_is_gated_on_is_a_leg",),
+    ),
+    Plant(
+        # A table dated by release, held to the running one, and read on the
+        # floor alone: its marker is gone.
+        "tests/test_suite_partition.py",
+        ("tests/test_floor_names.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_floor_names.py",
+            "@pytest.mark.interpreter\ndef test_the_table_agrees_with_this_interpreter",
+            "def test_the_table_agrees_with_this_interpreter",
+        ),
+        trips=("test_a_check_reading_the_interpreter_runs_on_every_leg",),
     ),
     Plant(
         # The same ledger, the other direction it grew: a job the gate cannot
@@ -1938,8 +2006,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "scripts/gate.py",
-            "\"uv run --no-sync pytest -q -p no:cacheprovider -m 'not repository'\",",
-            '"uv run --no-sync pytest -q -p no:cacheprovider",',
+            "\"-m 'not repository or interpreter'\"",
+            '""',
         ),
         trips=("test_the_floor_interpreter_runs_the_product_suite",),
     ),
@@ -3978,6 +4046,7 @@ UNPLANTED: dict[str, str] = {
     **_excuse(
         "test_changelog_ledger.py",
         OWN_PLANT,
+        "test_a_condition_is_read_whole_and_a_variable_filled_in",
         "test_a_line_outside_the_universe_is_never_stale",
     ),
     **_excuse(
@@ -4093,8 +4162,14 @@ UNPLANTED: dict[str, str] = {
         "test_a_class_that_answers_membership_itself_is_declined",
     ),
     **_excuse(
+        "test_required_jobs.py",
+        OWN_PLANT,
+        "test_a_selection_and_a_condition_are_read_as_the_runner_reads_them",
+    ),
+    **_excuse(
         "test_suite_partition.py",
         OWN_PLANT,
+        "test_a_reading_of_the_interpreter_is_read_from_the_syntax",
         "test_an_import_is_read_from_the_syntax_and_not_the_text",
         "test_the_validator_head_is_read_and_a_nested_one_is_not",
     ),
@@ -4115,6 +4190,7 @@ UNPLANTED: dict[str, str] = {
         "test_version_gates.py",
         OWN_PLANT,
         "test_a_job_that_forgives_itself_outright_enforces_no_interpreter",
+        "test_a_release_off_the_matrix_is_found_spelled_either_way",
         "test_the_helper_is_the_one_place_the_comparison_is_read_from",
     ),
 }
@@ -4252,8 +4328,36 @@ def _failed(output: str, ledger: str) -> set[str]:
     }
 
 
+def _reads_the_interpreter(plant: Plant) -> bool:
+    """Answer whether every test a plant trips reads the interpreter running it.
+
+    Those tests run on every leg of the python matrix, and the rest of the audit
+    on the floor alone. A plant follows the tests it trips: one tripping only a
+    test the floor cannot read -- a page parsed with a grammar the floor lacks --
+    would skip on the one leg that runs it, and be judged nowhere.
+    """
+    tree = ast.parse((ROOT / plant.ledger).read_text(encoding="utf-8"))
+    marked = {
+        node.name
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and any(
+            ast.unparse(decorator) == "pytest.mark.interpreter"
+            for decorator in node.decorator_list
+        )
+    }
+    return set(plant.trips) <= marked
+
+
 @pytest.mark.parametrize(
-    "plant", PLANTS, ids=[plant.ledger.split("/")[-1] for plant in PLANTS]
+    "plant",
+    [
+        pytest.param(plant, marks=pytest.mark.interpreter)
+        if _reads_the_interpreter(plant)
+        else plant
+        for plant in PLANTS
+    ],
+    ids=[plant.ledger.split("/")[-1] for plant in PLANTS],
 )
 def test_a_ledger_fails_on_the_defect_it_exists_to_catch(
     plant: Plant, tree: Path
