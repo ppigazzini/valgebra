@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -583,3 +584,39 @@ def test_an_install_page_naming_what_the_examples_import_passes(
         tmp_path, "from annotated_types import Ge\nimport valgebra", "annotated-types"
     )
     assert lint.check_example_installs() == []
+
+
+def test_every_bound_names_a_holder_that_names_it() -> None:
+    """A row's last cell is held to a test that spells the bound.
+
+    Driven against the real table, with controls from cells it carried: "its
+    own tests" for a file whose tests live in another module's corpus names
+    nothing, and a gate that measures a bound's cost without spelling it is no
+    holder alone. The corrected cells name the corpus and the law that drive
+    the two bounds, and a path read as "`x.rs` tests" is that file's test
+    modules.
+    """
+    assert lint.check_bound_holders() == []
+
+    def held(where: str, name: str, cell: str) -> bool:
+        return any(
+            re.search(rf"\b{name}\b", text) for text in lint.holder_texts(where, cell)
+        )
+
+    record = "crates/valgebra-py/src/check/walk/record.rs"
+    assert lint.own_tests(record) == [], "the record walk's tests are the corpus"
+    gate_alone = "its own tests, and `scripts/compare_gate.py`"
+    assert not held(record, "SMALL_OBJECT", gate_alone)
+    assert held(
+        record,
+        "SMALL_OBJECT",
+        "the walk's corpus in `crates/valgebra-py/src/check/walk/interpreter.rs`",
+    )
+    lower = "crates/valgebra-core/src/descr/lower.rs"
+    assert not held(lower, "UNFOLDS", "its own tests")
+    assert held(lower, "UNFOLDS", "`crates/valgebra-core/src/laws.rs`")
+    assert held(
+        "crates/valgebra-core/src/descr/lines.rs",
+        "MAX_LINES",
+        "`crates/valgebra-core/src/descr/mod.rs` tests",
+    )

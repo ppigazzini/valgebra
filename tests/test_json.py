@@ -318,7 +318,8 @@ def test_a_record_reads_a_document_at_every_width(width: int) -> None:
     """A record decides a parsed object alike on each side of the table width.
 
     The walk gathers a document's value for each declared field into a table
-    held on the stack up to sixteen fields and on the heap past them. With the
+    held on the stack up to sixteen fields -- `FOUND_ON_STACK` in
+    `check/walk/record.rs` -- and on the heap past them. With the
     optional field the widths give records of 2, 16, 17 and 41 fields, so each
     assertion runs on both sides of that line, and against the object path.
     """
