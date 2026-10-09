@@ -21,6 +21,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a generic type alias is read applied to its arguments
 - feat: a meet with a recursive reference is decided
 - fix: a product split across a wide union is held to the depth bound
+- fix: a named tuple is read once, as the positions it lays out
 
 -->
 
@@ -120,6 +121,14 @@ answer of its own, or a repair to a change not yet released.
   thread, so a goal asked at the bottom of the chain could open its whole depth
   on top of them. Each branch is a level of that bound, and past it the
   relation answers `"undecided"`.
+
+- **A named tuple is read once, as the positions it lays out.** Its fields
+  were built twice -- as a record of its attributes and as the tuple of its
+  positions -- and the record dropped, and the node bound counted both. A
+  schema of named tuples inside the bound was refused for a size it does not
+  have: `tuple[(Wide,) * 60]` over a thousand-field `Wide` spans about sixty
+  thousand nodes and was refused as counting past a hundred thousand. It
+  builds, and each class reads its fields once.
 
 ## [0.0.17] - 2026-10-06
 
