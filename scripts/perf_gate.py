@@ -1,31 +1,32 @@
 """Deterministic instruction-count regression gate.
 
 Builds a fixed workload, runs it under cachegrind, and compares the
-executed-instruction count against the committed budget. The count is identical
-across runs of a given build, so the gate catches an algorithmic regression
-without depending on a noisy wall clock. Shared CI runners are too variable for
-a wall-clock budget; instruction count is not.
+executed-instruction count against the same workload built at a base. The count
+is identical across runs of a given build, so the gate catches an algorithmic
+regression without depending on a noisy wall clock. Shared CI runners are too
+variable for a wall-clock budget; instruction count is not.
 
-Two ways to compare, and the relative one is the merge gate:
+**The gate compares a change with its base** (``--against <rev>``). The same
+workload is built and measured twice in one job -- once at ``HEAD``, once at
+``rev`` in a throwaway worktree -- with the same toolchain, the same flags and
+the same machine, and the gate holds the *difference*. Everything a recorded
+number cannot control cancels, so the tolerance is tight (2%) and a regression
+this change introduced is what is left. ``--against HEAD`` reads an
+uncommitted change.
 
-* **Against the merge base** (``--against <rev>``). The same workload is built
-  and measured twice in one job -- once at ``HEAD``, once at ``rev`` in a
-  throwaway worktree -- with the same toolchain, the same flags and the same
-  machine, and the gate holds the *difference*. Everything an absolute budget
-  cannot control cancels, so the tolerance is tight (2%) and a regression this
-  change introduced is what is left.
-* **Against a recorded number** (the default). Kept for the nightly lane and for
-  a local reading, and it is the weaker of the two: the count is deterministic
-  for a build, but not across toolchains or target features. Measured, the
-  commit that recorded the current core budget re-measures 5.35% away from it on
-  another machine of the same rustc line -- half the band -- so an absolute gate
-  wide enough not to flake is too wide to see a real 5% regression. That is what
-  ``--against`` exists to fix, and why the merge gate uses it.
+**The counts in ``scripts/perf_budget.json`` are a record, not a gate.** The
+count is deterministic for a build, but not across toolchains or target
+features. Measured, the commit that recorded the core count re-measures 5.35%
+away from it on another machine of the same rustc line, so a band wide enough
+not to flake is too wide to see a real 5% regression. The record is read in
+one place: a shape the base does not carry has no count to compare with, and
+is held to its recorded one inside that band instead. ``--update`` writes it.
 
 Three workloads, and thirty-one shapes across them:
 
 * The default **core** workload (`perf_workload`, pure Rust) measures the schema
-  operations and is fully deterministic, so its budget is tight.
+  operations and is fully deterministic, so its recorded count carries the
+  narrower band.
 * The **decision** workloads measure the three relations, which the core one
   never calls, in four shapes: relations that hold (`--decision`), relations
   that are refuted (`--decision-refute`), goals asked again
@@ -59,8 +60,8 @@ Three workloads, and thirty-one shapes across them:
   confirmed or refuted here. They embed CPython, whose startup is not a fixed
   instruction count, so each is measured as the *difference* between two
   iteration counts: startup cancels, leaving the deterministic per-iteration
-  cost. Their budgets carry a wider tolerance to absorb cross-interpreter FFI
-  variance while still catching a per-node regression, which is far larger.
+  cost. Their recorded counts carry a wider band to absorb cross-interpreter
+  FFI variance while still catching a per-node regression, which is far larger.
 
 ``--against`` takes every shape named on the command line and measures them all
 against **one** build of the base: the build is minutes and a measurement is
@@ -77,23 +78,21 @@ verdict:
   binding workload's is its iteration count by construction, so it is asserted as
   an identity and needs no recording. A workload whose body collapsed prints a
   different checksum and reddens *before* any count is compared.
-* **The budget is two-sided.** A count far *below* the budget is not a pass
-  either: a workload that stopped doing the work measures low, and a one-sided
-  ceiling publishes that as an improvement it never earned. An intentional
-  optimization past the floor is re-recorded with ``--update``, which is the
-  ledger discipline the budget exists for.
+* **A new shape's band is two-sided.** A count far *below* the recorded one
+  is not a pass either: a workload that stopped doing the work measures low,
+  and a one-sided ceiling publishes that as an improvement it never earned.
 
 Usage:
     python scripts/perf_gate.py --against origin/main    # the merge gate
+    python scripts/perf_gate.py --against HEAD           # an uncommitted change
     python scripts/perf_gate.py --against HEAD~1 --decision
-    python scripts/perf_gate.py                      # check the core budget
-    python scripts/perf_gate.py --decision           # gate the decision procedures
-    python scripts/perf_gate.py --decision --update  # re-record that budget
-    python scripts/perf_gate.py --update             # re-record the core budget
-    python scripts/perf_gate.py --binding            # check the binding budget
-    python scripts/perf_gate.py --binding --update   # re-record it
-    python scripts/perf_gate.py --binding-build      # one of the other shapes
     python scripts/perf_gate.py --against HEAD~1 --binding --binding-build
+    python scripts/perf_gate.py --update                 # record the core count
+    python scripts/perf_gate.py --decision --update      # record that shape's
+    python scripts/perf_gate.py --binding --update       # and the walk's
+
+A command line naming neither ``--against`` nor ``--update`` is refused with
+exit 2: there is nothing to compare with.
 
 Requires valgrind on PATH and a Rust toolchain. The binding shapes also need an
 embedded interpreter: the build links libpython, so run them with the
@@ -117,7 +116,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-# Three outcomes, three exit codes: 0 within budget, 1 outside it or the wrong
+# Three outcomes, three exit codes: 0 no regression, 1 a regression or the wrong
 # workload, 2 could not measure.
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -125,13 +124,6 @@ EXIT_CANNOT_RUN = 2
 
 ROOT = Path(__file__).resolve().parent.parent
 BUDGET_FILE = ROOT / "scripts" / "perf_budget.json"
-WORKLOAD = ROOT / "target" / "release" / "examples" / "perf_workload"
-DECISION_WORKLOAD = ROOT / "target" / "release" / "examples" / "decision_workload"
-BINDING_WORKLOAD = ROOT / "target" / "release" / "examples" / "binding_workload"
-# The two iteration counts whose cachegrind difference isolates the per-iteration
-# binding walk cost from the fixed (cancelling) interpreter startup.
-BINDING_ITERS_LOW = 50_000
-BINDING_ITERS_HIGH = 150_000
 # What a change may add against its own merge base, measured in one job with one
 # toolchain. Two percent is far outside the run-to-run variation of a count that
 # is deterministic per build (it is zero) and far inside the smallest regression
@@ -356,36 +348,36 @@ def check_checksum(measured: int, expected: int, subject: str) -> int:
     """Refuse a measurement whose workload did not compute what it must.
 
     A workload whose body collapsed still runs, still executes instructions, and
-    still reports a count the budget would accept from below. The checksum is the
+    still reports a count a band would accept from below. The checksum is the
     only thing that says the count belongs to the work it claims to measure, so
     it is compared first and a mismatch stops the run.
     """
     if measured != expected:
         print(f"RIG FAULT: {subject} checksum {measured}, expected {expected}.")
         print("The workload did not compute what it must; the count measures")
-        print("something other than the work this budget is for.")
+        print("something other than the work this count is for.")
         return 1
     print(f"checksum: {measured} ({subject}, as expected)")
     return 0
 
 
 def check_against_budget(measured: int, recorded: int, tolerance: float) -> int:
-    """Hold a count inside a two-sided band around the recorded budget."""
+    """Hold a count inside a two-sided band around the recorded one."""
     ceiling = int(recorded * (1 + tolerance))
     floor = int(recorded * (1 - tolerance))
     delta = (measured - recorded) / recorded
     print(f"measured: {measured:,} instructions")
-    print(f"budget:   {recorded:,} (+/-{tolerance:.0%} -> {floor:,} .. {ceiling:,})")
+    print(f"recorded: {recorded:,} (+/-{tolerance:.0%} -> {floor:,} .. {ceiling:,})")
     print(f"delta:    {delta:+.2%}")
     if measured > ceiling:
-        print("REGRESSION: instruction count exceeds the budget ceiling.")
+        print("REGRESSION: instruction count exceeds the recorded band.")
         return 1
     if measured < floor:
-        print("UNDER-RUN: instruction count falls below the budget floor.")
+        print("UNDER-RUN: instruction count falls below the recorded band.")
         print("Either the workload stopped doing the work it measures, or this is")
         print("a real optimization -- re-record with --update and say which.")
         return 1
-    print("OK: within budget.")
+    print("OK: within the recorded band.")
     return 0
 
 
@@ -435,10 +427,10 @@ MODES = {
     "binding-set": ("binding_workload", "binding set walk"),
 }
 
-#: The workload argument each binding mode passes, and the budget key it reads.
+#: The iteration pair each binding mode runs at.
 #: Iterations per shape, high and low, chosen so each measurement is a minute or
-#: so under cachegrind rather than ten. The walk keeps the pair its budget was
-#: recorded with; the shapes that do more work per iteration run fewer of them,
+#: so under cachegrind rather than ten. The walk keeps the pair its count was
+#: first recorded with; the shapes that do more work per iteration run fewer of them,
 #: and the difference still cancels startup because both runs share it.
 BINDING_ITERATIONS = {
     "binding": (150_000, 50_000),
@@ -612,8 +604,10 @@ def describe_window(count: int | None) -> tuple[str, bool]:
             "so what the difference covers cannot be said"
         )
         return (unknown, True)
-    if count <= 1:
-        return (f"window:   {count} commit", False)
+    if count == 0:
+        return ("window:   no commit -- what the checkout changes on its base", False)
+    if count == 1:
+        return ("window:   1 commit", False)
     batch = (
         f"window:   {count} commits -- a batch, so the difference below is "
         "their sum and no single commit is named by it"
@@ -677,8 +671,7 @@ def stale_steps(budget: dict) -> list[str]:
     stale = []
     for step in budget.get("steps", []):
         shape = step.get("shape", "")
-        key = f"{shape.replace('-', '_')}_workload_irefs"
-        recorded = budget.get(key)
+        recorded = budget.get(record_key(shape))
         if recorded is None:
             stale.append(f"{shape}: no budget is recorded for the shape")
             continue
@@ -699,7 +692,7 @@ def check_against_base(
 ) -> int:
     """Hold this change's count to its own merge base's, measured beside it.
 
-    One-sided, unlike the recorded-budget check. The floor there guards against a
+    One-sided, unlike a new shape's band. The floor there guards against a
     workload that stopped doing the work, and here the checksums do that better:
     two builds of a workload that computes the same thing agree exactly, so a
     count that fell because the body collapsed is caught by the comparison the
@@ -734,8 +727,8 @@ def absent_at(checkout: Path, mode: str) -> bool:
     A shape added in the change being measured has no counterpart at the base,
     and building one there fails with "no example target". That is not a
     regression and not a pass: there is no comparison to make, and saying so is
-    the honest reading. The absolute budget still gates such a shape, in the
-    same job.
+    the honest reading, and `judge_new` holds such a shape to its recorded
+    count instead, in the same run.
 
     Asked of the source rather than of cargo's message, so a genuine build
     failure at the base stays a failure rather than reading as a new shape.
@@ -768,8 +761,9 @@ def measure_base(
     being measured: the rig failed, not the tree. [`absent_at`](absent_at) reads
     the shape a base does not *carry*; this reads the shape it carries and
     cannot produce -- a toolchain its lockfile will not build, an example whose
-    own dependency moved. Both are "no comparison to make", and both leave the
-    recorded budget to gate the shape in the same job.
+    own dependency moved. Both are "no comparison to make". The first is a new
+    shape, held to its recorded count; the second is the rig's failure rather
+    than the change's, and the run exits 2.
     """
     readings = {mode: measured_or_blamed(mode, checkout, target) for mode in modes}
     measured = {
@@ -796,8 +790,8 @@ def run_relative(modes: list[str], rev: str) -> int:
 
     The base is built in a throwaway worktree with its own target directory, so
     the two builds neither share nor overwrite each other's output, and both use
-    whatever toolchain is on PATH -- which is the point: an absolute budget
-    compares against a number recorded on a machine that is not this one.
+    whatever toolchain is on PATH -- which is the point: a recorded count is a
+    number taken on a machine that is not this one.
 
     Several shapes are measured against **one** base build. Building the base
     once per shape is what kept the gate to a single shape: the build is minutes
@@ -808,6 +802,7 @@ def run_relative(modes: list[str], rev: str) -> int:
     any is judged, so one regression does not hide the next one's number.
     """
     sha = resolve_rev(rev)
+    record = json.loads(BUDGET_FILE.read_text(encoding="utf-8"))
     head = {mode: measure_mode(mode) for mode in modes}
     worktree = Path(tempfile.mkdtemp(prefix="valgebra-perf-base-"))
     checkout = worktree / "tree"
@@ -839,15 +834,13 @@ def run_relative(modes: list[str], rev: str) -> int:
         subject = MODES[mode][1]
         print(f"\n--- {subject}")
         if mode in fresh:
-            print(f"head:     {head[mode].irefs:,} instructions")
-            print("NEW SHAPE: the base does not carry this workload, so there is")
-            print("no comparison to make. Its recorded budget gates it instead.")
+            outcomes.append(judge_new(head[mode], record, mode))
             continue
         if mode in broken:
             print(f"head:     {head[mode].irefs:,} instructions")
             print("NOT COMPARABLE: the base carries this workload and could not")
             print(f"produce it ({broken[mode]}). That is the rig rather than this")
-            print("change; the recorded budget gates the shape instead.")
+            print("change, and no verdict on it.")
             outcomes.append(EXIT_CANNOT_RUN)
             continue
         outcomes.append(judge_relative(head[mode], base[mode], subject, mode))
@@ -871,8 +864,8 @@ def judge_relative(
 ) -> int:
     """Compare two measurements of the same workload, or refuse to compare them.
 
-    The checksum is asked first, as it is in the recorded-budget path and for a
-    sharper reason: two runs of a workload that computes the same thing agree
+    The checksum is asked first, as it is for a new shape and for a sharper
+    reason: two runs of a workload that computes the same thing agree
     exactly, so a disagreement says the workload itself moved between the two
     commits and the counts are of different work. That is not a regression and
     not a pass -- it is a comparison that cannot be made, which is exit code 2.
@@ -880,102 +873,71 @@ def judge_relative(
     if head.checksum != base.checksum:
         print(f"WORKLOAD CHANGED: base checksum {base.checksum}, head {head.checksum}.")
         print("The two runs measured different work, so their counts do not")
-        print("compare. Re-record the recorded budget in the same commit that")
-        print("changes the workload, and say what moved.")
+        print("compare. Re-record the count in the same commit that changes")
+        print("the workload, and say what moved.")
         return EXIT_CANNOT_RUN
     print(f"checksum: {head.checksum} ({subject}, unchanged from the base)")
     return check_against_base(head, base, subject, recorded_step(mode, base))
 
 
-def run_core(budget: dict, *, update: bool) -> int:
-    build_workload()
-    result = measure(WORKLOAD)
-    if update:
-        budget["core_workload_irefs"] = result.irefs
-        budget["core_workload_checksum"] = result.checksum
-        record_budget(budget)
-        print(f"recorded core budget: {result.irefs:,} instructions")
-        print(f"recorded core checksum: {result.checksum}")
-        return 0
-    failed = check_checksum(
-        result.checksum, int(budget["core_workload_checksum"]), "core workload"
-    )
-    if failed:
-        return failed
-    return check_against_budget(
-        result.irefs, int(budget["core_workload_irefs"]), float(budget["tolerance"])
-    )
+def record_key(mode: str) -> str:
+    """Name the key a shape's count is recorded under in the budget file."""
+    return f"{mode.replace('-', '_')}_workload_irefs"
 
 
-def run_decision(budget: dict, mode: str, *, update: bool) -> int:
-    """Gate the decision procedures: subtyping, emptiness, equivalence.
+def checksum_key(mode: str) -> str:
+    """Name the key a pure-Rust shape's checksum is recorded under.
 
-    A separate workload from the core one because it measures a separate
-    surface. Without it a rule added to `decision.rs` is invisible to the gate in
-    both directions -- neither the cost of a new one nor the saving from a
-    cheaper one shows up.
-
-    Three shapes. A proof and a refutation walk different paths and the first
-    workload only ever asked for proofs: a rule that refutes by comparing shapes
-    runs where no reading reached, so work put there -- an emptiness asked
-    before a mismatch is believed, say -- cost nothing any budget held. And no
-    two goals of either are the same pair of nodes, so neither can show what a
-    memo over goals would save; the third asks one goal once per field.
+    A binding shape has none: its checksum is its iteration count, which
+    `measure_mode` asserts wherever it is measured.
     """
-    example, subject = MODES[mode]
-    key = mode.replace("-", "_") + "_workload"
-    build_workload(example)
-    result = measure(ROOT / "target" / "release" / "examples" / example, branches=True)
-    if result.mispredicts is not None:
+    return f"{mode.replace('-', '_')}_workload_checksum"
+
+
+def record_mode(budget: dict, mode: str) -> None:
+    """Measure one shape and write its count, and its checksum where it has one."""
+    measured = measure_mode(mode)
+    subject = MODES[mode][1]
+    if mode in BINDING_SHAPES:
+        hi, lo = BINDING_ITERATIONS[mode]
         print(
-            f"branch mispredicts: {result.mispredicts:,} "
+            f"{subject} over {hi - lo:,} iterations (difference of {hi:,} and {lo:,})"
+        )
+    else:
+        budget[checksum_key(mode)] = measured.checksum
+    if measured.mispredicts is not None:
+        print(
+            f"branch mispredicts: {measured.mispredicts:,} "
             "(simulated, read and not gated)"
         )
-    if update:
-        budget[f"{key}_irefs"] = result.irefs
-        budget[f"{key}_checksum"] = result.checksum
-        record_budget(budget)
-        print(f"recorded {subject} budget: {result.irefs:,} instructions")
-        print(f"recorded {subject} checksum: {result.checksum}")
-        return 0
-    failed = check_checksum(result.checksum, int(budget[f"{key}_checksum"]), subject)
-    if failed:
-        return failed
-    return check_against_budget(
-        result.irefs,
-        int(budget[f"{key}_irefs"]),
-        float(budget["tolerance"]),
-    )
+    budget[record_key(mode)] = measured.irefs
+    record_budget(budget)
+    print(f"recorded {subject}: {measured.irefs:,} instructions")
 
 
-def run_binding(budget: dict, mode: str, *, update: bool) -> int:
-    """Measure one binding shape against its own budget.
+def judge_new(head: Measurement, budget: dict, mode: str) -> int:
+    """Hold a shape the base does not carry to the count recorded for it.
 
-    Every shape here is the difference of two iteration counts, so the embedded
-    interpreter's (identical) startup cancels out. `measure_mode` holds each run
-    to its checksum first: a run that ignored its argument reports a difference
-    near zero, which a ceiling-only budget would accept.
+    There is no base count to compare with, so the record stands in: the count
+    the commit adding the shape took, inside the band a count needs to survive
+    a change of machine. That band cannot see a 5% regression and does not need
+    to here, since the next change has this one as its base and is compared
+    with it at 2%. What it sees is a shape measuring other work than the one
+    recorded, and a workload that stopped doing the work.
     """
     subject = MODES[mode][1]
-    key = f"{mode.replace('-', '_')}_workload_irefs"
-    hi, lo = BINDING_ITERATIONS[mode]
-    measured = measure_mode(mode).irefs
-    print(
-        f"{subject} over {hi - lo:,} iterations (difference of {hi:,} and {lo:,} runs)"
-    )
-    if update:
-        budget[key] = measured
-        record_budget(budget)
-        print(f"recorded {subject} budget: {measured:,} instructions")
-        return 0
-    if key not in budget:
-        print(f"perf_gate: no budget recorded for {subject}; run with --update")
+    print("NEW SHAPE: the base does not carry this workload, so there is no")
+    print("comparison to make. It is held to its recorded count instead.")
+    recorded = budget.get(record_key(mode))
+    expected = None if mode in BINDING_SHAPES else budget.get(checksum_key(mode))
+    if recorded is None or (mode not in BINDING_SHAPES and expected is None):
+        print(f"No count is recorded for the {subject}: the commit that adds a")
+        print("shape records it with --update.")
         return EXIT_CANNOT_RUN
-    return check_against_budget(
-        measured,
-        int(budget[key]),
-        float(budget["binding_tolerance"]),
-    )
+    if expected is not None and check_checksum(head.checksum, int(expected), subject):
+        return EXIT_FAIL
+    band = budget["binding_tolerance" if mode in BINDING_SHAPES else "tolerance"]
+    return check_against_budget(head.irefs, int(recorded), float(band))
 
 
 def _arguments(argv: Sequence[str]) -> argparse.Namespace:
@@ -992,9 +954,14 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     )
     for name, (_, label) in MODES.items():
         parser.add_argument(f"--{name}", action="store_true", help=f"the {label}")
-    parser.add_argument("--against", metavar="REV", help="measure against REV")
-    parser.add_argument(
-        "--update", action="store_true", help="record the measurement as the budget"
+    # One or the other: a command line naming neither has nothing to compare
+    # with, and `argparse` refuses it with exit 2.
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument(
+        "--against", metavar="REV", help="compare with the same shapes built at REV"
+    )
+    action.add_argument(
+        "--update", action="store_true", help="record each shape's count"
     )
     return parser.parse_args(argv)
 
@@ -1002,28 +969,19 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
 def main(argv: Sequence[str] = ()) -> int:
     args = _arguments(argv)
     # `--binding` keeps its meaning -- the walk -- so an existing invocation and
-    # the budget recorded under it still name the same measurement.
+    # the count recorded under it still name the same measurement.
     chosen = vars(args)
     flagged = [name for name in MODES if chosen[name.replace("-", "_")]] or ["core"]
     if args.against is not None:
         # Every flagged shape against one base build, since the build is the
         # expensive half and the shapes share it.
         return run_relative(flagged, args.against)
-    update = args.update
     budget = json.loads(BUDGET_FILE.read_text(encoding="utf-8"))
-    outcomes = []
     for mode in flagged:
         if len(flagged) > 1:
             print(f"\n--- {MODES[mode][1]}")
-        if mode in BINDING_SHAPES:
-            outcomes.append(run_binding(budget, mode, update=update))
-        elif mode.startswith("decision"):
-            outcomes.append(run_decision(budget, mode, update=update))
-        else:
-            outcomes.append(run_core(budget, update=update))
-    if EXIT_CANNOT_RUN in outcomes:
-        return EXIT_CANNOT_RUN
-    return EXIT_FAIL if EXIT_FAIL in outcomes else EXIT_OK
+        record_mode(budget, mode)
+    return EXIT_OK
 
 
 if __name__ == "__main__":

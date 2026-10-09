@@ -895,7 +895,7 @@ thousand instructions on 3.14.
 
 There is no wall-clock gate on this, and that is deliberate: a relation's
 wall-clock cost is a property of the pair, and pinning one would be pinning a
-number the next rule changes. The instruction budgets cover the decision
+number the next rule changes. The instruction gate covers the decision
 workloads `crates/valgebra-core/examples/` holds -- one for each path a relation
 takes, which `MODES` in `scripts/perf_gate.py` names -- and those are what a
 change to the rules moves. What the bindings read off a class is no rule's, and
@@ -987,9 +987,10 @@ toolchain, and fails on a rise past the band it allows a change. The count is
 identical across runs of a given build, so the gate does not flake, and
 measuring both sides in one job cancels what another machine or another
 toolchain would add, while an algorithmic regression is far larger than the
-band. The committed budgets in `scripts/perf_budget.json` are read on the
-nightly, as a record of one environment rather than as a merge gate: the same
-commit re-measures several percent away on another machine.
+band. The counts in `scripts/perf_budget.json` are a record of one
+environment rather than a gate, since the same commit re-measures several
+percent away on another machine: the gate reads one only for a shape its base
+does not carry.
 
 The gate holds one workload per surface, because a gate only catches what it
 exercises. `crates/valgebra-core/examples/` holds the pure-Rust ones: the schema
@@ -1044,9 +1045,9 @@ noise an absolute budget cannot. A shape fails the merge gate when valgebra's
 ratio crosses its ceiling, or drifts past its recorded ratio where one is armed
 — a competitive regression, whether from valgebra slowing down or ceding ground.
 
-Re-record the budgets after an intentional change with:
+Re-record the counts after an intentional change with:
 
 ```bash
-python scripts/perf_gate.py --update            # the core budget; --decision, --binding-record, ... for the others
+python scripts/perf_gate.py --update            # the core count; --decision, --binding-record, ... for the others
 python scripts/compare_gate.py --update         # competitive ratios
 ```

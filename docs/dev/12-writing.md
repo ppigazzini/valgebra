@@ -44,9 +44,9 @@ object of the wrong kind. Write the sentence a reader needs before they delete
 your line.
 
 **Verify the claim against the tree; run it when it is behavioural.** Not "read
-it carefully" — `grep -n` for the symbol, `python scripts/perf_gate.py` for a
-count, `uv run --no-sync pytest -k` for a behaviour. Claims that took seconds to
-disprove have shipped in documentation sets.
+it carefully" — `grep -n` for the symbol, `python scripts/perf_gate.py --against
+HEAD` for a count, `uv run --no-sync pytest -k` for a behaviour. Claims that
+took seconds to disprove have shipped in documentation sets.
 
 **A claim about *meaning* is not behavioural, and running it does not check it.**
 What a schema denotes is stated by the variant's doc comment in

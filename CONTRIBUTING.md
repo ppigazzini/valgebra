@@ -136,8 +136,8 @@ file that owns the contract and the single command that reproduces its verdict.
 | doc examples run | `docs/` | `uv run --no-sync python scripts/run_doc_examples.py` |
 | doc examples read clean under ty, mypy, pyright and ruff, or say why | `scripts/check_doc_examples.py` | `uv run --no-sync python scripts/check_doc_examples.py` |
 | the rendered site builds | `mkdocs.yml` | `uv run --no-sync --group docs mkdocs build --strict` |
-| core instruction budget | `scripts/perf_budget.json` | `uv run --no-sync python scripts/perf_gate.py` |
-| binding instruction budget | `scripts/perf_budget.json` | `uv run --no-sync python scripts/perf_gate.py --binding` |
+| a change costs the core and decision workloads at most 2% more instructions than its base | the workloads in `crates/valgebra-core/examples/`, built at the change and at its base | `uv run --no-sync python scripts/perf_gate.py --against HEAD~1 --core --decision --decision-refute --decision-repeat --decision-matrix` |
+| a change costs a binding shape at most 2% more instructions than its base | the shapes in `crates/valgebra-py/src/workload.rs`, built at the change and at its base | `uv run --no-sync python scripts/perf_gate.py --against HEAD~1 --binding` |
 | competitive ratio | `scripts/perf_compare.json` | `uv run --no-sync --group bench python scripts/compare_gate.py` |
 | what a profile buys, per shape | the two wheels a run builds | `uv run --no-sync --group bench python scripts/pgo_compare.py --record plain.json` |
 | membership held and decisions only widened | `scripts/metamorphic_reference.json` | `uv run --no-sync python scripts/metamorphic_gate.py` |

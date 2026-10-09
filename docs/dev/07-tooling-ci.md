@@ -6,8 +6,8 @@ says which of the three things happened.
 ## Check the exit code, never a piped fragment
 
 ```sh
-python scripts/perf_gate.py | tail -1     # WRONG -- reads 0 from tail while the gate is red
-python scripts/perf_gate.py; echo $?      # right
+python scripts/perf_gate.py --against HEAD | tail -1   # WRONG -- reads 0 from tail while the gate is red
+python scripts/perf_gate.py --against HEAD; echo $?    # right
 ```
 
 ## Three outcomes, three exit codes
@@ -114,7 +114,7 @@ reproduces; the count is the table's rather than this sentence's:
 | the operating system and architecture | no | a macOS or Windows leg fails where Linux does not, and nothing local sees it |
 | the pinned tool versions | no, for the tools `taiki-e/install-action` installs | `ci.yml` installs `cargo-deny`, `cargo-llvm-cov` and `cargo-mutants` at versions it names, and the gate runs whichever is on the caller's `PATH`; a `uvx` step carries its pin in its own command, so the gate runs the lane's version of it |
 | the build of the interpreter, not only its version | no: a rule answers it instead | `sys.stdlib_module_names` is the build's, not the release's -- this box's 3.12 lists the Windows-only `_wmi` and a runner's does not, so a table of every name reported a difference between two builds as a moved row. The floor table records the modules this tree imports, which are portable by construction |
-| the machine's own speed | not modelled, and not a gate: every merge-blocking number is an instruction count | an absolute count reads 5--8% apart between two machines on one `rustc` line, which is what the recorded budgets carry a band for |
+| the machine's own speed | not modelled, and not a gate: every merge-blocking number is an instruction count | an absolute count reads 5--8% apart between two machines on one `rustc` line, which is why a recorded count gates only a shape new to a change, inside a band that wide |
 | secrets, tokens and the event payload | no, and the steps that need one are excused by name | the merge base comes from the event, so `--against` runs only in the lane |
 | what a gate **counts**, against what it claims to | no: a scope is a claim in prose, and no check reads it | the binding coverage floor counted the instruction gate's own workloads, which no suite runs, and the lane went red at 94.50% over a change that added none of its own uncovered lines; the build shape counted the harness formatting fifty names, and three quarters of what it reported was that |
 
@@ -253,7 +253,7 @@ every rule's default level, which is the list to read against
 
 ## The numeric gates
 
-### The instruction budget
+### The instruction gate
 
 Wall-clock benchmarks on shared runners are too noisy to gate, so
 `scripts/perf_gate.py` gates **instruction counts under cachegrind**, which are
@@ -402,13 +402,14 @@ because it is not.
 The rules that keep a measurement that did not happen from reading as a
 verdict:
 
-- **The band is two-sided.** A workload that stopped doing the work executes
-  *fewer* instructions, and a ceiling alone publishes that as an improvement it
-  never earned. A deliberate optimization past the floor is re-recorded rather
-  than absorbed.
+- **A new shape's band is two-sided.** A shape the base does not carry is
+  held to its recorded count, and a workload that stopped doing the work
+  executes *fewer* instructions, which a ceiling alone publishes as an
+  improvement it never earned.
 - **The workload proves it ran.** Each prints a checksum folded through every
-  result, compared **before** any count. The core and decision workloads' are
-  recorded constants; the binding workload's *is* its iteration count by
+  result, compared **before** any count: with the base's, and for a new shape
+  with the recorded one. The core and decision workloads' are constants of
+  their corpus; the binding workload's *is* its iteration count by
   construction, so a workload that ignored its argument — reporting a difference
   near zero — fails rather than passing under the ceiling. The decision
   workload's checksum counts verdicts, so a change that decides *differently*
@@ -430,7 +431,7 @@ verdict:
   `PYTHONHOME` and `VALGRIND_LIB` where the caller has them, and the fixed seed,
   and nothing else; valgrind is resolved to an absolute path first. The same
   binary then reads the same count from any shell. `--update` writes the
-  valgrind and C library a budget was recorded with under `measured_with` in
+  valgrind and C library a count was recorded with under `measured_with` in
   `scripts/perf_budget.json`, since both move a count with the tree unchanged.
 - **No run writes bytecode.** A binding shape is the difference of two runs,
   which cancels the interpreter's start-up only while both runs start alike. An
@@ -489,13 +490,16 @@ toolchain, the flags, the machine and the cachegrind version are one and the
 same across the pair, so what is left is the change.
 
 The recorded numbers in `scripts/perf_budget.json` are a **record of one
-environment**, read on the nightly and never on the merge path. The reason is
-measured: the commit that recorded the current core budget re-measures 5.35%
-away from it on another machine of the same rustc line. An absolute band wide
-enough not to flake on that is ±10%, which cannot see a real 5% regression --
-so the absolute check is either noisy or blind, and choosing between those is
-not a gate. Re-record with `--update` when an intentional change moves the
-number, and say what moved.
+environment**, and no lane holds a change to them. The reason is measured: the
+commit that recorded the current core count re-measures 5.35% away from it on
+another machine of the same rustc line. An absolute band wide enough not to
+flake on that is ±10%, which cannot see a real 5% regression -- so an absolute
+check is either noisy or blind, and choosing between those is not a gate. Read
+on a schedule under `continue-on-error`, such a band would be a gate that gates
+nothing, so no lane reads one. Re-record with `--update` when an intentional
+change moves the number, and say what moved. `perf_gate.py` refuses a command
+line that names neither `--against` nor `--update`, with exit 2, because there
+is nothing to compare with.
 
 One refusal is the relative gate's own: **a workload that changed is not a
 comparison.** Two builds of a workload computing the same thing agree on its
@@ -504,16 +508,20 @@ commits and the counts are of different work. That exits 2 -- neither a pass nor
 a regression.
 
 **A shape the base does not carry is a new shape**, not a comparison and not a
-pass: it is held to its recorded budget in the same job. The gate reads this
+pass: it is held to its recorded count in the same run, inside the band the
+record carries for a change of machine (`judge_new` in `scripts/perf_gate.py`).
+That is the one place the record is read, and the band is wide enough for it,
+since the next change has this one as its base and is compared with it at 2%.
+The gate reads this
 from the base's *source* before it builds anything -- the example the mode
 names, and for a binding shape the arm that names the shape (`absent_at` in
 `scripts/perf_gate.py`) -- because a base older than a shape builds the example
 and its binary refuses the name, and a refusal read from the binary would look
 like a broken build.
 
-Do not copy a budget into prose: `scripts/docs_lint.py` fails on it, because a
-figure that moves when the budget is re-recorded is stale the next time it
-moves.
+Do not copy a recorded count into prose: `scripts/docs_lint.py` fails on it,
+because a figure that moves when the count is re-recorded is stale the next
+time it moves.
 
 ### The competitive ratio
 
@@ -606,7 +614,7 @@ reading, and `docs/11-performance.md` carries the decision with its reason.
 and it is written in `ci.yml` rather than left to the runner image: a ratio
 belongs to the pair of libraries *and* the interpreter running them, and a lane
 that inherits one from an image makes claims nobody chose. The same holds for
-the instruction budgets' bands, which cover the distance between two releases,
+the recorded counts' bands, which cover the distance between two releases,
 and for both mutation sweeps, where a mutant on a version-gated branch is
 killable on the interpreter that takes the branch and unviable on the one that
 compiles it out. `tests/test_lane_interpreters.py` holds every lane to naming
@@ -882,9 +890,7 @@ tip they read a tree the next fast-forward replaces: the scheduled run of
 2026-10-09 was red on `main` in eleven push jobs, on a ruff row the branch had
 already repaired. So each push job reads the dispatcher's `dispatched` output
 and runs on a schedule only where it is `false`, a repository without the
-branch, where the scheduled run is the only one. The bench job's recorded
-budgets read a dispatch as well as a schedule, so a night records them in the
-run it dispatches.
+branch, where the scheduled run is the only one.
 
 **A skipped job cannot pass.** The `ci` aggregator lists every required job in
 `needs:` *and* fails unless each result is `success` rather than merely

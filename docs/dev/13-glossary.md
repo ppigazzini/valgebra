@@ -64,7 +64,7 @@ that defines it -- so a rename dates the entry.
 | **equivalent mutant** | a mutation that provably cannot change any result, so no test can kill it. Excluded with its argument in `exclude_re` of `.cargo/mutants.toml`, never counted as a gap |
 | **rig fault** | a run that produced no verdict — a timeout, an empty corpus, a mutation whose experiment cannot finish. Neither a pass nor a failure, and reported as itself ([07-tooling-ci.md](07-tooling-ci.md); `scripts/mutation_gate.py` reports a mutant's) |
 | **ratchet** | a committed floor that may only move one way. The mutation baselines (`scripts/mutation_baseline.json` and its `_walk` and `_pytest` siblings) are ratchets; a budget is not |
-| **budget** (of instructions) | a committed two-sided band a measurement is held to, in `scripts/perf_budget.json` |
+| **budget** (of instructions) | a shape's instruction count as last recorded, in `scripts/perf_budget.json`: a record, which the gate reads only for a shape new to a change, held to it inside a two-sided band |
 | **ledger** (of a list) | an enumerated list held to the tree in both directions, so an entry that stops being true fails and a subject with no entry fails too. Each carries a `LEDGER:` marker, and [08-testing.md](08-testing.md) tables them |
 | **excused** | named on a ledger with the reason it is a hole. An excuse expires in its own direction: one that stops being true fails ([08-testing.md](08-testing.md)) |
 | **suspected gap** | a relation the procedure answers `False` that no value in the probe's universe refutes, so it looks true and was not seen. Suspected because the universe is finite ([08-testing.md](08-testing.md)) |
