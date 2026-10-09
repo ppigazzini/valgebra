@@ -109,10 +109,13 @@ def test_the_ratchet_does_not_arm_in_another_environment() -> None:
 
 
 def test_an_unrecorded_gate_does_not_arm_and_does_not_fail() -> None:
-    moved, unarmed = GATE.drifted({"json_document": 0.990}, {})
-    assert moved == []
-    assert unarmed is not None
-    assert "--update" in unarmed
+    # The file's own state: a block with tolerances and no ratios, which reads
+    # as unrecorded rather than as a recording made on no interpreter.
+    for block in ({}, {"environment": None, "ratios": {}, "tolerance": {}}):
+        moved, unarmed = GATE.drifted({"json_document": 0.990}, block)
+        assert moved == []
+        assert unarmed is not None
+        assert "no ratios are recorded" in unarmed
 
 
 def test_a_shape_with_no_recorded_ratio_is_not_judged() -> None:
