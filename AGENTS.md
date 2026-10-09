@@ -86,6 +86,14 @@ replaces it with the wheel from the lock. Every command after it then tests a
 different module from the one just built, which reads as a change that did
 nothing. Sync deliberately -- `uv sync --locked` -- and build after it.
 
+**Locally, run the tests in scope, never the whole suite.** While a change is
+made, `pytest` runs the files that test what it touches -- the suite of the
+changed module, the ledgers that read a changed file, the doc-example checkers
+for a changed example -- and `cargo test` the corpus or the named tests that
+hold the changed code. The whole suite is too slow to run on every change, and
+the owner's push runs it on GitHub CI, on every interpreter the matrix names; a
+red lane there is read and fixed in the commit that caused it.
+
 Those are the fast ones, and they run in **your** clone. Before pushing, run the
 merge gate's own steps in a clone shaped like the runner's:
 
