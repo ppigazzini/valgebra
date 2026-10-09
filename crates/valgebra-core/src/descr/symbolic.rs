@@ -191,6 +191,11 @@ type Signature<G> = (bool, Vec<(u32, Option<G>)>);
 /// universe and are held in guard order, so the table is a name for the
 /// language: equal tables are equal languages, and the minimisation below is
 /// what makes the converse true.
+///
+/// A lookup below answers a miss with state zero or with no edges rather than
+/// refusing, for the reason the byte automaton in `regular.rs` gives: a
+/// well-formed table has none, and `minimal`, which every table here passes
+/// through, asserts each one it reads and builds.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SymbolicDfa<G: Guard> {
     edges: Vec<Vec<Edge<G>>>,
@@ -261,6 +266,18 @@ impl<G: Guard> SymbolicDfa<G> {
 
     pub(crate) fn state_count(&self) -> usize {
         self.accepting.len()
+    }
+
+    /// Whether every lookup on this table lands inside it: a row of edges per
+    /// state, none of them empty, each edge to a state of the table, and a
+    /// state to start from.
+    fn well_formed(&self) -> bool {
+        let states = self.state_count();
+        states > 0
+            && self.edges.len() == states
+            && self.edges.iter().all(|row| {
+                !row.is_empty() && row.iter().all(|edge| (edge.target as usize) < states)
+            })
     }
 
     fn accepts(&self, state: u32) -> bool {
@@ -561,7 +578,14 @@ impl<G: Guard> SymbolicDfa<G> {
     /// a wrong one. A complement never needs to fail, so it does not.
     #[must_use]
     fn minimal(self) -> SymbolicDfa<G> {
-        self.merge_equivalent().sorted().renumber()
+        debug_assert!(self.well_formed(), "a table is minimised as it was built");
+        let merged = self.merge_equivalent();
+        debug_assert!(merged.well_formed(), "merging the states kept the table");
+        let sorted = merged.sorted();
+        debug_assert!(sorted.well_formed(), "sorting the edges kept it");
+        let minimal = sorted.renumber();
+        debug_assert!(minimal.well_formed(), "renumbering the states kept it");
+        minimal
     }
 
     /// Merge the states no sequence distinguishes.

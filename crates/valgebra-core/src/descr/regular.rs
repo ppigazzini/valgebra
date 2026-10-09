@@ -74,6 +74,15 @@ type Class = u16;
 /// State zero is the start. Every state has a transition for every class, so a
 /// walk never falls off the table and a complement is a flip of the accepting
 /// flags rather than a construction.
+///
+/// **The lookups below answer a miss with state or class zero rather than
+/// refusing.** A well-formed table has no miss -- [`well_formed`](Self::well_formed)
+/// says what that means -- and the operations that read one are total: a
+/// complement, a membership walk, the three passes of a minimisation. Read as
+/// zero, a miss would be another language, so [`minimal`](Self::minimal),
+/// which every table here passes through or is built as, asserts the table it
+/// reads and each one it builds: a malformed table stops a debug build where it
+/// is made.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Dfa {
     /// The class of each byte.
@@ -88,6 +97,26 @@ struct Dfa {
 impl Dfa {
     fn state_count(&self) -> usize {
         self.accepting.len()
+    }
+
+    /// Whether every lookup on this table lands inside it: a class for each of
+    /// the 256 bytes and each below the class count, a row of transitions per
+    /// state, each to a state of the table, and a state to start from. A class
+    /// below the count is what makes the count positive, so no clause of its
+    /// own says so.
+    fn well_formed(&self) -> bool {
+        let states = self.state_count();
+        states > 0
+            && self.classes.len() == 256
+            && self
+                .classes
+                .iter()
+                .all(|class| usize::from(*class) < self.class_count)
+            && Some(self.transitions.len()) == states.checked_mul(self.class_count)
+            && self
+                .transitions
+                .iter()
+                .all(|target| (*target as usize) < states)
     }
 
     fn class_of(&self, byte: u8) -> Class {
@@ -360,9 +389,14 @@ impl Dfa {
     /// order. A minimal DFA is unique up to isomorphism, so fixing the numbering
     /// fixes the table.
     fn minimal(&self) -> Dfa {
+        debug_assert!(self.well_formed(), "a table is minimised as it was built");
         let merged = self.merge_equivalent();
+        debug_assert!(merged.well_formed(), "merging the states kept the table");
         let coarsened = merged.coarsen();
-        coarsened.renumber()
+        debug_assert!(coarsened.well_formed(), "coarsening the alphabet kept it");
+        let minimal = coarsened.renumber();
+        debug_assert!(minimal.well_formed(), "renumbering the states kept it");
+        minimal
     }
 
     /// Merge the states no word distinguishes, by refining a partition until it
@@ -436,8 +470,8 @@ impl Dfa {
         let mut ids: FxHashMap<Vec<u32>, Class> = FxHashMap::default();
         let mut classes: Vec<Class> = Vec::with_capacity(256);
         let mut columns: Vec<Class> = Vec::new();
-        for byte in 0u16..256 {
-            let old = self.class_of(u8::try_from(byte).unwrap_or(0));
+        for byte in u8::MIN..=u8::MAX {
+            let old = self.class_of(byte);
             let column: Vec<u32> = (0..self.state_count())
                 .map(|state| self.step(u32::try_from(state).unwrap_or(0), old))
                 .collect();
@@ -508,8 +542,7 @@ fn refine(a: &Dfa, b: &Dfa) -> (Vec<Class>, usize, Vec<(Class, Class)>) {
     let mut ids: FxHashMap<(Class, Class), Class> = FxHashMap::default();
     let mut pairs: Vec<(Class, Class)> = Vec::new();
     let mut classes: Vec<Class> = Vec::with_capacity(256);
-    for byte in 0u16..256 {
-        let byte = u8::try_from(byte).unwrap_or(0);
+    for byte in u8::MIN..=u8::MAX {
         let pair = (a.class_of(byte), b.class_of(byte));
         let count = Class::try_from(ids.len()).unwrap_or(0);
         let id = *ids.entry(pair).or_insert_with(|| {
@@ -782,8 +815,7 @@ impl Dfa {
         let crate_classes = built.byte_classes();
         let mut used: Vec<u8> = Vec::new();
         let mut byte_class: Vec<Class> = Vec::with_capacity(256);
-        for byte in 0u16..256 {
-            let byte = u8::try_from(byte).unwrap_or(0);
+        for byte in u8::MIN..=u8::MAX {
             let theirs = crate_classes.get(byte);
             let index = if let Some(index) = used.iter().position(|c| *c == theirs) {
                 index

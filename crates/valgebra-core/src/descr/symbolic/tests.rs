@@ -641,3 +641,54 @@ fn an_accepting_state_behind_an_undecided_letter_is_unproved() {
         "unproved is not a proof of emptiness"
     );
 }
+
+/// A table with an edge to a state it does not have stops a debug build where
+/// it is minimised, for the reason the byte automaton's test gives.
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "a table is minimised as it was built")]
+fn a_table_with_an_edge_off_it_stops_a_debug_build() {
+    let malformed: SymbolicDfa<IntSet> = SymbolicDfa {
+        edges: vec![vec![Edge {
+            guard: None,
+            target: 5,
+        }]],
+        accepting: vec![true],
+    };
+    let _ = malformed.minimal();
+}
+
+/// Each clause of a well-formed table refuses a table that breaks it alone: an
+/// edge to the state one past the last, a state with no edges, a row too few,
+/// and no state at all. The table they are made from is well formed, with an
+/// edge to its last state.
+#[test]
+fn each_defect_of_a_table_is_one_well_formed_refuses() {
+    let edge = |target| Edge {
+        guard: None::<IntSet>,
+        target,
+    };
+    let good = || SymbolicDfa {
+        edges: vec![vec![edge(1)], vec![edge(1)]],
+        accepting: vec![false, true],
+    };
+    assert!(good().well_formed());
+    let mut off_the_table = good();
+    off_the_table.edges[0][0].target = 2;
+    let mut an_empty_row = good();
+    an_empty_row.edges[1].clear();
+    let mut a_row_too_few = good();
+    a_row_too_few.edges.pop();
+    let no_state: SymbolicDfa<IntSet> = SymbolicDfa {
+        edges: Vec::new(),
+        accepting: Vec::new(),
+    };
+    for (defect, table) in [
+        ("an edge off the table", off_the_table),
+        ("an empty row", an_empty_row),
+        ("a row too few", a_row_too_few),
+        ("no state", no_state),
+    ] {
+        assert!(!table.well_formed(), "{defect}");
+    }
+}
