@@ -66,28 +66,49 @@ def test_every_recorded_step_names_a_shape_and_says_why() -> None:
         assert 0 < float(step["ceiling"]) < 5
 
 
-def test_a_recorded_step_applies_to_its_own_base_and_no_other(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A step excuses the one comparison it was written for.
+def test_a_recorded_step_excuses_the_comparison_that_crosses_it() -> None:
+    """A step excuses a comparison whose base does not carry it, and no other.
 
-    It is recorded against the base count it steps from, so a base at or past
-    the step measures the new count, stops matching the record, and is held to
-    the ordinary ceiling again. That is what keeps a step from becoming a
-    standing excuse for a shape. Driven from a record of its own: read off the
-    tree's file, the case held only while that file carried a `binding` step,
-    and it has carried none since.
+    The commit that takes a step records it, so a base before that commit has
+    no such record and a base at or past it has one: that second comparison is
+    held to the ordinary ceiling. A base count near the step's own is not a
+    match, since a later change giving part of a step back measures there, and
+    a step read off the count would excuse every change after it.
     """
-    record = tmp_path / "perf_budget.json"
-    step = {"shape": "binding", "base_irefs": 181_424_346, "ceiling": 0.5, "why": "x"}
-    record.write_text(json.dumps({"steps": [step]}), encoding="utf-8")
-    monkeypatch.setattr(gate, "BUDGET_FILE", record)
+    step = {
+        "shape": "decision-refute",
+        "base_irefs": 1_196_378,
+        "ceiling": 0.04,
+        "why": "the count and the cost moved apart",
+    }
+    assert gate.recorded_step("decision-refute", [step], []) == step
+    assert gate.recorded_step("decision-refute", [step], [step]) is None
+    # Named by its shape and its base, so a reworded argument is the same step.
+    reworded = dict(step, why="the argument, said again")
+    assert gate.recorded_step("decision-refute", [reworded], [step]) is None
+    assert gate.recorded_step("decision", [step], []) is None
 
-    stepped = gate.Measurement(irefs=181_424_346, checksum=1)
-    moved_on = gate.Measurement(irefs=266_911_896, checksum=1)
-    assert gate.recorded_step("binding", stepped) == step
-    assert gate.recorded_step("binding", moved_on) is None
-    assert gate.recorded_step("core", stepped) is None
+    # And the verdict it moves: 3% over the base passes under the step's
+    # ceiling, and fails once the base carries the step.
+    head = gate.Measurement(irefs=1_232_270, checksum=200)
+    base = gate.Measurement(irefs=1_196_378, checksum=200)
+    crossing = gate.recorded_step("decision-refute", [step], [])
+    assert gate.judge_relative(head, base, "refute", crossing) == gate.EXIT_OK
+    carried = gate.recorded_step("decision-refute", [step], [step])
+    assert gate.judge_relative(head, base, "refute", carried) == gate.EXIT_FAIL
+
+
+def test_a_base_reads_the_steps_its_own_record_carries(tmp_path: Path) -> None:
+    # A base older than the record has none, and every step of the head's is
+    # one the comparison crosses.
+    assert gate.carried_steps(tmp_path) == []
+    (tmp_path / "scripts").mkdir()
+    record = tmp_path / "scripts" / "perf_budget.json"
+    step = {"shape": "decision", "base_irefs": 1, "ceiling": 0.04, "why": "x"}
+    record.write_text(json.dumps({"steps": [step]}), encoding="utf-8")
+    assert gate.carried_steps(tmp_path) == [step]
+    record.write_text(json.dumps({"tolerance": 0.1}), encoding="utf-8")
+    assert gate.carried_steps(tmp_path) == []
 
 
 def test_a_step_the_file_has_outlived_is_refused() -> None:
@@ -318,10 +339,7 @@ BASE = gate.Measurement(irefs=100_000_000, checksum=134000)
 
 def _relative(head_irefs: int, checksum: int = 134000) -> int:
     return gate.judge_relative(
-        gate.Measurement(irefs=head_irefs, checksum=checksum),
-        BASE,
-        "core workload",
-        "core",
+        gate.Measurement(irefs=head_irefs, checksum=checksum), BASE, "core workload"
     )
 
 
