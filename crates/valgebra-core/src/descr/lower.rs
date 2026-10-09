@@ -843,13 +843,16 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
 /// equal to it, and then the set it cuts is bounded by a neighbour rather than
 /// by the bound itself -- which is a different set from the one the nearest
 /// float would cut, in whichever direction that rounding went.
+///
+/// The neighbour is the one on the side the bound keeps, so the type has no
+/// reading for the other side and no caller has a crossed case to answer.
 enum Straddle {
     /// A float equals the bound.
     Exact(f64),
-    /// No float does; this is the smallest one above it.
-    Above(f64),
-    /// No float does; this is the largest one below it.
-    Below(f64),
+    /// No float does; this is the nearest one on the side the bound keeps --
+    /// the smallest above it for a lower bound, the largest below it for an
+    /// upper one.
+    Beside(f64),
 }
 
 /// Which floats an integer bound cuts between.
@@ -871,10 +874,10 @@ fn straddle(value: i64, lower: bool) -> Straddle {
     match round_trip.cmp(&i128::from(value)) {
         core::cmp::Ordering::Equal => Straddle::Exact(nearest),
         // The nearest float overshot, so it *is* the one above.
-        core::cmp::Ordering::Greater if lower => Straddle::Above(nearest),
-        core::cmp::Ordering::Greater => Straddle::Below(nearest.next_down()),
-        core::cmp::Ordering::Less if lower => Straddle::Above(nearest.next_up()),
-        core::cmp::Ordering::Less => Straddle::Below(nearest),
+        core::cmp::Ordering::Greater if lower => Straddle::Beside(nearest),
+        core::cmp::Ordering::Greater => Straddle::Beside(nearest.next_down()),
+        core::cmp::Ordering::Less if lower => Straddle::Beside(nearest.next_up()),
+        core::cmp::Ordering::Less => Straddle::Beside(nearest),
     }
 }
 
@@ -899,13 +902,20 @@ fn float_bound(constraint: &Constraint, operand: &Operand) -> Option<FloatSet> {
     // No float equals an inexact bound, so `>` and `>=` admit the same ones and
     // the neighbour carries what the strictness would have.
     Some(match value {
-        Straddle::Exact(bound) if lower && strict => FloatSet::above(bound),
-        Straddle::Exact(bound) if strict => FloatSet::below(bound),
-        Straddle::Exact(bound) | Straddle::Above(bound) if lower => FloatSet::at_least(bound),
-        Straddle::Exact(bound) | Straddle::Below(bound) => FloatSet::at_most(bound),
-        // `lower` picks the variant `straddle` returns, so the two crossed
-        // cases are unreachable and answer with the set for the side they name.
-        Straddle::Above(bound) => FloatSet::at_least(bound),
+        Straddle::Exact(bound) if strict => {
+            if lower {
+                FloatSet::above(bound)
+            } else {
+                FloatSet::below(bound)
+            }
+        }
+        Straddle::Exact(bound) | Straddle::Beside(bound) => {
+            if lower {
+                FloatSet::at_least(bound)
+            } else {
+                FloatSet::at_most(bound)
+            }
+        }
     })
 }
 

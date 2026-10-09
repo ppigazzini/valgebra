@@ -49,6 +49,7 @@ thread_local! {
 /// guard recursing into the descriptor behind it -- calls this and refuses on
 /// `false`. A step that is linear in what it already holds does not, because
 /// bounding those bounds nothing the bounds above do not.
+#[must_use = "a charge that ran out is the refusal; a caller that ignores it builds past the allowance"]
 pub(crate) fn spend() -> bool {
     LEFT.with(|left| {
         let Some(rest) = left.get().checked_sub(1) else {

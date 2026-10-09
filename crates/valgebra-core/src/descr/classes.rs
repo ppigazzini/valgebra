@@ -340,11 +340,9 @@ impl Class {
     /// caller saturates at; the bindings number a query's classes from zero.
     #[must_use]
     pub fn exact(kind: Kind) -> Class {
-        let at = Kind::ALL
-            .iter()
-            .position(|listed| *listed == kind)
-            .and_then(|at| u32::try_from(at).ok())
-            .unwrap_or(0);
+        // The kind's place in `Kind::ALL`: one of eleven, so the subtraction
+        // cannot wrap and no two kinds share an id.
+        let at = kind as u32;
         let id = u32::MAX - 1 - at;
         Class::laid_out(id, id)
             .of_kind(kind)
