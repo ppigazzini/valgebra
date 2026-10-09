@@ -5383,6 +5383,97 @@ proptest! {
     }
 }
 
+/// Two chains, spelled the two ways a reader writes one: the reference around
+/// the union (`chain = None | {"a": chain}`) and inside it, the `TypedDict`
+/// spelling (`Node = {"a": Node | None}`). The key is one the universe names
+/// (`NAMES`), since a value's keys are static.
+fn chain_defs() -> Vec<Schema> {
+    let link = |schema: Schema| Schema::KeyedMap {
+        fields: vec![Field {
+            name: "a".into(),
+            schema,
+            required: true,
+        }]
+        .into(),
+        defaults: Vec::new().into(),
+    };
+    vec![
+        union(Schema::NoneType, link(Schema::Ref(DefIx::new(0)))),
+        link(union(Schema::Ref(DefIx::new(1)), Schema::NoneType)),
+    ]
+}
+
+/// A record a chain is met with: `None`, a scalar, a chain, a closed record of
+/// the chain's key and one optional key, or a union of two of them.
+fn chain_record() -> impl Strategy<Value = Schema> {
+    let leaf = prop_oneof![
+        Just(Schema::NoneType),
+        Just(Schema::Int),
+        Just(Schema::Str),
+        Just(Schema::Ref(DefIx::new(0))),
+        Just(Schema::Ref(DefIx::new(1))),
+    ];
+    leaf.prop_recursive(3, 12, 2, |inner| {
+        prop_oneof![
+            (inner.clone(), proptest::option::of(inner.clone())).prop_map(|(next, extra)| {
+                let mut fields = vec![Field {
+                    name: "a".into(),
+                    schema: next,
+                    required: true,
+                }];
+                fields.extend(extra.map(|schema| Field {
+                    name: "b".into(),
+                    schema,
+                    required: false,
+                }));
+                Schema::KeyedMap {
+                    fields: fields.into(),
+                    defaults: Vec::new().into(),
+                }
+            }),
+            (inner.clone(), inner).prop_map(|(a, b)| union(a, b)),
+        ]
+    })
+}
+
+proptest! {
+    // THEORY: two-fixpoints-one-procedure
+    /// A meet with a reference answers as the values of the universe do.
+    ///
+    /// The rules unfold a reference into the meet it is a member of, under a
+    /// goal of their own, and read the goal met again as empty. Both answers
+    /// are claims about values: an empty meet holds none of them, and an
+    /// inhabited one holds one the universe names, since every value of a
+    /// chain this deep is in it.
+    #[test]
+    fn a_meet_with_a_reference_answers_as_its_values_do(
+        reference in 0..2usize,
+        other in chain_record(),
+    ) {
+        let pool = const_pool();
+        let defs = chain_defs();
+        let meet = Schema::Intersection(vec![Schema::Ref(DefIx::new(reference)), other].into());
+        let verdict = meet.verdict_under_defs(&defs);
+        let schema = unfold_for_oracle(&meet, &defs, ORACLE_UNFOLDS);
+        let mut members = boundary_values(&[&schema])
+            .into_iter()
+            .filter(|value| member_full(&schema, value, &pool));
+        match verdict {
+            Verdict::Empty => prop_assert!(
+                members.next().is_none(),
+                "{:?} is decided empty and holds {:?}",
+                meet, members.next()
+            ),
+            Verdict::Inhabited => prop_assert!(
+                members.next().is_some(),
+                "{:?} is decided inhabited and the universe holds none of it",
+                meet
+            ),
+            Verdict::Unknown => {}
+        }
+    }
+}
+
 proptest! {
     /// A schema read as inhabited without a descent has a value, and the
     /// corpus holds it.

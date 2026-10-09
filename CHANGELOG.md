@@ -19,11 +19,20 @@ answer of its own, or a repair to a change not yet released.
 - fix: deprecated and Unit in metadata are ignored
 - fix: a callable where a schema goes is refused
 - feat: a generic type alias is read applied to its arguments
+- feat: a meet with a recursive reference is decided
 
 -->
 
 ### Added
 
+- **A meet with a recursive reference is decided.** For `chain =
+  recursive(lambda t: union(None, {"next": t}))`, `intersection(chain,
+  {"next": int})` is empty and `intersection(chain, {"next": {"next": None}})`
+  is not, where both answered `"undecided"`. The reference is unfolded into the
+  meet, a key that names it asks the meet of its types again, and a meet met
+  again while it is decided reads as empty, under a goal of the meet's own
+  rather than the reference's. A reference written inside a key's union,
+  `recursive(lambda t: {"next": union(t, None)})`, decides the same way.
 - **A generic type alias is read applied to its arguments.** `Pair[int]` from
   `type Pair[T] = tuple[T, T]` was refused as an unsupported form with origin
   `Pair`; it reads as `tuple[int, int]`, the body with the arguments in place

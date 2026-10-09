@@ -219,6 +219,9 @@ ROWS: dict[str, Row] = {
     "A subject outside a base.": Decides(Annotated[int, at.Ge(0)], str, "not_subset"),
     "Inclusion in a complement.": Decides(int, complement(str), "subset"),
     "Recursion.": Decides(_JSON, union(bytes, _JSON), "subset"),
+    "A meet with a recursive reference.": Decides(
+        intersection(_CHAIN, {"next": int}), None, "empty"
+    ),
     "The complement laws, where the constructors reach them.": Decides(
         union(int, complement(int)), anything, "subset"
     ),
@@ -246,15 +249,6 @@ ROWS: dict[str, Row] = {
         # What one unfolding does reach: the kinds a fixpoint admits. A value of
         # another kind shares nothing with it, so it is below its complement.
         beside=(bytes, complement(_CHAIN), "subset"),
-    ),
-    "A meet with a recursive reference.": Declines(
-        intersection(_CHAIN, {"next": int}),
-        nothing,
-        "a meet that unfolds a reference among its members, under a trail of "
-        "the meets it has met",
-        # What one unfolding does reach: a member of another kind meets no
-        # value of the fixpoint, so the meet is decided empty.
-        beside=(intersection(_CHAIN, int), nothing, "subset"),
     ),
     "A length bound over a set or a dict, in the sets.": Declines(
         Annotated[set[int], at.MinLen(1)],
