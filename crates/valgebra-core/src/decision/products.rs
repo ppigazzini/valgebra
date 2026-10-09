@@ -16,7 +16,7 @@
 use crate::ir::{Schema, SeqShape};
 use crate::verdict::{Relation, Verdict};
 
-use super::{SubtypeCx, spend};
+use super::{SubtypeCx, descending, spend};
 
 /// The element schemas of a *fixed-arity* sequence, or `None` when the shape has
 /// a tail.
@@ -62,6 +62,15 @@ pub(super) fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
 /// narrowed component is proved inhabited, which is a product with a value and
 /// no branch left. The conjuncts are asked in order and the first that does not
 /// hold is the answer, as the boolean reading stopped at the first `false`.
+///
+/// **Each branch it narrows by is a level of the query's depth.** The recursion
+/// takes one level per branch the product is not proved disjoint from, so how
+/// deep it runs is the union's width rather than the schema's nesting, and the
+/// step budget is spent per level on work that grows with the narrowed
+/// components, which caps the width it reaches and not the stack a goal asked
+/// at the bottom of it may still take. So the level is counted against
+/// [`MAX_DECISION_DEPTH`](super::MAX_DECISION_DEPTH) with the goal and
+/// emptiness levels it runs beside, and past the bound the product declines.
 pub(super) fn product_subtype(
     components: &[Schema],
     branches: &[&[Schema]],
@@ -117,7 +126,10 @@ pub(super) fn product_subtype(
                 }
             })
             .collect();
-        match (here, product_subtype(&narrowed, rest, cx, assumptions)) {
+        let rest_covers = descending(cx.budget, Relation::Unknown, || {
+            product_subtype(&narrowed, rest, cx, assumptions)
+        });
+        match (here, rest_covers) {
             (_, Relation::Holds) => {}
             (Relation::Fails, Relation::Fails) => return Relation::Fails,
             _ => return Relation::Unknown,

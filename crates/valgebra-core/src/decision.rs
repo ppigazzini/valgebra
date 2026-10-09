@@ -52,10 +52,14 @@ pub use crate::oracle::{LeafRelations, NoLeafRelations};
 /// subterms, a meet per subset, so a query that terminates can still outlast
 /// any caller, and that is what this ceiling is for.
 ///
-/// One budget is threaded through a whole top-level query — subtyping and the
-/// emptiness checks it calls into share it, and the two directions of an
-/// equivalence share it — so the bound cannot be escaped through a side door or
-/// spent twice.
+/// One budget is threaded through a whole top-level query — subtyping, the
+/// emptiness checks it calls into and the product rule share it, and the two
+/// directions of an equivalence share it — so no rule spends a second one. A
+/// lowering is the one cost it does not count: where the rules can neither prove
+/// nor refute `A <= ~B`, the `Complement` arm of `subtype_by_shape` asks the
+/// set representation whether `B` is empty, and that question is bounded by the
+/// lowering's own `Bounds` -- nodes read, nesting descended, multiplying work
+/// -- once for each goal that reaches it.
 ///
 /// **A memo is mostly not what would lower it.** Counted by
 /// `decision::goal_tests` over the older workloads' shapes and over a record of
@@ -126,8 +130,9 @@ impl Budget {
 /// `refused` where the level would pass [`MAX_DECISION_DEPTH`].
 ///
 /// The goal recursion and the emptiness recursion each descend through this
-/// once a level, and the two share the count, since an emptiness question
-/// asked deep inside a goal runs on the same stack. No guard closes the level:
+/// once a level, and the product rule once for each branch it narrows by; the
+/// three share the count, since an emptiness question asked deep inside a goal,
+/// and a goal asked at the bottom of a product, run on the same stack. No guard closes the level:
 /// a query that unwinds drops its budget with it, so the count is restored on
 /// the return alone -- a guard's drop put an unwinding path on every goal and
 /// read dearer than the count itself.
