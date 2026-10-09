@@ -615,8 +615,10 @@ def describe_window(count: int | None) -> tuple[str, bool]:
     return (batch, True)
 
 
-def recorded_step(mode: str, base: Measurement) -> dict | None:
-    """Return the argued step this shape takes over this base, if one is recorded.
+def recorded_step(
+    mode: str, steps: Sequence[dict], carried: Sequence[dict]
+) -> dict | None:
+    """Return the argued step this comparison crosses, if one is recorded.
 
     A shape's instruction count is a proxy for its cost, and once in a while a
     change moves the two apart: reading a list's elements through a snapshot of
@@ -626,39 +628,46 @@ def recorded_step(mode: str, base: Measurement) -> dict | None:
     change the wall clock says is two and a half times faster would be the
     proxy governing the thing it stands for.
 
-    So a step is recorded against **the base count it steps from**, not against
-    a commit. That is what makes it expire on its own: once the base is a commit
-    at or past the step, the base measures the new count, this record no longer
-    matches it, and the ordinary ceiling applies again. A record can therefore
-    excuse the one comparison it was written for and no later one.
+    So the commit that takes a step records it in the budget file (`steps`),
+    and the step excuses a comparison **whose base does not carry it** -- the
+    head's record holds it and the base's does not. That is the comparison
+    crossing the commit, and no later one: once the base is at or past the
+    step, its own record carries it and the ordinary ceiling applies again. A
+    step is named by its shape and the base count it steps from, so rewording
+    its argument does not make it a new one.
 
-    The match carries the *relative* tolerance, not the shape's own band, and
-    that is deliberate. A binding shape reads 6.9% apart on two machines and its
-    budget carries a 30% band for exactly that, so a step recorded from a lane's
-    numbers does not match a local ``--against`` and one recorded here would not
-    match the lane's. Widening the match to the band would make a record
-    portable and would also let it excuse a base that has drifted a quarter of
-    the way to anywhere -- and ``--against`` runs in one place, the bench lane,
-    which is where the number that has to match is taken. Precision of expiry is
-    what this record is for; portability is not.
+    A base count alone is not an expiry. A step is a difference, and a later
+    change that gives part of it back brings the shape's count back near the
+    base the step names, where a match on the count would excuse every change
+    after it. Which commits a base carries is a fact of the tree, the same on
+    every machine, so a step can be recorded from a local reading.
     """
-    budget = json.loads(BUDGET_FILE.read_text(encoding="utf-8"))
-    for step in budget.get("steps", []):
-        if step.get("shape") != mode:
-            continue
-        recorded = int(step["base_irefs"])
-        if abs(base.irefs - recorded) <= RELATIVE_TOLERANCE * recorded:
+    held = {(step.get("shape"), step.get("base_irefs")) for step in carried}
+    for step in steps:
+        if step.get("shape") == mode and (mode, step.get("base_irefs")) not in held:
             return step
     return None
+
+
+def carried_steps(checkout: Path) -> list[dict]:
+    """Read the steps a checkout's own record carries; none where it has none."""
+    try:
+        record = json.loads(
+            (checkout / "scripts" / "perf_budget.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return []
+    steps = record.get("steps", []) if isinstance(record, dict) else []
+    return steps if isinstance(steps, list) else []
 
 
 def stale_steps(budget: dict) -> list[str]:
     """Name every recorded step the file has outlived.
 
     A step describes one transition: from `base_irefs`, by at most `ceiling`.
-    It is worth keeping while the shape's recorded budget is still somewhere in
+    It is worth keeping while the shape's recorded count is still somewhere in
     that window -- the count a base measures, or the count a head measures once
-    the step is taken. A budget outside it says the shape has been re-recorded
+    the step is taken. A count outside it says the shape has been re-recorded
     for some other reason since, so the comparison the record was written to
     excuse is one nobody can make any more.
 
@@ -813,6 +822,7 @@ def run_relative(modes: list[str], rev: str) -> int:
             check=True,
         )
         fresh = [mode for mode in modes if absent_at(checkout, mode)]
+        carried = carried_steps(checkout)
         base, broken = measure_base(
             [mode for mode in modes if mode not in fresh],
             checkout,
@@ -843,7 +853,8 @@ def run_relative(modes: list[str], rev: str) -> int:
             print("change, and no verdict on it.")
             outcomes.append(EXIT_CANNOT_RUN)
             continue
-        outcomes.append(judge_relative(head[mode], base[mode], subject, mode))
+        step = recorded_step(mode, record.get("steps", []), carried)
+        outcomes.append(judge_relative(head[mode], base[mode], subject, step))
     outcome = EXIT_OK
     if EXIT_CANNOT_RUN in outcomes:
         outcome = EXIT_CANNOT_RUN
@@ -860,7 +871,7 @@ def run_relative(modes: list[str], rev: str) -> int:
 
 
 def judge_relative(
-    head: Measurement, base: Measurement, subject: str, mode: str
+    head: Measurement, base: Measurement, subject: str, step: dict | None = None
 ) -> int:
     """Compare two measurements of the same workload, or refuse to compare them.
 
@@ -877,7 +888,7 @@ def judge_relative(
         print("the workload, and say what moved.")
         return EXIT_CANNOT_RUN
     print(f"checksum: {head.checksum} ({subject}, unchanged from the base)")
-    return check_against_base(head, base, subject, recorded_step(mode, base))
+    return check_against_base(head, base, subject, step)
 
 
 def record_key(mode: str) -> str:

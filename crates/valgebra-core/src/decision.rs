@@ -101,10 +101,10 @@ pub(crate) const MAX_DECISION_DEPTH: u32 = 512;
 /// One value for the two because every recursive call is handed the budget
 /// already, so the depth travels with it. Counting a level on every goal that
 /// reaches the rules and on every emptiness question costs the decision
-/// workloads 2.5% to 3.1%, recorded as a step in `scripts/perf_budget.json`; a
-/// count kept per thread read 6% to 11%, a thread-local in a shared library
-/// being a call to find on every level, and one taken only through
-/// `verdict_rec` read less and left a union's members uncounted.
+/// workloads 2.5% to 3.1%; a count kept per thread read 6% to 11%, a
+/// thread-local in a shared library being a call to find on every level, and
+/// one taken only through `verdict_rec` read less and left a union's members
+/// uncounted.
 pub(crate) struct Budget {
     steps: Cell<u32>,
     depth: Cell<u32>,

@@ -755,7 +755,7 @@ by, so its depth is a union's width rather than a schema's nesting, and the
 step budget caps that width without capping the goal asked at the bottom of
 it. A level costs about 1 KiB on the profile-guided wheel, so
 the bound fits half of a 1 MiB thread. The count costs the decision workloads
-2.5% to 3.1%, recorded as a step in `scripts/perf_budget.json`.
+2.5% to 3.1%.
 `the_depth_bound_declines_and_gives_its_levels_back` holds the goal and
 emptiness recursions to it, and the levels to being given back, and
 `the_product_rule_takes_a_level_for_each_branch_it_narrows_by` holds the
