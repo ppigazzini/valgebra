@@ -4085,6 +4085,53 @@ PLANTS = (
         ),
         trips=("test_the_tree_has_version_gates_and_the_workflow_has_lanes",),
     ),
+    Plant(
+        # A shape the instruction gate counts, dropped from the training's
+        # tables: the wheel lays its path out without counts, and nothing says.
+        "tests/test_pgo_training.py",
+        ("scripts/pgo_workload.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/pgo_workload.py",
+            '    "binding-mapping": ("_mappings",),\n',
+            "",
+        ),
+        trips=("test_every_measured_shape_is_trained_or_excused",),
+    ),
+    Plant(
+        # A row for a shape neither gate measures: a claim about nothing.
+        "tests/test_pgo_training.py",
+        ("scripts/pgo_workload.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/pgo_workload.py",
+            '    "binding-mapping": ("_mappings",),\n',
+            '    "binding-mapping": ("_mappings",),\n'
+            '    "binding-gone": ("_mappings",),\n',
+        ),
+        trips=("test_every_measured_shape_is_trained_or_excused",),
+    ),
+    Plant(
+        # The call that trains a row's function, removed from `main`: the row
+        # still names a function the file defines, and the training never runs
+        # it.
+        "tests/test_pgo_training.py",
+        ("scripts/pgo_workload.py",),
+        lambda tree: _edit(tree, "scripts/pgo_workload.py", "    _mappings()\n", ""),
+        trips=("test_every_training_row_names_a_function_main_runs",),
+    ),
+    Plant(
+        # A shape excused from the training with a placeholder for its reason.
+        "tests/test_pgo_training.py",
+        ("scripts/pgo_workload.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/pgo_workload.py",
+            '"Compiling a protocol, whose members',
+            '"TODO: a protocol, whose members',
+        ),
+        trips=("test_every_untrained_shape_says_what_it_reads",),
+    ),
 )
 
 

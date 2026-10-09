@@ -92,6 +92,7 @@ for and misses the other. The ledgers:
 | `tests/test_crate_attributes.py` | every crate root forbids unsafe code |
 | `tests/test_harness_conditionals.py` | every `cfg(feature = ..)` site is test-only, or named |
 | `tests/test_contract_inventory.py` | every gate script has a contract row; every row names a real source |
+| `tests/test_pgo_training.py` | every shape the comparison and instruction gates measure is trained by the profile's workload, or named with what no call reads |
 | `tests/test_completeness_probe.py` | every suspected completeness gap is accepted with a reason |
 | `tests/test_completeness_ledger.py` | every relation the procedure must decide is decided; every relation it declines is still declined |
 | `tests/test_suite_partition.py` | every test file is a product test or a marked repository check |

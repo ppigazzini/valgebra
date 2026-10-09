@@ -932,10 +932,13 @@ wraps rather than checks integer overflow, which the dev and test profiles trap;
 The published wheels are profile-guided, trained by `scripts/pgo_workload.py`,
 which `pyproject.toml` names as `pgo-command`; what that buys, and on which
 shapes it costs, is [measured above](#baseline-matrix). A path the training
-workload never enters is laid out by chance, so the workload reaches every
-reading the walk has -- lists of scalars, of literals, of one class, of tuples,
-of named tuples and of dataclasses, records open and closed, a deeply nested
-list, the explaining walk -- and relations at both of their levels.
+workload never enters is laid out by chance, so the workload reads lists of
+scalars, of literals, of one class, of tuples, of named tuples and of
+dataclasses, records open and closed, a deeply nested list, the explaining walk,
+and relations at both of their levels. `TRAINED` in the workload names, for each
+shape a gate measures, the calls that take its reading, and `UNTRAINED` names
+the shapes none does with what each reads: a JSON array of records, a set, a
+value walked against a recursive schema among them.
 
 ### Measured and not taken
 
