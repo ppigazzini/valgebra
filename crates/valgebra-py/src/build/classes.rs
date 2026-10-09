@@ -2,7 +2,8 @@
 //! attributes describe.
 //!
 //! A `TypedDict` says so by carrying `__required_keys__`, an enum by subclassing
-//! `Enum`, a dataclass by `dataclasses.is_dataclass`, a `Protocol` by
+//! `Enum`, a dataclass by the `__dataclass_fields__` that
+//! `dataclasses.is_dataclass` reads, a `Protocol` by
 //! `_is_protocol`; every other class names its instances and is an
 //! `isinstance` atom. The section "What a class declares" in
 //! `docs/dev/03-frontend.md` is this module.
@@ -24,26 +25,20 @@ use super::{
 };
 use crate::errors::{summarize, unless_fatal};
 
-/// `dataclasses.is_dataclass`, held apart from [`Forms`](super::Forms) and
-/// resolved on the first class node that reaches the question.
+/// What [`declared_fields`] reads a dataclass through, held apart from
+/// [`Forms`](super::Forms) and resolved on the first dataclass a build reads.
 ///
 /// Not in the cache beside the other forms, because that cache is built the
 /// first time anything is compiled and `dataclasses` is a module most programs
 /// never import: it pulls `inspect`, `copy`, `functools` and their own imports
 /// in with it, and the objects they leave behind are *tracked* -- so every
 /// later collection walks them. Measured on the shape that compiles a
-/// fifty-field record of plain types, which reaches no dataclass and never asks
-/// this question: importing it with the rest reads **6.45% dearer**, all of it
-/// after the import, in the generational walks a build's own allocations
-/// trigger.
-static IS_DATACLASS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-
-/// What [`declared_fields`] reads a dataclass through, held beside
-/// [`IS_DATACLASS`] and for its reason.
-///
-/// Reached only from [`declared_fields`], which asks it after `is_dataclass`
-/// has answered yes -- so the module is already imported by the time this cell
-/// is filled, and a program that compiles no dataclass still never imports it.
+/// fifty-field record of plain types, which reaches no dataclass: importing it
+/// with the rest reads **6.45% dearer**, all of it after the import, in the
+/// generational walks a build's own allocations trigger. Reached only after
+/// [`is_dataclass`] has answered yes, so the module is already imported by the
+/// time this cell is filled, and a program that compiles no dataclass never
+/// imports it.
 static DATACLASS_READING: PyOnceLock<DataclassReading> = PyOnceLock::new();
 
 /// `dataclasses.fields`, and the marker it keeps a field by.
@@ -55,16 +50,19 @@ struct DataclassReading {
     kept: Option<Py<PyAny>>,
 }
 
-/// `dataclasses.is_dataclass`, imported on first use.
+/// Whether `ty` is a dataclass, read as `dataclasses.is_dataclass` reads it.
+///
+/// That function's body, on every interpreter the matrix runs (3.10 to 3.15
+/// and `PyPy`), is `hasattr(cls, "__dataclass_fields__")` once its argument is
+/// a class, which `ty` is: 3.10's further test for a `GenericAlias` cannot pass
+/// on an object that is a `type`. So the attribute is asked here and the
+/// function is not called. That spares a Python frame on every class node past
+/// the enum arm, and it leaves `dataclasses` unimported by a schema that names
+/// classes and no dataclass, for the reason [`DATACLASS_READING`] gives.
+/// `a_class_is_a_dataclass_where_is_dataclass_says_so` in `build/interpreter.rs`
+/// holds the reading to the call.
 pub(super) fn is_dataclass(ty: &Bound<'_, PyType>) -> PyResult<bool> {
-    let py = ty.py();
-    IS_DATACLASS
-        .get_or_try_init(py, || {
-            Ok::<_, PyErr>(py.import("dataclasses")?.getattr("is_dataclass")?.unbind())
-        })?
-        .bind(py)
-        .call1((ty,))?
-        .is_truthy()
+    ty.hasattr(intern!(ty.py(), "__dataclass_fields__"))
 }
 
 /// Whether a class declares fields the frontend reads beside the class: a

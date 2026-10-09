@@ -6,7 +6,9 @@ import enum
 import numbers
 import pathlib
 import re
+import subprocess
 import sys
+import textwrap
 import types
 import typing
 import uuid
@@ -215,6 +217,40 @@ def test_dataclass_attribute_failure_reports_the_path() -> None:
         Validator(Point).validate(Point(1, "y"))  # ty: ignore[invalid-argument-type]
     assert info.value.code == "int_type"
     assert info.value.path == ("y",)
+
+
+def test_a_class_that_is_no_dataclass_leaves_dataclasses_unimported() -> None:
+    """A schema naming classes and no dataclass never imports `dataclasses`.
+
+    Whether a class is a dataclass is read off the attribute
+    `dataclasses.is_dataclass` reads, so the module is not imported to ask it.
+    Its import pulls `inspect`, `copy` and `functools` in with it, and every
+    later collection walks the tracked objects they leave behind, in a program
+    that may never have asked for any of them. Asked in a fresh interpreter,
+    because the suite itself has imported the module long before this runs.
+    """
+    program = textwrap.dedent(
+        """
+        import sys
+        import valgebra
+        class Plain:
+            pass
+        class Annotated:
+            x: int
+        valgebra.Validator(Plain)
+        valgebra.Validator(list[Plain] | dict[str, Annotated])
+        print("dataclasses" in sys.modules)
+        """
+    )
+    result = subprocess.run(  # noqa: S603 -- fixed interpreter, in-repo program
+        [sys.executable, "-I", "-c", program],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == ["False"], result.stdout
 
 
 class Pair(NamedTuple):

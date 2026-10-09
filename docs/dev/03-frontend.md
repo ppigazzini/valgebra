@@ -401,11 +401,16 @@ before any name is read -- and the call answers wherever a step does not read as
 its own: a table that is not exactly a `dict`, a `dataclasses` with no marker.
 `a_dataclass_declares_what_fields_returns` holds the reading to the call.
 
-**A module is a handle too.** `dataclasses.is_dataclass` and
-`dataclasses.fields` are asked of handles held after the first class that asks
-and *only* after one asks: importing `dataclasses` pulls `inspect`, `copy` and
-`functools` in with it, and the tracked objects they leave behind are walked by
-every later garbage collection. `numbers.Number` -- the register both a
+**A module is a handle too.** `dataclasses.fields` is asked of a handle held
+after the first dataclass a build reads, and *only* after one: importing
+`dataclasses` pulls `inspect`, `copy` and `functools` in with it, and the
+tracked objects they leave behind are walked by every later garbage collection.
+Whether a class is a dataclass is not asked of the module at all.
+`is_dataclass` in `build/classes.rs` reads `__dataclass_fields__`, which is the
+whole of `dataclasses.is_dataclass` once its argument is a class, so a schema
+naming classes and no dataclass leaves the module unimported
+(`test_a_class_that_is_no_dataclass_leaves_dataclasses_unimported` in
+`tests/test_classes.py`). `numbers.Number` -- the register both a
 multiple-of's remainder and an order bound's comparison follow -- is held the
 same way, and for the ordinary reason rather than that one: written as an import
 it asks `sys.modules` and decodes two names **per bound**, which a fifty-field
