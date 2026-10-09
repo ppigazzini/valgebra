@@ -646,24 +646,32 @@ pub type Constraints = Arc<[Constraint]>;
 /// The schema intermediate representation.
 ///
 /// Each variant documents its denotation: the set of Python values it accepts.
-/// `Ord`/`Eq` are structural; the simplifier uses them to canonicalize the
-/// order of union and intersection members and to deduplicate.
+/// `Ord`/`Eq` are structural; the constructors use them to put union and
+/// intersection members in one order and to drop a repeated one.
 ///
-/// Adding a variant means handling it in every walk over the IR; the compiler
-/// forces the exhaustive `match`es. Checklist:
-/// - core: `Schema::map_children`, which is where the variant's child schemas
-///   are declared and which every purely structural walk reads them from;
-///   `Schema::remapped_by`, if it carries a pooled or definitions index;
-///   [`Schema::expected`], [`Schema::error_code`], [`Schema::depth`],
-///   [`Schema::node_count`], [`Schema::occurs_unguarded`],
-///   [`Schema::simplify`];
-/// - bindings (`valgebra-py`): the single `member` membership walk (which
-///   decides membership and, in explain mode, aggregates the violation) plus
-///   `render`.
+/// Adding a variant means handling it in every walk over the IR. The compiler
+/// forces an arm in the matches that name every variant:
+/// - core: the two statements of a node's children, `mapped_children` for a
+///   walk that rebuilds and `push_children` for one that only reads, which
+///   every structural walk goes through (`map_children`, [`Schema::depth`],
+///   [`Schema::node_count`], [`Schema::has_reference`] among them);
+///   `remapped_where_moved`, which moves the pooled and definitions indices;
+///   [`Schema::expected`], [`Schema::error_code`] and `guards_children`, which
+///   [`Schema::occurs_unguarded`] reads; the interner's `hash_node` and `tag`;
+///   and `descend`, the lowering to the set representation;
+/// - bindings (`valgebra-py`): the `member` membership walk, which decides
+///   membership and in explain mode aggregates the violation, and `render`.
+///
+/// Every other match over the IR ends in a wildcard and compiles unchanged: the
+/// interner's `same_node` reads a new variant as never shared, and the decision
+/// procedures read it through their wildcard arms. `tests/test_node_matrix.py`
+/// and `tests/test_closure_ledger.py` read the variants out of this enum and
+/// fail on one without a row, which is what makes a new variant visible there.
 ///
 /// The compiler forces an arm; it cannot check the arm recursed into every child.
-/// That is why the child set is declared once, in `map_children`, rather than per
-/// walk.
+/// That is why the child set is stated in the two child walks rather than per
+/// walk, and `the_functor_and_the_traversal_describe_the_same_children` holds
+/// the two to one set.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Schema {
     /// Top. Denotes every Python value; membership always holds. The payload
@@ -925,7 +933,7 @@ impl Schema {
     pub fn mapping(clause: MapClause) -> Schema {
         Schema::KeyedMap {
             fields: no_fields(),
-            defaults: vec![clause].into(),
+            defaults: share_clauses(&mut vec![clause]),
         }
     }
 
@@ -1536,8 +1544,21 @@ impl Schema {
             }
             Schema::Refine { base, .. } => out.push(base),
             // The leaves: the scalars, the bounds, the pooled atoms and the two
-            // reference forms hold no schema.
-            _ => {}
+            // reference forms hold no schema. Listed rather than caught by `_`,
+            // so a variant that holds one is a compile error here as it is in
+            // `mapped_children`.
+            Schema::Anything(_)
+            | Schema::Nothing
+            | Schema::NoneType
+            | Schema::Bool
+            | Schema::Int
+            | Schema::Float
+            | Schema::Str
+            | Schema::Bytes
+            | Schema::Literal(_)
+            | Schema::Instance(_)
+            | Schema::Ref(_)
+            | Schema::SelfRef(_) => {}
         }
     }
 

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::*;
-use crate::ir::{ClassIx, CollKind, ConstIx, Constraint, Constraints, DefIx, SeqKind};
+use crate::ir::{ClassIx, CollKind, ConstIx, Constraint, Constraints, DefIx, DefShift, SeqKind};
 
 fn field(name: &str, schema: Schema) -> Field {
     Field {
@@ -140,6 +140,15 @@ fn families() -> Vec<(&'static str, Box<dyn Fn(usize) -> Schema>, Endless)> {
                 fields: fields(&mut vec![field("k", base(i))]),
                 defaults: clauses(&mut vec![clause(Schema::Str, Schema::Int)]),
             }),
+            Endless::Yes,
+        ),
+        (
+            // Through the constructor the frontend spells `dict[K, V]` with,
+            // rather than the table: the family above shares a clause list by
+            // building it there, which says nothing of a constructor that does
+            // not.
+            "mapping",
+            Box::new(move |i| Schema::mapping(clause(Schema::Str, base(i)))),
             Endless::Yes,
         ),
         (
@@ -351,6 +360,33 @@ fn a_node_built_twice_is_one_node_in_every_family() {
             "{name}: the second build made a second node"
         );
     }
+}
+
+/// A rewrite that moves an index shares the node it rebuilt.
+///
+/// Reindexing a refinement over a literal moves the literal, so the base is
+/// rebuilt, and two reindexings of one schema rebuild it twice. It is one node:
+/// the walk that moves indices hands a rebuilt base to the table, as the
+/// descent beside it does for every child it rebuilds. A composed validator is
+/// built this way, so a base held fresh here is one no relation finds by
+/// pointer.
+#[test]
+fn a_reindexed_refinement_shares_the_base_it_moved() {
+    let refined = Schema::Refine {
+        base: node(Schema::Literal(ConstIx::new(0))),
+        constraints: Constraints::from([Constraint::MinLen(3)]),
+    };
+    let reindex = || refined.reindexed(&[5], DefShift::new(0));
+    let (one, two) = (reindex(), reindex());
+    let (Schema::Refine { base: first, .. }, Schema::Refine { base: second, .. }) = (&one, &two)
+    else {
+        panic!("a reindexed refinement is a refinement: {one:?}, {two:?}");
+    };
+    assert_eq!(**first, Schema::Literal(ConstIx::new(5)), "the index moved");
+    assert!(
+        Arc::ptr_eq(first, second),
+        "the second reindexing rebuilt the base as a second node"
+    );
 }
 
 /// And a node is found again after another of its family is built, which is
