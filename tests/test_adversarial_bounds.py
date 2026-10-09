@@ -432,11 +432,14 @@ def test_a_relation_fits_the_documented_stack() -> None:
     a hundred and ten one-tuples deep asks its emptiness that deep. Each
     overflowed the main thread's 8 MiB before the decision bounded its own
     depth; past the bound each declines. A pair whose cycles meet under it is
-    decided.
+    decided. And a product split across six hundred branches takes a level for
+    each branch it narrows by, which the bound counts with the rest.
     """
     result = _on_a_thread(
         """
-        from valgebra import Validator, recursive
+        from typing import Literal
+
+        from valgebra import Validator, recursive, union
 
         def nest(leaf, levels):
             for _ in range(levels):
@@ -467,6 +470,8 @@ def test_a_relation_fits_the_documented_stack() -> None:
             print(a.relation_to(b))
             ints, words = chain(int), chain(int | str)
             print(ints.relation_to(words), ints.is_empty())
+            branches = union(*[tuple[Literal[i], int] for i in range(600)])
+            print(Validator(tuple[int, int]).relation_to(branches))
         """
     )
     assert result.returncode == 0, result.stderr
@@ -474,6 +479,7 @@ def test_a_relation_fits_the_documented_stack() -> None:
         "undecided False",
         "subset",
         "undecided False",
+        "undecided",
     ], result.stderr
 
 

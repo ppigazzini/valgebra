@@ -654,8 +654,12 @@ is its soundness argument, and that is not about keys: an answer reached under
 the coinductive hypothesis the trail carries is not an answer without it, so
 what may be remembered is a goal decided with an empty trail and nothing else.
 The procedure bounds its own work with a counter, threaded through a whole
-top-level query so the two directions of an equivalence share it and the bound
-cannot be spent twice or escaped through a side door.
+top-level query so the two directions of an equivalence share it and no rule
+spends a second one. A lowering is the one cost it does not count: where the
+rules can neither prove nor refute `A <= ~B`, the `Complement` arm of
+`subtype_by_shape` asks the set representation whether `B` is empty, and that
+question is bounded by the lowering's own `Bounds` -- nodes read, nesting
+descended, multiplying work -- once for each goal that reaches it.
 
 One shape needs neither the memo nor the counter. A union of nothing but
 literals denotes a **finite set of values**, and inclusion between two finite
@@ -742,14 +746,20 @@ still be long: two fixpoints nesting 100 and 99 lists around the back edge
 return to a goal on the trail only after `lcm(100, 99)` levels, a few steps
 each, and a chain of definitions asks its emptiness as deep as the chain runs.
 `MAX_DECISION_DEPTH` counts the levels the goal recursion (a goal that reaches
-the rules) and the emptiness recursion (`empty_and_region`) hold open in one
-query, carried in its `Budget` beside the steps, one count for both since an
-emptiness question asked inside a goal runs on the same stack; past it the
-answer is undecided. A level costs about 1 KiB on the profile-guided wheel, so
+the rules), the emptiness recursion (`empty_and_region`) and the product rule
+(`product_subtype`) hold open in one query, carried in its `Budget` beside the
+steps, one count for the three since an emptiness question asked inside a goal,
+and a goal asked at the bottom of a product, run on the same stack; past it the
+answer is undecided. The product rule takes a level for each branch it narrows
+by, so its depth is a union's width rather than a schema's nesting, and the
+step budget caps that width without capping the goal asked at the bottom of
+it. A level costs about 1 KiB on the profile-guided wheel, so
 the bound fits half of a 1 MiB thread. The count costs the decision workloads
 2.5% to 3.1%, recorded as a step in `scripts/perf_budget.json`.
-`the_depth_bound_declines_and_gives_its_levels_back` holds both recursions to
-it, and the levels to being given back.
+`the_depth_bound_declines_and_gives_its_levels_back` holds the goal and
+emptiness recursions to it, and the levels to being given back, and
+`the_product_rule_takes_a_level_for_each_branch_it_narrows_by` holds the
+product rule.
 
 What to say about the ceiling is what it is measured to reach.
 `DECISION_BUDGET` is the ceiling and is a row of the bounds table

@@ -349,6 +349,73 @@ fn the_depth_bound_declines_and_gives_its_levels_back() {
         .expect("the thread answers");
 }
 
+/// The product rule takes a level of the query's depth for each branch it
+/// narrows by.
+///
+/// A product against a union recurses once per branch it is not proved
+/// disjoint from, so its depth is the union's width, which the step budget
+/// does not bound below the stack. Counted with the goals and the emptiness
+/// questions, a branch is a level: the leaf goal asked at the bottom of a chain
+/// of `n` branches is asked `n` levels deeper than the one asked at its top,
+/// and a chain begun near the bound climbs to it and declines there rather
+/// than past it. An oracle that answers nothing reads the depth at each leaf
+/// goal; the literals it is asked about keep every branch in the chain.
+#[test]
+fn the_product_rule_takes_a_level_for_each_branch_it_narrows_by() {
+    use std::cell::Cell;
+
+    use super::super::{ConstIx, LeafRelations, Relation, Schema, SeqShape};
+    use crate::descr::lower::Constants;
+
+    struct Watch<'a> {
+        budget: &'a Budget,
+        deepest: Cell<u32>,
+    }
+    impl Constants for Watch<'_> {}
+    impl LeafRelations for Watch<'_> {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            self.deepest
+                .set(self.deepest.get().max(self.budget.depth.get()));
+            None
+        }
+    }
+
+    let pair = |left: Schema| {
+        Schema::tuple(SeqShape {
+            prefix: vec![left, Schema::Int].into(),
+            tail: None,
+        })
+    };
+    let branches = 40;
+    let union = Schema::union((0..branches).map(|i| pair(Schema::Literal(ConstIx::new(i)))));
+    let deepest_from = |start: u32| {
+        let budget = Budget::new(DECISION_BUDGET);
+        budget.depth.set(start);
+        let watch = Watch {
+            budget: &budget,
+            deepest: Cell::new(0),
+        };
+        let answer = pair(Schema::Int).subtype_relation(&union, &watch, &[], &budget);
+        assert_eq!(budget.depth.get(), start, "the levels came back");
+        (answer, watch.deepest.get())
+    };
+
+    let (_, shallow) = deepest_from(0);
+    let width = u32::try_from(branches).expect("forty fits");
+    assert!(
+        shallow >= width,
+        "the leaf goals of {branches} branches reach depth {shallow}"
+    );
+
+    let start = MAX_DECISION_DEPTH - width / 2;
+    let (answer, near) = deepest_from(start);
+    assert_eq!(answer, Relation::Unknown);
+    assert!(
+        near > start + width / 4 && near <= MAX_DECISION_DEPTH,
+        "a chain begun at {start} climbs to {near}"
+    );
+}
+
 /// The depth admits exactly [`MAX_DECISION_DEPTH`] levels and refuses the next,
 /// and a refusal takes no level: the levels below it still close, the count is
 /// back where the query found it once they have, and the next descent reaches

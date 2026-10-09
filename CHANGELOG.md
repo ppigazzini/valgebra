@@ -20,6 +20,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a callable where a schema goes is refused
 - feat: a generic type alias is read applied to its arguments
 - feat: a meet with a recursive reference is decided
+- fix: a product split across a wide union is held to the depth bound
 
 -->
 
@@ -111,6 +112,14 @@ answer of its own, or a repair to a change not yet released.
   still refused. A decorator *function* in metadata, such as
   `dataclasses.dataclass` or `typing.final`, cannot be told from a predicate
   and is called, which the refinements page states.
+
+- **A product split across a wide union is held to the depth bound.** A
+  relation such as `tuple[int, int]` against a union of hundreds of
+  `tuple[Literal[i], int]` narrows the product by one branch a level, and those
+  levels went uncounted by the bound that keeps a relation inside a 1 MiB
+  thread, so a goal asked at the bottom of the chain could open its whole depth
+  on top of them. Each branch is a level of that bound, and past it the
+  relation answers `"undecided"`.
 
 ## [0.0.17] - 2026-10-06
 
