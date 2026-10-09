@@ -26,6 +26,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from _toml import load
 
@@ -71,9 +72,9 @@ def _examined() -> set[str]:
 
 
 def _swept_ordinarily() -> set[str]:
-    """Give the binding files the walk sweep names, read from its own lane."""
-    text = WORKFLOW.read_text(encoding="utf-8")
-    swept = set(re.findall(r"--file (crates/valgebra-py/\S+\.rs)", text))
+    """Give the binding files the walk sweep names, from the list its lanes read."""
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    swept = set(str((workflow.get("env") or {}).get("BINDING_SWEPT", "")).split())
     assert swept, "the workflow names no binding files for the sweep"
     return swept
 

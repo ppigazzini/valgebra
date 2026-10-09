@@ -2567,11 +2567,9 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "            --file crates/valgebra-py/src/codes.rs \\\n"
-            "            --features interpreter-tests -j 4",
-            "            --file crates/valgebra-py/src/codes.rs \\\n"
-            "            --file crates/valgebra-py/src/render.rs \\\n"
-            "            --features interpreter-tests -j 4",
+            "    crates/valgebra-py/src/codes.rs\n",
+            "    crates/valgebra-py/src/codes.rs\n"
+            "    crates/valgebra-py/src/render.rs\n",
         ),
         trips=("test_nothing_is_examined_under_pytest_that_a_second_already_proves",),
     ),
@@ -2779,19 +2777,33 @@ PLANTS = (
         trips=("test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may",),
     ),
     Plant(
-        # A file added to the nightly binding sweep and not to the push lane's.
+        # A binding file the nightly names beside the one list: a second list,
+        # and a baseline the push lane is judged against that it did not read.
         "tests/test_required_jobs.py",
         (".github/workflows/ci.yml",),
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "            --file crates/valgebra-py/src/codes.rs \\\n"
+            '          cargo mutants --package valgebra-py "${files[@]}" \\\n'
             "            --features interpreter-tests -j 4",
-            "            --file crates/valgebra-py/src/codes.rs \\\n"
+            '          cargo mutants --package valgebra-py "${files[@]}" \\\n'
             "            --file crates/valgebra-py/src/render.rs \\\n"
             "            --features interpreter-tests -j 4",
         ),
-        trips=("test_both_binding_sweeps_read_the_same_files",),
+        trips=("test_both_binding_sweeps_read_one_list",),
+    ),
+    Plant(
+        # The nightly building its arguments from the push lane's selection,
+        # which it never sets: a sweep of nothing that records a baseline.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "for f in $BINDING_SWEPT; do",
+            "for f in $FILES; do",
+        ),
+        trips=("test_both_binding_sweeps_read_one_list",),
     ),
     Plant(
         # The merge counting one shard fewer than its sweep is cut into.
@@ -2831,17 +2843,30 @@ PLANTS = (
         trips=("test_every_supported_interpreter_runs_on_every_event",),
     ),
     Plant(
-        # A file the binding sweep lists that its trigger no longer matches: the
-        # drift that let a change to the walk land with the sweep skipped.
+        # The push lane sweeping the whole list whichever file a change
+        # touches: the wait scoping removes, with a green lane over it.
         "tests/test_required_jobs.py",
         (".github/workflows/ci.yml",),
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "|equality|oracle|codes)\\.rs$' changed.txt",
-            "|equality|oracle)\\.rs$' changed.txt",
+            "for f in $FILES; do files+=",
+            "for f in $BINDING_SWEPT; do files+=",
         ),
-        trips=("test_the_binding_sweep_triggers_on_every_file_it_sweeps",),
+        trips=("test_the_push_sweep_takes_the_listed_files_the_change_touches",),
+    ),
+    Plant(
+        # The push lane selecting by crate rather than by the list: a file the
+        # baseline never swept, judged with every survivor in it read as new.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            'walk=$(grep -Fx -f changed.txt <<< "$BINDING_SWEPT" || true)',
+            "walk=$(grep '^crates/valgebra-py/' changed.txt || true)",
+        ),
+        trips=("test_the_push_sweep_takes_the_listed_files_the_change_touches",),
     ),
     Plant(
         # A relation the API never had, listed beside the four it has: the

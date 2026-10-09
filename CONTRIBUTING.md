@@ -245,9 +245,10 @@ baseline entry whose mutant the tests kill. The target is never zero —
 equivalent mutants exist and are undecidable — so an accepted survivor carries
 the argument for why no test can kill it.
 Every push also runs the first two **restricted to the whole files the diff
-touches**, which is bounded by the change rather than by the tree and so blocks
-merges, under one fixed proptest seed, so a push's verdict is the tree's and not
-the draw's; the third costs a suite run per mutant and stays on the schedule. Each
+touches** of the ones each examines, which is bounded by the change rather than
+by the tree and so blocks merges, under one fixed proptest seed, so a push's
+verdict is the tree's and not the draw's; the third costs a suite run per
+mutant and stays on the schedule. Each
 checks the new-survivor direction alone, because a partial sweep never generates
 most of the baseline and the expiry direction is not its to judge.
 Performance is gated two ways: a **deterministic cachegrind instruction count**

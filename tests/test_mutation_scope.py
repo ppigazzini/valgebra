@@ -79,22 +79,18 @@ BINDING = ROOT / "crates" / "valgebra-py"
 # real annotations through `build_schema` -- and the context's two predicates are
 # asserted over every mode by its own tests.
 def _swept() -> set[str]:
-    """Read the binding files the walk sweep covers, from the lane covering them.
+    """Read the binding files the walk sweep covers, from the list the lanes read.
 
-    This list was written out here, which made three copies of one list: the
-    two `--file` lists in `ci.yml` (which `tests/test_required_jobs.py` holds
-    equal to each other) and this one, which nothing held to either. A file
-    brought into the sweep therefore needed the same edit in three places, and
-    forgetting this one left the check below claiming the file was excluded
-    while the lane swept it. Read from the workflow, the claim is about what
+    A copy of the list written out here would be one nothing holds to the
+    lanes': a file brought into the sweep would need the same edit here as
+    well, and forgetting it would leave the check below claiming the file
+    excluded while the lane sweeps it. Read from the workflow's
+    `BINDING_SWEPT`, which both binding sweeps build their arguments from
+    (`tests/test_required_jobs.py` holds them to it), the claim is about what
     runs.
-
-    Read with a regex rather than a YAML library: the wanted lines are the
-    `--file` arguments inside one shell block, which a YAML parser hands back as
-    one string to search all the same.
     """
-    text = WORKFLOW.read_text(encoding="utf-8")
-    swept = set(re.findall(r"--file (crates/valgebra-py/\S+\.rs)", text))
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    swept = set(str((workflow.get("env") or {}).get("BINDING_SWEPT", "")).split())
     assert swept, "the workflow names no binding files for the sweep"
     return swept
 

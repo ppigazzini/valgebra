@@ -18,7 +18,10 @@ LEDGER: the merge gate requires every job the workflow defines
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -228,7 +231,84 @@ def test_a_sharded_sweep_covers_every_shard() -> None:
     assert sharded, "no job shards its sweep; this ledger has no subject"
 
 
-def test_both_binding_sweeps_read_the_same_files() -> None:
+#: The workflow variable listing the binding files the two binding sweeps
+#: examine, one per line.
+SWEPT_LIST = "BINDING_SWEPT"
+
+#: A binding path handed to `--file` as a literal: a list beside the one.
+_LITERAL_FILE = re.compile(r"--file\s+crates/valgebra-py/")
+
+#: The line of the push lane's diff step that picks the files its sweep takes.
+_SELECTION = re.compile(r"^\s*(walk=\$\(.*\))\s*$", re.MULTILINE)
+
+#: How a line of a sweep step that builds its `--file` arguments starts.
+_BUILDS_FILES = ("files=", "for f in ")
+
+#: What an invocation of the binding sweep hands `cargo mutants` first.
+_PASSES = re.compile(r"cargo mutants --package valgebra-py (\S+)")
+
+
+def _listing() -> str:
+    """Read the workflow's list of the binding files the two sweeps examine."""
+    listing = str((_workflow().get("env") or {}).get(SWEPT_LIST, ""))
+    assert listing.split(), f"the workflow lists no binding files under {SWEPT_LIST}"
+    return listing
+
+
+def _sweep_step(job: dict) -> dict:
+    """Give the one step of a job that runs the binding sweep."""
+    steps = [
+        step for step in job["steps"] if "cargo mutants" in str(step.get("run", ""))
+    ]
+    assert len(steps) == 1, f"expected one sweep step, found {len(steps)}"
+    return steps[0]
+
+
+def _bash(script: str, cwd: Path, **variables: str) -> str:
+    """Run a fragment of a step as the runner runs a step, and give what it prints.
+
+    Under the runner's shell and its flags, with the workflow's variables, which
+    the runner hands every step, beside the step's own.
+    """
+    bash = shutil.which("bash")
+    assert bash is not None, "bash runs every step of the workflow"
+    workflow = {
+        key: str(value) for key, value in (_workflow().get("env") or {}).items()
+    }
+    done = subprocess.run(  # noqa: S603  # a fragment of the tree's own workflow
+        [bash, "--noprofile", "--norc", "-eo", "pipefail", "-c", script],
+        cwd=cwd,
+        env={"PATH": os.environ.get("PATH", ""), **workflow, **variables},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+    return done.stdout
+
+
+def _swept_by(step: dict, cwd: Path, **variables: str) -> list[str]:
+    """Give the files a sweep step hands `cargo mutants`, by running what builds them.
+
+    The lines that build the arguments run as written, and every invocation in
+    the step is held to passing what they built, the listing a shard is named
+    against as well as the sweep.
+    """
+    run = str(step["run"])
+    built = "\n".join(
+        line for line in run.splitlines() if line.strip().startswith(_BUILDS_FILES)
+    )
+    assert built, "the sweep step builds no file arguments"
+    passed = set(_PASSES.findall(run))
+    assert passed == {'"${files[@]}"'}, (
+        f"an invocation passes {sorted(passed)} rather than the files it built"
+    )
+    printed = _bash(built + '\nprintf "%s\\n" "${files[@]}"', cwd, **variables).split()
+    assert set(printed[0::2]) <= {"--file"}, printed
+    return printed[1::2]
+
+
+def test_both_binding_sweeps_read_one_list(tmp_path: Path) -> None:
     """The nightly binding sweep covers what the push lane's ratchet judges.
 
     The push lane ratchets its sweep against a baseline, and that baseline is
@@ -236,63 +316,72 @@ def test_both_binding_sweeps_read_the_same_files() -> None:
     not has every survivor in it read as *new* the first time a change touches
     the area -- which is a red lane about code nobody edited, arriving on
     whichever commit happened to reach the sweep.
+
+    So the list is written once, as a workflow variable, and neither job names
+    a binding file beside it. The nightly is held to sweeping every file of it
+    by running the lines that build its arguments.
     """
     jobs = _workflow()["jobs"]
-    swept = {
-        name: {
-            line.strip().removeprefix("--file ").removesuffix("\\").strip()
-            for step in job["steps"]
-            for line in str(step.get("run", "")).splitlines()
-            if line.strip().startswith("--file crates/valgebra-py/")
-        }
-        for name, job in jobs.items()
-        if name in {"mutants-diff-walk", "nightly-mutants-walk"}
-    }
-    assert len(swept) == 2, f"expected both binding sweeps, found {sorted(swept)}"
-    push, nightly = swept["mutants-diff-walk"], swept["nightly-mutants-walk"]
-    assert push, "the push sweep names no files"
-    assert push == nightly, (
-        "the two binding sweeps read different files: "
-        f"only the push lane sweeps {sorted(push - nightly)}, "
-        f"only the nightly sweeps {sorted(nightly - push)}. The nightly records "
-        "the baseline the push lane is judged against, so the two are one list."
+    listing = _listing()
+    for name in ("mutants-diff-walk", "nightly-mutants-walk"):
+        runs = "\n".join(str(step.get("run", "")) for step in jobs[name]["steps"])
+        assert not _LITERAL_FILE.search(runs), (
+            f"{name} names a binding file of its own beside {SWEPT_LIST}. The "
+            "nightly records the baseline the push lane is judged against, so "
+            "the two read one list."
+        )
+    swept = _swept_by(_sweep_step(jobs["nightly-mutants-walk"]), tmp_path)
+    assert swept == listing.split(), (
+        f"the nightly sweeps {swept}, and the list is {listing.split()}"
     )
 
 
-#: The line of the push lane's diff step that decides whether the binding
-#: sweep runs at all: a regex over the changed paths, and the sweep is skipped
-#: when nothing matches.
-_WALK_TRIGGER = re.compile(r"walk=\$\(grep -E '([^']+)' changed\.txt")
+def test_the_push_sweep_takes_the_listed_files_the_change_touches(
+    tmp_path: Path,
+) -> None:
+    """A push sweeps the listed files its change touches, and no others.
 
-
-def test_the_binding_sweep_triggers_on_every_file_it_sweeps() -> None:
-    """A file the sweep lists is one the trigger matches.
-
-    The push lane sweeps its files only when the change touches one, and
-    "touches one" is a regex over the diff written apart from the `--file` list
-    it guards. The two drifted: the list named the record, scalar and sequence
-    walks, the index, the input decoders, the dialect and the codes, and the
-    regex matched none of them, so a change to the membership procedure itself
-    reached `main` with the sweep skipped. The list is what the sweep judges;
-    the trigger is held to it here.
+    The selection is the core lane's with the list in place of the crate: the
+    changed files the list names. It runs here, and the sweep step's argument
+    lines after it, on three changes drawn to tell the readings apart. Every
+    listed file beside three unlisted ones must sweep the list and nothing
+    else: a listed file the selection misses lands with its sweep skipped, and
+    an unlisted one has every survivor in it read as new against a baseline
+    that never swept it. One listed file must sweep that file alone, since the
+    whole list for one file is the wait scoping removes. No listed file must
+    skip the sweep. The unlisted paths are a binding file the list does not
+    name, a core file, and a listed path with a suffix, which a match on a
+    prefix would take.
     """
     job = _workflow()["jobs"]["mutants-diff-walk"]
-    runs = [str(step.get("run", "")) for step in job["steps"]]
-    triggers = [found.group(1) for run in runs for found in _WALK_TRIGGER.finditer(run)]
-    assert len(triggers) == 1, f"expected one trigger regex, found {triggers}"
-    trigger = re.compile(triggers[0])
-    swept = {
-        line.strip().removeprefix("--file ").removesuffix("\\").strip()
-        for run in runs
-        for line in run.splitlines()
-        if line.strip().startswith("--file crates/valgebra-py/")
-    }
-    assert swept, "the push sweep names no files"
-    unguarded = sorted(path for path in swept if not trigger.fullmatch(path))
-    assert not unguarded, (
-        f"files the binding sweep lists and its trigger does not match: "
-        f"{unguarded}. A change to one of them lands with the sweep skipped."
+    listing = _listing()
+    listed = listing.split()
+    diff = [step for step in job["steps"] if step.get("id") == "diff"]
+    assert len(diff) == 1, "expected one step with the id `diff`"
+    selections = _SELECTION.findall(str(diff[0]["run"]))
+    assert len(selections) == 1, f"expected one selection line, found {selections}"
+    sweep = _sweep_step(job)
+    assert sweep.get("if") == "steps.diff.outputs.walk != ''", sweep.get("if")
+    assert (sweep.get("env") or {}).get("FILES") == "${{ steps.diff.outputs.walk }}", (
+        f"the sweep reads {sweep.get('env')} rather than the files the diff selected"
     )
+    unlisted = [
+        "crates/valgebra-py/src/planted.rs",
+        "crates/valgebra-core/src/ir.rs",
+        f"{listed[0]}.orig",
+    ]
+    assert not set(unlisted) & set(listed), "an unlisted path the list names"
+
+    def swept(changed: list[str]) -> list[str]:
+        (tmp_path / "changed.txt").write_text(
+            "".join(f"{path}\n" for path in changed), encoding="utf-8"
+        )
+        selected = _bash(selections[0] + '\nprintf "%s" "$walk"', tmp_path)
+        return _swept_by(sweep, tmp_path, FILES=selected) if selected else []
+
+    assert swept([*unlisted, *listed]) == listed
+    assert swept([unlisted[0], listed[0], unlisted[2]]) == [listed[0]]
+    assert swept(unlisted) == []
 
 
 #: The variable proptest reads its seed from.
