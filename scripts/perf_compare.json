@@ -9,9 +9,10 @@
     "build": 0.04,
     "error_report": 1.6
   },
-  "_free_threaded_comment": "Ceilings the free-threaded build is held to instead, for the shapes where it is a different performance environment rather than the same one on a slower clock. A shape absent from here is held to the shared ceiling above. Reading an element out of a list takes the list's lock there, and a shape whose cost is per-element pays it; docs/11-performance.md measures that and says which shapes part.",
+  "_free_threaded_comment": "Ceilings the free-threaded build is held to instead, for the shapes where it is a different performance environment rather than the same one on a slower clock. A shape absent from here is held to the shared ceiling above. Reading an element out of a list takes the list's lock there, and a shape whose cost is per-element pays it; docs/11-performance.md measures that and says which shapes part. The bench lane's free-threaded job runs on two classes of machine, the faster about twice the speed of the slower, and on two shapes pydantic gains more from the faster one than the walk does: over the job's 304 readings from 2026-09-12 to 2026-10-09 the schema nested twenty-five deep read 0.291 to 0.453 and the one-integer check 0.171 to 0.305, each highest on the faster class, and two commits whose walk is the same read the nested schema 0.378 on the slower class and 0.449 on the faster. A ceiling inside that range fires on the runner rather than on the code, so each of the two clears the highest reading it has taken by a fifth, rounded up to the next 0.05.",
   "free_threaded_ceilings": {
-    "deep_nesting": 0.45
+    "deep_nesting": 0.55,
+    "scalar": 0.4
   },
   "_recorded_comment": "The ratio each shape last measured, the spread it was measured across, and the environment both belong to. See docs/dev/07-tooling-ci.md for why a claim alone stopped being enough.",
   "recorded": {
