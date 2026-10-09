@@ -558,10 +558,20 @@ and the spread it was measured across -- the ratchet the mutation sweep and the
 instruction gate already have. Once armed, a shape measuring worse than
 `recorded + tolerance` is red while still under its ceiling.
 
-**The ratchet is not armed.** The spreads are recorded; the ratios and the
-environment in `scripts/perf_compare.json` are empty until the first `--update`
-on the bench lane (`_how_to_arm` there says why), and until then the gate
-prints `ratchet not armed` and judges the ceilings alone.
+**The ratchet is not armed, and one run cannot arm it.** The bench lane's
+runners come in two classes of machine, and one tree reads differently on each:
+three runs of one commit read the one-integer check 0.156, 0.197 and 0.159,
+and one commit's push read the nested schema 0.165 where its dispatch
+read 0.124 and 0.126. Both differences are wider than the shape's tolerance of
+0.025, and across the lane's 47 readings on CPython 3.14, from 2026-10-04 to
+2026-10-09, five of the six ratcheted shapes spread wider than their tolerance,
+two of them twice as wide. The tolerances were read on one box. A recording
+taken from one run, which is what `--update` writes, lands on one class of
+machine and fires on the next run that lands on the other, with nothing
+changed. So the ratios and the environment in `scripts/perf_compare.json` stay
+empty until a recording is a figure of the lane rather than of a run
+(`_how_to_arm` there says what it wants), and the gate prints `ratchet not
+armed` and judges the ceilings alone.
 
 The travel problem is answered rather than avoided. The recorded block names the
 environment it was taken in -- the interpreter, whether it has a global lock,
@@ -583,19 +593,18 @@ the one shape timing a path that raises and formats a Python exception, so the
 spread belongs to the build as much as to the shape; and a row holds every
 shape to a tolerance or an argument in both directions.
 
-**The ratchet beside the ceiling is armed from the lane.** The comparison gate
-holds each shape to a ceiling, and beside it holds the shape to the ratio it
-*last measured* -- which is the ratchet, and which needs a recording to arm.
+**A recording is taken on the lane, and read before anything is committed.**
 A ratio belongs to the environment it was taken in (the interpreter's minor
 version, whether it has a global lock, and the pydantic-core on the other
 side), and `scripts/compare_gate.py` refuses to judge across those rather than
-compare a number about somewhere else. So the recording is made where it is
-read: run the CI workflow from the Actions tab with **`record_compare`**
-checked, take the `perf-compare-recorded` artifact, and commit
-`scripts/perf_compare.json` from it. The lane cannot commit, which is the point
--- a floor is a thing somebody chose. A run that reads the profiled build
-against the plain one is the run to tick it on: both readings then come off one
-box, one image and one toolchain.
+compare a number about somewhere else. Run the CI workflow from the Actions tab
+with **`record_compare`** checked, and the `perf-compare-recorded` artifact
+holds that run's ratios. One run is one class of machine, so the artifact is a
+reading to set beside the lane's others, not a block to commit as it stands:
+the lane cannot commit, which is the point -- a floor is a thing somebody
+chose, and choosing one wants the lane's spread in hand. A run that reads the
+profiled build against the plain one is the run to tick it on: both readings
+then come off one box, one image and one toolchain.
 
 **What a profile buys is read from the same lane, and it is per shape.**
 Profile-guided optimisation arranges what fat LTO left to arrange, so a shape

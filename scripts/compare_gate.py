@@ -557,8 +557,8 @@ def drifted(
     Split from ``main`` so the verdict can be driven, and shown to fail, without
     running a timer or pydantic.
     """
-    if not recorded:
-        return [], "no ratios are recorded yet; run --update on the bench lane"
+    if not recorded or not recorded.get("ratios"):
+        return [], "no ratios are recorded; `_how_to_arm` in the file says why"
     was = recorded.get("environment")
     now = environment()
     if was != now:
