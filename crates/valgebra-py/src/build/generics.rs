@@ -1,4 +1,4 @@
-//! What a parametrized form says: dispatch step 8, the typing spec's
+//! What a parametrized form says: dispatch step 9, the typing spec's
 //! introspection, and the two native literals that spell what it cannot.
 //!
 //! The origin is read before the arguments and compared by identity against the
@@ -113,7 +113,7 @@ pub(super) fn build_parametrized(
         return Ok(Schema::Instance(lits.intern_class(origin)));
     }
     if origin.is(py.get_type::<Validator>()) {
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "{} is the annotation a static checker reads for a validator, not a \
              schema: pass the schema itself, or a compiled Validator",
             summarize(alias)?
@@ -132,7 +132,7 @@ pub(super) fn build_parametrized(
     if is_type_alias(origin)? {
         return build_applied_alias(origin, args, alias, lits, defs);
     }
-    Err(not_implemented(&format!(
+    Err(not_implemented(format!(
         "unsupported typing form with origin {}; the subscripted forms read are \
          list, set, frozenset, dict, tuple, Union, Optional, Literal, Annotated, \
          Callable, a generic type alias, and the TypedDict qualifiers Required, \
@@ -163,7 +163,7 @@ pub(super) fn refuse_unhashable_literal(arg: &Bound<'_, PyAny>) -> PyResult<()> 
     // constant -- the spec's arguments are values -- and reading it on built the
     // `int` schema, so a schema meant to admit one value admitted every integer.
     if arg.is_instance_of::<PyType>() {
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "{} is a type rather than a constant, and is not a Literal \
              argument: the typing spec allows None, an enum member, or an int, \
              bool, str or bytes value. Write the type on its own to admit its \
@@ -186,7 +186,7 @@ pub(super) fn refuse_unhashable_literal(arg: &Bound<'_, PyAny>) -> PyResult<()> 
     } else {
         return Ok(());
     };
-    Err(not_implemented(&format!(
+    Err(not_implemented(format!(
         "{kind} is not a Literal argument: the typing spec allows None, an enum \
          member, or an int, bool, str or bytes value, and this one would be read \
          as a schema of its own rather than as a constant. Write {instead}"
@@ -224,7 +224,7 @@ pub(super) fn refuse_literal_form(arg: &Bound<'_, PyAny>) -> PyResult<()> {
     if !form {
         return Ok(());
     }
-    Err(not_implemented(&format!(
+    Err(not_implemented(format!(
         "{} is a typing form rather than a constant, and is not a Literal \
          argument: the typing spec allows None, an enum member, or an int, \
          bool, str or bytes value. Write the form on its own to admit its \
@@ -301,7 +301,7 @@ pub(super) fn build_type_argument(
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
     if arg.is_instance_of::<PyString>() || is_forward_reference(arg)? {
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "{} is a forward reference, and a schema is built from the types \
              themselves: resolve the annotation first with typing.get_type_hints(\
              ..., include_extras=True), or write the type rather than its name",
@@ -355,7 +355,7 @@ pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Un
         single_arg(wrapped.cast::<PyTuple>()?, arg, UNPACK_INSTEAD)?
     };
     if !origin_of(&inner)?.is(py.get_type::<PyTuple>()) {
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "only a tuple can be unpacked into a tuple schema; {} binds no \
              element types at runtime",
             summarize(&inner)?
@@ -475,7 +475,7 @@ pub(super) fn single_arg<'py>(
     if args.len() == 1 {
         return args.get_item(0);
     }
-    Err(not_implemented(&format!(
+    Err(not_implemented(format!(
         "{} takes exactly one type argument, and this one is written with {}: \
          {instead}",
         summarize(form)?,

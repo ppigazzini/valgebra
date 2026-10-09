@@ -1,4 +1,4 @@
-//! What a class declares: dispatch step 4, and the record the class's own
+//! What a class declares: dispatch step 5, and the record the class's own
 //! attributes describe.
 //!
 //! A `TypedDict` says so by carrying `__required_keys__`, an enum by subclassing
@@ -168,7 +168,7 @@ pub(super) fn build_type_object(
     // value fallthrough in build_schema.
     for form in [&forms.union, &forms.optional] {
         if ty.is(form.bind(py)) {
-            return Err(not_implemented(&format!(
+            return Err(not_implemented(format!(
                 "{} is a typing special form, not a value; write a concrete type \
                  (for a union, X | Y or Union[X, Y])",
                 summarize(ty.as_any())?
@@ -287,7 +287,7 @@ pub(super) fn protocol_members<'py>(
             ProtocolMember::Property(getter_return(&defined)?)
         } else if let Some(hint) = hints.get_item(&name)? {
             if is_qualified_member(&hint)? {
-                return Err(not_implemented(&format!(
+                return Err(not_implemented(format!(
                     "member {} of {} is declared ClassVar or Final, which says where \
                      the value lives rather than what it is: declare it with its type",
                     summarize(name.as_any())?,
@@ -381,7 +381,7 @@ pub(super) fn build_protocol(
     let py = ty.py();
     let forms = forms(py)?;
     if ty.is(forms.protocol.bind(py)) || is_extension(ty.as_any(), |held| &held.protocol)? {
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "{} is the base a protocol is declared from, not a type: pass the \
              protocol class itself",
             summarize(ty.as_any())?
@@ -391,7 +391,7 @@ pub(super) fn build_protocol(
         .getattr_opt(intern!(py, "__parameters__"))?
         .is_some_and(|parameters| parameters.len().is_ok_and(|count| count > 0))
     {
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "{} is a generic Protocol, which names one set per type argument: \
              declare its members with concrete types",
             summarize(ty.as_any())?

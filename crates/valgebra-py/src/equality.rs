@@ -270,10 +270,39 @@ fn equal(
             recur(a_base, b_base)?
                 && same_multiset(a, b, |x, y| constraint_equal(py, x, left, y, right))?
         }
-        // Everything left carries no pool slot and no set-shaped list, so the
-        // derived comparison is the whole of it: the scalars, the two bounds,
-        // and the two reference forms.
-        (a, b) => a == b,
+        // What carries no pool slot and no set-shaped list: the derived
+        // comparison is the whole of it -- the scalars, the two bounds, and the
+        // two reference forms -- and it answers `false` against another
+        // variant. Named rather than caught by `(a, b)`, so a variant that
+        // carries a slot is a compile error here: the derived comparison reads
+        // a slot's index, and two pools hold one constant at two indices.
+        (
+            a @ (Schema::Anything(_)
+            | Schema::Nothing
+            | Schema::NoneType
+            | Schema::Bool
+            | Schema::Int
+            | Schema::Float
+            | Schema::Str
+            | Schema::Bytes
+            | Schema::Ref(_)
+            | Schema::SelfRef(_)),
+            b,
+        ) => a == b,
+        // A variant with an arm above, met by another variant.
+        (
+            Schema::Literal(_)
+            | Schema::Instance(_)
+            | Schema::Union(_)
+            | Schema::Intersection(_)
+            | Schema::Complement(_)
+            | Schema::Coll { .. }
+            | Schema::Seq { .. }
+            | Schema::KeyedMap { .. }
+            | Schema::AttrRecord { .. }
+            | Schema::Refine { .. },
+            _,
+        ) => false,
     })
 }
 
@@ -387,8 +416,18 @@ pub(crate) fn hash_shape<H: Hasher>(
         Schema::Literal(index) => hash_constant(py, index.get(), pool, hasher)?,
         Schema::Instance(index) => hash_constant(py, index.get(), pool, hasher)?,
         // The scalars, the two bounds and the build-time marker: the
-        // discriminant above is the whole of their shape.
-        _ => {}
+        // discriminant above is the whole of their shape. Named rather than
+        // caught by `_`, so a variant that carries a slot or a child is a
+        // compile error here and in `equal` alike.
+        Schema::Anything(_)
+        | Schema::Nothing
+        | Schema::NoneType
+        | Schema::Bool
+        | Schema::Int
+        | Schema::Float
+        | Schema::Str
+        | Schema::Bytes
+        | Schema::SelfRef(_) => {}
     }
     Ok(())
 }

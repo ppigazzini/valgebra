@@ -1,9 +1,11 @@
 //! How `Annotated` metadata is read: the marker protocol, and whether the
 //! constraint it carries fits the base it refines.
 //!
-//! A marker is read by *attribute* and never by name, so any library's marker of
-//! the right shape works and none is imported. The section "How `Annotated`
-//! metadata is read" in `docs/dev/03-frontend.md` is this module.
+//! A constraint is read off a marker of the `annotated_types` vocabulary, found
+//! by the `__module__` of a class in the marker's method resolution order, and
+//! off no other library's marker that happens to carry the same names; the
+//! vocabulary is never imported. The section "How `Annotated` metadata is read"
+//! in `docs/dev/03-frontend.md` is this module.
 
 use pyo3::exceptions::PyValueError;
 use pyo3::intern;
@@ -70,10 +72,12 @@ pub(super) fn refuse_unordered_bound(attr: &str, bound: &Bound<'_, PyAny>) -> Py
 
 /// Build the schema an `Annotated` base and its metadata markers denote.
 ///
-/// Markers are read structurally (annotated-types style): an object exposing
-/// `ge`/`gt`/`le`/`lt` contributes a comparison bound, `min_length`/
-/// `max_length` contribute length bounds, and `func` (or a bare callable)
-/// contributes a predicate. A compiled validator contributes its set, and the
+/// A marker of the `annotated_types` vocabulary contributes what it carries:
+/// `ge`/`gt`/`le`/`lt` a comparison bound, `min_length`/`max_length` length
+/// bounds, `multiple_of` a step, and `func` a predicate; a bare callable is a
+/// predicate too, and valgebra's `Regex` or a compiled `re.Pattern` a pattern.
+/// Another library's marker carrying the same names is ignored. A compiled
+/// validator contributes its set, and the
 /// schema is the meet of the refined base and every such set: metadata only
 /// narrows. Unrecognized metadata is ignored, per the typing spec. With no
 /// recognized constraint and no validator the base schema is returned as-is.
@@ -222,7 +226,7 @@ pub(super) fn check_constraint_fits(
         Constraint::Predicate(_) => (Carries::Maybe, ""),
     };
     if answer == Carries::No {
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "{} values have no {what}, so this constraint admits none of them; \
              constrain a base the constraint can be asked of",
             base.expected()
@@ -282,7 +286,7 @@ pub(super) fn with_inline_flags(
         ),
     ] {
         if flags & bit != 0 {
-            return Err(not_implemented(&format!(
+            return Err(not_implemented(format!(
                 "{name} cannot be carried into this pattern: {why}"
             )));
         }
@@ -417,7 +421,7 @@ fn read_a_class(class: &Bound<'_, PyType>) -> PyResult<()> {
         return Ok(());
     }
     let name = class.name()?;
-    Err(not_implemented(&format!(
+    Err(not_implemented(format!(
         "{name} is a marker class, not a marker: an instance carries the \
          constraint, so write {name}(...)"
     )))
@@ -493,7 +497,7 @@ fn read_a_typing_form(marker: &Bound<'_, PyAny>) -> PyResult<()> {
     };
     for item in metadata.try_iter()? {
         if is_read_where_written(&item?)? {
-            return Err(not_implemented(&format!(
+            return Err(not_implemented(format!(
                 "{} is an Annotated alias, which carries its constraints for the \
                  type it annotates, and in metadata it annotates nothing; write \
                  the alias as the type, subscripted where it is generic, or put \
@@ -890,7 +894,7 @@ fn parse_constraint_within<'py>(
             } else {
                 format!("the pattern {}", summarize(&attr)?)
             };
-            return Err(not_implemented(&format!(
+            return Err(not_implemented(format!(
                 "{what} cannot constrain a schema: a pattern is matched against \
                  text, so write the pattern as a str",
             )));
@@ -936,7 +940,7 @@ fn parse_constraint_within<'py>(
         // A marker from the constraint vocabulary is not that: it was written to
         // narrow this schema, and ignoring it leaves a validator that admits
         // everything the marker excludes.
-        return Err(not_implemented(&format!(
+        return Err(not_implemented(format!(
             "{} is a constraint this frontend does not check; a schema carrying \
              it would admit the values it excludes, so it is refused rather than \
              ignored",
