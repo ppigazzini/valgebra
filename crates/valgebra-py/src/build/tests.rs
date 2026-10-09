@@ -724,6 +724,38 @@ fn the_parts_a_build_holds_count_together() {
     });
 }
 
+/// A named tuple's fields are read once, as the positions they lay out, so a
+/// build of named tuples counts what it builds.
+///
+/// The class is its `isinstance` atom met with the tuple of its positions;
+/// the record of its attributes says the same of the same values and is not
+/// built beside it. Built and dropped, that record was still counted, because
+/// the node guard holds every node a build has read: sixty uses of a
+/// thousand-field named tuple span about sixty thousand nodes and counted
+/// twice that, past the bound a schema of their size is under.
+#[test]
+fn a_named_tuple_is_read_once_and_counted_once() {
+    Python::attach(|py| {
+        let test = "a_named_tuple_is_read_once_and_counted_once";
+        let module = corpus(
+            py,
+            test,
+            "from typing import NamedTuple\n\
+             Wide = NamedTuple('Wide', [(f'f{i}', int) for i in range(1000)])\n\
+             sixty = tuple[(Wide,) * 60]\n",
+        );
+        let spans = 1 + 60 * (1 + 1 + 1 + 1000);
+        assert!(spans < MAX_SCHEMA_NODES && 2 * spans > MAX_SCHEMA_NODES);
+        assert_eq!(
+            held(&module, "Wide"),
+            Ok(1003),
+            "the class met with its positions"
+        );
+        assert_eq!(held(&module, "sixty"), Ok(spans));
+        assert_eq!(checked(&module, "sixty"), Ok(spans));
+    });
+}
+
 /// A class named from many places is refused at the node bound rather than
 /// built whole.
 ///

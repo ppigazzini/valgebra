@@ -1129,7 +1129,14 @@ pub(super) fn build_object(
 ) -> PyResult<Schema> {
     let hints = resolve_type_hints(ty)?;
     let hints = hints.cast::<PyDict>()?;
-    let class_index = lits.intern_class(ty.as_any());
+    let instance = Schema::Instance(lits.intern_class(ty.as_any()));
+    // A named tuple's positions are its attributes, so the record of them is
+    // not built beside the positions: it would say the same of the same values
+    // (see `named_tuple_positions`), and a record built and dropped is still
+    // counted by the node guard, which holds every node a build has read.
+    if let Some(positions) = named_tuple_positions(ty, hints, lits, defs)? {
+        return Ok(Schema::meet([instance, positions]));
+    }
     let declared = declared_fields(ty)?;
     let mut fields = Vec::with_capacity(declared.len());
     for name in declared {
@@ -1151,19 +1158,10 @@ pub(super) fn build_object(
             required: true,
         });
     }
-    let instance = Schema::Instance(class_index);
-    let mut parts = vec![instance];
-    let positions = named_tuple_positions(ty, hints, lits, defs)?;
-    if positions.is_none() && !fields.is_empty() {
-        parts.push(Schema::attr_record(fields));
+    if fields.is_empty() {
+        return Ok(instance);
     }
-    if let Some(positions) = positions {
-        parts.push(positions);
-    }
-    if parts.len() == 1 {
-        return Ok(parts.remove(0));
-    }
-    Ok(Schema::meet(parts))
+    Ok(Schema::meet([instance, Schema::attr_record(fields)]))
 }
 
 /// The hint a field's value is read against: the hint, or the type a `Final`
