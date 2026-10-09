@@ -49,6 +49,29 @@ env:
   # scheduled libFuzzer soak stays on floating `nightly` so it still warns about
   # future nightly/fuzzer breakage.
   FUZZ_NIGHTLY: nightly-2026-09-25
+  # The binding files the two binding sweeps examine, one per line. The
+  # nightly sweeps every one and records the baseline; a push sweeps the ones
+  # its change touches and is judged against that baseline. So the two read
+  # one list: a file a push judged and the nightly never swept would have
+  # every survivor in it read as new. `.cargo/mutants.toml` excludes the rest
+  # of the binding by name, and `tests/test_mutation_scope.py` holds this
+  # list and those exclusions to a partition of the binding.
+  BINDING_SWEPT: |
+    crates/valgebra-py/src/check/walk.rs
+    crates/valgebra-py/src/check/walk/record.rs
+    crates/valgebra-py/src/check/walk/scalar.rs
+    crates/valgebra-py/src/check/walk/sequence.rs
+    crates/valgebra-py/src/check/ctx.rs
+    crates/valgebra-py/src/check/index.rs
+    crates/valgebra-py/src/input.rs
+    crates/valgebra-py/src/build.rs
+    crates/valgebra-py/src/build/classes.rs
+    crates/valgebra-py/src/build/generics.rs
+    crates/valgebra-py/src/build/refine.rs
+    crates/valgebra-py/src/build/dialect.rs
+    crates/valgebra-py/src/equality.rs
+    crates/valgebra-py/src/oracle.rs
+    crates/valgebra-py/src/codes.rs
 
 jobs:
   rust-lint:
@@ -1251,15 +1274,17 @@ jobs:
 
   mutants-diff-walk:
     name: mutants binding ${{ matrix.shard }}
-    # Three round-robin shards over the binding's swept files: about nineteen
-    # hundred mutants run against an embedded interpreter. Cut in consecutive
-    # slices, the walk's files, whose mutants build and run, fell to one shard
-    # and the rest, two thirds of their mutants unviable, to the other two: 19,
-    # 15 and past 30 minutes on 2026-10-05, the third cancelled at its ceiling,
-    # where it had read 29 one commit earlier. Round-robin gives every shard
-    # the same mix, a third of the work between them. The suite a mutant runs
-    # has grown since, and the slowest shard read 43.5 minutes on 2026-10-08,
-    # so the ceiling is 90, twice that, by the rule the core's sweep states.
+    # Three round-robin shards over the files of `BINDING_SWEPT` the change
+    # touches, run against an embedded interpreter. Cut in consecutive slices,
+    # the walk's files, whose mutants build and run, fell to one shard and the
+    # rest, two thirds of their mutants unviable, to the other two: 19, 15 and
+    # past 30 minutes on 2026-10-05, the third cancelled at its ceiling, where
+    # it read 29 one commit earlier. Round-robin gives every shard the same
+    # mix, a third of the work between them. The ceiling is set by a change
+    # that touches every listed file, as a push to `main` carrying a release
+    # window can: about nineteen hundred mutants, whose slowest shard read
+    # 43.5 minutes on 2026-10-08, so the ceiling is 90, twice that, by the
+    # rule the core's sweep states.
     runs-on: ubuntu-latest
     timeout-minutes: 90
     # One seed for the baseline and every mutant of this shard, and the same
@@ -1337,13 +1362,17 @@ jobs:
           # change touched, because a Rust test and the code it covers are swept
           # together here.
           git diff --name-only --diff-filter=d "$base"...HEAD -- '*.rs' > changed.txt
-          walk=$(grep -E '^crates/valgebra-py/src/(check/(walk|ctx|index|walk/(record|scalar|sequence))|input|build(/(classes|generics|refine|dialect))?|equality|oracle|codes)\.rs$' changed.txt || true)
+          # The listed files among the changed ones, matched against the list
+          # itself: every file the sweep can take starts it, and no other does.
+          walk=$(grep -Fx -f changed.txt <<< "$BINDING_SWEPT" || true)
           {
             echo "walk<<EOF"; echo "$walk"; echo "EOF"
           } >> "$GITHUB_OUTPUT"
           echo "walk files: ${walk:-none}"
-      - name: Sweep the binding's swept files when the change touches one
+      - name: Sweep the listed binding files the change touches
         if: steps.diff.outputs.walk != ''
+        env:
+          FILES: ${{ steps.diff.outputs.walk }}
         run: |
           uv sync --locked --no-install-project
           export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
@@ -1353,23 +1382,8 @@ jobs:
           # the embedded interpreter starts from it, and imports what the
           # baseline's notes argue from.
           export PATH="$(dirname "$PYO3_PYTHON"):$PATH"
-          files=(
-            --file crates/valgebra-py/src/check/walk.rs
-            --file crates/valgebra-py/src/check/walk/record.rs
-            --file crates/valgebra-py/src/check/walk/scalar.rs
-            --file crates/valgebra-py/src/check/walk/sequence.rs
-            --file crates/valgebra-py/src/check/ctx.rs
-            --file crates/valgebra-py/src/check/index.rs
-            --file crates/valgebra-py/src/input.rs
-            --file crates/valgebra-py/src/build.rs
-            --file crates/valgebra-py/src/build/classes.rs
-            --file crates/valgebra-py/src/build/generics.rs
-            --file crates/valgebra-py/src/build/refine.rs
-            --file crates/valgebra-py/src/build/dialect.rs
-            --file crates/valgebra-py/src/equality.rs
-            --file crates/valgebra-py/src/oracle.rs
-            --file crates/valgebra-py/src/codes.rs
-          )
+          files=()
+          for f in $FILES; do files+=(--file "$f"); done
           set +e
           cargo mutants --package valgebra-py "${files[@]}" \
             --features interpreter-tests -j 2 --timeout-multiplier 20 \
@@ -2148,27 +2162,14 @@ jobs:
           # imports none, the corpus installs its stand-in, and the mutants the
           # notes accept for that module's arms read as caught.
           export PATH="$(dirname "$PYO3_PYTHON"):$PATH"
+          # Every file of the list, because this is where the push lane's
+          # baseline comes from: a file the ratchet judges and the baseline
+          # never saw has every survivor in it read as new, on whichever
+          # unrelated change next touches the area.
+          files=()
+          for f in $BINDING_SWEPT; do files+=(--file "$f"); done
           set +e
-          # The same files the push lane sweeps, because this is where
-          # their baseline comes from: a file the ratchet judges and the
-          # baseline never saw has every survivor in it read as new, on
-          # whichever unrelated change next touches the area.
-          cargo mutants --package valgebra-py \
-            --file crates/valgebra-py/src/check/walk.rs \
-            --file crates/valgebra-py/src/check/walk/record.rs \
-            --file crates/valgebra-py/src/check/walk/scalar.rs \
-            --file crates/valgebra-py/src/check/walk/sequence.rs \
-            --file crates/valgebra-py/src/check/ctx.rs \
-            --file crates/valgebra-py/src/check/index.rs \
-            --file crates/valgebra-py/src/input.rs \
-            --file crates/valgebra-py/src/build.rs \
-            --file crates/valgebra-py/src/build/classes.rs \
-            --file crates/valgebra-py/src/build/generics.rs \
-            --file crates/valgebra-py/src/build/refine.rs \
-            --file crates/valgebra-py/src/build/dialect.rs \
-            --file crates/valgebra-py/src/equality.rs \
-            --file crates/valgebra-py/src/oracle.rs \
-            --file crates/valgebra-py/src/codes.rs \
+          cargo mutants --package valgebra-py "${files[@]}" \
             --features interpreter-tests -j 4 --timeout-multiplier 20 \
             --shard "${{ matrix.shard }}/3" --sharding round-robin \
             --output walk-mutants \

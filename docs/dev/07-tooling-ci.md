@@ -647,8 +647,8 @@ path and measuring nothing.
 ### The mutation ratchets
 
 Three sweeps, each with its own committed baseline: the core crate, the
-binding's soundness surfaces — the files the `--file` list of
-`mutants-diff-walk` in `ci.yml` names: the membership walk with the context it
+binding's soundness surfaces — the files `BINDING_SWEPT` in `ci.yml` lists,
+which both binding sweeps read: the membership walk with the context it
 carries and the precompute it reads, the `Value` both input paths run over, the
 frontend and the four surfaces beside it, equality, the oracle and the failure
 codes — and the files the shipped extension is the only caller of.
@@ -709,7 +709,7 @@ export LD_LIBRARY_PATH="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.g
 # without the second, the sweep draws what the lane does not.
 export PROPTEST_MAX_SHRINK_TIME=1000
 export PROPTEST_RNG_SEED=0
-cargo mutants --package valgebra-py --file <the files the change touches> \
+cargo mutants --package valgebra-py --file <each file of BINDING_SWEPT the change touches> \
   --features interpreter-tests -j 2 --timeout-multiplier 20 \
   --output sweep -- -- --skip recursion_deeper_than_the_bound_is_refused \
   --skip the_two_readings_agree_at_the_walks_depth_bound
@@ -722,7 +722,7 @@ skips are the two termination proofs:
 ```bash
 export PROPTEST_MAX_SHRINK_TIME=1000
 export PROPTEST_RNG_SEED=0
-cargo mutants --package valgebra-core --file <the files the change touches> \
+cargo mutants --package valgebra-core --file <each core file the change touches> \
   -j 4 --timeout-multiplier 20 --output sweep \
   -- -- --skip deep_subtype_into_bottom_terminates \
   --skip subtyping_terminates_on_a_distributed_tower
@@ -984,9 +984,11 @@ shards round-robin: cut in
 consecutive slices, a file's mutants fall to one shard, and one whose mutants
 build and run costs several times one whose mutants mostly do not compile --
 the binding's push sweep read 15, 19 and past 30 minutes that way. Every push runs the core and walk sweeps
-restricted to the **whole files the change touches** — bounded by the change
-rather than by the tree — and blocks the merge; the pytest sweep costs a
-rebuild and a suite run per mutant and stays on the schedule. A push sweep
+restricted to the **whole files the change touches** of the ones each sweep
+examines, the core crate's and the binding files `BINDING_SWEPT` lists —
+bounded by the change rather than by the tree — and blocks the merge; the
+pytest sweep costs a rebuild and a suite run per mutant and stays on the
+schedule. A push sweep
 checks the new-survivor direction alone, because a partial sweep never
 generates most of the baseline.
 

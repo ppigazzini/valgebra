@@ -85,7 +85,7 @@ NEEDS_A_RUNNER = {
     ),
     "List the Rust files the diff touches": "reads the event payload",
     "Sweep the core files the change touches": "a mutation sweep, tens of minutes",
-    "Sweep the binding's swept files when the change touches one": (
+    "Sweep the listed binding files the change touches": (
         "a mutation sweep, tens of minutes"
     ),
     "Measure binding coverage via the Python suite and Rust unit tests": (
