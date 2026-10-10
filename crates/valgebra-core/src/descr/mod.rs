@@ -23,6 +23,7 @@
 //! distinguishes its values. The type says which is which, so what the
 //! descriptor can and cannot see is read off it rather than inferred.
 
+mod automaton;
 pub mod budget;
 pub mod classes;
 pub mod floats;

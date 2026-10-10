@@ -35,18 +35,11 @@
 use regex_automata::dfa::{Automaton, dense};
 use regex_automata::util::syntax;
 use regex_automata::{Anchored, Input};
-use rustc_hash::{FxHashMap, FxHashSet};
-use std::collections::VecDeque;
+use rustc_hash::FxHashMap;
 use std::sync::{Arc, OnceLock};
 
-/// The most states an automaton may hold.
-///
-/// A product doubles the exponent -- `|A| * |B|` states before minimisation --
-/// and a complement of a product does it again, so a bound is what keeps a
-/// pathological pattern from exhausting memory rather than answering. Past it
-/// the set is not representable, and the constructor says so rather than
-/// returning an automaton for a different language.
-pub const MAX_STATES: usize = 4096;
+pub use super::automaton::MAX_STATES;
+use super::automaton::{Reached, canonical_order, reaches, refine};
 
 /// What `regex-automata` may spend building one pattern's table, in bytes.
 ///
@@ -152,22 +145,14 @@ impl Dfa {
     /// minimisation as well as after -- which is what the product construction
     /// needs when it stops early.
     fn is_empty(&self) -> bool {
-        let mut seen: FxHashSet<u32> = FxHashSet::default();
-        let mut pending: VecDeque<u32> = VecDeque::from([0]);
-        while let Some(state) = pending.pop_front() {
-            // `insert` answers whether the state is new, so the walk visits
-            // each one once and terminates because the states are finite.
-            if !seen.insert(state) {
-                continue;
-            }
-            if self.accepts(state) {
-                return false;
-            }
-            for class in 0..self.class_count {
-                pending.push_back(self.step(state, class.try_into().unwrap_or(0)));
-            }
-        }
-        true
+        !reaches(
+            |state| self.accepts(state),
+            |state, pending| {
+                for class in 0..self.class_count {
+                    pending.push_back(self.step(state, class.try_into().unwrap_or(0)));
+                }
+            },
+        )
     }
 
     /// The automaton accepting nothing, over the one-class alphabet.
@@ -336,37 +321,23 @@ impl Dfa {
 
     /// The product of two automata, accepting where `accept` says so.
     ///
-    /// One BFS over reachable state *pairs*, so the states built are the ones a
-    /// word can reach rather than the whole cross product. The alphabets are
-    /// refined together first: a class of the product is a pair of classes, one
-    /// from each side, and only the pairs some byte realises get an id.
+    /// One walk over reachable state *pairs* ([`Reached`]), so the states built
+    /// are the ones a word can reach rather than the whole cross product. The
+    /// alphabets are refined together first: a class of the product is a pair
+    /// of classes, one from each side, and only the pairs some byte realises
+    /// get an id.
     fn product(&self, other: &Dfa, accept: impl Fn(bool, bool) -> bool) -> Option<Dfa> {
-        let (classes, class_count, pairs) = refine(self, other);
-        let mut ids: FxHashMap<(u32, u32), u32> = FxHashMap::default();
-        // A draining queue, so the walk ends when nothing is left rather than
-        // when an index catches up with a list that is still growing.
-        let mut pending: VecDeque<(u32, u32)> = VecDeque::from([(0, 0)]);
-        ids.insert((0, 0), 0);
+        let (classes, class_count, pairs) = refine_alphabets(self, other);
+        let mut reached = Reached::from((0, 0));
         let mut transitions: Vec<u32> = Vec::new();
         let mut accepting: Vec<bool> = Vec::new();
         let mut built = 0usize;
-        while let Some((mine, theirs)) = pending.pop_front() {
+        while let Some((mine, theirs)) = reached.next() {
             built += 1;
             accepting.push(accept(self.accepts(mine), other.accepts(theirs)));
             for pair in &pairs {
                 let next = (self.step(mine, pair.0), other.step(theirs, pair.1));
-                let id = if let Some(id) = ids.get(&next) {
-                    *id
-                } else {
-                    if ids.len() >= MAX_STATES {
-                        return None;
-                    }
-                    let id = u32::try_from(ids.len()).ok()?;
-                    ids.insert(next, id);
-                    pending.push_back(next);
-                    id
-                };
-                transitions.push(id);
+                transitions.push(reached.id(next, || true)?);
             }
         }
         debug_assert_eq!(built, accepting.len(), "one row is built per state");
@@ -400,37 +371,27 @@ impl Dfa {
     }
 
     /// Merge the states no word distinguishes, by refining a partition until it
-    /// stops changing (Moore's algorithm).
+    /// stops changing ([`refine`], Moore's algorithm).
     fn merge_equivalent(&self) -> Dfa {
         // Start by separating the accepting states from the rest: a word of
-        // length zero already tells those apart.
-        let mut block: Vec<u32> = self.accepting.iter().map(|a| u32::from(*a)).collect();
-        // At most one round per state: each round either splits a block or is
-        // the last, and a block cannot split more often than it has members.
-        // Bounding it is what makes a wrong termination test leave a coarser
-        // automaton -- which the canonicity property rejects -- rather than run
-        // without end.
-        for _ in 0..=self.state_count() {
-            // A state's signature is its own block and the block each class
-            // leads to. Two states stay together only while their signatures
-            // agree, which is one more letter of lookahead per round.
-            let mut ids: FxHashMap<Vec<u32>, u32> = FxHashMap::default();
-            let mut next: Vec<u32> = Vec::with_capacity(self.state_count());
-            for state in 0..self.state_count() {
+        // length zero already tells those apart. A state's signature is its own
+        // block and the block each class leads to, so two states stay together
+        // only while their signatures agree, which is one more letter of
+        // lookahead per round.
+        let seed: Vec<u32> = self.accepting.iter().map(|a| u32::from(*a)).collect();
+        let block = refine::<Vec<u32>, FxHashMap<Vec<u32>, u32>>(
+            self.state_count(),
+            seed,
+            |state, block| {
                 let state = u32::try_from(state).unwrap_or(0);
                 let mut signature = vec![block.get(state as usize).copied().unwrap_or(0)];
                 for class in 0..self.class_count {
                     let target = self.step(state, class.try_into().unwrap_or(0));
                     signature.push(block.get(target as usize).copied().unwrap_or(0));
                 }
-                let count = u32::try_from(ids.len()).unwrap_or(0);
-                next.push(*ids.entry(signature).or_insert(count));
-            }
-            if next == block {
-                break;
-            }
-            block = next;
-        }
+                signature
+            },
+        );
         let count = block.iter().copied().max().map_or(1, |m| m as usize + 1);
         let mut transitions = vec![0u32; count * self.class_count];
         let mut accepting = vec![false; count];
@@ -501,23 +462,11 @@ impl Dfa {
     }
 
     /// Renumber the states by a walk that takes classes in order, dropping the
-    /// ones no word reaches.
+    /// ones no word reaches ([`canonical_order`]).
     fn renumber(&self) -> Dfa {
-        let mut ids: FxHashMap<u32, u32> = FxHashMap::default();
-        let mut order: Vec<u32> = Vec::new();
-        let mut pending: VecDeque<u32> = VecDeque::from([0]);
-        ids.insert(0, 0);
-        while let Some(state) = pending.pop_front() {
-            order.push(state);
-            for class in 0..self.class_count {
-                let target = self.step(state, class.try_into().unwrap_or(0));
-                let fresh = u32::try_from(ids.len()).unwrap_or(0);
-                if let std::collections::hash_map::Entry::Vacant(slot) = ids.entry(target) {
-                    slot.insert(fresh);
-                    pending.push_back(target);
-                }
-            }
-        }
+        let (order, ids) = canonical_order(|state| {
+            (0..self.class_count).map(move |class| self.step(state, class.try_into().unwrap_or(0)))
+        });
         let mut transitions = Vec::with_capacity(order.len() * self.class_count);
         let mut accepting = Vec::with_capacity(order.len());
         for state in &order {
@@ -538,7 +487,7 @@ impl Dfa {
 
 /// The alphabet two automata share: a class per pair of classes some byte
 /// realises, plus the byte-to-class map over it.
-fn refine(a: &Dfa, b: &Dfa) -> (Vec<Class>, usize, Vec<(Class, Class)>) {
+fn refine_alphabets(a: &Dfa, b: &Dfa) -> (Vec<Class>, usize, Vec<(Class, Class)>) {
     let mut ids: FxHashMap<(Class, Class), Class> = FxHashMap::default();
     let mut pairs: Vec<(Class, Class)> = Vec::new();
     let mut classes: Vec<Class> = Vec::with_capacity(256);
@@ -829,30 +778,16 @@ impl Dfa {
         let start = built
             .start_state_forward(&Input::new("").anchored(Anchored::Yes))
             .ok()?;
-        let mut ids: FxHashMap<usize, u32> = FxHashMap::default();
-        let mut pending: VecDeque<_> = VecDeque::from([start]);
-        ids.insert(start.as_usize(), 0);
+        let mut reached = Reached::from(start);
         let mut transitions: Vec<u32> = Vec::new();
         let mut accepting: Vec<bool> = Vec::new();
-        while let Some(state) = pending.pop_front() {
+        while let Some(state) = reached.next() {
             accepting.push(built.is_match_state(built.next_eoi_state(state)));
             for class in 0..alphabet {
                 // Every byte of a class takes the same transition, so one
                 // representative stands for the column.
                 let byte = representative(&byte_class, class)?;
-                let next = built.next_state(state, byte);
-                let id = if let Some(id) = ids.get(&next.as_usize()) {
-                    *id
-                } else {
-                    if ids.len() >= MAX_STATES {
-                        return None;
-                    }
-                    let id = u32::try_from(ids.len()).ok()?;
-                    ids.insert(next.as_usize(), id);
-                    pending.push_back(next);
-                    id
-                };
-                transitions.push(id);
+                transitions.push(reached.id(built.next_state(state, byte), || true)?);
             }
         }
         Some(Dfa {
