@@ -185,7 +185,7 @@ pub(super) fn stored<'a, 'py>(
 #[cold]
 #[inline(never)]
 fn stored_copy<'py>(dict: &Bound<'py, PyDict>, ctx: Ctx<'_>) -> Option<Bound<'py, PyDict>> {
-    if ctx.signals.fatal_seen.get() {
+    if ctx.state.signals.fatal_seen.get() {
         return None;
     }
     held_dict(dict)
@@ -586,7 +586,7 @@ fn keyed_map_matches_py(
         return false;
     };
     let mut decided = decided;
-    if let Some(plan) = ctx.records.get(&(fields.as_ptr() as usize)) {
+    if let Some(plan) = ctx.index.records.get(&(fields.as_ptr() as usize)) {
         if let Some(answered) =
             keyed_map_asks_for_its_keys(fields, defaults, dict, ctx, plan, decided.as_deref_mut())
         {
@@ -720,6 +720,7 @@ pub(super) fn keyed_map_matches_json(
     let undeclared = Undeclared::of(defaults);
     let open = matches!(undeclared, Undeclared::Admitted | Undeclared::AnyStr);
     if let Some(plan) = ctx
+        .index
         .records
         .get(&(fields.as_ptr() as usize))
         .filter(|plan| undeclared != Undeclared::Read && plan.by_name.len() == fields.len())
@@ -806,7 +807,7 @@ pub(super) fn keyed_map_matches_json(
     // a name set rebuilt per object. A schema absent from the plan falls back to
     // scanning the field list, so correctness never depends on the plan being
     // complete.
-    let plan = ctx.records.get(&(fields.as_ptr() as usize));
+    let plan = ctx.index.records.get(&(fields.as_ptr() as usize));
     let declares = |name: &str| match plan {
         Some(plan) => plan.by_name.contains_key(name),
         None => fields.iter().any(|f| &*f.name == name),
@@ -987,7 +988,7 @@ pub(super) fn keyed_map_explain(
     // per call; an interned key carries its hash. A schema absent from the index
     // falls back to its own text, so correctness never depends on the plan being
     // complete -- the two spellings name the same key.
-    let interned = ctx.records.get(&(fields.as_ptr() as usize));
+    let interned = ctx.index.records.get(&(fields.as_ptr() as usize));
     let entries = dict.len();
     // Every field the deciding walk read before it refused matched, so it has no
     // violation to report and nothing is learned by probing it again. Resuming
@@ -1146,7 +1147,7 @@ pub(super) fn check_attr_record(
     // The interned names, in field order. A schema absent from the index (an
     // incomplete build traversal) falls back to the field's own text, so
     // correctness never depends on the plan being complete.
-    let interned = ctx.attrs.get(&(fields.as_ptr() as usize));
+    let interned = ctx.index.attrs.get(&(fields.as_ptr() as usize));
     // Whether a level is free under the record, which no field's walk moves.
     let room = ctx.room_to_descend();
     let mut ok = true;

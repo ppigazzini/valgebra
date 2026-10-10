@@ -27,7 +27,7 @@
 //! `SystemExit`, `GeneratorExit`), and `MemoryError`/`RecursionError` (ordinary
 //! exceptions whose meaning is "the interpreter cannot continue"). It is not an
 //! answer to "are you in this set?": the interpreter is unwinding. The first such
-//! signal is recorded in `ctx.fatal`; the walk then short-circuits (every later
+//! signal is recorded in `ctx.state.fatal`; the walk then short-circuits (every later
 //! [`member`] call returns at once) and the entry point re-raises it, so an
 //! interrupted check stops instead of being silently reported as a non-member.
 
@@ -379,12 +379,12 @@ pub(crate) use crate::errors::is_fatal;
 /// Record the first fatal signal so the walk unwinds (every later `member` call
 /// returns at once) and the entry point re-raises it.
 pub(super) fn record_fatal(err: PyErr, ctx: Ctx<'_>) {
-    let mut slot = ctx.fatal.borrow_mut();
+    let mut slot = ctx.state.fatal.borrow_mut();
     if slot.is_none() {
         *slot = Some(err);
     }
     // Mirror into the cheap flag the per-node short-circuit reads.
-    ctx.signals.fatal_seen.set(true);
+    ctx.state.signals.fatal_seen.set(true);
 }
 
 /// Record that the walk stopped with `code` rather than deciding, for a
@@ -392,8 +392,8 @@ pub(super) fn record_fatal(err: PyErr, ctx: Ctx<'_>) {
 /// signal is; unlike that signal a stop does not unwind the walk, since a
 /// union branch beside it may still decide.
 pub(super) fn record_stop(code: Code, ctx: Ctx<'_>) {
-    if ctx.signals.stopped.get().is_none() {
-        ctx.signals.stopped.set(Some(code));
+    if ctx.state.signals.stopped.get().is_none() {
+        ctx.state.signals.stopped.set(Some(code));
     }
 }
 
@@ -409,7 +409,7 @@ pub(super) fn record_if_fatal(err: PyErr, py: Python<'_>, ctx: Ctx<'_>) {
 
 /// Fold a membership probe's result into a boolean. An ordinary exception means
 /// the value cannot answer "are you in this set?", so it is a non-member. A fatal
-/// interpreter signal is recorded in `ctx.fatal` so the walk unwinds and the
+/// interpreter signal is recorded in `ctx.state.fatal` so the walk unwinds and the
 /// entry point re-raises it, and reported locally as a non-member so the current
 /// frame returns.
 pub(super) fn fold(result: PyResult<bool>, py: Python<'_>, ctx: Ctx<'_>) -> bool {
@@ -483,7 +483,7 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
     // A fatal interpreter signal recorded earlier in the walk unwinds the whole
     // traversal: every remaining node reports a non-member at once, so a large
     // value stops promptly instead of finishing the walk after a KeyboardInterrupt.
-    if ctx.signals.fatal_seen.get() {
+    if ctx.state.signals.fatal_seen.get() {
         return false;
     }
     // One level of the walk is one native stack frame, so the walk counts its own
@@ -793,7 +793,7 @@ fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, 
     // bound the scan below reports the bound, as the explaining walk does.
     if matches!(members.first(), Some(Schema::Literal(_)))
         && ctx.room_to_descend()
-        && let Some(plan) = ctx.unions.get(&(members.as_ptr() as usize))
+        && let Some(plan) = ctx.index.unions.get(&(members.as_ptr() as usize))
         && let Some(decided) = plan.decide(value)
     {
         return decided;
@@ -856,7 +856,7 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
     };
     // A fatal signal a branch raised while it was decided unwinds the walk
     // before any branch is explained.
-    if ctx.signals.fatal_seen.get() {
+    if ctx.state.signals.fatal_seen.get() {
         return false;
     }
     let chosen = chosen_record(&refused);
@@ -1065,7 +1065,7 @@ fn record_explained(
     decided: &Decided,
 ) {
     let ctx = frame.ctx;
-    if ctx.signals.fatal_seen.get() {
+    if ctx.state.signals.fatal_seen.get() {
         return;
     }
     let Some(_level) = ctx.descend() else {
@@ -1104,7 +1104,7 @@ fn record_explained(
 /// as [`member`] holds it: at the walk's depth bound the branch records the
 /// bound instead, which a report does read, so there it is explained.
 fn decided_quietly(schema: &Schema, value: &Value<'_, '_>, ctx: Ctx<'_>) -> Option<bool> {
-    if ctx.signals.fatal_seen.get() {
+    if ctx.state.signals.fatal_seen.get() {
         return Some(false);
     }
     let _level = ctx.descend()?;
@@ -1198,10 +1198,10 @@ fn check_complement(inner: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_,
     // negation says nothing either, so the complement refuses the value with
     // the stop's code. The cell is cleared for the inner walk and keeps any
     // earlier stop after it, so a complement above this one reads both.
-    let before = ctx.signals.stopped.take();
+    let before = ctx.state.signals.stopped.take();
     let matched = member(inner, value, &mut Unwritten::default().frame(ctx));
-    let stopped = ctx.signals.stopped.get();
-    ctx.signals.stopped.set(before.or(stopped));
+    let stopped = ctx.state.signals.stopped.get();
+    ctx.state.signals.stopped.set(before.or(stopped));
     let code = match (matched, stopped) {
         (false, None) => return true,
         (true, _) => UNEXPECTED_MATCH,
@@ -1276,7 +1276,7 @@ fn is_exactly_a(obj: &Bound<'_, PyAny>, class: &Bound<'_, PyAny>) -> bool {
 fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
     let key = (value.id(), id.get());
-    match ctx.guard.borrow_mut().enter(key) {
+    match ctx.state.guard.borrow_mut().enter(key) {
         Entered::Open => {}
         Entered::Cycle => {
             record_stop(RECURSION_LOOP, ctx);
@@ -1310,11 +1310,11 @@ fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> boo
         // not reachable from user input; release builds degrade to a non-member
         // rather than panicking across the language boundary.
         debug_assert!(false, "definition index {} out of range", id.get());
-        ctx.guard.borrow_mut().leave();
+        ctx.state.guard.borrow_mut().leave();
         return false;
     };
     let result = member(def, value, frame);
-    ctx.guard.borrow_mut().leave();
+    ctx.state.guard.borrow_mut().leave();
     result
 }
 

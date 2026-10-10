@@ -348,10 +348,14 @@ of them, one class, a union of literals, a tuple of scalars, a named tuple of
 them.
 
 All three read the same `Frame`: where the walk is in the value, what it has
-found there, and the context it may look things up in. A walk needing a
-different one -- a union explaining a branch into a buffer of its own, a clause
-pair deciding on the fast path inside an explaining walk -- builds it from the
-parts it keeps. A fast walk writes neither of a frame's buffers, so where the
+found there, and the context it may look things up in. The context is seven
+words -- the pool, the definitions, and one reference each to the validator's
+index and the call's state -- so a table or a cell is read with the loads a
+reference of its own would take, and a level that hands the context on copies
+seven words (`Ctx` in `check/ctx.rs`, which also gives the two-word form it
+refuses). A walk needing a different frame -- a union explaining a branch into
+a buffer of its own, a clause pair deciding on the fast path inside an
+explaining walk -- builds it from the parts it keeps. A fast walk writes neither of a frame's buffers, so where the
 walk is fast already it asks in the frame it holds: `check_union` walks each
 branch in the union's frame, and a mapping's scan keeps one fast frame for every
 entry `covered` asks of its clauses. Each buffer is a value with a destructor,
@@ -567,12 +571,12 @@ most of what they cost, and each asks the test directly:
   failure says: `check_constraint` reads the operand and nothing it would name,
   and `explained` builds the code and the expectation only for a failure a walk
   that explains records. The context is read through the frame rather than
-  copied out of it, since a thirteen-word copy handed by value to a function
-  left out of line is written to the stack once per constraint, on the path
-  every passing value takes. Refined integers cost 5% fewer instructions again
-  on the binding gate on 3.12 and 3.14, and a pattern 1.9%; a thousand integers
-  under two bounds cost 11% fewer on 3.12 and 3.15, and a thousand strings
-  under two length bounds 17%.
+  copied out of it, since a copy handed by value to a function left out of
+  line is written to the stack once per constraint, on the path every passing
+  value takes. Refined integers cost 5% fewer instructions again on the binding
+  gate on 3.12 and 3.14, and a pattern 1.9%; a thousand integers under two
+  bounds cost 11% fewer on 3.12 and 3.15, and a thousand strings under two
+  length bounds 17%.
 - **A record's field.** A field that is a scalar -- most of a `TypedDict` -- is
   its type test in the deciding walk (`field_holds`), read by keys, by the scan
   and in both JSON readings: the binding gate's fifty-field record costs 7%

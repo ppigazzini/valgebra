@@ -10,58 +10,39 @@ use std::cell::{Cell, RefCell};
 use pyo3::prelude::*;
 use valgebra_core::Schema;
 
-use super::index::{AttrsIndex, RecordIndex, RegexIndex, UnionIndex};
+use super::index::ValidatorIndex;
 use crate::codes::Code;
 
 /// The read-only context threaded through a validation walk: the constants pool,
-/// the recursion definitions, the precomputed record index, the active recursion
-/// guard, and the walk mode. The guard records `(object id, definition
-/// index)` pairs currently on the path so a value that contains itself fails with
-/// `recursion_loop` instead of looping.
+/// the recursion definitions, the validator's precomputed index, the call's own
+/// [`WalkState`], and the walk mode.
+///
+/// Seven words: the pool and the definitions, and one reference each to the
+/// index's four tables and to the state's four cells. A table or a cell lies at
+/// a fixed offset of what is referred to, so reaching one costs the address and
+/// a load, which is what a reference of its own would cost, and a level that
+/// hands the context on by value copies seven words rather than a reference per
+/// table and per cell.
+///
+/// One reference to a structure holding all of it would be two words, carried
+/// in two registers and never copied, and is refused: every read through a
+/// frame takes a load more that way, and the call boundary measured 8.7%
+/// dearer and refined integers 4.1% (`scripts/perf_gate.py --binding-boundary`,
+/// `--binding-refined`).
 #[derive(Clone, Copy)]
 pub(crate) struct Ctx<'a> {
     pub(crate) pool: &'a [Py<PyAny>],
     pub(crate) defs: &'a [Schema],
-    /// Per-record declared-field lookups, built once per validator and keyed by
-    /// the address of each record's `fields` buffer. The keyed-map fast path
-    /// reads it instead of rebuilding the name map on every call; a node absent
-    /// from it falls back to building the map, so correctness never depends on
-    /// it being complete.
-    pub(crate) records: &'a RecordIndex,
-    /// Per-attribute-schema interned names, built once per validator. The
-    /// attribute walk hands these to `getattr` instead of building a fresh
-    /// `PyString` per attribute per value.
-    pub(crate) attrs: &'a AttrsIndex,
-    /// Per-union value sets for unions whose members are all literals, keyed by
-    /// the address of the union's members buffer. It answers only for an exact
-    /// int or str value: the deciding walk takes its answer either way instead
-    /// of scanning every branch, and the explaining walk takes only its yes, for
-    /// the elements of a list of the union, and walks every other element. Any
-    /// other case (a non-literal union, a value of another type, a JSON value)
-    /// falls back to the linear scan.
-    pub(crate) unions: &'a UnionIndex,
-    /// Compiled string patterns, keyed by the address of the pattern's own
-    /// text in the schema; the refinement walk reads it for a `Regex(...)`
-    /// constraint instead of recompiling.
-    pub(crate) regexes: &'a RegexIndex,
-    pub(crate) guard: &'a RefCell<Trail>,
-    /// How many walk levels are open below the entry point. Each level is a
-    /// native stack frame, and [`MAX_WALK_DEPTH`] is the ceiling
-    /// [`descend`](Ctx::descend) holds it under.
-    pub(crate) depth: &'a Cell<usize>,
-    /// A fatal interpreter signal raised mid-walk — a base exception that is not
-    /// an ordinary exception (`KeyboardInterrupt`, `SystemExit`, `GeneratorExit`),
-    /// or a `MemoryError`/`RecursionError`. The first such error is recorded here;
-    /// the walk then short-circuits and the entry point re-raises it instead of
-    /// silently reporting a non-member. An ordinary exception during a membership
-    /// probe stays folded to non-membership and never lands here.
-    pub(crate) fatal: &'a RefCell<Option<PyErr>>,
-    /// What the walk has met that is not an answer: whether a fatal signal is
-    /// recorded, and the first stop. One reference for the two, so the context
-    /// every arm copies is no wider for the second.
-    pub(crate) signals: &'a Signals,
-    /// What the walk is for. Constant for a whole walk, so the fast path pays
-    /// nothing for the explain bookkeeping.
+    /// The plans built once per validator ([`ValidatorIndex`]). A node absent
+    /// from them falls back to its general reading, so an answer never depends
+    /// on the index being complete.
+    pub(crate) index: &'a ValidatorIndex,
+    /// What this membership test has found so far: the recursion guard, the
+    /// open levels, the first fatal signal, and the stops ([`WalkState`]).
+    pub(crate) state: &'a WalkState,
+    /// What the walk is for. Constant for a whole walk, so the fast path pays a
+    /// test of it per node, which goes the same way every time, and none of
+    /// the explain bookkeeping.
     pub(crate) mode: WalkMode,
 }
 
@@ -140,7 +121,7 @@ impl Trail {
 /// reference.
 #[derive(Default)]
 pub(crate) struct Signals {
-    /// A `Cell` mirror of whether [`Ctx::fatal`] holds a signal yet, set
+    /// A `Cell` mirror of whether [`WalkState::fatal`] holds a signal yet, set
     /// alongside it in `record_fatal`. The per-node short-circuit reads this
     /// with a plain load instead of taking a `RefCell` borrow on every
     /// membership step.
@@ -158,15 +139,26 @@ pub(crate) struct Signals {
 /// first fatal signal, the signals, and the count of open walk levels.
 ///
 /// One owner rather than a local per cell at each entry point. They share a
-/// lifetime — one call — and they are read together as `Ctx`, so a caller that
-/// assembles three of them and forgets the fourth is a caller the type system
-/// should not be able to spell.
+/// lifetime — one call — and the walk reads them through one reference in
+/// [`Ctx`], so a caller that assembles three of them and forgets the fourth is
+/// a caller the type system should not be able to spell.
 pub(crate) struct WalkState {
     /// `(object id, definition index)` pairs open on the current path, so a value
     /// that contains itself fails with `recursion_loop` instead of looping.
     pub(crate) guard: RefCell<Trail>,
+    /// A fatal interpreter signal raised mid-walk — a base exception that is not
+    /// an ordinary exception (`KeyboardInterrupt`, `SystemExit`, `GeneratorExit`),
+    /// or a `MemoryError`/`RecursionError`. The first such error is recorded here;
+    /// the walk then short-circuits and the entry point re-raises it instead of
+    /// silently reporting a non-member. An ordinary exception during a membership
+    /// probe stays folded to non-membership and never lands here.
     pub(crate) fatal: RefCell<Option<PyErr>>,
+    /// What the walk has met that is not an answer: whether a fatal signal is
+    /// recorded, and the first stop.
     pub(crate) signals: Signals,
+    /// How many walk levels are open below the entry point. Each level is a
+    /// native stack frame, and [`MAX_WALK_DEPTH`] is the ceiling
+    /// [`descend`](Ctx::descend) holds it under.
     pub(crate) depth: Cell<usize>,
 }
 
@@ -214,12 +206,13 @@ impl Default for WalkState {
 /// What it costs is measured on the wheel that ships. The profile-guided build
 /// inlines the walk's arms into frames of 2.5 to 3 KiB a level on the dict and
 /// union shapes, against 0.6 KiB on a plain release build, and the dearest
-/// walk is the one explaining a refused value: at 384 levels it fits in 896
-/// KiB and overflows 832, under the 1 MiB that is the least stack any thread
-/// `CPython` creates has. 512 levels needed 1.5 MiB, and 255 would have
-/// refused `int | list[T]` from 85 unfoldings. An unoptimized build spends
-/// more again and fits no such figure, which is a build nothing ships. A
-/// thread given less than 1 MiB can overflow first; `docs/10-limits.md` says
+/// walk is the one explaining a refused value: at 384 levels, with the walks
+/// of `test_the_deepest_walk_fits_the_documented_stack`, the `CPython` 3.12
+/// wheel fits in 844 KiB and overflows 828, under the 1 MiB that is the least
+/// stack any thread `CPython` creates has. 512 levels needed 1.5 MiB, and 255
+/// would have refused `int | list[T]` from 85 unfoldings. An unoptimized build
+/// spends more again and fits no such figure, which is a build nothing ships.
+/// A thread given less than 1 MiB can overflow first; `docs/10-limits.md` says
 /// so.
 pub(crate) const MAX_WALK_DEPTH: usize = 3 * MAX_RECURSION_DEPTH;
 
@@ -249,7 +242,7 @@ impl<'a> Ctx<'a> {
     /// container a counter pair and a guard drop, which on a shape whose whole
     /// check is a type test per element is a measurable share of it.
     pub(crate) fn room_to_descend(self) -> bool {
-        self.depth.get() < MAX_WALK_DEPTH
+        self.state.depth.get() < MAX_WALK_DEPTH
     }
 
     /// Open one level of descent, or refuse when the walk already holds
@@ -259,12 +252,13 @@ impl<'a> Ctx<'a> {
     /// violation — the same answer an over-deep value gets from the unfolding
     /// bound, because it is the same fact about the value.
     pub(crate) fn descend(self) -> Option<Descent<'a>> {
-        let level = self.depth.get() + 1;
+        let depth = &self.state.depth;
+        let level = depth.get() + 1;
         if level > MAX_WALK_DEPTH {
             return None;
         }
-        self.depth.set(level);
-        Some(Descent(self.depth))
+        depth.set(level);
+        Some(Descent(depth))
     }
 }
 

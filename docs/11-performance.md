@@ -627,14 +627,23 @@ program that builds validators per request, and to no validation call.
   instructions that way (`--binding-mapping`), and a recursive schema's
   descent 10% fewer (`--binding-recursive`). The scan reads the frame's
   context where it lies, asking each half of a clause as a record asks a field
-  (`field_holds`), rather than copying the thirteen-word context once an entry:
-  the same mapping costs another 9.7% fewer. Where a fast walk has no frame to
+  (`field_holds`), rather than copying the context once an entry: the same
+  mapping costs another 9.7% fewer. Where a fast walk has no frame to
   hold -- `is_valid` and `is_valid_json` themselves, a mapping's scan, a parsed
   object -- its pair is an `Unwritten` one, never dropped because it never owns
   anything: `is_valid` on a scalar costs 6% fewer instructions that way on
   CPython 3.15, `in` 9%, and the instruction gate's call boundary 13%
   (`--binding-boundary`). A record read by its keys keeps an ordinary pair,
   since without the drop the release build lays its loop out dearer.
+- **The context a level hands on is seven words.** It holds the pool, the
+  definitions, and one reference each to the validator's index and the call's
+  state (`Ctx` in `check/ctx.rs`), and a table or a cell lies at a fixed offset
+  of what is referred to, so each is read with the loads a reference of its own
+  would take. A walk that descends copies less a level: on the CPython 3.12
+  PGO wheel a list nested twenty-five deep costs 12.9% fewer instructions, a
+  scalar 5.4%, a literal 4.8% and a JSON document 1.5%, and the deepest walks
+  fit a thread of 844 KiB. On the instruction gate the call boundary reads
+  1.9% fewer and a recursive schema 1.2%.
 - **The recursion trail is a stack, reserved on first use.** Entering a
   reference pushes a `(value, definition)` pair and leaving pops it (`Trail` in
   `check/ctx.rs`), so nothing is hashed. The first level reserves `FIRST_TRAIL`
@@ -1010,6 +1019,11 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   the value's address, it costs `--binding-refined` 2.0 to 4.3% more; read in
   one pass over the run of length bounds, it costs that shape nothing and the
   list of strings 12% more.
+- **A two-word walk context**: one reference to everything a walk reads,
+  beside its mode, travels in two registers and is never copied, but a read
+  through a frame takes one load more: `--binding-boundary` reads 8.7%
+  dearer, `--binding-refined` 4.1% and `--binding-subclass` 3.4%, where the
+  JSON shapes read about 1% cheaper.
 - **A replacement global allocator**: up to 28% cheaper on the JSON shapes and
   12% dearer on the call boundary, past the gate's ceiling, for a C dependency
   on every wheel target.

@@ -29,14 +29,8 @@ fn holds(
     let ctx = Ctx {
         pool,
         defs,
-        records: &index.records,
-        attrs: &index.attrs,
-        unions: &index.unions,
-        regexes: &index.regexes,
-        guard: &state.guard,
-        depth: &state.depth,
-        fatal: &state.fatal,
-        signals: &state.signals,
+        index: &index,
+        state: &state,
         mode: WalkMode::Fast,
     };
     member(
@@ -73,14 +67,8 @@ fn explain_in(
     let ctx = Ctx {
         pool,
         defs,
-        records: &index.records,
-        attrs: &index.attrs,
-        unions: &index.unions,
-        regexes: &index.regexes,
-        guard: &state.guard,
-        depth: &state.depth,
-        fatal: &state.fatal,
-        signals: &state.signals,
+        index: &index,
+        state: &state,
         mode,
     };
     let mut out = Vec::new();
@@ -292,14 +280,8 @@ fn a_changed_container_is_a_non_member_that_names_itself() {
         let ctx = |mode| Ctx {
             pool: &[],
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode,
         };
 
@@ -353,14 +335,8 @@ fn a_union_names_its_branches_by_their_constants() {
         let ctx = Ctx {
             pool: &pool,
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode: WalkMode::Explain,
         };
         let mut labels = BranchLabels::new();
@@ -473,14 +449,8 @@ fn a_union_names_a_class_branch_by_its_class() {
         let ctx = Ctx {
             pool: &pool,
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode: WalkMode::Explain,
         };
         let mut labels = BranchLabels::new();
@@ -1832,14 +1802,8 @@ fn decide_with_fatal(
     let ctx = Ctx {
         pool,
         defs: &[],
-        records: &index.records,
-        attrs: &index.attrs,
-        unions: &index.unions,
-        regexes: &index.regexes,
-        guard: &state.guard,
-        depth: &state.depth,
-        fatal: &state.fatal,
-        signals: &state.signals,
+        index: &index,
+        state: &state,
         mode: WalkMode::Fast,
     };
     let ok = member(
@@ -1883,14 +1847,8 @@ fn walk_json(
     let ctx = Ctx {
         pool,
         defs: &[],
-        records: &index.records,
-        attrs: &index.attrs,
-        unions: &index.unions,
-        regexes: &index.regexes,
-        guard: &state.guard,
-        depth: &state.depth,
-        fatal: &state.fatal,
-        signals: &state.signals,
+        index: &index,
+        state: &state,
         mode,
     };
     let mut out = Vec::new();
@@ -2137,14 +2095,8 @@ fn a_union_explains_the_branch_that_descended_furthest() {
         let ctx = Ctx {
             pool: &[],
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode: WalkMode::ExplainFailFast,
         };
         let ok = member(
@@ -2220,14 +2172,8 @@ fn an_explaining_walk_aggregates_every_independent_failure() {
             let ctx = Ctx {
                 pool: &[],
                 defs: &[],
-                records: &index.records,
-                attrs: &index.attrs,
-                unions: &index.unions,
-                regexes: &index.regexes,
-                guard: &state.guard,
-                depth: &state.depth,
-                fatal: &state.fatal,
-                signals: &state.signals,
+                index: &index,
+                state: &state,
                 mode,
             };
             let mut out = Vec::new();
@@ -2257,14 +2203,8 @@ fn run_mode(
     let ctx = Ctx {
         pool: &[],
         defs: &[],
-        records: &index.records,
-        attrs: &index.attrs,
-        unions: &index.unions,
-        regexes: &index.regexes,
-        guard: &state.guard,
-        depth: &state.depth,
-        fatal: &state.fatal,
-        signals: &state.signals,
+        index: &index,
+        state: &state,
         mode,
     };
     let mut out = Vec::new();
@@ -2541,14 +2481,8 @@ fn a_closed_record_reports_every_extra_key_unless_fail_fast_stops_it() {
             let ctx = Ctx {
                 pool: &[],
                 defs: &[],
-                records: &index.records,
-                attrs: &index.attrs,
-                unions: &index.unions,
-                regexes: &index.regexes,
-                guard: &state.guard,
-                depth: &state.depth,
-                fatal: &state.fatal,
-                signals: &state.signals,
+                index: &index,
+                state: &state,
                 mode,
             };
             let mut out = Vec::new();
@@ -2994,14 +2928,8 @@ fn the_json_record_path_agrees_with_and_without_its_plan() {
             let ctx = Ctx {
                 pool: &[],
                 defs: &[],
-                records: &index.records,
-                attrs: &index.attrs,
-                unions: &index.unions,
-                regexes: &index.regexes,
-                guard: &state.guard,
-                depth: &state.depth,
-                fatal: &state.fatal,
-                signals: &state.signals,
+                index,
+                state: &state,
                 mode: WalkMode::Fast,
             };
             assert!(keyed_map_matches_json(fields, defaults, py, &good, ctx));
@@ -3029,14 +2957,8 @@ fn the_json_path_and_the_object_path_agree() {
         let ctx = Ctx {
             pool: &[],
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode: WalkMode::Fast,
         };
         assert!(member(
@@ -3599,14 +3521,8 @@ fn an_explaining_walk_resumes_where_the_deciding_one_stopped() {
         let explain = || Ctx {
             pool: &[],
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode: WalkMode::Explain,
         };
         let report = |value: &Bound<'_, PyDict>| {
@@ -3748,14 +3664,8 @@ fn a_resumption_carries_the_count_the_deciding_walk_had() {
                 Ctx {
                     pool: &[],
                     defs: &[],
-                    records: &small_index.records,
-                    attrs: &small_index.attrs,
-                    unions: &small_index.unions,
-                    regexes: &small_index.regexes,
-                    guard: &state.guard,
-                    depth: &state.depth,
-                    fatal: &state.fatal,
-                    signals: &state.signals,
+                    index: &small_index,
+                    state: &state,
                     mode: WalkMode::Explain,
                 },
             ),
@@ -3846,14 +3756,8 @@ fn a_value_that_changes_size_between_the_walks_is_not_resumed() {
                 Ctx {
                     pool: &pool,
                     defs: &[],
-                    records: &index.records,
-                    attrs: &index.attrs,
-                    unions: &index.unions,
-                    regexes: &index.regexes,
-                    guard: &state.guard,
-                    depth: &state.depth,
-                    fatal: &state.fatal,
-                    signals: &state.signals,
+                    index: &index,
+                    state: &state,
                     mode: WalkMode::Explain,
                 },
             ),
@@ -4587,14 +4491,8 @@ fn recorded(
     let ctx = Ctx {
         pool,
         defs: &[],
-        records: &index.records,
-        attrs: &index.attrs,
-        unions: &index.unions,
-        regexes: &index.regexes,
-        guard: &state.guard,
-        depth: &state.depth,
-        fatal: &state.fatal,
-        signals: &state.signals,
+        index: &index,
+        state: &state,
         mode: WalkMode::Explain,
     };
     let mut out = Vec::new();
@@ -4720,14 +4618,8 @@ fn a_fatal_signal_from_a_branch_label_is_recorded() {
             let ctx = Ctx {
                 pool: &pool,
                 defs: &[],
-                records: &index.records,
-                attrs: &index.attrs,
-                unions: &index.unions,
-                regexes: &index.regexes,
-                guard: &state.guard,
-                depth: &state.depth,
-                fatal: &state.fatal,
-                signals: &state.signals,
+                index: &index,
+                state: &state,
                 mode: WalkMode::Explain,
             };
             push_branch_label(&schema, ctx, py, &mut BranchLabels::new());
@@ -4777,14 +4669,8 @@ fn a_scalar_is_answered_as_the_walk_answers_it() {
         let ctx = Ctx {
             pool: &[],
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode: WalkMode::Fast,
         };
         for schema in &scalars {
@@ -4853,14 +4739,8 @@ fn a_sequence_of_a_union_of_scalars_is_read_as_its_tests() {
         let ctx = |mode| Ctx {
             pool: &[],
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode,
         };
         let Schema::Union(branches) = &nullable else {
@@ -5037,14 +4917,8 @@ fn a_tuple_of_scalar_positions_is_read_as_its_tests() {
         let ctx = |mode| Ctx {
             pool: &[],
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode,
         };
         let eval = |source: &str| {
@@ -5170,14 +5044,8 @@ fn an_admitted_scalar_element_is_answered_quietly_when_explaining() {
         let ctx = Ctx {
             pool: &[],
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode: WalkMode::Explain,
         };
         let one = PyInt::new(py, 1i64).into_any();
@@ -5647,14 +5515,8 @@ fn a_list_of_literals_is_read_by_its_table() {
         let ctx = |mode| Ctx {
             pool: &pool,
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode,
         };
         let read = |source: &str, prefix: &[Schema], members: &[Schema], mode| {
@@ -5760,14 +5622,8 @@ fn a_list_of_one_class_is_read_off_its_elements_types() {
         let ctx = |mode| Ctx {
             pool: &pool,
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode,
         };
         let read = |source: &str, prefix: &[Schema], mode| {
@@ -5901,14 +5757,8 @@ fn a_list_of_scalar_tuples_is_read_by_a_test_of_each_element() {
         let ctx = |mode| Ctx {
             pool: &[],
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode,
         };
         let read = |source: &str, prefix: &[Schema], element: &Schema, mode| {
@@ -6098,14 +5948,8 @@ fn a_list_of_refinements_is_read_by_each_refinement() {
         let ctx = |mode| Ctx {
             pool: &pool,
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode,
         };
         let read = |source: &str, prefix: &[Schema], mode| {
@@ -6244,14 +6088,8 @@ fn a_list_of_named_tuples_is_read_by_a_test_of_each_element() {
         let ctx = |mode| Ctx {
             pool: &pool,
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode,
         };
         let read = |source: &str, prefix: &[Schema], element: &Schema, mode| {
@@ -6370,14 +6208,8 @@ fn a_list_of_a_scalar_or_none_is_answered_by_its_reader() {
             let ctx = Ctx {
                 pool: &[],
                 defs: &[],
-                records: &index.records,
-                attrs: &index.attrs,
-                unions: &index.unions,
-                regexes: &index.regexes,
-                guard: &state.guard,
-                depth: &state.depth,
-                fatal: &state.fatal,
-                signals: &state.signals,
+                index: &index,
+                state: &state,
                 mode,
             };
             let (mut path, mut out) = (Vec::new(), Vec::new());
@@ -6546,14 +6378,8 @@ fn a_list_of_dataclasses_is_read_as_its_records() {
         let ctx = |mode| Ctx {
             pool: &pool,
             defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode,
         };
         let read = |source: &str, prefix: &[Schema], mode| {

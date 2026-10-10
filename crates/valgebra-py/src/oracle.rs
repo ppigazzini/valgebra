@@ -241,14 +241,8 @@ impl PoolRelations<'_, '_> {
         let ctx = Ctx {
             pool: self.literals,
             defs: self.definitions,
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: &index,
+            state: &state,
             mode: WalkMode::Fast,
         };
         let admitted = member(

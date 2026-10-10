@@ -689,7 +689,7 @@ fn wide_fields(py: Python<'_>) -> (Vec<Field>, Py<PyAny>) {
 /// interpreter startup, so the gate ([`scripts/perf_gate.py`]) measures the
 /// *difference* between two iteration counts: startup is identical in both runs
 /// and cancels, leaving the deterministic per-iteration walk cost. This is the
-/// budgeted signal, and it also covers the per-node `ctx.fatal.borrow()` tax.
+/// budgeted signal, and it also covers the per-node `ctx.state.fatal.borrow()` tax.
 #[doc(hidden)]
 #[must_use]
 pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: usize) -> u64 {
@@ -1111,7 +1111,7 @@ fn explaining_list(py: Python<'_>, iters: usize) -> u64 {
 #[must_use]
 pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
     // A homogeneous int list: the walk crosses the boundary at the container and
-    // at each element (an `isinstance` check and the per-node `ctx.fatal.borrow()`
+    // at each element (an `isinstance` check and the per-node `ctx.state.fatal.borrow()`
     // tax), the most common shape on the hot path.
     let schema = Schema::Seq {
         container: SeqKind::List,

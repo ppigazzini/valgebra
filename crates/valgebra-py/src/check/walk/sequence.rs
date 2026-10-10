@@ -910,7 +910,7 @@ pub(super) fn class_record_list_matches(
         if ctx.mode.explains() {
             frame.path.push(PathSegment::Index(at));
         }
-        let held = !ctx.signals.fatal_seen.get() && is_exactly_a(item, class);
+        let held = !ctx.state.signals.fatal_seen.get() && is_exactly_a(item, class);
         let item = Value::Py(item);
         ok &= if held
             && let Some(_meet) = ctx.descend()
@@ -1040,7 +1040,7 @@ pub(super) fn literal_list_matches(
     if !matches!(members.first(), Some(Schema::Literal(_))) {
         return None;
     }
-    let plan = ctx.unions.get(&(members.as_ptr() as usize))?;
+    let plan = ctx.index.unions.get(&(members.as_ptr() as usize))?;
     let decided = |item: &Value<'_, '_>| plan.decide(item) == Some(true);
     if ctx.mode.explains() {
         return Some(list_explained(list, union, decided, value, frame));
@@ -1352,7 +1352,7 @@ fn reads_where_it_lies(tuple: &Bound<'_, PyTuple>, ctx: Ctx<'_>) -> bool {
 #[cold]
 #[inline(never)]
 fn storage_of<'py>(tuple: &Bound<'py, PyTuple>, ctx: Ctx<'_>) -> Option<Bound<'py, PyTuple>> {
-    if ctx.signals.fatal_seen.get() {
+    if ctx.state.signals.fatal_seen.get() {
         return None;
     }
     let copy = || -> PyResult<Bound<'py, PyTuple>> {
@@ -1565,7 +1565,7 @@ pub(super) fn scan_set<'py>(
             }
         };
         // Reading the type may have raised a fatal signal, which ends the walk.
-        if ctx.signals.fatal_seen.get() {
+        if ctx.state.signals.fatal_seen.get() {
             return Scan::Unreadable;
         }
         for item in iter {

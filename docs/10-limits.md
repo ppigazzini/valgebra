@@ -74,11 +74,11 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   creates has. The shipped wheels are built with profile-guided optimization,
   whose inlining makes a level cost 2.5 to 3 KiB on the dict and union shapes,
   and the dearest walk, explaining a value refused at the bound, needs between
-  832 and 896 KiB there. The release smoke runs the deepest walks on a 1 MiB
-  thread on every wheel it ships. A thread given less can run out before the bound does, and the
-  process ends with it; a thread an embedding host starts at the 512 KiB
-  pthread default on macOS is one. Give a thread that validates deep values
-  1 MiB or more. This holds on both the object path and the JSON path; an
+  828 and 844 KiB on the CPython 3.12 wheel. The release smoke runs the
+  deepest walks on a 1 MiB thread on every wheel it ships. A thread given less
+  can run out before the bound does, and the process ends with it; a thread an
+  embedding host starts at the 512 KiB pthread default on macOS is one. Give a
+  thread that validates deep values 1 MiB or more. This holds on both the object path and the JSON path; an
   over-deep JSON document is rejected by the parser as `json_invalid`.
 
     The parser has a bound of its own — a couple of hundred levels of arrays and

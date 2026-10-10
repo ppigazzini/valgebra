@@ -112,7 +112,7 @@ pub(super) fn scalar_member(
     room: bool,
 ) -> Option<bool> {
     let kind = scalar_of(schema)?;
-    Some(room && !ctx.signals.fatal_seen.get() && scalar_admits(kind, value))
+    Some(room && !ctx.state.signals.fatal_seen.get() && scalar_admits(kind, value))
 }
 
 /// The scalar kind every position of a sequence takes, with the schema it is
@@ -186,7 +186,7 @@ pub(super) fn admitted_quietly(schema: &Schema, value: &Value<'_, '_>, ctx: Ctx<
                 return false;
             };
             ctx.room_to_descend()
-                && !ctx.signals.fatal_seen.get()
+                && !ctx.state.signals.fatal_seen.get()
                 && members.iter().all(|m| scalar_of(m).is_some())
                 && scalar_union_admits(members, value)
         }
@@ -690,9 +690,9 @@ fn order_bound(
 /// The answer is reached without the message: a constraint reads its operand
 /// and nothing it would name, and [`explained`] builds what a failure says only
 /// once a walk that explains has one to record. The context is read through the
-/// frame, never copied out of it: it is thirteen words, and a copy handed by
-/// value to a function left out of line is written to the stack once per
-/// constraint, on the path every passing value takes.
+/// frame, never copied out of it: it is seven words, and a copy handed by value
+/// to a function left out of line is written to the stack once per constraint,
+/// on the path every passing value takes.
 fn check_constraint(
     constraint: &Constraint,
     value: &Bound<'_, PyAny>,
@@ -744,7 +744,7 @@ fn check_constraint(
             // belongs; answering "no match" there refutes an inclusion that
             // holds. `a_literal_is_asked_of_a_pattern_the_probe_compiles_itself`
             // holds the case.
-            let regexes = frame.ctx.regexes;
+            let regexes = &frame.ctx.index.regexes;
             let matched = value
                 .cast::<PyString>()
                 .ok()

@@ -1,28 +1,19 @@
 use super::{
     Ctx, Entered, FIRST_TRAIL, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, Trail, WalkMode, WalkState,
 };
+use crate::check::ValidatorIndex;
 use pyo3::exceptions::PyKeyboardInterrupt;
-use rustc_hash::FxHashMap;
 
 /// Build a context over an empty validator. Only the depth counter is read
 /// here, and it is the one piece of the context that needs no interpreter:
 /// a `Cell<usize>` and the guard that returns a level to it.
 fn with_ctx(state: &WalkState, run: impl FnOnce(Ctx<'_>)) {
-    let records = FxHashMap::default();
-    let attrs = FxHashMap::default();
-    let unions = FxHashMap::default();
-    let regexes = FxHashMap::default();
+    let index = ValidatorIndex::default();
     run(Ctx {
         pool: &[],
         defs: &[],
-        records: &records,
-        attrs: &attrs,
-        unions: &unions,
-        regexes: &regexes,
-        guard: &state.guard,
-        depth: &state.depth,
-        fatal: &state.fatal,
-        signals: &state.signals,
+        index: &index,
+        state,
         mode: WalkMode::Fast,
     });
 }

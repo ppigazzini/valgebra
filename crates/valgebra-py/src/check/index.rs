@@ -196,9 +196,25 @@ pub(crate) fn compile_pattern(pattern: &str) -> Result<Regex, regex::Error> {
 /// and reused across calls.
 #[derive(Default)]
 pub(crate) struct ValidatorIndex {
+    /// Per-record declared-field lookups, keyed by the address of each record's
+    /// `fields` buffer. The keyed-map fast path reads it instead of rebuilding
+    /// the name map on every call; a node absent from it falls back to building
+    /// the map.
     pub(crate) records: RecordIndex,
+    /// Per-attribute-schema interned names. The attribute walk hands these to
+    /// `getattr` instead of building a fresh `PyString` per attribute per value.
     pub(crate) attrs: AttrsIndex,
+    /// Per-union value sets for unions whose members are all literals, keyed by
+    /// the address of the union's members buffer. It answers only for an exact
+    /// int or str value: the deciding walk takes its answer either way instead
+    /// of scanning every branch, and the explaining walk takes only its yes, for
+    /// the elements of a list of the union, and walks every other element. Any
+    /// other case (a non-literal union, a value of another type, a JSON value)
+    /// falls back to the linear scan.
     pub(crate) unions: UnionIndex,
+    /// Compiled string patterns, keyed by the address of the pattern's own
+    /// text in the schema; the refinement walk reads it for a `Regex(...)`
+    /// constraint instead of recompiling.
     pub(crate) regexes: RegexIndex,
 }
 

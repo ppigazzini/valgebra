@@ -326,18 +326,11 @@ impl Validator {
         state: &'a WalkState,
         mode: WalkMode,
     ) -> Ctx<'a> {
-        let index = self.index(py);
         Ctx {
             pool: &self.literals,
             defs: &self.definitions,
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            signals: &state.signals,
+            index: self.index(py),
+            state,
             mode,
         }
     }
