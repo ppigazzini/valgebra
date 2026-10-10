@@ -1002,6 +1002,14 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   eight-element list costs 26% more for the table, a homogeneous tuple of
   `int | None` 26% more, and `--binding-nullable` reads 6.8% dearer on CPython
   3.12, where the member test the table replaces is already inlined.
+- **Remembering a string's length across a refinement's bounds**:
+  `Annotated[str, MinLen(1), MaxLen(64)]` reads the length once for each
+  bound, and a length kept for the second costs a list of a hundred such
+  strings 11.6 to 15.5% fewer instructions on CPython 3.14. Kept as a
+  parameter of the bound check, reset where the walk runs code, or keyed by
+  the value's address, it costs `--binding-refined` 2.0 to 4.3% more; read in
+  one pass over the run of length bounds, it costs that shape nothing and the
+  list of strings 12% more.
 - **A replacement global allocator**: up to 28% cheaper on the JSON shapes and
   12% dearer on the call boundary, past the gate's ceiling, for a C dependency
   on every wheel target.
