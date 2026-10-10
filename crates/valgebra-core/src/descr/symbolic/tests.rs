@@ -1,5 +1,6 @@
 use super::{Edge, Guard, MAX_EDGES, MAX_ROW, MAX_STATES, SymbolicDfa};
 use crate::descr::integers::IntSet;
+use crate::descr::lattice_tests::Algebra;
 use crate::verdict::Verdict;
 use proptest::prelude::*;
 
@@ -57,6 +58,19 @@ fn universe() -> Vec<Vec<i64>> {
 fn agree_on_sequences(a: &SymbolicDfa<IntSet>, b: &SymbolicDfa<IntSet>) -> bool {
     universe().iter().all(|w| a.holds(w) == b.holds(w))
 }
+
+/// The sequence languages' operations, as the shared laws ask them, compared
+/// against the sequences: the canonical form is earned only where the guards
+/// can answer every meet, so a law held by `==` alone would be a claim about
+/// the minimisation.
+const SEQUENCES: Algebra<SymbolicDfa<IntSet>> = Algebra {
+    join: SymbolicDfa::union,
+    meet: SymbolicDfa::intersect,
+    complement: SymbolicDfa::complement,
+    same: agree_on_sequences,
+    holds_nothing: SymbolicDfa::is_empty,
+    holds_everything: |a| agree_on_sequences(a, &SymbolicDfa::all()),
+};
 
 /// The guards the generator draws from: two overlapping sets and two
 /// disjoint ones, so a product has meets that are empty and meets that are
@@ -122,47 +136,21 @@ proptest! {
         b in language(),
         c in language(),
     ) {
-        let joined = a.union(&b);
-        prop_assert!(matches(joined.as_ref(), b.union(&a).as_ref()));
-        let met = a.intersect(&b);
-        prop_assert!(matches(met.as_ref(), b.intersect(&a).as_ref()));
-        prop_assert!(matches(
-            joined.as_ref().and_then(|ab| ab.union(&c)).as_ref(),
-            b.union(&c).as_ref().and_then(|bc| a.union(bc)).as_ref()
-        ));
-        prop_assert!(matches(
-            met.as_ref().and_then(|ab| ab.intersect(&c)).as_ref(),
-            b.intersect(&c).as_ref().and_then(|bc| a.intersect(bc)).as_ref()
-        ));
-        if let Some(inner) = &met {
-            prop_assert!(matches(a.union(inner).as_ref(), Some(&a)));
-        }
-        if let Some(inner) = &joined {
-            prop_assert!(matches(a.intersect(inner).as_ref(), Some(&a)));
-        }
+        SEQUENCES.lattice_laws(&a, &b, &c)?;
+        // The machine refuses alike whichever side comes first: a product
+        // explores the same pairs of states in either order.
+        prop_assert_eq!(a.union(&b).is_some(), b.union(&a).is_some());
+        prop_assert_eq!(a.intersect(&b).is_some(), b.intersect(&a).is_some());
     }
 
     // THEORY: a-sequence-is-a-language
     /// The complement laws, and De Morgan both ways.
     #[test]
     fn the_complement_laws_hold_of_the_sequences(a in language(), b in language()) {
-        prop_assert!(
-            a.intersect(&a.complement())
-                .is_some_and(|met| met.is_empty())
-        );
-        prop_assert!(matches(
-            a.union(&a.complement()).as_ref(),
-            Some(&SymbolicDfa::all())
-        ));
-        prop_assert!(agree_on_sequences(&a.complement().complement(), &a));
-        prop_assert!(matches(
-            a.union(&b).map(|u| u.complement()).as_ref(),
-            a.complement().intersect(&b.complement()).as_ref()
-        ));
-        prop_assert!(matches(
-            a.intersect(&b).map(|m| m.complement()).as_ref(),
-            a.complement().union(&b.complement()).as_ref()
-        ));
+        SEQUENCES.complement_laws(&a, &b)?;
+        // And a language met or joined with its own complement builds.
+        prop_assert!(a.intersect(&a.complement()).is_some());
+        prop_assert!(a.union(&a.complement()).is_some());
     }
 
     /// An empty verdict is contradicted by no sequence, and a sequence in
@@ -205,15 +193,6 @@ proptest! {
                 prop_assert!(guarded <= 1, "state {} letter {}", state, letter);
             }
         }
-    }
-}
-
-/// Whether two optional languages both exist and hold the same sequences.
-fn matches(a: Option<&SymbolicDfa<IntSet>>, b: Option<&SymbolicDfa<IntSet>>) -> bool {
-    match (a, b) {
-        (Some(a), Some(b)) => agree_on_sequences(a, b),
-        (None, None) => true,
-        _ => false,
     }
 }
 

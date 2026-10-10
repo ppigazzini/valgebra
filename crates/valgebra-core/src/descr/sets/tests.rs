@@ -2,6 +2,7 @@ use super::{MAX_LINES, Members, SetLattice};
 use crate::descr::Descr;
 use crate::descr::budget;
 use crate::descr::integers::IntSet;
+use crate::descr::lattice_tests::Algebra;
 use crate::descr::values::Values;
 use crate::kind::Kind;
 use crate::verdict::Verdict;
@@ -39,6 +40,17 @@ fn same(a: &SetLattice<IntSet>, b: &SetLattice<IntSet>) -> bool {
     SETS.iter()
         .all(|members| a.holds(members) == b.holds(members))
 }
+
+/// The set lattice's operations, as the shared laws ask them, compared
+/// against the sets: a union of powerset lines is not canonical.
+const POWERSETS: Algebra<SetLattice<IntSet>> = Algebra {
+    join: SetLattice::union,
+    meet: SetLattice::intersect,
+    complement: SetLattice::complement,
+    same,
+    holds_nothing: SetLattice::is_empty,
+    holds_everything: |a| same(a, &SetLattice::all()),
+};
 
 /// Lattices over the integer sets whose own laws are already held.
 fn lattice() -> impl Strategy<Value = SetLattice<IntSet>> {
@@ -103,53 +115,14 @@ proptest! {
     #[test]
     fn the_lattice_laws_hold_of_the_sets(a in lattice(), b in lattice(), c in lattice()) {
         let _allowance = budget::law();
-        let (join, meet) = (
-            |x: &SetLattice<IntSet>, y: &SetLattice<IntSet>| x.union(y),
-            |x: &SetLattice<IntSet>, y: &SetLattice<IntSet>| x.intersect(y),
-        );
-        if let (Some(ab), Some(ba)) = (join(&a, &b), join(&b, &a)) {
-            prop_assert!(same(&ab, &ba), "join commutes");
-        }
-        if let (Some(ab), Some(ba)) = (meet(&a, &b), meet(&b, &a)) {
-            prop_assert!(same(&ab, &ba), "meet commutes");
-        }
-        if let (Some(bc), Some(ab)) = (join(&b, &c), join(&a, &b))
-            && let (Some(left), Some(right)) = (join(&a, &bc), join(&ab, &c))
-        {
-            prop_assert!(same(&left, &right), "join associates");
-        }
-        if let (Some(bc), Some(ac)) = (join(&b, &c), meet(&a, &c))
-            && let (Some(ab), Some(left)) = (meet(&a, &b), meet(&a, &bc))
-            && let Some(right) = ab.union(&ac)
-        {
-            prop_assert!(same(&left, &right), "meet distributes over join");
-        }
+        POWERSETS.lattice_laws(&a, &b, &c)?;
     }
 
     /// The complement laws, and De Morgan both ways.
     #[test]
     fn the_complement_laws_hold_of_the_sets(a in lattice(), b in lattice()) {
         let _allowance = budget::law();
-        let not_a = a.complement();
-        {
-            let not_a = &not_a;
-            if let Some(met) = a.intersect(not_a) {
-                prop_assert!(met.is_empty(), "a set is in one of the two");
-            }
-            if let Some(joined) = a.union(not_a) {
-                prop_assert!(same(&joined, &SetLattice::all()), "and in one of them");
-            }
-            prop_assert!(same(&not_a.complement(), &a), "twice is nothing");
-        }
-        {
-            let (not_a, not_b) = (&not_a, &b.complement());
-            if let (Some(joined), Some(met)) = (a.union(&b), not_a.intersect(not_b)) {
-                prop_assert!(same(&joined.complement(), &met), "de Morgan one way");
-            }
-            if let (Some(met), Some(joined)) = (a.intersect(&b), not_a.union(not_b)) {
-                prop_assert!(same(&met.complement(), &joined), "and the other");
-            }
-        }
+        POWERSETS.complement_laws(&a, &b)?;
     }
 
     /// Emptiness is a decision about the sets, not about the form.

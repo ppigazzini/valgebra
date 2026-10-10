@@ -1,4 +1,5 @@
 use super::IntervalSet;
+use crate::descr::lattice_tests::Algebra;
 use proptest::prelude::*;
 
 /// The integers a law is checked over.
@@ -13,6 +14,17 @@ const WINDOW: core::ops::RangeInclusive<i64> = -12..=12;
 fn same(a: &IntervalSet, b: &IntervalSet) -> bool {
     WINDOW.into_iter().all(|n| a.holds(n) == b.holds(n))
 }
+
+/// The interval sets' operations, as the shared laws ask them. None of them
+/// refuses.
+const INTERVALS: Algebra<IntervalSet> = Algebra {
+    join: |a, b| Some(a.union(b)),
+    meet: |a, b| Some(a.intersect(b)),
+    complement: IntervalSet::complement,
+    same,
+    holds_nothing: IntervalSet::is_empty,
+    holds_everything: |a| same(a, &IntervalSet::all()),
+};
 
 /// Sets built from bounded endpoints, so agreement on the window is
 /// agreement everywhere: no generated set has a feature outside it.
@@ -53,35 +65,13 @@ proptest! {
         b in interval_set(),
         c in interval_set(),
     ) {
-        prop_assert!(same(&a.union(&b), &b.union(&a)));
-        prop_assert!(same(&a.intersect(&b), &b.intersect(&a)));
-        prop_assert!(same(&a.union(&b).union(&c), &a.union(&b.union(&c))));
-        prop_assert!(same(
-            &a.intersect(&b).intersect(&c),
-            &a.intersect(&b.intersect(&c))
-        ));
-        prop_assert!(same(&a.union(&a.intersect(&b)), &a));
-        prop_assert!(same(&a.intersect(&a.union(&b)), &a));
-        prop_assert!(same(
-            &a.intersect(&b.union(&c)),
-            &a.intersect(&b).union(&a.intersect(&c))
-        ));
+        INTERVALS.lattice_laws(&a, &b, &c)?;
     }
 
     /// The complement laws, and De Morgan both ways.
     #[test]
     fn the_complement_laws_hold_of_the_integers(a in interval_set(), b in interval_set()) {
-        prop_assert!(a.intersect(&a.complement()).is_empty());
-        prop_assert!(same(&a.union(&a.complement()), &IntervalSet::all()));
-        prop_assert!(same(&a.complement().complement(), &a));
-        prop_assert!(same(
-            &a.union(&b).complement(),
-            &a.complement().intersect(&b.complement())
-        ));
-        prop_assert!(same(
-            &a.intersect(&b).complement(),
-            &a.complement().union(&b.complement())
-        ));
+        INTERVALS.complement_laws(&a, &b)?;
     }
 
     /// Holding the same integers *is* being equal, which is what the merging

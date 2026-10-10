@@ -512,6 +512,19 @@ each case is checked against a fixed spread as well -- `nan`, the infinities,
 `-0.0`, the ends of the integer carriers, a newline in text and in bytes -- and
 a disagreement about one of those is a failure rather than a flake.
 
+**The set representations' laws are one body.** `descr/lattice_tests.rs`
+states them once: both operations idempotent, commutative and associative, each
+absorbing the other and distributing over the other, and a set and its
+complement disjoint, covering, undone by a second complement and related by De
+Morgan both ways. Each representation's suite asks that body with its own
+operations and its own reading of one set -- equality where its form is
+canonical (the word automata, the descriptors), agreement over a universe of
+values where a bound or a polarity gives one set two spellings -- so no
+representation is held to fewer laws than another. A law with a term that
+refused past a bound is not asked, since a bound may turn an answer into a
+refusal and never into another answer; the canonical representations hold, in
+rows of their own, that a refusal is the same in both orders.
+
 **The lattice laws draw their schemas rather than sampling a list.** A law held
 over a fixed spread of atoms and containers is a law about that spread. The
 strategy builds around a drawn element, so a refinement can sit inside a list,

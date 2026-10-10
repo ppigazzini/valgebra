@@ -1,5 +1,6 @@
 use super::{Field, Values};
 use crate::descr::integers::IntSet;
+use crate::descr::lattice_tests::Algebra;
 use crate::descr::symbolic::Guard;
 use crate::verdict::Verdict;
 use proptest::prelude::*;
@@ -123,6 +124,18 @@ fn same(a: &Values<IntSet>, b: &Values<IntSet>) -> bool {
     POINTS.iter().all(|n| a.holds(n) == b.holds(n))
 }
 
+/// The value sets' operations, as the shared laws ask them, compared against
+/// the points: `Every` and a guard naming every integer are one set and two
+/// forms, which is the whole reason the top is carried beside.
+const VALUES: Algebra<Values<IntSet>> = Algebra {
+    join: Values::join,
+    meet: Values::meet,
+    complement: Values::complement,
+    same,
+    holds_nothing: |a| POINTS.iter().all(|n| !a.holds(n)),
+    holds_everything: |a| POINTS.iter().all(|n| a.holds(n)),
+};
+
 /// Value sets whose own laws the integer component already holds.
 fn values() -> impl Strategy<Value = Values<IntSet>> {
     let leaf = prop_oneof![
@@ -157,50 +170,14 @@ proptest! {
     fn the_lattice_laws_hold_of_the_values(
         a in values(), b in values(), c in values()
     ) {
-        if let (Some(ab), Some(ba)) = (a.join(&b), b.join(&a)) {
-            prop_assert!(same(&ab, &ba), "join commutes");
-        }
-        if let (Some(ab), Some(ba)) = (a.meet(&b), b.meet(&a)) {
-            prop_assert!(same(&ab, &ba), "meet commutes");
-        }
-        if let (Some(bc), Some(ab)) = (b.join(&c), a.join(&b))
-            && let (Some(left), Some(right)) = (a.join(&bc), ab.join(&c))
-        {
-            prop_assert!(same(&left, &right), "join associates");
-        }
-        if let (Some(bc), Some(ac)) = (b.join(&c), a.meet(&c))
-            && let (Some(ab), Some(left)) = (a.meet(&b), a.meet(&bc))
-            && let Some(right) = ab.join(&ac)
-        {
-            prop_assert!(same(&left, &right), "meet distributes over join");
-        }
+        VALUES.lattice_laws(&a, &b, &c)?;
     }
 
     // THEORY: each-kind-is-closed
     /// The complement laws, and De Morgan both ways.
     #[test]
     fn the_complement_laws_hold_of_the_values(a in values(), b in values()) {
-        let not_a = a.complement();
-        if let Some(met) = a.meet(&not_a) {
-            prop_assert!(
-                POINTS.iter().all(|n| !met.holds(n)),
-                "a value is in one of the two"
-            );
-        }
-        if let Some(joined) = a.join(&not_a) {
-            prop_assert!(
-                POINTS.iter().all(|n| joined.holds(n)),
-                "and in one of them"
-            );
-        }
-        prop_assert!(same(&not_a.complement(), &a), "twice is nothing");
-
-        if let (Some(met), Some(joined)) = (a.meet(&b), a.complement().join(&b.complement())) {
-            prop_assert!(same(&met.complement(), &joined), "de Morgan, one way");
-        }
-        if let (Some(joined), Some(met)) = (a.join(&b), a.complement().meet(&b.complement())) {
-            prop_assert!(same(&joined.complement(), &met), "and the other");
-        }
+        VALUES.complement_laws(&a, &b)?;
     }
 }
 

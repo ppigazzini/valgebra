@@ -2,6 +2,7 @@ use super::{MAX_ATOMS, RecordLattice};
 use crate::descr::budget;
 use crate::descr::classes::{Attributes, Class, Hook, Member};
 use crate::descr::integers::IntSet;
+use crate::descr::lattice_tests::Algebra;
 use crate::verdict::Verdict;
 use proptest::prelude::*;
 use std::sync::Arc;
@@ -157,6 +158,17 @@ fn same(a: &RecordLattice<IntSet>, b: &RecordLattice<IntSet>) -> bool {
         .all(|object| holds(a, object) == holds(b, object))
 }
 
+/// The record lattice's operations, as the shared laws ask them, compared
+/// against the objects: a union of atoms is not canonical.
+const OBJECTS: Algebra<RecordLattice<IntSet>> = Algebra {
+    join: RecordLattice::union,
+    meet: RecordLattice::intersect,
+    complement: RecordLattice::complement,
+    same,
+    holds_nothing: RecordLattice::is_empty,
+    holds_everything: |a| same(a, &RecordLattice::all()),
+};
+
 fn lattice() -> impl Strategy<Value = RecordLattice<IntSet>> {
     let leaf = prop_oneof![
         Just(RecordLattice::empty()),
@@ -207,44 +219,14 @@ proptest! {
         c in lattice(),
     ) {
         let _allowance = budget::law();
-        if let (Some(ab), Some(ba)) = (a.union(&b), b.union(&a)) {
-            prop_assert!(same(&ab, &ba), "join commutes");
-        }
-        if let (Some(ab), Some(ba)) = (a.intersect(&b), b.intersect(&a)) {
-            prop_assert!(same(&ab, &ba), "meet commutes");
-        }
-        if let (Some(bc), Some(ab)) = (b.union(&c), a.union(&b))
-            && let (Some(left), Some(right)) = (a.union(&bc), ab.union(&c))
-        {
-            prop_assert!(same(&left, &right), "join associates");
-        }
-        if let (Some(bc), Some(ac)) = (b.union(&c), a.intersect(&c))
-            && let (Some(ab), Some(left)) = (a.intersect(&b), a.intersect(&bc))
-            && let Some(right) = ab.union(&ac)
-        {
-            prop_assert!(same(&left, &right), "meet distributes over join");
-        }
+        OBJECTS.lattice_laws(&a, &b, &c)?;
     }
 
     /// The complement laws, and De Morgan both ways.
     #[test]
     fn the_complement_laws_hold_of_the_objects(a in lattice(), b in lattice()) {
         let _allowance = budget::law();
-        let not_a = a.complement();
-        if let Some(met) = a.intersect(&not_a) {
-            prop_assert!(met.is_empty(), "an object is in one of the two");
-        }
-        if let Some(joined) = a.union(&not_a) {
-            prop_assert!(same(&joined, &RecordLattice::all()), "and in one of them");
-        }
-        prop_assert!(same(&not_a.complement(), &a), "twice is nothing");
-        let not_b = b.complement();
-        if let (Some(joined), Some(met)) = (a.union(&b), not_a.intersect(&not_b)) {
-            prop_assert!(same(&joined.complement(), &met), "de Morgan one way");
-        }
-        if let (Some(met), Some(joined)) = (a.intersect(&b), not_a.union(&not_b)) {
-            prop_assert!(same(&met.complement(), &joined), "and the other");
-        }
+        OBJECTS.complement_laws(&a, &b)?;
     }
 
     /// Emptiness is a decision about the objects, not about the form.
