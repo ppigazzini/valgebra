@@ -170,8 +170,8 @@ impl Summand for Line {
         Line::complement(self, whole)
     }
 
-    /// Drop the lines proved empty and merge the ones that differ only in
-    /// structure.
+    /// Drop the lines proved empty, merge the ones that differ only in
+    /// structure, and put the rest in order, each once.
     ///
     /// Merging is distributivity, and it is what keeps a kind that constrains
     /// no object at *one* line: `(s₁ ∧ o) ∨ (s₂ ∧ o)` is `(s₁ ∨ s₂) ∧ o`, so two
@@ -211,6 +211,8 @@ impl Summand for Line {
             kept += 1;
         }
         lines.truncate(kept);
+        lines.sort();
+        lines.dedup();
         Some(lines)
     }
 }

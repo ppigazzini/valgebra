@@ -45,15 +45,17 @@ pub(super) trait Summand: Clone + Ord + Sized {
     /// The values of the universe this summand does not hold, as a union.
     fn complement(&self, within: Self::Within) -> Self::Complement;
 
-    /// A list a meet or a union has just built, with the summands proved to
-    /// hold nothing dropped and the rest in the shape this lattice compares
-    /// them in, or `None` where bringing one into that shape refuses.
+    /// A list a meet or a union has just built, in the lattice's canonical
+    /// form: the summands proved to hold nothing dropped, the rest each in
+    /// the shape this lattice compares them in, each once, and in order. `None`
+    /// where bringing one into that shape refuses.
     ///
-    /// The lattice's own reading of what makes two spellings of a union one:
-    /// each lattice has its own canonical summand, and some merge two
-    /// summands into one. [`tidy`] sorts what this returns, removes the
-    /// repeats and holds it to [`MAX`](Summand::MAX), the same three steps for
-    /// every lattice.
+    /// The lattice's own reading of what makes two spellings of a union one,
+    /// which is why it is not written once: each lattice has its own canonical
+    /// summand, one merges two summands into one, and "each once" is by
+    /// position after a sort for a summand whose equality agrees with its
+    /// order and by equality for one whose guard's equality is coarser.
+    /// [`tidy`] holds what this returns to [`MAX`](Summand::MAX).
     fn compacted(summands: Vec<Self>) -> Option<Vec<Self>>;
 }
 
@@ -134,6 +136,25 @@ impl<S: Summand> PolarUnion<S> {
     /// answer and nothing is expanded.
     pub(super) fn holds(&self, held_by: impl FnMut(&S) -> bool) -> bool {
         self.summands.iter().any(held_by) != self.negated
+    }
+
+    /// The values in either, or `None` past the bound.
+    ///
+    /// A negated side is joined through De Morgan rather than rebuilt: `A ∪ B`
+    /// is `¬(¬A ∩ ¬B)`, and the meet is the operation that can drop a summand
+    /// mid-way. Expanding the negation first asks the bound about a union that
+    /// is only an intermediate, and a refusal there refuses a join whose
+    /// answer fits.
+    pub(super) fn union(&self, other: &Self, within: S::Within) -> Option<Self> {
+        if self.negated || other.negated {
+            let met = self
+                .complement(within)
+                .intersect(&other.complement(within), within)?;
+            return Some(met.complement(within));
+        }
+        let mut summands = self.summands.clone();
+        summands.extend(other.summands.iter().cloned());
+        Some(Self::of(tidy(summands)?))
     }
 
     /// The values in both, or `None` past the bound or where a summand's meet
@@ -237,8 +258,8 @@ pub(super) fn product<S: Summand>(left: &[S], right: &[S]) -> Option<Vec<S>> {
     tidy(summands)
 }
 
-/// Compact a list the lattice's own way, put it in order, drop the repeats,
-/// and refuse a union past the bound.
+/// Bring a list into the lattice's canonical form, and refuse a union past
+/// the bound.
 ///
 /// Dropping a summand proved empty is not an optimisation: it contributes no
 /// value to the union, so removing it leaves the same set and keeps the count
@@ -246,8 +267,6 @@ pub(super) fn product<S: Summand>(left: &[S], right: &[S]) -> Option<Vec<S>> {
 /// because it may yet hold a value. The order is what makes two equal unions
 /// compare equal, as far as equality here goes.
 pub(super) fn tidy<S: Summand>(summands: Vec<S>) -> Option<Vec<S>> {
-    let mut kept = S::compacted(summands)?;
-    kept.sort();
-    kept.dedup();
+    let kept = S::compacted(summands)?;
     (kept.len() <= S::MAX).then_some(kept)
 }
