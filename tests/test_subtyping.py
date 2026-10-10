@@ -16,6 +16,7 @@ import annotated_types as at
 from hypothesis import given
 from hypothesis import strategies as st
 
+from _edges import EDGES
 from valgebra import Validator, complement, intersection, recursive, union
 
 
@@ -107,6 +108,8 @@ VALUES = [
     {"value": 1, "next": None},
     {"value": 1, "next": {"value": 2, "next": None}},
     object(),
+    # The edges of the scalar kinds, which a drawn value reaches only by luck.
+    *EDGES,
 ]
 
 specs = st.sampled_from(SPECS)

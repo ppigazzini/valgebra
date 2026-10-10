@@ -18,6 +18,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from _edges import EDGES
 from valgebra import (
     Validator,
     anything,
@@ -86,22 +87,8 @@ VALUES = [
     {},
     (1, "a"),
     (1, 2, 3),
-    # The boundaries, which a drawn value reaches only by luck. Each is a value
-    # some operation reads differently from its neighbours: `nan` equals
-    # nothing including itself, the infinities bound every comparison, `-0.0`
-    # equals `0.0` and hashes with it, the two integers sit at the ends of the
-    # carriers a lowering uses, and a newline is where a pattern's `.` and `$`
-    # part company.
-    float("nan"),
-    float("inf"),
-    float("-inf"),
-    -0.0,
-    2**53 + 1,
-    -(2**63),
-    2**63 - 1,
-    2**70,
-    "\n",
-    "a\nb",
+    # The edges of the scalar kinds, which a drawn value reaches only by luck.
+    *EDGES,
     # The empty tuple, and a field holding an empty container: the values that
     # part `nothing` from a tuple of tuples, or one record from another, and a
     # drawn value almost never builds. Without them a fifth of wrongly stated

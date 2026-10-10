@@ -35,6 +35,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from _edges import EDGES
 from valgebra import (
     Regex,
     ValidationError,
@@ -765,21 +766,9 @@ _NODES_DRAWN: dict[str, str] = {
 #: the draw is a boundary the suite reaches on some runs and not others, and a
 #: disagreement about `nan` is not a thing to learn from a flake.
 BOUNDARIES: list[object] = [
-    float("nan"),
-    float("inf"),
-    float("-inf"),
-    -0.0,
+    *EDGES,
     0.0,
-    2**53 + 1,
-    -(2**63),
-    2**63 - 1,
-    2**70,
     "",
-    "\n",
-    "a\nb",
-    # A lone surrogate: a `str` of one character with no text, so every kind
-    # holds it and no pattern matches it.
-    "\ud800",
     # One unfolding of a record-bodied fixpoint, and the same with a key the
     # record does not declare. A drawn value reaches the first by luck and the
     # second by none, and the pair is what separates "the field reads" from

@@ -53,6 +53,34 @@ would otherwise say again, and a copy is how the first one drifts.
   and not a placeholder.
 - **`_deferred.py` holds the classes whose annotations are strings**, because
   `from __future__ import annotations` applies to a whole module.
+- **`_edges.py` holds the edges of the scalar kinds**: `nan`, the infinities,
+  `-0.0`, the integers at the ends of the carriers, two newlines and a lone
+  surrogate. The denotation, law and subtyping suites ask every relation of
+  them beside their own values and their draws. A shared spread is a shared
+  blind spot, so it holds only what each of those suites would otherwise copy,
+  and each keeps the values its own schemas are built from.
+
+Two more are refused, each by a test:
+
+- **One table of representatives.** Two ledgers each hold a dictionary named
+  `REPRESENTATIVES`, and they mean different things. The closure ledger's are
+  the algebra's named representatives, such as `Nothing`, `Bool` and
+  `Intersection`, each with the derivation it stands for. The relation
+  ledger's are one schema per variant, the pairs it decides. That second table
+  also differs from the node matrix's on purpose. The node matrix's
+  intersection, `int & ~str`, is the set `int`, and the relation ledger
+  refuses two columns that are one set:
+  `test_the_representatives_are_that_many_different_sets` fails on a merged
+  table.
+- **A `_floor.py` of named release gates.** A name such as `needs_311` can
+  stand in for a `skipif` decorator, but not for an `if sys.version_info >=
+  (3, 11):` block guarding an import. `test_floor_names.py` reads the
+  comparison itself, so an import under `if HAS_311:` reads as one the floor
+  makes, and
+  `test_no_module_reads_a_name_outside_the_releases_that_have_it` fails. The
+  decorators would still go one at a time when the floor moves, because
+  `test_version_gates.py` refuses a gate with no lane below it, so a name
+  would save the move nothing.
 
 ## The layers, and what each can see
 
