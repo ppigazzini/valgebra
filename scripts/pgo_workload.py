@@ -64,6 +64,8 @@ TRAINED: dict[str, tuple[str, ...]] = {
     "decision-refute": ("_relations",),
     "decision-repeat": ("_relations",),
     "decision-matrix": ("_relations",),
+    "decision-rules": ("_relations",),
+    "decision-sets": ("_relations",),
     "binding": ("_sequences",),
     "binding-boundary": ("_scalars",),
     "binding-record": ("_records",),

@@ -484,13 +484,13 @@ def test_every_binding_shape_has_iterations_and_a_budget() -> None:
             assert budget.get(checksum, 0) > 0, f"{mode} records no {checksum}"
 
 
-def _bench_steps() -> list[str]:
-    """Collect the bench job's steps that measure a binding shape."""
+def _bench_steps(prefix: str = "--binding") -> list[str]:
+    """Collect the bench job's steps that pass a flag starting with `prefix`."""
     workflow = yaml.safe_load(
         (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     )
     steps = workflow["jobs"]["bench"]["steps"]
-    return [step["run"] for step in steps if "--binding" in step.get("run", "")]
+    return [step["run"] for step in steps if prefix in step.get("run", "")]
 
 
 def test_every_binding_shape_is_measured_by_a_lane() -> None:
@@ -511,6 +511,21 @@ def test_every_binding_shape_is_measured_by_a_lane() -> None:
         f"binding shapes with a recorded count that no bench step measures: "
         f"{missing}. Add the flag to the binding gate step of the bench job in "
         f".github/workflows/ci.yml, or drop the shape."
+    )
+
+
+def test_every_decision_shape_is_measured_by_a_lane() -> None:
+    """A decision shape with a record and no flag in a step is a count nothing reads."""
+    passed = {
+        flag[2:]
+        for step in _bench_steps(prefix="--decision")
+        for flag in re.findall(r"--decision[a-z-]*", step)
+    }
+    shapes = {mode for mode in gate.MODES if mode.startswith("decision")}
+    missing = sorted(shapes - passed)
+    assert not missing, (
+        f"decision shapes with a recorded count that no bench step measures: "
+        f"{missing}. Add the flag to the decision gate step of the bench job."
     )
 
 

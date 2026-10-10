@@ -64,5 +64,10 @@
   "_binding_explain_list_comment": "`validate` over ten thousand integers whose last element is a string: the explaining walk over a homogeneous list that is refused, which every other list shape measured accepting. Recorded on uv's CPython 3.14, the interpreter the bench job runs, as the walk budget is and for the walk's reason: 3.14 reads a list of integers in place, one pass that finds and reports the failure. Below 3.14 -- and on the free-threaded builds -- the explaining reader takes a snapshot, stops at the failure in it, and reads the list in place from there; that reading is compiled out on 3.14, so this budget does not see it. On CPython 3.12 the same shape counts 423,820,525 instructions, and 737,158,525 read in place from the start, which is what `perf_gate.py --against` on 3.12 reads for a change to it.",
   "binding_explain_list_workload_irefs": 332245462,
   "_binding_json_bounded_comment": "The JSON document of two hundred open records, each under `MaxLen(8)`: a length bound on a parsed object counts the keys the object holds, which a parsed object may repeat and the dict `json.loads` builds from it does not, and no shape without a bound on a mapping reads that count. Recorded on uv's CPython 3.14, the interpreter the bench job runs.",
-  "binding_json_bounded_workload_irefs": 374748500
+  "binding_json_bounded_workload_irefs": 374748500,
+  "_decision_sets_comment": "One corpus of nine relations asked of the two deciders: `decision_rules` through the public relation, which the rules answer on every pair without reaching the sets, and `decision_sets` through the reading the relation takes where the rules decline -- each side lowered, the supertype complemented, the two met under the work allowance. The rules run the corpus twenty thousand times and the sets twenty, so the two checksums are one fold at two iteration counts, and the ratio of the counts per iteration is the gap the pages give between the deciders. The sets half allocates throughout, so it reads about a tenth higher under the gate's no-fastbin allocator than in a plain shell, and the rules half does not move. Re-record both with --decision-rules --decision-sets --update.",
+  "decision_rules_workload_checksum": 460000,
+  "decision_rules_workload_irefs": 93848165,
+  "decision_sets_workload_checksum": 460,
+  "decision_sets_workload_irefs": 179073272
 }

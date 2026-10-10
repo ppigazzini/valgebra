@@ -263,14 +263,17 @@ gate only catches what it exercises:
 - the **core** transformations — the constructors' normal form, the composition
   remap, the record transform;
 - the **decision** procedures (`--decision`, `--decision-refute`,
-  `--decision-repeat`, `--decision-matrix`) — subtyping, emptiness, equivalence;
-  `MODES` in `scripts/perf_gate.py` owns the list, and the first three are the
+  `--decision-repeat`, `--decision-matrix`, `--decision-rules`,
+  `--decision-sets`) — subtyping, emptiness, equivalence; `MODES` in
+  `scripts/perf_gate.py` owns the list, and the first three are the
   workloads one whose relations hold, one whose relations are refuted, and one
   whose goals repeat. The core workload never calls a decision, so without
   these the whole decision surface is unmeasured in both directions: neither
   what a new rule costs nor what a cheaper one saves. Three because a proof, a
   refutation and a repeated goal walk different paths, and a workload that
-  asks only for proofs holds a refuting rule to nothing;
+  asks only for proofs holds a refuting rule to nothing. The last two are one
+  example asked of the rules and of the sets, so a lowering made dearer or
+  cheaper reads on its own shape rather than as a share of the matrix's;
 - the **binding** shapes (`--binding`, `--binding-boundary`,
   `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-mapping`,
   `--binding-subclass`, `--binding-recursive`, `--binding-deep`,

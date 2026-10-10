@@ -22,16 +22,18 @@ not to flake is too wide to see a real 5% regression. The record is read in
 one place: a shape the base does not carry has no count to compare with, and
 is held to its recorded one inside that band instead. ``--update`` writes it.
 
-Three workloads, and thirty-two shapes across them:
+Three workloads, and thirty-four shapes across them:
 
 * The default **core** workload (`perf_workload`, pure Rust) measures the schema
   operations and is fully deterministic, so its recorded count carries the
   narrower band.
 * The **decision** workloads measure the three relations, which the core one
-  never calls, in four shapes: relations that hold (`--decision`), relations
+  never calls, in six shapes: relations that hold (`--decision`), relations
   that are refuted (`--decision-refute`), goals asked again
-  (`--decision-repeat`), and the pairs that reach the set representation
-  (`--decision-matrix`).
+  (`--decision-repeat`), the pairs that reach the set representation
+  (`--decision-matrix`), and one corpus asked of the rules
+  (`--decision-rules`) and of the sets (`--decision-sets`), whose two counts
+  are what a rule's answer saves over building the sets for it.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
   twenty-seven shapes: the membership walk (`--binding`), the call boundary
@@ -143,7 +145,14 @@ MISPREDICTS = re.compile(r"Mispredicts:\s*([\d,]+)")
 #: because cachegrind predicts an indirect branch by its last target, a model its
 #: manual calls older than the processors the lanes run on.
 BRANCH_MODES = frozenset(
-    {"decision", "decision-refute", "decision-repeat", "decision-matrix"}
+    {
+        "decision",
+        "decision-refute",
+        "decision-repeat",
+        "decision-matrix",
+        "decision-rules",
+        "decision-sets",
+    }
 )
 # Both workloads print one trailing line holding the checksum, bare or prefixed.
 CHECKSUM = re.compile(r"^(?:checksum=)?(\d+)$")
@@ -400,6 +409,8 @@ MODES = {
     "decision-refute": ("decision_refute_workload", "refuting decision workload"),
     "decision-repeat": ("decision_repeat_workload", "repeating decision workload"),
     "decision-matrix": ("decision_matrix_workload", "matrix decision workload"),
+    "decision-rules": ("decision_sets_workload", "relations asked of the rules"),
+    "decision-sets": ("decision_sets_workload", "relations asked of the sets"),
     "binding": ("binding_workload", "binding walk"),
     "binding-boundary": ("binding_workload", "binding call boundary"),
     "binding-record": ("binding_workload", "binding record walk"),
@@ -431,6 +442,13 @@ MODES = {
     "binding-nullable": ("binding_workload", "binding nullable element walk"),
     "binding-set": ("binding_workload", "binding set walk"),
 }
+
+#: The reading a core shape passes its example, for the two that share one.
+#:
+#: The rules and the sets are asked the same pairs, so the ratio of the two
+#: counts is a ratio over one question rather than over two corpora. One
+#: example holds the corpus, and the argument names which decider answers it.
+CORE_READINGS = {"decision-rules": "rules", "decision-sets": "sets"}
 
 #: The iteration pair each binding mode runs at.
 #: Iterations per shape, high and low, chosen so each measurement is a minute or
@@ -534,7 +552,8 @@ def measure_mode(
     if mode not in BINDING_SHAPES:
         build_workload(example, root, target)
         binary = (target or root / "target") / "release" / "examples" / example
-        return measure(binary, branches=mode in BRANCH_MODES)
+        reading = (CORE_READINGS[mode],) if mode in CORE_READINGS else ()
+        return measure(binary, *reading, branches=mode in BRANCH_MODES)
 
     shape = BINDING_SHAPES[mode]
     hi, lo = BINDING_ITERATIONS[mode]
