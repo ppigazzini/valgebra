@@ -26,14 +26,13 @@ import re
 
 import pytest
 
-from _tree import ROOT
+from _tree import ROOT, SCRIPTS, scripts
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
 
 CONTRIBUTING = ROOT / "CONTRIBUTING.md"
-SCRIPTS = ROOT / "scripts"
 HEADING = "## Contract inventory"
 
 
@@ -78,9 +77,7 @@ def test_every_gate_script_has_a_row() -> None:
     # check on its own. A script is listed where a cell names its path, not where
     # its name occurs: `gate.py` is a substring of `perf_gate.py`.
     named = set(re.findall(r"scripts/([\w.]+\.py)", _whole_table()))
-    unlisted = sorted(
-        script.name for script in SCRIPTS.glob("*.py") if script.name not in named
-    )
+    unlisted = sorted(script.name for script in scripts() if script.name not in named)
     assert not unlisted, (
         f"gate scripts with no row in the contract inventory: {unlisted}. "
         "Add a row naming what it promises and the command that reruns it."

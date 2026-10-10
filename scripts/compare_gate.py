@@ -65,22 +65,19 @@ not read as one that passed.
 
 from __future__ import annotations
 
-import argparse
 import json
 import sys
 import timeit
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, TypedDict
 
+from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments
+
 if TYPE_CHECKING:
+    import argparse
     from collections.abc import Callable, Sequence
 
-# Three outcomes, three exit codes; see the module docstring.
-EXIT_OK = 0
-EXIT_FAIL = 1
-EXIT_CANNOT_RUN = 2
 
-ROOT = Path(__file__).resolve().parent.parent
 CEILING_FILE = ROOT / "scripts" / "perf_compare.json"
 
 # Per-shape call budget: repeats of `number` calls; the minimum per-call time is
@@ -361,11 +358,7 @@ def warm_up(shapes: dict[str, Shape]) -> bool:
 
 def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     """Read the command line before measuring anything; an unknown flag exits 2."""
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     parser.add_argument(
         "--update", action="store_true", help="record the ratios and the ceilings"
     )

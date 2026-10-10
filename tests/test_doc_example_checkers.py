@@ -25,14 +25,12 @@ LEDGER: every checker diagnostic on a published example is expected with a reaso
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from _reason import is_a_reason
-from _tree import ROOT
+from _tree import ROOT, load_script
 
 if TYPE_CHECKING:
     from collections import Counter
@@ -47,20 +45,10 @@ for _checker in ("ty", "mypy", "pyright", "ruff"):
 
 pytestmark = pytest.mark.repository
 
-CHECKER = ROOT / "scripts" / "check_doc_examples.py"
-
 
 def checker() -> ModuleType:
     """Import the script, so its ledger is what this reads."""
-    spec = importlib.util.spec_from_file_location(
-        "valgebra_doc_example_checkers", CHECKER
-    )
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script("check_doc_examples", "valgebra_doc_example_checkers")
 
 
 @pytest.fixture(scope="module")

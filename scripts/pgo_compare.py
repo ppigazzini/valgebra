@@ -35,12 +35,13 @@ Each wheel is timed in its own environment, and the two readings are compared:
 The comparison reports what the profile buys and what it costs. It does not
 decide: whether the release matrix keeps `pgo: true` is a decision about which
 shapes the project serves, and `docs/11-performance.md` is where that decision
-and its reason are written.
+and its reason are written. So it answers in two of the gates' three codes: 0
+for a reading and 2 for none. The middle one says "this ran and the answer is
+no", and no answer here has that shape.
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import sys
 from dataclasses import asdict, dataclass
@@ -48,16 +49,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import compare_gate
+from _lib import EXIT_CANNOT_RUN, EXIT_OK, arguments
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
-
-# A measurement, not a gate: it reports what it read, or refuses to read. The
-# gate vocabulary's middle code says "this ran and the answer is no", and there
-# is no answer of that shape here -- what the numbers mean is a decision a page
-# carries, not a verdict this script reaches.
-EXIT_OK = 0
-EXIT_CANNOT_RUN = 2
 
 #: The spread a shape with no recorded one is read against. `error_report` is
 #: that shape: it times the path that raises and formats a Python exception, and
@@ -217,9 +212,7 @@ def report(plain: Reading, profiled: Reading) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__ and __doc__.splitlines()[0], allow_abbrev=False
-    )
+    parser = arguments(__doc__)
     parser.add_argument(
         "--record",
         type=Path,

@@ -25,13 +25,14 @@ counts.
 
 from __future__ import annotations
 
-import argparse
 import datetime
 import sys
 from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Annotated, Literal, NamedTuple, TypedDict
+
+from _lib import arguments
 
 from valgebra import (
     Regex,
@@ -324,11 +325,7 @@ def _scalars() -> None:
 
 
 def main(argv: list[str]) -> None:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     parser.parse_args(argv)
     _records()
     _sequences()

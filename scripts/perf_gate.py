@@ -104,7 +104,6 @@ interpreter's library directory on the loader path.
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import re
@@ -116,16 +115,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments, git_output
+
 if TYPE_CHECKING:
+    import argparse
     from collections.abc import Mapping, Sequence
 
-# Three outcomes, three exit codes: 0 no regression, 1 a regression or the wrong
-# workload, 2 could not measure.
-EXIT_OK = 0
-EXIT_FAIL = 1
-EXIT_CANNOT_RUN = 2
 
-ROOT = Path(__file__).resolve().parent.parent
 BUDGET_FILE = ROOT / "scripts" / "perf_budget.json"
 # What a change may add against its own merge base, measured in one job with one
 # toolchain. Two percent is far outside the run-to-run variation of a count that
@@ -594,17 +590,9 @@ def commits_since(sha: str, root: Path = ROOT) -> int | None:
     `None` where the question cannot be answered: a shallow clone may not reach
     the base at all, and an unrelated history has no path between the two.
     """
-    result = subprocess.run(
-        ["git", "rev-list", "--count", f"{sha}..HEAD"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return None
+    counted = git_output("rev-list", "--count", f"{sha}..HEAD", cwd=root)
     try:
-        return int(result.stdout.strip())
+        return None if counted is None else int(counted)
     except ValueError:
         return None
 
@@ -984,11 +972,7 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     answered for a measurement nobody asked for. `argparse` refuses it with exit
     2, which is this gate's "could not run".
     """
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     for name, (_, label) in MODES.items():
         parser.add_argument(f"--{name}", action="store_true", help=f"the {label}")
     # One or the other: a command line naming neither has nothing to compare

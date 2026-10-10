@@ -45,8 +45,11 @@ would otherwise say again, and a copy is how the first one drifts.
   every caller a copy of its own, and `runs` gives the shell of every step, so
   a flag quoted in a comment is not a lane passing it. `variants` reads a core
   enum with one pattern, so every table held to `Schema`, `Constraint` or
-  `Kind` is held to the same variants. `test_suite_partition.py` refuses a
-  module that finds the checkout from its own file.
+  `Kind` is held to the same variants. `load_script` imports a gate script the
+  way it runs, with `scripts/` on the import path; `scripts` lists every script
+  but the shared module; and `lay_script` copies one into a tree of a test's
+  own, with `_lib.py` beside it. `test_suite_partition.py` refuses a module that
+  finds the checkout from its own file.
 - **`_toml.py` parses TOML on every interpreter the suite runs on**, through
   `tomli` where `tomllib` is not there yet.
 - **`_reason.py` is what a ledger's written reason is held to**: a sentence,

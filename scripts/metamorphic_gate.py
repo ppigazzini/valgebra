@@ -39,19 +39,15 @@ could not run has proven nothing and must not read as one that passed.
 
 from __future__ import annotations
 
-import argparse
 import json
-import subprocess
 import sys
-from pathlib import Path
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
-# Three outcomes, three exit codes; see the module docstring.
-EXIT_OK = 0
-EXIT_FAIL = 1
-EXIT_CANNOT_RUN = 2
+from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments, git_output
 
-ROOT = Path(__file__).resolve().parent.parent
+if TYPE_CHECKING:
+    import argparse
+
 REFERENCE_FILE = ROOT / "scripts" / "metamorphic_reference.json"
 
 
@@ -333,17 +329,7 @@ def record() -> Recording | None:
 
 def _commit() -> str:
     """Name the commit this recording describes, or `unknown` outside a checkout."""
-    try:
-        result = subprocess.run(  # fixed argv, no shell
-            ["git", "rev-parse", "HEAD"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return "unknown"
-    return result.stdout.strip() if result.returncode == 0 else "unknown"
+    return git_output("rev-parse", "HEAD", cwd=ROOT) or "unknown"
 
 
 def _keys_agree(name: str, reference: dict[str, str], measured: dict[str, str]) -> bool:
@@ -441,11 +427,7 @@ def _report(title: str, failures: list[str]) -> None:
 
 def _arguments(argv: list[str]) -> argparse.Namespace:
     """Read the command line before building anything; an unknown flag exits 2."""
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     parser.add_argument(
         "--record",
         action="store_true",

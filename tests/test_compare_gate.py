@@ -12,14 +12,14 @@ baseline key whose shape was removed is a ceiling with nothing behind it.
 
 from __future__ import annotations
 
-import importlib.util
 import json
+import subprocess
 import sys
 from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import ROOT
+from _tree import ROOT, load_script
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
@@ -29,18 +29,10 @@ if TYPE_CHECKING:
     from pathlib import Path
     from types import ModuleType
 
-GATE = ROOT / "scripts" / "compare_gate.py"
-
 
 def _load_gate() -> ModuleType:
     """Import the gate by path; ``scripts/`` is not an importable package."""
-    spec = importlib.util.spec_from_file_location("compare_gate", GATE)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script("compare_gate")
 
 
 gate = _load_gate()
@@ -125,3 +117,29 @@ def test_a_payload_the_validator_rejects_is_a_rig_fault() -> None:
     assert not gate.warm_up({"broken": shape})
     ok = {**shape, "valgebra": lambda _data: True}
     assert gate.warm_up({"fine": ok})
+
+
+def test_the_benchmarks_load_the_gate_where_they_run(tmp_path: Path) -> None:
+    """The benchmarks' conftest loads the gate by path, in pytest's own process.
+
+    `scripts/` is not on that import path, so the conftest puts it there before
+    loading, as `load_script` does here: without it the gate cannot import
+    `_lib`, and every benchmark errored at setup. So the conftest's loader is
+    run in a child interpreter whose path does not hold `scripts/`.
+    """
+    load = (
+        "import importlib.util, sys; "
+        "spec = importlib.util.spec_from_file_location('conftest', sys.argv[1]); "
+        "module = importlib.util.module_from_spec(spec); "
+        "spec.loader.exec_module(module); "
+        "print(module._compare_gate().provenance.__name__)"
+    )
+    done = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        [sys.executable, "-c", load, str(ROOT / "benches" / "conftest.py")],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == "provenance"

@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import ROOT
+from _tree import lay_script
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -22,8 +22,6 @@ if TYPE_CHECKING:
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
-
-GATE = ROOT / "scripts" / "mutation_gate.py"
 
 
 def _run(  # noqa: PLR0913 - a fixture per file the gate reads, named at each call
@@ -44,8 +42,7 @@ def _run(  # noqa: PLR0913 - a fixture per file the gate reads, named at each ca
     (out / "missed.txt").write_text("".join(line + "\n" for line in missed))
     if timed_out is not None:
         (out / "timeout.txt").write_text("".join(line + "\n" for line in timed_out))
-    (work / "scripts").mkdir(exist_ok=True)
-    (work / "scripts" / "mutation_gate.py").write_text(GATE.read_text())
+    lay_script("mutation_gate", work)
     recorded: dict[str, object] = {"survivors": baseline}
     if accepted is not None:
         recorded["_accepted"] = accepted
@@ -131,8 +128,7 @@ def test_a_killed_baseline_survivor_fails_until_the_baseline_shrinks(
 
 def test_an_empty_output_dir_refuses_to_pass(tmp_path: Path) -> None:
     (tmp_path / "mutants.out").mkdir()
-    (tmp_path / "scripts").mkdir()
-    (tmp_path / "scripts" / "mutation_gate.py").write_text(GATE.read_text())
+    lay_script("mutation_gate", tmp_path)
     (tmp_path / "scripts" / "mutation_baseline.json").write_text('{"survivors": []}\n')
     result = subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
         [sys.executable, str(tmp_path / "scripts" / "mutation_gate.py")],
@@ -160,8 +156,7 @@ def test_a_baseline_matching_the_sweep_exactly_passes(tmp_path: Path) -> None:
 
 
 def test_a_missing_output_directory_is_could_not_run(tmp_path: Path) -> None:
-    (tmp_path / "scripts").mkdir()
-    (tmp_path / "scripts" / "mutation_gate.py").write_text(GATE.read_text())
+    lay_script("mutation_gate", tmp_path)
     (tmp_path / "scripts" / "mutation_baseline.json").write_text('{"survivors": []}\n')
     result = subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
         [sys.executable, str(tmp_path / "scripts" / "mutation_gate.py")],
@@ -181,8 +176,7 @@ def test_a_missing_baseline_is_could_not_run(tmp_path: Path) -> None:
     out.mkdir()
     (out / "caught.txt").write_text("some/file.rs:1:1: caught mutant\n")
     (out / "missed.txt").write_text("")
-    (tmp_path / "scripts").mkdir()
-    (tmp_path / "scripts" / "mutation_gate.py").write_text(GATE.read_text())
+    lay_script("mutation_gate", tmp_path)
     result = subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
         [sys.executable, str(tmp_path / "scripts" / "mutation_gate.py")],
         cwd=tmp_path,
@@ -231,8 +225,7 @@ def test_re_recording_keeps_the_reasons_beside_the_set(tmp_path: Path) -> None:
     out.mkdir()
     (out / "caught.txt").write_text("x.rs:1:1: caught\n")
     (out / "missed.txt").write_text("a.rs:1:1: replace f -> bool with true\n")
-    (tmp_path / "scripts").mkdir()
-    (tmp_path / "scripts" / "mutation_gate.py").write_text(GATE.read_text())
+    lay_script("mutation_gate", tmp_path)
     baseline = tmp_path / "scripts" / "mutation_baseline.json"
     baseline.write_text(
         json.dumps({"_why": "the argument", "survivors": []}) + "\n",

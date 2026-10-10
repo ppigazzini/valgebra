@@ -32,7 +32,6 @@ Exit 0 when every diagnostic is expected and every row is reported.
 
 from __future__ import annotations
 
-import argparse
 import ast
 import importlib.util
 import json
@@ -45,6 +44,8 @@ from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
+from _lib import ROOT, arguments
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # the floor, where pytest's own dependency supplies the parser
@@ -53,7 +54,6 @@ else:  # the floor, where pytest's own dependency supplies the parser
 if TYPE_CHECKING:
     from types import ModuleType
 
-ROOT = Path(__file__).resolve().parent.parent
 RUNNER = ROOT / "scripts" / "run_doc_examples.py"
 PYPROJECT = ROOT / "pyproject.toml"
 
@@ -481,11 +481,7 @@ def problems(found: Counter[Key], checkers: tuple[str, ...]) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     parser.parse_args(argv)
     reading = read()
     wrong = problems(reading.found, reading.checkers)

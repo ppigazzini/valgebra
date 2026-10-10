@@ -15,12 +15,10 @@ record rather than a gate.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import math
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -29,7 +27,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import ROOT, read_workflow
+from _tree import ROOT, lay_script, load_script, read_workflow
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
@@ -38,18 +36,10 @@ pytestmark = pytest.mark.repository
 if TYPE_CHECKING:
     from types import ModuleType
 
-GATE = ROOT / "scripts" / "perf_gate.py"
-
 
 def _load_gate() -> ModuleType:
     """Import the gate by path; ``scripts/`` is not an importable package."""
-    spec = importlib.util.spec_from_file_location("perf_gate", GATE)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script("perf_gate")
 
 
 gate = _load_gate()
@@ -604,8 +594,7 @@ def _run_step(tree: Path, base_sha: str, branch: str) -> str:
     script the step calls is laid into the synthetic checkout, where the step
     finds it on a runner.
     """
-    (tree / "scripts").mkdir(exist_ok=True)
-    shutil.copy2(ROOT / "scripts" / "change_base.py", tree / "scripts")
+    lay_script("change_base", tree)
     with tempfile.NamedTemporaryFile("w+", delete=False) as output:
         recorded = Path(output.name)
     try:

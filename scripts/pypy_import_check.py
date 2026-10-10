@@ -21,19 +21,16 @@ job's log names the form rather than the file.
 
 from __future__ import annotations
 
-import argparse
 import sys
 import typing
+
+from _lib import arguments
 
 import valgebra as vg
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     parser.parse_args(argv)
     print(f"valgebra {vg.__version__} imported on {sys.implementation.name}")
 

@@ -10,16 +10,14 @@ script's own and the input is one that must fail it.
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import ROOT
+from _tree import load_script
 
 # The repository checks are not the product suite: this file drives the gate
 # scripts, none of which ship in a wheel.
@@ -29,20 +27,10 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from types import ModuleType
 
-SCRIPTS = ROOT / "scripts"
-
 
 def _load(name: str) -> ModuleType:
     """Import a script by path; ``scripts/`` is not an importable package."""
-    spec = importlib.util.spec_from_file_location(
-        f"verdict_{name}", SCRIPTS / f"{name}.py"
-    )
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script(name, f"verdict_{name}")
 
 
 @pytest.mark.parametrize(

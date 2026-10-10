@@ -13,15 +13,13 @@ to refuse is a comparison that prints whatever it is given.
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from _tree import ROOT
+from _tree import SCRIPTS, load_script
 
 # The repository checks are not the product suite: this file reads the tree and
 # the scripts, neither of which ships in a wheel.
@@ -30,8 +28,6 @@ pytestmark = pytest.mark.repository
 if TYPE_CHECKING:
     from types import ModuleType
 
-SCRIPTS = ROOT / "scripts"
-SCRIPT = SCRIPTS / "pgo_compare.py"
 
 ENVIRONMENT = "cpython3.12-gil-valgebra-0.0.11"
 
@@ -44,14 +40,7 @@ def _load() -> ModuleType:
     Registered in `sys.modules` before it runs, because the dataclass it defines
     reads its own module back out of there while it is being built.
     """
-    sys.path.insert(0, str(SCRIPTS))
-    spec = importlib.util.spec_from_file_location("pgo_compare", SCRIPT)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script("pgo_compare")
 
 
 pgo = _load()

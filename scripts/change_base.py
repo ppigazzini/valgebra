@@ -32,24 +32,20 @@ Exit 0 with the commit on stdout; 2 when no base can be named.
 
 from __future__ import annotations
 
-import argparse
 import os
-import subprocess
 import sys
+from pathlib import Path
 
-EXIT_OK = 0
-EXIT_CANNOT_RUN = 2
+from _lib import EXIT_CANNOT_RUN, EXIT_OK, arguments, git_output
+
+#: The checkout this is asked about: the one it is started in, which is the
+#: lane's checkout and, under test, a history built for the question.
+CHECKOUT = Path()
 
 
 def _git(*args: str) -> str | None:
-    """Run git, giving its output, or None where it fails."""
-    done = subprocess.run(
-        ["git", *args],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return done.stdout.strip() if done.returncode == 0 else None
+    """Ask git about the checkout this runs in."""
+    return git_output(*args, cwd=CHECKOUT)
 
 
 def _commit(revision: str) -> str | None:
@@ -77,11 +73,7 @@ def _branch_tip(branch: str) -> str | None:
 
 
 def main(argv: list[str]) -> int:
-    argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    ).parse_args(argv)
+    arguments(__doc__).parse_args(argv)
     head = _commit("HEAD")
     if head is None:
         print("change_base: HEAD names no commit", file=sys.stderr)

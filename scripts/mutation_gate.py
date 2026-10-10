@@ -52,23 +52,19 @@ Three outcomes, three exit codes, so a caller can dispatch on them:
 
 from __future__ import annotations
 
-import argparse
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments, git_output
+
 if TYPE_CHECKING:
+    import argparse
     from collections.abc import Iterable, Sequence
 
-# Three outcomes, three exit codes; see the module docstring.
-EXIT_OK = 0
-EXIT_FAIL = 1
-EXIT_CANNOT_RUN = 2
 
-ROOT = Path(__file__).resolve().parent.parent
 # One baseline per sweep, named by what the sweep covers.
 BASELINES = {
     "core": ROOT / "scripts" / "mutation_baseline.json",
@@ -210,11 +206,7 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     An unknown flag, a missing value and an unknown baseline are each a gate
     that could not run, so each exits 2 -- `argparse`'s own code for them.
     """
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     parser.add_argument("--update", action="store_true", help="re-record the baseline")
     parser.add_argument("--baseline", choices=sorted(BASELINES), default="core")
     parser.add_argument(
@@ -259,13 +251,8 @@ def _keys_for_absent_files(baseline: set[str]) -> bool:
     functions of one name in two files would share a key, and an argument for
     one would silently excuse the other.
     """
-    listed = subprocess.run(
-        ["git", "-C", str(ROOT), "ls-files", "-z"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    tracked = {name for name in listed.stdout.split("\0") if name}
+    listed = git_output("ls-files", "-z", cwd=ROOT) or ""
+    tracked = {name for name in listed.split("\0") if name}
     if not tracked:
         return False  # not a checkout: the sweep's own reading still stands
     absent = sorted(

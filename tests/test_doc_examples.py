@@ -33,7 +33,6 @@ LEDGER: every python example in a tracked page is run or marked with a reason
 from __future__ import annotations
 
 import ast
-import importlib.util
 import re
 import subprocess
 import sys
@@ -41,7 +40,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import ROOT
+from _tree import ROOT, load_script
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -51,8 +50,6 @@ if TYPE_CHECKING:
 # neither of which ships in a wheel.
 pytestmark = pytest.mark.repository
 
-RUNNER = ROOT / "scripts" / "run_doc_examples.py"
-
 
 def runner() -> ModuleType:
     """Import the example runner, so its own list is what this reads.
@@ -60,13 +57,7 @@ def runner() -> ModuleType:
     Restating the list here would make two lists, and the one this file could
     not see going stale is the other one.
     """
-    spec = importlib.util.spec_from_file_location("valgebra_doc_examples", RUNNER)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script("run_doc_examples", "valgebra_doc_examples")
 
 
 def _tracked_pages() -> list[Path]:

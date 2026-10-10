@@ -19,6 +19,7 @@ them without asking the compiler what it did.
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -31,7 +32,14 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def _compare_gate() -> ModuleType:
-    """Load the gate's provenance check without importing it as a package."""
+    """Load the gate's provenance check without importing it as a package.
+
+    A script finds `_lib` beside it on the import path its own run gives it,
+    and pytest's run is not that one, so the directory goes there first.
+    """
+    scripts = str(ROOT / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
     path = ROOT / "scripts" / "compare_gate.py"
     spec = importlib.util.spec_from_file_location("compare_gate", path)
     if spec is None or spec.loader is None:  # pragma: no cover - a missing script

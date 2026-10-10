@@ -1981,14 +1981,16 @@ PLANTS = (
         trips=("test_no_lane_runs_the_suite_on_an_implementation_nobody_states",),
     ),
     Plant(
-        # A gate script answering "could not run" with a code of its own.
+        # A gate script answering "could not run" with a code of its own, over
+        # the one it imports.
         "tests/test_local_gate.py",
         ("scripts/coverage_gate.py",),
         lambda tree: _edit(
             tree,
             "scripts/coverage_gate.py",
-            "EXIT_CANNOT_RUN = 2",
-            "EXIT_CANNOT_RUN = 3",
+            "from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments\n",
+            "from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments\n"
+            "\nEXIT_CANNOT_RUN = 3\n",
         ),
         trips=("test_a_gate_script_answers_in_the_three_code_vocabulary",),
     ),

@@ -31,16 +31,17 @@ regress".
 
 from __future__ import annotations
 
-import argparse
 import json
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments
+
 if TYPE_CHECKING:
+    import argparse
     from collections.abc import Sequence
 
-ROOT = Path(__file__).resolve().parent.parent
 RECORD = ROOT / "scripts" / "branch_coverage.json"
 
 
@@ -51,11 +52,7 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     the per-file floors are a scope, and a synthesised report of one file
     against the tree's thirty is a scope mismatch rather than a regression.
     """
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     parser.add_argument("report", type=Path, help="llvm-cov's JSON export")
     parser.add_argument(
         "--record", type=Path, default=RECORD, help="the floors to read and write"
@@ -65,10 +62,6 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     )
     return parser.parse_args(argv)
 
-
-EXIT_OK = 0
-EXIT_FAIL = 1
-EXIT_CANNOT_RUN = 2
 
 #: How far under the measurement a re-recorded floor sits.
 #:

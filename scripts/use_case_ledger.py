@@ -30,14 +30,17 @@ Two outcomes, two exit codes: **0** the recorded set matches what the tree has,
 
 from __future__ import annotations
 
-import argparse
 import ast
 import json
 import re
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-ROOT = Path(__file__).resolve().parent.parent
+from _lib import EXIT_FAIL, EXIT_OK, ROOT, arguments
+
+if TYPE_CHECKING:
+    import argparse
+
 RECORD = ROOT / "scripts" / "use_case_ledger.json"
 STUB = ROOT / "python" / "valgebra" / "_valgebra.pyi"
 PACKAGE = ROOT / "python" / "valgebra" / "__init__.py"
@@ -52,9 +55,6 @@ IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
 #: here to a site that writes it.
 CODE_TABLE = ROOT / "crates" / "valgebra-py" / "src" / "codes.rs"
 CORE_CODE_TABLE = ROOT / "crates" / "valgebra-core" / "src" / "codes.rs"
-
-EXIT_OK = 0
-EXIT_FAIL = 1
 
 
 def public_surface() -> set[str]:
@@ -442,11 +442,7 @@ def report(
 
 def _arguments(argv: list[str]) -> argparse.Namespace:
     """Read the command line before reading the tree; an unknown flag exits 2."""
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     parser.add_argument(
         "--update", action="store_true", help="record the empty cells, reasons kept"
     )

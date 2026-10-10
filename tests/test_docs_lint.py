@@ -12,7 +12,6 @@ behaviour described as absent from a build that has it.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import re
 import subprocess
@@ -21,7 +20,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import ROOT
+from _tree import ROOT, load_script
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
@@ -36,13 +35,7 @@ LINT = ROOT / "scripts" / "docs_lint.py"
 
 def _load() -> ModuleType:
     """Import the lint by path; ``scripts/`` is not an importable package."""
-    spec = importlib.util.spec_from_file_location("docs_lint", LINT)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script("docs_lint")
 
 
 lint = _load()

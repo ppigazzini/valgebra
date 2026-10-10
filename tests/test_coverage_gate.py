@@ -9,7 +9,6 @@ a report naming too few files to be believed.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
@@ -17,7 +16,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import ROOT
+from _tree import ROOT, load_script
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
@@ -32,13 +31,7 @@ GATE = ROOT / "scripts" / "coverage_gate.py"
 
 def _load_gate() -> ModuleType:
     """Import the gate by path; ``scripts/`` is not an importable package."""
-    spec = importlib.util.spec_from_file_location("coverage_gate", GATE)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script("coverage_gate")
 
 
 gate = _load_gate()

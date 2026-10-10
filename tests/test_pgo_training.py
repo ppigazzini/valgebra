@@ -22,15 +22,13 @@ excused
 from __future__ import annotations
 
 import ast
-import importlib.util
 import json
-import sys
 from typing import TYPE_CHECKING
 
 import pytest
 
 from _reason import is_a_reason
-from _tree import ROOT
+from _tree import ROOT, load_script
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -48,15 +46,7 @@ _TABLE_NAMES = frozenset({"TRAINED", "UNTRAINED", "_JSON_UNTRAINED"})
 
 def _perf_gate() -> ModuleType:
     """Import the instruction gate by path; ``scripts/`` is not a package."""
-    spec = importlib.util.spec_from_file_location(
-        "perf_gate_for_training", ROOT / "scripts" / "perf_gate.py"
-    )
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script("perf_gate", "perf_gate_for_training")
 
 
 def _module() -> ast.Module:

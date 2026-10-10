@@ -34,7 +34,6 @@ PRODUCT: every error code a report can carry
 from __future__ import annotations
 
 import ast
-import importlib.util
 import re
 import subprocess
 import sys
@@ -43,7 +42,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from _reason import is_a_reason
-from _tree import ROOT
+from _tree import ROOT, load_script
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -69,13 +68,7 @@ def _derivation() -> ModuleType:
     file enforces the set behind it, and two derivations would let them come to
     different answers about what a cell is.
     """
-    spec = importlib.util.spec_from_file_location("use_case_ledger", LEDGER)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script("use_case_ledger")
 
 
 _LEDGER = _derivation()

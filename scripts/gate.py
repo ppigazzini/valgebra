@@ -41,7 +41,6 @@ gate that could not run has proven nothing.
 
 from __future__ import annotations
 
-import argparse
 import os
 import re
 import shlex
@@ -53,6 +52,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
+from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments, git_output
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -60,11 +60,7 @@ if TYPE_CHECKING:
 #: A step to run: its job, its name, its command, and the job's own `env`.
 Step = tuple[str, str, str, dict[str, str]]
 
-EXIT_OK = 0
-EXIT_FAIL = 1
-EXIT_CANNOT_RUN = 2
 
-ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 #: Steps a developer's machine cannot reproduce, and why. Each key is a step's
@@ -368,17 +364,6 @@ def perf_base(tree: Path = ROOT) -> str | None:
     if base is None or base == head:
         base = git_output("rev-parse", "HEAD~1", cwd=tree)
     return base
-
-
-def git_output(*args: str, cwd: Path = ROOT) -> str | None:
-    """Give a git command's single line of output, or `None` where it fails."""
-    done = subprocess.run(
-        ["git", "-C", str(cwd), *args],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return done.stdout.strip() if done.returncode == 0 else None
 
 
 def perf_plan() -> tuple[list[tuple[str, str, str]], list[str]]:
@@ -835,7 +820,7 @@ def show_plan(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
+    parser = arguments(__doc__)
     parser.add_argument("--list", action="store_true", help="show the plan and stop")
     parser.add_argument("--job", help="run one job's steps")
     parser.add_argument(

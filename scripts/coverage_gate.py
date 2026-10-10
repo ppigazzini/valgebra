@@ -45,20 +45,17 @@ in:
 
 from __future__ import annotations
 
-import argparse
 import json
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
+from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments
+
 if TYPE_CHECKING:
+    import argparse
     from collections.abc import Sequence
 
-EXIT_OK = 0
-EXIT_FAIL = 1
-EXIT_CANNOT_RUN = 2
-
-ROOT = Path(__file__).resolve().parent.parent
 
 #: The floor per scope, in percent. Low on purpose: see the module docstring.
 #: A file under it is one the tests reach incidentally or not at all, which is
@@ -112,11 +109,7 @@ def _cannot_run(message: str) -> NoReturn:
 
 def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     """Read the command line; an unknown flag or scope cannot run, exit 2."""
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     parser.add_argument("--json", type=Path, default=Path("coverage.json"))
     parser.add_argument("--scope", choices=sorted(FLOORS), default="core")
     parser.add_argument("--lines", type=float, help="the line floor, in percent")

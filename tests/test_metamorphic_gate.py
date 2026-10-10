@@ -15,13 +15,11 @@ LEDGER: every relation the metamorphic gate holds can be driven to fail
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import ROOT
+from _tree import load_script
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
@@ -30,18 +28,10 @@ pytestmark = pytest.mark.repository
 if TYPE_CHECKING:
     from types import ModuleType
 
-GATE = ROOT / "scripts" / "metamorphic_gate.py"
-
 
 def _load_gate() -> ModuleType:
     """Import the gate by path; ``scripts/`` is not an importable package."""
-    spec = importlib.util.spec_from_file_location("metamorphic_gate", GATE)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script("metamorphic_gate")
 
 
 gate = _load_gate()

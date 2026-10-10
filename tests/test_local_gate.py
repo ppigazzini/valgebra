@@ -28,7 +28,6 @@ LEDGER: every merge-gate step is run by the local gate or excused by name
 
 from __future__ import annotations
 
-import importlib.util
 import os
 import shlex
 import subprocess
@@ -38,7 +37,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import ROOT
+from _tree import ROOT, load_script
 
 pytestmark = pytest.mark.repository
 
@@ -46,18 +45,11 @@ if TYPE_CHECKING:
     from types import ModuleType
 
 GATE = ROOT / "scripts" / "gate.py"
-SCRIPTS = ROOT / "scripts"
 
 
 def _load_gate() -> ModuleType:
     """Import the gate by path; ``scripts/`` is not an importable package."""
-    spec = importlib.util.spec_from_file_location("valgebra_gate", GATE)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script("gate", "valgebra_gate")
 
 
 gate = _load_gate()
@@ -415,18 +407,10 @@ def test_a_gate_script_answers_in_the_three_code_vocabulary(script: str) -> None
     half a caller dispatching on the code depends on.
     """
     name = f"gate_codes_{script}"
-    spec = importlib.util.spec_from_file_location(name, SCRIPTS / script)
-    assert spec is not None, f"{script} has no spec"
-    assert spec.loader is not None, f"{script} has no loader"
-    module = importlib.util.module_from_spec(spec)
-    # Registered before it runs: a script defining a dataclass has its class
-    # read back out of `sys.modules` under its own `__module__`, and a module
-    # executed without being registered is not there to read.
-    sys.modules[name] = module
     try:
-        spec.loader.exec_module(module)
+        module = load_script(script.removesuffix(".py"), name)
     finally:
-        del sys.modules[name]
+        sys.modules.pop(name, None)
 
     codes = (module.EXIT_OK, module.EXIT_FAIL, module.EXIT_CANNOT_RUN)
     assert codes == (0, 1, 2), f"{script} answers with {codes}"

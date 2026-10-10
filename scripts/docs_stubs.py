@@ -35,7 +35,6 @@ looked for as edited rather than as remembered here.
 
 from __future__ import annotations
 
-import argparse
 import html
 import importlib
 import re
@@ -45,7 +44,14 @@ from typing import Any
 
 import griffe
 
-ROOT = Path(__file__).resolve().parent.parent
+# mkdocs loads this file by path, as a griffe extension, in a process no script
+# run started: `scripts/` is not on that import path until this puts it there.
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+from _lib import ROOT, arguments  # noqa: E402
+
 PACKAGE = "valgebra"
 COMPILED = "_valgebra"
 PAGE = ROOT / "site" / "16-api" / "index.html"
@@ -105,11 +111,7 @@ def missing(page: str) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     parser.add_argument("--check", action="store_true", help="hold the built page")
     if not parser.parse_args(argv).check:
         parser.error("--check is the one mode")

@@ -9,14 +9,12 @@ package rather than a broken build.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import ROOT
+from _tree import load_script
 
 # The repository checks are not the product suite: this file drives a lane's
 # script, which does not ship in a wheel.
@@ -25,17 +23,9 @@ pytestmark = pytest.mark.repository
 if TYPE_CHECKING:
     from types import ModuleType
 
-SCRIPT = ROOT / "scripts" / "pypy_import_check.py"
-
 
 def _load() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("pypy_import_check", SCRIPT)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script("pypy_import_check")
 
 
 def test_the_forms_build_here() -> None:

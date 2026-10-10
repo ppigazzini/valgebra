@@ -25,19 +25,20 @@ question could not be asked, which is not the same as an answer.
 
 from __future__ import annotations
 
-import argparse
 import ast
 import json
 import subprocess
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-ROOT = Path(__file__).resolve().parent.parent
+from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments
+
+if TYPE_CHECKING:
+    import argparse
+    from pathlib import Path
+
 TABLE = ROOT / "tests" / "floor_names.json"
 
-EXIT_OK = 0
-EXIT_FAIL = 1
-EXIT_CANNOT_RUN = 2
 
 #: The modules the table dates names in.
 MODULES = ("typing", "enum")
@@ -238,11 +239,7 @@ def _survey(table: dict, versions: list[str]) -> dict[str, dict[str, list[str]]]
 
 def _arguments(argv: list[str]) -> argparse.Namespace:
     """Read the command line: `--check` or `--update`; anything else exits 2."""
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true", help="hold the table")
     mode.add_argument("--update", action="store_true", help="rewrite the table")

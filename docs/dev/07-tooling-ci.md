@@ -31,6 +31,27 @@ Read by substring, a mistyped flag is no flag at all, and a gate asked for one
 measurement answers for another. `tests/test_script_arguments.py` holds every
 file under `scripts/` to it.
 
+**The codes, the root and the parser are said once**, in `scripts/_lib.py`,
+with `git_output`, which asks git a question of a directory the caller names.
+A script runs with its own directory first on the import path, so it finds the
+module by name. A test or the benchmarks' conftest loading a script by path
+puts the directory there first, and a test copying a script into a tree of its
+own copies the module too, since a script's root is where `_lib.py` sits.
+mkdocs loads `docs_stubs.py` by path as a griffe extension, with no loader of
+ours between, so that script puts its own directory on the path. The leading underscore says the file is
+no script: no lane runs it, it has no contract row and it takes no flags.
+`tests/test_script_arguments.py` refuses a script that defines a code, `ROOT`
+or a parser of its own.
+
+What a script runs a step or a measurement in is not shared, because the two
+are different rules. `gate.py` gives a step the caller's environment, less the
+colour a terminal forces and the venv `uv run` names. `perf_gate.py` gives a
+workload the few names it needs, with the hash seed and the allocator fixed,
+since the environment's size moves a count. Either rule applied to the other's case fails a test:
+`test_a_forced_colour_variable_does_not_reach_a_step` needs a caller's variable
+kept, and `test_a_workload_runs_without_the_callers_environment` needs it
+dropped.
+
 ## The local gate, and the contract inventory
 
 **`scripts/gate.py` runs the lane's steps, not a list that resembles them.** It

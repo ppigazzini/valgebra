@@ -19,7 +19,6 @@ most needs to trust.
 
 from __future__ import annotations
 
-import argparse
 import re
 import subprocess
 import sys
@@ -28,10 +27,11 @@ import textwrap
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from _lib import ROOT, arguments
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-ROOT = Path(__file__).resolve().parent.parent
 # The README, the changelog, and every page of the documentation site. Each
 # runnable python block is executed, so no published example can go stale.
 DOCS = [
@@ -84,11 +84,7 @@ def run_block(block: str, doc_name: str, index: int) -> bool:
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     parser.parse_args(argv)
     checked = 0
     failures = 0

@@ -86,7 +86,6 @@ not run.
 
 from __future__ import annotations
 
-import argparse
 import ast
 import functools
 import json
@@ -95,13 +94,13 @@ import subprocess
 import sys
 import textwrap
 import unicodedata
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-EXIT_OK = 0
-EXIT_FAIL = 1
-EXIT_CANNOT_RUN = 2
+from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments
 
-ROOT = Path(__file__).resolve().parent.parent
+if TYPE_CHECKING:
+    from pathlib import Path
+
 INTERNAL = "__DEV"
 
 # The other half of the internal surface: the notes and plans that live under it.
@@ -1054,11 +1053,7 @@ def check_example_installs() -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        allow_abbrev=False,
-    )
+    parser = arguments(__doc__)
     parser.parse_args(argv)
     files = tracked_markdown()
     if len(files) < MIN_TRACKED_PAGES:

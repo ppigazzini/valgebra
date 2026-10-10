@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import ROOT
+from _tree import ROOT, scripts
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -39,7 +39,6 @@ if TYPE_CHECKING:
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
 
-SCRIPTS = ROOT / "scripts"
 
 # Scripts deliberately driven by nothing, each with the reason. Empty today:
 # every script under scripts/ is driven by a workflow, by pyproject, or by a
@@ -94,12 +93,12 @@ def _drivers_of(script: str) -> list[str]:
 
 
 def test_every_script_runs_in_a_lane() -> None:
-    scripts = sorted(p.name for p in SCRIPTS.glob("*.py"))
+    names = sorted(p.name for p in scripts())
     # The glob is the detector; an empty universe would pass having checked
     # nothing, which is worse than a bare failure.
-    assert len(scripts) >= 4, f"the scripts glob found only {scripts}"
+    assert len(names) >= 4, f"the scripts glob found only {names}"
 
-    undriven = [s for s in scripts if s not in EXCUSED and not _drivers_of(s)]
+    undriven = [s for s in names if s not in EXCUSED and not _drivers_of(s)]
     assert not undriven, (
         f"scripts in no lane and on no excused list: {undriven}. "
         "Wire each into a workflow, or excuse it by name with a reason."
@@ -108,8 +107,7 @@ def test_every_script_runs_in_a_lane() -> None:
 
 def _stale(excused: dict[str, str]) -> tuple[list[str], list[str]]:
     """Give the excuses naming a script that is gone, and those naming a driven one."""
-    scripts = {p.name for p in SCRIPTS.glob("*.py")}
-    gone = sorted(set(excused) - scripts)
+    gone = sorted(set(excused) - {p.name for p in scripts()})
     driven = sorted(name for name in excused if _drivers_of(name))
     return gone, driven
 

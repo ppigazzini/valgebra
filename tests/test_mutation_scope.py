@@ -34,18 +34,16 @@ LEDGER: every binding file is swept or excluded by name
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import re
 import shutil
 import subprocess
-import sys
 from typing import TYPE_CHECKING
 
 import pytest
 
 from _toml import load
-from _tree import ROOT, read_workflow, runs
+from _tree import ROOT, load_script, read_workflow, runs
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -342,15 +340,7 @@ def _baseline_names() -> ModuleType:
     one description where it holds several. The gate's own naming reads the
     listing here, so the two cannot drift apart.
     """
-    spec = importlib.util.spec_from_file_location(
-        "mutation_gate", ROOT / "scripts" / "mutation_gate.py"
-    )
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_script("mutation_gate")
 
 
 @pytest.mark.skipif(
