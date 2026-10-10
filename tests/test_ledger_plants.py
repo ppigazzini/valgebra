@@ -17,8 +17,8 @@ no others, so every test function of every ledger file is named by a plant or
 excused with the reason no plant fits it. A ledger with no plant here is a ledger
 nobody has shown to work.
 
-The copy is the tracked files only, made once and repaired between rows, so a
-plant cannot leak into the next one or into the tree being audited.
+The copy is the tracked files only, made once a worker and repaired between
+rows, so a plant cannot leak into the next one or into the tree being audited.
 
 LEDGER: every ledger fails on the defect it exists to catch
 """
@@ -4196,8 +4196,7 @@ PLANTS = (
             "tests/test_suite_installs.py",
             '    "ty": "type-checks, once, on CPython",\n',
             '    "ty": "type-checks, once, on CPython",\n'
-            '    "pytest-xdist": "spreads the suite over cores, which'
-            ' no lane asks for",\n',
+            '    "black": "formats the code, which ruff does instead",\n',
         ),
         trips=("test_the_dev_group_is_the_test_group_and_its_tools",),
     ),
@@ -4721,7 +4720,11 @@ def _working_files() -> list[str]:
 
 @pytest.fixture(scope="module")
 def tree(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
-    """Clone the tree once, overlay the working files, repair between plants.
+    """Clone the tree once a worker, overlay the working files, repair it.
+
+    Once a worker rather than once a run: each worker of a parallel run clones
+    a copy of its own, so two plants running at once never share one, and the
+    repair between two plants is the repair of one worker's copy.
 
     A **clone** rather than a copy of the files, because one ledger reads the
     history: the changelog roll is measured from the last release tag, and over

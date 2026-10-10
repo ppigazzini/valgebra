@@ -253,6 +253,14 @@ holds an answer of the installed extension, which no edit to the clone's source
 moves, or it reads notes a clone does not carry. A ledger with no plant fails
 the list, so the next one arrives with the evidence that it works.
 
+**The plants run in parallel.** They are most of the audit, and each is a
+pytest run of its own, so the floor leg runs the audit with
+`-n auto --dist worksteal` across its cores. Each worker clones the tree once
+and repairs its own copy between plants, so no two plants running at once
+share a copy. Work stealing rather than fixed shares, because one plant runs
+ten times as long as another. The same flags run it locally:
+`pytest -m repository -n auto --dist worksteal`.
+
 `tests/test_node_matrix.py` is the same shape one level in: it reads the `Schema`
 variants out of the IR and fails when one carries no row, so the universe is
 derived from the tree rather than restated.

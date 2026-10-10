@@ -550,13 +550,17 @@ jobs:
         run: >-
           uv run --no-sync pytest -m "not repository or interpreter"
           --cov=valgebra --cov-report=term-missing --durations=30
+      # The audit runs on every core the runner has. Most of it is plants, each
+      # a pytest run in a clone, and each worker clones once, so no two plants
+      # share a copy. Work stealing, because the plants' times differ tenfold
+      # and a worker handed a fixed share finishes last.
       - name: The repository audit
         if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == env.FLOOR }}
         env:
           HYPOTHESIS_PROFILE: ci
         run: >-
           uv run --no-sync pytest -m "repository and not interpreter"
-          --durations=30
+          -n auto --dist worksteal --durations=30
       # ruff and ty are static and pinned to a target version, so their result
       # does not depend on the runner's Python; run them once on the floor.
       - name: Ruff lint

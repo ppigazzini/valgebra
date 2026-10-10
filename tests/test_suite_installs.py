@@ -42,6 +42,7 @@ EXCUSED: dict[str, str] = {
     "pyright": "a checker the checker ledgers run, which skip where it is absent",
     "pre-commit": "runs the hooks before a commit, not the suite",
     "pytest-cov": "measures coverage, which its own lane gates on CPython",
+    "pytest-xdist": "spreads the repository audit over the floor leg's cores",
     "ruff": "lints and formats, once, on CPython",
     "ty": "type-checks, once, on CPython",
 }
