@@ -14,6 +14,14 @@ The marker is the boundary, and the import is the evidence for it:
 * a marked file that imports ``valgebra`` is a product test wearing the marker,
   and would be dropped from the product suite by mistake.
 
+The line is not between needing the checkout and not needing it. A product
+test that holds the library to a claim the tree writes down -- a page's table,
+the variants of the IR, the stub's signatures -- reads both, so the product
+suite runs from a checkout with the library installed beside it, as every
+release lane runs it. Those modules are named here with what each reads, read
+from their import of ``_tree``, so a product module that starts reading the
+tree is one a reader sees.
+
 Reading the import rather than a hand-written list is what makes the check
 survive a new file. A test that arrives importing nothing is caught the day it
 arrives, rather than at the next audit.
@@ -32,6 +40,7 @@ import ast
 
 import pytest
 
+from _reason import is_a_reason
 from _tree import ROOT
 
 # The repository checks are not the product suite: this file reads the tree,
@@ -148,6 +157,59 @@ def test_every_test_file_falls_on_one_side_of_the_line() -> None:
         f"product tests carrying the repository marker: {mismarked}. "
         "The marker takes them out of the product suite."
     )
+
+
+#: The product modules that read the tree, each with what it reads there.
+READS_THE_TREE: dict[str, str] = {
+    "test_boundary_ledger.py": "the decidability and soundness pages it drives",
+    "test_closure_ledger.py": "the variants of `Schema` it sorts into columns",
+    "test_constraint_matrix.py": "the variants of `Constraint` and `Kind` it crosses",
+    "test_documented_idioms.py": "the limits and schema-language pages it runs",
+    "test_error_contract.py": "the error-model page whose promises it holds",
+    "test_form_ledger.py": "the tables of the schema-language and refinement pages",
+    "test_node_matrix.py": "the variants of `Schema`, and the stub's entry points",
+    "test_public_surface.py": "the stub's positional-only parameters",
+    "test_regex_dialect.py": "the refinement page's account of the pattern dialect",
+    "test_relation_ledger.py": "the variants of `Schema`, and the binding's hooks",
+}
+
+
+def _reads_the_tree(tree: ast.Module) -> bool:
+    """Answer whether the module imports `_tree`, the one way to the checkout."""
+    return any(
+        (isinstance(node, ast.ImportFrom) and node.module == "_tree")
+        or (
+            isinstance(node, ast.Import)
+            and any(alias.name == "_tree" for alias in node.names)
+        )
+        for node in ast.walk(tree)
+    )
+
+
+def test_a_product_module_reading_the_tree_is_named() -> None:
+    """The product suite reads the tree where a table says so, and nowhere else.
+
+    Both directions: a product module that starts reading the checkout arrives
+    here with no row, and a row whose module stopped reading it, or became a
+    repository check, names a dependency the product suite does not have.
+    """
+    readers = set()
+    for path in sorted(TESTS.glob("test_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        product = _imports_the_library(tree) and not _is_marked(tree)
+        if product and _reads_the_tree(tree):
+            readers.add(path.name)
+    # The scan is the detector: no reader at all would pass both directions.
+    assert readers, "no product module reads the tree; the import scan read nothing"
+    unnamed = sorted(readers - set(READS_THE_TREE))
+    assert not unnamed, (
+        f"product modules reading the tree with no row: {unnamed}. Name what "
+        "each reads in `READS_THE_TREE`, or read it from the library instead."
+    )
+    stale = sorted(set(READS_THE_TREE) - readers)
+    assert not stale, f"rows naming no product module that reads the tree: {stale}"
+    for name, what in READS_THE_TREE.items():
+        assert is_a_reason(what), f"{name}: say what the module reads"
 
 
 def test_the_product_suite_is_the_larger_half() -> None:

@@ -18,17 +18,22 @@ pytest -m repository         # the project's own audit
 pytest                       # both, which CI's floor leg runs
 ```
 
-The split is worth drawing for two reasons. A repository check counted as a
-product test makes the library look tested by work that never touched it. And a
-reader who has the library without the tree -- from a wheel, an sdist, a
-distribution package -- cannot run those checks at all, so a suite that mixes
-them fails for a reason that is not about valgebra.
+The split is worth drawing because a repository check counted as a product test
+makes the library look tested by work that never touched it.
+
+It is not a line between needing the checkout and not needing it. A product test
+that holds the library to a claim the tree writes down -- a page's table, the
+variants of the IR, the stub's signatures -- reads both. So the product suite
+runs from a checkout with the library installed beside it rather than built
+from it, which is how every release lane runs it against the wheels it built.
 
 The marker is not maintained by hand. A test file that never imports `valgebra`
 exercises nothing and must carry it; a marked file that *does* import valgebra
 is a product test the marker would silently drop. `test_suite_partition.py`
 reads both facts from the syntax and fails either way round, so a new file lands
-on one side the day it arrives.
+on one side the day it arrives. It also names every product module that reads
+the tree, with what it reads, from the module's import of `_tree`: a product
+test that starts reading a page arrives there with no row.
 
 ## What the suite shares
 

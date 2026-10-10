@@ -142,12 +142,14 @@ testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers", "--strict-config"]
 xfail_strict = true
 # The suite holds two kinds of test. Most exercise the library, and run against
-# an installed wheel wherever one is built. The rest read this repository -- its
+# an installed wheel wherever one is built; a few of them hold it to a page or
+# to the IR, and read the checkout as well. The rest read this repository -- its
 # tree, its configuration, its gate scripts and its documentation -- and answer
 # for the project rather than for the product; none of what they read ships. They
 # carry the `repository` marker, so `-m "not repository"` is the product suite
 # and `-m repository` is the project's own audit. `tests/test_suite_partition.py`
-# holds the two apart in both directions.
+# holds the two apart in both directions, and names the product tests that read
+# the checkout.
 #
 # A few checks of the audit read the interpreter running them as well as the
 # tree: a table dated by release, a fingerprint naming the build, a page parsed

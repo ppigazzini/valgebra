@@ -312,7 +312,7 @@ jobs:
           path: dist
       # Not the local ./.github/actions/setup-uv wrapper the CI lanes use: this
       # job installs uv before the repository is on disk -- its checkout comes
-      # later, into `tree/`, for `tests/` alone -- so the wrapper's own files are
+      # later, into `tree/`, for the suite alone -- so the wrapper's own files are
       # not there to run from.
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -345,7 +345,8 @@ jobs:
             bin=".venv-$py/bin"; [ -d "$bin" ] || bin=".venv-$py/Scripts"
             "$bin/python" -W error -c "import sys, sysconfig, valgebra as v; assert v.Validator(int).is_valid(1); assert not v.Validator(int).is_valid('x'); assert v.Validator(list[int]).is_valid([1, 2]); assert v.Validator(int).is_valid_json('1'); assert not (sysconfig.get_config_var('Py_GIL_DISABLED') and sys._is_gil_enabled()); print('smoke ok', sys.version.split()[0], v.__version__)"
           done
-      # The checkout is for `tests/` alone: the package under test is the wheel
+      # The checkout is for the suite alone: `tests/`, and the pages and IR a few
+      # product tests hold the wheel to. The package under test is the wheel
       # from `dist`, never the tree.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -392,7 +393,7 @@ jobs:
         with:
           name: ${{ matrix.wheel.artifact }}
           path: dist
-      # The checkout is for `tests/` alone, as in the glibc smoke.
+      # The checkout is for the suite alone, as in the glibc smoke.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -467,7 +468,7 @@ jobs:
           path: dist
       # Not the local ./.github/actions/setup-uv wrapper the CI lanes use: this
       # job installs uv before the repository is on disk -- its checkout comes
-      # later, into `tree/`, for `tests/` alone -- so the wrapper's own files are
+      # later, into `tree/`, for the suite alone -- so the wrapper's own files are
       # not there to run from.
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -484,7 +485,7 @@ jobs:
           uv venv
           uv pip install dist/valgebra-*.tar.gz
           .venv/bin/python -W error -c "import valgebra as v; assert v.Validator(int).is_valid(1); assert not v.Validator(int).is_valid('x'); assert v.Validator(list[int]).is_valid([1, 2]); assert v.Validator(int).is_valid_json('1'); print('sdist smoke ok', v.__version__)"
-      # As for the wheels: the checkout is for `tests/` alone, and the package
+      # As for the wheels: the checkout is for the suite alone, and the package
       # under test is the one built from the sdist.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

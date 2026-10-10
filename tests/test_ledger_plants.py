@@ -3411,6 +3411,19 @@ PLANTS = (
         trips=("test_no_typing_form_is_subscripted_with_a_validator",),
     ),
     Plant(
+        # A product module that starts reading a page, and is named nowhere: the
+        # product suite gains a dependency on the checkout no reader can see.
+        "tests/test_suite_partition.py",
+        ("tests/test_scalars.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_scalars.py",
+            "import pytest\n",
+            "import pytest\n\nfrom _tree import ROOT\n",
+        ),
+        trips=("test_a_product_module_reading_the_tree_is_named",),
+    ),
+    Plant(
         # A module finding the checkout for itself: a second answer to where
         # the tree is, which moving the module leaves pointing somewhere else.
         "tests/test_suite_partition.py",
