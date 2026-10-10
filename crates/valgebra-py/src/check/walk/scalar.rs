@@ -242,10 +242,23 @@ pub(super) fn check_literal(
     let Some(literal) = const_at(ctx, index, value.py()) else {
         return false;
     };
+    // A Python value is compared where it lies, as a refinement's bound is: the
+    // walk holds it, so a comparison writes no reference count on it. A parsed
+    // JSON value is built into the object `json.loads` would have given. The
+    // comparison keeps one call site, which is what keeps it inlined here.
+    let built;
+    let obj = match value {
+        Value::Py(obj) => Ok(*obj),
+        Value::Json(..) => match value.to_python() {
+            Ok(obj) => {
+                built = obj;
+                Ok(&built)
+            }
+            Err(err) => Err(err),
+        },
+    };
     let ok = fold(
-        value
-            .to_python()
-            .and_then(|obj| literal_matches(&obj, literal)),
+        obj.and_then(|obj| literal_matches(obj, literal)),
         value.py(),
         ctx,
     );

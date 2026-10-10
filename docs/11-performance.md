@@ -587,7 +587,11 @@ program that builds validators per request, and to no validation call.
   string, a cached small integer. An exact `str`, `int`, `bool`, `bytes` or
   `None` that *is* the pooled constant equals it, so `is_the_constant` answers
   without a comparison. A `float` is excluded, since a NaN is not equal to
-  itself.
+  itself. Either way the value is compared where the walk holds it, writing no
+  reference count, and only a parsed JSON value is built into an object
+  (`check_literal`): a check against one `Literal` costs 2.4% fewer
+  instructions on CPython 3.14 and 4.1% fewer on 3.14t, where PyO3 reaches a
+  reference count through a call into the interpreter.
 - **A refinement borrows its operand and renders nothing on a pass.** The bound
   is read out of the pool as a borrow for the whole check, and the value from
   the walk, so a passing check writes no reference count; a scalar base that
