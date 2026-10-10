@@ -34,6 +34,7 @@ PRODUCT: every error code a report can carry
 from __future__ import annotations
 
 import ast
+import functools
 import re
 import subprocess
 import sys
@@ -103,10 +104,22 @@ def test_the_product_suite_is_what_is_searched() -> None:
     assert "LEDGER: every public name and every error code" not in suite
 
 
+@functools.cache
+def _reached() -> frozenset[str]:
+    """Give every cell the product suite reaches, read once for every row.
+
+    `names_reached` judges each cell on its own, so a cell is in the set for
+    the whole universe exactly when it is in the set for itself alone. Read per
+    row, the suite would be cut, parsed and searched once a cell, and this file
+    would be the audit's slowest.
+    """
+    return frozenset(_names_reached(_universe(), _product_sources()) | _markers())
+
+
 @pytest.mark.parametrize("cell", sorted(_universe()))
 def test_every_use_case_is_named_by_the_suite_or_accepted(cell: str) -> None:
     """A name the tree grows and the suite never mentions fails here."""
-    reached = cell in _names_reached({cell}, _product_sources()) | _markers()
+    reached = cell in _reached()
     accepted = cell in ACCEPTED
     assert reached or accepted, (
         f"{cell} is a use case no product test names, and has no accepted reason"
@@ -130,9 +143,7 @@ def test_the_count_is_reported() -> None:
     ledger that pinned the count would fail on the commit that adds a name
     rather than on the one that leaves it unreached.
     """
-    universe = _universe()
-    reached = _names_reached(universe, _product_sources()) | _markers()
-    assert reached | set(ACCEPTED) >= universe
+    assert _reached() | set(ACCEPTED) >= _universe()
 
 
 def _matrix_rows() -> tuple[set[str], dict[str, str]]:
