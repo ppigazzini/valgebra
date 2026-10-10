@@ -3426,6 +3426,22 @@ PLANTS = (
         trips=("test_a_product_module_reading_the_tree_is_named",),
     ),
     Plant(
+        # One of the jobs sharing the debug build's cache moved to another
+        # interpreter without the key: the others restore a build linked
+        # against it.
+        "tests/test_lane_interpreters.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            '          python-version: "3.12"\n'
+            "      - run: uv sync --locked --group docs\n",
+            '          python-version: "3.13"\n'
+            "      - run: uv sync --locked --group docs\n",
+        ),
+        trips=("test_jobs_sharing_a_rust_cache_install_the_interpreter_it_names",),
+    ),
+    Plant(
         # A module finding the checkout for itself: a second answer to where
         # the tree is, which moving the module leaves pointing somewhere else.
         "tests/test_suite_partition.py",

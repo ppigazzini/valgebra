@@ -619,10 +619,13 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
-          # is `.venv/bin/python` whichever build stands behind it, so a cache
-          # saved on the image's 3.12 would link this lane against that one.
-          key: managed-python
+          # One cache for the jobs that build this debug extension on uv's 3.12:
+          # one toolchain, one command, one interpreter, so the `target/` one
+          # job saves is the one the next would build. Named for the interpreter
+          # and moved with it, as `bench` argues: `PYO3_PYTHON` is
+          # `.venv/bin/python` whichever build stands behind it, so a cache saved
+          # on another release links the lane against that one.
+          shared-key: debug-uv-3.12
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.12"
@@ -661,10 +664,13 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
-          # is `.venv/bin/python` whichever build stands behind it, so a cache
-          # saved on the image's 3.12 would link this lane against that one.
-          key: managed-python
+          # One cache for the jobs that build this debug extension on uv's 3.12:
+          # one toolchain, one command, one interpreter, so the `target/` one
+          # job saves is the one the next would build. Named for the interpreter
+          # and moved with it, as `bench` argues: `PYO3_PYTHON` is
+          # `.venv/bin/python` whichever build stands behind it, so a cache saved
+          # on another release links the lane against that one.
+          shared-key: debug-uv-3.12
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.12"
@@ -695,10 +701,13 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
-          # is `.venv/bin/python` whichever build stands behind it, so a cache
-          # saved on the image's 3.12 would link this lane against that one.
-          key: managed-python
+          # One cache for the jobs that build this debug extension on uv's 3.12:
+          # one toolchain, one command, one interpreter, so the `target/` one
+          # job saves is the one the next would build. Named for the interpreter
+          # and moved with it, as `bench` argues: `PYO3_PYTHON` is
+          # `.venv/bin/python` whichever build stands behind it, so a cache saved
+          # on another release links the lane against that one.
+          shared-key: debug-uv-3.12
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.12"
@@ -794,10 +803,13 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
-          # is `.venv/bin/python` whichever build stands behind it, so a cache
-          # saved on the image's 3.12 would link this lane against that one.
-          key: managed-python
+          # One cache for the jobs that build this debug extension on uv's 3.12:
+          # one toolchain, one command, one interpreter, so the `target/` one
+          # job saves is the one the next would build. Named for the interpreter
+          # and moved with it, as `bench` argues: `PYO3_PYTHON` is
+          # `.venv/bin/python` whichever build stands behind it, so a cache saved
+          # on another release links the lane against that one.
+          shared-key: debug-uv-3.12
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.12"

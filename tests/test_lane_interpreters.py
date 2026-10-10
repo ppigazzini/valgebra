@@ -24,6 +24,12 @@ that, because an import is not an answer. So a stated implementation has a lane
 that runs the suite, and a lane that runs the suite on an implementation is one
 the metadata states.
 
+The third is the build caches. A cache one job saves and another restores links
+the interpreter the first built against: pyo3 resolves it again only when
+`PYO3_PYTHON` changes, and every lane names `.venv/bin/python` whichever build
+stands behind it. So the jobs sharing a rust cache install one interpreter, and
+the key names that interpreter: a lane moving its interpreter moves the key.
+
 LEDGER: no lane installs an interpreter without naming it
 """
 
@@ -183,3 +189,41 @@ def test_no_lane_runs_the_suite_on_an_implementation_nobody_states() -> None:
         f"{unstated}. Add the classifier, or the lane is spending minutes on a "
         "target no consumer is told about."
     )
+
+
+def _shared_caches() -> dict[str, set[str]]:
+    """Give each shared rust cache key, with the interpreters its jobs install."""
+    shared: dict[str, set[str]] = {}
+    for job in read_workflow()["jobs"].values():
+        steps = job.get("steps") or []
+        keys = [
+            str(step["with"]["shared-key"])
+            for step in steps
+            if str(step.get("uses", "")).startswith("Swatinem/rust-cache@")
+            and "shared-key" in (step.get("with") or {})
+        ]
+        installed = " ".join(
+            str(step["with"]["python-version"])
+            for step in steps
+            if "python-version" in (step.get("with") or {})
+        )
+        for key in keys:
+            shared.setdefault(key, set()).add(installed or "none")
+    return shared
+
+
+def test_jobs_sharing_a_rust_cache_install_the_interpreter_it_names() -> None:
+    shared = _shared_caches()
+    # The scan is the detector: no shared cache at all would pass having read
+    # nothing.
+    assert shared, "no job shares a rust cache"
+    for key, interpreters in shared.items():
+        assert len(interpreters) == 1, (
+            f"`{key}` is restored by jobs on {sorted(interpreters)}: a cache built "
+            "against one links the others against it"
+        )
+        (interpreter,) = interpreters
+        assert interpreter in key, (
+            f"`{key}` does not name {interpreter}, so moving the interpreter "
+            "leaves the cache behind"
+        )
