@@ -24,10 +24,11 @@
 
 use std::sync::Arc;
 
-use super::budget;
+use std::borrow::Cow;
+
+use super::polar::{PolarUnion, Summand, tidy};
 use super::records::RecordLattice;
 use super::{Component, Descr, Op, Whole};
-use std::borrow::Cow;
 
 use crate::kind::Kind;
 use crate::verdict::Verdict;
@@ -115,10 +116,10 @@ impl Line {
     /// one automaton carries the `str` words and the `bytes` ones -- and their
     /// universes are not the same set: every byte string is a `bytes`, and a
     /// `str` is one that encodes a sequence of code points. So the structure's
-    /// raw complement holds words no value of the kind takes, and
-    /// [`complement_lines`] seeds its fold with the kind's own top and meets
-    /// each pair into it, which cuts them back. Cutting again here is the same
-    /// meet taken twice.
+    /// raw complement holds words no value of the kind takes, and the fold that
+    /// complements a union ([`complement_all`](super::polar::complement_all))
+    /// seeds itself with the kind's own top and meets each pair into it, which
+    /// cuts them back. Cutting again here is the same meet taken twice.
     ///
     /// **Total.** A component's complement is a flag or a flip and a record
     /// lattice's is the same, so neither half can refuse; the fold below is
@@ -140,25 +141,84 @@ impl Line {
 /// what makes the two bounds cost nothing: a descriptor holding one kind is
 /// eleven empty vectors and one line.
 ///
-/// The polarity is the same device the record lattice carries, for the same
-/// reason: a complement must be **total** -- the [`Guard`](super::Guard)
-/// contract asks for one -- and the positive form of a complement can pass
-/// [`MAX_LINES`]. Flipping a flag always succeeds; normalising back to a union
-/// is attempted and, where it does not fit, the flag carries the set instead.
+/// The polarity is the device every lattice built from parts carries
+/// ([`PolarUnion`]), for the same reason: a complement must be **total** -- the
+/// [`Guard`](super::Guard) contract asks for one -- and the positive form of a
+/// complement can pass [`MAX_LINES`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct Lines {
-    lines: Vec<Line>,
-    /// Whether the lines are the values held or the values *not* held.
-    negated: bool,
+pub(crate) struct Lines(PolarUnion<Line>);
+
+impl Summand for Line {
+    /// The kind the lines are a part of: complementing *no* lines is the whole
+    /// kind, and an empty union carries no line to read one off. A name rather
+    /// than a set, because only a complement wants the set -- so the eleven
+    /// wholes an operation runs over are built where they are read and nowhere
+    /// else.
+    type Within = Whole;
+    type Complement = [Line; 2];
+    const MAX: usize = MAX_LINES;
+
+    fn top(whole: Whole) -> Line {
+        Line::everything(whole.component())
+    }
+
+    fn meet(&self, other: &Line) -> Option<Line> {
+        self.combine(other, Op::Intersect)
+    }
+
+    fn complement(&self, whole: Whole) -> [Line; 2] {
+        Line::complement(self, whole)
+    }
+
+    /// Drop the lines proved empty and merge the ones that differ only in
+    /// structure.
+    ///
+    /// Merging is distributivity, and it is what keeps a kind that constrains
+    /// no object at *one* line: `(s₁ ∧ o) ∨ (s₂ ∧ o)` is `(s₁ ∨ s₂) ∧ o`, so two
+    /// lines agreeing on their objects are one line over the joined structure.
+    /// Without it `bool` would be a line per boolean and `int` a line per
+    /// interval, and two descriptors admitting the same values would stop
+    /// comparing equal. Where the structure union passes its own bound the two
+    /// lines stay apart, which is the same set spelled longer.
+    fn compacted(mut lines: Vec<Line>) -> Option<Vec<Line>> {
+        // In place: the caller has just built this list and the result is the
+        // same list shorter, so a second one of the same width is an
+        // allocation per meet and per union. `kept` is how many of the front
+        // are keepers, and a line that survives is swapped up to join them.
+        let mut kept = 0;
+        for at in 0..lines.len() {
+            {
+                // The keepers are `lines[..kept]`, which the split puts in
+                // `front`; the line being read is the first of `back`.
+                // Continuing drops it, falling through keeps it.
+                let (front, back) = lines.split_at_mut(at);
+                let Some(line) = back.first() else { break };
+                if line.is_empty() {
+                    continue;
+                }
+                if let Some(keeper) = front
+                    .iter()
+                    .take(kept)
+                    .position(|held| held.objects == line.objects)
+                    && let Some(held) = front.get_mut(keeper)
+                    && let Some(joined) = held.structure.combine(&line.structure, Op::Union)
+                {
+                    held.structure = joined;
+                    continue;
+                }
+            }
+            lines.swap(kept, at);
+            kept += 1;
+        }
+        lines.truncate(kept);
+        Some(lines)
+    }
 }
 
 impl Lines {
     /// No value of the kind.
-    pub(crate) fn bottom() -> Lines {
-        Lines {
-            lines: Vec::new(),
-            negated: false,
-        }
+    pub(crate) const fn bottom() -> Lines {
+        Lines(PolarUnion::of(Vec::new()))
     }
 
     /// Every value of the kind whose structure this describes.
@@ -177,59 +237,31 @@ impl Lines {
     /// One line, or the bottom where that line is proved to hold nothing.
     ///
     /// **A `Lines` never carries a line proved empty.** Every operation drops
-    /// them ([`tidy`]), so one built with one is a value no operation can return
-    /// -- and `a ∪ a` would tidy it away and stop equalling `a`. Equality is what
-    /// the lattice laws are asked in, so a form only a constructor can produce is
-    /// a form that breaks them.
+    /// them ([`Summand::compacted`]), so one built with one is a value no
+    /// operation can return -- and `a ∪ a` would tidy it away and stop
+    /// equalling `a`. Equality is what the lattice laws are asked in, so a
+    /// form only a constructor can produce is a form that breaks them.
     fn of(line: Line) -> Lines {
-        Lines {
-            lines: if line.is_empty() {
-                Vec::new()
-            } else {
-                vec![line]
-            },
-            negated: false,
-        }
-    }
-
-    /// The lines of the values this holds, complementing a negated form.
-    ///
-    /// `whole` names the kind these lines are a part of: complementing *no*
-    /// lines is the whole kind, and an empty union carries no line to read one
-    /// off. It is a name rather than a set because this is the only place that
-    /// wants the set, and only on the negated path -- so the eleven wholes an
-    /// operation runs over are built where they are read and nowhere else.
-    ///
-    /// Borrowed where the list is already positive, which is the common case
-    /// and the one asked most often: a component is asked whether it is empty
-    /// once per kind per constraint, and copying a list to read whether it
-    /// holds a line was the whole cost of asking.
-    fn positive(&self, whole: Whole) -> Option<Cow<'_, [Line]>> {
-        if self.negated {
-            complement_lines(&self.lines, whole).map(Cow::Owned)
+        Lines(PolarUnion::of(if line.is_empty() {
+            Vec::new()
         } else {
-            Some(Cow::Borrowed(&self.lines))
-        }
+            vec![line]
+        }))
     }
 
     /// What is known about this kind admitting a value.
     ///
-    /// A union of lines, so the verdict is the union's: empty when every line is
-    /// proved empty, inhabited as soon as one is. A negated form has to be
-    /// expanded first, and a refusal there is *unknown* rather than inhabited --
-    /// past the bound there is no union to read, so nothing is proved either way.
+    /// A union of lines, so the verdict is the union's, each line asked within
+    /// the kind it serves.
     pub(crate) fn emptiness(&self, whole: Whole) -> Verdict {
-        match self.positive(whole) {
-            Some(lines) => Verdict::any(lines.iter().map(|line| line.emptiness(whole.kind()))),
-            None => Verdict::Unknown,
-        }
+        self.0.verdict(whole, |line| line.emptiness(whole.kind()))
     }
 
     /// The structure of every line proved to hold a value, or `None` where a
     /// line is proved neither way or a negated form cannot be expanded.
     pub(crate) fn inhabited_structures(&self, whole: Whole) -> Option<Vec<Component>> {
         let mut structures = Vec::new();
-        for line in self.positive(whole)?.iter() {
+        for line in self.0.positive(whole)?.iter() {
             match line.emptiness(whole.kind()) {
                 Verdict::Inhabited => structures.push(line.structure.clone()),
                 Verdict::Empty => {}
@@ -250,199 +282,58 @@ impl Lines {
         structural: &dyn Fn(&Component) -> bool,
         objects: &dyn Fn(&RecordLattice<Arc<Descr>>) -> bool,
     ) -> bool {
-        self.lines
-            .iter()
-            .any(|line| structural(&line.structure) && objects(&line.objects))
-            != self.negated
+        self.0
+            .holds(|line| structural(&line.structure) && objects(&line.objects))
     }
 
     /// Every value in either union, or in both.
     ///
     /// A union concatenates and a meet multiplies, which is where the bound
     /// bites.
+    ///
+    /// **A negated side is expanded before a join**, where the lattices built
+    /// from atoms join one through De Morgan, `¬(¬A ∩ ¬B)`. The two are one set
+    /// and differ in where the bound refuses and in the form the answer takes:
+    /// expansion leaves a union of lines, and De Morgan a negated union. A
+    /// kind's lines sit inside the record and map fields that carry a
+    /// descriptor, where two fields are compared and deduplicated by that form,
+    /// so moving this one moves the forms the other lattices compact by. That
+    /// is a change to measure on its own, and not part of sharing the device.
     pub(crate) fn combine(&self, other: &Lines, op: Op, whole: Whole) -> Option<Lines> {
-        // A meet against a negated side removes one of its lines at a time.
-        // `⋀ᵢ¬Lᵢ` is `¬⋁ᵢLᵢ`, so both orders compute the same values; what they
-        // differ in is the widest intermediate they ask [`MAX_LINES`] about.
-        // Expanding the negation first multiplies every `¬Lᵢ` together with
-        // nothing to narrow the product, which is a width the answer rarely
-        // has -- and a bound reached under one spelling of a difference and
-        // not another makes a relation's answer a property of how it was
-        // written.
-        if op == Op::Intersect && (self.negated || other.negated) {
-            let mut lines = match (self.negated, other.negated) {
-                (false, _) => self.lines.clone(),
-                (true, false) => other.lines.clone(),
-                // Two negated sides leave nothing positive to start from, so
-                // the meet starts at the whole kind and both sides narrow it.
-                (true, true) => vec![Line::everything(whole.component())],
-            };
-            for negated in [self, other].into_iter().filter(|side| side.negated) {
-                for line in &negated.lines {
-                    lines = product(&lines, &line.complement(whole))?;
-                }
-            }
-            return Some(Lines {
-                lines,
-                negated: false,
-            });
-        }
-        let mine = self.positive(whole)?;
-        let theirs = other.positive(whole)?;
-        let lines = match op {
+        match op {
+            Op::Intersect => self.0.intersect(&other.0, whole).map(Lines),
             Op::Union => {
-                let mut lines = mine.into_owned();
+                let mut lines = self.0.positive(whole)?.into_owned();
                 // The right-hand list is appended where it lies: owning it
                 // first buys a second allocation and a move, and the lines
                 // are cloned into the result either way.
-                match theirs {
+                match other.0.positive(whole)? {
                     Cow::Borrowed(rest) => lines.extend_from_slice(rest),
                     Cow::Owned(rest) => lines.extend(rest),
                 }
-                tidy(lines)?
+                Some(Lines(PolarUnion::of(tidy(lines)?)))
             }
-            Op::Intersect => product(&mine, &theirs)?,
-        };
-        Some(Lines {
-            lines,
-            negated: false,
-        })
+        }
     }
 
     /// Every value of the kind this union does not admit.
     ///
-    /// Total, which is what the [`Guard`](super::Guard) contract asks. The lines
-    /// are rebuilt where the product fits, so the common forms stay comparable,
-    /// and the polarity carries the rest.
+    /// Total, which is what the [`Guard`](super::Guard) contract asks.
     pub(crate) fn complement(&self, whole: Whole) -> Lines {
-        // A negated union's complement is its own lines held positively; a
-        // positive one's is De Morgan over them, where that fits, and the
-        // same lines under the flipped flag where it does not.
-        if self.negated {
-            return Lines {
-                lines: self.lines.clone(),
-                negated: false,
-            };
-        }
-        // Expanded only where the expansion is one product, which is what
-        // keeps the cheap forms canonical -- complementing "no lines" gives
-        // back exactly the whole kind rather than a second spelling of it.
-        // Past that the negation is carried, and the meet it is headed for
-        // removes one line at a time instead.
-        if self.lines.len() > 1 {
-            return Lines {
-                lines: self.lines.clone(),
-                negated: true,
-            };
-        }
-        match complement_lines(&self.lines, whole) {
-            Some(lines) => Lines {
-                lines,
-                negated: false,
-            },
-            None => Lines {
-                lines: self.lines.clone(),
-                negated: true,
-            },
-        }
+        Lines(self.0.complement(whole))
     }
-}
 
-/// The lines a union of lines complements into, or `None` past [`MAX_LINES`].
-///
-/// De Morgan over the lines: `¬⋁ᵢ Lᵢ` is `⋀ᵢ ¬Lᵢ`, and each `¬Lᵢ` is the two
-/// lines [`Line::complement`] gives. The fold starts from the whole kind, which
-/// is what complementing no lines yields.
-fn complement_lines(lines: &[Line], whole: Whole) -> Option<Vec<Line>> {
-    let mut kept = vec![Line::everything(whole.component())];
-    for line in lines {
-        kept = product(&kept, &line.complement(whole))?;
+    /// The lines as held, whichever polarity reads them.
+    #[cfg(test)]
+    fn lines(&self) -> &[Line] {
+        self.0.summands()
     }
-    Some(kept)
-}
 
-/// The lines of a meet, which is a meet of every pair.
-///
-/// Every pair charges the build's allowance, because this is the loop that
-/// multiplies: the pairs are the product of the two counts, and a fold over
-/// several unions raises that to a power. The line bound stops the result from
-/// being too wide, and the allowance stops the *work* from being too much
-/// before the width is known.
-fn product(left: &[Line], right: &[Line]) -> Option<Vec<Line>> {
-    let mut lines = Vec::new();
-    for mine in left {
-        for theirs in right {
-            if !budget::spend() {
-                return None;
-            }
-            if lines.len() >= MAX_LINES {
-                // [`MAX_LINES`] bounds the *union*, and a union is only as wide
-                // as it is once the lines proved empty and the repeats are
-                // gone. Compacting here is what keeps the raw count from
-                // standing in for that width, and the bound itself is
-                // [`tidy`]'s: asked once, so a union as wide as the bound
-                // builds whichever order its factors were multiplied in,
-                // and one wider than it refuses whichever order they took.
-                lines = tidy(lines)?;
-            }
-            lines.push(mine.combine(theirs, Op::Intersect)?);
-        }
+    /// Whether the lines are the values *not* held.
+    #[cfg(test)]
+    const fn negated(&self) -> bool {
+        self.0.is_negated()
     }
-    tidy(lines)
-}
-
-/// Drop the lines proved empty, merge the ones that differ only in structure,
-/// put the rest in order, and refuse past the bound.
-///
-/// Dropping is not an optimisation: a line proved empty contributes no value to
-/// the union, so removing it leaves the same set and keeps the count from
-/// growing on shapes that describe nothing. A line that is merely *unknown*
-/// stays, because it may yet hold a value.
-///
-/// Merging is distributivity, and it is what keeps a kind that constrains no
-/// object at *one* line: `(s₁ ∧ o) ∨ (s₂ ∧ o)` is `(s₁ ∨ s₂) ∧ o`, so two lines
-/// agreeing on their objects are one line over the joined structure. Without it
-/// `bool` would be a line per boolean and `int` a line per interval, and two
-/// descriptors admitting the same values would stop comparing equal. Where the
-/// structure union passes its own bound the two lines stay apart, which is the
-/// same set spelled longer.
-///
-/// The order is what makes two equal unions compare equal, as far as equality
-/// here goes.
-fn tidy(mut lines: Vec<Line>) -> Option<Vec<Line>> {
-    // In place: the caller has just built this list and the result is the same
-    // list shorter, so a second one of the same width is an allocation per
-    // meet and per union. `kept` is how many of the front are keepers, and a
-    // line that survives is swapped up to join them.
-    let mut kept = 0;
-    for at in 0..lines.len() {
-        {
-            // The keepers are `lines[..kept]`, which the split puts in `front`;
-            // the line being read is the first of `back`. Continuing drops it,
-            // falling through keeps it.
-            let (front, back) = lines.split_at_mut(at);
-            let Some(line) = back.first() else { break };
-            if line.is_empty() {
-                continue;
-            }
-            if let Some(keeper) = front
-                .iter()
-                .take(kept)
-                .position(|held| held.objects == line.objects)
-                && let Some(held) = front.get_mut(keeper)
-                && let Some(joined) = held.structure.combine(&line.structure, Op::Union)
-            {
-                held.structure = joined;
-                continue;
-            }
-        }
-        lines.swap(kept, at);
-        kept += 1;
-    }
-    lines.truncate(kept);
-    lines.sort();
-    lines.dedup();
-    (lines.len() <= MAX_LINES).then_some(lines)
 }
 
 #[cfg(test)]

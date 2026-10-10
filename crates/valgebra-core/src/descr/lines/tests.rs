@@ -292,7 +292,7 @@ fn a_complement_past_the_bound_keeps_its_values_under_the_flag() {
     }
     let flagged = wide.complement(WHOLE);
     assert!(
-        flagged.negated,
+        flagged.negated(),
         "nine two-sided lines complement past {MAX_LINES} lines"
     );
     for (n, class) in universe() {
@@ -333,7 +333,7 @@ fn a_meet_against_a_negated_side_removes_one_line_at_a_time() {
     }
     let flagged = wide.complement(WHOLE);
     assert!(
-        flagged.negated,
+        flagged.negated(),
         "the row is about a side the bound could not expand"
     );
 
@@ -360,8 +360,8 @@ fn a_meet_against_a_negated_side_removes_one_line_at_a_time() {
 /// were multiplied in, which is a property of how a difference was written
 /// rather than of the values it names.
 ///
-/// The lines carry an object constraint apiece, because [`tidy`](super::tidy)
-/// merges lines that differ only in their structure: twenty lines of one kind's
+/// The lines carry an object constraint apiece, because the compaction
+/// ([`Summand::compacted`](super::Summand::compacted)) merges lines that differ only in their structure: twenty lines of one kind's
 /// integers are one line, and a union of one is a union no product grows.
 #[test]
 fn a_meet_is_bounded_by_the_width_of_its_union_and_not_by_its_pairs() {
@@ -377,9 +377,9 @@ fn a_meet_is_bounded_by_the_width_of_its_union_and_not_by_its_pairs() {
             .combine(&line(n), Op::Union, WHOLE)
             .expect("twenty lines");
     }
-    assert_eq!(wide.lines.len(), 20, "twenty lines, none of them merged");
+    assert_eq!(wide.lines().len(), 20, "twenty lines, none of them merged");
     assert!(
-        wide.lines.len() * wide.lines.len() > MAX_LINES,
+        wide.lines().len() * wide.lines().len() > MAX_LINES,
         "the row needs a pair count the bound would refuse"
     );
 
@@ -387,8 +387,8 @@ fn a_meet_is_bounded_by_the_width_of_its_union_and_not_by_its_pairs() {
         .combine(&wide, Op::Intersect, WHOLE)
         .expect("four hundred pairs, one union");
     assert_eq!(
-        met.lines.len(),
-        wide.lines.len(),
+        met.lines().len(),
+        wide.lines().len(),
         "and an answer no wider than either side"
     );
     for n in 0..20i64 {
