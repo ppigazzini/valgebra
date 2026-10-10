@@ -29,8 +29,8 @@
 //! be pushed onto finitely many labels; an attribute namespace has no such
 //! regions.
 
-use super::budget;
 use super::classes::{Class, Reach};
+use super::polar::{PolarUnion, Summand};
 use super::symbolic::Guard;
 use super::values::{Field, Values};
 use crate::Kind;
@@ -271,55 +271,85 @@ impl<G: Guard> Atom<G> {
     }
 }
 
+impl<G: Guard> Summand for Atom<G> {
+    /// Nothing: an atom's universe is every object, whatever kind carries it.
+    type Within = ();
+    type Complement = Vec<Atom<G>>;
+    const MAX: usize = MAX_ATOMS;
+
+    fn top((): ()) -> Atom<G> {
+        Atom::top()
+    }
+
+    fn meet(&self, other: &Atom<G>) -> Option<Atom<G>> {
+        Atom::meet(self, other)
+    }
+
+    fn complement(&self, (): ()) -> Vec<Atom<G>> {
+        Atom::complement(self)
+    }
+
+    /// Each atom in its tidied shape, without the ones holding no object, each
+    /// once, and in order.
+    ///
+    /// Once by equality rather than by position after a sort. A guard's
+    /// equality can be coarser than its order -- an integer set compares two
+    /// spellings of one set equal and sorts them apart -- so two equal atoms
+    /// need not be neighbours once sorted, and a sort cannot be what finds the
+    /// repeat.
+    fn compacted(atoms: Vec<Atom<G>>) -> Option<Vec<Atom<G>>> {
+        let mut kept: Vec<Atom<G>> = Vec::with_capacity(atoms.len());
+        for atom in atoms {
+            let atom = atom.tidy();
+            if !atom.is_empty() && !kept.contains(&atom) {
+                kept.push(atom);
+            }
+        }
+        kept.sort();
+        Some(kept)
+    }
+}
+
 /// A set of objects, held as a union of open record atoms and a polarity.
 ///
 /// The polarity is what keeps `complement` total, which the [`Guard`] a
-/// descriptor must be requires of it. Complementing a union of atoms is a
-/// product -- an intersection over the atoms, each contributing a union over its
-/// labels -- so doing it eagerly could pass the bound and have nowhere sound to
-/// go. Flipping a flag cannot, and the product is paid by the operation that
-/// needs the atoms, where a refusal is already allowed. The powerset component
-/// keeps complement total the same way, and for the same reason.
+/// descriptor must be requires of it: complementing a union of atoms is a
+/// product -- an intersection over the atoms, each contributing a union over
+/// its labels -- so doing it eagerly could pass the bound and have nowhere
+/// sound to go. The device is the one every lattice built from parts shares,
+/// in `descr/polar.rs`.
 ///
 /// **Not canonical**, for the reason a union of powerset lines is not: two
 /// unions can hold the same objects and stay unequal, and recognising that costs
 /// a search this does not run.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct RecordLattice<G: Guard> {
-    atoms: Vec<Atom<G>>,
-    /// Whether the atoms are the objects held or the objects *not* held.
-    negated: bool,
-}
+pub struct RecordLattice<G: Guard>(PolarUnion<Atom<G>>);
 
 impl<G: Guard> RecordLattice<G> {
     /// No object at all.
     #[must_use]
     pub fn empty() -> RecordLattice<G> {
-        RecordLattice {
-            atoms: Vec::new(),
-            negated: false,
-        }
+        RecordLattice(PolarUnion::of(Vec::new()))
     }
 
     /// Every object: the one atom that constrains no attribute.
     #[must_use]
     pub fn all() -> RecordLattice<G> {
-        RecordLattice {
-            atoms: vec![Atom::top()],
-            negated: false,
-        }
+        RecordLattice::one(Atom::top())
+    }
+
+    /// The objects one atom admits.
+    fn one(atom: Atom<G>) -> RecordLattice<G> {
+        RecordLattice(PolarUnion::of(vec![atom]))
     }
 
     /// The objects that are instances of `class`.
     #[must_use]
     pub fn instance_of(class: Class) -> RecordLattice<G> {
-        RecordLattice {
-            atoms: vec![Atom {
-                is_a: BTreeSet::from([class]),
-                ..Atom::top()
-            }],
-            negated: false,
-        }
+        RecordLattice::one(Atom {
+            is_a: BTreeSet::from([class]),
+            ..Atom::top()
+        })
     }
 
     /// The objects carrying `label`, whose value is in `ty`.
@@ -328,46 +358,31 @@ impl<G: Guard> RecordLattice<G> {
     /// `⊥` in the field's type rather than a rule beside it.
     #[must_use]
     pub fn attribute(label: &str, ty: G, optional: bool) -> RecordLattice<G> {
-        RecordLattice {
-            atoms: vec![Atom {
-                fields: BTreeMap::from([(
-                    label.to_owned(),
-                    Field {
-                        ty: Values::Only(ty),
-                        absent: optional,
-                    },
-                )]),
-                ..Atom::top()
-            }],
-            negated: false,
-        }
+        RecordLattice::one(Atom {
+            fields: BTreeMap::from([(
+                label.to_owned(),
+                Field {
+                    ty: Values::Only(ty),
+                    absent: optional,
+                },
+            )]),
+            ..Atom::top()
+        })
     }
 
     /// The objects that do *not* carry `label` at all.
     #[must_use]
     pub fn without(label: &str) -> RecordLattice<G> {
-        RecordLattice {
-            atoms: vec![Atom {
-                fields: BTreeMap::from([(
-                    label.to_owned(),
-                    Field {
-                        ty: Values::none(),
-                        absent: true,
-                    },
-                )]),
-                ..Atom::top()
-            }],
-            negated: false,
-        }
-    }
-
-    /// The atoms of the objects this holds, complementing a negated form.
-    fn positive(&self) -> Option<Vec<Atom<G>>> {
-        if self.negated {
-            complement_atoms(&self.atoms)
-        } else {
-            Some(self.atoms.clone())
-        }
+        RecordLattice::one(Atom {
+            fields: BTreeMap::from([(
+                label.to_owned(),
+                Field {
+                    ty: Values::none(),
+                    absent: true,
+                },
+            )]),
+            ..Atom::top()
+        })
     }
 
     /// Whether this holds no object.
@@ -381,10 +396,6 @@ impl<G: Guard> RecordLattice<G> {
     }
 
     /// What is known about this holding an object.
-    ///
-    /// A negated form has to be expanded first, and a refusal there is
-    /// *unknown* rather than inhabited: past the bound there is no union to
-    /// read, so nothing has been proved either way.
     #[must_use]
     pub fn emptiness(&self) -> Verdict {
         self.emptiness_of_kind(None)
@@ -404,153 +415,49 @@ impl<G: Guard> RecordLattice<G> {
     /// `None` is the line of objects that have no builtin kind, where the class
     /// is the whole of what is asked and the documented assumption -- a class
     /// the bindings can read has an instance -- is the answer.
-    ///
-    /// A form that is not negated is read where it stands: only a negated one
-    /// has a union to build first, and copying the atoms to read them would pay
-    /// a copy and a drop of every atom on each question.
     #[must_use]
     pub fn emptiness_of_kind(&self, kind: Option<Kind>) -> Verdict {
-        let any_held =
-            |atoms: &[Atom<G>]| Verdict::any(atoms.iter().map(|atom| atom.emptiness_of_kind(kind)));
-        if !self.negated {
-            return any_held(&self.atoms);
-        }
-        match complement_atoms(&self.atoms) {
-            Some(atoms) => any_held(&atoms),
-            None => Verdict::Unknown,
-        }
+        self.0.verdict((), |atom| atom.emptiness_of_kind(kind))
     }
 
     /// Whether the object carrying `attributes` is held.
     #[must_use]
     pub fn holds(&self, class: Option<&Class>, attributes: &[(&str, G::Value)]) -> bool {
-        self.atoms.iter().any(|atom| atom.holds(class, attributes)) != self.negated
+        self.0.holds(|atom| atom.holds(class, attributes))
     }
 
     /// The objects in either, or `None` past [`MAX_ATOMS`].
     #[must_use]
     pub fn union(&self, other: &RecordLattice<G>) -> Option<RecordLattice<G>> {
-        if self.negated || other.negated {
-            // De Morgan: `A ∪ B` is `¬(¬A ∩ ¬B)`, and the meet is the operation
-            // that can drop an atom mid-way. Expanding the negation first asks
-            // the bound about a union that is only an intermediate.
-            let met = self.complement().intersect(&other.complement())?;
-            return Some(met.complement());
-        }
-        let mut atoms = self.atoms.clone();
-        atoms.extend(other.atoms.iter().cloned());
-        Some(RecordLattice {
-            atoms: tidy(atoms)?,
-            negated: false,
-        })
+        self.0.union(&other.0, ()).map(RecordLattice)
     }
 
     /// The objects in both, or `None` past [`MAX_ATOMS`] or where a guard
     /// refuses.
     #[must_use]
     pub fn intersect(&self, other: &RecordLattice<G>) -> Option<RecordLattice<G>> {
-        let mut atoms = match (self.negated, other.negated) {
-            (false, false) => product(&self.atoms, &other.atoms)?,
-            (false, true) => self.atoms.clone(),
-            (true, false) => other.atoms.clone(),
-            // Two negated sides leave nothing positive to start from, so the
-            // meet starts at every object and both sides narrow it.
-            (true, true) => vec![Atom::top()],
-        };
-        for negated in [self, other].into_iter().filter(|side| side.negated) {
-            for atom in &negated.atoms {
-                atoms = product(&atoms, &atom.complement())?;
-            }
-        }
-        Some(RecordLattice {
-            atoms,
-            negated: false,
-        })
+        self.0.intersect(&other.0, ()).map(RecordLattice)
     }
 
     /// The objects this does not hold.
     ///
-    /// Total, which is what the [`Guard`] contract asks. The atoms are rebuilt
-    /// where the product fits, so the common forms stay comparable, and the
-    /// polarity carries the rest.
+    /// Total, which is what the [`Guard`] contract asks.
     #[must_use]
     pub fn complement(&self) -> RecordLattice<G> {
-        let flipped = RecordLattice {
-            atoms: self.atoms.clone(),
-            negated: !self.negated,
-        };
-        // Expanded only where the expansion is one product, which is what
-        // keeps the cheap forms canonical -- complementing "every object"
-        // gives back exactly "no object" rather than a second spelling of it.
-        // Past that the negation is carried: rebuilding a wide union's
-        // complement here spends the build's allowance on an intermediate that
-        // the meet it is headed for would have pruned, and a meet against a
-        // negated side removes one atoms at a time instead.
-        if self.atoms.len() > 1 {
-            return flipped;
-        }
-        match flipped.positive() {
-            Some(atoms) => RecordLattice {
-                atoms,
-                negated: false,
-            },
-            None => flipped,
-        }
+        RecordLattice(self.0.complement(()))
     }
-}
 
-/// The atoms a union of atoms complements into, or `None` past [`MAX_ATOMS`].
-fn complement_atoms<G: Guard>(atoms: &[Atom<G>]) -> Option<Vec<Atom<G>>> {
-    let mut whole = vec![Atom::top()];
-    for atom in atoms {
-        whole = product(&whole, &atom.complement())?;
+    /// The atoms as held, whichever polarity reads them.
+    #[cfg(test)]
+    fn atoms(&self) -> &[Atom<G>] {
+        self.0.summands()
     }
-    Some(whole)
-}
 
-/// The atoms of a meet, which is a meet of every pair.
-///
-/// Every pair charges the build's allowance: the count is the product of the
-/// two, and a meet of a guard against a guard descends a level of nesting for
-/// each pair. See [`budget`].
-fn product<G: Guard>(left: &[Atom<G>], right: &[Atom<G>]) -> Option<Vec<Atom<G>>> {
-    let mut atoms = Vec::new();
-    for mine in left {
-        for theirs in right {
-            if !budget::spend() {
-                return None;
-            }
-            if atoms.len() >= MAX_ATOMS {
-                // [`MAX_ATOMS`] bounds the *union*, and a union is only as wide
-                // as it is once the atoms holding no object and the repeats are
-                // gone. Compacting here is what keeps the raw count from
-                // standing in for that width, and the bound itself is
-                // [`tidy`]'s: asked once, so a union as wide as the bound
-                // builds whichever order its factors were multiplied in,
-                // and one wider than it refuses whichever order they took.
-                atoms = tidy(atoms)?;
-            }
-            atoms.push(mine.meet(theirs)?);
-        }
+    /// Whether the atoms are the objects *not* held.
+    #[cfg(test)]
+    const fn negated(&self) -> bool {
+        self.0.is_negated()
     }
-    tidy(atoms)
-}
-
-/// Drop the atoms that hold nothing, put the rest in order, and refuse a union
-/// past the bound.
-fn tidy<G: Guard>(atoms: Vec<Atom<G>>) -> Option<Vec<Atom<G>>> {
-    let mut kept: Vec<Atom<G>> = Vec::with_capacity(atoms.len());
-    for atom in atoms {
-        let atom = atom.tidy();
-        if !atom.is_empty() && !kept.contains(&atom) {
-            kept.push(atom);
-        }
-    }
-    if kept.len() > MAX_ATOMS {
-        return None;
-    }
-    kept.sort();
-    Some(kept)
 }
 
 #[cfg(test)]
