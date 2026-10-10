@@ -44,9 +44,12 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+      # The lint step's own command, `--locked` included, so the hook reads the
+      # lock the lane reads: `tests/test_commit_hooks.py` holds both clippy
+      # hooks to a step.
       - id: cargo-clippy
         name: cargo clippy
-        entry: cargo clippy --all-targets --all-features -- -D warnings
+        entry: cargo clippy --locked --all-targets --all-features -- -D warnings
         language: system
         types: [rust]
         pass_filenames: false

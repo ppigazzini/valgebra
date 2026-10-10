@@ -106,7 +106,9 @@ being a workspace member or a detached surface named here with the command that
 builds it.
 
 `pre-commit run --all-files` runs the file-hygiene, ruff, `ty`, cargo and
-docs-lint gates in one step.
+docs-lint gates in one step. Each clippy hook runs a lint step's own command,
+`--locked` included, so a commit the hooks pass reads the lock the lane reads;
+`tests/test_commit_hooks.py` holds them to it.
 
 ## Contract inventory
 

@@ -92,12 +92,18 @@ def _parsed(path: Path) -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def read_workflow(path: Path = WORKFLOW) -> dict[str, Any]:
-    """Parse a workflow or an action, `ci.yml` unless another is named.
+def read_yaml(path: Path) -> dict[str, Any]:
+    """Parse a YAML file of the tree's: the parse is shared, the copy the caller's.
 
-    The parse is shared and the copy is the caller's, to fill in or cut down.
+    The caller fills in a variable or cuts a list down, and the next caller reads
+    the file as written.
     """
     return copy.deepcopy(_parsed(path))
+
+
+def read_workflow(path: Path = WORKFLOW) -> dict[str, Any]:
+    """Parse a workflow or an action, `ci.yml` unless another is named."""
+    return read_yaml(path)
 
 
 def runs(path: Path = WORKFLOW) -> list[str]:
