@@ -31,6 +31,7 @@ pub mod interval;
 mod lines;
 pub mod lower;
 pub mod maps;
+mod polar;
 pub mod records;
 pub mod regular;
 pub mod sets;
