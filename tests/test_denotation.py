@@ -833,12 +833,20 @@ def test_walk_matches_denotation(case: tuple[Validator, Pred], value: object) ->
         _agrees(compiled, predicate, boundary)
 
 
+#: The examples each refinement leaf draws: a tenth of the profile's. A leaf is
+#: a property of its own, so the profile's whole budget per leaf would cost the
+#: family as many properties as there are constraint kinds; a fraction keeps it
+#: moving with the profile, so the nightly draws each leaf ten times as deep as
+#: the merge gate does.
+_LEAF_EXAMPLES = max(1, settings().max_examples // 10)
+
+
 @pytest.mark.parametrize(
     "leaf",
     [strategy for _, strategy in _REFINED],
     ids=[kind for kind, _ in _REFINED],
 )
-@settings(max_examples=50)
+@settings(max_examples=_LEAF_EXAMPLES)
 @given(data=st.data())
 def test_every_refinement_leaf_matches_its_denotation(
     leaf: st.SearchStrategy[Spec], data: st.DataObject

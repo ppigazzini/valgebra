@@ -6,10 +6,15 @@ derandomised, no database. A deep profile that inherits them asks the same
 examples every night. So the profiles are read here in a child interpreter with
 ``CI`` set, where the inheritance happens, rather than in this one, where it may
 not.
+
+A property can still pin its own budget, and a pinned one draws the same count
+under every profile. So a budget written beside a property is read here too,
+and must be a fraction of the profile's rather than a number.
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -133,3 +138,65 @@ def test_every_property_file_runs_under_the_nightly_profile() -> None:
         f"property files the nightly profile never draws: {missing}. Name each "
         "in the nightly lane's deep suite."
     )
+
+
+def _fixed_budgets(tree: ast.Module) -> list[int]:
+    """Give the lines where a `settings(...)` call gives `max_examples` a number.
+
+    A name bound to a number at module scope is a number too: moving the figure
+    into a constant keeps it the same under every profile.
+    """
+    numbers = {
+        target.id
+        for node in tree.body
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+    return sorted(
+        keyword.value.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and ast.unparse(node.func).split(".")[-1] == "settings"
+        for keyword in node.keywords
+        if keyword.arg == "max_examples"
+        and (
+            isinstance(keyword.value, ast.Constant)
+            or (isinstance(keyword.value, ast.Name) and keyword.value.id in numbers)
+        )
+    )
+
+
+def test_no_property_pins_its_example_budget_to_a_number() -> None:
+    """A budget beside a property moves with the profile, or it hides from it.
+
+    A leaf that pins its own budget draws that many examples under every
+    profile, so the deep lane asks it what the merge gate asks, and a reading of
+    the profiles above says nothing about that leaf.
+    """
+    offenders = {
+        path.name: found
+        for path in sorted(TESTS.glob("test_*.py"))
+        if (found := _fixed_budgets(ast.parse(path.read_text(encoding="utf-8"))))
+    }
+    assert not offenders, (
+        f"properties drawing a fixed number of examples: {offenders}. Give the "
+        "budget as a fraction of `settings().max_examples`, which is the "
+        "profile's."
+    )
+
+
+def test_a_budget_is_read_as_a_number_however_it_is_spelled() -> None:
+    # The readings the check turns on: a literal, a module constant and a
+    # dotted call are numbers, and a fraction of the profile's is not.
+    literal = ast.parse("@settings(max_examples=50)\ndef test_x(): pass\n")
+    assert _fixed_budgets(literal) == [1]
+    constant = ast.parse("N = 50\n@settings(max_examples=N)\ndef test_x(): pass\n")
+    assert _fixed_budgets(constant) == [2]
+    dotted = ast.parse("@hypothesis.settings(max_examples=5)\ndef test_x(): pass\n")
+    assert _fixed_budgets(dotted) == [1]
+    scaled = ast.parse(
+        "N = max(1, settings().max_examples // 10)\n"
+        "@settings(max_examples=N)\ndef test_x(): pass\n"
+    )
+    assert _fixed_budgets(scaled) == []

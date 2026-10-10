@@ -17,7 +17,10 @@ database: a ``nightly`` that named neither replayed the same examples every
 night on a runner and hunted nothing.
 
 The decision and completeness suites read these so the hole-hunting fuzzers run
-shallow locally and deep on a schedule without per-test settings.
+shallow locally and deep on a schedule without per-test settings. A property
+that draws less than the profile gives takes a fraction of the profile's budget
+rather than a number, so it deepens with the rest at night;
+``tests/test_property_profiles.py`` refuses a number.
 
 No per-example wall-clock deadline is set. A global deadline is a flaky guard on a
 loaded shared runner, and too coarse to catch a superlinear regression that still

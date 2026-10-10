@@ -422,6 +422,13 @@ examples, the same ones on every push, and seven did -- the four properties
 that hold the walk to pydantic-core and jsonschema among them, which the deep
 suite asks with the oracles installed and required.
 
+**A budget beside a property is a fraction of the profile's.** A
+`max_examples` written as a number draws that many under every profile, so
+the nightly asks it what the merge gate asks: the refinement leaves of the
+denotation suite drew fifty everywhere until they took a tenth of the
+profile's. `tests/test_property_profiles.py` refuses a number there, spelled
+as a literal or as a module constant.
+
 ## What a use case is, and how many there are
 
 "Every use case is covered" is a claim only once a use case is a thing something
