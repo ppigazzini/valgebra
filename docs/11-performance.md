@@ -868,6 +868,13 @@ as a list against a length-bounded list of the same element.
 - **Every query spends a work budget** (`spend` in `decision.rs`), and returns
   the conservative answer once it is spent, so a deeply nested Boolean
   combination stops rather than running unbounded.
+- **A query carries its state behind one pointer.** The oracle, the
+  definitions, the budget, the trail and the `visiting` list are one context
+  per query (`Cx` in `decision.rs`), handed down by reference: a rule's call
+  passes one pointer, and an emptiness question a goal asks reads the query's
+  `visiting` list rather than starting one. The meets being unfolded stay off
+  it, on a list only an unfolded meet reaches, since a field of the context is
+  built and dropped by every query.
 - **The set representation shares what it does not edit.** An automaton holds
   its edge guards and its word automata by handle, a complement of a minimal
   automaton keeps it minimal, and a question about which kinds a descriptor

@@ -17,11 +17,11 @@ use std::cell::Cell;
 use rustc_hash::FxHashMap;
 
 use crate::descr::maps::KEY_KINDS;
-use crate::ir::{DefIx, Field, MapClause, Schema};
+use crate::ir::{Field, MapClause, Schema};
 use crate::kind::Kind;
 use crate::verdict::{Relation, Verdict};
 
-use super::{Budget, LeafRelations, SubtypeCx};
+use super::Cx;
 
 /// What the keyed maps meeting in an intersection admit between them: `Empty`
 /// where no dict is in every map, `Inhabited` where every member is a closed
@@ -64,13 +64,7 @@ use super::{Budget, LeafRelations, SubtypeCx};
 /// resolved is read as the cycle it is, as the field of a single map reads it.
 /// A fresh list there unfolds the reference again: a recursive meet of two maps
 /// reaches this rule once per unfolding, with nothing to stop it but the stack.
-pub(super) fn keyed_map_meet_verdict(
-    members: &[Schema],
-    oracle: &dyn LeafRelations,
-    defs: &[Schema],
-    visiting: &mut Vec<DefIx>,
-    budget: &Budget,
-) -> Verdict {
+pub(super) fn keyed_map_meet_verdict(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
     let maps: Vec<(&[Field], bool)> = members
         .iter()
         .filter_map(|member| match member {
@@ -94,7 +88,7 @@ pub(super) fn keyed_map_meet_verdict(
     for (name, (types, _)) in keys.iter().filter(|(_, (_, required))| *required) {
         let held = if types.len() > 1 {
             let meet = Schema::Intersection(types.iter().copied().cloned().collect());
-            meet.verdict_rec(oracle, defs, visiting, budget)
+            meet.verdict_rec(cx)
         } else {
             Verdict::Inhabited
         };
@@ -144,8 +138,7 @@ pub(super) fn keyed_map_subtype(
     da: &[MapClause],
     fb: &[Field],
     db: &[MapClause],
-    cx: SubtypeCx<'_>,
-    assumptions: &mut Vec<(Schema, Schema)>,
+    cx: &mut Cx<'_>,
 ) -> Relation {
     // Index both field lists by name once, so the cross-list lookups below are O(1)
     // each rather than a fresh linear scan per field (O(fields²) per comparison).
@@ -199,10 +192,7 @@ pub(super) fn keyed_map_subtype(
                             answer
                         }
                         _ => {
-                            let answer =
-                                a_field
-                                    .schema
-                                    .is_subtype_rec(&b_field.schema, cx, assumptions);
+                            let answer = a_field.schema.is_subtype_rec(&b_field.schema, cx);
                             last = Some((&a_field.schema, &b_field.schema, answer));
                             answer
                         }
@@ -229,9 +219,7 @@ pub(super) fn keyed_map_subtype(
                 // value type is beside the point; reading it anyway refutes on
                 // a value `a` does not have.
                 None => Relation::all(da.iter().map(|clause| {
-                    let covers = clause
-                        .value
-                        .is_subtype_rec(&b_field.schema, cx, assumptions);
+                    let covers = clause.value.is_subtype_rec(&b_field.schema, cx);
                     if clause.key.holds_every_value_of(Kind::Str, cx.oracle) {
                         // Every string key, so this clause does spell the name.
                         covers
@@ -288,15 +276,13 @@ pub(super) fn keyed_map_subtype(
                     let covering = db
                         .iter()
                         .filter(|clause| clause.key.holds_every_value_of(Kind::Str, cx.oracle));
-                    let answer = Relation::any(covering.map(|clause| {
-                        a_field
-                            .schema
-                            .is_subtype_rec(&clause.value, cx, assumptions)
-                    }));
+                    let answer = Relation::any(
+                        covering.map(|clause| a_field.schema.is_subtype_rec(&clause.value, cx)),
+                    );
                     match answer {
                         Relation::Holds => Relation::Holds,
                         Relation::Fails if one_witness => {
-                            Relation::of_mismatch(a_field.schema.verdict_of(cx))
+                            Relation::of_mismatch(a_field.schema.verdict_rec(cx))
                         }
                         _ => Relation::Unknown,
                     }
@@ -320,14 +306,10 @@ pub(super) fn keyed_map_subtype(
             // proof ends the search, so a subsumed clause allocates nothing.
             let mut values_asked: Vec<(&Schema, Relation)> = Vec::new();
             let subsumed = db.iter().any(|theirs| {
-                if !mine
-                    .key
-                    .is_subtype_rec(&theirs.key, cx, assumptions)
-                    .holds()
-                {
+                if !mine.key.is_subtype_rec(&theirs.key, cx).holds() {
                     return false;
                 }
-                let answer = mine.value.is_subtype_rec(&theirs.value, cx, assumptions);
+                let answer = mine.value.is_subtype_rec(&theirs.value, cx);
                 if !answer.holds() {
                     values_asked.push((&theirs.value, answer));
                 }
@@ -336,7 +318,7 @@ pub(super) fn keyed_map_subtype(
             if subsumed {
                 Relation::Holds
             } else {
-                clause_escapes(mine, db, &mut values_asked, cx, assumptions)
+                clause_escapes(mine, db, &mut values_asked, cx)
             }
         }));
         // Three conjuncts of one claim about one pair, so any one of them
@@ -397,8 +379,7 @@ fn clause_escapes<'b>(
     mine: &MapClause,
     db: &'b [MapClause],
     values_asked: &mut Vec<(&'b Schema, Relation)>,
-    cx: SubtypeCx<'_>,
-    assumptions: &mut Vec<(Schema, Schema)>,
+    cx: &mut Cx<'_>,
 ) -> Relation {
     // The questions a kind asks of `mine.value` repeat across kinds -- a
     // complement key reads seven of them -- so each is asked once: its own
@@ -426,7 +407,7 @@ fn clause_escapes<'b>(
         }
         let answer = match reader {
             None => {
-                *inhabited.get_or_insert_with(|| Relation::of_mismatch(mine.value.verdict_of(cx)))
+                *inhabited.get_or_insert_with(|| Relation::of_mismatch(mine.value.verdict_rec(cx)))
             }
             Some(value) => {
                 if let Some((_, answer)) = values_asked
@@ -435,7 +416,7 @@ fn clause_escapes<'b>(
                 {
                     *answer
                 } else {
-                    let answer = mine.value.is_subtype_rec(value, cx, assumptions);
+                    let answer = mine.value.is_subtype_rec(value, cx);
                     values_asked.push((value, answer));
                     answer
                 }
@@ -459,12 +440,7 @@ fn clause_escapes<'b>(
 /// The rule is set inclusion read off the denotation: an attribute the supertype
 /// does not name constrains nothing, and one it names constrains every value of
 /// the subtype exactly when the subtype names it too, at least as narrowly.
-pub(super) fn attr_record_subtype(
-    fa: &[Field],
-    fb: &[Field],
-    cx: SubtypeCx<'_>,
-    assumptions: &mut Vec<(Schema, Schema)>,
-) -> Relation {
+pub(super) fn attr_record_subtype(fa: &[Field], fb: &[Field], cx: &mut Cx<'_>) -> Relation {
     let order = Cell::new(None);
     let mut a_by_name = FieldCursor::over(fa, fb, &order);
     Relation::all(fb.iter().map(|b| {
@@ -475,7 +451,7 @@ pub(super) fn attr_record_subtype(
             // carry.
             None => Relation::Fails,
             Some(a) if b.required && !a.required => Relation::Fails,
-            Some(a) => a.schema.is_subtype_rec(&b.schema, cx, assumptions),
+            Some(a) => a.schema.is_subtype_rec(&b.schema, cx),
         }
     }))
 }

@@ -661,6 +661,21 @@ rules can neither prove nor refute `A <= ~B`, the `Complement` arm of
 question is bounded by the lowering's own `Bounds` -- nodes read, nesting
 descended, multiplying work -- once for each goal that reaches it.
 
+**One context carries a query through both recursions.** The oracle, the
+definitions, the budget and two stacks of hypotheses travel together in
+`decision::Cx`, built where a query starts and handed down by `&mut`: the trail
+the goal recursion unfolds a reference under, and the `visiting` list the
+emptiness recursion resolves one on. A frame that pushes pops before it returns,
+and no emptiness rule asks a goal, so `visiting` is empty wherever a goal asks
+an emptiness question -- a verdict is about one schema, and starts with nothing
+being resolved. A debug assertion on every goal holds that, and
+`a_query_gives_its_stacks_back_as_it_was_given_them` holds both stacks to coming
+back as they were given, over drawn schemas and definitions. The meets the
+emptiness recursion unfolds a reference into stay on a thread-local list keyed
+by the query's budget: a list on the context is built and dropped by every
+query, and that teardown read 10.6% more instructions on the decision workload
+for a list only an unfolded meet reaches.
+
 One shape needs neither the memo nor the counter. A union of nothing but
 literals denotes a **finite set of values**, and inclusion between two finite
 sets is membership of every value of one in the other -- a walk of the two

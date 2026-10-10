@@ -18,7 +18,7 @@ use crate::ir::{ClassIx, CollKind, Constraint, Schema, SeqKind};
 use crate::kind::{Kind, Region, Regions};
 
 use super::literals::literal_constants;
-use super::{LeafRelations, NoLeafRelations, SubtypeCx};
+use super::{Cx, LeafRelations, NoLeafRelations};
 
 impl Schema {
     /// Whether this schema and `other` are *provably* disjoint: no value belongs
@@ -505,7 +505,7 @@ impl Schema {
 /// way to build a cycle here is a chain of references and unions with no
 /// constructor between them, which is the shape a repeated *goal* is assumed
 /// through long before this reading is reached.
-pub(super) fn outside_every_kind(other: &Schema, class: ClassIx, cx: SubtypeCx<'_>) -> bool {
+pub(super) fn outside_every_kind(other: &Schema, class: ClassIx, cx: &Cx<'_>) -> bool {
     let outside = |kind| cx.oracle.direct_instance_of_kind(class, kind) == Some(false);
     match other {
         Schema::Union(branches) => {

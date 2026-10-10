@@ -18,15 +18,15 @@ use std::cell::RefCell;
 
 use crate::descr::classes::Reach;
 use crate::descr::lower::{Constants, an_empty_reading_stands, lower_unfolded};
-use crate::ir::{ClassIx, Constraint, Constraints, DefIx, Field, Polarity, Schema};
+use crate::ir::{ClassIx, Constraint, Constraints, Field, Polarity, Schema};
 use crate::kind::{Kind, Region, Regions};
 use crate::verdict::Verdict;
 
 use super::constraints::{Density, bounds_unsatisfiable, longest, shortest, tightest_bounds};
 use super::records::keyed_map_meet_verdict;
 use super::{
-    Budget, DECISION_BUDGET, LeafRelations, NoLeafRelations, descending, has_complementary_pair,
-    has_disjoint_pair, spend,
+    Budget, Cx, DECISION_BUDGET, LeafRelations, NoLeafRelations, descending,
+    has_complementary_pair, has_disjoint_pair, spend,
 };
 
 impl Schema {
@@ -80,7 +80,7 @@ impl Schema {
         // asked it on every inhabited schema, and lowering one determinises
         // automata and takes products -- a third of the decision workload,
         // spent on a question already answered.
-        match self.verdict_rec(oracle, defs, &mut Vec::new(), &Budget::new(DECISION_BUDGET)) {
+        match self.verdict_rec(&mut Cx::new(oracle, defs, &Budget::new(DECISION_BUDGET))) {
             Verdict::Empty => true,
             Verdict::Inhabited => false,
             Verdict::Unknown => self.denotes_no_value(oracle, defs),
@@ -120,35 +120,28 @@ impl Schema {
     #[cfg(test)]
     pub(crate) fn empty_steps(&self) -> u32 {
         let budget = Budget::new(DECISION_BUDGET);
-        self.is_empty_rec(&NoLeafRelations, &[], &mut Vec::new(), &budget);
+        self.is_empty_rec(&mut Cx::new(&NoLeafRelations, &[], &budget));
         DECISION_BUDGET - budget.left()
     }
 
     /// The emptiness verdict where the rules can look a constant or a class up.
     #[cfg(test)]
     pub(crate) fn verdict_under(&self, oracle: &dyn LeafRelations) -> Verdict {
-        self.verdict_rec(oracle, &[], &mut Vec::new(), &Budget::new(DECISION_BUDGET))
+        self.verdict_rec(&mut Cx::new(oracle, &[], &Budget::new(DECISION_BUDGET)))
     }
 
     /// The rules' emptiness verdict with references resolved through `defs`.
     #[cfg(test)]
     pub(crate) fn verdict_under_defs(&self, defs: &[Schema]) -> Verdict {
-        self.verdict_rec(
+        self.verdict_rec(&mut Cx::new(
             &NoLeafRelations,
             defs,
-            &mut Vec::new(),
             &Budget::new(DECISION_BUDGET),
-        )
+        ))
     }
 
-    pub(super) fn is_empty_rec(
-        &self,
-        oracle: &dyn LeafRelations,
-        defs: &[Schema],
-        visiting: &mut Vec<DefIx>,
-        budget: &Budget,
-    ) -> bool {
-        self.verdict_rec(oracle, defs, visiting, budget).is_empty()
+    pub(super) fn is_empty_rec(&self, cx: &mut Cx<'_>) -> bool {
+        self.verdict_rec(cx).is_empty()
     }
 
     /// What this schema's emptiness can be proven to be, under the leaf oracle
@@ -161,22 +154,15 @@ impl Schema {
     /// `Unknown`, and a test can say so.
     #[must_use]
     pub fn verdict(&self) -> Verdict {
-        self.verdict_rec(
+        self.verdict_rec(&mut Cx::new(
             &NoLeafRelations,
             &[],
-            &mut Vec::new(),
             &Budget::new(DECISION_BUDGET),
-        )
+        ))
     }
 
-    pub(super) fn verdict_rec(
-        &self,
-        oracle: &dyn LeafRelations,
-        defs: &[Schema],
-        visiting: &mut Vec<DefIx>,
-        budget: &Budget,
-    ) -> Verdict {
-        self.empty_and_region(oracle, defs, visiting, budget).0
+    pub(super) fn verdict_rec(&self, cx: &mut Cx<'_>) -> Verdict {
+        self.empty_and_region(cx).0
     }
 
     /// The emptiness verdict and the value-region bitset of `self`, decided in a
@@ -192,34 +178,22 @@ impl Schema {
     /// run unbounded down a side door any more than the rest of the decision can;
     /// on exhaustion it returns the conservative "not proven empty" with an unknown
     /// region.
-    pub(super) fn empty_and_region(
-        &self,
-        oracle: &dyn LeafRelations,
-        defs: &[Schema],
-        visiting: &mut Vec<DefIx>,
-        budget: &Budget,
-    ) -> (Verdict, Regions) {
+    pub(super) fn empty_and_region(&self, cx: &mut Cx<'_>) -> (Verdict, Regions) {
         // One level of the recursion, and a level past the depth bound is a
         // frame the stack may not have, which proves nothing.
-        descending(budget, (Verdict::Unknown, Regions::Unknown), || {
-            self.empty_and_region_at(oracle, defs, visiting, budget)
+        descending(cx.budget, (Verdict::Unknown, Regions::Unknown), || {
+            self.empty_and_region_at(cx)
         })
     }
 
     /// [`empty_and_region`](Self::empty_and_region) one level down, inside the
     /// level it holds.
-    fn empty_and_region_at(
-        &self,
-        oracle: &dyn LeafRelations,
-        defs: &[Schema],
-        visiting: &mut Vec<DefIx>,
-        budget: &Budget,
-    ) -> (Verdict, Regions) {
+    fn empty_and_region_at(&self, cx: &mut Cx<'_>) -> (Verdict, Regions) {
         // Bound the work, sharing the budget with the caller (the subtyping
         // decision passes its own `cx.budget` in), so emptiness cannot escape the
         // ceiling subtyping advertises. Exhaustion proves nothing either way,
         // which is what `Unknown` says and what a `false` could not.
-        if !spend(budget) {
+        if !spend(cx.budget) {
             return (Verdict::Unknown, Regions::Unknown);
         }
         // A scalar atom names its region exactly, so the region settles it. Read
@@ -239,14 +213,14 @@ impl Schema {
                 // occurrence demands an infinite unfolding, so on its own it has
                 // no finite inhabitant. A union base case or an optional or
                 // starred position escapes before reaching here.
-                if visiting.contains(id) {
+                if cx.visiting.contains(id) {
                     return (Verdict::Empty, Regions::Unknown);
                 }
-                match defs.get(id.get()) {
+                match cx.defs.get(id.get()) {
                     Some(def) => {
-                        visiting.push(*id);
-                        let verdict = def.verdict_rec(oracle, defs, visiting, budget);
-                        visiting.pop();
+                        cx.visiting.push(*id);
+                        let verdict = def.verdict_rec(cx);
+                        cx.visiting.pop();
                         (verdict, Regions::Unknown)
                     }
                     // A reference no definition resolves says nothing about the
@@ -258,10 +232,7 @@ impl Schema {
             // tail repeats zero times, so a shape whose prefix is all inhabited
             // admits at least the sequence that stops at the prefix.
             Schema::Seq { shape, .. } => {
-                let prefix = shape
-                    .prefix
-                    .iter()
-                    .map(|element| element.verdict_rec(oracle, defs, visiting, budget));
+                let prefix = shape.prefix.iter().map(|element| element.verdict_rec(cx));
                 (Verdict::every(prefix), Regions::Unknown)
             }
             // A refinement is a subset of its base: an empty base empties it, and
@@ -272,15 +243,12 @@ impl Schema {
             // complement would report an inhabited schema empty -- which is why
             // every other refinement stays unknown.
             Schema::Refine { base, constraints } if constraints.is_empty() => {
-                base.empty_and_region(oracle, defs, visiting, budget)
+                base.empty_and_region(cx)
             }
-            Schema::Refine { base, constraints } => (
-                refinement_verdict(base, constraints, oracle, defs, visiting, budget),
-                Regions::Unknown,
-            ),
-            Schema::Intersection(members) => {
-                intersection_verdict(members, oracle, defs, visiting, budget)
+            Schema::Refine { base, constraints } => {
+                (refinement_verdict(base, constraints, cx), Regions::Unknown)
             }
+            Schema::Intersection(members) => intersection_verdict(members, cx),
             // A set or frozenset admits the empty collection whatever its
             // element schema is, so it is *proven* inhabited -- which two values
             // could not say apart from the opaque wildcard below, where the same
@@ -290,9 +258,7 @@ impl Schema {
             // admits the empty dict when it requires nothing at all.
             Schema::KeyedMap { fields, .. } => {
                 let required = fields.iter().filter(|field| field.required);
-                let verdict = Verdict::every(
-                    required.map(|field| field.schema.verdict_rec(oracle, defs, visiting, budget)),
-                );
+                let verdict = Verdict::every(required.map(|field| field.schema.verdict_rec(cx)));
                 (verdict, Regions::Unknown)
             }
             // An attribute record carries no class, so its fields decide it in
@@ -306,9 +272,7 @@ impl Schema {
             // more than unknown.
             Schema::AttrRecord { fields } => {
                 let required = fields.iter().filter(|field| field.required);
-                let verdict = Verdict::every(
-                    required.map(|field| field.schema.verdict_rec(oracle, defs, visiting, budget)),
-                );
+                let verdict = Verdict::every(required.map(|field| field.schema.verdict_rec(cx)));
                 (verdict, Regions::Unknown)
             }
             // A union is empty when every member is and inhabited when any member
@@ -318,8 +282,7 @@ impl Schema {
                 let mut verdict = Verdict::Empty;
                 let mut region = Regions::UNION_UNIT;
                 for m in members.iter() {
-                    let (member, member_region) =
-                        m.empty_and_region(oracle, defs, visiting, budget);
+                    let (member, member_region) = m.empty_and_region(cx);
                     verdict = Verdict::any([verdict, member].into_iter());
                     region = region.union(member_region);
                     // A member that is not proven empty and an opaque region are
@@ -359,7 +322,7 @@ impl Schema {
             // (`empty_and_region_folds_the_same_region_as_region_set`). The
             // emptiness verdict has no such second reader.
             Schema::Complement(inner) => {
-                let (_, inner_region) = inner.empty_and_region(oracle, defs, visiting, budget);
+                let (_, inner_region) = inner.empty_and_region(cx);
                 let region = match inner_region {
                     Regions::Known(regions) => Regions::Known(regions.complement()),
                     Regions::Unknown => Regions::Unknown,
@@ -384,7 +347,7 @@ impl Schema {
             // whose equality it does not trust, and the literal stays unknown
             // there, which is where it was for every constant before.
             Schema::Literal(constant) => (
-                match oracle.literals_disjoint(*constant, *constant) {
+                match cx.oracle.literals_disjoint(*constant, *constant) {
                     Some(true) => Verdict::Empty,
                     Some(false) => Verdict::Inhabited,
                     None => Verdict::Unknown,
@@ -408,7 +371,7 @@ impl Schema {
             // A class with a hooked metaclass is not a set here, and stays
             // unknown as it is everywhere else.
             Schema::Instance(_) => (
-                match oracle.atom_denotes_a_set(self) {
+                match cx.oracle.atom_denotes_a_set(self) {
                     Some(true) => Verdict::Inhabited,
                     _ => Verdict::Unknown,
                 },
@@ -457,20 +420,14 @@ fn density_of<'a>(bases: impl IntoIterator<Item = &'a Schema>) -> Density {
 /// in *every* member, which none of the five does, so it is the region that
 /// settles it -- exactly, over the whole scalar fragment -- and past that the
 /// meet is opaque however inhabited its members are.
-fn intersection_verdict(
-    members: &[Schema],
-    oracle: &dyn LeafRelations,
-    defs: &[Schema],
-    visiting: &mut Vec<DefIx>,
-    budget: &Budget,
-) -> (Verdict, Regions) {
+fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Regions) {
     let mut any_empty = false;
     let mut region = Regions::MEET_UNIT;
     // What the members say together, which only the shape below can read as the
     // meet's own: in general two inhabited members meet in nothing.
     let mut members_hold = Verdict::Inhabited;
     for m in members {
-        let (verdict, member_region) = m.empty_and_region(oracle, defs, visiting, budget);
+        let (verdict, member_region) = m.empty_and_region(cx);
         any_empty |= verdict.is_empty();
         members_hold = Verdict::every([members_hold, verdict].into_iter());
         region = region.intersect(member_region);
@@ -485,19 +442,17 @@ fn intersection_verdict(
     let mut maps_hold = Verdict::Unknown;
     let empty = any_empty
         || region.known().is_some_and(Region::is_empty)
-        || has_complementary_pair(members, oracle)
-        || has_disjoint_pair(members, oracle)
-        || intersection_bounds_unsatisfiable(members, oracle)
+        || has_complementary_pair(members, cx.oracle)
+        || has_disjoint_pair(members, cx.oracle)
+        || intersection_bounds_unsatisfiable(members, cx.oracle)
         || {
-            maps_hold = keyed_map_meet_verdict(members, oracle, defs, visiting, budget);
+            maps_hold = keyed_map_meet_verdict(members, cx);
             maps_hold.is_empty()
         };
     let verdict = if empty {
         Verdict::Empty
     } else if let Some((class, fields)) = class_with_attributes(members) {
-        if members_hold == Verdict::Inhabited
-            && !a_direct_instance_carries(class, fields, oracle, defs, visiting, budget)
-        {
+        if members_hold == Verdict::Inhabited && !a_direct_instance_carries(class, fields, cx) {
             Verdict::Unknown
         } else {
             members_hold
@@ -514,8 +469,7 @@ fn intersection_verdict(
         }
     };
     let verdict = match verdict {
-        Verdict::Unknown => meet_through_a_reference(members, oracle, defs, visiting, budget)
-            .unwrap_or(Verdict::Unknown),
+        Verdict::Unknown => meet_through_a_reference(members, cx).unwrap_or(Verdict::Unknown),
         settled => settled,
     };
     (verdict, region)
@@ -541,8 +495,9 @@ fn intersection_verdict(
 ///
 /// The meet is the goal, its members sorted and without repeats -- the members
 /// of a meet are a set -- held open while the path below decides it
-/// ([`OpenMeet`]) and read as empty where the path reaches it again. That is the least fixpoint read inductively, as a reference reached
-/// again on `visiting` is: a value is a finite tree, so a value of the meet
+/// ([`OpenMeet`]) and read as empty where the path reaches it again. That is
+/// the least fixpoint read inductively, as a reference reached again on
+/// `visiting` is: a value is a finite tree, so a value of the meet
 /// that needed a value of the same meet below it needs a smaller one, and a
 /// smallest value needs none. The goal is popped when it is decided and
 /// remembered nowhere, since what it answered rested on the goals open above
@@ -556,13 +511,8 @@ fn intersection_verdict(
 /// the key, and the meet holding `{"a": None}`, empty.
 ///
 /// Asked only where the rules decline, so a meet they decide keeps its answer.
-fn meet_through_a_reference(
-    members: &[Schema],
-    oracle: &dyn LeafRelations,
-    defs: &[Schema],
-    visiting: &mut Vec<DefIx>,
-    budget: &Budget,
-) -> Option<Verdict> {
+fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdict> {
+    let defs = cx.defs;
     let unfolding = members
         .iter()
         .enumerate()
@@ -586,7 +536,7 @@ fn meet_through_a_reference(
         let holds_a_reference = branches
             .iter()
             .any(|branch| matches!(branch, Schema::Ref(_)));
-        if !(holds_a_reference || OpenMeet::any_open(budget)) {
+        if !(holds_a_reference || OpenMeet::any_open(cx.budget)) {
             return None;
         }
         (at, branches)
@@ -594,7 +544,7 @@ fn meet_through_a_reference(
     let mut goal = members.to_vec();
     goal.sort();
     goal.dedup();
-    let Some(_open) = OpenMeet::open(budget, goal) else {
+    let Some(_open) = OpenMeet::open(cx.budget, goal) else {
         return Some(Verdict::Empty);
     };
     let mut verdict = Verdict::Empty;
@@ -610,8 +560,7 @@ fn meet_through_a_reference(
                 .filter(|(other, _)| *other != at)
                 .map(|(_, member)| member.clone()),
         );
-        let (held, _) =
-            Schema::Intersection(meet.into()).empty_and_region(oracle, defs, visiting, budget);
+        let (held, _) = Schema::Intersection(meet.into()).empty_and_region(cx);
         verdict = Verdict::any([verdict, held].into_iter());
         if verdict == Verdict::Inhabited {
             break;
@@ -628,12 +577,11 @@ thread_local! {
     /// query can start inside another on the same thread -- a class relation
     /// the oracle asks of Python can ask one -- so each is read only by the
     /// query whose budget opened it, which is live, and so at an address no
-    /// other live budget has. Held here rather than on the budget or beside
-    /// `visiting`: a list on either is built and dropped by every query and
-    /// every question a subtyping rule asks, which read 2.2% more instructions
-    /// on the relation matrix as a field of `visiting` and 6.9% more on the
-    /// decision workload as one of the budget, where this list is reached only
-    /// by a meet being unfolded.
+    /// other live budget has. Held here rather than on the budget or the
+    /// query's [`Cx`], beside `visiting`: a list on either is built and dropped
+    /// by every query, and this one is reached only where a meet is unfolded.
+    /// On the context its teardown read 10.6% more instructions on the
+    /// decision workload, whose queries take a few hundred each.
     static OPEN_MEETS: RefCell<Vec<(usize, Vec<Schema>)>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -687,26 +635,17 @@ impl Drop for OpenMeet {
 /// Asked only of a meet whose members are inhabited, so a required field is
 /// already known to admit a value; an optional one is asked here where only a
 /// value can meet it.
-fn a_direct_instance_carries(
-    class: ClassIx,
-    fields: &[Field],
-    oracle: &dyn LeafRelations,
-    defs: &[Schema],
-    visiting: &mut Vec<DefIx>,
-    budget: &Budget,
-) -> bool {
-    fields
-        .iter()
-        .all(|field| match oracle.attribute_reach(class, &field.name) {
+fn a_direct_instance_carries(class: ClassIx, fields: &[Field], cx: &mut Cx<'_>) -> bool {
+    fields.iter().all(
+        |field| match cx.oracle.attribute_reach(class, &field.name) {
             Some(Reach::Anything) => true,
             Some(Reach::AnyValue) => {
-                field.required
-                    || field.schema.verdict_rec(oracle, defs, visiting, budget)
-                        == Verdict::Inhabited
+                field.required || field.schema.verdict_rec(cx) == Verdict::Inhabited
             }
             Some(Reach::Missing) => !field.required,
             Some(Reach::Unread) | None => false,
-        })
+        },
+    )
 }
 
 /// Whether this meet is one class together with the attributes its instances
@@ -754,18 +693,11 @@ pub(super) fn class_with_attributes(members: &[Schema]) -> Option<(ClassIx, &[Fi
 /// by as many copies of an element as it asks for. Which is also the reading
 /// that gives `mu t. list[t] & MinLen(1)` the answer it has: each unfolding
 /// demands one more element and the cycle has no finite value.
-fn refinement_verdict(
-    base: &Schema,
-    constraints: &Constraints,
-    oracle: &dyn LeafRelations,
-    defs: &[Schema],
-    visiting: &mut Vec<DefIx>,
-    budget: &Budget,
-) -> Verdict {
+fn refinement_verdict(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>) -> Verdict {
     let density = density_of([base]);
-    if base.is_empty_rec(oracle, defs, visiting, budget)
-        || bounds_unsatisfiable(constraints.iter(), oracle, density)
-        || lengths_miss_the_shape(base, constraints, oracle, defs, visiting, budget)
+    if base.is_empty_rec(cx)
+        || bounds_unsatisfiable(constraints.iter(), cx.oracle, density)
+        || lengths_miss_the_shape(base, constraints, cx)
     {
         return Verdict::Empty;
     }
@@ -774,7 +706,7 @@ fn refinement_verdict(
     // be asked to name. Read before the length bounds below, which are a
     // different question about a different base.
     if matches!(base, Schema::Int) {
-        return bounded_integer_verdict(constraints, oracle);
+        return bounded_integer_verdict(constraints, cx.oracle);
     }
     let lengths_only = constraints
         .iter()
@@ -797,10 +729,8 @@ fn refinement_verdict(
         // holds vacuously.
         _ => match repeated_element(base) {
             Some(_) if shortest(constraints.iter()) == 0 => Verdict::Inhabited,
-            Some(element) if repeats_a_member(base) => {
-                element.verdict_rec(oracle, defs, visiting, budget)
-            }
-            Some(element) => distinct_members(element, shortest(constraints.iter()), oracle),
+            Some(element) if repeats_a_member(base) => element.verdict_rec(cx),
+            Some(element) => distinct_members(element, shortest(constraints.iter()), cx.oracle),
             None => Verdict::Unknown,
         },
     }
@@ -932,14 +862,7 @@ fn value_count_bounds(schema: &Schema, oracle: &dyn LeafRelations) -> (usize, us
 /// times. So `MinLen(5)` over a list of exactly three elements, or `MaxLen(1)`
 /// over one of at least two, admits no sequence, whatever the conjunction's
 /// other constraints say.
-fn lengths_miss_the_shape(
-    base: &Schema,
-    constraints: &Constraints,
-    oracle: &dyn LeafRelations,
-    defs: &[Schema],
-    visiting: &mut Vec<DefIx>,
-    budget: &Budget,
-) -> bool {
+fn lengths_miss_the_shape(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>) -> bool {
     let Schema::Seq { shape, .. } = base else {
         return false;
     };
@@ -950,7 +873,7 @@ fn lengths_miss_the_shape(
     let open = shape
         .tail
         .as_deref()
-        .is_some_and(|tail| !tail.is_empty_rec(oracle, defs, visiting, budget));
+        .is_some_and(|tail| !tail.is_empty_rec(cx));
     !open && shortest(constraints.iter()) > fixed
 }
 

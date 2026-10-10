@@ -290,6 +290,7 @@ mod drawn {
 #[test]
 fn the_depth_bound_declines_and_gives_its_levels_back() {
     use super::super::{DefIx, NoLeafRelations, Relation, Schema, SeqShape, Verdict};
+    use super::Cx;
 
     let nest = |levels: usize, leaf: Schema| {
         (0..levels).fold(leaf, |inner, _| Schema::list(SeqShape::homogeneous(inner)))
@@ -323,12 +324,11 @@ fn the_depth_bound_declines_and_gives_its_levels_back() {
                 (0..100).fold(leaf, |inner, _| tuple(inner))
             })
             .collect();
-        Schema::Ref(DefIx::new(links - 1)).verdict_rec(
+        Schema::Ref(DefIx::new(links - 1)).verdict_rec(&mut Cx::new(
             &NoLeafRelations,
             &defs,
-            &mut Vec::new(),
             &Budget::new(DECISION_BUDGET),
-        )
+        ))
     };
     let shallow = (21 * 20, 3 * 100);
     let deep = (24 * 23, 8 * 100);
