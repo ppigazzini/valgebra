@@ -765,9 +765,11 @@ program that builds validators per request, and to no validation call.
 
 - **`is_valid_json` walks the parsed document in place.** The walk reads a
   value that is either a Python object or a parsed JSON value, so a document is
-  checked without building Python objects for it; the two sources run one walk
-  and stay equivalent by construction, which a property test holds over random
-  schemas and documents ([the JSON page](07-json.md) has the figures).
+  checked without building Python objects for it, except the value at a node
+  that compares it with one: a literal, an instance or object check, a
+  refinement's comparison or predicate. The two sources run one walk and stay
+  equivalent by construction, which a property test holds over random schemas
+  and documents ([the JSON page](07-json.md) has the figures).
 - **A closed record reads a document's keys through its plan, once.** Each key
   of the parsed object is resolved through the record's name-to-position plan
   and every declared field's value gathered before any is checked, because a
@@ -780,6 +782,16 @@ program that builds validators per request, and to no validation call.
   covered where it lies -- an entry is the one the document means exactly when
   no later entry repeats its key -- and a wider one through a table of last
   values.
+- **A length bound counts a parsed container where it lies.** An array's
+  length is its item count, and an object's is its distinct keys, counted by
+  the same two readings (`distinct_keys` in `check/walk/record.rs`), since the
+  dict `json.loads` builds holds a repeated key once. The bounds are asked
+  before the elements, and a document runs no code that could change it, so a
+  refinement whose every constraint is a length bound builds nothing to ask
+  them again (`parsed_for_constraints` in `check/walk/scalar.rs`). Two hundred
+  records under `MaxLen(8)` cost 65% fewer instructions than building each one
+  into a dict, once to count it and once to ask the bound again. The building
+  is out of line, and a list of refined Python integers costs 1% fewer for it.
 
 ### Reporting a failure
 

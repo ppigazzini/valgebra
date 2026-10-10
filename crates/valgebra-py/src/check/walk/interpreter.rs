@@ -3425,6 +3425,141 @@ fn a_parsed_object_reads_its_repeats_alike_at_every_width() {
     });
 }
 
+/// A length bound on a parsed object counts the keys of the dict `json.loads`
+/// builds from it: a key the document repeats is one key.
+///
+/// The count is taken where the object lies, by the two readings its undeclared
+/// keys are found with, so the rows run either side of `SMALL_OBJECT` and across
+/// it. Key `i` is written `i % 3 + 1` times, its repeats adjacent in one
+/// document and apart in the other, so a count of the entries a later one
+/// repeats, or of the repeats themselves, is not the dict's length. Each bound
+/// is held at that length, one under it and one over it.
+#[test]
+fn a_length_bound_counts_a_parsed_objects_keys_at_every_width() {
+    Python::attach(|py| {
+        let mapping = Schema::KeyedMap {
+            fields: Vec::new().into(),
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }]
+            .into(),
+        };
+        let bounded = |bound| Schema::refine(mapping.clone(), vec![bound]);
+        let empty = json_object(Vec::new());
+        assert!(holds_json(py, &bounded(Constraint::MaxLen(0)), &empty));
+        assert!(!holds_json(py, &bounded(Constraint::MinLen(1)), &empty));
+
+        let names: Vec<String> = (0..24).map(|i| format!("k{i}")).collect();
+        for width in [1, 2, 3, 4, 5, 8, 12, 24] {
+            let written = |i: usize| i % 3 + 1;
+            let adjacent = json_object(
+                (0..width)
+                    .flat_map(|i| (0..written(i)).map(move |_| i))
+                    .map(|i| (names[i].as_str(), JsonValue::Int(1)))
+                    .collect(),
+            );
+            let apart = json_object(
+                (0..3)
+                    .flat_map(|round| (0..width).filter(move |i| written(*i) > round))
+                    .map(|i| (names[i].as_str(), JsonValue::Int(1)))
+                    .collect(),
+            );
+            for document in [&adjacent, &apart] {
+                let built = Value::Json(py, document)
+                    .to_python()
+                    .and_then(|dict| dict.len())
+                    .expect("a parsed object builds a dict");
+                assert_eq!(built, width, "the dict holds each key once");
+                for (bound, holds) in [
+                    (Constraint::MinLen(width), true),
+                    (Constraint::MaxLen(width), true),
+                    (Constraint::MinLen(width + 1), false),
+                    (Constraint::MaxLen(width - 1), false),
+                ] {
+                    assert_eq!(
+                        holds_json(py, &bounded(bound.clone()), document),
+                        holds,
+                        "width {width}, {bound:?}"
+                    );
+                }
+            }
+        }
+    });
+}
+
+/// A refinement of a parsed value builds the object `json.loads` would give and
+/// asks it every constraint, unless each constraint is a length bound its
+/// container was asked before its elements.
+///
+/// The rows are the ones a reading that built too little would admit: a
+/// string, whose length is not a container's, an integer under an order bound,
+/// and a list whose predicate its length bound does not answer.
+#[test]
+fn a_parsed_value_is_built_for_a_constraint_its_container_did_not_ask() {
+    Python::attach(|py| {
+        let pool = vec![
+            PyInt::new(py, 5i64).into_any().unbind(),
+            py.get_type::<PyBool>().into_any().unbind(),
+        ];
+        let ints = || Schema::list(SeqShape::homogeneous(Schema::Int));
+        let array = |items: Vec<JsonValue<'static>>| JsonValue::Array(Arc::new(items));
+
+        let sized = Schema::refine(Schema::Str, vec![Constraint::MinLen(2)]);
+        assert!(!holds_json_over(
+            py,
+            &sized,
+            &JsonValue::Str("a".into()),
+            &pool
+        ));
+        assert!(holds_json_over(
+            py,
+            &sized,
+            &JsonValue::Str("ab".into()),
+            &pool
+        ));
+
+        let at_least = Schema::refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(0))]);
+        assert!(!holds_json_over(py, &at_least, &JsonValue::Int(4), &pool));
+        assert!(holds_json_over(py, &at_least, &JsonValue::Int(5), &pool));
+
+        // `bool` refuses the empty list the length bound admits.
+        let truthy = Schema::refine(
+            ints(),
+            vec![Constraint::MaxLen(2), Constraint::Predicate(PredIx::new(1))],
+        );
+        assert!(!holds_json_over(py, &truthy, &array(Vec::new()), &pool));
+        assert!(holds_json_over(
+            py,
+            &truthy,
+            &array(vec![JsonValue::Int(1)]),
+            &pool
+        ));
+        assert!(!holds_json_over(
+            py,
+            &truthy,
+            &array(vec![JsonValue::Int(1); 3]),
+            &pool
+        ));
+
+        // Length bounds alone are answered before the elements, both ways.
+        let bounded = Schema::refine(ints(), vec![Constraint::MinLen(1), Constraint::MaxLen(2)]);
+        assert!(!holds_json_over(py, &bounded, &array(Vec::new()), &pool));
+        assert!(holds_json_over(
+            py,
+            &bounded,
+            &array(vec![JsonValue::Int(1)]),
+            &pool
+        ));
+        assert!(!holds_json_over(
+            py,
+            &bounded,
+            &array(vec![JsonValue::Int(1), JsonValue::Str("x".into())]),
+            &pool
+        ));
+    });
+}
+
 /// The key a violation points at, so a row reads as the field it means.
 fn at(violation: &Violation) -> String {
     match violation.path.first() {

@@ -7,7 +7,7 @@
 //! why these live together and beside rather than inside the dispatcher.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::ControlFlow;
 use std::sync::Arc;
 
@@ -920,6 +920,35 @@ fn undeclared_covered(
 /// payload rather than a record's free-form section, and pays for the table it
 /// then uses.
 const SMALL_OBJECT: usize = 8;
+
+/// How many keys a parsed object holds, counted as the dict `json.loads`
+/// builds from it counts them: a key the document repeats is one key.
+///
+/// Counted where the object lies, by the two readings [`undeclared_covered`]
+/// finds a document's last entries with: a look forward up to
+/// [`SMALL_OBJECT`] entries, and past it a table hashed with a key per
+/// process, for the reason given there. The dict is built from these same
+/// decoded keys, so the two counts are one count.
+pub(super) fn distinct_keys(entries: &[(Cow<'_, str>, JsonValue<'_>)]) -> usize {
+    if entries.len() <= SMALL_OBJECT {
+        return entries
+            .iter()
+            .enumerate()
+            .filter(|(position, (key, _))| {
+                !entries
+                    .iter()
+                    .skip(position + 1)
+                    .any(|(later, _)| later.as_ref() == key.as_ref())
+            })
+            .count();
+    }
+    let mut seen: HashSet<&str, RandomState> =
+        HashSet::with_capacity_and_hasher(entries.len(), RandomState::new());
+    entries
+        .iter()
+        .filter(|(key, _)| seen.insert(key.as_ref()))
+        .count()
+}
 
 /// The explain pass over a keyed map, run only after [`keyed_map_matches`] has
 /// reported the value is not a member. It walks in declared order — present

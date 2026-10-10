@@ -126,6 +126,35 @@ def test_many_duplicate_json_keys_validate_in_one_pass() -> None:
     assert v.is_valid_json(doc)
 
 
+@pytest.mark.parametrize("width", [3, 20])
+def test_a_length_bound_counts_the_keys_a_parsed_object_holds(width: int) -> None:
+    """A length bound on a parsed object reads the keys `json.loads` keeps.
+
+    A JSON object may repeat a key, and the dict built from it holds the key
+    once, so a bound counts each distinct key once. The count is taken where
+    the object lies, by a look forward over a small object and a table over a
+    wide one; the two widths here are one on each side of that, and every
+    answer and every error is the one the object path gives for `json.loads`
+    of the same document. Key `i` is written `i % 3 + 1` times, so neither the
+    entries nor the repeats number what the dict holds.
+    """
+    keys = [f"k{i}" for i in range(width) for _ in range(i % 3 + 1)]
+    doc = "{" + ", ".join(f'"{key}": {n}' for n, key in enumerate(keys)) + "}"
+    assert len(json.loads(doc)) == width, "the dict holds each key once"
+    for bound, holds in [
+        (at.MaxLen(width), True),
+        (at.MinLen(width), True),
+        (at.MaxLen(width - 1), False),
+        (at.MinLen(width + 1), False),
+    ]:
+        v = Validator(Annotated[dict[str, int], bound])
+        assert v.is_valid_json(doc) is holds, (bound, width)
+        assert v.is_valid(json.loads(doc)) is holds, (bound, width)
+        assert _outcome(lambda v=v: v.validate_json(doc)) == _outcome(
+            lambda v=v: v.validate(json.loads(doc))
+        ), (bound, width)
+
+
 def test_malformed_json_raises_a_structured_error() -> None:
     v = Validator(int)
     with pytest.raises(ValidationError) as info:

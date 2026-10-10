@@ -277,6 +277,9 @@ document shape is a tree the walk reads once and drops.
 
 Nodes that compare against a Python object — literals, refinements, instance and
 object checks, and predicates — materialize just the value at that node, since
-the comparison runs in Python. `validate_json` and `load` materialize the whole
-document, since each hands back what a caller reads -- a report of Python-level
-value summaries, or the value itself; only `is_valid_json` is fully in place.
+the comparison runs in Python. A length bound on an array or an object compares
+nothing, so it builds nothing: an array's items are counted, and an object's
+keys as the dict `json.loads` builds holds them, a repeated key once.
+`validate_json` and `load` materialize the whole document, since each hands back
+what a caller reads -- a report of Python-level value summaries, or the value
+itself; only `is_valid_json` is fully in place.

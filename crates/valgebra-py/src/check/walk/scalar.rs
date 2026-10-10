@@ -11,6 +11,8 @@
 //! see the note there for what routing the arms through here costs and what
 //! test holds the two statements together.
 
+use std::ops::ControlFlow;
+
 use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyDict, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple};
@@ -18,6 +20,7 @@ use valgebra_core::{
     CollKind, ConstIx, Constraint, OperandIx, PredIx, Schema, SeqKind, Violation, quoted,
 };
 
+use super::record::distinct_keys;
 use super::{
     Base, Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at,
     reads_its_length, record_fatal, record_if_fatal, record_stop, stop,
@@ -344,7 +347,8 @@ fn predicate_passes(value: &Bound<'_, PyAny>, predicate: &Bound<'_, PyAny>) -> P
 /// with one exception: a length bound on a container, which
 /// [`lengths_before_elements`] asks before the elements. The loop below asks it
 /// again, where it holds and records nothing unless the walk ran code that
-/// changed the value.
+/// changed the value; a parsed value runs none, so it is not asked again
+/// ([`parsed_for_constraints`]).
 ///
 /// Which bases have elements is a property of the node, so a refinement of a
 /// scalar -- asked once per element of a list of them -- pays one comparison
@@ -372,20 +376,16 @@ pub(super) fn check_refine(
         return false;
     }
     // A Python value is borrowed for the whole check, as the bound is: the walk
-    // holds it, so a passing check writes no reference count on it. A parsed
-    // JSON value is built into the object `json.loads` would have given.
+    // holds it, so a passing check writes no reference count on it.
     let built;
     let obj = match value {
         Value::Py(obj) => *obj,
-        Value::Json(..) => match value.to_python() {
-            Ok(obj) => {
+        Value::Json(..) => match parsed_for_constraints(base, constraints, value, &frame.ctx) {
+            ControlFlow::Continue(obj) => {
                 built = obj;
                 &built
             }
-            Err(err) => {
-                record_if_fatal(err, value.py(), frame.ctx);
-                return false;
-            }
+            ControlFlow::Break(answer) => return answer,
         },
     };
     let mut ok = true;
@@ -398,6 +398,36 @@ pub(super) fn check_refine(
         }
     }
     ok
+}
+
+/// The object a refinement's constraints read off a parsed JSON value -- the
+/// one `json.loads` would have given -- or the answer where none is built.
+///
+/// None is built where every constraint is a length bound its container was
+/// asked before its elements: a document runs no code, so those hold as they
+/// were asked. Out of line, so the reading of a Python value pays nothing for
+/// it.
+#[inline(never)]
+fn parsed_for_constraints<'py>(
+    base: &Schema,
+    constraints: &[Constraint],
+    value: &Value<'py, '_>,
+    ctx: &Ctx<'_>,
+) -> ControlFlow<bool, Bound<'py, PyAny>> {
+    if constraints
+        .iter()
+        .all(|constraint| matches!(constraint, Constraint::MinLen(_) | Constraint::MaxLen(_)))
+        && is_of_its_kind(base, value)
+    {
+        return ControlFlow::Break(true);
+    }
+    match value.to_python() {
+        Ok(obj) => ControlFlow::Continue(obj),
+        Err(err) => {
+            record_if_fatal(err, value.py(), *ctx);
+            ControlFlow::Break(false)
+        }
+    }
 }
 
 /// Ask a container's length bounds where a fixed shape asks its arity: after
@@ -422,9 +452,11 @@ fn lengths_before_elements(
     // The length every bound reads, taken once and the way the constraint takes
     // it. A JSON array holds its items as the list built from it would, so its
     // count is read without building one; a JSON object may repeat a key, which
-    // the dict built from it does not, so it is built and asked.
+    // the dict built from it does not, so its distinct keys are counted where
+    // it lies.
     let len = match value {
         Value::Json(_, JsonValue::Array(items)) => Some(items.len()),
+        Value::Json(_, JsonValue::Object(entries)) => Some(distinct_keys(entries)),
         Value::Json(..) | Value::Py(_) => {
             match value.to_python().and_then(|obj| stored_len(&obj, &ctx)) {
                 Ok(len) => Some(len),

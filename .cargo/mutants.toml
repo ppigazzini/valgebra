@@ -181,6 +181,12 @@ exclude_re = [
     # test's. The two readings themselves stay in the sweep and both of their
     # mutants die: the repeat test and the refusal are killable, and are killed.
     "replace <= with > in undeclared_covered",
+    # `distinct_keys` counts a parsed object's keys for a length bound by the
+    # same two readings, chosen at the same bound, and
+    # `a_length_bound_counts_a_parsed_objects_keys_at_every_width` holds them to
+    # one count either side of it and across it. Flipping the comparison moves
+    # the cost and no count, for the reason above.
+    "replace <= with > in distinct_keys",
 ]
 
 # A few mutants run longer than the baseline; give generous headroom over it.

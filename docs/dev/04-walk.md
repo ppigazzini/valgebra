@@ -22,8 +22,12 @@ a `Value::Json` is never explained: the explaining arms of the JSON walk are
 unreachable by construction, and a document reaches the same codes with the same
 `loc` a Python value reaches, which is what
 [08-error-model.md](../08-error-model.md) promises. The in-place path exists for
-the question that needs no objects at all, and that is the one that answers a
-`bool`.
+the question whose answer is no object, the one that answers a `bool`. It builds
+the object `json.loads` would give only for a node that compares the value with
+a Python object -- a literal, an instance or object check, a refinement's
+comparison or predicate -- and a length bound compares nothing: an array's
+items and an object's distinct keys are counted where they lie
+([below](#a-narrow-object-is-covered-where-it-lies)).
 
 **A streaming check is refused.** Reading the document with jiter's pull
 parser instead of its tree saves at most the tree's construction and drop, and
@@ -785,6 +789,10 @@ is walked. That is a smaller saving than the table -- one key-schema walk per
 undeclared key rather than one allocation per object -- and the two compose.
 Both are on the comparison gate's JSON document, which reads 0.78 of
 pydantic-core with them and 0.87 with only the first.
+
+The two readings count a parsed object's keys for a length bound too
+(`distinct_keys`): the dict `json.loads` builds holds a repeated key once, so an
+entry counts where no entry after it repeats its key.
 
 The Python-dict path is untouched by both: a dict key is any object, and the
 reason this reading holds is that a parsed key is not.
