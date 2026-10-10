@@ -3144,6 +3144,258 @@ PLANTS = (
         trips=("test_the_nightly_runs_on_the_branch_development_is_on",),
     ),
     Plant(
+        # The trait scanned at an indentation no method has: every question is
+        # read as gone, and the two directions compare nothing.
+        "tests/test_oracle_ledger.py",
+        ("tests/test_oracle_ledger.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_oracle_ledger.py",
+            '_METHOD = re.compile(r"^    fn ([a-z_][a-z0-9_]*)\\s*\\(", re.MULTILINE)',
+            '_METHOD = re.compile(r"^  fn ([a-z_][a-z0-9_]*)\\s*\\(", re.MULTILINE)',
+        ),
+        trips=("test_the_trait_is_read_at_all",),
+    ),
+    Plant(
+        # A question renamed on the page and not in the trait: the page names
+        # one nothing asks and misses the one the core does.
+        "tests/test_oracle_ledger.py",
+        ("docs/dev/02-decision.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/02-decision.md",
+            "- `divides` — does one pooled step divide another",
+            "- `divides_by` — does one pooled step divide another",
+        ),
+        trips=(
+            "test_every_question_the_core_asks_is_on_the_page",
+            "test_every_question_the_page_names_is_one_the_core_asks",
+        ),
+    ),
+    Plant(
+        # A question listed twice, which reads as complete in both directions.
+        "tests/test_oracle_ledger.py",
+        ("docs/dev/02-decision.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/02-decision.md",
+            "- `compare` — order two pooled refinement bounds;\n",
+            "- `compare` — order two pooled refinement bounds;\n"
+            "- `compare` — order two pooled refinement bounds;\n",
+        ),
+        trips=("test_the_page_lists_each_question_once",),
+    ),
+    Plant(
+        # A default the pin does not ask: the sweep takes it on the argument
+        # that the pin kills an answering mutant, and nothing does.
+        "tests/test_oracle_ledger.py",
+        ("crates/valgebra-core/src/oracle/tests.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/oracle/tests.rs",
+            "    assert_eq!(oracle.divides(one, two), None);\n",
+            "",
+        ),
+        trips=("test_every_declining_default_is_held_to_its_decline",),
+    ),
+    Plant(
+        # An oracle default excused from the sweep again.
+        "tests/test_oracle_ledger.py",
+        (".cargo/mutants.toml",),
+        lambda tree: _edit(
+            tree,
+            ".cargo/mutants.toml",
+            'exclude_re = [\n    "has_disjoint_complement_pair",\n',
+            "exclude_re = [\n"
+            '    "replace LeafRelations::divides .* with Some\\\\(true\\\\)",\n'
+            '    "has_disjoint_complement_pair",\n',
+        ),
+        trips=("test_the_sweep_excuses_no_oracle_default",),
+    ),
+    Plant(
+        # A refuting reading renamed on the page: the page names a function
+        # nothing defines, and the one `unstructured` asks goes unlisted.
+        "tests/test_oracle_ledger.py",
+        ("docs/dev/02-decision.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/02-decision.md",
+            "- `shorter_than` — the supertype carries a length bound",
+            "- `shorter_than_its_bound` — the supertype carries a length bound",
+        ),
+        trips=(
+            "test_every_reading_the_page_names_exists",
+            "test_every_rule_that_refutes_is_on_the_page",
+        ),
+    ),
+    Plant(
+        # The descriptor modules globbed under an extension none has.
+        "tests/test_module_direction.py",
+        ("tests/test_module_direction.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_module_direction.py",
+            'return sorted(DESCR.glob("*.rs"))',
+            'return sorted(DESCR.glob("*.rust"))',
+        ),
+        trips=("test_the_descriptor_modules_are_read_at_all",),
+    ),
+    Plant(
+        # The answer type read from the decider rather than from the frame.
+        "tests/test_module_direction.py",
+        ("crates/valgebra-core/src/descr/polar.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/descr/polar.rs",
+            "use crate::verdict::Verdict;",
+            "use crate::decision::Verdict;",
+        ),
+        trips=("test_the_definition_imports_nothing_from_the_optimisation",),
+    ),
+    Plant(
+        # The term reaching into a decider for an answer type.
+        "tests/test_module_direction.py",
+        ("crates/valgebra-core/src/simplify.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/simplify.rs",
+            "use crate::kind::{Region, Regions};\n",
+            "use crate::decision::Verdict;\nuse crate::kind::{Region, Regions};\n",
+        ),
+        trips=("test_the_term_imports_nothing_from_the_optimisation",),
+    ),
+    Plant(
+        # The frame reaching back into the decider it sits below.
+        "tests/test_module_direction.py",
+        ("crates/valgebra-core/src/kind.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/kind.rs",
+            "use crate::verdict::Verdict;",
+            "use crate::decision::Verdict;",
+        ),
+        trips=("test_the_frame_is_where_the_definition_can_reach_it",),
+    ),
+    Plant(
+        # The fast path not asking the definition, with no sentence saying
+        # the edge is left out on purpose.
+        "tests/test_module_direction.py",
+        ("crates/valgebra-core/src/decision.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/decision.rs",
+            "use crate::descr::lower::{",
+            "use crate::lowering::{",
+        ),
+        trips=("test_the_optimisation_may_still_depend_on_the_definition",),
+    ),
+    Plant(
+        # The walk asking the procedure whether one schema holds another.
+        "tests/test_module_direction.py",
+        ("crates/valgebra-py/src/check/walk.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-py/src/check/walk.rs",
+            "use pyo3::intern;\n",
+            "use pyo3::intern;\nuse valgebra_core::decision::Relation;\n",
+        ),
+        trips=("test_the_membership_walk_never_consults_subtyping",),
+    ),
+    Plant(
+        # A memo of decided goals in the query's context, with no sentence
+        # saying how a backtracked hypothesis leaves it.
+        "tests/test_memo_placement.py",
+        ("crates/valgebra-core/src/decision.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/decision.rs",
+            "    visiting: Vec<DefIx>,\n}\n",
+            "    visiting: Vec<DefIx>,\n"
+            "    /// The goals already decided, so a repeat is answered from here.\n"
+            "    decided: FxHashMap<(Schema, Schema), Relation>,\n}\n",
+        ),
+        trips=("test_a_memo_without_a_revert_condition_fails_placement",),
+    ),
+    Plant(
+        # The workflows globbed under an extension none has: only the local
+        # actions' steps are read, and too few to be the lanes.
+        "tests/test_workflow_actions.py",
+        ("tests/test_workflow_actions.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_workflow_actions.py",
+            'for path in sorted(WORKFLOWS.glob("*.yml")):',
+            'for path in sorted(WORKFLOWS.glob("*.yaml")):',
+        ),
+        trips=("test_the_steps_are_read",),
+    ),
+    Plant(
+        # The MSRV lane's toolchain from an action that publishes a moving tag.
+        "tests/test_workflow_actions.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "      - uses: $/.github/actions/setup-rust\n"
+            "        with:\n"
+            "          toolchain: ${{ steps.msrv.outputs.version }}",
+            "      - uses: dtolnay/rust-toolchain@master\n"
+            "        with:\n"
+            "          toolchain: ${{ steps.msrv.outputs.version }}",
+        ),
+        trips=("test_no_toolchain_comes_from_a_third_party_action",),
+    ),
+    Plant(
+        # The wrapper handing its default to an action instead of to rustup.
+        "tests/test_workflow_actions.py",
+        (".github/actions/setup-rust/action.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/actions/setup-rust/action.yml",
+            '      run: rustup default "$TOOLCHAIN"',
+            "      uses: dtolnay/rust-toolchain@stable",
+        ),
+        trips=("test_the_wrapper_runs_rustup_and_no_action",),
+    ),
+    Plant(
+        # The workflows globbed under an extension none has.
+        "tests/test_workflow_syncs.py",
+        ("tests/test_workflow_syncs.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_workflow_syncs.py",
+            'for path in sorted(WORKFLOWS.glob("*.yml"))',
+            'for path in sorted(WORKFLOWS.glob("*.yaml"))',
+        ),
+        trips=("test_the_workflows_are_read",),
+    ),
+    Plant(
+        # The site's environment resolved afresh rather than taken from the
+        # lock: a deploy built from a resolution no lane tested.
+        "tests/test_workflow_syncs.py",
+        (".github/workflows/docs.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/docs.yml",
+            "      - run: uv sync --locked --group docs",
+            "      - run: uv sync --group docs",
+        ),
+        trips=("test_every_sync_installs_the_lock",),
+    ),
+    Plant(
+        # A bare `uv run` after the build, which resolves again and uninstalls
+        # what `maturin develop` put there.
+        "tests/test_workflow_syncs.py",
+        (".github/workflows/docs.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/docs.yml",
+            "      - run: uv run --no-sync maturin develop --uv",
+            "      - run: uv run maturin develop --uv",
+        ),
+        trips=("test_every_run_in_a_checkout_runs_on_what_the_job_installed",),
+    ),
+    Plant(
         # A test module subscripting a typing form with a validator, which on
         # the floor is a collection error that takes the module with it.
         "tests/test_suite_partition.py",
@@ -4351,6 +4603,11 @@ UNPLANTED: dict[str, str] = {
         OWN_PLANT,
         "test_a_selection_and_a_condition_are_read_as_the_runner_reads_them",
         "test_the_gate_and_a_condition_are_read_as_the_runner_reads_them",
+    ),
+    **_excuse(
+        "test_memo_placement.py",
+        OWN_PLANT,
+        "test_the_detector_finds_a_memo_and_reads_the_sentence",
     ),
     **_excuse(
         "test_suite_partition.py",

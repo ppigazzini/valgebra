@@ -10,6 +10,8 @@ is one rustup command, which every hosted runner carries, so
 
 Held over every workflow and every local action, so a toolchain action added
 tomorrow fails here the day it lands.
+
+LEDGER: every toolchain a workflow installs comes from the rustup wrapper
 """
 
 from __future__ import annotations

@@ -17,6 +17,9 @@ asserts it of each, and a default that answers fails there whatever reads it.
 So these are held here: every method is on the page, every name on the page is
 a method, every default that declines is asserted to, and the sweep excuses
 none.
+
+LEDGER: every question the core asks the oracle is on the decision page, and
+every reading that refutes
 """
 
 from __future__ import annotations

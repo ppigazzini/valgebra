@@ -153,6 +153,11 @@ for and misses the other. The ledgers:
 | `tests/test_release_smoke.py` | every wheel the release builds is loaded, its ends tested; PyPy's is plain |
 | `tests/test_release_matrix.py` | every classified release has a wheel on every platform, or a named gap |
 | `tests/test_sdist.py` | the source distribution carries every build input and nothing else |
+| `tests/test_oracle_ledger.py` | every question the core asks the oracle is on the decision page, and every reading that refutes |
+| `tests/test_module_direction.py` | the definition, the term and the membership walk import nothing from the structural procedure |
+| `tests/test_memo_placement.py` | every table keyed by a goal in the coinductive procedure says how it reverts |
+| `tests/test_workflow_actions.py` | every toolchain a workflow installs comes from the rustup wrapper |
+| `tests/test_workflow_syncs.py` | every sync installs the lock, and every run in a checkout runs on it |
 | `tests/test_ledger_plants.py` | every ledger fails on the defect it exists to catch |
 
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds

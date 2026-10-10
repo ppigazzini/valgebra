@@ -24,6 +24,9 @@ of schemas inside the coinductive procedure fails here until the sentence that
 discharges §14.3 is written beside it -- not as a promise that the sentence is
 true, which nothing mechanical can check, but so that writing one is a
 deliberate act a reviewer sees rather than an omission nobody does.
+
+LEDGER: every table keyed by a goal in the coinductive procedure says how it
+reverts
 """
 
 from __future__ import annotations

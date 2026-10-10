@@ -7,6 +7,8 @@ so the Pages deploy could publish a site built from a resolution no lane had
 tested. A bare `uv run` resolves again before it runs, uninstalling the build
 `maturin develop` made. Held over every workflow, so a job added tomorrow is
 held the day it lands.
+
+LEDGER: every sync installs the lock, and every run in a checkout runs on it
 """
 
 from __future__ import annotations

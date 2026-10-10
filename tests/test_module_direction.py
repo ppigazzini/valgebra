@@ -31,6 +31,9 @@ schema is built -- a join carrying a member together with its complement is the
 top -- and the one statement of that law is in `oracle.rs`, which `simplify.rs`
 and the emptiness decision read from there too. Stated inside either decider it
 would be an edge from the term to a reading of it.
+
+LEDGER: the definition, the term and the membership walk import nothing from
+the structural procedure
 """
 
 from __future__ import annotations
