@@ -26,15 +26,14 @@ from __future__ import annotations
 
 import ast
 import re
-from pathlib import Path
 
 import pytest
 
 from _reason import is_a_reason
+from _tree import ROOT
 
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 STUB = ROOT / "python" / "valgebra" / "_valgebra.pyi"
 CONSUMER = ROOT / "tests" / "typing" / "consumer.py"
 

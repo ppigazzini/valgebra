@@ -38,17 +38,18 @@ from __future__ import annotations
 
 import functools
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
 
+from _tree import ROOT
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
 
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 THEORY = ROOT / "docs" / "dev" / "10-theory.md"
 
 #: The tags a *claim* carries, each with the id that names it. The page's own

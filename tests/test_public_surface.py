@@ -15,11 +15,11 @@ import importlib
 import re
 import types
 import typing
-from pathlib import Path
 
 import pytest
 
 import valgebra
+from _tree import ROOT
 from valgebra import ValidationError, Validator, nothing
 
 
@@ -246,9 +246,7 @@ def test_the_stub_marks_no_positional_only_parameter_this_file_misses() -> None:
     here with no row, and a row naming a parameter the stub no longer marks
     fails rather than driving a refusal that is not promised.
     """
-    stub = (
-        Path(__file__).resolve().parent.parent / "python" / "valgebra" / "_valgebra.pyi"
-    ).read_text(encoding="utf-8")
+    stub = (ROOT / "python" / "valgebra" / "_valgebra.pyi").read_text(encoding="utf-8")
     marked: set[tuple[str, str]] = set()
     for name, params in re.findall(r"^    def (\w+)\(([^)]*)\)", stub, re.MULTILINE):
         # A dunder is a protocol Python calls by its own rules, and no caller

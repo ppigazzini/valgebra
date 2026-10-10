@@ -38,12 +38,13 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from _tree import ROOT
+
 pytestmark = pytest.mark.repository
 
 if TYPE_CHECKING:
     from types import ModuleType
 
-ROOT = Path(__file__).resolve().parent.parent
 GATE = ROOT / "scripts" / "gate.py"
 SCRIPTS = ROOT / "scripts"
 

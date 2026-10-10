@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from _tree import ROOT
+
 # The repository checks are not the product suite: this file reads the tree and
 # the scripts, neither of which ships in a wheel.
 pytestmark = pytest.mark.repository
@@ -28,7 +30,6 @@ pytestmark = pytest.mark.repository
 if TYPE_CHECKING:
     from types import ModuleType
 
-ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
 SCRIPT = SCRIPTS / "pgo_compare.py"
 

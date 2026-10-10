@@ -37,15 +37,19 @@ LEDGER: every failure code is a name the table declares, and every name is used
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+from _tree import ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # A repository check: it reads the crate's sources and the derivation script,
 # neither of which ships in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 BINDING = ROOT / "crates" / "valgebra-py" / "src"
 TABLE = BINDING / "codes.rs"
 CORE = ROOT / "crates" / "valgebra-core" / "src"

@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
+
+from _tree import ROOT
 
 # The repository checks are not the product suite: this file drives a lane's
 # script, which does not ship in a wheel.
@@ -24,7 +25,7 @@ pytestmark = pytest.mark.repository
 if TYPE_CHECKING:
     from types import ModuleType
 
-SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "pypy_import_check.py"
+SCRIPT = ROOT / "scripts" / "pypy_import_check.py"
 
 
 def _load() -> ModuleType:

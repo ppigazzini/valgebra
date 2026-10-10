@@ -24,15 +24,19 @@ from __future__ import annotations
 import ast
 import builtins
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+from _tree import ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # A claim about the pages, which ship in no wheel, read against the API where
 # the package declares it rather than through an import.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 
 #: The declared surface: the stub the package ships for its extension, which
 #: `tests/test_surface_outcomes.py` and the checker ledgers hold to the binding,

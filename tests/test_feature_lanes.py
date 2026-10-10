@@ -32,19 +32,16 @@ LEDGER: every crate feature runs in a test lane or is excused by name
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
-import yaml
 
 from _toml import load
+from _tree import ROOT, WORKFLOWS, read_workflow
 
 # A repository check: it reads the workflows and the manifests, neither of
 # which ships in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKFLOWS = ROOT / ".github" / "workflows"
 
 #: Features no test lane runs, each with the reason. An entry is a hole in the
 #: claim above, so it carries an argument rather than a name alone.
@@ -112,7 +109,7 @@ def _lanes_running(feature: str) -> list[str]:
     """Every job outside a measurement that passes `feature` to `cargo test`."""
     lanes = []
     for path in sorted(WORKFLOWS.glob("*.yml")):
-        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+        workflow = read_workflow(path)
         for job_id, job in (workflow.get("jobs") or {}).items():
             spelled = f"{job_id} {job.get('name', '')}"
             if _MEASURES.search(spelled):

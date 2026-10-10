@@ -28,7 +28,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-import yaml
+
+from _tree import ROOT, read_workflow
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
@@ -37,8 +38,6 @@ pytestmark = pytest.mark.repository
 if TYPE_CHECKING:
     from types import ModuleType
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 GATE = ROOT / "scripts" / "perf_gate.py"
 
 
@@ -487,9 +486,7 @@ def test_every_binding_shape_has_iterations_and_a_budget() -> None:
 
 def _bench_steps(prefix: str = "--binding") -> list[str]:
     """Collect the bench job's steps that pass a flag starting with `prefix`."""
-    workflow = yaml.safe_load(
-        (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    )
+    workflow = read_workflow()
     steps = workflow["jobs"]["bench"]["steps"]
     return [step["run"] for step in steps if prefix in step.get("run", "")]
 
@@ -590,7 +587,7 @@ def test_the_pages_give_the_gap_between_the_deciders_the_record_holds() -> None:
 
 def _merge_base_step() -> str:
     """Read the shell of the workflow's "Name the merge base" step from it."""
-    spec = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    spec = read_workflow()
     for job in spec["jobs"].values():
         for step in job.get("steps", []):
             if step.get("name") == "Name the merge base":

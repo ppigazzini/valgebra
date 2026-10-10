@@ -17,16 +17,15 @@ every gate green.
 from __future__ import annotations
 
 from itertools import pairwise
-from pathlib import Path
 
 import pytest
 
 from _toml import load
+from _tree import ROOT
 
 # A repository check: it reads the build configuration, which no wheel ships.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / ".cargo" / "config.toml"
 
 

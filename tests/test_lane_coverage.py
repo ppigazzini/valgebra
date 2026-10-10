@@ -26,15 +26,19 @@ LEDGER: every gate script runs in a lane; no excuse is stale
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+from _tree import ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
 
 # Scripts deliberately driven by nothing, each with the reason. Empty today:

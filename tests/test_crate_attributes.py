@@ -22,13 +22,17 @@ LEDGER: every crate root forbids unsafe code
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
+from _tree import ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 CRATES = ROOT / "crates"
 
 #: The attribute that makes the claim the compiler's. Written as an inner

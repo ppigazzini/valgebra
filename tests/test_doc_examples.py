@@ -37,19 +37,20 @@ import importlib.util
 import re
 import subprocess
 import sys
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
+from _tree import ROOT
+
 if TYPE_CHECKING:
+    from pathlib import Path
     from types import ModuleType
 
 # A repository check: it reads the tree's pages and the script that runs them,
 # neither of which ships in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 RUNNER = ROOT / "scripts" / "run_doc_examples.py"
 
 

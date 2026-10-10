@@ -25,18 +25,17 @@ LEDGER: every cfg(feature = ..) site is test-only, or named
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
 from _reason import is_a_reason
 from _toml import load
+from _tree import ROOT
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 BINDING = ROOT / "crates" / "valgebra-py"
 
 # Features whose `cfg` sites are allowed OUTSIDE a test module, each with the

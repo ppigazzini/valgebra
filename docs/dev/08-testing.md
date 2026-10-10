@@ -30,6 +30,25 @@ is a product test the marker would silently drop. `test_suite_partition.py`
 reads both facts from the syntax and fails either way round, so a new file lands
 on one side the day it arrives.
 
+## What the suite shares
+
+A few modules under `tests/` hold no tests. Each says one thing that many tests
+would otherwise say again, and a copy is how the first one drifts.
+
+- **`_tree.py` is where the checkout is.** It names the root, the workflows and
+  the core's `ir.rs` and `kind.rs`. It parses a workflow once per run and gives
+  every caller a copy of its own, and `runs` gives the shell of every step, so
+  a flag quoted in a comment is not a lane passing it. `variants` reads a core
+  enum with one pattern, so every table held to `Schema`, `Constraint` or
+  `Kind` is held to the same variants. `test_suite_partition.py` refuses a
+  module that finds the checkout from its own file.
+- **`_toml.py` parses TOML on every interpreter the suite runs on**, through
+  `tomli` where `tomllib` is not there yet.
+- **`_reason.py` is what a ledger's written reason is held to**: a sentence,
+  and not a placeholder.
+- **`_deferred.py` holds the classes whose annotations are strings**, because
+  `from __future__ import annotations` applies to a whole module.
+
 ## The layers, and what each can see
 
 | Layer | Judges | Blind to |

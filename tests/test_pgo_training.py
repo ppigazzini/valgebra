@@ -25,12 +25,12 @@ import ast
 import importlib.util
 import json
 import sys
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
 from _reason import is_a_reason
+from _tree import ROOT
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -39,7 +39,6 @@ if TYPE_CHECKING:
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 WORKLOAD = ROOT / "scripts" / "pgo_workload.py"
 
 #: The module-level names the tables are built from: the tables and the reason

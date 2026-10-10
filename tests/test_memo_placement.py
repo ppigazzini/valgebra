@@ -29,13 +29,13 @@ deliberate act a reviewer sees rather than an omission nobody does.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
+from _tree import ROOT
+
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 #: The coinductive procedure and the rules it is split into. The descriptor is
 #: not under this rule: it holds no hypothesis, so a cache there reverts nothing.
 #:

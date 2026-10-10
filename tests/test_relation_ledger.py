@@ -48,13 +48,13 @@ from __future__ import annotations
 import abc
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Annotated, Any
 
 import annotated_types as at
 import pytest
 
 from _reason import is_a_reason
+from _tree import ROOT, variants
 
 # The two class-shaped forms come from the node table rather than being written
 # again here. This file's tables claim to be that file's forms, and importing is
@@ -71,13 +71,7 @@ from valgebra import (
     union,
 )
 
-ROOT = Path(__file__).resolve().parent.parent
-IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
 ORACLE = ROOT / "crates" / "valgebra-py" / "src" / "oracle.rs"
-
-#: The variants of `pub enum Schema`, read from the tree rather than restated.
-_ENUM = re.compile(r"^pub enum Schema \{$(.*?)^\}$", re.DOTALL | re.MULTILINE)
-_VARIANT = re.compile(r"^    ([A-Z][A-Za-z]*)[ ({,]", re.MULTILINE)
 
 #: The hooks `denotes_a_set` reads before the oracle will answer about a
 #: class. Read out of the binding rather than restated: a third hook added
@@ -211,19 +205,6 @@ DECLINED_AND_NOTHING_DECIDES: dict[tuple[str, str], str] = {
 }
 
 
-def _variants() -> set[str]:
-    """Read the `Schema` variant names out of the IR rather than restating them."""
-    body = _ENUM.search(IR.read_text(encoding="utf-8"))
-    assert body, "ir.rs has no `pub enum Schema`"
-    found = set(_VARIANT.findall(body.group(1)))
-    # The scan is the detector: an empty variant set would pass both directions
-    # having read nothing at all.
-    assert {"Anything", "Nothing", "Union", "Complement"} <= found, (
-        f"the variant scan found only {sorted(found)}"
-    )
-    return found
-
-
 @pytest.fixture(scope="module")
 def built() -> dict[str, Validator]:
     """Each representative, compiled once for the whole product."""
@@ -255,17 +236,17 @@ def _witnesses(built: dict[str, Validator], subject: str, supertype: str) -> lis
 
 def test_the_universe_is_the_ir_variants_in_both_directions() -> None:
     """A node added to the IR arrives here without a representative, and fails."""
-    variants = _variants()
-    missing = sorted(variants - set(REPRESENTATIVES) - NOT_IN_A_COMPILED_SCHEMA)
+    found = variants("Schema")
+    missing = sorted(found - set(REPRESENTATIVES) - NOT_IN_A_COMPILED_SCHEMA)
     assert not missing, (
         f"schema variants with no representative: {missing}. Give each one the "
         "form `tests/test_node_matrix.py` names for it, or excuse it with the "
         "reason no compiled schema holds one."
     )
-    stale = sorted(set(REPRESENTATIVES) - variants)
+    stale = sorted(set(REPRESENTATIVES) - found)
     assert not stale, f"representatives naming no IR variant: {stale}"
     # The excuse expires in its own direction.
-    assert variants >= NOT_IN_A_COMPILED_SCHEMA
+    assert found >= NOT_IN_A_COMPILED_SCHEMA
 
 
 def test_the_representatives_are_that_many_different_sets(

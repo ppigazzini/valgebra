@@ -34,19 +34,19 @@ import re
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
 
+from _tree import ROOT
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
+    from pathlib import Path
 
 # The repository checks are not the product suite: this file reads the tree,
 # copies it, and runs pytest inside the copy, none of which ships in a wheel.
 pytestmark = pytest.mark.repository
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 class Plant(NamedTuple):
@@ -3159,6 +3159,19 @@ PLANTS = (
         trips=("test_no_typing_form_is_subscripted_with_a_validator",),
     ),
     Plant(
+        # A module finding the checkout for itself: a second answer to where
+        # the tree is, which moving the module leaves pointing somewhere else.
+        "tests/test_suite_partition.py",
+        ("tests/test_sweep_skips.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_sweep_skips.py",
+            'CONTRIBUTING = ROOT / "CONTRIBUTING.md"',
+            'CONTRIBUTING = Path(__file__).resolve().parent.parent / "CONTRIBUTING.md"',
+        ),
+        trips=("test_the_checkout_is_found_in_one_place",),
+    ),
+    Plant(
         # `--strict-markers` dropped, so a misspelt marker is accepted and the
         # boundary drawn by it moves silently.
         "tests/test_suite_partition.py",
@@ -4342,6 +4355,7 @@ UNPLANTED: dict[str, str] = {
     **_excuse(
         "test_suite_partition.py",
         OWN_PLANT,
+        "test_a_module_naming_itself_is_not_one_finding_the_tree",
         "test_a_reading_of_the_interpreter_is_read_from_the_syntax",
         "test_an_import_is_read_from_the_syntax_and_not_the_text",
         "test_the_validator_head_is_read_and_a_nested_one_is_not",

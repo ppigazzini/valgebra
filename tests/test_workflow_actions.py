@@ -14,15 +14,13 @@ tomorrow fails here the day it lands.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
-import yaml
+
+from _tree import ROOT, WORKFLOWS, read_workflow
 
 # A repository check: it reads the workflows, which ship in no wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 GITHUB = ROOT / ".github"
 
 #: The local action every lane installs its toolchain through, in the
@@ -33,12 +31,12 @@ WRAPPER = "$/.github/actions/setup-rust"
 def _steps() -> list[tuple[str, dict]]:
     """Every step of every workflow job and every local action, with its place."""
     found: list[tuple[str, dict]] = []
-    for path in sorted((GITHUB / "workflows").glob("*.yml")):
-        jobs = yaml.safe_load(path.read_text(encoding="utf-8"))["jobs"]
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        jobs = read_workflow(path)["jobs"]
         for name, job in jobs.items():
             found.extend((f"{path.name}:{name}", step) for step in job.get("steps", []))
     for path in sorted((GITHUB / "actions").glob("*/action.yml")):
-        runs = yaml.safe_load(path.read_text(encoding="utf-8"))["runs"]
+        runs = read_workflow(path)["runs"]
         where = str(path.relative_to(ROOT))
         found.extend((where, step) for step in runs.get("steps", []))
     return found
@@ -67,6 +65,6 @@ def test_no_toolchain_comes_from_a_third_party_action() -> None:
 
 def test_the_wrapper_runs_rustup_and_no_action() -> None:
     wrapper = ROOT / WRAPPER.removeprefix("$/") / "action.yml"
-    steps = yaml.safe_load(wrapper.read_text(encoding="utf-8"))["runs"]["steps"]
+    steps = read_workflow(wrapper)["runs"]["steps"]
     assert not [step["uses"] for step in steps if "uses" in step]
     assert any("rustup" in str(step.get("run", "")) for step in steps)

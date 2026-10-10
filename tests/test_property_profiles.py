@@ -18,16 +18,16 @@ import sys
 from pathlib import Path
 
 import pytest
-import yaml
 from hypothesis import settings
 from hypothesis.database import DirectoryBasedExampleDatabase
+
+from _tree import ROOT, read_workflow
 
 # A repository check: it reads the suite's own `conftest.py` and the workflow,
 # neither of which ships in a wheel.
 pytestmark = pytest.mark.repository
 
-TESTS = Path(__file__).resolve().parent
-ROOT = TESTS.parent
+TESTS = ROOT / "tests"
 
 #: Load `conftest.py` under one profile and print the settings it selected.
 READ = (
@@ -81,9 +81,7 @@ def test_the_nightly_lane_hands_its_database_back_each_night() -> None:
     """
     database = settings.get_profile("nightly").database
     assert isinstance(database, DirectoryBasedExampleDatabase)
-    workflow = yaml.safe_load(
-        (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    )
+    workflow = read_workflow()
     steps = workflow["jobs"]["nightly-fuzz"]["steps"]
     (deep,) = (
         i
@@ -123,9 +121,7 @@ def test_every_property_file_runs_under_the_nightly_profile() -> None:
         if re.search(r"^\s*@given\(", path.read_text(encoding="utf-8"), re.MULTILINE)
     }
     assert drawn, "no test file draws a property"
-    workflow = yaml.safe_load(
-        (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    )
+    workflow = read_workflow()
     (deep,) = (
         str(step["run"])
         for step in workflow["jobs"]["nightly-fuzz"]["steps"]

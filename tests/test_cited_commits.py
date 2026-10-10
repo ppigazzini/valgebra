@@ -35,13 +35,17 @@ import os
 import re
 import shutil
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
+from _tree import ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 
 #: A commit-shaped string: git's own abbreviation floor is 7, and 40 is a full
 #: object name. Longer runs of hex are something else -- a wheel's hash, a

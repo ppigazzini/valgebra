@@ -30,18 +30,15 @@ LEDGER: no lane installs an interpreter without naming it
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
-import yaml
 
 from _toml import load
+from _tree import ROOT, WORKFLOWS, read_workflow
 
 # A repository check: it reads the workflows, which ship in no wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKFLOWS = ROOT / ".github" / "workflows"
 
 #: The wrapper every lane installs its interpreter through.
 WRAPPER = "/.github/actions/setup-uv"
@@ -110,7 +107,7 @@ def _implementations_running_the_suite() -> dict[str, list[str]]:
     """Group every lane that runs pytest by the implementation it installs."""
     running: dict[str, list[str]] = {}
     for path in sorted(WORKFLOWS.glob("*.yml")):
-        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+        workflow = read_workflow(path)
         for job_name, job in (workflow.get("jobs") or {}).items():
             steps = job.get("steps") or []
             if not any(_RUNS_PYTEST.search(str(step.get("run", ""))) for step in steps):
@@ -127,7 +124,7 @@ def _uses_without_a_version() -> list[str]:
     """Return `job/step` for every wrapper use that names no interpreter."""
     unnamed = []
     for path in sorted(WORKFLOWS.glob("*.yml")):
-        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+        workflow = read_workflow(path)
         for job_name, job in (workflow.get("jobs") or {}).items():
             for index, step in enumerate(job.get("steps") or []):
                 uses = str(step.get("uses", ""))
@@ -155,11 +152,7 @@ def test_the_wrapper_still_defaults_to_letting_uv_choose() -> None:
     and this ledger would pass while saying nothing. The check is that the hole
     it closes is still open at the wrapper.
     """
-    action = yaml.safe_load(
-        (ROOT / ".github" / "actions" / "setup-uv" / "action.yml").read_text(
-            encoding="utf-8"
-        )
-    )
+    action = read_workflow(ROOT / ".github" / "actions" / "setup-uv" / "action.yml")
     default = action["inputs"]["python-version"].get("default", "")
     assert not str(default).strip(), (
         "the wrapper names a default interpreter, so a lane naming none inherits "

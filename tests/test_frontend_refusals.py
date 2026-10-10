@@ -34,15 +34,18 @@ import ast
 import functools
 import re
 import warnings
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from _reason import is_a_reason
+from _tree import ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "crates" / "valgebra-py" / "src"
 
 #: The frontend's files: the dispatch, and the four surfaces beside it. A

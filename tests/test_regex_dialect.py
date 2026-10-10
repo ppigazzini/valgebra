@@ -14,16 +14,14 @@ from __future__ import annotations
 import re
 import sys
 import warnings
-from pathlib import Path
 from typing import Annotated
 
 import pytest
 
+from _tree import ROOT
 from valgebra import Regex, Validator
 
-_PAGE = (
-    Path(__file__).resolve().parent.parent / "docs" / "05-refinements.md"
-).read_text(encoding="utf-8")
+_PAGE = (ROOT / "docs" / "05-refinements.md").read_text(encoding="utf-8")
 
 
 def _matches(pattern: str, text: str) -> bool:

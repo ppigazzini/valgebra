@@ -50,14 +50,13 @@ from __future__ import annotations
 
 import re
 import subprocess
-from pathlib import Path
 
 import pytest
-import yaml
+
+from _tree import ROOT, read_workflow
 
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 CHANGELOG = ROOT / "CHANGELOG.md"
 
 # The conventional types that mean a caller can see the change. `docs`, `test`,
@@ -204,17 +203,11 @@ def test_the_roll_is_not_empty_while_the_surface_moves() -> None:
         assert _roll(), "the surface moved this release and the roll is empty"
 
 
-def _workflow() -> dict:
-    return yaml.safe_load(
-        (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    )
-
-
 def _checkout_depth() -> str:
     """Read what the python lane asks `actions/checkout` for, as written."""
     checkouts = [
         step
-        for step in _workflow()["jobs"]["python"]["steps"]
+        for step in read_workflow()["jobs"]["python"]["steps"]
         if str(step.get("uses", "")).startswith("actions/checkout@")
     ]
     assert len(checkouts) == 1, "the python lane checks out once"
@@ -257,7 +250,7 @@ def test_the_leg_that_takes_the_history_says_so_in_its_name() -> None:
     on a leg that no longer takes it is worse than no name at all, because it
     answers the question a reader asked and answers it wrongly.
     """
-    name = str(_workflow()["jobs"]["python"]["name"])
+    name = str(read_workflow()["jobs"]["python"]["name"])
     marker = _only_ternary(name, "the python lane's name")
     depth = _only_ternary(_checkout_depth(), "the python lane's fetch-depth")
 
@@ -281,7 +274,7 @@ def test_the_leg_that_takes_the_history_says_so_in_its_name() -> None:
 
 #: The interpreter the floor leg runs, which is the leg that takes the history:
 #: the workflow's own `FLOOR`, so a floor that moves moves this reading too.
-FLOOR = str(_workflow()["env"]["FLOOR"])
+FLOOR = str(read_workflow()["env"]["FLOOR"])
 
 #: A workflow expression of the one shape this ledger reads: a parenthesised
 #: conjunction of `lhs == rhs` tests choosing between two quoted results.
@@ -305,7 +298,7 @@ def _tests(condition: str) -> frozenset[tuple[str, str]]:
     the conjunction, and a condition on the floor leg would read as one true on
     every ubuntu leg.
     """
-    variables = _workflow().get("env") or {}
+    variables = read_workflow().get("env") or {}
     tests = []
     for clause in condition.split("&&"):
         found = _TEST.fullmatch(clause.strip())

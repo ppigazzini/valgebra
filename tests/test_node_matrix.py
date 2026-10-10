@@ -16,13 +16,13 @@ import pickle
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from pathlib import Path
 from types import GenericAlias
 from typing import Annotated, Any
 
 import annotated_types as at
 import pytest
 
+from _tree import ROOT, variants
 from valgebra import (
     ValidationError,
     Validator,
@@ -38,8 +38,6 @@ from valgebra import (
 pytestmark = pytest.mark.filterwarnings(
     "ignore:Validator.simplify is deprecated:DeprecationWarning"
 )
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 class _Klass:
@@ -435,8 +433,6 @@ def test_membership_table_covers_every_node() -> None:
 # out of the tree rather than listed a second time here: a `Schema` variant that
 # reaches the walk and has no row fails below, at the commit that adds it.
 
-_IR_SOURCE = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
-
 # Labels whose node kind is not their own name, and the one variant with no row.
 _LABEL_TO_VARIANT = {
     # `typing.Any` is a spelling of the top, not a node of its own: it compiles
@@ -452,40 +448,18 @@ _LABEL_TO_VARIANT = {
 _NOT_IN_A_COMPILED_SCHEMA = {"SelfRef"}
 
 
-def _ir_variants() -> set[str]:
-    """Read the `Schema` variant names from the IR rather than restating them."""
-    source = _IR_SOURCE.read_text(encoding="utf-8")
-    start = source.index("pub enum Schema {")
-    body = source[start : source.index("\n}\n", start)]
-    names = set()
-    for line in body.splitlines():
-        stripped = line.strip()
-        if stripped.startswith(("//", "/", "#")) or not stripped:
-            continue
-        match = re.match(r"([A-Z][A-Za-z0-9]*)\s*[({,]", stripped)
-        if match:
-            names.add(match.group(1))
-    return names
-
-
 # THEORY: the-ir-matches-its-producers
 def test_the_node_table_covers_every_ir_variant() -> None:
-    variants = _ir_variants()
-    # The parse itself is a detector, so it must be shown to have read something:
-    # a table that "covers" an empty universe covers nothing.
-    assert {"KeyedMap", "Complement", "Anything", "Nothing"} <= variants, sorted(
-        variants
-    )
-
+    found = variants("Schema")
     covered = {_LABEL_TO_VARIANT.get(label, label.split(":")[0]) for label in _NODES}
-    missing = variants - covered - _NOT_IN_A_COMPILED_SCHEMA
+    missing = found - covered - _NOT_IN_A_COMPILED_SCHEMA
     assert not missing, f"IR variants with no row in the node table: {sorted(missing)}"
 
     # And no row names a variant the IR no longer has, so a rename cannot leave a
     # row silently testing nothing.
-    stale = covered - variants
+    stale = covered - found
     assert not stale, f"node table rows naming no IR variant: {sorted(stale)}"
 
     # The excuse expires in its own direction: a variant excused from the table
     # that the IR has dropped is an excuse with no subject.
-    assert variants >= _NOT_IN_A_COMPILED_SCHEMA
+    assert found >= _NOT_IN_A_COMPILED_SCHEMA

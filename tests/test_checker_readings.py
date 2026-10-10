@@ -37,6 +37,7 @@ from typing import NamedTuple
 import pytest
 
 from _reason import is_a_reason
+from _tree import ROOT
 
 # The three checkers are the dev group's, and the PyPy lane installs only what
 # the product suite reads: there this ledger has nothing to run and says so,
@@ -46,7 +47,6 @@ for _checker in ("ty", "mypy", "pyright"):
 
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 READINGS = ROOT / "tests" / "typing" / "readings"
 #: The tree's own package, which every checker is pointed at ahead of the
 #: installed one, so the rows answer for the stub as written here.

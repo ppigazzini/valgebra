@@ -36,11 +36,15 @@ would be an edge from the term to a reading of it.
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
+from _tree import ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 CORE = ROOT / "crates" / "valgebra-core" / "src"
 DESCR = CORE / "descr"
 

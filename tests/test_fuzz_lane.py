@@ -41,17 +41,18 @@ import re
 import shutil
 import subprocess
 import sys
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
-import yaml
+
+from _tree import ROOT, read_workflow, variants
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # A repository check: it reads the workflow, which ships in no wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 #: The step that runs the soak, by its `name:` in the workflow.
 SOAK = "Fuzz the decision procedures"
@@ -69,7 +70,7 @@ PROCESS_CEILING_MB = 4096
 
 def _step() -> dict[str, Any]:
     """Give the soak's step as the workflow declares it."""
-    spec = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    spec = read_workflow()
     for job in spec["jobs"].values():
         for step in job.get("steps", []):
             if step.get("name") == SOAK:
@@ -279,14 +280,6 @@ def test_the_generator_draws_every_node_the_ir_has() -> None:
     *spelling* beside the set, and one arm covers both because a fuzz target
     reads verdicts rather than spellings. Anything else absent is a gap.
     """
-    ir = (ROOT / "crates" / "valgebra-core" / "src" / "ir.rs").read_text(
-        encoding="utf-8"
-    )
-    body = ir[ir.index("pub enum Schema") :]
-    body = body[: body.index("\n}")]
-    variants = set(re.findall(r"^    ([A-Z]\w+)", body, re.MULTILINE))
-    assert {"Anything", "Nothing", "Union", "Complement"} <= variants, sorted(variants)
-
     generator = (ROOT / "fuzz" / "src" / "lib.rs").read_text(encoding="utf-8")
     # The constructors count as well as the bare variants: a sequence is built
     # through `Schema::set` and `Schema::frozen_set`, which name no variant.
@@ -302,7 +295,7 @@ def test_the_generator_draws_every_node_the_ir_has() -> None:
         if any(name in emitted for name in names):
             emitted.add(variant)
 
-    missing = sorted(variants - emitted)
+    missing = sorted(variants("Schema") - emitted)
     assert not missing, (
         f"the fuzz generator emits no {missing}. A variant it cannot build is "
         "one no soak reaches, so every law the target checks is a law about "

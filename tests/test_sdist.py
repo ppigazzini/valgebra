@@ -23,17 +23,16 @@ import shutil
 import subprocess
 import sys
 import tarfile
-from pathlib import Path
 
 import pytest
 
 from _toml import load
+from _tree import ROOT
 
 # The repository checks are not the product suite: this file builds the
 # repository's source distribution, which no installed wheel carries.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 
 #: What the build writes into the archive rather than taking from the tree.
 WRITTEN = {"PKG-INFO"}

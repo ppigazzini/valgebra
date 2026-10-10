@@ -17,18 +17,20 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
-import yaml
+
+from _tree import ROOT, read_workflow
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # The repository checks are not the product suite: this file reads the workflow
 # and drives a CI script, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "change_base.py"
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 #: A clone inherits no committer, and a commit here must not depend on whether
 #: the machine running the suite has one configured.
@@ -167,7 +169,7 @@ def test_every_step_that_reads_the_event_base_names_it_through_the_script() -> N
     reads it most carefully. A step carrying `BASE_SHA` works the base out by
     calling the script, not by a shell of its own.
     """
-    spec = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    spec = read_workflow()
     readers = [
         (job, step.get("name", ""), step.get("run", ""))
         for job, body in spec["jobs"].items()

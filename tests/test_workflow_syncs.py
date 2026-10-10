@@ -12,25 +12,21 @@ held the day it lands.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
-import yaml
+
+from _tree import WORKFLOWS, read_workflow
 
 # The repository checks are not the product suite: this file reads the
 # workflows, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
-
-WORKFLOWS = Path(__file__).resolve().parent.parent / ".github" / "workflows"
 
 
 def _jobs() -> list[tuple[str, dict]]:
     return [
         (f"{path.name}:{name}", job)
         for path in sorted(WORKFLOWS.glob("*.yml"))
-        for name, job in (
-            yaml.safe_load(path.read_text(encoding="utf-8"))["jobs"]
-        ).items()
+        for name, job in (read_workflow(path)["jobs"]).items()
     ]
 
 

@@ -25,18 +25,19 @@ import os
 import re
 import shutil
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
-import yaml
 
 from _toml import load
+from _tree import ROOT, read_workflow
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # A repository check: it reads the workflow, which ships in no wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 #: The job that gates the merge on the others.
 GATE = "ci"
@@ -51,10 +52,6 @@ NOT_ON_A_PUSH = re.compile(r"github\.event_name == 'schedule'|inputs\.[a-z_]+")
 #: language offers: a name with a hyphen in it cannot be read with a dot, since
 #: the hyphen parses as subtraction, so those are read by index.
 READS = re.compile(r"needs(?:\.([a-z0-9-]+)|\['([a-z0-9-]+)'\])\.result")
-
-
-def _workflow() -> dict:
-    return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
 
 
 def _gate_condition(gate: dict) -> str:
@@ -78,7 +75,7 @@ def _not_on_a_push(jobs: dict) -> set[str]:
 
 
 def test_every_job_is_required_by_the_gate() -> None:
-    jobs = _workflow()["jobs"]
+    jobs = read_workflow()["jobs"]
     gate = jobs[GATE]
     needed = set(gate["needs"])
     defined = set(jobs) - {GATE}
@@ -224,7 +221,7 @@ def _results(run: str, **planted: str) -> dict[str, dict]:
 @functools.cache
 def _jobs() -> dict:
     """Read the workflow's jobs once for the rows that model whole runs."""
-    return _workflow()["jobs"]
+    return read_workflow()["jobs"]
 
 
 def _gate_fails(results: dict[str, dict], event: str) -> bool:
@@ -254,7 +251,7 @@ def test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may() -> None:
     among them: which nights run it is its own condition's to say, and
     `test_the_nightly_runs_on_the_branch_development_is_on` holds those.
     """
-    needs = _workflow()["jobs"][GATE]["needs"]
+    needs = read_workflow()["jobs"][GATE]["needs"]
     pushed = {
         name for name, read in _results("a push").items() if read["result"] == "success"
     }
@@ -317,7 +314,7 @@ def test_the_gate_and_a_condition_are_read_as_the_runner_reads_them() -> None:
 
 
 def test_every_need_is_read_by_the_condition() -> None:
-    jobs = _workflow()["jobs"]
+    jobs = read_workflow()["jobs"]
     gate = jobs[GATE]
     read = _jobs_the_condition_reads(gate)
     unread = sorted(set(gate["needs"]) - read)
@@ -328,7 +325,7 @@ def test_every_need_is_read_by_the_condition() -> None:
 
 
 def test_the_gate_names_no_job_the_workflow_lacks() -> None:
-    jobs = _workflow()["jobs"]
+    jobs = read_workflow()["jobs"]
     gate = jobs[GATE]
     read = _jobs_the_condition_reads(gate)
     named = set(gate["needs"]) | read
@@ -377,7 +374,7 @@ def test_every_merge_counts_the_shards_its_sweep_is_cut_into() -> None:
     drift apart make the guard pass over a sweep with a shard missing, which is
     the state it exists to refuse.
     """
-    jobs = _workflow()["jobs"]
+    jobs = read_workflow()["jobs"]
     merges = _merges(jobs)
     assert merges, "no job merges a sharded sweep; the step name has moved"
     for merge, (sweep, counted) in sorted(merges.items()):
@@ -404,7 +401,7 @@ def test_a_sharded_sweep_covers_every_shard() -> None:
     the old matrix to no shard at all.
     """
     sharded = False
-    for name, job in sorted(_workflow()["jobs"].items()):
+    for name, job in sorted(read_workflow()["jobs"].items()):
         matrix = job.get("strategy", {}).get("matrix", {})
         if "shard" not in matrix:
             continue
@@ -441,7 +438,7 @@ _PASSES = re.compile(r"cargo mutants --package valgebra-py (\S+)")
 
 def _listing() -> str:
     """Read the workflow's list of the binding files the two sweeps examine."""
-    listing = str((_workflow().get("env") or {}).get(SWEPT_LIST, ""))
+    listing = str((read_workflow().get("env") or {}).get(SWEPT_LIST, ""))
     assert listing.split(), f"the workflow lists no binding files under {SWEPT_LIST}"
     return listing
 
@@ -464,7 +461,7 @@ def _bash(script: str, cwd: Path, **variables: str) -> str:
     bash = shutil.which("bash")
     assert bash is not None, "bash runs every step of the workflow"
     workflow = {
-        key: str(value) for key, value in (_workflow().get("env") or {}).items()
+        key: str(value) for key, value in (read_workflow().get("env") or {}).items()
     }
     done = subprocess.run(  # noqa: S603  # a fragment of the tree's own workflow
         [bash, "--noprofile", "--norc", "-eo", "pipefail", "-c", script],
@@ -512,7 +509,7 @@ def test_both_binding_sweeps_read_one_list(tmp_path: Path) -> None:
     a binding file beside it. The nightly is held to sweeping every file of it
     by running the lines that build its arguments.
     """
-    jobs = _workflow()["jobs"]
+    jobs = read_workflow()["jobs"]
     listing = _listing()
     for name in ("mutants-diff-walk", "nightly-mutants-walk"):
         runs = "\n".join(str(step.get("run", "")) for step in jobs[name]["steps"])
@@ -544,7 +541,7 @@ def test_the_push_sweep_takes_the_listed_files_the_change_touches(
     name, a core file, and a listed path with a suffix, which a match on a
     prefix would take.
     """
-    job = _workflow()["jobs"]["mutants-diff-walk"]
+    job = read_workflow()["jobs"]["mutants-diff-walk"]
     listing = _listing()
     listed = listing.split()
     diff = [step for step in job["steps"] if step.get("id") == "diff"]
@@ -609,7 +606,7 @@ def test_a_push_sweep_draws_one_literal_and_a_nightly_its_run_id() -> None:
     kills it. The nightly keeps the run id, since finding those mutants is its
     work and its new survivor is a report rather than a block.
     """
-    jobs = _workflow()["jobs"]
+    jobs = read_workflow()["jobs"]
     seeds = _seeds(jobs)
     off_the_push = _not_on_a_push(jobs)
     pushed = {name: seed for name, seed in seeds.items() if name not in off_the_push}
@@ -639,7 +636,7 @@ def test_the_local_sweep_draws_the_push_lanes_seed() -> None:
     there. The recipes are the page's fenced blocks that judge a partial sweep
     with `--new-only`, which is what makes one a push sweep.
     """
-    jobs = _workflow()["jobs"]
+    jobs = read_workflow()["jobs"]
     pushed = {
         seed for name, seed in _seeds(jobs).items() if name not in _not_on_a_push(jobs)
     }
@@ -682,7 +679,7 @@ def test_the_nightly_runs_on_the_branch_development_is_on() -> None:
     A lane reads that from the dispatcher, or, a ratchet, from the sweep it
     ratchets, which reads it in turn.
     """
-    workflow = _workflow()
+    workflow = read_workflow()
     jobs = workflow["jobs"]
     dispatcher = jobs[DISPATCH]
     assert " ".join(str(dispatcher["if"]).split()) == (
@@ -743,7 +740,7 @@ def _dispatch(tmp_path: Path, listed: str, dispatching: int) -> tuple[int, str]:
     """
     (step,) = [
         step
-        for step in _workflow()["jobs"][DISPATCH]["steps"]
+        for step in read_workflow()["jobs"][DISPATCH]["steps"]
         if "gh workflow run" in str(step.get("run", ""))
     ]
     stand_ins = tmp_path / "bin"
@@ -813,7 +810,7 @@ def test_every_supported_interpreter_runs_on_every_event() -> None:
     things that ledger does not: the job runs on every event, and the
     free-threaded build the classifiers promise has a leg in it.
     """
-    job = _workflow()["jobs"]["python"]
+    job = read_workflow()["jobs"]["python"]
     condition = str(job.get("if", ""))
     assert not NOT_ON_A_PUSH.search(condition), (
         f"the python job runs only when {condition!r}, so a push reads no interpreter"
@@ -958,7 +955,7 @@ def test_the_floor_leg_reads_the_audit_and_every_leg_the_rest() -> None:
     checks marked `interpreter`, whose answer is the running interpreter's.
     Each once, since two selections that overlap read a test twice.
     """
-    workflow = _workflow()
+    workflow = read_workflow()
     reads = _reads(workflow)
     floor = ("python", f"ubuntu-latest {workflow['env']['FLOOR']}")
     assert floor in reads, f"the python job runs no floor leg: {sorted(reads)}"

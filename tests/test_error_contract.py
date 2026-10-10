@@ -18,19 +18,17 @@ from __future__ import annotations
 
 import re
 import typing
-from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Literal
 
 import annotated_types as at
 import pytest
 
 from _reason import is_a_reason
+from _tree import ROOT
 from valgebra import ValidationError, Validator, union
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-ROOT = Path(__file__).resolve().parent.parent
 
 
 def _errors(schema: object, value: object, *, fail_fast: bool = False) -> list[dict]:

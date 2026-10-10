@@ -42,7 +42,6 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
-from pathlib import Path
 from typing import (
     Annotated,
     Any,
@@ -55,6 +54,7 @@ import annotated_types as at
 import pytest
 
 from _reason import is_a_reason
+from _tree import ROOT
 from valgebra import (
     Validator,
     anything,
@@ -65,7 +65,6 @@ from valgebra import (
     union,
 )
 
-ROOT = Path(__file__).resolve().parent.parent
 PAGE = ROOT / "docs" / "15-decidability.md"
 
 #: The three lists, by the heading each sits under.

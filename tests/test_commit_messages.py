@@ -26,14 +26,14 @@ from __future__ import annotations
 
 import re
 import subprocess
-from pathlib import Path
 
 import pytest
+
+from _tree import ROOT
 
 # A repository check: it reads the history, which ships in no wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 
 #: The working area's own name, and the notes and codes kept under it, in the
 #: forms a message would write them.

@@ -20,11 +20,12 @@ from pathlib import Path
 
 import pytest
 
+from _tree import ROOT
+
 # This reads the tree rather than the library: it is a claim about how the
 # sources are laid out, and nothing it touches ships in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 
 #: The directory proptest persists seeds to, beside each crate's `src`.
 SEEDS = "proptest-regressions"

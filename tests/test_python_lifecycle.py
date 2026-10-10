@@ -34,29 +34,26 @@ from __future__ import annotations
 import datetime
 import json
 import re
-from pathlib import Path
 from typing import NamedTuple
 
 import pytest
-import yaml
 
 from _toml import load
+from _tree import ROOT, read_workflow, runs
 
 # A repository check: it reads the packaging metadata, the workflow and a table
 # under `tests/`, and none of them ships in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = load(ROOT / "pyproject.toml")
-WORKFLOW_TEXT = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 #: The workflow's own variables. A step reading the floor as `${{ env.FLOOR }}`
-#: states the floor as much as one spelling it out, so the text is read with
+#: states the floor as much as one spelling it out, so the steps are read with
 #: each such expression filled in.
-WORKFLOW_ENV = yaml.safe_load(WORKFLOW_TEXT).get("env") or {}
+WORKFLOW_ENV = read_workflow().get("env") or {}
 WORKFLOW_READ = re.sub(
     r"\$\{\{\s*env\.(\w+)\s*\}\}",
     lambda found: str(WORKFLOW_ENV[found.group(1)]),
-    WORKFLOW_TEXT,
+    "\n".join(runs()),
 )
 FLOOR_NAMES = json.loads(
     (ROOT / "tests" / "floor_names.json").read_text(encoding="utf-8")
@@ -142,7 +139,7 @@ def _matrix() -> dict[int, bool]:
     which is how a prerelease runs, or by the literal `true`, which forgives
     the whole job; `tests/test_version_gates.py` reads the same two shapes.
     """
-    job = yaml.safe_load(WORKFLOW_TEXT)["jobs"]["python"]
+    job = read_workflow()["jobs"]["python"]
     matrix = job["strategy"]["matrix"]
     versions = [str(version) for version in matrix["python-version"]]
     versions += [str(row["python-version"]) for row in matrix.get("include", [])]

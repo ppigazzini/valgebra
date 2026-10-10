@@ -21,19 +21,16 @@ LEDGER: every suite apart from dev installs the test group at the lock's version
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
-import yaml
 
 from _toml import load
+from _tree import ROOT, WORKFLOWS, read_workflow
 
 # This reads the tree rather than the library: it is a claim about the
 # workflows, and nothing it touches ships in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKFLOWS = ROOT / ".github" / "workflows"
 
 #: The group a suite installed apart from the dev group installs.
 GROUP = "test"
@@ -75,9 +72,7 @@ def _jobs() -> list[tuple[str, dict]]:
     return [
         (f"{path.name}: {name}", job)
         for path in sorted(WORKFLOWS.glob("*.yml"))
-        for name, job in yaml.safe_load(path.read_text(encoding="utf-8"))
-        .get("jobs", {})
-        .items()
+        for name, job in read_workflow(path).get("jobs", {}).items()
     ]
 
 

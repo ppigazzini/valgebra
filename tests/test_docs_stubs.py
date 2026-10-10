@@ -14,19 +14,20 @@ import importlib
 import importlib.util
 import sys
 import types
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
+from _tree import ROOT
 
 # The repository checks are not the product suite: this file drives a docs
 # script, which does not ship in a wheel.
 pytestmark = pytest.mark.repository
 
 if TYPE_CHECKING:
+    from pathlib import Path
     from types import ModuleType
 
-ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "docs_stubs.py"
 
 

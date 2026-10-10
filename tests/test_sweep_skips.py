@@ -22,18 +22,16 @@ LEDGER: every SWEEP-SKIP mark is skipped; every skip is marked
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
 from _reason import is_a_reason
+from _tree import ROOT, runs
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CONTRIBUTING = ROOT / "CONTRIBUTING.md"
 MARKER = "SWEEP-SKIP"
 
@@ -56,8 +54,7 @@ def _marked_tests() -> set[str]:
 
 
 def _skipped_tests() -> set[str]:
-    text = WORKFLOW.read_text(encoding="utf-8")
-    return set(re.findall(r"--skip ([a-z0-9_]+)", text))
+    return set(re.findall(r"--skip ([a-z0-9_]+)", "\n".join(runs())))
 
 
 def test_every_marked_test_is_actually_skipped() -> None:

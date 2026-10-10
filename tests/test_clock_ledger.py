@@ -28,10 +28,11 @@ from pathlib import Path
 
 import pytest
 
+from _tree import ROOT
+
 # A repository check: it reads the suite's own source, which ships in no wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 
 #: A reading of the clock, in the forms this suite writes one.
 CLOCK = re.compile(r"\b(?:perf_counter|monotonic|process_time)\s*\(")

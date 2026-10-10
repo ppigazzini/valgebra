@@ -37,9 +37,10 @@ from pathlib import Path
 
 import pytest
 
+from _tree import ROOT
+
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 THEORY = ROOT / "docs" / "dev" / "10-theory.md"
 
 #: Where the shelf lives. Assembled from its pieces rather than written, for the

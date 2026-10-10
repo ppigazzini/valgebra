@@ -32,13 +32,12 @@ LEDGER: every schema variant is a generator, a representative, or a marker
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
 from typing import Annotated, Literal
 
 import annotated_types as at
 import pytest
 
+from _tree import variants
 from valgebra import (
     Validator,
     anything,
@@ -55,13 +54,6 @@ _NONE = None
 class _Class:
     """A class no fold knows, so a union over it keeps its spelling."""
 
-
-ROOT = Path(__file__).resolve().parent.parent
-IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
-
-# The variants of `pub enum Schema`, read from the tree rather than restated.
-ENUM = re.compile(r"^pub enum Schema \{$(.*?)^\}$", re.DOTALL | re.MULTILINE)
-VARIANT = re.compile(r"^    ([A-Z][A-Za-z]*)[ ({,]", re.MULTILINE)
 
 # A set no combination of the others reaches. Adding one extends the algebra,
 # and the case for it is that the domain is unreachable without it.
@@ -111,22 +103,10 @@ REPRESENTATIVES = {
 MARKERS = {"Ref", "SelfRef"}
 
 
-def _variants() -> set[str]:
-    body = ENUM.search(IR.read_text(encoding="utf-8"))
-    assert body, "ir.rs has no `pub enum Schema`"
-    found = set(VARIANT.findall(body.group(1)))
-    # The scan is the detector: an empty variant set would pass both directions
-    # having read nothing.
-    assert {"Anything", "Nothing", "Union", "Complement"} <= found, (
-        f"the variant scan found only {sorted(found)}"
-    )
-    return found
-
-
 # THEORY: the-ir-matches-its-producers, no-arrow-type
 def test_every_variant_is_a_generator_a_representative_or_a_marker() -> None:
     claimed = GENERATORS | set(REPRESENTATIVES) | MARKERS
-    missing = sorted(_variants() - claimed)
+    missing = sorted(variants("Schema") - claimed)
     assert not missing, (
         f"schema variants this ledger does not account for: {missing}. Each is a "
         "generator (a set no combination of the others reaches), a representative "
@@ -139,7 +119,7 @@ def test_every_variant_is_a_generator_a_representative_or_a_marker() -> None:
 # THEORY: the-ir-matches-its-producers, no-arrow-type
 def test_no_column_names_a_variant_that_is_gone() -> None:
     claimed = GENERATORS | set(REPRESENTATIVES) | MARKERS
-    stale = sorted(claimed - _variants())
+    stale = sorted(claimed - variants("Schema"))
     assert not stale, f"columns naming variants ir.rs no longer has: {stale}"
 
 

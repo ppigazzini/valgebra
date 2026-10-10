@@ -27,12 +27,12 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from _reason import is_a_reason
+from _tree import ROOT
 
 if TYPE_CHECKING:
     from collections import Counter
@@ -47,7 +47,6 @@ for _checker in ("ty", "mypy", "pyright", "ruff"):
 
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 CHECKER = ROOT / "scripts" / "check_doc_examples.py"
 
 

@@ -42,7 +42,6 @@ import re
 import sys
 import typing
 from dataclasses import dataclass
-from pathlib import Path
 from types import GenericAlias
 from typing import (
     TYPE_CHECKING,
@@ -59,12 +58,13 @@ from typing import (
 import annotated_types as at
 import pytest
 
+from _tree import ROOT
 from valgebra import Regex, Validator, instance_of
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
 PAGES = (
     ROOT / "docs" / "03-schema-language.md",
     ROOT / "docs" / "05-refinements.md",

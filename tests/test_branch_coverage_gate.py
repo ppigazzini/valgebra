@@ -16,17 +16,18 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
+from _tree import ROOT
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
 
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 GATE = ROOT / "scripts" / "branch_coverage.py"
 
 EXIT_OK = 0

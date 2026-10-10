@@ -27,17 +27,14 @@ LEDGER: every wheel the release builds is loaded, its ends tested; PyPy's is pla
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
-import yaml
+
+from _tree import WORKFLOWS, read_workflow
 
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKFLOW = yaml.safe_load(
-    (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-)
+WORKFLOW = read_workflow(WORKFLOWS / "release.yml")
 BUILDS: list[dict[str, object]] = WORKFLOW["jobs"]["wheels"]["strategy"]["matrix"][
     "platform"
 ]

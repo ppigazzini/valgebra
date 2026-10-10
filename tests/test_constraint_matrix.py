@@ -37,23 +37,13 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Annotated, Any, get_args
 
 import annotated_types as at
 import pytest
 
+from _tree import variants
 from valgebra import Regex, ValidationError, Validator
-
-ROOT = Path(__file__).resolve().parent.parent
-IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
-KIND = ROOT / "crates" / "valgebra-core" / "src" / "kind.rs"
-
-_CONSTRAINTS = re.compile(
-    r"^pub enum Constraint \{$(.*?)^\}$", re.DOTALL | re.MULTILINE
-)
-_KINDS = re.compile(r"^pub enum Kind \{$(.*?)^\}$", re.DOTALL | re.MULTILINE)
-_VARIANT = re.compile(r"^    ([A-Z][A-Za-z]*)[ ({,]", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -220,22 +210,11 @@ _KIND_BASES: dict[str, tuple[Any, Any, Any]] = {
 CELLS = _kind_cells()
 
 
-def _variants(path: Path, enumeration: re.Pattern[str], least: int) -> set[str]:
-    """Read an enum's variant names out of the tree rather than restating them."""
-    body = enumeration.search(path.read_text(encoding="utf-8"))
-    assert body, f"{path.name} has no enum this ledger reads"
-    found = set(_VARIANT.findall(body.group(1)))
-    # The scan is the detector: an empty set would pass both directions having
-    # read nothing at all.
-    assert len(found) >= least, f"the scan found only {sorted(found)}"
-    return found
-
-
 def _product() -> list[tuple[str, str]]:
     return [
         (constraint, kind)
-        for constraint in sorted(_variants(IR, _CONSTRAINTS, 9))
-        for kind in sorted(_variants(KIND, _KINDS, 11))
+        for constraint in sorted(variants("Constraint"))
+        for kind in sorted(variants("Kind"))
     ]
 
 
@@ -254,7 +233,7 @@ def test_the_universe_is_the_two_enums_in_both_directions() -> None:
 
 def test_every_kind_has_a_base_a_caller_writes() -> None:
     """The bases are the kinds, so a kind added to the partition arrives here."""
-    kinds = _variants(KIND, _KINDS, 11)
+    kinds = variants("Kind")
     assert set(_KIND_BASES) == kinds, sorted(kinds ^ set(_KIND_BASES))
     for kind, (base, member, outsider) in _KIND_BASES.items():
         compiled = Validator(base)

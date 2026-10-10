@@ -29,15 +29,15 @@ LEDGER: every test file is a product test or a marked repository check
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 
 import pytest
+
+from _tree import ROOT
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 TESTS = ROOT / "tests"
 
 
@@ -159,6 +159,64 @@ def test_the_product_suite_is_the_larger_half() -> None:
     assert product > len(modules) - product, (
         f"{product} product tests against {len(modules) - product} repository checks"
     )
+
+
+def _climbs_from_itself(tree: ast.Module) -> list[int]:
+    """Give the lines that read `__file__` for anything but the module's name.
+
+    `Path(__file__).name` is a module naming itself, which a check skipping its
+    own source does. Any other reading climbs from the file to a directory, and
+    the directory a test climbs to is the checkout, which `tests/_tree.py`
+    names for every module.
+    """
+    named = {
+        id(node.value.args[0])
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        and node.attr == "name"
+        and isinstance(node.value, ast.Call)
+        and len(node.value.args) == 1
+        and isinstance(node.value.args[0], ast.Name)
+        and node.value.args[0].id == "__file__"
+    }
+    return sorted(
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+        and node.id == "__file__"
+        and id(node) not in named
+    )
+
+
+def test_the_checkout_is_found_in_one_place() -> None:
+    """Every module reaches the tree through `tests/_tree.py`.
+
+    Each module once spelled the climb for itself, in three spellings, and a
+    module that climbs one level too few reads `tests/` as the root and finds
+    nothing it looks for -- which a check that asserts it read something says
+    loudly, and one that does not says as a pass.
+    """
+    offenders = {
+        path.relative_to(TESTS).as_posix(): found
+        for path in sorted(TESTS.rglob("*.py"))
+        if path.name != "_tree.py"
+        and (found := _climbs_from_itself(ast.parse(path.read_text(encoding="utf-8"))))
+    }
+    assert not offenders, (
+        f"modules finding the checkout from their own file: {offenders}. Import "
+        "`ROOT` from `_tree`, or a path it names."
+    )
+
+
+def test_a_module_naming_itself_is_not_one_finding_the_tree() -> None:
+    # The readings the check turns on: a climb is one at any depth, and a module
+    # asking its own name is not.
+    climbs = ast.parse("ROOT = Path(__file__).resolve().parent.parent\n")
+    assert _climbs_from_itself(climbs) == [1]
+    beside = ast.parse("TESTS = Path(__file__).parent\n")
+    assert _climbs_from_itself(beside) == [1]
+    named = ast.parse("if path.name == Path(__file__).name:\n    pass\n")
+    assert _climbs_from_itself(named) == []
 
 
 def test_the_marker_is_registered() -> None:

@@ -22,13 +22,12 @@ none.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
 from _toml import load
+from _tree import ROOT
 
-ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "docs" / "dev" / "02-decision.md"
 TRAIT = ROOT / "crates" / "valgebra-core" / "src" / "oracle.rs"
 #: The structural rules, where a pair no rule decides is handed to the

@@ -40,22 +40,21 @@ import re
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-import yaml
 
 from _toml import load
+from _tree import ROOT, read_workflow, runs
 
 if TYPE_CHECKING:
+    from pathlib import Path
     from types import ModuleType
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / ".cargo" / "mutants.toml"
 
 #: The three sweeps' accepted survivors, one file per sweep. A sweep judges a
@@ -66,7 +65,6 @@ BASELINES = (
     ROOT / "scripts" / "mutation_baseline_walk.json",
     ROOT / "scripts" / "mutation_baseline_pytest.json",
 )
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 BINDING = ROOT / "crates" / "valgebra-py"
 
 
@@ -89,7 +87,7 @@ def _swept() -> set[str]:
     (`tests/test_required_jobs.py` holds them to it), the claim is about what
     runs.
     """
-    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    workflow = read_workflow()
     swept = set(str((workflow.get("env") or {}).get("BINDING_SWEPT", "")).split())
     assert swept, "the workflow names no binding files for the sweep"
     return swept
@@ -265,8 +263,8 @@ def _configured_timeout(config: Path) -> float:
 
 def _lane_timeouts() -> set[float]:
     """Every `--timeout-multiplier` the workflow's sweeps pass."""
-    text = WORKFLOW.read_text(encoding="utf-8")
-    found = {float(value) for value in re.findall(r"--timeout-multiplier (\S+)", text)}
+    passed = re.findall(r"--timeout-multiplier (\S+)", "\n".join(runs()))
+    found = {float(value) for value in passed}
     assert found, "no lane passes a timeout multiplier"
     return found
 
@@ -401,7 +399,6 @@ def test_no_accepted_survivor_has_outlived_its_subject() -> None:
 
 # --- The sweep's environment, held between the lane and the recipe -----------
 
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 TOOLING = ROOT / "docs" / "dev" / "07-tooling-ci.md"
 
 #: A fenced block of the tooling page, with the language it is tagged.
@@ -410,7 +407,7 @@ _FENCED = re.compile(r"^```(\w*)\n(.*?)^```", re.MULTILINE | re.DOTALL)
 
 def _sweep_jobs() -> dict[str, dict[str, str]]:
     """Give each workflow job that runs a sweep, with the environment it sets."""
-    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    workflow = read_workflow()
     found: dict[str, dict[str, str]] = {}
     for name, job in workflow["jobs"].items():
         steps = job.get("steps") or []

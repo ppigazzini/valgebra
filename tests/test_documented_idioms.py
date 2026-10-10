@@ -9,15 +9,15 @@ the suite would notice if the pages stopped saying it.
 from __future__ import annotations
 
 from collections import abc, deque
-from pathlib import Path
 from typing import Annotated, Any
 
 import annotated_types as at
 import pytest
 
+from _tree import ROOT
 from valgebra import Validator, anything, complement
 
-_DOCS = Path(__file__).resolve().parent.parent / "docs"
+_DOCS = ROOT / "docs"
 
 # Far past any bound, so a shape that never fails is a failed test rather than a
 # hung one.

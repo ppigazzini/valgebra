@@ -23,20 +23,21 @@ LEDGER: every file the sweep excuses to pytest is examined under pytest
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import pytest
-import yaml
 
 from _toml import load
+from _tree import ROOT, read_workflow
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Reads the tree, the two configurations and the workflow; none ships in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 ORDINARY = ROOT / ".cargo" / "mutants.toml"
 UNDER_PYTEST = ROOT / ".cargo" / "mutants-pytest.toml"
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 WRAPPER = ROOT / "crates" / "valgebra-py" / "tests" / "pytest_sweep.rs"
 MANIFEST = ROOT / "crates" / "valgebra-py" / "Cargo.toml"
 
@@ -73,30 +74,29 @@ def _examined() -> set[str]:
 
 def _swept_ordinarily() -> set[str]:
     """Give the binding files the walk sweep names, from the list its lanes read."""
-    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    workflow = read_workflow()
     swept = set(str((workflow.get("env") or {}).get("BINDING_SWEPT", "")).split())
     assert swept, "the workflow names no binding files for the sweep"
     return swept
 
 
-def _lane(naming: str) -> str:
-    """Give the workflow text of the one job naming this, split from the rest.
+def _shell(job: dict[str, Any]) -> str:
+    """Give the shell of a job's steps: the flags a sweep is run with."""
+    return "\n".join(
+        str(step["run"]) for step in job.get("steps") or [] if "run" in step
+    )
 
-    Split on the job headers rather than read from parsed YAML, because what is
-    asserted below is the text of a shell block -- the flags a sweep is run
-    with -- and a parse would hand back the same string through more machinery.
+
+def _lane(naming: str) -> dict[str, Any]:
+    """Give the one job whose steps' shell names this.
+
+    Read from the parse, so a comment above a job that mentions the sweep is
+    not the job running it.
     """
-    text = WORKFLOW.read_text(encoding="utf-8")
-    jobs = re.split(r"^  (?=[a-z][\w-]*:$)", text, flags=re.MULTILINE)
-    holding = [job for job in jobs if naming in job]
+    jobs = (read_workflow().get("jobs") or {}).values()
+    holding = [job for job in jobs if naming in _shell(job)]
     assert len(holding) == 1, f"{len(holding)} job(s) name {naming!r}; one does"
     return holding[0]
-
-
-def _condition(lane: str) -> str:
-    """Give a job's `if:`, with the continuation lines of a folded one."""
-    found = re.search(r"^( *)if:.*(?:\n\1 +\S.*)*", lane, re.MULTILINE)
-    return found.group() if found else ""
 
 
 def test_every_file_excused_to_pytest_is_examined_there() -> None:
@@ -206,9 +206,10 @@ def test_a_lane_runs_the_sweep_off_the_merge_path() -> None:
     takes.
     """
     lane = _lane("mutants-pytest.toml")
-    assert f"--features {FEATURE}" in lane, "the lane does not enable the wrapper"
-    assert VENV in lane, f"the lane does not give the sweep a {VENV}"
-    assert re.search(r"schedule|workflow_dispatch", _condition(lane)), (
+    shell = _shell(lane)
+    assert f"--features {FEATURE}" in shell, "the lane does not enable the wrapper"
+    assert VENV in shell, f"the lane does not give the sweep a {VENV}"
+    assert re.search(r"schedule|workflow_dispatch", str(lane.get("if", ""))), (
         "the sweep costs a suite run per mutant and must not sit on the merge path"
     )
 
@@ -216,10 +217,10 @@ def test_a_lane_runs_the_sweep_off_the_merge_path() -> None:
 def test_a_lane_ratchets_what_the_sweep_finds() -> None:
     """Survivors reported nowhere are survivors nobody sees."""
     lane = _lane("--baseline pytest")
-    assert "scripts/mutation_gate.py --baseline pytest" in lane, (
+    assert "scripts/mutation_gate.py --baseline pytest" in _shell(lane), (
         "the ratchet does not run the gate against the pytest baseline"
     )
-    assert re.search(r"schedule|workflow_dispatch", _condition(lane)), (
+    assert re.search(r"schedule|workflow_dispatch", str(lane.get("if", ""))), (
         "the ratchet runs where its sweep does"
     )
 

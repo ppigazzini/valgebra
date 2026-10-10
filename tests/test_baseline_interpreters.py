@@ -26,13 +26,10 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 
 import pytest
-import yaml
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+from _tree import ROOT, read_workflow
 
 # This file reads the tree rather than the library: it holds two recorded files
 # to each other, and exercises no schema.
@@ -62,7 +59,7 @@ _VERSION = re.compile(r"\b3\.\d{1,2}t?\b")
 
 def _pinned(job: str) -> str | None:
     """Read the interpreter `job` installs, or `None` where it installs none."""
-    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    workflow = read_workflow()
     steps = workflow["jobs"][job].get("steps", [])
     versions = [
         (step.get("with") or {}).get("python-version")
@@ -126,7 +123,7 @@ _VENV_FIRST = re.compile(
 
 def _embedded_sweeps() -> dict[str, str]:
     """Give each step that sweeps against an embedded interpreter, by its job."""
-    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    workflow = read_workflow()
     found: dict[str, str] = {}
     for name, job in workflow["jobs"].items():
         for step in job.get("steps") or []:
@@ -178,7 +175,7 @@ _BASE_HOME = re.compile(r'\bPYTHONHOME="\$base"')
 
 def _interpreter_steps() -> dict[str, str]:
     """Give each step that embeds an interpreter in a test binary, by job and step."""
-    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    workflow = read_workflow()
     return {
         f"{name}: {step.get('name', '')}": str(step.get("run") or "")
         for name, job in workflow["jobs"].items()

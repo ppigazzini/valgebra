@@ -29,19 +29,17 @@ LEDGER: every manifest is a workspace member or a named detached surface
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
 import pytest
 
 from _reason import is_a_reason
 from _toml import load
+from _tree import ROOT, WORKFLOWS, runs
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKFLOWS = ROOT / ".github" / "workflows"
 CONTRIBUTING = ROOT / "CONTRIBUTING.md"
 PYPROJECT = ROOT / "pyproject.toml"
 
@@ -128,9 +126,7 @@ def test_every_detached_surface_carries_its_reason() -> None:
 def test_every_detached_surface_is_built_by_a_lane() -> None:
     # A detached crate the local gate skips and no workflow builds is a build
     # surface nothing drives at all -- worse than one that is merely local-only.
-    workflows = "\n".join(
-        p.read_text(encoding="utf-8") for p in WORKFLOWS.glob("*.yml")
-    )
+    workflows = "\n".join(run for p in WORKFLOWS.glob("*.yml") for run in runs(p))
     for path, entry in DETACHED.items():
         assert entry["lane"] in workflows, f"{path}: no workflow runs {entry['lane']!r}"
 

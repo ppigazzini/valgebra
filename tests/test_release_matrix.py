@@ -20,18 +20,16 @@ LEDGER: every classified release has a wheel on every platform, or a named gap
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
-import yaml
 
 from _toml import load
+from _tree import ROOT, WORKFLOWS, read_workflow
 
 # The repository checks are not the product suite: this file reads the
 # packaging metadata and the release workflow, neither of which ships.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 
 #: The first release whose free-threaded build is supported rather than
 #: experimental (PEP 779), and the first the installation page names.
@@ -65,9 +63,7 @@ UNNAMED: dict[str, str] = {
 
 
 def _rows() -> list[dict[str, str]]:
-    workflow = yaml.safe_load(
-        (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    )
+    workflow = read_workflow(WORKFLOWS / "release.yml")
     return workflow["jobs"]["wheels"]["strategy"]["matrix"]["platform"]
 
 

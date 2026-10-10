@@ -48,19 +48,20 @@ from __future__ import annotations
 import ast
 import json
 import sys
-from pathlib import Path
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
+
+from _tree import ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Reading the tree's own sources, which is a repository check rather than a
 # claim about the library.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
-TABLE = json.loads(
-    (Path(__file__).resolve().parent / "floor_names.json").read_text(encoding="utf-8")
-)
+TABLE = json.loads((ROOT / "tests" / "floor_names.json").read_text(encoding="utf-8"))
 
 #: The modules whose names are dated. Both are stdlib modules that grew typing
 #: and enumeration forms across the supported releases, and both are read at

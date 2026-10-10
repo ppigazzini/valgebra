@@ -38,22 +38,20 @@ import importlib.util
 import re
 import subprocess
 import sys
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
 from _reason import is_a_reason
+from _tree import ROOT
 
 if TYPE_CHECKING:
     from types import ModuleType
 
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
 STUB = ROOT / "python" / "valgebra" / "_valgebra.pyi"
 PACKAGE = ROOT / "python" / "valgebra" / "__init__.py"
-IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
 #: Cells the product suite does not name, each with the reason it does not.
 #:
 #: Read from `scripts/use_case_ledger.json` rather than written here, so the

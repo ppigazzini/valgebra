@@ -17,17 +17,16 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
 from _reason import is_a_reason
+from _tree import ROOT
 
 if TYPE_CHECKING:
     from types import ModuleType
 
-ROOT = Path(__file__).resolve().parents[1]
 
 # The repository's gates are not the product suite: this reads a script.
 pytestmark = pytest.mark.repository

@@ -17,15 +17,20 @@ import ast
 import importlib.util
 import subprocess
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+from _tree import ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # The repository checks are not the product suite: this file runs the scripts,
 # none of which ship in a wheel.
 pytestmark = pytest.mark.repository
 
-SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+SCRIPTS = ROOT / "scripts"
 
 
 def _absent_import(script: Path) -> str | None:

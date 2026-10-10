@@ -43,14 +43,13 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
+
+from _tree import ROOT, read_workflow
 
 # A repository check: it reads the tree's own sources and the workflow, neither
 # of which ships in a wheel.
 pytestmark = pytest.mark.repository
 
-ROOT = Path(__file__).resolve().parent.parent
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 #: The release a corpus row needs, as the corpora spell one.
 _SINCE = re.compile(r"\bSince\((\d{1,2})\)")
@@ -122,10 +121,6 @@ def _rust_gates() -> dict[int, list[str]]:
     return found
 
 
-def _workflow() -> dict:
-    return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-
-
 #: One of the workflow's own variables, read where a value is the whole of it.
 _VARIABLE = re.compile(r"\$\{\{\s*env\.(\w+)\s*\}\}")
 
@@ -149,7 +144,7 @@ def _lanes() -> dict[str, bool]:
     value is what the lane's `continue-on-error` says about that version rather
     than whether the lane exists.
     """
-    workflow = _workflow()
+    workflow = read_workflow()
     variables = workflow.get("env") or {}
     lanes: dict[str, bool] = {}
     for job in (workflow.get("jobs") or {}).values():
@@ -296,7 +291,7 @@ def test_every_release_a_step_is_gated_on_is_a_leg() -> None:
     is a green one -- the stub's only gate among them. So the release each is
     compared with is held to the legs the job runs.
     """
-    workflow = _workflow()
+    workflow = read_workflow()
     compared = _compared(workflow)
     # Read from the file, so it is shown to have been read: a pattern that
     # matched nothing would leave the rule below quantified over nothing.

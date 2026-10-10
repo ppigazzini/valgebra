@@ -13,19 +13,20 @@ import importlib.util
 import json
 import subprocess
 import sys
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
+from _tree import ROOT
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
 
 if TYPE_CHECKING:
+    from pathlib import Path
     from types import ModuleType
 
-ROOT = Path(__file__).resolve().parent.parent
 GATE = ROOT / "scripts" / "coverage_gate.py"
 
 

@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from _tree import ROOT
+
 # The repository checks are not the product suite: this file drives the gate
 # scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
@@ -27,7 +29,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from types import ModuleType
 
-SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+SCRIPTS = ROOT / "scripts"
 
 
 def _load(name: str) -> ModuleType:
