@@ -224,8 +224,10 @@ meet with the rebuilt set spends past the allowance a meet with `x` fits in, so
 field kinds decide. `decision/tests.rs` holds the widths from one to four.
 
 **A ceiling reached by one spelling of a set and not another is a ceiling that
-decides relations.** The three lattices built from atoms -- maps, objects, sets
--- carry a polarity, so a complement that does not fit as a union is held as the
+decides relations.** The four lattices built from parts -- a kind's lines and
+the map, object and set lattices -- hold a set as a union of summands under a
+polarity, one device in `descr/polar.rs` with each lattice saying only what a
+summand is, so a complement that does not fit as a union is held as the
 negation of one; the union is rebuilt when something meets it. Rebuilding it
 *first* is what passes the ceiling: `¬⋁ᵢAᵢ` is `⋀ᵢ¬Aᵢ`, and multiplying every
 `¬Aᵢ` together before anything narrows the product reaches the widest term the
