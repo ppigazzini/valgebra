@@ -246,6 +246,10 @@ pub enum BindingShape {
     /// str}`: every key but one is covered by the clause rather than named by a
     /// field, which is the reading an open record takes in place.
     JsonOpen,
+    /// The same records, each under a length bound: `Annotated[{"id": int,
+    /// str: str}, MaxLen(8)]`. A bound on a parsed object counts the keys the
+    /// object holds, which no shape without a bound on a mapping reads.
+    JsonBounded,
     /// A recursive schema, `mu X. int | list[X]`, over a parsed document of
     /// twenty trees twelve levels deep: the reference and its trail on the JSON
     /// path, which the recursive shape measures only on Python values.
@@ -298,6 +302,7 @@ impl BindingShape {
             "json-reject" => BindingShape::JsonReject,
             "json-union" => BindingShape::JsonUnion,
             "json-open" => BindingShape::JsonOpen,
+            "json-bounded" => BindingShape::JsonBounded,
             "json-deep" => BindingShape::JsonDeep,
             "deep" => BindingShape::Deep,
             "refined" => BindingShape::Refined,
@@ -640,6 +645,19 @@ const JSON_OPEN: &str = json_shape!(
      'city': 'Rome', 'lang': 'en'} for i in range(200)]).encode()\n"
 );
 
+/// The same records under a length bound, the marker spelled as the refined
+/// shape spells its own so the workload imports nothing it does not hold.
+const JSON_BOUNDED: &str = json_shape!(
+    "from typing import Annotated\n\
+     class MaxLen:\n\
+     \x20   def __init__(self, max_length):\n\
+     \x20       self.max_length = max_length\n\
+     MaxLen.__module__ = 'annotated_types'\n\
+     SPELLING = list[Annotated[{'id': int, str: str}, MaxLen(8)]]\n\
+     DOCUMENT = json.dumps([{'id': i, 'name': 'Ada', 'email': 'a@b.c', \
+     'city': 'Rome', 'lang': 'en'} for i in range(200)]).encode()\n"
+);
+
 fn wide_fields(py: Python<'_>) -> (Vec<Field>, Py<PyAny>) {
     let fields: Vec<Field> = (0..50)
         .map(|i| Field {
@@ -726,6 +744,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
         BindingShape::JsonReject => json_walk(py, iters, JSON_REJECT, Expect::NonMember),
         BindingShape::JsonUnion => json_walk(py, iters, JSON_UNION, Expect::Member),
         BindingShape::JsonOpen => json_walk(py, iters, JSON_OPEN, Expect::Member),
+        BindingShape::JsonBounded => json_walk(py, iters, JSON_BOUNDED, Expect::Member),
         BindingShape::JsonDeep => json_deep_walk(py, iters),
         BindingShape::Deep => spelled_walk(py, iters, DEEP),
         BindingShape::Refined => spelled_walk(py, iters, REFINED),

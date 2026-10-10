@@ -111,6 +111,11 @@ UNTRAINED: dict[str, str] = {
         "JSON records read through a key-type clause: no call here validates a "
         "JSON document against a record with a catch-all. " + _JSON_UNTRAINED
     ),
+    "binding-json-bounded": (
+        "JSON records under a length bound, whose length is the count of the "
+        "keys a parsed object holds: no call here validates a JSON document "
+        "against a bounded mapping. " + _JSON_UNTRAINED
+    ),
     "binding-json-deep": (
         "A recursive schema over a parsed document: no call here validates JSON "
         "against a reference. " + _JSON_UNTRAINED

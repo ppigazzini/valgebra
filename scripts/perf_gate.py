@@ -22,7 +22,7 @@ not to flake is too wide to see a real 5% regression. The record is read in
 one place: a shape the base does not carry has no count to compare with, and
 is held to its recorded one inside that band instead. ``--update`` writes it.
 
-Three workloads, and thirty-one shapes across them:
+Three workloads, and thirty-two shapes across them:
 
 * The default **core** workload (`perf_workload`, pure Rust) measures the schema
   operations and is fully deterministic, so its recorded count carries the
@@ -34,7 +34,7 @@ Three workloads, and thirty-one shapes across them:
   (`--decision-matrix`).
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
-  twenty-six shapes: the membership walk (`--binding`), the call boundary
+  twenty-seven shapes: the membership walk (`--binding`), the call boundary
   alone (`--binding-boundary`), the walk over a wide record
   (`--binding-record`), the same walk over a value whose keys are interned
   (`--binding-keys`), the same fields declared by an open record
@@ -47,7 +47,8 @@ Three workloads, and thirty-one shapes across them:
   (`--binding-set`), parsing and walking a JSON document (`--binding-json`),
   the same document rejected halfway (`--binding-json-reject`), a document of
   two record kinds against their union (`--binding-json-union`), records read
-  through a key-type clause (`--binding-json-open`), a recursive schema over a
+  through a key-type clause (`--binding-json-open`), the same records under a
+  length bound (`--binding-json-bounded`), a recursive schema over a
   nested document (`--binding-json-deep`), building a validator from its
   Python spelling (`--binding-build`), compiling one written as a `TypedDict`
   of refined integers (`--binding-annotated`), compiling a fifty-field
@@ -419,6 +420,10 @@ MODES = {
     "binding-json-reject": ("binding_workload", "binding JSON document rejected"),
     "binding-json-union": ("binding_workload", "binding JSON union of records"),
     "binding-json-open": ("binding_workload", "binding JSON records read by clause"),
+    "binding-json-bounded": (
+        "binding_workload",
+        "binding JSON records under a length bound",
+    ),
     "binding-json-deep": ("binding_workload", "binding JSON recursive document"),
     "binding-deep": ("binding_workload", "binding deep nesting walk"),
     "binding-refined": ("binding_workload", "binding refined element walk"),
@@ -453,6 +458,7 @@ BINDING_ITERATIONS = {
     "binding-json-reject": (500, 150),
     "binding-json-union": (500, 150),
     "binding-json-open": (500, 150),
+    "binding-json-bounded": (500, 150),
     "binding-json-deep": (1_000, 300),
     "binding-deep": (50_000, 15_000),
     "binding-refined": (20_000, 5_000),
@@ -482,6 +488,7 @@ BINDING_SHAPES = {
     "binding-json-reject": "json-reject",
     "binding-json-union": "json-union",
     "binding-json-open": "json-open",
+    "binding-json-bounded": "json-bounded",
     "binding-json-deep": "json-deep",
     "binding-deep": "deep",
     "binding-refined": "refined",

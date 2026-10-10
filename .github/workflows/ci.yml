@@ -936,7 +936,8 @@ jobs:
               --binding-explain-list \
               --binding-open --binding-json --binding-pattern \
               --binding-recursive --binding-json-reject --binding-json-union \
-              --binding-json-open --binding-json-deep --binding-deep \
+              --binding-json-open --binding-json-bounded --binding-json-deep \
+              --binding-deep \
               --binding-refined --binding-mapping --binding-nullable --binding-set \
               --against "$BASE"
         env:

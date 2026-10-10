@@ -276,7 +276,8 @@ gate only catches what it exercises:
   `--binding-subclass`, `--binding-recursive`, `--binding-deep`,
   `--binding-refined`, `--binding-nullable`, `--binding-set`,
   `--binding-json`, `--binding-json-reject`, `--binding-json-union`,
-  `--binding-json-open`, `--binding-json-deep`, `--binding-pattern`,
+  `--binding-json-open`, `--binding-json-bounded`, `--binding-json-deep`,
+  `--binding-pattern`,
   `--binding-build`, `--binding-annotated`, `--binding-object`,
   `--binding-protocol`, `--binding-relation`,
   `--binding-explain`, `--binding-explain-accept`, `--binding-explain-list`) —
@@ -287,7 +288,8 @@ gate only catches what it exercises:
   twenty-five deep, elements that each read a refinement's bound, a list of
   `int | None`, a `set[str]`, parsing and walking a JSON document -- accepted,
   rejected halfway, as a union of two record kinds, read through a key-type
-  clause, and against a recursive schema -- matching a string against a compiled
+  clause, the same under a length bound, and against a recursive schema --
+  matching a string against a compiled
   pattern, building a validator from its Python spelling, compiling one written
   as a `TypedDict` of refined integers, compiling a fifty-field dataclass or a
   fifty-member protocol, relating two dataclasses, explaining a failure in a
@@ -303,7 +305,8 @@ gate only catches what it exercises:
   **One accepting JSON shape measured every JSON change**, and the paths a
   change could lose on had no count: the reject a fast walk stops at, the union
   that reads a parsed object once per branch, the clause that reads a key rather
-  than a field, the reference on the parsed path. So did one walk over plain
+  than a field, the reference on the parsed path, the length bound that counts
+  a parsed object's keys. So did one walk over plain
   kinds measure the walk: a refined element reads its bound on every check,
   sixteen times the instructions of an element that only has a kind.
 
