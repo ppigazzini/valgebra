@@ -16,7 +16,7 @@
 use crate::ir::{Schema, SeqShape};
 use crate::verdict::{Relation, Verdict};
 
-use super::{SubtypeCx, descending, spend};
+use super::{Cx, descending, spend};
 
 /// The element schemas of a *fixed-arity* sequence, or `None` when the shape has
 /// a tail.
@@ -74,16 +74,12 @@ pub(super) fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
 pub(super) fn product_subtype(
     components: &[Schema],
     branches: &[&[Schema]],
-    cx: SubtypeCx<'_>,
-    assumptions: &mut Vec<(Schema, Schema)>,
+    cx: &mut Cx<'_>,
 ) -> Relation {
     if !spend(cx.budget) {
         return Relation::Unknown;
     }
-    let verdicts: Vec<Verdict> = components
-        .iter()
-        .map(|c| c.verdict_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget))
-        .collect();
+    let verdicts: Vec<Verdict> = components.iter().map(|c| c.verdict_rec(cx)).collect();
     if verdicts.iter().any(|verdict| verdict.is_empty()) {
         return Relation::Holds;
     }
@@ -106,7 +102,7 @@ pub(super) fn product_subtype(
         remaining = rest;
     };
     for (position, (mine, theirs)) in components.iter().zip(branch.iter()).enumerate() {
-        let here = mine.is_subtype_rec(theirs, cx, assumptions);
+        let here = mine.is_subtype_rec(theirs, cx);
         if here == Relation::Holds {
             continue;
         }
@@ -127,7 +123,7 @@ pub(super) fn product_subtype(
             })
             .collect();
         let rest_covers = descending(cx.budget, Relation::Unknown, || {
-            product_subtype(&narrowed, rest, cx, assumptions)
+            product_subtype(&narrowed, rest, cx)
         });
         match (here, rest_covers) {
             (_, Relation::Holds) => {}
@@ -155,8 +151,7 @@ pub(super) fn product_subtype(
 pub(super) fn seq_splits_across_union(
     schema: &Schema,
     members: &[Schema],
-    cx: SubtypeCx<'_>,
-    assumptions: &mut Vec<(Schema, Schema)>,
+    cx: &mut Cx<'_>,
 ) -> Relation {
     let Schema::Seq { container, shape } = schema else {
         return Relation::Unknown;
@@ -190,7 +185,7 @@ pub(super) fn seq_splits_across_union(
         return Relation::Unknown;
     }
     let branches: Vec<&[Schema]> = branches.iter().map(Vec::as_slice).collect();
-    let answer = product_subtype(&components, &branches, cx, assumptions);
+    let answer = product_subtype(&components, &branches, cx);
     if set_aside_hold_none {
         answer
     } else {
@@ -206,8 +201,7 @@ pub(super) fn linear_subtype(
     ta: Option<&Schema>,
     pb: &[Schema],
     tb: Option<&Schema>,
-    cx: SubtypeCx<'_>,
-    assumptions: &mut Vec<(Schema, Schema)>,
+    cx: &mut Cx<'_>,
 ) -> Relation {
     // A repeated tail with an empty element language never repeats, so the left
     // side is then just its fixed prefix. Emptiness is decided with the same
@@ -219,9 +213,7 @@ pub(super) fn linear_subtype(
     // that stands on the tail *repeating* needs the element proven to have a
     // value: a tail the rules cannot read either way may be no tail at all.
     // No tail repeats nothing, which is what `Empty` says of it.
-    let repeats = ta.map_or(Verdict::Empty, |element| {
-        element.verdict_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget)
-    });
+    let repeats = ta.map_or(Verdict::Empty, |element| element.verdict_rec(cx));
     let ta = ta.filter(|_| repeats != Verdict::Empty);
     // A's fixed prefix must align with B: against B's prefix where they overlap,
     // then against B's repeated tail past it (which B must therefore have). A
@@ -238,7 +230,7 @@ pub(super) fn linear_subtype(
     // `keyed_map_subtype` for that argument and for why the pair is compared by
     // equality rather than by address.
     let mut last: Option<(&Schema, &Schema, Relation)> = None;
-    let mut aligns = |assumptions: &mut Vec<(Schema, Schema)>| {
+    let mut aligns = |cx: &mut Cx<'_>| {
         Relation::all(pa.iter().enumerate().map(|(i, element)| {
             let expected = match pb.get(i) {
                 Some(expected) => expected,
@@ -252,7 +244,7 @@ pub(super) fn linear_subtype(
             match last {
                 Some((sub, sup, answer)) if sub == element && sup == expected => answer,
                 _ => {
-                    let answer = element.is_subtype_rec(expected, cx, assumptions);
+                    let answer = element.is_subtype_rec(expected, cx);
                     last = Some((element, expected, answer));
                     answer
                 }
@@ -261,7 +253,7 @@ pub(super) fn linear_subtype(
     };
     match (ta, tb) {
         (None, None) if pa.len() != pb.len() => Relation::Fails,
-        (None, None | Some(_)) => aligns(assumptions),
+        (None, None | Some(_)) => aligns(cx),
         // A repeats without bound but B is finite-length: no value with a
         // repeat is in B. That is a mismatch of the repeated element's values,
         // and it is read the way the query reads the subject's: refuted where
@@ -270,8 +262,6 @@ pub(super) fn linear_subtype(
         // have been dropped above, so `Holds` is not an answer this arm gives.
         (Some(_), None) => Relation::of_mismatch(repeats),
         // A's repeated element must also land in B's repeated tail.
-        (Some(a), Some(tail)) => {
-            aligns(assumptions).and(|| a.is_subtype_rec(tail, cx, assumptions))
-        }
+        (Some(a), Some(tail)) => aligns(cx).and(|| a.is_subtype_rec(tail, cx)),
     }
 }

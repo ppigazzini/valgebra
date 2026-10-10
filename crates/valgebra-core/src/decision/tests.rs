@@ -22,16 +22,8 @@ use crate::oracle::tests::Pure;
 /// reason. A rule is pinned by asking it on its own.
 fn structural(sub: &Schema, sup: &Schema) -> bool {
     let budget = Budget::new(DECISION_BUDGET);
-    sub.is_subtype_rec(
-        sup,
-        SubtypeCx {
-            oracle: &NoLeafRelations,
-            defs: &[],
-            budget: &budget,
-        },
-        &mut Vec::new(),
-    )
-    .holds()
+    sub.is_subtype_rec(sup, &mut Cx::new(&NoLeafRelations, &[], &budget))
+        .holds()
 }
 
 /// Every set is below the universe, however the universe is spelled.
@@ -89,12 +81,7 @@ fn an_unresolved_reference_is_below_a_reference_to_the_universe() {
     let rules = |sub: &Schema, sup: &Schema| {
         sub.is_subtype_rec(
             sup,
-            SubtypeCx {
-                oracle: &NoLeafRelations,
-                defs: &defs,
-                budget: &Budget::new(DECISION_BUDGET),
-            },
-            &mut Vec::new(),
+            &mut Cx::new(&NoLeafRelations, &defs, &Budget::new(DECISION_BUDGET)),
         )
     };
     let unresolved = Schema::Ref(DefIx::new(2));
@@ -143,15 +130,7 @@ fn an_unresolved_reference_is_below_a_reference_to_the_universe() {
 fn a_refinement_with_no_constraint_is_decided_as_its_base_on_either_side() {
     let rules = |sub: &Schema, sup: &Schema| {
         let budget = Budget::new(DECISION_BUDGET);
-        sub.is_subtype_rec(
-            sup,
-            SubtypeCx {
-                oracle: &NoLeafRelations,
-                defs: &[],
-                budget: &budget,
-            },
-            &mut Vec::new(),
-        )
+        sub.is_subtype_rec(sup, &mut Cx::new(&NoLeafRelations, &[], &budget))
     };
     let bare = |base: Schema| Schema::Refine {
         base: Arc::new(base),
@@ -710,12 +689,12 @@ proptest! {
     fn covering_the_universe_is_the_complement_being_empty(s in schema()) {
         let budget = Budget::new(DECISION_BUDGET);
         let via_complement = Schema::Complement(Arc::new(s.clone()))
-            .is_empty_rec(&NoLeafRelations, &[], &mut Vec::new(), &budget);
+            .is_empty_rec(&mut Cx::new(&NoLeafRelations, &[], &budget));
         prop_assert_eq!(via_complement, s.covers_the_universe());
         // And the fast fold is below the complete reading, never past it.
         let budget = Budget::new(DECISION_BUDGET);
         let (_, regions) =
-            s.empty_and_region(&NoLeafRelations, &[], &mut Vec::new(), &budget);
+            s.empty_and_region(&mut Cx::new(&NoLeafRelations, &[], &budget));
         if regions == Regions::Known(Region::ALL) {
             prop_assert!(s.covers_the_universe());
         }
@@ -728,12 +707,7 @@ proptest! {
     #[test]
     fn empty_and_region_folds_the_same_region_as_region_set(s in schema()) {
         let folded = s
-            .empty_and_region(
-                &NoLeafRelations,
-                &[],
-                &mut Vec::new(),
-                &Budget::new(DECISION_BUDGET),
-            )
+            .empty_and_region(&mut Cx::new(&NoLeafRelations, &[], &Budget::new(DECISION_BUDGET)))
             .1;
         prop_assert_eq!(folded, s.region_set());
     }
@@ -910,10 +884,7 @@ fn open(fields: Vec<Field>) -> Schema {
 fn meet_is_empty(members: &[Schema]) -> bool {
     keyed_map_meet_verdict(
         members,
-        &NoLeafRelations,
-        &[],
-        &mut Vec::new(),
-        &Budget::new(DECISION_BUDGET),
+        &mut Cx::new(&NoLeafRelations, &[], &Budget::new(DECISION_BUDGET)),
     )
     .is_empty()
 }
@@ -1047,7 +1018,7 @@ fn a_recursive_meet_of_maps_is_decided_within_its_unfoldings() {
     // The meet holds no finite value: a value of the key is in both unions, so
     // it is in the fixpoint again. Declining is sound, and a claim of a value
     // is not.
-    let verdict = this.verdict_rec(&NoLeafRelations, &defs, &mut Vec::new(), &budget);
+    let verdict = this.verdict_rec(&mut Cx::new(&NoLeafRelations, &defs, &budget));
     assert_ne!(verdict, Verdict::Inhabited);
     let spent = DECISION_BUDGET - budget.left();
     assert!(spent < 100, "the meet spent {spent} steps");
@@ -1056,7 +1027,7 @@ fn a_recursive_meet_of_maps_is_decided_within_its_unfoldings() {
 /// The rules' verdict on `schema` under `defs`, and the steps it spent.
 fn rules_verdict(schema: &Schema, defs: &[Schema]) -> (Verdict, u32) {
     let budget = Budget::new(DECISION_BUDGET);
-    let verdict = schema.verdict_rec(&NoLeafRelations, defs, &mut Vec::new(), &budget);
+    let verdict = schema.verdict_rec(&mut Cx::new(&NoLeafRelations, defs, &budget));
     (verdict, DECISION_BUDGET - budget.left())
 }
 
@@ -1280,16 +1251,8 @@ fn a_meet_met_again_while_it_is_open_reads_empty() {
 /// decided anyway. Which is a better answer and a worse test.
 fn by_the_rules(sub: &Schema, sup: &Schema) -> bool {
     let budget = Budget::new(DECISION_BUDGET);
-    sub.is_subtype_rec(
-        sup,
-        SubtypeCx {
-            oracle: &NoLeafRelations,
-            defs: &[],
-            budget: &budget,
-        },
-        &mut Vec::new(),
-    )
-    .holds()
+    sub.is_subtype_rec(sup, &mut Cx::new(&NoLeafRelations, &[], &budget))
+        .holds()
 }
 
 /// Emptiness by the structural rules alone, for the reason
@@ -1301,7 +1264,7 @@ fn empty_by_the_rules(schema: &Schema) -> bool {
 /// [`empty_by_the_rules`] with an oracle, for the arms that need one to
 /// order two pooled bounds.
 fn empty_by_the_rules_under(schema: &Schema, oracle: &dyn LeafRelations) -> bool {
-    schema.is_empty_rec(oracle, &[], &mut Vec::new(), &Budget::new(DECISION_BUDGET))
+    schema.is_empty_rec(&mut Cx::new(oracle, &[], &Budget::new(DECISION_BUDGET)))
 }
 
 /// A refinement carrying no constraint denotes exactly its base, and both
@@ -3704,12 +3667,11 @@ fn a_constant_that_does_not_equal_itself_denotes_no_value() {
         }
     }
     let verdict = |oracle: &dyn LeafRelations| {
-        Schema::Literal(ConstIx::new(0)).verdict_rec(
+        Schema::Literal(ConstIx::new(0)).verdict_rec(&mut Cx::new(
             oracle,
             &[],
-            &mut Vec::new(),
             &Budget::new(DECISION_BUDGET),
-        )
+        ))
     };
     assert_eq!(verdict(&NotAValue), Verdict::Empty);
     assert_eq!(verdict(&Values), Verdict::Inhabited);
@@ -5454,15 +5416,7 @@ fn a_complement_names_a_witness_from_the_kinds_its_inner_schema_is_not() {
     // rows, and the query applies it to this answer as it does to every other.
     let relation = |sub: &Schema, oracle: &dyn LeafRelations| {
         let budget = Budget::new(DECISION_BUDGET);
-        sub.subtype_by_rules(
-            &class,
-            SubtypeCx {
-                oracle,
-                defs: &[],
-                budget: &budget,
-            },
-            &mut Vec::new(),
-        )
+        sub.subtype_by_rules(&class, &mut Cx::new(oracle, &[], &budget))
     };
     let not = |schema| Schema::Complement(Arc::new(schema));
 
@@ -5882,20 +5836,12 @@ fn a_decision_leaves_the_trail_it_was_given() {
     ];
     for (sub, sup) in pairs {
         let budget = Budget::new(DECISION_BUDGET);
-        let mut trail = Vec::new();
-        let _ = sub.is_subtype_rec(
-            &sup,
-            SubtypeCx {
-                oracle: &NoLeafRelations,
-                defs: &defs,
-                budget: &budget,
-            },
-            &mut trail,
-        );
+        let mut cx = Cx::new(&NoLeafRelations, &defs, &budget);
+        let _ = sub.is_subtype_rec(&sup, &mut cx);
         assert!(
-            trail.is_empty(),
+            cx.trail.is_empty(),
             "{sub:?} <= {sup:?} left {} assumption(s) behind",
-            trail.len()
+            cx.trail.len()
         );
     }
 }
@@ -5915,17 +5861,52 @@ fn a_decision_leaves_an_assumption_it_did_not_make() {
     let seeded: Vec<(Schema, Schema)> =
         vec![(Schema::Str, Schema::Bytes), (Schema::Int, Schema::Float)];
     let budget = Budget::new(DECISION_BUDGET);
-    let mut trail = seeded.clone();
-    let _ = Schema::Ref(DefIx::new(0)).is_subtype_rec(
-        &Schema::Ref(DefIx::new(0)),
-        SubtypeCx {
-            oracle: &NoLeafRelations,
-            defs: &defs,
-            budget: &budget,
-        },
-        &mut trail,
-    );
-    assert_eq!(trail, seeded, "the caller's assumptions did not survive");
+    let mut cx = Cx::new(&NoLeafRelations, &defs, &budget);
+    cx.trail = seeded.clone();
+    let _ = Schema::Ref(DefIx::new(0)).is_subtype_rec(&Schema::Ref(DefIx::new(0)), &mut cx);
+    assert_eq!(cx.trail, seeded, "the caller's assumptions did not survive");
+}
+
+proptest! {
+    // A bounded shrink, so a broken bound cannot turn a caught mutation into a
+    // run that outlasts a sweep: see `budget::law`.
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    // THEORY: the-assumption-set-is-popped
+    /// A query gives the context's two stacks back as it was given them, over
+    /// drawn schemas and drawn definitions.
+    ///
+    /// The rows above hold the trail on fixed pairs. The context carries
+    /// `visiting` beside it a whole query long, so a frame of either recursion
+    /// that left an entry behind would hand every later question in the query a
+    /// hypothesis it never made: a goal discharged with no proof, or a
+    /// reference read as a cycle it is not on. Both recursions are asked from a
+    /// context seeded with entries of its own, so a rule that cleared a stack
+    /// instead of popping its own entries fails as surely as one that leaked.
+    #[test]
+    fn a_query_gives_its_stacks_back_as_it_was_given_them(
+        a in crate::laws::recursive_schema(),
+        b in crate::laws::recursive_schema(),
+        defs in crate::laws::drawn_defs(),
+    ) {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &defs, &budget);
+        let trail = vec![(Schema::Str, Schema::Bytes)];
+        // A definition no drawn table holds, so the seed is never read as a
+        // cycle and the verdict below is the one an empty list reaches.
+        let visiting = vec![DefIx::new(defs.len())];
+        cx.trail.clone_from(&trail);
+        let _ = a.is_subtype_rec(&b, &mut cx);
+        prop_assert_eq!(&cx.trail, &trail);
+        prop_assert!(cx.visiting.is_empty());
+        cx.visiting.clone_from(&visiting);
+        let _ = a.verdict_rec(&mut cx);
+        prop_assert_eq!(&cx.visiting, &visiting);
+        prop_assert_eq!(&cx.trail, &trail);
+    }
 }
 
 // THEORY: recursive-subtyping, the-trail-holds-terms
@@ -5958,16 +5939,9 @@ fn an_assumption_is_read_as_the_pair_it_is() {
     let list = |element| Schema::list(SeqShape::homogeneous(element));
     let decide = |sub: &Schema, sup: &Schema, seed: Vec<(Schema, Schema)>| {
         let budget = Budget::new(DECISION_BUDGET);
-        let mut trail = seed;
-        sub.is_subtype_rec(
-            sup,
-            SubtypeCx {
-                oracle: &NoLeafRelations,
-                defs: &[],
-                budget: &budget,
-            },
-            &mut trail,
-        )
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        cx.trail = seed;
+        sub.is_subtype_rec(sup, &mut cx)
     };
 
     // Settled by the regions: no hypothesis reaches them.

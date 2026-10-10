@@ -838,7 +838,7 @@ shelf does not hold: a family whose every level reaches the next twice doubles
 its work per level, and the work budget is what caps it, declining the family
 eighteen levels deep. **[DEVIATION: the-assumption-set-is-popped]**
 
-HELD-BY: a_decision_leaves_an_assumption_it_did_not_make, a_decision_leaves_the_trail_it_was_given, a_goal_reached_by_two_paths_is_derived_twice_until_the_budget_declines
+HELD-BY: a_decision_leaves_an_assumption_it_did_not_make, a_decision_leaves_the_trail_it_was_given, a_query_gives_its_stacks_back_as_it_was_given_them, a_goal_reached_by_two_paths_is_derived_twice_until_the_budget_declines
 
 **The dict key partition is by kind.** `1` and `True` are one key to a dict and
 two labels to the partition, so an atom requiring both under distinct values
