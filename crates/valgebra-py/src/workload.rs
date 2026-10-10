@@ -24,7 +24,9 @@
 //! the release profile links with fat LTO and strips, and the library measures
 //! 3,526,472 bytes with this module and 3,524,136 without. The sweeps would
 //! still skip it by name, because `cargo mutants` reads the module tree from the
-//! source and offers a mutant in a file no build compiles.
+//! source and offers a mutant in a file no build compiles. Nor would it lift the
+//! allowance below: the restriction lints read the library with every feature
+//! on, so a gated module is linted as this one is.
 //!
 //! A shape that cannot build its value is a rig fault rather than a verdict, and
 //! a panic is how an instrument says so: the library's restriction lints admit
