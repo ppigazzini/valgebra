@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import os
 import re
 import shutil
@@ -527,6 +528,64 @@ def test_every_decision_shape_is_measured_by_a_lane() -> None:
         f"decision shapes with a recorded count that no bench step measures: "
         f"{missing}. Add the flag to the decision gate step of the bench job."
     )
+
+
+#: The pages that give the gap between the two deciders as an order of
+#: magnitude, each of which a re-recorded pair of counts can make wrong.
+GAP_PAGES = (
+    "ARCHITECTURE.md",
+    "docs/dev/01-schema-ir.md",
+    "docs/dev/02-decision.md",
+    "docs/11-performance.md",
+    "docs/13-foundations.md",
+)
+
+
+def test_the_pages_give_the_gap_between_the_deciders_the_record_holds() -> None:
+    """The order of magnitude the pages give is the record's.
+
+    `--decision-rules` and `--decision-sets` ask one corpus of the rules and of
+    the sets, at the two iteration counts the example names, and the pages
+    say how far apart the two are. That is a claim about two recorded counts,
+    so it is read from them: a re-recorded count that moves the ratio to
+    another order fails here until the pages say so. The two checksums are one
+    fold at the two counts, and are held to it, since a pair one decider
+    answers and the other does not is a corpus whose ratio says nothing.
+    """
+    budget = json.loads(
+        (ROOT / "scripts" / "perf_budget.json").read_text(encoding="utf-8")
+    )
+    source = (
+        ROOT / "crates" / "valgebra-core" / "examples" / "decision_sets_workload.rs"
+    ).read_text(encoding="utf-8")
+
+    def iterations(name: str) -> int:
+        found = re.search(rf"const {name}_ITERATIONS: usize = ([\d_]+);", source)
+        assert found, f"the workload names no {name}_ITERATIONS"
+        return int(found.group(1).replace("_", ""))
+
+    rules, sets = iterations("RULES"), iterations("SETS")
+    assert (
+        budget[gate.checksum_key("decision-rules")] * sets
+        == budget[gate.checksum_key("decision-sets")] * rules
+    ), "the two halves answered the corpus differently"
+    ratio = (budget[gate.record_key("decision-sets")] / sets) / (
+        budget[gate.record_key("decision-rules")] / rules
+    )
+    words = {2: "two", 3: "three", 4: "four"}
+    order = round(math.log10(ratio))
+    assert order in words, f"the sets cost {ratio:,.0f} times the rules"
+    for page in GAP_PAGES:
+        text = " ".join((ROOT / page).read_text(encoding="utf-8").split())
+        assert f"{words[order]} orders of magnitude" in text, (
+            f"{page} does not give the gap as {words[order]} orders of magnitude, "
+            f"which the record reads ({ratio:,.0f} times)"
+        )
+        for other in set(words.values()) - {words[order]}:
+            assert f"{other} orders of magnitude" not in text, (
+                f"{page} gives the gap as {other} orders of magnitude, and the "
+                f"record reads {words[order]} ({ratio:,.0f} times)"
+            )
 
 
 def _merge_base_step() -> str:

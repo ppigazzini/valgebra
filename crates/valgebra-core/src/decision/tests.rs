@@ -1565,7 +1565,7 @@ impl LeafRelations for Kinded {
 /// library makes about a class rests on that -- `A` below `B`, for two classes
 /// neither deriving from the other, is reported `not_subset` because the
 /// difference is read as holding a value. The rules declined to say it and
-/// deferred to the sets, which cost two orders of magnitude for an answer the
+/// deferred to the sets, which cost three orders of magnitude for an answer the
 /// library had already committed to.
 ///
 /// A class no value can instantiate is where the assumption is wrong, and it

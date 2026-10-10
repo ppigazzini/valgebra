@@ -704,8 +704,8 @@ impl Schema {
         // discriminants, which settles a `None` branch beside a record -- and
         // with the full one only where that left the question open. The full
         // reading builds a meet per branch, and the path it is asked on is the
-        // one already headed for the set representation, which costs about two
-        // orders of magnitude more.
+        // one already headed for the set representation, which costs about
+        // three orders of magnitude more.
         //
         // And asked at all only where a branch refutes, which is the answer
         // the narrowing carries back from the branch it leaves: a union every

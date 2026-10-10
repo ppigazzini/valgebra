@@ -867,9 +867,12 @@ and they have a cost of their own with two clear levels. A pair a **rule**
 decides costs about a microsecond: the rules recurse over the two schemas and
 answer from their shapes. A pair the rules decline goes to the **set
 representation**, which lowers both sides into automata and takes tens to
-hundreds of microseconds. Two orders of magnitude is the gap, and it is the
-reason a rule that stops declining is worth writing; `cargo bench --bench core`
-measures both sides, the `subtype_*` rows against the `lower_*` rows.
+hundreds of microseconds. Inside the core the two answers to one question are
+about three orders of magnitude apart -- `scripts/perf_gate.py
+--decision-rules` and `--decision-sets` ask one corpus of each, and
+`scripts/perf_budget.json` holds both counts -- and a call through
+`relation_to` adds its own fixed cost to either. That gap is the reason a rule
+that stops declining is worth writing.
 
 Which pairs land on which side is the interesting part, and it moves. Most do
 not reach the sets: a mismatch of kinds, a record missing a required key, a

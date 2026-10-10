@@ -311,7 +311,8 @@ impl Schema {
             // only there, so a complement the regions already settle pays
             // nothing for it. The reading is a member list walked against a
             // bitset; the set representation answers the same question by
-            // lowering both sides, which is two orders of magnitude dearer.
+            // lowering both sides, which is about three orders of magnitude
+            // dearer (`scripts/perf_gate.py --decision-sets`).
             //
             // **The verdict moves and the region does not.** They are two
             // answers, and only the first of them is this reading's to give: a

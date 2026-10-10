@@ -94,9 +94,10 @@ answer in three values — proved, refuted, or neither:
   value.
 
 The rules are asked first and the descriptor only where they *decline*, because
-building one costs about two orders of magnitude more than a rule that already
-answered. Neither can overturn the other: both are sound, so the pair gives
-whichever of them decides. The core cannot see a Python object, so a question
+building one costs about three orders of magnitude more than a rule that already
+answered (`scripts/perf_gate.py --decision-sets` against `--decision-rules`,
+one corpus asked of both). Neither can overturn the other: both are sound, so
+the pair gives whichever of them decides. The core cannot see a Python object, so a question
 about a class, a constant or a comparison operand is asked back through the
 `LeafRelations` trait, which
 [`crates/valgebra-py/src/oracle.rs`](crates/valgebra-py/src/oracle.rs)

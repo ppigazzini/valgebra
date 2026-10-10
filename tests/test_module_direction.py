@@ -5,7 +5,7 @@ order between them: `crates/valgebra-core/src/descr/` is the **definition** --
 a schema denotes a set, each kind carries a representation closed under the
 three operations, and `a <= b` is `a & ~b` admitting no value -- while
 `decision.rs` is the **fast path**, a structural procedure asked first only
-because building a set costs about two orders of magnitude more than a rule
+because building a set costs about three orders of magnitude more than a rule
 that already answers.
 
 A dependency graph matching that order has the definition below the

@@ -28,9 +28,9 @@ is asked only where the rules reach the third, and the pair gives whichever of
 them decides. The rules are an optimisation of a relation the descriptor defines
 -- [01-schema-ir.md](01-schema-ir.md) records that decision under "Which
 representation decides" -- and the reason they are worth having is measured:
-building a set representation costs about two orders of magnitude more than a
-rule that already answers, which is what a relation the rules *refute* stops
-paying.
+building a set representation costs about three orders of magnitude more than a
+rule that already answers (under "Four bounds, each measured"), which is what a
+relation the rules *refute* stops paying.
 
 **How the two deciders compose.** Each answers in three values, and the whole
 of the wiring is which answer passes to what. The cascade of *readings* inside
@@ -65,7 +65,7 @@ everything, and one whose subject is undecided becomes a decline rather than a
 `Fails`, which the descriptor is asked about as it is about any other. The
 **descriptor** is reached only from a decline -- a pair the rules
 refuted is never lowered, because a sound second reading cannot overturn a
-proof, and lowering one costs about two orders of magnitude more than the rule
+proof, and lowering one costs about three orders of magnitude more than the rule
 that already answered. Its inhabited answer refutes only where no reference was
 cut: where one was, the difference was widened on the left and shrunk on the
 right, so a value found in it need be no value of the real difference. Its
@@ -601,11 +601,11 @@ is worth is a reading rather than a claim: `scripts/perf_gate.py
 
 Two of these carry the whole reason the fast path exists. `disjoint_with` and
 `outside_every_kind` answer from two nodes and an oracle call what the descriptor
-answers by building both sets and walking them — about two orders of magnitude
-more ([11-performance.md](../11-performance.md)). And they answer where the
-descriptor *declines*: a predicate is the constraint the sets will not read
-through, and a schema nested past the lowering's depth is one they give up on, so
-a pair carrying either is decided here or not at all.
+answers by building both sets and walking them — about three orders of
+magnitude more (below). And they answer where the descriptor *declines*: a
+predicate is the constraint the sets will not read through, and a schema nested
+past the lowering's depth is one they give up on, so a pair carrying either is
+decided here or not at all.
 
 ## Four bounds, each measured
 
@@ -623,13 +623,26 @@ What the numbers say, and where to read them. `cargo bench --bench core` is the
 harness: the `lower_nested_records_depth*` rows grow from under a microsecond at
 no nesting to milliseconds at six levels, which is the exponential the nesting
 bound catches, and `lower_sibling_union_difference_unheld` against its `_held`
-sibling is what the bound saves on one shape. Building a set costs about two
-orders of magnitude more than a rule that already answers, which is the whole
-reason the rules are asked first and the descriptor second. On the shapes
-reachable today the nesting bound refuses before the work allowance does, so the
-allowance is what remains for a schema that is shallow and wide.
+sibling is what the bound saves on one shape. On the shapes reachable today the
+nesting bound refuses before the work allowance does, so the allowance is what
+remains for a schema that is shallow and wide.
 
-**The two orders of magnitude are per relation, and a query is not one
+**Building a set costs about three orders of magnitude more than a rule that
+already answers**, which is the whole reason the rules are asked first and the
+descriptor second. `scripts/perf_gate.py --decision-rules` and
+`--decision-sets` measure it as one corpus asked of each -- nine relations a
+scalar, a sequence, a record, a literal table, a bound and a set write, which
+the rules answer without the sets and the sets answer alike -- and
+`scripts/perf_budget.json` holds the two counts; the two halves fold one
+checksum at two iteration counts, so a pair either decider stops answering, or
+answers the other way, shows. Pair by pair the gap runs from two orders, for
+two lower bounds, to nearly four, for two lists and for two tuples. The rules'
+half is the public relation, and the sets' half is the reading it takes where
+the rules decline (`crates/valgebra-core/examples/decision_sets_workload.rs`).
+`tests/test_perf_gate.py` holds the phrase to the record: a re-recorded count
+that moves the ratio to another order fails it until the pages say so.
+
+**The three orders of magnitude are per relation, and a query is not one
 relation.** On the workload whose shapes reach the descriptor at all
 (`scripts/perf_gate.py --decision-matrix`, whose count
 `scripts/perf_budget.json` owns) the instructions divide the other way: the

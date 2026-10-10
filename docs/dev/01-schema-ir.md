@@ -734,10 +734,10 @@ operations so that question can be asked literally. Everything it can hold, it
 decides.
 
 The **structural rules** are the fast path. Building a descriptor costs about
-two orders of magnitude more than a rule that already answers, which is measured
-under "What it costs to build a descriptor" above; a shape the rules settle in
-nanoseconds is not worth a set representation. So the rules answer first, and the
-descriptor answers where they decline.
+three orders of magnitude more than a rule that already answers, which
+[02-decision.md](02-decision.md) measures under "Four bounds, each measured"; a
+shape the rules settle in nanoseconds is not worth a set representation. So the
+rules answer first, and the descriptor answers where they decline.
 
 What that ordering is *not* is a second opinion. Both are asked of the same
 question, and both answer in the same three values: the descriptor is asked

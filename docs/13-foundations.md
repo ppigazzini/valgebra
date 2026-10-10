@@ -111,9 +111,9 @@ sets, the strings and bytes as automata, the lists and tuples as automata over
 letters that are themselves sets, the sets as a powerset lattice, the dicts as a
 lattice of map atoms — so inclusion becomes one question about emptiness: `a` is
 below `b` exactly when `a` and the complement of `b` share no value. That
-decides pairs no rule about shapes reaches, and it costs about two orders of
-magnitude more than a rule -- `cargo bench --bench core` measures both, the
-`subtype_*` rows against the `lower_*` rows
+decides pairs no rule about shapes reaches, and it costs about three orders of
+magnitude more than a rule -- `scripts/perf_gate.py --decision-rules` and
+`--decision-sets` ask one corpus of both
 ([performance](11-performance.md#what-a-relation-between-two-validators-costs))
 -- which is why it is asked second and only where the rules decline.
 
@@ -195,11 +195,11 @@ under union, intersection and complement, so the emptiness test is asked
 literally rather than approximated by a rule about the shape. It decides what a
 rule about shapes cannot — a container meet, a complement nested inside another,
 one regular language inside another, the ordering of two steps — and it is
-bounded, because building one costs the two orders of magnitude over a rule
-that `cargo bench --bench core` measures
-([above](#two-deciders-and-the-guard-between-them)). What is past those bounds,
-and what no finite descriptor holds, is what the boundary records as
-conservative.
+bounded, because building one costs about three orders of magnitude over a
+rule, which `scripts/perf_gate.py --decision-sets` against `--decision-rules`
+measures ([above](#two-deciders-and-the-guard-between-them)). What is past
+those bounds, and what no finite descriptor holds, is what the boundary records
+as conservative.
 
 Neither ever changes a membership decision: the walk answers membership directly,
 and both representations are sound.
