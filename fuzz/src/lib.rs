@@ -1,7 +1,9 @@
 //! Shared fuzz scaffolding: a depth-bounded `Arbitrary` generator that maps raw
 //! fuzzer bytes onto the core schema IR, and the sound invariants the targets
-//! assert. Indices into the (absent) object pool are kept small so distinct
-//! atoms collide often enough for the relational checks to bite. Recursion is
+//! assert. Indices into the object pool are kept small so distinct atoms
+//! collide often enough for the relational checks to bite. The `decision`
+//! target holds no pool, and `decision_oracle` draws one ([`World`]) so the
+//! rules that read a constant, a bound or a class are reached too. Recursion is
 //! capped so a target exercises algebra and decision logic rather than the
 //! stack-depth limits, which the adversarial-bounds work measures separately.
 //!
@@ -19,8 +21,12 @@ use std::sync::Arc;
 use arbitrary::{Arbitrary, Result, Unstructured};
 use valgebra_core::{
     ClassIx, ConstIx, Constraint, DefIx, Field, MapClause, NoLeafRelations, OperandIx, PredIx,
-    Schema, SeqKind, SeqShape,
+    Relation, Schema, SeqKind, SeqShape,
 };
+
+mod world;
+
+pub use world::World;
 
 const NAMES: [&str; 4] = ["a", "b", "c", "d"];
 const PATTERNS: [&str; 3] = ["a+", "[0-9]*", "x"];
@@ -252,6 +258,82 @@ impl<'a> Arbitrary<'a> for SchemaPair {
             defs.push(build_schema(u, 2)?);
         }
         Ok(Self(build_schema(u, 4)?, build_schema(u, 4)?, defs))
+    }
+}
+
+/// A [`SchemaPair`] and the [`World`] its pool indices name.
+///
+/// The pair is drawn first and the world from what is left, so an input the
+/// `decision` target reads builds the same two schemas here: its seeds are
+/// this target's seeds too, and a world drawn from an exhausted input is the
+/// one every byte zero names rather than a refusal.
+#[derive(Debug)]
+pub struct WorldPair(pub SchemaPair, pub World);
+
+impl<'a> Arbitrary<'a> for WorldPair {
+    fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
+        Ok(Self(SchemaPair::arbitrary(u)?, World::arbitrary(u)?))
+    }
+}
+
+/// [`check_relations`]' laws under an oracle that answers, and the one law
+/// between two oracles.
+///
+/// A proof or a refutation reached knowing nothing of the pool holds of every
+/// pool, this world's among them, so the decision asked the same question
+/// with and without the world never answers it both ways. That is soundness
+/// read across the rules the blind oracle cannot reach: a refutation the
+/// literal table or a class reading gives is checked against every answer
+/// the rest of the decision gives without them.
+pub fn check_relations_in(a: &Schema, b: &Schema, defs: &[Schema], world: &World) {
+    let seeing = |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, world, defs);
+    let below = |sub: &Schema, sup: &Schema| seeing(sub, sup).holds();
+    assert!(below(a, a), "subtyping not reflexive on {a:?} in {world:?}");
+    assert!(
+        a.is_equivalent_under(a, world, defs),
+        "equivalence not reflexive on {a:?} in {world:?}"
+    );
+    assert!(
+        below(a, &Schema::ANYTHING),
+        "{a:?} not below the top in {world:?}"
+    );
+    assert!(
+        below(&Schema::Nothing, a),
+        "bottom not below {a:?} in {world:?}"
+    );
+    if a.is_empty_with(world, defs) {
+        assert!(below(a, b), "empty {a:?} not below {b:?} in {world:?}");
+    }
+    if Schema::Complement(Arc::new(b.clone())).is_empty_with(world, defs) {
+        assert!(below(a, b), "{a:?} not below universal {b:?} in {world:?}");
+    }
+    // Each relation is asked once and read twice: for the order laws here,
+    // and against the blind answer below. A query that lowers a schema
+    // naming a constant is the dear one, and it is the one this target is for.
+    let (ab, ba) = (seeing(a, b), seeing(b, a));
+    let (sub_ab, sub_ba) = (ab.holds(), ba.holds());
+    if a.is_equivalent_under(b, world, defs) {
+        assert!(
+            sub_ab && sub_ba,
+            "equivalent {a:?} and {b:?} are not mutually included in {world:?}"
+        );
+    }
+    if sub_ab && sub_ba {
+        assert!(
+            a.is_equivalent_under(b, world, defs),
+            "mutually included {a:?} and {b:?} are not equivalent in {world:?}"
+        );
+    }
+    let nothing = Schema::Nothing;
+    for (sub, sup, seen) in [(a, b, ab), (b, a, ba), (a, &nothing, seeing(a, &nothing))] {
+        let blind = sub.subtype_relation_under(sup, &NoLeafRelations, defs);
+        assert!(
+            !matches!(
+                (blind, seen),
+                (Relation::Holds, Relation::Fails) | (Relation::Fails, Relation::Holds)
+            ),
+            "{sub:?} <= {sup:?} is {blind:?} blind and {seen:?} in {world:?}"
+        );
     }
 }
 

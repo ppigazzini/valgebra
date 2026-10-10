@@ -570,7 +570,11 @@ cargo mutants -p valgebra-core -j 2 --timeout-multiplier 20 \
 **Denotation preservation is not re-checked in the fuzz targets.** They assert
 procedure-agnostic laws — panic-freedom, reflexivity,
 the top and bottom bounds, equivalence as mutual inclusion — over the **full**
-IR, including the opaque fragment a value oracle cannot model. Membership
+IR, including the opaque fragment a value oracle cannot model. `decision_oracle`
+asks them again under a pool drawn beside the schemas (`fuzz/src/world.rs`),
+which answers the literal, bound and class questions as the interpreter would,
+and adds the one law between two oracles: an inclusion proved knowing nothing
+of the pool is never refuted knowing it, nor the other way round. Membership
 preservation is oracle-tested over the decidable fragment in the core law suite.
 Duplicating it in the fuzzer would only cover the sub-fragment its wide generator
 is built to exceed.

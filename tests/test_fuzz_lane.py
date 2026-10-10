@@ -26,6 +26,11 @@ fails with the pipe -- and the last is held by running the step's own script
 against a stand-in soak, since a flag can be read where a shell option is
 only shown by what it does.
 
+And a target the soak does not name is a build and nothing more: `fuzz-build`
+compiles every target the fuzz workspace declares on every push, which says it
+links and says nothing it finds. So the targets the soak runs are the targets
+the workspace declares.
+
 LEDGER: the fuzz soak names its ceilings, forks its batches, and fails with them
 """
 
@@ -198,6 +203,27 @@ def test_the_soak_bounds_memory_per_batch() -> None:
     assert re.search(r"-fork=\d+", step), (
         "the soak does not fork, so its memory ceiling applies to a process "
         "whose resident size grows with every execution it has done"
+    )
+
+
+def test_the_soak_runs_every_fuzz_target() -> None:
+    """A target no night runs is compiled on every push and asked nothing.
+
+    `fuzz/Cargo.toml` declares each target as a `[[bin]]`, and the soak runs
+    the ones its loop names. A target added to the first and not the second
+    is held to compiling, which `fuzz-build` checks, and to no law at all.
+    """
+    manifest = (ROOT / "fuzz" / "Cargo.toml").read_text(encoding="utf-8")
+    declared = set(
+        re.findall(r'^\[\[bin\]\]\nname = "([^"]+)"', manifest, re.MULTILINE)
+    )
+    assert {"decision", "decision_oracle"} <= declared, sorted(declared)
+    loop = re.search(r"^\s*for target in ([\w ]+); do$", _soak_step(), re.MULTILINE)
+    assert loop, "the soak names its targets in no loop, so it runs none by name"
+    soaked = set(loop.group(1).split())
+    assert soaked == declared, (
+        f"the fuzz workspace declares {sorted(declared)} and the soak runs "
+        f"{sorted(soaked)}: a target it does not run is one no night fuzzes"
     )
 
 

@@ -1748,6 +1748,10 @@ jobs:
     # libFuzzer, seeded from the committed corpus. Scheduled and manual only: a
     # crash fails the lane, but the soak runs off the merge path. The order laws
     # it asserts are mirrored on the merge gate by the structural property tests.
+    # Two targets: `decision` asks every relation with an oracle that declines
+    # every question, and `decision_oracle` asks the same pairs under a pool of
+    # constants, bounds and classes drawn beside them, which reaches the
+    # literal, bound and class rules the first never can.
     needs: nightly-dispatch
     if: >-
       !cancelled() && (github.event_name == 'workflow_dispatch' ||
@@ -1785,6 +1789,7 @@ jobs:
         with:
           path: |
             fuzz/corpus/decision
+            fuzz/corpus/decision_oracle
           key: fuzz-corpus-${{ github.run_id }}
           restore-keys: fuzz-corpus-
       # The persistent corpus is named first, so libFuzzer writes what it learns
@@ -1835,6 +1840,12 @@ jobs:
       # which is a rig fault rather than a clean sheet. The number is two orders
       # below a healthy soak -- millions of runs in six minutes -- so it catches
       # a dead target and never a slow machine.
+      #
+      # Each target takes the whole budget, one after the other, and each is
+      # held to the floor on its own: a second target sharing six minutes with
+      # the first would halve the reach of both. They read the same seeds,
+      # since `decision_oracle` draws its schemas as `decision` does and its
+      # pool from the bytes the pair leaves, and they keep a corpus each.
       - name: Fuzz the decision procedures
         env:
           # Four fifths of the budget above. A soak that stops far short of it
@@ -1842,41 +1853,57 @@ jobs:
           MIN_SECONDS: "288"
         run: |
           set -o pipefail
-          mkdir -p fuzz/corpus/decision
-          cargo fuzz run --target x86_64-unknown-linux-gnu decision \
-            fuzz/corpus/decision fuzz/seeds/decision -- \
-            -max_total_time=360 -fork=1 -malloc_limit_mb=64 -rss_limit_mb=4096 \
-            -ignore_ooms=0 -ignore_timeouts=0 2>&1 | tee soak.log
-          # Under `-fork=1` the child reports through the parent's summary line
-          # and its closing note; both are read, because either alone has a
-          # silent shape. A run with no summary executed nothing, and one whose
-          # rate is zero executed nothing over however long it sat there.
-          rate=$(grep -oE 'exec/s: *[0-9]+' soak.log | tail -1 \
-            | grep -oE '[0-9]+$')
-          seconds=$(grep -oE 'fuzzed for [0-9]+ seconds' soak.log | tail -1 \
-            | grep -oE '[0-9]+')
-          if [ -z "${rate:-}" ] || [ -z "${seconds:-}" ]; then
-            echo "RIG FAULT: the soak printed no rate and no duration, so it" >&2
-            echo "measured nothing; a clean sheet here would say otherwise." >&2
-            exit 2
-          fi
-          echo "the soak ran ${seconds}s at ${rate} exec/s (floor ${MIN_SECONDS}s, rate > 0)"
-          if [ "$rate" -le 0 ] || [ "$seconds" -lt "$MIN_SECONDS" ]; then
-            echo "RIG FAULT: ${seconds}s at ${rate} exec/s is beneath the" >&2
-            echo "floor: this run found nothing because it ran nothing." >&2
-            exit 2
-          fi
+          for target in decision decision_oracle; do
+            mkdir -p "fuzz/corpus/$target"
+            cargo fuzz run --target x86_64-unknown-linux-gnu "$target" \
+              "fuzz/corpus/$target" fuzz/seeds/decision -- \
+              -max_total_time=360 -fork=1 -malloc_limit_mb=64 -rss_limit_mb=4096 \
+              -ignore_ooms=0 -ignore_timeouts=0 2>&1 | tee soak.log
+            # Under `-fork=1` the child reports through the parent's summary
+            # line and its closing note; both are read, because either alone
+            # has a silent shape. A run with no summary executed nothing, and
+            # one whose rate is zero executed nothing over however long it sat
+            # there.
+            # An empty match is the fault the check below names, so a grep
+            # finding nothing must not end the step before it is named.
+            rate=$(grep -oE 'exec/s: *[0-9]+' soak.log | tail -1 \
+              | grep -oE '[0-9]+$' || true)
+            seconds=$(grep -oE 'fuzzed for [0-9]+ seconds' soak.log | tail -1 \
+              | grep -oE '[0-9]+' || true)
+            if [ -z "${rate:-}" ] || [ -z "${seconds:-}" ]; then
+              echo "RIG FAULT: the $target soak printed no rate and no" >&2
+              echo "duration, so it measured nothing; a clean sheet here" >&2
+              echo "would say otherwise." >&2
+              exit 2
+            fi
+            echo "$target ran ${seconds}s at ${rate} exec/s (floor ${MIN_SECONDS}s, rate > 0)"
+            if [ "$rate" -le 0 ] || [ "$seconds" -lt "$MIN_SECONDS" ]; then
+              echo "RIG FAULT: ${seconds}s at ${rate} exec/s is beneath the" >&2
+              echo "floor: $target found nothing because it ran nothing." >&2
+              exit 2
+            fi
+          done
       # Minimize before saving, so the cache holds the smallest input set that
       # keeps the coverage rather than growing without bound. A failure here is
       # not a finding -- the soak above already reported one -- so it does not
       # fail the lane.
       - name: Minimize the corpus
         continue-on-error: true
-        run: cargo fuzz cmin --target x86_64-unknown-linux-gnu decision fuzz/corpus/decision
+        # Both corpora are minimized whichever fails, and the step still says
+        # one did.
+        run: |
+          status=0
+          for target in decision decision_oracle; do
+            cargo fuzz cmin --target x86_64-unknown-linux-gnu "$target" \
+              "fuzz/corpus/$target" || status=1
+          done
+          exit "$status"
       - name: Report the corpus size
         run: |
-          echo "decision: $(find fuzz/corpus/decision -type f | wc -l) input(s)" \
-            >> "$GITHUB_STEP_SUMMARY"
+          for target in decision decision_oracle; do
+            echo "$target: $(find "fuzz/corpus/$target" -type f | wc -l) input(s)" \
+              >> "$GITHUB_STEP_SUMMARY"
+          done
       - name: Upload crash artifacts
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

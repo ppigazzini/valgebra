@@ -34,3 +34,10 @@ path = "fuzz_targets/decision.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "decision_oracle"
+path = "fuzz_targets/decision_oracle.rs"
+test = false
+doc = false
+bench = false

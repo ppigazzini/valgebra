@@ -534,11 +534,11 @@ _REFUSING = (
 
 #: The fuzz soak's floor, the comparison the soak's `RIG FAULT` exit rests on.
 _SOAK_FLOOR = (
-    '          if [ "$rate" -le 0 ] || [ "$seconds" -lt "$MIN_SECONDS" ]; then\n'
-    '            echo "RIG FAULT: ${seconds}s at ${rate} exec/s is beneath the" >&2\n'
-    '            echo "floor: this run found nothing because it ran nothing." >&2\n'
-    "            exit 2\n"
-    "          fi\n"
+    '            if [ "$rate" -le 0 ] || [ "$seconds" -lt "$MIN_SECONDS" ]; then\n'
+    '              echo "RIG FAULT: ${seconds}s at ${rate} exec/s is beneath the" >&2\n'
+    '              echo "floor: $target found nothing because it ran nothing." >&2\n'
+    "              exit 2\n"
+    "            fi\n"
 )
 
 
@@ -3562,6 +3562,18 @@ PLANTS = (
             tree, ".github/workflows/ci.yml", "          set -o pipefail\n", ""
         ),
         trips=("test_the_step_ends_as_the_soak_does",),
+    ),
+    Plant(
+        # A target the workspace declares and the soak leaves out.
+        "tests/test_fuzz_lane.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "for target in decision decision_oracle; do\n            mkdir",
+            "for target in decision; do\n            mkdir",
+        ),
+        trips=("test_the_soak_runs_every_fuzz_target",),
     ),
     Plant(
         # A node added to the IR that the generator never learns to build.

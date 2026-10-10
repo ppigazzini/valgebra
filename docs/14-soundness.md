@@ -169,7 +169,10 @@ what each layer is blind to beside it.
   right, closing the single-author blind spot.
 - **Coverage-guided fuzzing.** libFuzzer drives the decision procedures over the
   whole IR, asserting the sound order laws (reflexivity, the lattice bounds,
-  equivalence as mutual inclusion); the same invariants gate every merge.
+  equivalence as mutual inclusion); the same invariants gate every merge. A
+  second target asks them again under a pool of constants, bounds and classes
+  drawn beside the schemas, where an inclusion proved knowing nothing of the
+  pool is never refuted knowing it, nor the other way round.
 
 These are partial mechanization — adversarial, independent, and coverage-guided —
 in place of a fully formal proof.

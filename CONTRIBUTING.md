@@ -195,16 +195,21 @@ each layer is blind to beside it.
   never asserted.
 - **Snapshots.** Error messages and `repr` output are pinned with insta and
   syrupy so a wording change is a deliberate, reviewed diff.
-- **Coverage-guided fuzzing.** The libFuzzer target in `fuzz/` drives the
+- **Coverage-guided fuzzing.** The libFuzzer targets in `fuzz/` drive the
   decision procedures with `arbitrary`-built schemas, asserting the sound
-  invariants (no panic, the order laws). The same invariants run on the merge
-  gate as structural property tests; the fuzz soak runs nightly, and its corpus
-  is cached across runs and minimized after each, so the fuzzer accumulates the
-  inputs it has learned reach new code instead of restarting cold from the
-  committed seeds. Build and run the target with
+  invariants (no panic, the order laws): `decision` with an oracle that
+  declines every question, and `decision_oracle` under a pool of constants,
+  bounds and classes drawn beside the schemas, where a proof and a refutation
+  of one inclusion, with and without the pool, must never meet. The same
+  invariants run on the merge gate as structural property tests; the fuzz soak
+  runs nightly, and each target's corpus is cached across runs and minimized
+  after each, so the fuzzer accumulates the inputs it has learned reach new
+  code instead of restarting cold from the committed seeds. Build and run a
+  target with
   `cargo +nightly fuzz run decision fuzz/corpus/decision fuzz/seeds/decision`
-  (needs `cargo-fuzz`); the corpus directory is named first, so what the run
-  learns lands there rather than in the tracked seeds.
+  (needs `cargo-fuzz`; `decision_oracle` reads the same seeds); the corpus
+  directory is named first, so what the run learns lands there rather than in
+  the tracked seeds.
 
 Run the Rust property suites with `cargo test`; raise the example count with
 `PROPTEST_CASES=30000`. Run the Python suites with `uv run --no-sync pytest`;
