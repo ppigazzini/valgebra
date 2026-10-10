@@ -24,17 +24,12 @@
 //! `tuple[A, *tuple[B, ...], C]` is a chain with a loop in the middle, which is
 //! why the three spellings need one constructor rather than three nodes.
 
+use super::automaton::{Reached, canonical_order, reaches, refine};
 use super::budget;
 use crate::verdict::Verdict;
-use rustc_hash::{FxHashMap, FxHashSet};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 
-/// The most states an automaton may hold.
-///
-/// For the reason [`regular`](super::regular) gives: a product multiplies the
-/// state counts, so a bound is what keeps a pathological combination from
-/// exhausting memory rather than answering.
-pub const MAX_STATES: usize = 4096;
+pub use super::automaton::MAX_STATES;
 
 /// The most transitions one state may have.
 ///
@@ -325,31 +320,26 @@ impl<G: Guard> SymbolicDfa<G> {
     /// Whether an accepting state is reachable, following the edges `reach`
     /// admits.
     fn accepts_under(&self, reach: Reach) -> bool {
-        let mut seen: FxHashSet<u32> = FxHashSet::default();
-        let mut pending: VecDeque<u32> = VecDeque::from([0]);
-        while let Some(state) = pending.pop_front() {
-            if !seen.insert(state) {
-                continue;
-            }
-            if self.accepts(state) {
-                return true;
-            }
-            let row = self.outgoing(state);
-            let rest = rest_of(row);
-            let rest_verdict = rest.as_ref().map_or(Verdict::Unknown, Guard::emptiness);
-            for edge in row {
-                let verdict = match &edge.guard {
-                    Some(guard) => guard.emptiness(),
-                    // The else edge's own set is what the guarded edges leave,
-                    // and a join this cannot build says nothing about it.
-                    None => rest_verdict,
-                };
-                if reach.follows(verdict) {
-                    pending.push_back(edge.target);
+        reaches(
+            |state| self.accepts(state),
+            |state, pending| {
+                let row = self.outgoing(state);
+                let rest = rest_of(row);
+                let rest_verdict = rest.as_ref().map_or(Verdict::Unknown, Guard::emptiness);
+                for edge in row {
+                    let verdict = match &edge.guard {
+                        Some(guard) => guard.emptiness(),
+                        // The else edge's own set is what the guarded edges
+                        // leave, and a join this cannot build says nothing
+                        // about it.
+                        None => rest_verdict,
+                    };
+                    if reach.follows(verdict) {
+                        pending.push_back(edge.target);
+                    }
                 }
-            }
-        }
-        false
+            },
+        )
     }
 
     /// Whether this language holds the sequence `values`.
@@ -416,7 +406,8 @@ impl<G: Guard> SymbolicDfa<G> {
 
     /// The product, accepting where `accept` says so.
     ///
-    /// One walk over reachable state *pairs*. The guards of a pair are the
+    /// One walk over reachable state *pairs* ([`Reached`]), each new one
+    /// charging the build's allowance. The guards of a pair are the
     /// pairwise meets of the two sides' guards: each side's edges are disjoint
     /// and covering, so the meets are too, and the product needs no minterm
     /// search -- which is what a set of guards with no such invariant would.
@@ -435,13 +426,11 @@ impl<G: Guard> SymbolicDfa<G> {
         other: &SymbolicDfa<G>,
         accept: impl Fn(bool, bool) -> bool,
     ) -> Option<SymbolicDfa<G>> {
-        let mut ids: FxHashMap<(u32, u32), u32> = FxHashMap::default();
-        let mut pending: VecDeque<(u32, u32)> = VecDeque::from([(0, 0)]);
-        ids.insert((0, 0), 0);
+        let mut reached = Reached::from((0, 0));
         let mut edges: Vec<Vec<Edge<G>>> = Vec::new();
         let mut accepting: Vec<bool> = Vec::new();
         let mut held = 0usize;
-        while let Some((mine, theirs)) = pending.pop_front() {
+        while let Some((mine, theirs)) = reached.next() {
             accepting.push(accept(self.accepts(mine), other.accepts(theirs)));
             let (ours, yours) = (self.outgoing(mine), other.outgoing(theirs));
             // What each side's else edge takes, which is what its guarded edges
@@ -477,18 +466,7 @@ impl<G: Guard> SymbolicDfa<G> {
                     if guard.is_none() && rest_is_empty {
                         continue;
                     }
-                    let pair = (ours.target, yours.target);
-                    let target = if let Some(id) = ids.get(&pair) {
-                        *id
-                    } else {
-                        if ids.len() >= MAX_STATES || !budget::spend() {
-                            return None;
-                        }
-                        let id = u32::try_from(ids.len()).ok()?;
-                        ids.insert(pair, id);
-                        pending.push_back(pair);
-                        id
-                    };
+                    let target = reached.id((ours.target, yours.target), budget::spend)?;
                     if row.len() >= MAX_ROW {
                         return None;
                     }
@@ -608,36 +586,17 @@ impl<G: Guard> SymbolicDfa<G> {
         // states anyway. Seeding with that split instead is work the loop
         // repeats, and the sweep said so: a seed that collapses to one block
         // changed no answer.
-        let mut block: Vec<u32> = vec![0; count];
-        // At most one round per state: each round either splits a block or is
-        // the last, and a block cannot split more often than it has members.
-        for _ in 0..=count {
-            // Signatures are collected in state order and each gets the id of
-            // its first appearance. That numbering is what puts the start
-            // state's block at zero -- its signature is the first seen -- and
-            // it makes the ids depend on the signatures rather than on how many
-            // splits the round made.
-            //
-            // A `BTreeMap` rather than a hash map, because a signature holds
-            // guards and a guard is ordered rather than hashed; the entry it
-            // vacates takes the next id, which is the first-appearance
-            // numbering the paragraph above requires. A scan for an equal
-            // signature would give the same ids and read every kept signature
-            // per state, which is a round quadratic in the state count on a
-            // table a length bound sizes.
-            let mut seen: BTreeMap<Signature<G>, usize> = BTreeMap::new();
-            let mut next: Vec<u32> = Vec::with_capacity(count);
-            for state in 0..count {
-                let signature = normalised.signature(state, &block);
-                let fresh = seen.len();
-                let id = *seen.entry(signature).or_insert(fresh);
-                next.push(u32::try_from(id).unwrap_or(0));
-            }
-            if next == block {
-                break;
-            }
-            block = next;
-        }
+        //
+        // Signatures are numbered in a `BTreeMap` rather than a hash map,
+        // because a signature holds guards and a guard is ordered rather than
+        // hashed. A scan for an equal signature would give the same ids and
+        // read every kept signature per state, which is a round quadratic in
+        // the state count on a table a length bound sizes.
+        let block = refine::<Signature<G>, BTreeMap<Signature<G>, u32>>(
+            count,
+            vec![0; count],
+            |state, block| normalised.signature(state, block),
+        );
         let blocks = block.iter().copied().max().map_or(1, |m| m as usize + 1);
         let mut edges: Vec<Vec<Edge<G>>> = vec![Vec::new(); blocks];
         let mut accepting = vec![false; blocks];
@@ -716,22 +675,11 @@ impl<G: Guard> SymbolicDfa<G> {
         self
     }
 
-    /// Renumber by a walk that takes edges in order, dropping unreachable states.
+    /// Renumber by a walk that takes edges in order, dropping unreachable
+    /// states ([`canonical_order`]).
     fn renumber(&self) -> SymbolicDfa<G> {
-        let mut ids: FxHashMap<u32, u32> = FxHashMap::default();
-        let mut order: Vec<u32> = Vec::new();
-        let mut pending: VecDeque<u32> = VecDeque::from([0]);
-        ids.insert(0, 0);
-        while let Some(state) = pending.pop_front() {
-            order.push(state);
-            for edge in self.outgoing(state) {
-                let fresh = u32::try_from(ids.len()).unwrap_or(0);
-                if let std::collections::hash_map::Entry::Vacant(slot) = ids.entry(edge.target) {
-                    slot.insert(fresh);
-                    pending.push_back(edge.target);
-                }
-            }
-        }
+        let (order, ids) =
+            canonical_order(|state| self.outgoing(state).iter().map(|edge| edge.target));
         let edges = order
             .iter()
             .map(|state| {
