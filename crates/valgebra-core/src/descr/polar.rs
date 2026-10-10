@@ -88,6 +88,12 @@ impl<S: Summand> PolarUnion<S> {
         }
     }
 
+    /// A union held under the polarity given, as a test spells one.
+    #[cfg(test)]
+    pub(super) const fn with_polarity(summands: Vec<S>, negated: bool) -> Self {
+        Self { summands, negated }
+    }
+
     /// The summands as held, whichever polarity reads them.
     #[cfg(test)]
     pub(super) fn summands(&self) -> &[S] {

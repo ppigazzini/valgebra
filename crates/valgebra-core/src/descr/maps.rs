@@ -40,7 +40,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::budget;
+use super::polar::{PolarUnion, Summand, tidy};
 use super::symbolic::Guard;
 use super::values::{Field, Values};
 use crate::kind::Kind;
@@ -617,36 +617,58 @@ impl<G: Guard> MapAtom<G> {
     }
 }
 
+impl<G: Guard> Summand for MapAtom<G> {
+    /// Nothing: an atom's universe is every dict.
+    type Within = ();
+    type Complement = Vec<MapAtom<G>>;
+    const MAX: usize = MAX_ATOMS;
+
+    fn top((): ()) -> MapAtom<G> {
+        MapAtom::top()
+    }
+
+    fn meet(&self, other: &MapAtom<G>) -> Option<MapAtom<G>> {
+        MapAtom::meet(self, other)
+    }
+
+    fn complement(&self, (): ()) -> Vec<MapAtom<G>> {
+        MapAtom::complement(self)
+    }
+
+    /// Each atom with the labels its defaults already say absorbed, without
+    /// the ones holding no dict, in order, and each once.
+    fn compacted(atoms: Vec<MapAtom<G>>) -> Option<Vec<MapAtom<G>>> {
+        let mut kept: Vec<MapAtom<G>> = atoms
+            .into_iter()
+            .map(MapAtom::absorbed)
+            .filter(|atom| atom.emptiness() != Verdict::Empty)
+            .collect();
+        kept.sort();
+        kept.dedup();
+        Some(kept)
+    }
+}
+
 /// The dicts a descriptor admits, as a union of map atoms or their complement.
 ///
-/// The polarity is the device the record and powerset lattices carry, and for
-/// the same reason: a complement must be total, and its positive form can pass
-/// [`MAX_ATOMS`].
+/// The polarity is the device every lattice built from parts carries, in
+/// `descr/polar.rs`, and for the same reason: a complement must be total, and
+/// its positive form can pass [`MAX_ATOMS`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MapLattice<G: Guard> {
-    atoms: Vec<MapAtom<G>>,
-    /// Whether the atoms are the dicts held or the dicts *not* held.
-    negated: bool,
-}
+pub struct MapLattice<G: Guard>(PolarUnion<MapAtom<G>>);
 
 impl<G: Guard> MapLattice<G> {
     /// No dict at all.
     #[must_use]
     pub fn empty() -> MapLattice<G> {
-        MapLattice {
-            atoms: Vec::new(),
-            negated: false,
-        }
+        MapLattice(PolarUnion::of(Vec::new()))
     }
 
     /// Every dict: the one atom that names no label and lets every key map
     /// anywhere.
     #[must_use]
     pub fn all() -> MapLattice<G> {
-        MapLattice {
-            atoms: vec![MapAtom::top()],
-            negated: false,
-        }
+        MapLattice(PolarUnion::of(vec![MapAtom::top()]))
     }
 
     /// The dicts whose `label` maps into `ty`, every other key free.
@@ -663,10 +685,7 @@ impl<G: Guard> MapLattice<G> {
                 absent: optional,
             },
         );
-        MapLattice {
-            atoms: vec![atom.absorbed()],
-            negated: false,
-        }
+        MapLattice(PolarUnion::of(vec![atom.absorbed()]))
     }
 
     /// The dicts a keyed map spells: the keys it names, and what a key of each
@@ -718,10 +737,7 @@ impl<G: Guard> MapLattice<G> {
             };
             atom.labels.insert(label, field);
         }
-        Some(MapLattice {
-            atoms: tidy(vec![atom])?,
-            negated: false,
-        })
+        Some(MapLattice(PolarUnion::of(tidy(vec![atom])?)))
     }
 
     /// The dicts every one of whose keys of `kind` maps into `ty`.
@@ -736,10 +752,7 @@ impl<G: Guard> MapLattice<G> {
                 absent: true,
             };
         }
-        MapLattice {
-            atoms: vec![atom],
-            negated: false,
-        }
+        MapLattice(PolarUnion::of(vec![atom]))
     }
 
     /// The dicts carrying no key outside `parts`.
@@ -764,19 +777,7 @@ impl<G: Guard> MapLattice<G> {
                 };
             }
         }
-        MapLattice {
-            atoms: vec![atom],
-            negated: false,
-        }
-    }
-
-    /// The atoms of the dicts this holds, complementing a negated form.
-    fn positive(&self) -> Option<Vec<MapAtom<G>>> {
-        if self.negated {
-            complement_atoms(&self.atoms)
-        } else {
-            Some(self.atoms.clone())
-        }
+        MapLattice(PolarUnion::of(vec![atom]))
     }
 
     /// What is known about this holding a dict.
@@ -785,154 +786,52 @@ impl<G: Guard> MapLattice<G> {
     /// rather than inhabited: past the bound there is no union to read.
     #[must_use]
     pub fn emptiness(&self) -> Verdict {
-        match self.positive() {
-            Some(atoms) => Verdict::any(atoms.iter().map(MapAtom::emptiness)),
-            None => Verdict::Unknown,
-        }
+        self.0.verdict((), MapAtom::emptiness)
     }
 
     /// Whether the dict carrying `entries` is held.
     #[must_use]
     pub fn holds(&self, entries: &[Entry<G::Value>]) -> bool {
-        self.atoms.iter().any(|atom| atom.holds(entries)) != self.negated
+        self.0.holds(|atom| atom.holds(entries))
     }
 
     /// The dicts in either, or `None` past [`MAX_ATOMS`].
-    ///
-    /// A negated side is joined through De Morgan rather than rebuilt: `A ∪ B`
-    /// is `¬(¬A ∩ ¬B)`, and the meet is the operation that can drop an atom
-    /// mid-way. Expanding the negation first asks [`MAX_ATOMS`] about a union
-    /// that is only an intermediate, and a refusal there refuses a join whose
-    /// answer fits.
     #[must_use]
     pub fn union(&self, other: &MapLattice<G>) -> Option<MapLattice<G>> {
-        if self.negated || other.negated {
-            let met = self.complement().intersect(&other.complement())?;
-            return Some(met.complement());
-        }
-        let mut atoms = self.atoms.clone();
-        atoms.extend(other.atoms.iter().cloned());
-        Some(MapLattice {
-            atoms: tidy(atoms)?,
-            negated: false,
-        })
+        self.0.union(&other.0, ()).map(MapLattice)
     }
 
     /// The dicts in both, or `None` past [`MAX_ATOMS`] or where a guard refuses.
     ///
-    /// A negated side is removed one atom at a time rather than rebuilt into a
-    /// union first. `¬⋁ᵢAᵢ` is `⋀ᵢ¬Aᵢ`, so both orders compute this set; what
-    /// they differ in is the widest intermediate they ask [`MAX_ATOMS`] about.
-    /// Rebuilding first multiplies every `¬Aᵢ` together with nothing to narrow
-    /// the product -- four two-field records pass the bound -- while meeting
-    /// each factor into what is already held drops the atoms holding no dict
-    /// before the next factor multiplies them.
-    ///
-    /// The set is the same either way, which is what makes this an order and
-    /// not a rule: a bound reached under one spelling of a difference and not
-    /// the other would make a relation's answer a property of how the caller
-    /// wrote it.
+    /// Four two-field records against their corners are the shape that shows
+    /// why a negated side is removed one atom at a time: rebuilt first, their
+    /// complement passes the bound, while meeting each factor into what is
+    /// already held drops the atoms holding no dict before the next factor
+    /// multiplies them.
     #[must_use]
     pub fn intersect(&self, other: &MapLattice<G>) -> Option<MapLattice<G>> {
-        let mut atoms = match (self.negated, other.negated) {
-            (false, false) => product(&self.atoms, &other.atoms)?,
-            (false, true) => self.atoms.clone(),
-            (true, false) => other.atoms.clone(),
-            // Two negated sides leave nothing positive to start from, so the
-            // meet starts at every dict and both sides narrow it.
-            (true, true) => vec![MapAtom::top()],
-        };
-        for negated in [self, other].into_iter().filter(|side| side.negated) {
-            for atom in &negated.atoms {
-                atoms = product(&atoms, &atom.complement())?;
-            }
-        }
-        Some(MapLattice {
-            atoms,
-            negated: false,
-        })
+        self.0.intersect(&other.0, ()).map(MapLattice)
     }
 
     /// The dicts this does not hold.
     ///
-    /// Total, which is what the [`Guard`] contract asks. The atoms are rebuilt
-    /// where the difference fits, and the polarity carries the rest.
+    /// Total, which is what the [`Guard`] contract asks.
     #[must_use]
     pub fn complement(&self) -> MapLattice<G> {
-        let flipped = MapLattice {
-            atoms: self.atoms.clone(),
-            negated: !self.negated,
-        };
-        // Expanded only where the expansion is one product, which is what
-        // keeps the cheap forms canonical -- complementing "every dict"
-        // gives back exactly "no dict" rather than a second spelling of it.
-        // Past that the negation is carried: rebuilding a wide union's
-        // complement here spends the build's allowance on an intermediate that
-        // the meet it is headed for would have pruned, and a meet against a
-        // negated side removes one atoms at a time instead.
-        if self.atoms.len() > 1 {
-            return flipped;
-        }
-        match flipped.positive() {
-            Some(atoms) => MapLattice {
-                atoms,
-                negated: false,
-            },
-            None => flipped,
-        }
+        MapLattice(self.0.complement(()))
     }
-}
 
-/// The atoms a union of atoms complements into, or `None` past [`MAX_ATOMS`].
-///
-/// `¬⋁ᵢ Aᵢ` is `⋀ᵢ ¬Aᵢ`, and each `¬Aᵢ` is the union [`MapAtom::complement`]
-/// gives, so the fold is a product rather than a subtraction.
-fn complement_atoms<G: Guard>(atoms: &[MapAtom<G>]) -> Option<Vec<MapAtom<G>>> {
-    let mut whole = vec![MapAtom::top()];
-    for atom in atoms {
-        whole = product(&whole, &atom.complement())?;
+    /// The atoms as held, whichever polarity reads them.
+    #[cfg(test)]
+    fn atoms(&self) -> &[MapAtom<G>] {
+        self.0.summands()
     }
-    Some(whole)
-}
 
-/// The atoms of a meet, which is a meet of every pair.
-///
-/// Every pair charges the build's allowance, for the reason the record atoms'
-/// product does. See [`budget`].
-fn product<G: Guard>(left: &[MapAtom<G>], right: &[MapAtom<G>]) -> Option<Vec<MapAtom<G>>> {
-    let mut atoms = Vec::new();
-    for mine in left {
-        for theirs in right {
-            if !budget::spend() {
-                return None;
-            }
-            if atoms.len() >= MAX_ATOMS {
-                // [`MAX_ATOMS`] bounds the *union*, and a union is only as wide
-                // as it is once the atoms holding no dict and the repeats are
-                // gone. Compacting here is what keeps the raw count from
-                // standing in for that width, and the bound itself is
-                // [`tidy`]'s: asked once, so a union as wide as the bound
-                // builds whichever order its factors were multiplied in,
-                // and one wider than it refuses whichever order they took.
-                atoms = tidy(atoms)?;
-            }
-            atoms.push(mine.meet(theirs)?);
-        }
+    /// Whether the atoms are the dicts *not* held.
+    #[cfg(test)]
+    const fn negated(&self) -> bool {
+        self.0.is_negated()
     }
-    tidy(atoms)
-}
-
-/// Drop the atoms that hold nothing, put the rest in order, and refuse a union
-/// past the bound.
-fn tidy<G: Guard>(atoms: Vec<MapAtom<G>>) -> Option<Vec<MapAtom<G>>> {
-    let mut kept: Vec<MapAtom<G>> = atoms
-        .into_iter()
-        .map(MapAtom::absorbed)
-        .filter(|atom| atom.emptiness() != Verdict::Empty)
-        .collect();
-    kept.sort();
-    kept.dedup();
-    (kept.len() <= MAX_ATOMS).then_some(kept)
 }
 
 #[cfg(test)]

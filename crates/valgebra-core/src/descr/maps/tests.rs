@@ -6,6 +6,7 @@ use super::{
 };
 use crate::descr::budget;
 use crate::descr::integers::IntSet;
+use crate::descr::polar::PolarUnion;
 use crate::descr::values::{Field, Values};
 use crate::kind::Kind;
 use crate::verdict::Verdict;
@@ -1087,7 +1088,7 @@ proptest! {
         // than overwriting a constraint.
         let label = Label::str("d");
         let padded: Vec<MapAtom<IntSet>> = a
-            .atoms
+            .atoms()
             .iter()
             .map(|atom| {
                 let mut padded = atom.clone();
@@ -1095,16 +1096,13 @@ proptest! {
                 padded
             })
             .collect();
-        for (atom, padded) in a.atoms.iter().zip(&padded) {
+        for (atom, padded) in a.atoms().iter().zip(&padded) {
             prop_assert_eq!(&padded.clone().absorbed(), &atom.clone().absorbed());
         }
         let Some(atoms) = tidy(padded) else {
             return Ok(());
         };
-        let rebuilt = MapLattice {
-            atoms,
-            negated: a.negated,
-        };
+        let rebuilt = MapLattice(PolarUnion::with_polarity(atoms, a.negated()));
         prop_assert_eq!(&rebuilt, &a, "the padded spelling is another lattice");
     }
 
@@ -1163,10 +1161,10 @@ fn a_complement_is_expanded_only_where_it_is_one_product() {
     let two = keyed("a", 0).union(&keyed("b", 1)).expect("two atoms");
     let carried = two.complement();
     assert!(
-        carried.negated,
+        carried.negated(),
         "two atoms are carried rather than expanded"
     );
-    assert_eq!(carried.atoms, two.atoms, "with the atoms as they were");
+    assert_eq!(carried.atoms(), two.atoms(), "with the atoms as they were");
     assert!(
         same(&carried.complement(), &two),
         "and the flag complements back into the union it carries"
@@ -1195,12 +1193,12 @@ fn a_meet_is_bounded_by_the_width_of_its_union_and_not_by_its_pairs() {
         .intersect(&wide)
         .expect("four hundred pairs, one union");
     assert!(
-        wide.atoms.len() * wide.atoms.len() > MAX_ATOMS,
+        wide.atoms().len() * wide.atoms().len() > MAX_ATOMS,
         "the row needs a pair count the bound would refuse"
     );
     assert_eq!(
-        met.atoms.len(),
-        wide.atoms.len(),
+        met.atoms().len(),
+        wide.atoms().len(),
         "and an answer no wider than either side"
     );
     assert!(same(&met, &wide), "a meet with itself holds what it held");
