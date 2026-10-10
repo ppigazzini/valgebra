@@ -1,4 +1,5 @@
 use super::FloatSet;
+use crate::descr::lattice_tests::Algebra;
 use proptest::prelude::*;
 
 /// The endpoints the generator writes, the float after `1.0` among them, so an
@@ -43,6 +44,17 @@ fn universe() -> Vec<f64> {
 fn same(a: &FloatSet, b: &FloatSet) -> bool {
     universe().into_iter().all(|f| a.holds(f) == b.holds(f))
 }
+
+/// The float sets' operations, as the shared laws ask them. None of them
+/// refuses.
+const FLOATS: Algebra<FloatSet> = Algebra {
+    join: |a, b| Some(a.union(b)),
+    meet: |a, b| Some(a.intersect(b)),
+    complement: FloatSet::complement,
+    same,
+    holds_nothing: FloatSet::is_empty,
+    holds_everything: |a| same(a, &FloatSet::all()),
+};
 
 /// Sets built from endpoints inside the universe, so agreement on it is
 /// agreement everywhere.
@@ -97,36 +109,14 @@ proptest! {
         b in float_set(),
         c in float_set(),
     ) {
-        prop_assert!(same(&a.union(&b), &b.union(&a)));
-        prop_assert!(same(&a.intersect(&b), &b.intersect(&a)));
-        prop_assert!(same(&a.union(&b).union(&c), &a.union(&b.union(&c))));
-        prop_assert!(same(
-            &a.intersect(&b).intersect(&c),
-            &a.intersect(&b.intersect(&c))
-        ));
-        prop_assert!(same(&a.union(&a.intersect(&b)), &a));
-        prop_assert!(same(&a.intersect(&a.union(&b)), &a));
-        prop_assert!(same(
-            &a.intersect(&b.union(&c)),
-            &a.intersect(&b).union(&a.intersect(&c))
-        ));
+        FLOATS.lattice_laws(&a, &b, &c)?;
     }
 
     /// The complement laws, and De Morgan both ways. The `nan` bit rides
     /// along: it is an ordinary two-element algebra beside the intervals.
     #[test]
     fn the_complement_laws_hold_of_the_floats(a in float_set(), b in float_set()) {
-        prop_assert!(a.intersect(&a.complement()).is_empty());
-        prop_assert!(same(&a.union(&a.complement()), &FloatSet::all()));
-        prop_assert!(same(&a.complement().complement(), &a));
-        prop_assert!(same(
-            &a.union(&b).complement(),
-            &a.complement().intersect(&b.complement())
-        ));
-        prop_assert!(same(
-            &a.intersect(&b).complement(),
-            &a.complement().union(&b.complement())
-        ));
+        FLOATS.complement_laws(&a, &b)?;
     }
 
     /// Holding the same floats is being equal, which is what the merging and

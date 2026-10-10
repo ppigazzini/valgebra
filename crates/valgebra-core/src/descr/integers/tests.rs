@@ -1,5 +1,6 @@
 use super::{IntSet, MAX_PERIOD, gcd, lcm};
 use crate::descr::interval::IntervalSet;
+use crate::descr::lattice_tests::Algebra;
 use proptest::prelude::*;
 
 /// Union and meet inside the test corpus, where the bound is out of reach.
@@ -41,6 +42,17 @@ fn same(a: &IntSet, b: &IntSet) -> bool {
     window(a, b).all(|n| a.holds(n) == b.holds(n))
 }
 
+/// The integer sets' operations, as the shared laws ask them. A refusal is a
+/// broken generator here ([`or`]), so the two that can refuse do so loudly.
+const INTEGERS: Algebra<IntSet> = Algebra {
+    join: |a, b| Some(or(a, b)),
+    meet: |a, b| Some(and(a, b)),
+    complement: IntSet::complement,
+    same,
+    holds_nothing: IntSet::is_empty,
+    holds_everything: |a| same(a, &IntSet::all()),
+};
+
 /// Sets built from bounded endpoints and small steps, so agreement on the
 /// window is agreement everywhere.
 fn int_set() -> impl Strategy<Value = IntSet> {
@@ -79,32 +91,13 @@ proptest! {
         b in int_set(),
         c in int_set(),
     ) {
-        prop_assert!(same(&or(&a, &b), &or(&b, &a)));
-        prop_assert!(same(&and(&a, &b), &and(&b, &a)));
-        prop_assert!(same(&or(&or(&a, &b), &c), &or(&a, &or(&b, &c))));
-        prop_assert!(same(&and(&and(&a, &b), &c), &and(&a, &and(&b, &c))));
-        prop_assert!(same(&or(&a, &and(&a, &b)), &a));
-        prop_assert!(same(&and(&a, &or(&a, &b)), &a));
-        prop_assert!(same(
-            &and(&a, &or(&b, &c)),
-            &or(&and(&a, &b), &and(&a, &c))
-        ));
+        INTEGERS.lattice_laws(&a, &b, &c)?;
     }
 
     /// The complement laws, and De Morgan both ways.
     #[test]
     fn the_complement_laws_hold_of_the_integers(a in int_set(), b in int_set()) {
-        prop_assert!(and(&a, &a.complement()).is_empty());
-        prop_assert!(same(&or(&a, &a.complement()), &IntSet::all()));
-        prop_assert!(same(&a.complement().complement(), &a));
-        prop_assert!(same(
-            &or(&a, &b).complement(),
-            &and(&a.complement(), &b.complement())
-        ));
-        prop_assert!(same(
-            &and(&a, &b).complement(),
-            &or(&a.complement(), &b.complement())
-        ));
+        INTEGERS.complement_laws(&a, &b)?;
     }
 
     /// Holding the same integers is being equal, across periods.

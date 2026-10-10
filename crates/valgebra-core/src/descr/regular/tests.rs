@@ -1,4 +1,5 @@
 use super::{Alphabet, RegularSet};
+use crate::descr::lattice_tests::Algebra;
 use proptest::prelude::*;
 
 /// The words a law is checked over.
@@ -57,6 +58,18 @@ fn same_language(a: &RegularSet, b: &RegularSet) -> bool {
     };
     inside(a, b) && inside(b, a)
 }
+
+/// The languages' operations, as the shared laws ask them, compared by
+/// equality: the minimal, canonically numbered table makes equality language
+/// equality, which [`same_language`] holds it to.
+const LANGUAGES: Algebra<RegularSet> = Algebra {
+    join: RegularSet::union,
+    meet: RegularSet::intersect,
+    complement: RegularSet::complement,
+    same: |a, b| a == b,
+    holds_nothing: RegularSet::is_empty,
+    holds_everything: |a| *a == RegularSet::all(Alphabet::Bytes),
+};
 
 /// A pattern's language, or the empty set where the bound refuses it.
 fn language(pattern: &str) -> RegularSet {
@@ -158,49 +171,21 @@ proptest! {
         b in regular_set(),
         c in regular_set(),
     ) {
-        prop_assert_eq!(a.union(&b), b.union(&a));
-        prop_assert_eq!(a.intersect(&b), b.intersect(&a));
-        prop_assert_eq!(
-            a.union(&b).and_then(|ab| ab.union(&c)),
-            b.union(&c).and_then(|bc| a.union(&bc))
-        );
-        prop_assert_eq!(
-            a.intersect(&b).and_then(|ab| ab.intersect(&c)),
-            b.intersect(&c).and_then(|bc| a.intersect(&bc))
-        );
-        if let Some(met) = a.intersect(&b) {
-            prop_assert_eq!(a.union(&met), Some(a.clone()));
-        }
-        if let Some(joined) = a.union(&b) {
-            prop_assert_eq!(a.intersect(&joined), Some(a.clone()));
-        }
-        if let (Some(left), Some(right)) = (
-            b.union(&c).and_then(|bc| a.intersect(&bc)),
-            a.intersect(&b).and_then(|ab| {
-                a.intersect(&c).and_then(|ac| ab.union(&ac))
-            }),
-        ) {
-            prop_assert_eq!(left, right);
-        }
+        LANGUAGES.lattice_laws(&a, &b, &c)?;
+        // A canonical table refuses alike whichever side comes first, which
+        // the shared laws leave to the representations that are canonical.
+        prop_assert_eq!(a.union(&b).is_some(), b.union(&a).is_some());
+        prop_assert_eq!(a.intersect(&b).is_some(), b.intersect(&a).is_some());
     }
 
     /// The complement laws, and De Morgan both ways.
     #[test]
     fn the_complement_laws_hold_of_the_languages(a in regular_set(), b in regular_set()) {
-        prop_assert!(
-            a.intersect(&a.complement())
-                .is_some_and(|met| met.is_empty())
-        );
-        prop_assert_eq!(a.union(&a.complement()), Some(RegularSet::all(Alphabet::Bytes)));
-        prop_assert_eq!(&a.complement().complement(), &a);
-        prop_assert_eq!(
-            a.union(&b).map(|set| set.complement()),
-            a.complement().intersect(&b.complement())
-        );
-        prop_assert_eq!(
-            a.intersect(&b).map(|set| set.complement()),
-            a.complement().union(&b.complement())
-        );
+        LANGUAGES.complement_laws(&a, &b)?;
+        // And a language met or joined with its own complement builds: the
+        // product of a table with its own complement is no wider than it.
+        prop_assert!(a.intersect(&a.complement()).is_some());
+        prop_assert!(a.union(&a.complement()).is_some());
     }
 
     /// Equality of the canonical forms is equality of the languages.

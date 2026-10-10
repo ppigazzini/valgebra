@@ -1,5 +1,6 @@
 use super::{BoolSet, Class, Component, Descr, Label, Lines, Op, Value, Verdict, Whole};
 use crate::descr::budget;
+use crate::descr::lattice_tests::Algebra;
 use crate::descr::lines;
 use crate::descr::records::RecordLattice;
 use crate::descr::symbolic::{Edge, Guard};
@@ -370,23 +371,7 @@ proptest! {
         c in descr_with_sets(),
     ) {
         let _allowance = allowance();
-        if let (Some(ab), Some(ba)) = (a.union(&b), b.union(&a)) {
-            prop_assert!(agree_on_values(&ab, &ba), "join commutes");
-        }
-        if let (Some(ab), Some(ba)) = (a.intersect(&b), b.intersect(&a)) {
-            prop_assert!(agree_on_values(&ab, &ba), "meet commutes");
-        }
-        if let (Some(bc), Some(ab)) = (b.union(&c), a.union(&b))
-            && let (Some(left), Some(right)) = (a.union(&bc), ab.union(&c))
-        {
-            prop_assert!(agree_on_values(&left, &right), "join associates");
-        }
-        if let (Some(bc), Some(ac)) = (b.union(&c), a.intersect(&c))
-            && let (Some(ab), Some(left)) = (a.intersect(&b), a.intersect(&bc))
-            && let Some(right) = ab.union(&ac)
-        {
-            prop_assert!(agree_on_values(&left, &right), "meet distributes over join");
-        }
+        BY_VALUES.lattice_laws(&a, &b, &c)?;
     }
 
     /// The complement laws, over descriptors that hold sets.
@@ -396,33 +381,7 @@ proptest! {
         b in descr_with_sets(),
     ) {
         let _allowance = allowance();
-        let not_a = a.complement();
-        if let Some(met) = a.intersect(&not_a) {
-            prop_assert!(met.is_empty(), "a value is in one of the two");
-        }
-        if let Some(joined) = a.union(&not_a) {
-            prop_assert!(
-                agree_on_values(&joined, &Descr::anything()),
-                "and in one of them"
-            );
-        }
-        prop_assert!(
-            agree_on_values(&not_a.complement(), &a),
-            "twice is nothing"
-        );
-        let not_b = b.complement();
-        if let (Some(joined), Some(met)) = (a.union(&b), not_a.intersect(&not_b)) {
-            prop_assert!(
-                agree_on_values(&joined.complement(), &met),
-                "de Morgan one way"
-            );
-        }
-        if let (Some(met), Some(joined)) = (a.intersect(&b), not_a.union(&not_b)) {
-            prop_assert!(
-                agree_on_values(&met.complement(), &joined),
-                "and the other"
-            );
-        }
+        BY_VALUES.complement_laws(&a, &b)?;
     }
 
     /// A verdict is a claim about the values, and each of the three says
@@ -1113,6 +1072,27 @@ fn agree_on_values(a: &Descr, b: &Descr) -> bool {
     universe().into_iter().all(|v| a.admits(v) == b.admits(v))
 }
 
+/// The descriptors' operations, as the shared laws ask them, compared by
+/// equality: one component per kind, each canonical for its representation,
+/// so equality is equality of the sets and a law is checked at full strength
+/// rather than over whatever values a universe can list.
+const DESCRIPTORS: Algebra<Descr> = Algebra {
+    join: Descr::union,
+    meet: Descr::intersect,
+    complement: Descr::complement,
+    same: |a, b| a == b,
+    holds_nothing: Descr::is_empty,
+    holds_everything: |a| *a == Descr::anything(),
+};
+
+/// The same operations compared against the values, for the descriptors that
+/// hold a component whose union of lines is not canonical.
+const BY_VALUES: Algebra<Descr> = Algebra {
+    same: agree_on_values,
+    holds_everything: |a| agree_on_values(a, &Descr::anything()),
+    ..DESCRIPTORS
+};
+
 /// The word descriptors the generator draws from, built once.
 ///
 /// A pattern's automaton is determinised and minimised, which is far more
@@ -1301,55 +1281,21 @@ proptest! {
     /// strength rather than over whatever values a universe can list.
     #[test]
     fn the_lattice_laws_hold_of_the_descriptors(a in descr(), b in descr(), c in descr()) {
-        prop_assert_eq!(a.union(&b), b.union(&a));
-        prop_assert_eq!(a.intersect(&b), b.intersect(&a));
-        prop_assert_eq!(
-            a.union(&b).and_then(|ab| ab.union(&c)),
-            b.union(&c).and_then(|bc| a.union(&bc))
-        );
-        prop_assert_eq!(
-            a.intersect(&b).and_then(|ab| ab.intersect(&c)),
-            b.intersect(&c).and_then(|bc| a.intersect(&bc))
-        );
-        prop_assert_eq!(a.union(&a), Some(a.clone()));
-        prop_assert_eq!(a.intersect(&a), Some(a.clone()));
-        // Absorption and distributivity, which the structural simplifier
-        // cannot state because it does not apply them.
-        if let Some(met) = a.intersect(&b) {
-            prop_assert_eq!(a.union(&met), Some(a.clone()));
-        }
-        if let Some(joined) = a.union(&b) {
-            prop_assert_eq!(a.intersect(&joined), Some(a.clone()));
-        }
-        if let (Some(left), Some(right)) = (
-            b.union(&c).and_then(|bc| a.intersect(&bc)),
-            a.intersect(&b).and_then(|ab| {
-                a.intersect(&c).and_then(|ac| ab.union(&ac))
-            }),
-        ) {
-            prop_assert_eq!(left, right);
-        }
+        DESCRIPTORS.lattice_laws(&a, &b, &c)?;
+        // A canonical form refuses alike whichever side comes first, which
+        // the shared laws leave to the representations that are canonical.
+        prop_assert_eq!(a.union(&b).is_some(), b.union(&a).is_some());
+        prop_assert_eq!(a.intersect(&b).is_some(), b.intersect(&a).is_some());
     }
 
     // THEORY: the-descriptor
     /// The complement laws, and the two the structural procedure declines.
     #[test]
     fn the_complement_laws_hold_of_the_descriptors(a in descr(), b in descr()) {
-        prop_assert!(
-            a.intersect(&a.complement())
-                .is_some_and(|met| met.is_empty())
-        );
-        prop_assert_eq!(a.union(&a.complement()), Some(Descr::anything()));
-        prop_assert_eq!(&a.complement().complement(), &a);
-        // De Morgan, both ways.
-        prop_assert_eq!(
-            a.union(&b).map(|u| u.complement()),
-            a.complement().intersect(&b.complement())
-        );
-        prop_assert_eq!(
-            a.intersect(&b).map(|m| m.complement()),
-            a.complement().union(&b.complement())
-        );
+        DESCRIPTORS.complement_laws(&a, &b)?;
+        // And a descriptor met or joined with its own complement builds.
+        prop_assert!(a.intersect(&a.complement()).is_some());
+        prop_assert!(a.union(&a.complement()).is_some());
     }
 
     /// Two equal descriptors agree about every value.

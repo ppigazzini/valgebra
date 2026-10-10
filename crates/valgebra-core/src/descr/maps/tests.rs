@@ -6,6 +6,7 @@ use super::{
 };
 use crate::descr::budget;
 use crate::descr::integers::IntSet;
+use crate::descr::lattice_tests::Algebra;
 use crate::descr::polar::PolarUnion;
 use crate::descr::values::{Field, Values};
 use crate::kind::Kind;
@@ -733,6 +734,17 @@ fn same(a: &MapLattice<IntSet>, b: &MapLattice<IntSet>) -> bool {
     dicts().iter().all(|d| a.holds(d) == b.holds(d))
 }
 
+/// The map lattice's operations, as the shared laws ask them, compared
+/// against the dicts: a union of map atoms is not canonical.
+const DICTS: Algebra<MapLattice<IntSet>> = Algebra {
+    join: MapLattice::union,
+    meet: MapLattice::intersect,
+    complement: MapLattice::complement,
+    same,
+    holds_nothing: |a| dicts().iter().all(|d| !a.holds(d)),
+    holds_everything: |a| same(a, &MapLattice::all()),
+};
+
 /// One drawn entry: a key of any part the generator's atoms name, and a
 /// value in the range their integer sets separate.
 ///
@@ -867,57 +879,14 @@ proptest! {
         c in lattice(),
     ) {
         let _allowance = budget::law();
-        if let (Some(ab), Some(ba)) = (a.union(&b), b.union(&a)) {
-            prop_assert!(same(&ab, &ba), "join commutes");
-        }
-        if let (Some(ab), Some(ba)) = (a.intersect(&b), b.intersect(&a)) {
-            prop_assert!(same(&ab, &ba), "meet commutes");
-        }
-        if let (Some(bc), Some(ab)) = (b.union(&c), a.union(&b))
-            && let (Some(left), Some(right)) = (a.union(&bc), ab.union(&c))
-        {
-            prop_assert!(same(&left, &right), "join associates");
-        }
-        if let (Some(bc), Some(ab)) = (b.intersect(&c), a.intersect(&b))
-            && let (Some(left), Some(right)) = (a.intersect(&bc), ab.intersect(&c))
-        {
-            prop_assert!(same(&left, &right), "meet associates");
-        }
-        if let Some(met) = a.intersect(&b)
-            && let Some(absorbed) = a.union(&met)
-        {
-            prop_assert!(same(&absorbed, &a), "join absorbs the meet");
-        }
-        if let (Some(bc), Some(ac)) = (b.union(&c), a.intersect(&c))
-            && let (Some(ab), Some(left)) = (a.intersect(&b), a.intersect(&bc))
-            && let Some(right) = ab.union(&ac)
-        {
-            prop_assert!(same(&left, &right), "meet distributes over join");
-        }
+        DICTS.lattice_laws(&a, &b, &c)?;
     }
 
     /// The complement laws, and De Morgan both ways.
     #[test]
     fn the_complement_laws_hold_of_the_dicts(a in lattice(), b in lattice()) {
         let _allowance = budget::law();
-        let not_a = a.complement();
-        if let Some(met) = a.intersect(&not_a) {
-            prop_assert!(
-                dicts().iter().all(|d| !met.holds(d)),
-                "a dict is in one of the two"
-            );
-        }
-        if let Some(joined) = a.union(&not_a) {
-            prop_assert!(same(&joined, &MapLattice::all()), "and in one of them");
-        }
-        prop_assert!(same(&not_a.complement(), &a), "twice is nothing");
-        let not_b = b.complement();
-        if let (Some(joined), Some(met)) = (a.union(&b), not_a.intersect(&not_b)) {
-            prop_assert!(same(&joined.complement(), &met), "de Morgan one way");
-        }
-        if let (Some(met), Some(joined)) = (a.intersect(&b), not_a.union(&not_b)) {
-            prop_assert!(same(&met.complement(), &joined), "and the other");
-        }
+        DICTS.complement_laws(&a, &b)?;
     }
 
     // THEORY: the-descriptor

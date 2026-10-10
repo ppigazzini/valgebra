@@ -2,6 +2,7 @@ use super::{Lines, MAX_LINES};
 use crate::descr::budget;
 use crate::descr::classes::Class;
 use crate::descr::integers::IntSet;
+use crate::descr::lattice_tests::Algebra;
 use crate::descr::records::RecordLattice;
 use crate::descr::{Component, Op, Whole};
 use crate::kind::Kind;
@@ -84,6 +85,25 @@ fn same(a: &Lines, b: &Lines) -> bool {
         .all(|(n, class)| holds(a, *n, class.as_ref()) == holds(b, *n, class.as_ref()))
 }
 
+/// The lines' operations within [`WHOLE`], as the shared laws ask them,
+/// compared against the values for the reason [`same`] gives.
+const LINES: Algebra<Lines> = Algebra {
+    join: |a, b| a.combine(b, Op::Union, WHOLE),
+    meet: |a, b| a.combine(b, Op::Intersect, WHOLE),
+    complement: |a| a.complement(WHOLE),
+    same,
+    holds_nothing: |a| {
+        universe()
+            .iter()
+            .all(|(n, class)| !holds(a, *n, class.as_ref()))
+    },
+    holds_everything: |a| {
+        universe()
+            .iter()
+            .all(|(n, class)| holds(a, *n, class.as_ref()))
+    },
+};
+
 /// Unions of lines of the `Int` kind, built the way the descriptor builds them.
 ///
 /// The leaves are the three constructors a caller reaches for -- the bottom, a
@@ -146,31 +166,7 @@ proptest! {
         a in lines(), b in lines(), c in lines()
     ) {
         let _allowance = budget::law();
-        if let (Some(ab), Some(ba)) =
-            (a.combine(&b, Op::Union, WHOLE), b.combine(&a, Op::Union, WHOLE))
-        {
-            prop_assert!(same(&ab, &ba), "join commutes");
-        }
-        if let (Some(ab), Some(ba)) =
-            (a.combine(&b, Op::Intersect, WHOLE), b.combine(&a, Op::Intersect, WHOLE))
-        {
-            prop_assert!(same(&ab, &ba), "meet commutes");
-        }
-        if let (Some(bc), Some(ab)) =
-            (b.combine(&c, Op::Union, WHOLE), a.combine(&b, Op::Union, WHOLE))
-            && let (Some(left), Some(right)) =
-                (a.combine(&bc, Op::Union, WHOLE), ab.combine(&c, Op::Union, WHOLE))
-        {
-            prop_assert!(same(&left, &right), "join associates");
-        }
-        if let (Some(bc), Some(ac)) =
-            (b.combine(&c, Op::Union, WHOLE), a.combine(&c, Op::Intersect, WHOLE))
-            && let (Some(ab), Some(left)) =
-                (a.combine(&b, Op::Intersect, WHOLE), a.combine(&bc, Op::Intersect, WHOLE))
-            && let Some(right) = ab.combine(&ac, Op::Union, WHOLE)
-        {
-            prop_assert!(same(&left, &right), "meet distributes over join");
-        }
+        LINES.lattice_laws(&a, &b, &c)?;
     }
 
     // THEORY: the-lines-are-checked-per-kind
@@ -184,34 +180,7 @@ proptest! {
     #[test]
     fn the_complement_laws_hold_of_the_lines(a in lines(), b in lines()) {
         let _allowance = budget::law();
-        let not_a = a.complement(WHOLE);
-        if let Some(met) = a.combine(&not_a, Op::Intersect, WHOLE) {
-            prop_assert!(
-                universe().iter().all(|(n, class)| !holds(&met, *n, class.as_ref())),
-                "a value is in one of the two"
-            );
-        }
-        if let Some(joined) = a.combine(&not_a, Op::Union, WHOLE) {
-            prop_assert!(
-                universe().iter().all(|(n, class)| holds(&joined, *n, class.as_ref())),
-                "and in one of them"
-            );
-        }
-        prop_assert!(same(&not_a.complement(WHOLE), &a), "twice is nothing");
-
-        let de_morgan = b.complement(WHOLE);
-        if let (Some(met), Some(joined)) = (
-            a.combine(&b, Op::Intersect, WHOLE),
-            not_a.combine(&de_morgan, Op::Union, WHOLE),
-        ) {
-            prop_assert!(same(&met.complement(WHOLE), &joined), "de Morgan, one way");
-        }
-        if let (Some(joined), Some(met)) = (
-            a.combine(&b, Op::Union, WHOLE),
-            not_a.combine(&de_morgan, Op::Intersect, WHOLE),
-        ) {
-            prop_assert!(same(&joined.complement(WHOLE), &met), "and the other");
-        }
+        LINES.complement_laws(&a, &b)?;
     }
 }
 

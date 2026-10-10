@@ -28,6 +28,8 @@ pub mod classes;
 pub mod floats;
 pub mod integers;
 pub mod interval;
+#[cfg(test)]
+mod lattice_tests;
 mod lines;
 pub mod lower;
 pub mod maps;
