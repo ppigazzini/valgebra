@@ -345,10 +345,10 @@ fn a_complement_is_expanded_only_where_it_is_one_product() {
         .expect("two lines");
     let carried = two.complement();
     assert!(
-        carried.negated,
+        carried.negated(),
         "two lines are carried rather than expanded"
     );
-    assert_eq!(carried.lines, two.lines, "with the lines as they were");
+    assert_eq!(carried.lines(), two.lines(), "with the lines as they were");
     assert!(
         same(&carried.complement(), &two),
         "and the flag complements back into the union it carries"
@@ -375,11 +375,11 @@ fn a_meet_is_bounded_by_the_width_of_its_union_and_not_by_its_pairs() {
         .intersect(&wide)
         .expect("four hundred pairs, one union");
     assert!(
-        wide.lines.len() * wide.lines.len() > MAX_LINES,
+        wide.lines().len() * wide.lines().len() > MAX_LINES,
         "the row needs a pair count the bound would refuse"
     );
     assert!(
-        met.lines.len() <= wide.lines.len() + 1,
+        met.lines().len() <= wide.lines().len() + 1,
         "and an answer the width of either side, plus the line the unlike meets share"
     );
     assert!(same(&met, &wide), "a meet with itself holds what it held");

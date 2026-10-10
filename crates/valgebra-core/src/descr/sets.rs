@@ -32,7 +32,7 @@
 
 use std::sync::Arc;
 
-use super::budget;
+use super::polar::{PolarUnion, Summand};
 use super::symbolic::Guard;
 use super::values::Values;
 use super::{Component, Descr, Whole};
@@ -170,20 +170,6 @@ impl<G: Members> Line<G> {
     }
 }
 
-/// The lines a union of powerset lines complements into, or `None` past
-/// [`MAX_LINES`].
-///
-/// The complement of a union is the intersection of the complements, and one
-/// line's complement is itself a union: a set fails `P(T) ∧ ⋀ⱼ ¬P(Sⱼ)` by
-/// escaping `T`, or by falling inside one of the `Sⱼ` after all.
-fn complement_lines<G: Members>(lines: &[Line<G>]) -> Option<Vec<Line<G>>> {
-    let mut whole = SetLattice::all_lines();
-    for line in lines {
-        whole = product(&whole, &escapes(line))?;
-    }
-    Some(whole)
-}
-
 /// The lines a set outside `line` belongs to: escaping `T`, or falling inside
 /// one of the `Sⱼ` after all.
 ///
@@ -202,56 +188,53 @@ fn escapes<G: Members>(line: &Line<G>) -> Vec<Line<G>> {
     alternatives
 }
 
-/// The lines of a meet, which is a meet of every pair: a set in both is drawn
-/// wholly from both, so the elements meet and the subtractions collect.
-fn product<G: Members>(left: &[Line<G>], right: &[Line<G>]) -> Option<Vec<Line<G>>> {
-    let mut lines = Vec::new();
-    for mine in left {
-        for theirs in right {
-            // The bound says how wide the result may be; the budget says how
-            // much reaching one may cost, and a product is the step that
-            // multiplies. The three sibling lattices charge here and this is
-            // the fourth, so a build that has spent its allowance refuses in
-            // every one of them rather than in three.
-            if !budget::spend() {
-                return None;
-            }
-            if lines.len() >= MAX_LINES {
-                // [`MAX_LINES`] bounds the *union*, and a union is only as wide
-                // as it is once the lines holding no set and the repeats are
-                // gone. Compacting here is what keeps the raw count from
-                // standing in for that width, and the bound itself is
-                // [`tidy`]'s: asked once, so a union as wide as the bound
-                // builds whichever order its factors were multiplied in,
-                // and one wider than it refuses whichever order they took.
-                lines = tidy(lines)?;
-            }
-            let mut minus = mine.minus.clone();
-            minus.extend(theirs.minus.iter().cloned());
-            lines.push(Line {
-                elements: mine.elements.meet(&theirs.elements)?,
-                minus,
-            });
-        }
-    }
-    tidy(lines)
-}
+impl<G: Members> Summand for Line<G> {
+    /// Nothing: a line's universe is every set.
+    type Within = ();
+    type Complement = Vec<Line<G>>;
+    const MAX: usize = MAX_LINES;
 
-/// Drop the lines that hold nothing, put the rest in order, and refuse a union
-/// past the bound.
-fn tidy<G: Members>(lines: Vec<Line<G>>) -> Option<Vec<Line<G>>> {
-    let mut kept: Vec<Line<G>> = Vec::with_capacity(lines.len());
-    for line in lines {
-        let line = line.tidy()?;
-        if !line.is_empty() && !kept.contains(&line) {
-            kept.push(line);
+    /// The one line every set satisfies: it subtracts nothing and bounds
+    /// nothing.
+    fn top((): ()) -> Line<G> {
+        Line {
+            elements: Values::Every,
+            minus: Vec::new(),
         }
     }
-    if kept.len() > MAX_LINES {
-        return None;
+
+    /// A set in both lines is drawn wholly from both, so the elements meet and
+    /// the subtractions collect.
+    fn meet(&self, other: &Line<G>) -> Option<Line<G>> {
+        let mut minus = self.minus.clone();
+        minus.extend(other.minus.iter().cloned());
+        Some(Line {
+            elements: self.elements.meet(&other.elements)?,
+            minus,
+        })
     }
-    kept.sort();
-    Some(kept)
+
+    /// A set fails `P(T) ∧ ⋀ⱼ ¬P(Sⱼ)` by escaping `T`, or by falling inside one
+    /// of the `Sⱼ` after all ([`escapes`]).
+    fn complement(&self, (): ()) -> Vec<Line<G>> {
+        escapes(self)
+    }
+
+    /// Each line with its subtractions in canonical shape, without the ones
+    /// holding no set, each once, and in order. Once by equality, for the
+    /// reason the record atoms give: a letter's equality can be coarser than
+    /// its order, so a sort need not put two equal lines side by side.
+    fn compacted(lines: Vec<Line<G>>) -> Option<Vec<Line<G>>> {
+        let mut kept: Vec<Line<G>> = Vec::with_capacity(lines.len());
+        for line in lines {
+            let line = line.tidy()?;
+            if !line.is_empty() && !kept.contains(&line) {
+                kept.push(line);
+            }
+        }
+        kept.sort();
+        Some(kept)
+    }
 }
 
 /// A set of sets, held as a union of powerset lines and a polarity.
@@ -260,10 +243,9 @@ fn tidy<G: Members>(lines: Vec<Line<G>>) -> Option<Vec<Line<G>>> {
 /// sequence automaton reads its letters through requires of it. Complementing a
 /// union of lines is a *product* -- an intersection of complements, each itself
 /// a union -- so doing it eagerly could pass the bound and have nowhere sound to
-/// go. Flipping a flag cannot, and the product is paid for later by the
-/// operation that needs the lines, where a refusal is already allowed. The byte
-/// automaton keeps complement total the same way, by flipping its accepting
-/// states rather than rebuilding.
+/// go. The device is the one every lattice built from parts shares, in
+/// `descr/polar.rs`; the byte automaton keeps complement total the same way, by
+/// flipping its accepting states rather than rebuilding.
 ///
 /// **Not canonical, unlike the other components.** Two unions can hold the same
 /// sets and stay unequal: `P(A ∪ B)` is also the union of `P(A)`, `P(B)` and the
@@ -272,58 +254,28 @@ fn tidy<G: Members>(lines: Vec<Line<G>>) -> Option<Vec<Line<G>>> {
 /// than by equality of the forms -- the same weakening the sequence automaton
 /// takes, and for a reason of the same kind.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SetLattice<G: Members> {
-    lines: Vec<Line<G>>,
-    /// Whether the lines are the sets held or the sets *not* held.
-    negated: bool,
-}
+pub struct SetLattice<G: Members>(PolarUnion<Line<G>>);
 
 impl<G: Members> SetLattice<G> {
-    /// The one line every set satisfies.
-    fn all_lines() -> Vec<Line<G>> {
-        vec![Line {
-            elements: Values::Every,
-            minus: Vec::new(),
-        }]
-    }
-
     /// No set at all -- not even the empty one.
     #[must_use]
     pub fn empty() -> SetLattice<G> {
-        SetLattice {
-            lines: Vec::new(),
-            negated: false,
-        }
+        SetLattice(PolarUnion::of(Vec::new()))
     }
 
     /// Every set: the one line that subtracts nothing and bounds nothing.
     #[must_use]
     pub fn all() -> SetLattice<G> {
-        SetLattice {
-            lines: SetLattice::all_lines(),
-            negated: false,
-        }
+        SetLattice(PolarUnion::of(vec![Line::top(())]))
     }
 
     /// The sets whose members all lie in `elements`.
     #[must_use]
     pub fn of(elements: G) -> SetLattice<G> {
-        SetLattice {
-            lines: vec![Line {
-                elements: Values::Only(elements),
-                minus: Vec::new(),
-            }],
-            negated: false,
-        }
-    }
-
-    /// The lines of the sets this holds, complementing a negated form.
-    fn positive(&self) -> Option<Vec<Line<G>>> {
-        if self.negated {
-            complement_lines(&self.lines)
-        } else {
-            Some(self.lines.clone())
-        }
+        SetLattice(PolarUnion::of(vec![Line {
+            elements: Values::Only(elements),
+            minus: Vec::new(),
+        }]))
     }
 
     /// Whether this holds no set.
@@ -338,101 +290,48 @@ impl<G: Members> SetLattice<G> {
     }
 
     /// What is known about this holding a set.
-    ///
-    /// A negated form has to be expanded first, and a refusal there is
-    /// *unknown* rather than inhabited: past the bound there is no union to
-    /// read, so nothing has been proved either way.
     #[must_use]
     pub fn emptiness(&self) -> Verdict {
-        match self.positive() {
-            Some(lines) => Verdict::any(lines.iter().map(Line::emptiness)),
-            None => Verdict::Unknown,
-        }
+        self.0.verdict((), Line::emptiness)
     }
 
     /// Whether the set whose members are `members` is held.
     #[must_use]
     pub fn holds(&self, members: &[G::Value]) -> bool {
-        self.lines.iter().any(|line| line.holds(members)) != self.negated
+        self.0.holds(|line| line.holds(members))
     }
 
     /// The sets in either, or `None` past [`MAX_LINES`].
     #[must_use]
     pub fn union(&self, other: &SetLattice<G>) -> Option<SetLattice<G>> {
-        if self.negated || other.negated {
-            // De Morgan: `A ∪ B` is `¬(¬A ∩ ¬B)`, and the meet is the operation
-            // that can drop a line mid-way. Expanding the negation first asks
-            // the bound about a union that is only an intermediate.
-            let met = self.complement().intersect(&other.complement())?;
-            return Some(met.complement());
-        }
-        let mut lines = self.lines.clone();
-        lines.extend(other.lines.iter().cloned());
-        Some(SetLattice {
-            lines: tidy(lines)?,
-            negated: false,
-        })
+        self.0.union(&other.0, ()).map(SetLattice)
     }
 
     /// The sets in both, or `None` past [`MAX_LINES`] or where a guard refuses.
-    ///
-    /// A negated side is removed one line at a time rather than rebuilt into a
-    /// union first. `¬⋁ᵢLᵢ` is `⋀ᵢ¬Lᵢ`, so both orders compute this set; what
-    /// they differ in is the widest intermediate they ask [`MAX_LINES`] about,
-    /// and rebuilding first multiplies every `¬Lᵢ` together with nothing to
-    /// narrow the product.
     #[must_use]
     pub fn intersect(&self, other: &SetLattice<G>) -> Option<SetLattice<G>> {
-        let mut lines = match (self.negated, other.negated) {
-            (false, false) => product(&self.lines, &other.lines)?,
-            (false, true) => self.lines.clone(),
-            (true, false) => other.lines.clone(),
-            // Two negated sides leave nothing positive to start from, so the
-            // meet starts at every set and both sides narrow it.
-            (true, true) => SetLattice::all_lines(),
-        };
-        for negated in [self, other].into_iter().filter(|side| side.negated) {
-            for line in &negated.lines {
-                lines = product(&lines, &escapes(line))?;
-            }
-        }
-        Some(SetLattice {
-            lines,
-            negated: false,
-        })
+        self.0.intersect(&other.0, ()).map(SetLattice)
     }
 
     /// The sets this does not hold.
     ///
     /// Total, which is what the [`Guard`] contract asks and what keeps a
-    /// descriptor complementable. The lines are rebuilt where the product fits,
-    /// so the common forms stay comparable -- complementing `every set` gives
-    /// back exactly `no set` rather than a second spelling of it -- and the
-    /// polarity carries the rest, where there is no bounded union to rebuild
-    /// into.
+    /// descriptor complementable.
     #[must_use]
     pub fn complement(&self) -> SetLattice<G> {
-        let flipped = SetLattice {
-            lines: self.lines.clone(),
-            negated: !self.negated,
-        };
-        // Expanded only where the expansion is one product, which is what
-        // keeps the cheap forms canonical -- complementing "every set"
-        // gives back exactly "no set" rather than a second spelling of it.
-        // Past that the negation is carried: rebuilding a wide union's
-        // complement here spends the build's allowance on an intermediate that
-        // the meet it is headed for would have pruned, and a meet against a
-        // negated side removes one lines at a time instead.
-        if self.lines.len() > 1 {
-            return flipped;
-        }
-        match flipped.positive() {
-            Some(lines) => SetLattice {
-                lines,
-                negated: false,
-            },
-            None => flipped,
-        }
+        SetLattice(self.0.complement(()))
+    }
+
+    /// The lines as held, whichever polarity reads them.
+    #[cfg(test)]
+    fn lines(&self) -> &[Line<G>] {
+        self.0.summands()
+    }
+
+    /// Whether the lines are the sets *not* held.
+    #[cfg(test)]
+    const fn negated(&self) -> bool {
+        self.0.is_negated()
     }
 }
 
