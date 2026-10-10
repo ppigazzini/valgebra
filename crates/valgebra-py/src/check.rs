@@ -7,14 +7,17 @@
 //! the fail-fast mode stops it at the first. In *fast* mode it builds no
 //! violation, path or value summary and short-circuits as soon as membership is
 //! decided; storage a reading needs for itself is allocated at the site that
-//! says why. One walk serves both, so there is no second walk to keep in sync.
+//! says why. One dispatcher serves every mode; where a reading has a reader per
+//! mode, the `decide` harness and `tests/test_equivalence.py` hold the two to
+//! one verdict (`docs/dev/04-walk.md`).
 //!
 //! The walk runs over a [`Value`](crate::input::Value), so the object path and
 //! the in-place JSON path share one traversal. The explain side only ever sees
 //! a Python value (the JSON entry points materialize before explaining), so
 //! building a violation always has a Python object in hand. The per-child path
 //! bookkeeping is gated on `ctx.mode`, constant for a whole walk, so the fast
-//! path pays nothing for it.
+//! path pays a test of the mode per child, which goes the same way for the
+//! whole walk, and none of the bookkeeping.
 
 pub(crate) mod ctx;
 mod index;

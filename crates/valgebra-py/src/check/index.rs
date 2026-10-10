@@ -20,8 +20,10 @@ pub(crate) struct RecordPlan {
     /// name, and a Rust `&str` handed to `get_item` is decoded into a fresh
     /// `PyString` and hashed before the lookup can start -- per field, per
     /// call. An interned key carries its hash with it, so the lookup is the
-    /// probe alone. The accepting walk does not need these: it scans the dict
-    /// once and resolves each key it finds through `by_name`.
+    /// probe alone. The deciding walk asks by these keys too wherever they
+    /// settle the record (`keyed_map_asks_for_its_keys`), and scans the dict
+    /// once, resolving each key it finds through `by_name`, where a clause reads
+    /// an undeclared key together with its value or a probe raised.
     ///
     /// **Interned rather than merely built, and that is most of what the key
     /// is for.** A dict probe compares the key it is given with the key it

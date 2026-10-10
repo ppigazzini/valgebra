@@ -8,7 +8,15 @@ when an accept looks wrong.
 
 There is **one** `member` function, parameterised by mode rather than a fast one
 and an explaining one side by side. Two walks drift, and the defect that follows
-is an answer that depends on which of them ran.
+is an answer that depends on which of them ran. Below it, a reading that would
+cost one mode what the other needs has a reader per mode -- a list of scalars
+(`list_explained`), a tuple of one kind (`homogeneous_tuple_explained`), a
+record's undeclared keys (`undeclared_explained`) -- and each pair is a second
+walk in small. What holds a pair to one verdict is a test, not the
+construction: the `decide` harness in `check/walk/interpreter.rs` runs each
+case in both modes and asserts they agree, with a violation for a refusal and
+none for an admission, and `tests/test_equivalence.py` draws schemas and values
+for the same assertion.
 
 It runs over a `Value`, which is either a borrowed Python object or a borrowed
 parsed JSON value. That is what keeps the object path and the in-place JSON path

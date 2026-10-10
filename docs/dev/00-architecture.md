@@ -89,10 +89,14 @@ needs the frontend to compile one. Two more pairs import each other, each across
 a function rather than a type: `crates/valgebra-py/src/check/walk.rs` calls the
 violation builders in `check/violation.rs`, which call back into the walk's
 `record_if_fatal`; and in the core, `ir.rs` folds the complement law through
-`oracle.rs`, which reads the `Schema` it is asked about. Every shared type lives
-in a leaf module its users import directly —
-`crates/valgebra-py/src/exception.rs`, `crates/valgebra-py/src/check/ctx.rs` —
-with the aggregator re-exporting, so no call site spells a longer path.
+`oracle.rs`, which reads the `Schema` it is asked about. One cycle runs through
+three, across a function too: the validator renders its schema through
+`crates/valgebra-py/src/render.rs`, which asks the frontend's `declares_fields`
+(`build/classes.rs`) whether a class declares fields, and the frontend needs
+the validator. Every shared type lives in a leaf module its users import
+directly — `crates/valgebra-py/src/exception.rs`,
+`crates/valgebra-py/src/check/ctx.rs` — with the aggregator re-exporting, so no
+call site spells a longer path.
 
 No cycle costs anything the build can see. rustc's compilation unit is the crate,
 and the shipped artifact is one `.so` statically linking `valgebra-core`, so at

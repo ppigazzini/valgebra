@@ -66,10 +66,11 @@ constants pool. The result is wrapped in an immutable `Validator`.
 or a JSON document — is presented through one `Value` abstraction
 ([`input.rs`](crates/valgebra-py/src/input.rs)), and a **single membership walk**
 ([`check/walk.rs`](crates/valgebra-py/src/check/walk.rs)) decides it. The walk runs in one
-of two modes: a *fast* mode that returns a bool and allocates nothing but what a
-measured reading pays for ([docs/dev/04-walk.md](docs/dev/04-walk.md)), and an
+of three modes: a *fast* mode that returns a bool and allocates nothing but what a
+measured reading pays for ([docs/dev/04-walk.md](docs/dev/04-walk.md)), an
 *explain* mode that builds a `Violation` with the path, the expected label, and a
-value summary. A `Violation` becomes the `ValidationError`
+value summary for each independent failure, and a *fail-fast* explain mode that
+builds the first. A `Violation` becomes the `ValidationError`
 ([`errors.rs`](crates/valgebra-py/src/errors.rs)) that `validate` raises.
 
 `is_valid_json` walks the parsed document in place, and `validate_json` and
