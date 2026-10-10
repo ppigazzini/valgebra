@@ -51,6 +51,7 @@ IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
 #: and no failure anybody reports. `tests/test_code_table.py` holds every name
 #: here to a site that writes it.
 CODE_TABLE = ROOT / "crates" / "valgebra-py" / "src" / "codes.rs"
+CORE_CODE_TABLE = ROOT / "crates" / "valgebra-core" / "src" / "codes.rs"
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -103,16 +104,20 @@ def error_codes() -> set[str]:
     """Every code the walk can put in a report, read from the Rust.
 
     Two sources, because a code arrives two ways. The node kinds come from the
-    table in the IR, which is what a leaf reports for its own kind. The rest are
-    written at the site that reports them, and are recognised by shape: a code is
-    snake_case with at least one underscore, which is what separates one from the
-    words beside it (`"dict"`, `"list"`) that name a kind in a message.
+    table in the IR, which is what a leaf reports for its own kind, and the ones
+    the walk writes too from the core's code table the IR reads them from. The
+    rest are written at the site that reports them, and are recognised by shape:
+    a code is snake_case with at least one underscore, which is what separates
+    one from the words beside it (`"dict"`, `"list"`) that name a kind in a
+    message.
     """
     codes: set[str] = set()
     source = IR.read_text(encoding="utf-8")
     body = source[source.index("fn error_code") :]
     body = body[: body.index("\n    }")]
     codes.update(re.findall(r'"([a-z_]+)"', body))
+    core = CORE_CODE_TABLE.read_text(encoding="utf-8")
+    codes.update(re.findall(r'pub const [A-Z][A-Z0-9_]*: &str = "([a-z_]+)";', core))
     declared = CODE_TABLE.read_text(encoding="utf-8")
     named = r'const [A-Z][A-Z0-9_]*: Code = Code\("([a-z_]+)"\);'
     codes.update(re.findall(named, declared))

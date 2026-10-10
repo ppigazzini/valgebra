@@ -22,10 +22,14 @@ this holds the arrangement:
   only way to write one;
 * the universe the use-case ledger derives is the table's values together with
   the core's own `error_code` arms -- the two places a code can come from, held
-  to the two tables rather than to a scan.
+  to the two tables rather than to a scan;
+* a code in both tables is spelled once, in the core's `codes.rs`, which the
+  core's arm and the binding's constant both read.
 
 The core's table stays where it is: a code for a node is the node's own, and
-`Code::of_schema` is the one crossing.
+`Code::of_schema` is the crossing where the node is in hand. A walk that builds
+a node's failure itself names the node's code with a binding constant, and that
+constant is defined from the core's.
 
 LEDGER: every failure code is a name the table declares, and every name is used
 """
@@ -44,11 +48,19 @@ pytestmark = pytest.mark.repository
 ROOT = Path(__file__).resolve().parent.parent
 BINDING = ROOT / "crates" / "valgebra-py" / "src"
 TABLE = BINDING / "codes.rs"
+CORE = ROOT / "crates" / "valgebra-core" / "src"
+CORE_TABLE = CORE / "codes.rs"
 
-#: A code the table declares: a name, and the string a caller compares against.
+#: A code the table declares: a name, and either the string a caller compares
+#: against or the core constant that holds it.
 _DECLARED = re.compile(
-    r"pub\(crate\) const (?P<name>[A-Z][A-Z0-9_]*): Code"
-    r" = Code\(\"(?P<code>[a-z_]+)\"\);"
+    r"pub\(crate\) const (?P<name>[A-Z][A-Z0-9_]*): Code = Code\("
+    r"(?:\"(?P<code>[a-z_]+)\"|valgebra_core::codes::(?P<core>[A-Z][A-Z0-9_]*))\);"
+)
+
+#: A code the core's table declares.
+_CORE_DECLARED = re.compile(
+    r"pub const (?P<name>[A-Z][A-Z0-9_]*): &str = \"(?P<code>[a-z_]+)\";"
 )
 
 #: A violation built with its code spelled out, which the table exists to stop.
@@ -68,14 +80,39 @@ def _sources() -> list[Path]:
     ]
 
 
-def _table() -> dict[str, str]:
-    """Give the table's constants, as name to code."""
-    if not TABLE.exists():
-        return {}
+def _core_table() -> dict[str, str]:
+    """Give the core table's constants, as name to code."""
     return {
         found["name"]: found["code"]
+        for found in _CORE_DECLARED.finditer(CORE_TABLE.read_text(encoding="utf-8"))
+    }
+
+
+def _table() -> dict[str, str]:
+    """Give the table's constants, as name to code, a core constant read through."""
+    if not TABLE.exists():
+        return {}
+    core = _core_table()
+    return {
+        found["name"]: found["code"] or core.get(found["core"], found["core"])
         for found in _DECLARED.finditer(TABLE.read_text(encoding="utf-8"))
     }
+
+
+def _spelled_in_the_binding() -> set[str]:
+    """Give the codes the binding's table spells as literals of its own."""
+    return {
+        found["code"]
+        for found in _DECLARED.finditer(TABLE.read_text(encoding="utf-8"))
+        if found["code"]
+    }
+
+
+def _error_code_arms() -> str:
+    """Give the body of the core's `error_code`, the arm per node."""
+    source = (CORE / "ir.rs").read_text(encoding="utf-8")
+    body = source[source.index("fn error_code") :]
+    return body[: body.index("\n    }")]
 
 
 def test_the_binding_names_its_codes_in_one_table() -> None:
@@ -125,4 +162,38 @@ def test_the_derived_universe_is_the_two_tables() -> None:
     assert "_EMITTERS" not in script, (
         "the use-case ledger still scans hand-picked paths for snake-case "
         "strings, which is the derivation the table replaces"
+    )
+
+
+def test_a_code_in_both_tables_is_spelled_once_in_the_core() -> None:
+    """A code both tables carry is the core's string, read by both.
+
+    A walk that builds a node's failure itself names the node's code with a
+    binding constant, so ten codes are in both tables. Spelled in each, a typo
+    in one is a second code for one failure; so the binding defines each from
+    the core's constant and spells none of the core's codes again.
+    """
+    core = _core_table()
+    assert len(core) >= 10, f"the core's table declares only {sorted(core)}"
+    arms = _error_code_arms()
+    unread = sorted(name for name in core if f"codes::{name}" not in arms)
+    assert not unread, (
+        f"core codes no `error_code` arm reads: {unread}. The core's table holds "
+        "the codes a node reports for itself; one no arm reads is no node's."
+    )
+    binding = TABLE.read_text(encoding="utf-8")
+    undefined = sorted(
+        name for name in core if f"Code(valgebra_core::codes::{name})" not in binding
+    )
+    assert not undefined, (
+        f"core codes the binding's table does not define a constant from: "
+        f"{undefined}. The core names a code here because the binding writes it "
+        "too; one it does not write is the arm's literal."
+    )
+    nodes = set(core.values()) | set(re.findall(r'"([a-z_]+)"', arms))
+    respelled = sorted(_spelled_in_the_binding() & nodes)
+    assert not respelled, (
+        f"binding constants that spell a node's code again: {respelled}. Name "
+        "it in `crates/valgebra-core/src/codes.rs` and define the constant from "
+        "that, so the two tables read one string."
     )

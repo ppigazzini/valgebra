@@ -1732,11 +1732,53 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "crates/valgebra-py/src/codes.rs",
-            'pub(crate) const DICT_TYPE: Code = Code("dict_type");',
-            'pub(crate) const DICT_TYPE: Code = Code("dict_type");\n'
+            'pub(crate) const EXTRA_FORBIDDEN: Code = Code("extra_forbidden");',
+            'pub(crate) const EXTRA_FORBIDDEN: Code = Code("extra_forbidden");\n'
             'pub(crate) const PLANTED_ERROR: Code = Code("planted_error");',
         ),
         trips=("test_every_name_the_table_declares_is_written_somewhere",),
+    ),
+    Plant(
+        # A code both tables carry spelled again in the binding's: a typo in
+        # either would be a second code for one failure.
+        "tests/test_code_table.py",
+        ("crates/valgebra-py/src/codes.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-py/src/codes.rs",
+            "Code = Code(valgebra_core::codes::DICT_TYPE);",
+            'Code = Code("dict_type");',
+        ),
+        trips=("test_a_code_in_both_tables_is_spelled_once_in_the_core",),
+    ),
+    Plant(
+        # A core code no arm reads: the core's table names a code no node
+        # reports for itself.
+        "tests/test_code_table.py",
+        ("crates/valgebra-core/src/ir.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/ir.rs",
+            "Schema::KeyedMap { .. } => codes::DICT_TYPE,",
+            'Schema::KeyedMap { .. } => "dict_type",',
+        ),
+        trips=("test_a_code_in_both_tables_is_spelled_once_in_the_core",),
+    ),
+    Plant(
+        # A node's code the core does not name, spelled in the binding's table.
+        "tests/test_code_table.py",
+        ("crates/valgebra-py/src/codes.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-py/src/codes.rs",
+            'pub(crate) const EXTRA_FORBIDDEN: Code = Code("extra_forbidden");',
+            'pub(crate) const EXTRA_FORBIDDEN: Code = Code("extra_forbidden");\n'
+            'pub(crate) const INT_TYPE: Code = Code("int_type");',
+        ),
+        trips=(
+            "test_every_name_the_table_declares_is_written_somewhere",
+            "test_a_code_in_both_tables_is_spelled_once_in_the_core",
+        ),
     ),
     Plant(
         # The table moved to another file: every rule above reads an empty

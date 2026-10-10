@@ -32,6 +32,7 @@
 use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 
+use crate::codes;
 use crate::oracle::{NoLeafRelations, has_complementary_pair_within};
 
 mod intern;
@@ -1463,6 +1464,9 @@ impl Schema {
     }
 
     /// The stable, machine-readable code emitted when membership fails.
+    ///
+    /// The ten codes a walk also writes without the node in hand are read from
+    /// [`codes`], where the binding's table reads them too.
     #[must_use]
     pub fn error_code(&self) -> &'static str {
         match self {
@@ -1475,31 +1479,31 @@ impl Schema {
             Schema::Float => "float_type",
             Schema::Str => "string_type",
             Schema::Bytes => "bytes_type",
-            Schema::Literal(_) => "literal_error",
+            Schema::Literal(_) => codes::LITERAL_ERROR,
             Schema::Seq {
                 container: SeqKind::List,
                 ..
-            } => "list_type",
+            } => codes::LIST_TYPE,
             Schema::Seq {
                 container: SeqKind::Tuple,
                 ..
-            } => "tuple_type",
+            } => codes::TUPLE_TYPE,
             Schema::Coll { container, .. } => match container {
-                CollKind::Set => "set_type",
-                CollKind::FrozenSet => "frozen_set_type",
+                CollKind::Set => codes::SET_TYPE,
+                CollKind::FrozenSet => codes::FROZEN_SET_TYPE,
             },
-            Schema::KeyedMap { .. } => "dict_type",
-            Schema::Union(_) => "union_error",
+            Schema::KeyedMap { .. } => codes::DICT_TYPE,
+            Schema::Union(_) => codes::UNION_ERROR,
             Schema::Intersection(_) => "intersection_error",
-            Schema::Complement(_) => "unexpected_match",
-            Schema::Instance(_) => "instance_type",
+            Schema::Complement(_) => codes::UNEXPECTED_MATCH,
+            Schema::Instance(_) => codes::INSTANCE_TYPE,
             // A record's failures are its fields' -- a missing attribute, or the
             // field schema's own code -- so the walk never emits this one; it is
             // here because every node has a code.
             Schema::AttrRecord { .. } => "object_type",
             Schema::Refine { base, .. } => base.error_code(),
             Schema::Ref(_) => "recursion",
-            Schema::SelfRef(_) => "unresolved_recursion",
+            Schema::SelfRef(_) => codes::UNRESOLVED_RECURSION,
         }
     }
 

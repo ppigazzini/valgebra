@@ -29,6 +29,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 mod carries;
+pub mod codes;
 mod decision;
 pub mod descr;
 mod ir;

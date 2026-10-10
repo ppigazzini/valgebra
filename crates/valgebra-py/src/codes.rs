@@ -8,6 +8,12 @@
 //! *walk* reports: a bound that failed, a key that is missing, a walk that ran
 //! out of levels.
 //!
+//! Ten codes are both. A walk that builds a node's failure itself, mostly
+//! holding the node's parts rather than the node -- a sequence's walk its
+//! container, a set's walk its reading -- names the node's code with a
+//! constant here, defined from [`valgebra_core::codes`] so that it is spelled
+//! once.
+//!
 //! Written as literals at the sites that report them, as they were, the set
 //! could only be recovered by scanning files for strings that look like codes.
 //! That reading misses a code written in a file nobody thought to scan, and
@@ -35,23 +41,23 @@ impl Code {
 
     /// The code the *core* writes for this node.
     ///
-    /// The one crossing between the two tables. A leaf mismatch is the node's
-    /// own failure -- an `int` that is a `str`, a literal that is another --
-    /// and the node is what names it, so this reads the core's arm rather than
-    /// restating twenty-one of them here.
+    /// The crossing between the two tables where the node is in hand. A leaf
+    /// mismatch is the node's own failure -- an `int` that is a `str`, a
+    /// literal that is another -- and the node is what names it, so this reads
+    /// the core's arm rather than restating twenty-one of them here.
     pub(crate) fn of_schema(schema: &Schema) -> Code {
         Code(schema.error_code())
     }
 }
 
 /// A value that is not a `dict` where a mapping is expected.
-pub(crate) const DICT_TYPE: Code = Code("dict_type");
+pub(crate) const DICT_TYPE: Code = Code(valgebra_core::codes::DICT_TYPE);
 
 /// A key the record does not declare, on a record that forbids extras.
 pub(crate) const EXTRA_FORBIDDEN: Code = Code("extra_forbidden");
 
 /// A value that is not a `frozenset`.
-pub(crate) const FROZEN_SET_TYPE: Code = Code("frozen_set_type");
+pub(crate) const FROZEN_SET_TYPE: Code = Code(valgebra_core::codes::FROZEN_SET_TYPE);
 
 /// A value below an exclusive lower bound.
 pub(crate) const GREATER_THAN: Code = Code("greater_than");
@@ -60,7 +66,7 @@ pub(crate) const GREATER_THAN: Code = Code("greater_than");
 pub(crate) const GREATER_THAN_EQUAL: Code = Code("greater_than_equal");
 
 /// A value that is not an instance of the class the schema names.
-pub(crate) const INSTANCE_TYPE: Code = Code("instance_type");
+pub(crate) const INSTANCE_TYPE: Code = Code(valgebra_core::codes::INSTANCE_TYPE);
 
 /// A document the JSON parser refused before any schema saw it.
 pub(crate) const JSON_INVALID: Code = Code("json_invalid");
@@ -75,10 +81,10 @@ pub(crate) const LESS_THAN_EQUAL: Code = Code("less_than_equal");
 pub(crate) const LIST_LENGTH: Code = Code("list_length");
 
 /// A value that is not a `list`.
-pub(crate) const LIST_TYPE: Code = Code("list_type");
+pub(crate) const LIST_TYPE: Code = Code(valgebra_core::codes::LIST_TYPE);
 
 /// A value that is not one of the literals the schema lists.
-pub(crate) const LITERAL_ERROR: Code = Code("literal_error");
+pub(crate) const LITERAL_ERROR: Code = Code(valgebra_core::codes::LITERAL_ERROR);
 
 /// An attribute the schema requires that the object does not carry.
 pub(crate) const MISSING_ATTRIBUTE: Code = Code("missing_attribute");
@@ -105,7 +111,7 @@ pub(crate) const RECURSION_LIMIT: Code = Code("recursion_limit");
 pub(crate) const RECURSION_LOOP: Code = Code("recursion_loop");
 
 /// A value that is not a `set`.
-pub(crate) const SET_TYPE: Code = Code("set_type");
+pub(crate) const SET_TYPE: Code = Code(valgebra_core::codes::SET_TYPE);
 
 /// A string the pattern does not match.
 pub(crate) const STRING_PATTERN_MISMATCH: Code = Code("string_pattern_mismatch");
@@ -120,16 +126,16 @@ pub(crate) const TOO_SHORT: Code = Code("too_short");
 pub(crate) const TUPLE_LENGTH: Code = Code("tuple_length");
 
 /// A value that is not a `tuple`.
-pub(crate) const TUPLE_TYPE: Code = Code("tuple_type");
+pub(crate) const TUPLE_TYPE: Code = Code(valgebra_core::codes::TUPLE_TYPE);
 
 /// A value a complement excludes: it matched the schema that was negated.
-pub(crate) const UNEXPECTED_MATCH: Code = Code("unexpected_match");
+pub(crate) const UNEXPECTED_MATCH: Code = Code(valgebra_core::codes::UNEXPECTED_MATCH);
 
 /// A value outside every branch of a union.
-pub(crate) const UNION_ERROR: Code = Code("union_error");
+pub(crate) const UNION_ERROR: Code = Code(valgebra_core::codes::UNION_ERROR);
 
 /// A reference whose definition the walk cannot resolve.
-pub(crate) const UNRESOLVED_RECURSION: Code = Code("unresolved_recursion");
+pub(crate) const UNRESOLVED_RECURSION: Code = Code(valgebra_core::codes::UNRESOLVED_RECURSION);
 
 /// The exception's own code, carried where no single violation owns the
 /// failure.

@@ -30,10 +30,15 @@ mismatch reports the node's own code, and `Schema::error_code` in
 binding's -- a bound that failed, a key that is missing, a walk that ran out of
 levels -- and `crates/valgebra-py/src/codes.rs` declares each as a `Code`
 constant with what it means. Every site writes one of those constants'
-`as_str()`, and `Code::of_schema` is the single crossing from the core's table
-to this one. The compiler does not hold a site to that: `Violation::code` is a
-`&'static str`, so a string spelled out at a site would compile, and what
-refuses it is `tests/test_code_table.py`.
+`as_str()`. Ten codes are in both tables, because a walk that builds a node's
+failure itself, mostly holding the node's parts rather than the node, names the
+node's code with a binding constant: those are declared once, in
+`crates/valgebra-core/src/codes.rs`, which the core's arms and the binding's
+constants both read. `Code::of_schema` is the crossing for a leaf mismatch,
+where the node is in hand. The compiler does not hold a site to that:
+`Violation::code` is a `&'static str`, so a string spelled out at a site would
+compile, and what refuses it is `tests/test_code_table.py`, which also refuses
+a binding constant that spells one of the core's codes again.
 
 Declared in two tables, the set of codes is read rather than recovered. A scan
 for strings that look like codes would miss a code written in a file nobody
