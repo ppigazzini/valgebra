@@ -621,7 +621,10 @@ program that builds validators per request, and to no validation call.
   `check/walk/record.rs`), rather than a pair built and dropped per branch and
   per key: a `dict[str, int]` of sixty-four entries costs 10% fewer
   instructions that way (`--binding-mapping`), and a recursive schema's
-  descent 10% fewer (`--binding-recursive`). Where a fast walk has no frame to
+  descent 10% fewer (`--binding-recursive`). The scan reads the frame's
+  context where it lies, asking each half of a clause as a record asks a field
+  (`field_holds`), rather than copying the thirteen-word context once an entry:
+  the same mapping costs another 9.7% fewer. Where a fast walk has no frame to
   hold -- `is_valid` and `is_valid_json` themselves, a mapping's scan, a parsed
   object -- its pair is an `Unwritten` one, never dropped because it never owns
   anything: `is_valid` on a scalar costs 6% fewer instructions that way on

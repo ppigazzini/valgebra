@@ -310,23 +310,20 @@ fn field_holds(
 /// Decided in `sub`, a fast walk's frame the caller holds for the whole map:
 /// a fast walk writes neither of its buffers, but each is a value with a
 /// destructor, and a pair built and dropped per key is work the answer does
-/// not depend on.
+/// not depend on. Each half is a field's question ([`field_holds`]), so a
+/// scalar key or value is its type test -- `dict[str, int]` reads both halves
+/// of every entry that way -- and the frame's context is read where it lies
+/// rather than copied once an entry.
 fn covered(
     defaults: &[MapClause],
     key: &Value<'_, '_>,
     val: &Value<'_, '_>,
     sub: &mut Frame<'_, '_>,
 ) -> bool {
-    let ctx = sub.ctx;
-    // A scalar key or value is its type test, asked without the walk around it:
-    // `dict[str, int]` reads both halves of every entry that way.
-    let room = ctx.room_to_descend();
-    let mut admits = |schema: &Schema, value: &Value<'_, '_>| {
-        scalar_member(schema, value, ctx, room).unwrap_or_else(|| member(schema, value, sub))
-    };
-    defaults
-        .iter()
-        .any(|clause| admits(&clause.key, key) && admits(&clause.value, val))
+    let room = sub.ctx.room_to_descend();
+    defaults.iter().any(|clause| {
+        field_holds(&clause.key, key, room, sub) && field_holds(&clause.value, val, room, sub)
+    })
 }
 
 /// The field name a key resolves to, read the way the dict resolves one.
