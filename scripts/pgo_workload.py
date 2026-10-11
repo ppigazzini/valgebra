@@ -234,6 +234,11 @@ def _records() -> None:
         spec: dict[str, object] = {f"f{i}": int for i in range(width)}
         spec["note?"] = str
         rec = Validator(spec)
+        # Built as often as it is checked below, since a validator is built
+        # once a process and timed as a build; a frontend read three times is
+        # laid out by whichever other reading moves it.
+        for _ in range(200):
+            Validator(spec)
         good = {f"f{i}": i for i in range(width)}
         bad_missing = {f"f{i}": i for i in range(width - 1)}
         bad_type = {**good, "f0": "x"}
