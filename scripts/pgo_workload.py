@@ -89,6 +89,7 @@ TRAINED: dict[str, tuple[str, ...]] = {
     "binding-json": ("_json_documents",),
     "binding-json-reject": ("_json_documents",),
     "binding-json-deep": ("_json_documents",),
+    "binding-set": ("_sets",),
 }
 
 #: Why a JSON shape the training has not been measured on is left out of it:
@@ -129,9 +130,6 @@ UNTRAINED: dict[str, str] = {
         "about a fifth faster on CPython 3.14; trained on its own as well, it "
         "read 0.5% more instructions here and in the list nested twenty-five "
         "deep."
-    ),
-    "binding-set": (
-        "A `set[str]` read through its own iterator: no call here validates a set."
     ),
     "decision-lengths": (
         "A list's length bound lowered to an automaton with a state per element "
@@ -341,6 +339,14 @@ def _json_documents() -> None:
     _run(Validator(tree).is_valid_json, [forest], 400)
 
 
+def _sets() -> None:
+    # A set read through its own iterator, which no list or tuple reading
+    # takes: sixty-four strings accepted, and one integer among them refused.
+    words = Validator(set[str])
+    names = {f"k{i}" for i in range(64)}
+    _run(words.is_valid, [names, {*names, 1}], 2000)
+
+
 def _unions() -> None:
     # Literal unions (string enum and integer codes) and a structural union.
     status = Validator(Literal["pending", "active", "paused", "finished", "failed"])
@@ -382,6 +388,7 @@ def main(argv: list[str]) -> None:
     _scalars()
     _relations()
     _json_documents()
+    _sets()
 
 
 def _relations() -> None:
