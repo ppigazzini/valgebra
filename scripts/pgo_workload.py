@@ -88,6 +88,7 @@ TRAINED: dict[str, tuple[str, ...]] = {
     "json_document": ("_json_documents",),
     "binding-json": ("_json_documents",),
     "binding-json-reject": ("_json_documents",),
+    "binding-json-deep": ("_json_documents",),
 }
 
 #: Why a JSON shape the training has not been measured on is left out of it:
@@ -121,14 +122,13 @@ UNTRAINED: dict[str, str] = {
         "keys a parsed object holds: no call here validates a JSON document "
         "against a bounded mapping. " + _JSON_UNTRAINED
     ),
-    "binding-json-deep": (
-        "A recursive schema over a parsed document: no call here validates JSON "
-        "against a reference. " + _JSON_UNTRAINED
-    ),
     "binding-recursive": (
         "A value walked against a recursive schema, entering the reference and "
-        "its trail per level: `_relations` builds a recursive schema and relates "
-        "it, and no call here walks a value against one."
+        "its trail per level. The JSON reference's training reaches the "
+        "reference and the trail the two walks share, which took this shape "
+        "about a fifth faster on CPython 3.14; trained on its own as well, it "
+        "read 0.5% more instructions here and in the list nested twenty-five "
+        "deep."
     ),
     "binding-set": (
         "A `set[str]` read through its own iterator: no call here validates a set."
@@ -329,6 +329,16 @@ def _json_documents() -> None:
     refused = [*records[:100], {**records[100], "id": "x"}, *records[101:]]
     document = Validator(list[JsonRecord])
     _run(document.is_valid_json, [json.dumps(records), json.dumps(refused)], 400)
+
+    # A reference on the JSON path: twenty trees twelve deep, each a pair of a
+    # subtree and an integer, against the schema that names itself -- whose
+    # values the list of them is one of.
+    def grown(depth: int) -> object:
+        return 1 if depth == 0 else [grown(depth - 1), depth]
+
+    tree = recursive(lambda node: int | list[node])  # ty: ignore[invalid-type-form]
+    forest = json.dumps([grown(12) for _ in range(20)])
+    _run(Validator(tree).is_valid_json, [forest], 400)
 
 
 def _unions() -> None:

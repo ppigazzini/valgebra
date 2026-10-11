@@ -1008,10 +1008,10 @@ shapes it costs, is [measured above](#baseline-matrix). A path the training
 workload never enters is laid out by chance, so the workload reads lists of
 scalars, of literals, of one class, of tuples, of named tuples and of
 dataclasses, records open and closed, a deeply nested list, the explaining walk,
-a JSON array of records, and relations at both of their levels. `TRAINED` in the
-workload names, for each shape a gate measures, the calls that take its reading,
-and `UNTRAINED` names the shapes none does with what each reads: a set and a
-value walked against a recursive schema among them.
+a JSON array of records and a recursive JSON document, and relations at both of
+their levels. `TRAINED` in the workload names, for each shape a gate measures,
+the calls that take its reading, and `UNTRAINED` names the shapes none does with
+what each reads: a set and a value walked against a recursive schema among them.
 
 ### Measured and not taken
 
