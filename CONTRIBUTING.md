@@ -73,7 +73,7 @@ export LD_LIBRARY_PATH="$(uv run --no-sync python -c 'import sysconfig; print(sy
 cargo test
 cargo check --manifest-path fuzz/Cargo.toml --all-targets
 uv run --no-sync python scripts/docs_lint.py
-uv run --no-sync maturin develop --uv
+uv run --no-sync maturin develop --uv   # after any Rust change
 uv run --no-sync ruff check . && uv run --no-sync ruff format --check .
 uv run --no-sync ty check
 uv run --no-sync pytest

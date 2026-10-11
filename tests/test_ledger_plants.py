@@ -1640,6 +1640,20 @@ PLANTS = (
         trips=("test_every_detached_surface_is_built_by_a_lane",),
     ),
     Plant(
+        # A command the contributor gate gains and the agent's copy does not:
+        # an agent running its own list skips a step the guide calls the gate.
+        "tests/test_build_surfaces.py",
+        ("CONTRIBUTING.md",),
+        lambda tree: _edit(
+            tree,
+            "CONTRIBUTING.md",
+            "uv run --no-sync ty check\nuv run --no-sync pytest\n",
+            "uv run --no-sync ty check\nuv run --no-sync mypy\n"
+            "uv run --no-sync pytest\n",
+        ),
+        trips=("test_the_agent_gate_is_the_contributor_gate",),
+    ),
+    Plant(
         # A cache-key pattern with a typo, which matches nothing and reads as
         # coverage.
         "tests/test_build_surfaces.py",

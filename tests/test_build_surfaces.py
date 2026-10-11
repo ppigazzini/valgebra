@@ -41,6 +41,7 @@ from _tree import ROOT, WORKFLOWS, runs
 pytestmark = pytest.mark.repository
 
 CONTRIBUTING = ROOT / "CONTRIBUTING.md"
+AGENTS = ROOT / "AGENTS.md"
 PYPROJECT = ROOT / "pyproject.toml"
 
 # Manifests outside the root workspace, each with the command that builds it and
@@ -141,6 +142,28 @@ def _gate_block() -> str:
     text = CONTRIBUTING.read_text(encoding="utf-8")
     section = text.split("\n## The gate\n", 1)[1]
     return section.split("```bash\n", 1)[1].split("```", 1)[0]
+
+
+def _agent_gate_block() -> str:
+    """Give the commands of AGENTS.md's gate: the first fence under its heading."""
+    text = AGENTS.read_text(encoding="utf-8")
+    section = text.split("\n## Build Health Gate\n", 1)[1]
+    return section.split("```bash\n", 1)[1].split("```", 1)[0]
+
+
+def test_the_agent_gate_is_the_contributor_gate() -> None:
+    """AGENTS.md carries the gate CONTRIBUTING.md owns, line for line.
+
+    An agent reads its instructions file and not the contributing guide, so the
+    list is written in both, and the instructions say the guide owns it and that
+    a command added there belongs in them in the same change. This is what holds
+    that sentence: the two fences parted by a comment while nothing read them.
+    """
+    agents, contributing = _agent_gate_block(), _gate_block()
+    assert agents == contributing, (
+        "the gate fence in AGENTS.md differs from the one CONTRIBUTING.md owns:\n"
+        + "\n".join(sorted(set(agents.splitlines()) ^ set(contributing.splitlines())))
+    )
 
 
 def test_the_local_gate_names_every_detached_surface() -> None:

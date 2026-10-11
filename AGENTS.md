@@ -61,7 +61,8 @@ A change is not done until every command exits 0. Trust exit codes, not log
 text — a process can print progress and then fail. If a gate cannot run, say so
 and list what was checked instead. The list is the one `CONTRIBUTING.md`
 carries under [The gate](CONTRIBUTING.md#the-gate), which owns it: a command
-added there belongs here in the same change.
+added there belongs here in the same change, and `tests/test_build_surfaces.py`
+holds the two fences equal.
 
 ```bash
 cargo fmt --check
