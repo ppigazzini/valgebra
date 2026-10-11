@@ -196,8 +196,13 @@ each layer is blind to beside it.
   De Morgan, the complement laws, the folds construction applies — is proved
   with proptest (Rust) and hypothesis (Python) against the membership relation,
   never asserted.
-- **Snapshots.** Error messages and `repr` output are pinned with insta and
-  syrupy so a wording change is a deliberate, reviewed diff.
+- **Snapshots, and the assertions beside them.** The core's `Violation` message
+  format is pinned with insta, and the error matrix and the error snapshots
+  with syrupy, so a change to either is a reviewed diff. The rest of the
+  wording, `repr` included, is held where it is asserted -- a `match=` or a
+  `str(exc)` comparison in the test that raises it -- and
+  `tests/test_frontend_refusals.py` holds every refusal the frontend writes to
+  a test whose pattern its message satisfies.
 - **Coverage-guided fuzzing.** The libFuzzer targets in `fuzz/` drive the
   decision procedures with `arbitrary`-built schemas, asserting the sound
   invariants (no panic, the order laws): `decision` with an oracle that
