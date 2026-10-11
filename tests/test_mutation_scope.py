@@ -176,7 +176,9 @@ def _test_module_files() -> set[str]:
             continue
         text = source.read_text(encoding="utf-8")
         for name in re.findall(
-            r"#\[cfg\((?:test|all\(test[^\n]*)\)\]\s*\nmod (\w+);", text
+            r"#\[cfg\((?:test|all\(test[^\n]*)\)\]\s*\n"
+            r"(?:pub(?:\([a-z()]+\))? )?mod (\w+);",
+            text,
         ):
             for candidate in (
                 source.parent / f"{name}.rs",

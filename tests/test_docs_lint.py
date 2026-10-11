@@ -614,3 +614,86 @@ def test_every_bound_names_a_holder_that_names_it() -> None:
         "MAX_LINES",
         "`crates/valgebra-core/src/descr/mod.rs` tests",
     )
+
+
+#: A zone table of three rows: a file, a file with one beside it, a directory.
+ZONES = (
+    "# Architecture\n\n## The zones\n\n"
+    "| Zone | Owns | Page |\n|---|---|---|\n"
+    "| `crates/core/src/ir.rs` | the IR | here |\n"
+    "| `crates/py/src/errors.rs`, `render.rs` | the errors | here |\n"
+    "| `crates/py/src/check/` | the walk | here |\n"
+    "\n## The direction\n"
+)
+HELD = {
+    "crates/core/src/ir.rs",
+    "crates/py/src/errors.rs",
+    "crates/py/src/render.rs",
+    "crates/py/src/check/",
+    "crates/py/src/check/walk.rs",
+}
+
+
+def test_a_name_after_the_first_sits_beside_the_one_before_it() -> None:
+    assert lint.zone_paths("`crates/py/src/errors.rs`, `render.rs`") == [
+        "crates/py/src/errors.rs",
+        "crates/py/src/render.rs",
+    ]
+    # A name spelled from the root moves the directory the next one sits in.
+    assert lint.zone_paths(
+        "`crates/a/src/x.rs`, `x/`, `crates/b/src/y.rs`, `z.rs`"
+    ) == [
+        "crates/a/src/x.rs",
+        "crates/a/src/x/",
+        "crates/b/src/y.rs",
+        "crates/b/src/z.rs",
+    ]
+
+
+def test_every_file_a_row_or_a_directory_names_is_owned() -> None:
+    production = sorted(path for path in HELD if not path.endswith("/"))
+    assert lint.zone_problems(ZONES, production, HELD) == []
+
+
+def test_a_file_in_no_zone_fails() -> None:
+    production = ["crates/core/src/ir.rs", "crates/core/src/oracle.rs"]
+    problems = lint.zone_problems(ZONES, production, HELD)
+    assert problems == [
+        "docs/dev/00-architecture.md: crates/core/src/oracle.rs is in no zone"
+    ]
+
+
+def test_a_zone_naming_what_the_tree_does_not_hold_fails() -> None:
+    problems = lint.zone_problems(ZONES, [], HELD - {"crates/py/src/render.rs"})
+    assert problems == [
+        (
+            "docs/dev/00-architecture.md: a zone names crates/py/src/render.rs, "
+            "which the tree does not hold"
+        )
+    ]
+
+
+def test_a_page_with_no_zone_table_is_reported() -> None:
+    problems = lint.zone_problems("# Architecture\n\n## The direction\n", [], HELD)
+    assert problems == ["docs/dev/00-architecture.md: the zone table reads as empty"]
+
+
+def test_a_test_module_declared_with_a_visibility_is_test_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `pub(crate) mod tests;` lets a sibling read the module's fixtures and
+    # compiles into the library exactly as little as a private one, so the
+    # body is a test file: read as production, it would be a file the zone
+    # rule demands a row for and the bounds scan reads for bounds.
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    source = tmp_path / "crates" / "core" / "src" / "oracle.rs"
+    (source.parent / "oracle").mkdir(parents=True)
+    source.write_text("pub fn ask() {}\n\n#[cfg(test)]\npub(crate) mod tests;\n")
+    (source.parent / "oracle" / "tests.rs").write_text("const FIXTURE: usize = 1;\n")
+    assert lint.test_module_files([source]) == {"crates/core/src/oracle/tests.rs"}
+
+
+def test_the_zone_table_owns_every_production_file() -> None:
+    # Driven against the real tree, as the bounds ledger is; the synthetic
+    # rows above are the controls for both directions.
+    assert lint.check_zone_table() == []

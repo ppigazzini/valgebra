@@ -60,6 +60,12 @@ other:
   ``docs/dev/08-testing.md`` fails, and a row naming a test that does not exist
   fails. The pages state no count of them: a count in prose is a second copy
   of the table, and it drifts by one entry at a time.
+* **The table of zones.** A production ``.rs`` file under ``crates/*/src`` that
+  no row of the zone table in ``docs/dev/00-architecture.md`` names fails, and
+  a row naming a path the tree does not hold fails. A row naming a directory
+  owns every file below it. "Fix the page that owns the zone in the same
+  commit" is a rule only where every file has a zone, and a file that has none
+  is the one whose change nobody's page records.
 * **The llms.txt manifest.** A page in the site's ``nav`` that the ``llmstxt``
   sections of ``mkdocs.yml`` do not name fails, and the reverse; so does a
   manifest line whose summary is not its page's ``description:``.
@@ -94,6 +100,7 @@ import subprocess
 import sys
 import textwrap
 import unicodedata
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments
@@ -715,8 +722,12 @@ TEST_MODULE_START = re.compile(
     r"^#\[cfg\((?:test|all\(test[^\n]*)\)\]\n(?:pub(?:\([a-z()]+\))? )?mod ",
     re.MULTILINE,
 )
-#: `#[cfg(test)] mod name;` -- a module whose body is a sibling file.
-TEST_MODULE = re.compile(r"#\[cfg\((?:test|all\(test[^\n]*)\)\]\s*\nmod (\w+);")
+#: `#[cfg(test)] mod name;` -- a module whose body is a sibling file, whatever
+#: visibility it is declared with: `pub(crate) mod tests;` lets a sibling's
+#: tests read its fixtures, and is as test-only as a private one.
+TEST_MODULE = re.compile(
+    r"#\[cfg\((?:test|all\(test[^\n]*)\)\]\s*\n(?:pub(?:\([a-z()]+\))? )?mod (\w+);"
+)
 
 
 def before_the_test_module(text: str) -> str:
@@ -927,6 +938,97 @@ def check_bound_holders() -> list[str]:
     return problems
 
 
+#: The zone table: the rows between the page's "The zones" heading and the next.
+ZONE_SECTION = re.compile(r"^## The zones\n(.*?)(?=^## )", re.MULTILINE | re.DOTALL)
+#: A row's first cell, which names the zone's files and directories.
+ZONE_CELL = re.compile(r"^\| (`[^|]+) \|", re.MULTILINE)
+#: A name in that cell spelled from the repository root rather than beside the
+#: name before it.
+ROOTED = ("crates/", "python/")
+
+
+def zone_paths(cell: str) -> list[str]:
+    """Read the paths one zone cell names, each spelled from the repository root.
+
+    A cell writes its first path from the root and the ones after it beside
+    that one -- `crates/valgebra-py/src/errors.rs`, `render.rs` -- until a name
+    spelled from the root again moves the directory the rest sit in. A name
+    ending in ``/`` is a directory.
+    """
+    paths: list[str] = []
+    beside = ""
+    for name in re.findall(r"`([^`]+)`", cell):
+        path = name if name.startswith(ROOTED) else f"{beside}{name}"
+        beside = path[: path.rstrip("/").rfind("/") + 1]
+        paths.append(path)
+    return paths
+
+
+def zone_problems(page: str, production: list[str], held: set[str]) -> list[str]:
+    """Hold the zone table to the production files, in both directions.
+
+    `production` is every production source file, spelled from the root;
+    `held` is every path the tree holds, directories with their trailing
+    ``/``. A file is owned by a row naming it or naming a directory above it.
+    """
+    section = ZONE_SECTION.search(page)
+    zones = [
+        path
+        for cell in ZONE_CELL.findall(section.group(1) if section else "")
+        for path in zone_paths(cell)
+    ]
+    files = {path for path in zones if not path.endswith("/")}
+    directories = tuple(path for path in zones if path.endswith("/"))
+    problems = [
+        f"docs/dev/00-architecture.md: {source} is in no zone"
+        for source in sorted(production)
+        if source not in files and not source.startswith(directories)
+    ]
+    problems += [
+        f"docs/dev/00-architecture.md: a zone names {path}, which the tree does "
+        "not hold"
+        for path in zones
+        if path not in held
+    ]
+    # The table is the detector: a page whose table reads as empty owns
+    # nothing, and every file would fail for a reason that is not theirs.
+    if not zones:
+        problems.append("docs/dev/00-architecture.md: the zone table reads as empty")
+    return problems
+
+
+def check_zone_table() -> list[str]:
+    """Hold every production source file to the zone that owns it.
+
+    The developer set's rule is that a change fixes the page owning its zone in
+    the same commit, and the zone table is how a reader finds that page. A file
+    in no zone is a change whose page nobody can name, and a table that reads
+    as complete with a file missing is how such a file goes unseen.
+    """
+    page = ROOT / "docs" / "dev" / "00-architecture.md"
+    if not page.exists():
+        return []
+    sources = [
+        source
+        for source in tracked_files("*.rs")
+        if re.match(r"crates/[^/]+/src/", source.relative_to(ROOT).as_posix())
+    ]
+    test_only = test_module_files(sources)
+    production = [
+        where
+        for where in (source.relative_to(ROOT).as_posix() for source in sources)
+        if where not in test_only
+    ]
+    held = {path.relative_to(ROOT).as_posix() for path in tracked_files()}
+    held |= {
+        f"{parent.as_posix()}/"
+        for path in list(held)
+        for parent in PurePosixPath(path).parents
+        if parent != PurePosixPath()
+    }
+    return zone_problems(page.read_text(encoding="utf-8"), production, held)
+
+
 #: A page's one-line summary in its front matter.
 DESCRIPTION = re.compile(r"^description: (.+)$", re.MULTILINE)
 
@@ -1135,6 +1237,7 @@ def main(argv: list[str]) -> int:
     failures += check_product_table()
     failures += check_bounds_ledger()
     failures += check_bound_holders()
+    failures += check_zone_table()
     failures += check_llms_manifest()
 
     if failures:
