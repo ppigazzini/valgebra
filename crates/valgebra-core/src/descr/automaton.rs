@@ -14,13 +14,15 @@
 //!
 //! The refinement that merges the states no input tells apart is here too, and
 //! the sequence automaton alone reads it. The word automaton cuts its blocks by
-//! the transitions read backwards, which takes `k n log n` work where this
-//! takes a round per state on a chain; a sequence automaton has no fixed
-//! alphabet to read its transitions backwards by, since each state's edges
-//! carry guards of their own.
+//! the transitions read backwards, which takes `k n log n` work; a sequence
+//! automaton has no fixed alphabet to read its transitions backwards by, since
+//! each state's edges carry guards of their own. From one block this takes a
+//! round per state on a chain, so the sequence automaton starts it from a
+//! partition by each state's distances (`seed` in `symbolic.rs`), which parts
+//! a chain before the first round.
 
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque, btree_map};
 use std::hash::Hash;
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -92,13 +94,17 @@ pub(super) fn canonical_order<I: IntoIterator<Item = u32>>(
 /// The coarsest partition of `count` states that `signature` cannot split,
 /// refined from `block` (Moore's algorithm).
 ///
-/// Each round gives every state the id of its signature under the current
-/// partition -- one more input of lookahead -- numbering signatures in state
-/// order, so state zero's block is zero. The rounds stop when one changes
-/// nothing. At most one round per state: each either splits a block or is the
-/// last, and a block cannot split more often than it has members. Bounding it
-/// is what makes a wrong termination test leave a coarser table -- which the
-/// canonicity properties reject -- rather than run without end.
+/// Each round splits every block by its members' signatures under the current
+/// partition -- one more input of lookahead. The part holding a block's first
+/// member keeps the block's number and each other part takes the next free
+/// one, so the numbers stay dense and state zero keeps the number the start
+/// gave it. A block of one state cannot split, so a round signs only the
+/// members of larger blocks, and a start that parts most of the states costs
+/// each round that much less. The rounds stop when one splits nothing. At most
+/// one round per state: each either splits a block or is the last, and a block
+/// cannot split more often than it has members. Bounding it is what makes a
+/// wrong termination test leave a coarser table -- which the canonicity
+/// properties reject -- rather than run without end.
 ///
 /// The signatures are numbered in an ordered map rather than a hash map,
 /// because a sequence automaton's signature holds guards and a guard is
@@ -110,18 +116,53 @@ pub(super) fn refine<K: Ord>(
     mut block: Vec<u32>,
     signature: impl Fn(usize, &[u32]) -> K,
 ) -> Vec<u32> {
+    // Each block's members, whether a part of it has kept its number, and the
+    // next partition: kept across rounds, so a round allocates only its
+    // signatures. The two tallies are apart so each is filled as one run.
+    let (mut members, mut kept, mut next) = (Vec::new(), Vec::new(), Vec::new());
     for _ in 0..=count {
-        let mut ids: BTreeMap<K, u32> = BTreeMap::new();
-        let next: Vec<u32> = (0..count)
-            .map(|state| {
-                let fresh = u32::try_from(ids.len()).unwrap_or(0);
-                *ids.entry(signature(state, &block)).or_insert(fresh)
-            })
-            .collect();
-        if next == block {
+        let blocks = block
+            .iter()
+            .copied()
+            .max()
+            .map_or(0, |last| last as usize + 1);
+        members.clear();
+        members.resize(blocks, 0u32);
+        for id in &block {
+            if let Some(size) = members.get_mut(*id as usize) {
+                *size += 1;
+            }
+        }
+        kept.clear();
+        kept.resize(blocks, false);
+        let mut fresh = u32::try_from(blocks).unwrap_or(0);
+        let mut ids: BTreeMap<(u32, K), u32> = BTreeMap::new();
+        next.clone_from(&block);
+        for (state, slot) in next.iter_mut().enumerate() {
+            let own = *slot;
+            if members.get(own as usize).is_none_or(|size| *size < 2) {
+                continue;
+            }
+            *slot = match ids.entry((own, signature(state, &block))) {
+                btree_map::Entry::Occupied(seen) => *seen.get(),
+                btree_map::Entry::Vacant(part) => {
+                    let first = kept
+                        .get_mut(own as usize)
+                        .is_some_and(|taken| !std::mem::replace(taken, true));
+                    let id = if first {
+                        own
+                    } else {
+                        fresh += 1;
+                        fresh - 1
+                    };
+                    *part.insert(id)
+                }
+            };
+        }
+        if fresh as usize == blocks {
             break;
         }
-        block = next;
+        std::mem::swap(&mut block, &mut next);
     }
     block
 }

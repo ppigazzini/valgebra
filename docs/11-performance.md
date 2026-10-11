@@ -945,6 +945,25 @@ as a list against a length-bounded list of the same element.
   `MinLen(4000)` refuses in 4 ms against 1.2 s.
   `--decision-lengths` reads 88.31% fewer instructions and `--decision-sets`
   21.80% fewer.
+- **A sequence automaton's merge starts from three distances, and signs only
+  the states that share a block.** Before its first round, each state is put
+  in a block by its distance to an accepting state, its distance to a
+  rejecting one, and the longest walk it can take while acceptance stays in
+  reach (`seed` in `descr/symbolic.rs`). States the merge joins agree on all
+  three, so the start changes no table; what it changes is the rounds. From
+  one block, the rounds part a chain a state per round, and a chain is what a
+  length bound is; from the distances its states are apart before the first
+  round, a lower bound's by how far each is from accepting and an upper
+  bound's by how far each can go. A block of one state cannot split, so a
+  round signs only the members of larger blocks (`refine` in
+  `descr/automaton.rs`): two tuples of a thousand positions that differ only
+  at their last take a round per position, which the distances do not save,
+  and their union reads 1.06 billion instructions against 2.11 billion when
+  every round signs every state. `MinLen(1000)` over `list[int]` lowers in
+  1.8 ms against 87 ms on a release build, `MaxLen(1000)` in 1.6 ms against
+  104 ms, and `MinLen(500) ⊆ MinLen(1000)` decides in 5.9 ms against 146 ms.
+  `--decision-lengths` reads 19.85% fewer instructions and `--decision-sets`
+  0.88% fewer.
 
 **A pair's constants are read once per validator, not once per question.**
 Relating two validators pools one's constants into the other's, and the key a

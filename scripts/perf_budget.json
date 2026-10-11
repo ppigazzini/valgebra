@@ -67,10 +67,10 @@
   "binding_json_bounded_workload_irefs": 374748500,
   "_decision_sets_comment": "One corpus of nine relations asked of the two deciders: `decision_rules` through the public relation, which the rules answer on every pair without reaching the sets, and `decision_sets` through the reading the relation takes where the rules decline -- each side lowered, the supertype complemented, the two met under the work allowance. The rules run the corpus twenty thousand times and the sets twenty, so the two checksums are one fold at two iteration counts, and the ratio of the counts per iteration is the gap the pages give between the deciders, whose order of magnitude tests/test_perf_gate.py reads from here. The sets half allocates throughout, so it reads about a tenth higher under the gate's no-fastbin allocator than in a plain shell, and the rules half does not move. Re-record both with --decision-rules --decision-sets --update.",
   "decision_rules_workload_checksum": 460000,
-  "decision_rules_workload_irefs": 94308238,
+  "decision_rules_workload_irefs": 94308389,
   "decision_sets_workload_checksum": 460,
-  "decision_sets_workload_irefs": 131467900,
+  "decision_sets_workload_irefs": 130316841,
   "_decision_lengths_comment": "Four length bounds over a list of integers asked of the sets through the reading the sets half takes, two passes: a longer lower bound inside a shorter one, the converse, a shorter upper bound inside a longer one, and a bound on both sides inside a lower one. Every bound is short enough that each pair is decided, so a change that lets a longer bound lower moves this count and not the checksum. Re-record with --decision-lengths --update.",
   "decision_lengths_workload_checksum": 22,
-  "decision_lengths_workload_irefs": 55786139
+  "decision_lengths_workload_irefs": 44831084
 }

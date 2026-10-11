@@ -1,4 +1,5 @@
 use super::{Edge, Guard, MAX_EDGES, MAX_ROW, MAX_STATES, SymbolicDfa};
+use crate::descr::automaton::refine;
 use crate::descr::integers::IntSet;
 use crate::descr::lattice_tests::Algebra;
 use crate::verdict::Verdict;
@@ -231,6 +232,27 @@ proptest! {
         prop_assert_eq!(a.union(&all), a.product(&all, either));
         prop_assert_eq!(all.union(&a), all.product(&a, either));
     }
+
+    /// The merge's rounds started from the distances end at the partition the
+    /// rounds started from one block reach.
+    ///
+    /// Over tables drawn state by state rather than built by the operations,
+    /// which minimise what they build: a drawn table has states no sequence
+    /// tells apart, cycles, and states that cannot accept, so the seed parts
+    /// some states, leaves others for the rounds, and is wrong if it parts two
+    /// the rounds would join.
+    #[test]
+    fn the_rounds_from_the_distances_end_where_the_rounds_from_one_block_do(
+        drawn in table(),
+    ) {
+        let table = drawn.merge_targets().sorted();
+        let count = table.state_count();
+        let rounds = |start| refine(count, start, |state, block| table.signature(state, block));
+        prop_assert_eq!(
+            in_order_seen(&rounds(table.seed())),
+            in_order_seen(&rounds(vec![0; count]))
+        );
+    }
 }
 
 /// A letter for a shape: one of the drawn guards, the empty set or every
@@ -239,6 +261,135 @@ fn letter() -> impl Strategy<Value = IntSet> {
     let mut letters = guards();
     letters.extend([IntSet::empty(), IntSet::all()]);
     prop::sample::select(letters)
+}
+
+/// A partition numbered afresh, each block by the first state in it, so two
+/// numberings of one partition read alike.
+fn in_order_seen(blocks: &[u32]) -> Vec<u32> {
+    let mut seen: Vec<u32> = Vec::new();
+    blocks
+        .iter()
+        .map(|block| {
+            let at = seen
+                .iter()
+                .position(|first| first == block)
+                .unwrap_or_else(|| {
+                    seen.push(*block);
+                    seen.len() - 1
+                });
+            u32::try_from(at).expect("a drawn table is small")
+        })
+        .collect()
+}
+
+/// A round signs only the states that share a block, since a block of one
+/// cannot split, and a block that splits keeps its number for the part
+/// holding its first member while each other part takes the next free one.
+///
+/// Five states, `0` and `3` alone and the rest in block one, whose signature
+/// parts state `4` from `1` and `2`: the first round signs the three, the
+/// second the two left together, and nothing else is ever signed.
+#[test]
+fn a_round_signs_only_the_states_that_share_a_block() {
+    let signed = std::cell::RefCell::new(Vec::new());
+    let blocks = refine(5, vec![0, 1, 1, 2, 1], |state, _| {
+        signed.borrow_mut().push(state);
+        state == 4
+    });
+    assert_eq!(blocks, [0, 1, 1, 2, 3]);
+    assert_eq!(*signed.borrow(), [1, 2, 4, 1, 2]);
+}
+
+/// A table of up to eight states drawn row by row: each row sends `0`, `1`
+/// and the integers from two up to a drawn state or leaves them to its else
+/// edge, which goes to a drawn state too, so every row is complete and its
+/// edges take disjoint values.
+fn table() -> impl Strategy<Value = SymbolicDfa<IntSet>> {
+    (1u32..=8).prop_flat_map(|states| {
+        let target = 0..states;
+        let row = (
+            prop::option::of(target.clone()),
+            prop::option::of(target.clone()),
+            prop::option::of(target.clone()),
+            target,
+        )
+            .prop_map(|(zero, one, two_up, rest)| {
+                let letters = [
+                    (IntSet::just(0), zero),
+                    (IntSet::just(1), one),
+                    (IntSet::between(Some(2), None), two_up),
+                ];
+                let mut row: Vec<Edge<IntSet>> = letters
+                    .into_iter()
+                    .filter_map(|(letter, to)| {
+                        to.map(|target| Edge {
+                            guard: Some(letter),
+                            target,
+                        })
+                    })
+                    .collect();
+                row.push(Edge {
+                    guard: None,
+                    target: rest,
+                });
+                row
+            });
+        let states = states as usize;
+        (
+            prop::collection::vec(row, states),
+            prop::collection::vec(any::<bool>(), states),
+        )
+            .prop_map(|(edges, accepting)| SymbolicDfa { edges, accepting })
+    })
+}
+
+/// The three distances the merge starts from, on a table that has each case
+/// one of them reads: a chain to an accepting state that can go no further,
+/// a dead state, a cycle through an accepting state, and a state before both
+/// the chain and the cycle.
+///
+/// The longest walk is what parts the states of an upper bound, which are all
+/// accepting and all one element from refusing; the chain here is held to it
+/// by states `0` to `2`. States `4` and `6` agree on all three and are not
+/// equivalent, which leaves the rounds a block to cut, and the bound's own
+/// table, where every state is apart before the first round, has a block per
+/// state in the seed.
+#[test]
+fn the_merge_starts_from_three_distances() {
+    let edge = |guard: Option<IntSet>, target| Edge { guard, target };
+    let table = SymbolicDfa {
+        edges: vec![
+            vec![edge(None, 1)],
+            vec![edge(None, 2)],
+            vec![edge(None, 3)],
+            vec![edge(None, 3)],
+            vec![edge(None, 5)],
+            vec![edge(None, 4)],
+            vec![edge(Some(IntSet::just(0)), 2), edge(None, 4)],
+        ],
+        accepting: vec![false, false, true, false, false, true, false],
+    };
+    let never = u32::MAX;
+    let to_accepting = table.distances(true);
+    assert_eq!(to_accepting, [2, 1, 0, never, 1, 0, 1]);
+    assert_eq!(table.distances(false), [0, 0, 1, 0, 0, 1, 0]);
+    let live: Vec<bool> = to_accepting.iter().map(|d| *d != never).collect();
+    assert_eq!(
+        table.longest_live_walks(&live),
+        [2, 1, 0, never, never, never, never]
+    );
+    assert_eq!(table.seed(), [0, 1, 2, 3, 4, 5, 4]);
+
+    for n in [1usize, 4, 9] {
+        let zeros = SymbolicDfa::shape(&[], Some(&IntSet::just(0)));
+        let at_least = SymbolicDfa::shape(&vec![IntSet::just(0); n + 1], Some(&IntSet::just(0)));
+        let at_most = zeros.intersect(&at_least.complement()).expect("a chain");
+        let seed = at_most.seed();
+        let mut blocks = seed.clone();
+        blocks.sort_unstable();
+        blocks.dedup();
+        assert_eq!(blocks.len(), at_most.state_count(), "at most {n}: {seed:?}");
+    }
 }
 
 /// A product past the build's allowance refuses, and the same product

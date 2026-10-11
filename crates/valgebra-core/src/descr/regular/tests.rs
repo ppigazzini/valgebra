@@ -184,14 +184,14 @@ fn paired_table() -> impl Strategy<Value = super::Dfa> {
     })
 }
 
-/// The partition the rounds reach: every state signed afresh, each round, by
-/// its own block and the blocks its classes lead to, until a round changes
-/// nothing. The refinement the sequence automaton runs, asked of a word table.
+/// The partition the rounds reach: each round signs the states that share a
+/// block by the blocks their classes lead to, until a round splits nothing.
+/// The refinement the sequence automaton runs, asked of a word table.
 fn blocks_by_rounds(dfa: &super::Dfa) -> Vec<u32> {
     let seed = dfa.accepting.iter().map(|a| u32::from(*a)).collect();
     crate::descr::automaton::refine(dfa.state_count(), seed, |state, block| {
         let state = u32::try_from(state).expect("a drawn table is small");
-        let mut signature = vec![block[state as usize]];
+        let mut signature = Vec::new();
         for class in 0..dfa.class_count {
             let class = u16::try_from(class).expect("four classes at most");
             signature.push(block[dfa.step(state, class) as usize]);

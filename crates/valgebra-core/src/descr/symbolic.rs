@@ -28,6 +28,7 @@ use super::automaton::{Reached, canonical_order, reaches, refine};
 use super::budget;
 use crate::verdict::Verdict;
 use rustc_hash::FxHashMap;
+use std::collections::VecDeque;
 
 pub use super::automaton::MAX_STATES;
 
@@ -235,10 +236,9 @@ impl<G: Guard> SymbolicDfa<G> {
     /// no sequence shorter than the `last - i` letters ahead of it and one of
     /// exactly that length, so no two positions accept the same sequences; the
     /// accepting state is the only one taking the empty sequence, and the sink
-    /// the only one taking none. The merge would find nothing, and it spends a
-    /// round per state on a chain, which is what a length bound is: 0.9 s on
-    /// four thousand elements, on a release build. A letter that is empty, or
-    /// that cannot say, leaves the table to the merge.
+    /// the only one taking none. The merge would find nothing, at more cost than
+    /// ordering and renumbering the chain. A letter that is empty, or that
+    /// cannot say, leaves the table to the merge.
     /// `a_chain_of_inhabited_letters_is_minimal_as_built` holds the two
     /// readings to one table.
     #[must_use]
@@ -451,7 +451,7 @@ impl<G: Guard> SymbolicDfa<G> {
     ///
     /// The empty language is the identity and the whole one absorbs, so a side
     /// that is either answers without a product -- whose table would be the
-    /// other side's again, rebuilt and minimised a round per state.
+    /// other side's again, rebuilt pair by pair and minimised.
     #[must_use]
     pub fn union(&self, other: &SymbolicDfa<G>) -> Option<SymbolicDfa<G>> {
         match (self.constant(), other.constant()) {
@@ -664,6 +664,24 @@ impl<G: Guard> SymbolicDfa<G> {
     /// have one transition function, so they merge; refining until the
     /// signatures stop changing is Moore's algorithm.
     ///
+    /// **The refinement starts from three distances a state has along the
+    /// table's edges**: to an accepting state, to a rejecting one, and the
+    /// longest walk it can take while acceptance stays reachable. Two states the
+    /// merge puts together share all three: their signatures agree, so they
+    /// accept alike and reach the same blocks, and by induction on the distance
+    /// what one of them reaches in so many steps the other reaches in as many.
+    /// So the seed never parts two states the rounds would join, and refining
+    /// from a partition the answer already refines ends at that answer. What
+    /// the seed buys is the rounds: from one block, the rounds separate a
+    /// chain's states one per round, which is a round per element of a length
+    /// bound, and from the distances every one of them is apart before the
+    /// first -- a lower bound's chain by how far it is from accepting, an upper
+    /// bound's by how far it can go. A state the seed leaves alone in its block
+    /// is never signed, so the rounds a table needs read only the states the
+    /// distances do not part.
+    /// `the_rounds_from_the_distances_end_where_the_rounds_from_one_block_do`
+    /// holds the two starts to one answer.
+    ///
     /// The signature is only a faithful reading of the transition function
     /// because the edges are normalised first: one edge per target, guards in
     /// order. Without that, two states could send the same values to the same
@@ -671,13 +689,7 @@ impl<G: Guard> SymbolicDfa<G> {
     fn merge_equivalent(self) -> SymbolicDfa<G> {
         let normalised = self.merge_targets().sorted();
         let count = normalised.state_count();
-        // Every state in one block to begin with, which is the coarsest
-        // partition -- and the right place to start, because the accepting flag
-        // is part of a signature, so the first round separates the accepting
-        // states anyway. Seeding with that split instead is work the loop
-        // repeats, and the sweep said so: a seed that collapses to one block
-        // changed no answer.
-        let block = refine(count, vec![0; count], |state, block| {
+        let block = refine(count, normalised.seed(), |state, block| {
             normalised.signature(state, block)
         });
         let blocks = block.iter().copied().max().map_or(1, |m| m as usize + 1);
@@ -733,6 +745,137 @@ impl<G: Guard> SymbolicDfa<G> {
         }
         reached.sort();
         (self.accepts(state), reached)
+    }
+
+    /// Each state's block before the first round: one block for each triple of
+    /// a distance to an accepting state, a distance to a rejecting one and the
+    /// longest walk that keeps acceptance in reach.
+    fn seed(&self) -> Vec<u32> {
+        let to_accepting = self.distances(true);
+        let to_rejecting = self.distances(false);
+        let live: Vec<bool> = to_accepting.iter().map(|d| *d != u32::MAX).collect();
+        let longest = self.longest_live_walks(&live);
+        let mut ids: FxHashMap<(u32, u32, u32), u32> = FxHashMap::default();
+        to_accepting
+            .into_iter()
+            .zip(to_rejecting)
+            .zip(longest)
+            .map(|((accepting, rejecting), walk)| {
+                let fresh = u32::try_from(ids.len()).unwrap_or(0);
+                *ids.entry((accepting, rejecting, walk)).or_insert(fresh)
+            })
+            .collect()
+    }
+
+    /// Each live state's longest walk through live states -- a state is live
+    /// when an accepting state is in reach -- or `u32::MAX` for one that can
+    /// walk without end, being on or before a cycle of them, and for a state
+    /// that is not live.
+    ///
+    /// A state's walk is one more than its longest successor's, so the walks
+    /// are settled from the states with no live successor backwards, each
+    /// once its successors all are; what is never settled is on or before a
+    /// cycle. A state is queued once, when it settles, so the queue drains
+    /// within one pop per state, and the loop is bounded by that for the
+    /// reason [`distances`](Self::distances) gives.
+    fn longest_live_walks(&self, live: &[bool]) -> Vec<u32> {
+        let count = self.state_count();
+        let is_live = |state: usize| live.get(state).copied().unwrap_or(false);
+        let mut into: Vec<Vec<u32>> = vec![Vec::new(); count];
+        let mut unsettled = vec![0u32; count];
+        for (state, row) in self.edges.iter().enumerate() {
+            if !is_live(state) {
+                continue;
+            }
+            for edge in row {
+                if is_live(edge.target as usize)
+                    && let (Some(sources), Some(waiting)) =
+                        (into.get_mut(edge.target as usize), unsettled.get_mut(state))
+                {
+                    sources.push(u32::try_from(state).unwrap_or(0));
+                    *waiting += 1;
+                }
+            }
+        }
+        let mut walk = vec![u32::MAX; count];
+        let mut pending: VecDeque<usize> = VecDeque::new();
+        for state in 0..count {
+            if is_live(state)
+                && unsettled.get(state) == Some(&0)
+                && let Some(slot) = walk.get_mut(state)
+            {
+                *slot = 0;
+                pending.push_back(state);
+            }
+        }
+        let mut longest = vec![0u32; count];
+        for _ in 0..count {
+            let Some(state) = pending.pop_front() else {
+                break;
+            };
+            let through = walk.get(state).copied().unwrap_or(0).saturating_add(1);
+            for source in into.get(state).map_or(&[][..], Vec::as_slice) {
+                let source = *source as usize;
+                if let (Some(best), Some(waiting)) =
+                    (longest.get_mut(source), unsettled.get_mut(source))
+                {
+                    *best = (*best).max(through);
+                    *waiting -= 1;
+                    if *waiting == 0
+                        && let Some(slot) = walk.get_mut(source)
+                    {
+                        *slot = *best;
+                        pending.push_back(source);
+                    }
+                }
+            }
+        }
+        walk
+    }
+
+    /// Each state's distance to a state whose accepting flag is `accepting`,
+    /// along the table's edges -- every edge, whatever its guard is known to
+    /// hold -- or `u32::MAX` for a state from which none is reached.
+    ///
+    /// A state is queued once, when its distance is found, so the queue drains
+    /// within one pop per state. Bounding the loop by that is what makes a
+    /// broken test leave a wrong distance, which the merge's tests read,
+    /// rather than run without end.
+    fn distances(&self, accepting: bool) -> Vec<u32> {
+        let count = self.state_count();
+        let mut into: Vec<Vec<u32>> = vec![Vec::new(); count];
+        for (state, row) in self.edges.iter().enumerate() {
+            for edge in row {
+                if let Some(sources) = into.get_mut(edge.target as usize) {
+                    sources.push(u32::try_from(state).unwrap_or(0));
+                }
+            }
+        }
+        let mut distance = vec![u32::MAX; count];
+        let mut pending: VecDeque<usize> = VecDeque::new();
+        for (state, accepts) in self.accepting.iter().enumerate() {
+            if *accepts == accepting
+                && let Some(slot) = distance.get_mut(state)
+            {
+                *slot = 0;
+                pending.push_back(state);
+            }
+        }
+        for _ in 0..count {
+            let Some(state) = pending.pop_front() else {
+                break;
+            };
+            let next = distance.get(state).copied().unwrap_or(0).saturating_add(1);
+            for source in into.get(state).map_or(&[][..], Vec::as_slice) {
+                if let Some(slot) = distance.get_mut(*source as usize)
+                    && *slot == u32::MAX
+                {
+                    *slot = next;
+                    pending.push_back(*source as usize);
+                }
+            }
+        }
+        distance
     }
 
     /// Put every edge list in guard order and drop the edges no value can take.
