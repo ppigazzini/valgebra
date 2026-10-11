@@ -9,11 +9,13 @@
 //!   about *meaning* is checked;
 //! * [`kind`](Kind) and the two three-valued answers, [`Verdict`] and
 //!   [`Relation`] -- the frame both deciders read, below either of them;
-//! * `descr` -- the **definition**: one representation per kind, each closed
-//!   under union, intersection and complement, deciding a relation by the
-//!   emptiness of one combination;
-//! * `decision` -- the **fast path**: structural rules over the schema tree,
-//!   answering first and handing a pair they decline to the definition.
+//! * `descr` -- the **set representation**: one representation per kind, each
+//!   closed under union, intersection and complement, deciding a relation
+//!   between two schemas it can build by the emptiness of one combination;
+//! * `decision` -- the **structural rules** over the schema tree, which reach
+//!   the recursive schemas, predicates and hooked classes the set
+//!   representation cannot build, answer first, and hand it a pair they
+//!   decline.
 //!
 //! Inspecting a Python object requires `PyO3`, so the membership walk lives in
 //! the bindings crate and reaches back through [`LeafRelations`] for the

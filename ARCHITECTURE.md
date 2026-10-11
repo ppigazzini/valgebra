@@ -87,11 +87,11 @@ answer in three values — proved, refuted, or neither:
 - **the rules** ([`decision.rs`](crates/valgebra-core/src/decision.rs) and the
   modules beside it) recurse over the two schema trees and apply inclusion rules
   to their shapes;
-- **the descriptor** ([`descr/`](crates/valgebra-core/src/descr/mod.rs)) is the
-  definition rather than an optimisation of it: the value universe is
-  partitioned by `Kind`, each kind carries a representation closed under union,
-  intersection and complement, and `a <= b` is asked as `a ∧ ¬b` admitting no
-  value.
+- **the descriptor** ([`descr/`](crates/valgebra-core/src/descr/mod.rs))
+  partitions the value universe by `Kind`, gives each kind a representation
+  closed under union, intersection and complement, and asks `a <= b` as `a ∧ ¬b`
+  admitting no value. It builds no cycle, no predicate and no hooked class, so
+  every recursive schema is the rules' alone.
 
 The rules are asked first and the descriptor only where they *decline*, because
 building one costs about three orders of magnitude more than a rule that already

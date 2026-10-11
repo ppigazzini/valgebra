@@ -1,15 +1,18 @@
 """The definition does not import the optimisation.
 
-Two representations decide the three relations, and the shipped pages state an
-order between them: `crates/valgebra-core/src/descr/` is the **definition** --
-a schema denotes a set, each kind carries a representation closed under the
-three operations, and `a <= b` is `a & ~b` admitting no value -- while
-`decision.rs` is the **fast path**, a structural procedure asked first only
-because building a set costs about three orders of magnitude more than a rule
-that already answers.
+Two sound deciders answer the three relations, and the shipped pages state an
+order between them: `crates/valgebra-core/src/descr/` is the **definition** for
+every schema it can build -- a schema denotes a set, each kind carries a
+representation closed under the three operations, and `a <= b` is `a & ~b`
+admitting no value -- while `decision.rs` is the structural procedure, asked
+first because building a set costs about three orders of magnitude more than a
+rule that already answers, and alone in reaching a recursive schema, a
+predicate or a hooked class.
 
 A dependency graph matching that order has the definition below the
-optimisation, importing nothing from it. The tree ran it both ways: every
+procedure, importing nothing from it: the definition is what the procedure
+hands a pair it declines, and built from a rule it would carry that rule's
+defect into the answer given where the rule declined. The tree ran it both ways: every
 `descr/` module wrote `use crate::decision::{Kind, Verdict}` for the partition
 it is indexed by and the answer it returns, while `decision.rs` imported
 `descr::lower` for the fallback it asks when its rules decline.

@@ -728,24 +728,26 @@ combine with a builtin's, so none of its instances is ever of a listed kind.
 Two decide, and the order between them is a cost measurement rather than a
 preference.
 
-The **descriptor** is the definition: a schema denotes a set, `a ≤ b` is
-`a ∧ ¬b = ∅`, and each kind carries a representation closed under the three
-operations so that question can be asked literally. Everything it can hold, it
-decides.
+The **descriptor** asks the question literally: a schema denotes a set, `a ≤ b`
+is `a ∧ ¬b = ∅`, and each kind carries a representation closed under the three
+operations. Everything it can build, it decides, and it builds no cycle, no
+predicate and no class whose metaclass answers `isinstance`.
 
-The **structural rules** are the fast path. Building a descriptor costs about
-three orders of magnitude more than a rule that already answers, which
-[02-decision.md](02-decision.md) measures under "Four bounds, each measured"; a
-shape the rules settle in nanoseconds is not worth a set representation. So the
-rules answer first, and the descriptor answers where they decline.
+The **structural rules** decide by shape, and reach what the descriptor cannot
+build: every recursive schema is theirs alone. Where both reach, building a
+descriptor costs about three orders of magnitude more than a rule that already
+answers, which [02-decision.md](02-decision.md) measures under "Four bounds,
+each measured"; a shape the rules settle in nanoseconds is not worth a set
+representation. So the rules answer first, and the descriptor answers where
+they decline.
 
 What that ordering is *not* is a second opinion. Both are asked of the same
-question, and both answer in the same three values: the descriptor is asked
-only where the rules answer neither, so the pair gives the descriptor's answer
-wherever the descriptor can build. Neither overturns the other, because neither
-is asked once the other has decided. The rules are an optimisation of a relation
-the descriptor defines, and the page that describes the decision says so in that
-order.
+question, both answer in the same three values, and both are sound, so where
+both decide they agree: neither overturns the other, and neither is asked once
+the other has decided. Nor is one an optimisation of the other. They are two
+sound deciders with partly disjoint reach, joined where the rules decline and
+held to each other by `tests/test_completeness_probe.py`, and the page that
+describes the decision says so in that order.
 
 **A rule earns its place by answering a shape the descriptor refuses, or by
 answering a common one far more cheaply.** A rule that only repeats what the

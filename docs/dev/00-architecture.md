@@ -53,8 +53,8 @@ flowchart TB
 
     subgraph CORE["crates/valgebra-core -- pure Rust, no pyo3"]
         direction TB
-        DECISION["decision.rs, decision/<br/>the structural rules -- the optimisation"]
-        DESCR["descr/<br/>the set representation -- the definition"]
+        DECISION["decision.rs, decision/<br/>the structural rules -- asked first"]
+        DESCR["descr/<br/>the set representation -- asked where the rules decline"]
         IR["ir.rs<br/>the node set and what each denotes"]
         FRAME["kind.rs, verdict.rs<br/>the partition, and the two three-valued answers"]
         DECISION -->|"asks only where its own rules decline"| DESCR
@@ -82,13 +82,20 @@ not a dependency at all -- it is a trait the core defines and the binding
 implements, which is how a pure-Rust crate asks a question only Python can
 answer.
 
-**Inside the core, the definition does not import the optimisation.** The
-descriptor is what a schema's set *is* and the structural rules are an
-optimisation of the relation it defines, so the frame both read — the `Kind`
-partition, its `Region` summary, and the `Verdict`/`Relation` answers — sits in
-`kind.rs` and `verdict.rs` below the pair rather than inside either. The reverse
-edge is allowed and used: `decision.rs` asks `descr::lower` where its own rules
-decline. `tests/test_module_direction.py` holds both halves.
+**Inside the core, the set representation imports nothing from the structural
+rules.** The two are sound deciders with partly disjoint reach: the descriptor
+builds the set a schema denotes from the term alone and decides every relation
+between two sets it builds, and the rules decide by shape, reaching the
+recursive schemas, predicates and hooked classes the descriptor cannot build.
+The descriptor is what the rules hand a pair they decline, and built from a
+rule it would carry that rule's defect into the answer given where the rule
+declined. So the frame both read — the `Kind` partition, its `Region` summary,
+the `Verdict`/`Relation` answers and the `LeafRelations` questions — sits in
+`kind.rs`, `verdict.rs` and `oracle.rs` below the pair rather than inside
+either. The reverse edge is allowed and used: `decision.rs` asks
+`descr::lower` where its own rules decline. `tests/test_module_direction.py`
+holds both halves, and [02-decision.md](02-decision.md) says what each decider
+reaches.
 
 Within the binding, `crates/valgebra-py/src/validator.rs` and
 `crates/valgebra-py/src/build.rs` depend on each other, and that pair is a

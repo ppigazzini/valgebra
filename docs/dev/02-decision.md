@@ -1,36 +1,45 @@
 # The decision procedure
 
-Two representations answer the three relations, and the order between them is a
-cost measurement rather than a preference.
+Two sound deciders answer the three relations, with reaches that overlap and
+neither contains, and the order between them is a cost measurement rather than a
+preference.
 
-`crates/valgebra-core/src/descr/` is the **definition**. A schema denotes a set;
-each kind carries a representation closed under union, intersection and
-complement; and `a <= b` is `a & ~b` admitting no value. Everything it can hold,
-it decides.
+`crates/valgebra-core/src/descr/` is the **set representation**. A schema
+denotes a set; each kind carries a representation closed under union,
+intersection and complement; and `a <= b` is `a & ~b` admitting no value. It
+decides every relation between two schemas it can build, and it builds no
+cycle, no predicate, no class whose metaclass answers `isinstance`, and nothing
+past the three bounds a build is held to.
 
-`crates/valgebra-core/src/decision.rs` is the **fast path**. It recurses over the
-schema tree, matching shapes and applying rules, with one module per surface
-beside it: `decision/emptiness.rs` for the three-valued verdict every relation
-reduces to, `decision/readings.rs` for what a pair no rule decides is read
-for, `oracle.rs` for the questions only the bindings can answer,
-`decision/constraints.rs` for a refinement's bounds,
+`crates/valgebra-core/src/decision.rs` is the **structural rules**. They recurse
+over the schema tree, matching shapes and applying rules, with one module per
+surface beside the file: `decision/emptiness.rs` for the three-valued verdict
+every relation reduces to, `decision/readings.rs` for what a pair no rule
+decides is read for, `decision/constraints.rs` for a refinement's bounds,
 `decision/products.rs` for sequences split across a union,
 `decision/records.rs` for keyed maps and attribute records, and
-`decision/literals.rs` for tables of constants. It answers first, and the
-descriptor answers where it declines -- where it *declines*, not where it says
-no: a schema the rules prove inhabited is not lowered, because a sound second
-reading cannot overturn a proof and lowering one determinises automata and takes
-products to fail to.
+`decision/literals.rs` for tables of constants. Both deciders ask `oracle.rs`,
+at the crate root below them, the questions only the bindings can answer. The
+rules answer first, and the descriptor answers where they decline -- where they
+*decline*, not where they say no: a schema the rules prove inhabited is not
+lowered, because a sound second reading cannot overturn a proof, and lowering
+one would determinise automata and take products to reach the answer the rules
+gave.
 
-That ordering is not a second opinion. Both are asked the same question and
-both answer in three values -- proved, refuted, or neither -- so the descriptor
-is asked only where the rules reach the third, and the pair gives whichever of
-them decides. The rules are an optimisation of a relation the descriptor defines
--- [01-schema-ir.md](01-schema-ir.md) records that decision under "Which
-representation decides" -- and the reason they are worth having is measured:
+That ordering is not a second opinion. Both are asked the same question, both
+answer in three values -- proved, refuted, or neither -- and both are sound, so
+where both decide they agree, the descriptor is asked only where the rules
+reach the third, and the pair gives whichever of them decides. Neither is an
+optimisation of the other: every recursive schema, predicate and hooked class
+is the rules' alone ("Why every rule stays", below), and a pair the rules
+decline is the descriptor's. Where both reach, the rules go first because
 building a set representation costs about three orders of magnitude more than a
 rule that already answers (under "Four bounds, each measured"), which is what a
-relation the rules *refute* stops paying.
+relation the rules *refute* stops paying. `tests/test_completeness_probe.py`
+asks both of every pair of one corpus and holds the pairs they answer apart --
+each a fixpoint the rules' coinductive hypothesis proves and one unfolding does
+not -- to a count that may only shrink. [01-schema-ir.md](01-schema-ir.md)
+records the order under "Which representation decides".
 
 **How the two deciders compose.** Each answers in three values, and the whole
 of the wiring is which answer passes to what. The cascade of *readings* inside
