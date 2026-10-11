@@ -479,8 +479,8 @@ was not read first-hand:
 
 | where | the construction | the work it belongs to |
 |---|---|---|
-| `crates/valgebra-core/src/descr/regular.rs` | a minimal deterministic automaton per word kind: refine a partition of the states until the signatures stop changing, coarsen the alphabet, renumber canonically | **Moore's** algorithm, named at the function. Not Hopcroft's `n log n`, which this does not implement |
-| `crates/valgebra-core/src/descr/symbolic.rs` | the same refinement one alphabet up, where a letter is a descriptor, an edge carries a guard and the total transition is an *else* edge rather than a guard naming the universe | the minimisation of **symbolic automata** over a Boolean algebra of guards |
+| `crates/valgebra-core/src/descr/regular.rs` | a minimal deterministic automaton per word kind: cut the blocks of a partition of the states by the transitions read backwards, queueing the smaller part of each cut, then coarsen the alphabet and renumber canonically | **Hopcroft's** algorithm, `k n log n` over `n` states and `k` classes, named at the function |
+| `crates/valgebra-core/src/descr/symbolic.rs` | a refinement of the states until their signatures stop changing, one alphabet up, where a letter is a descriptor, an edge carries a guard and the total transition is an *else* edge rather than a guard naming the universe | **Moore's** algorithm, named at the function in `automaton.rs`, and the minimisation of **symbolic automata** over a Boolean algebra of guards |
 | `crates/valgebra-core/src/descr/integers.rs` | eventually periodic sets as an interval set per residue class, two periods meeting at their least common multiple | the ultimately periodic sets, which are the **one-variable fragment of Presburger arithmetic**. The representation is semilinear rather than automaton-based |
 
 **Why they are described and not cited.** A citation here is held to the rule the
@@ -489,8 +489,9 @@ these three it was matched to the code and not to the paper, so a row above woul
 be an attribution from memory -- which is the failure mode this page exists to
 avoid, in a politer form than quoting a theorem number a secondary source
 reported. The reading that can be done here has been: each description above is
-against the source, and `regular.rs` names Moore at the line that refines the
-partition.
+against the source, `regular.rs` names Hopcroft at the function that cuts the
+partition, and `automaton.rs` names Moore at the refinement the sequence
+automaton runs.
 
 The consequence worth stating: **the descriptor's components are the part of
 this design least anchored in a read source.** They are held by their own test

@@ -39,7 +39,7 @@ use rustc_hash::FxHashMap;
 use std::sync::{Arc, OnceLock};
 
 pub use super::automaton::MAX_STATES;
-use super::automaton::{Reached, canonical_order, reaches, refine};
+use super::automaton::{Reached, canonical_order, reaches};
 
 /// What `regex-automata` may spend building one pattern's table, in bytes.
 ///
@@ -370,28 +370,10 @@ impl Dfa {
         minimal
     }
 
-    /// Merge the states no word distinguishes, by refining a partition until it
-    /// stops changing ([`refine`], Moore's algorithm).
+    /// Merge the states no word distinguishes: one state for each block of
+    /// [`equivalent_states`](Self::equivalent_states).
     fn merge_equivalent(&self) -> Dfa {
-        // Start by separating the accepting states from the rest: a word of
-        // length zero already tells those apart. A state's signature is its own
-        // block and the block each class leads to, so two states stay together
-        // only while their signatures agree, which is one more letter of
-        // lookahead per round.
-        let seed: Vec<u32> = self.accepting.iter().map(|a| u32::from(*a)).collect();
-        let block = refine::<Vec<u32>, FxHashMap<Vec<u32>, u32>>(
-            self.state_count(),
-            seed,
-            |state, block| {
-                let state = u32::try_from(state).unwrap_or(0);
-                let mut signature = vec![block.get(state as usize).copied().unwrap_or(0)];
-                for class in 0..self.class_count {
-                    let target = self.step(state, class.try_into().unwrap_or(0));
-                    signature.push(block.get(target as usize).copied().unwrap_or(0));
-                }
-                signature
-            },
-        );
+        let block = self.equivalent_states();
         let count = block.iter().copied().max().map_or(1, |m| m as usize + 1);
         let mut transitions = vec![0u32; count * self.class_count];
         let mut accepting = vec![false; count];
@@ -419,6 +401,69 @@ impl Dfa {
             transitions,
             accepting,
         }
+    }
+
+    /// The states no word tells apart: a block for each state, numbered from
+    /// zero at state zero's, two states sharing one exactly when they accept
+    /// the same words.
+    ///
+    /// Hopcroft's algorithm. The accepting states and the rest start as two
+    /// blocks, and a block is cut wherever one class leads part of it into a
+    /// block, the *splitter*, and the rest of it elsewhere. Each part a cut
+    /// makes is a splitter in turn -- except that of the two parts only the
+    /// smaller is queued: a block no class cuts against a set and against one
+    /// part of it is one no class cuts against the other part either. So a
+    /// state is in a queued block at most `log n` times, and the work is
+    /// `k n log n` over `n` states and `k` classes.
+    ///
+    /// A pass that signs every state afresh each round until a round changes
+    /// nothing reaches the same partition and spends a round per state on a
+    /// chain. A literal is a chain, and one of four thousand bytes took 0.6 s
+    /// to build that way on a release build, which every product keeping the
+    /// chain spent again. `the_halves_cut_where_the_rounds_do` holds the two to
+    /// one partition.
+    ///
+    /// Each block is queued once, when it is made, and a block is a nonempty
+    /// set of states apart from every other, so the queue drains within one
+    /// pop per state. Bounding the loop by that is what makes a broken cut
+    /// leave a wrong table, which the properties reject, rather than run
+    /// without end.
+    fn equivalent_states(&self) -> Vec<u32> {
+        let predecessors = Predecessors::of(self);
+        let mut partition = Partition::by_acceptance(&self.accepting);
+        let mut queued: Vec<u32> = (0..partition.block_count())
+            .filter_map(|block| u32::try_from(block).ok())
+            .collect();
+        let mut splitter: Vec<u32> = Vec::new();
+        for _ in 0..self.state_count() {
+            let Some(block) = queued.pop() else {
+                break;
+            };
+            // A copy of the splitter's members: a cut below can move them, or
+            // cut this very block, and every class still reads the set the
+            // block was when it left the queue.
+            splitter.clear();
+            splitter.extend_from_slice(partition.members(block));
+            for class in 0..self.class_count {
+                for target in &splitter {
+                    for source in predecessors.leading_to(class, *target) {
+                        partition.mark(*source);
+                    }
+                }
+                partition.cut_marked(&mut queued);
+            }
+        }
+        // The merged table starts where state zero does, so that block trades
+        // its number with block zero's.
+        let start = partition.block.first().copied().unwrap_or(0);
+        for block in &mut partition.block {
+            if *block == start {
+                *block = 0;
+            } else if *block == 0 {
+                *block = start;
+            }
+        }
+        partition.block
     }
 
     /// Coarsen the alphabet to the partition this automaton's states induce.
@@ -502,6 +547,215 @@ fn refine_alphabets(a: &Dfa, b: &Dfa) -> (Vec<Class>, usize, Vec<(Class, Class)>
     }
     let class_count = pairs.len().max(1);
     (classes, class_count, pairs)
+}
+
+/// For each class and target state, the states the class leads there from:
+/// the transitions read backwards, which is what a cut asks.
+///
+/// One run of `sources` for each pair of a class and a target, laid end to
+/// end, so the whole reversal is two allocations however many states there
+/// are.
+struct Predecessors {
+    /// Where each run begins in `sources`, and one entry past the last run, so
+    /// a run ends where the next begins.
+    starts: Vec<usize>,
+    sources: Vec<u32>,
+    /// How many runs one class has, which is the table's state count.
+    states: usize,
+}
+
+impl Predecessors {
+    fn of(dfa: &Dfa) -> Predecessors {
+        let states = dfa.state_count();
+        let run = |class: usize, target: u32| class * states + target as usize;
+        let rows = || dfa.transitions.chunks(dfa.class_count.max(1)).enumerate();
+        // Count each run's sources into the entry after it, so a running sum
+        // turns the counts into where each run begins.
+        let mut starts = vec![0usize; dfa.class_count * states + 1];
+        for (_, row) in rows() {
+            for (class, target) in row.iter().enumerate() {
+                if let Some(count) = starts.get_mut(run(class, *target) + 1) {
+                    *count += 1;
+                }
+            }
+        }
+        let mut sum = 0;
+        for start in &mut starts {
+            sum += *start;
+            *start = sum;
+        }
+        // Then fill each run from where it begins.
+        let mut next = starts.clone();
+        let mut sources = vec![0u32; dfa.transitions.len()];
+        for (state, row) in rows() {
+            for (class, target) in row.iter().enumerate() {
+                if let Some(at) = next.get_mut(run(class, *target)) {
+                    if let Some(slot) = sources.get_mut(*at) {
+                        *slot = u32::try_from(state).unwrap_or(0);
+                    }
+                    *at += 1;
+                }
+            }
+        }
+        Predecessors {
+            starts,
+            sources,
+            states,
+        }
+    }
+
+    /// The states `class` leads to `target` from.
+    fn leading_to(&self, class: usize, target: u32) -> &[u32] {
+        let run = class * self.states + target as usize;
+        let begin = self.starts.get(run).copied().unwrap_or(0);
+        let end = self.starts.get(run + 1).copied().unwrap_or(begin);
+        self.sources.get(begin..end).unwrap_or(&[])
+    }
+}
+
+/// A partition of a table's states into blocks, refined by marking the states
+/// a splitter reaches and cutting each block between its marked and unmarked
+/// members.
+///
+/// A block's members sit side by side in `members`, its marked ones first, so
+/// a mark is a swap and a cut is a boundary moved: the work is in the states
+/// marked and the states relabelled, never in the size of a block they leave.
+struct Partition {
+    /// The states, each block's members side by side.
+    members: Vec<u32>,
+    /// Where each state sits in `members`.
+    position: Vec<usize>,
+    /// Each state's block.
+    block: Vec<u32>,
+    /// Each block's run of `members`, from `start` to `end`.
+    start: Vec<usize>,
+    end: Vec<usize>,
+    /// How many of each block's members are marked.
+    marked: Vec<usize>,
+    /// The blocks with a marked member, each once.
+    touched: Vec<u32>,
+}
+
+impl Partition {
+    /// The rejecting states and the accepting ones, each a block where it has
+    /// a member: the cut a word of length zero already makes.
+    fn by_acceptance(accepting: &[bool]) -> Partition {
+        let mut partition = Partition {
+            members: Vec::with_capacity(accepting.len()),
+            position: vec![0; accepting.len()],
+            block: vec![0; accepting.len()],
+            start: Vec::new(),
+            end: Vec::new(),
+            marked: Vec::new(),
+            touched: Vec::new(),
+        };
+        for side in [false, true] {
+            let begin = partition.members.len();
+            let id = u32::try_from(partition.block_count()).unwrap_or(0);
+            for (state, accepts) in accepting.iter().enumerate() {
+                if *accepts != side {
+                    continue;
+                }
+                if let Some(slot) = partition.position.get_mut(state) {
+                    *slot = partition.members.len();
+                }
+                if let Some(slot) = partition.block.get_mut(state) {
+                    *slot = id;
+                }
+                partition.members.push(u32::try_from(state).unwrap_or(0));
+            }
+            if partition.members.len() > begin {
+                partition.start.push(begin);
+                partition.end.push(partition.members.len());
+                partition.marked.push(0);
+            }
+        }
+        partition
+    }
+
+    fn block_count(&self) -> usize {
+        self.start.len()
+    }
+
+    fn members(&self, block: u32) -> &[u32] {
+        let block = block as usize;
+        let begin = self.start.get(block).copied().unwrap_or(0);
+        let end = self.end.get(block).copied().unwrap_or(begin);
+        self.members.get(begin..end).unwrap_or(&[])
+    }
+
+    /// Mark `state`: it trades places with its block's first unmarked member.
+    ///
+    /// The lookups answer a miss with zero, as the table's do: every state has
+    /// a block and a place, and every block a run, by construction.
+    fn mark(&mut self, state: u32) {
+        let index = state as usize;
+        let block = self.block.get(index).copied().unwrap_or(0);
+        let at = self.position.get(index).copied().unwrap_or(0);
+        let marked = self.marked.get(block as usize).copied().unwrap_or(0);
+        let boundary = self.start.get(block as usize).copied().unwrap_or(0) + marked;
+        if at < boundary {
+            return;
+        }
+        if let Some(count) = self.marked.get_mut(block as usize) {
+            *count += 1;
+        }
+        if marked == 0 {
+            self.touched.push(block);
+        }
+        let displaced = self.members.get(boundary).copied().unwrap_or(state);
+        if let Some(slot) = self.members.get_mut(at) {
+            *slot = displaced;
+        }
+        if let Some(slot) = self.members.get_mut(boundary) {
+            *slot = state;
+        }
+        if let Some(slot) = self.position.get_mut(displaced as usize) {
+            *slot = at;
+        }
+        if let Some(slot) = self.position.get_mut(index) {
+            *slot = boundary;
+        }
+    }
+
+    /// Cut each touched block between its marked and unmarked members, give
+    /// the smaller part a new block, and queue it.
+    ///
+    /// The larger part keeps the block's id, and with it the block's place in
+    /// the queue where it had one, so both parts of a queued block are queued.
+    /// A block whose members are all marked is not cut. The marks are cleared.
+    fn cut_marked(&mut self, queued: &mut Vec<u32>) {
+        for block in std::mem::take(&mut self.touched) {
+            let block = block as usize;
+            let begin = self.start.get(block).copied().unwrap_or(0);
+            let end = self.end.get(block).copied().unwrap_or(begin);
+            let count = self.marked.get_mut(block).map_or(0, std::mem::take);
+            let size = end - begin;
+            if count == size {
+                continue;
+            }
+            // The marked members are the first `count`, and a tie moves them.
+            let (moved, kept) = if count <= size - count {
+                (begin..begin + count, begin + count..end)
+            } else {
+                (begin + count..end, begin..begin + count)
+            };
+            if let (Some(first), Some(last)) = (self.start.get_mut(block), self.end.get_mut(block))
+            {
+                (*first, *last) = (kept.start, kept.end);
+            }
+            let id = u32::try_from(self.block_count()).unwrap_or(0);
+            self.start.push(moved.start);
+            self.end.push(moved.end);
+            self.marked.push(0);
+            for state in self.members.get(moved).unwrap_or(&[]) {
+                if let Some(slot) = self.block.get_mut(*state as usize) {
+                    *slot = id;
+                }
+            }
+            queued.push(id);
+        }
+    }
 }
 
 /// Which words a pattern is read over.

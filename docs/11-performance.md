@@ -911,6 +911,17 @@ as a list against a length-bounded list of the same element.
   automaton keeps it minimal, and a question about which kinds a descriptor
   reaches is read off its components (`Descr::within`, `Descr::reaches` in
   `descr/mod.rs`) rather than answered by building a meet and testing it.
+- **A word automaton is minimised by halves.** The states no word tells apart
+  merge once blocks of states are cut by the transitions read backwards, and
+  only the smaller part of each cut is queued to cut by next
+  (`equivalent_states` in `descr/regular.rs`, Hopcroft's algorithm): `k n log n`
+  work over `n` states and `k` byte classes. Signing every state afresh each
+  round reaches the same partition and spends a round per state on a chain,
+  which is what a literal is: a literal of four thousand bytes takes about
+  1.5 ms to build on a release build, where the rounds took 603 ms, and a
+  product that keeps its chain is minimised again at the same cost.
+  `--decision-sets` reads 6.12% fewer instructions, the signatures the rounds
+  allocated.
 
 **A pair's constants are read once per validator, not once per question.**
 Relating two validators pools one's constants into the other's, and the key a

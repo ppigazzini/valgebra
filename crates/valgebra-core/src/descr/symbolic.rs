@@ -27,7 +27,6 @@
 use super::automaton::{Reached, canonical_order, reaches, refine};
 use super::budget;
 use crate::verdict::Verdict;
-use std::collections::BTreeMap;
 
 pub use super::automaton::MAX_STATES;
 
@@ -586,17 +585,9 @@ impl<G: Guard> SymbolicDfa<G> {
         // states anyway. Seeding with that split instead is work the loop
         // repeats, and the sweep said so: a seed that collapses to one block
         // changed no answer.
-        //
-        // Signatures are numbered in a `BTreeMap` rather than a hash map,
-        // because a signature holds guards and a guard is ordered rather than
-        // hashed. A scan for an equal signature would give the same ids and
-        // read every kept signature per state, which is a round quadratic in
-        // the state count on a table a length bound sizes.
-        let block = refine::<Signature<G>, BTreeMap<Signature<G>, u32>>(
-            count,
-            vec![0; count],
-            |state, block| normalised.signature(state, block),
-        );
+        let block = refine(count, vec![0; count], |state, block| {
+            normalised.signature(state, block)
+        });
         let blocks = block.iter().copied().max().map_or(1, |m| m as usize + 1);
         let mut edges: Vec<Vec<Edge<G>>> = vec![Vec::new(); blocks];
         let mut accepting = vec![false; blocks];

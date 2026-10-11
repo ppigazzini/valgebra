@@ -67,7 +67,7 @@
   "binding_json_bounded_workload_irefs": 374748500,
   "_decision_sets_comment": "One corpus of nine relations asked of the two deciders: `decision_rules` through the public relation, which the rules answer on every pair without reaching the sets, and `decision_sets` through the reading the relation takes where the rules decline -- each side lowered, the supertype complemented, the two met under the work allowance. The rules run the corpus twenty thousand times and the sets twenty, so the two checksums are one fold at two iteration counts, and the ratio of the counts per iteration is the gap the pages give between the deciders, whose order of magnitude tests/test_perf_gate.py reads from here. The sets half allocates throughout, so it reads about a tenth higher under the gate's no-fastbin allocator than in a plain shell, and the rules half does not move. Re-record both with --decision-rules --decision-sets --update.",
   "decision_rules_workload_checksum": 460000,
-  "decision_rules_workload_irefs": 93848165,
+  "decision_rules_workload_irefs": 93848198,
   "decision_sets_workload_checksum": 460,
-  "decision_sets_workload_irefs": 179073272
+  "decision_sets_workload_irefs": 168109389
 }

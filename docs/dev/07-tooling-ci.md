@@ -763,7 +763,7 @@ python scripts/mutation_gate.py --baseline walk --new-only --out sweep/mutants.o
 ```
 
 The core sweep is the same shape without an interpreter to point at, and its
-skips are the two termination proofs:
+skips are the two termination proofs and the long word's build:
 
 ```bash
 export PROPTEST_MAX_SHRINK_TIME=1000
@@ -771,7 +771,8 @@ export PROPTEST_RNG_SEED=0
 cargo mutants --package valgebra-core --file <each core file the change touches> \
   -j 4 --timeout-multiplier 20 --output sweep \
   -- -- --skip deep_subtype_into_bottom_terminates \
-  --skip subtyping_terminates_on_a_distributed_tower
+  --skip subtyping_terminates_on_a_distributed_tower \
+  --skip a_word_of_a_hundred_thousand_bytes_builds
 python scripts/mutation_gate.py --baseline core --new-only --out sweep/mutants.out
 ```
 

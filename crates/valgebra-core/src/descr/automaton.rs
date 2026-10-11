@@ -2,16 +2,22 @@
 //! deterministic table is read by.
 //!
 //! The word automaton (`regular.rs`) steps on byte classes and the sequence
-//! automaton (`symbolic.rs`) on guarded edges, and each keeps its own table,
-//! its own signature of a state and its own minimisation passes. What is the
-//! same in both is the reading of a table as a graph from state zero: whether
-//! an accepting state is reachable, the order a canonical numbering visits the
-//! states in, the bounded refinement that merges the states no input tells
-//! apart, and the walk that numbers the states a product or a builder reaches.
-//! Each is written once here, over the targets the caller says a state leads to
-//! and in the order the caller gives them, so the numbering a walk produces --
-//! which is what makes a minimal table canonical -- is the caller's order and
-//! nothing of this module's.
+//! automaton (`symbolic.rs`) on guarded edges, and each keeps its own table
+//! and its own minimisation passes. What is the same in both is the reading of
+//! a table as a graph from state zero: whether an accepting state is reachable,
+//! the order a canonical numbering visits the states in, and the walk that
+//! numbers the states a product or a builder reaches. Each is written once
+//! here, over the targets the caller says a state leads to and in the order the
+//! caller gives them, so the numbering a walk produces -- which is what makes a
+//! minimal table canonical -- is the caller's order and nothing of this
+//! module's.
+//!
+//! The refinement that merges the states no input tells apart is here too, and
+//! the sequence automaton alone reads it. The word automaton cuts its blocks by
+//! the transitions read backwards, which takes `k n log n` work where this
+//! takes a round per state on a chain; a sequence automaton has no fixed
+//! alphabet to read its transitions backwards by, since each state's edges
+//! carry guards of their own.
 
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
@@ -83,32 +89,6 @@ pub(super) fn canonical_order<I: IntoIterator<Item = u32>>(
     (order, ids)
 }
 
-/// The numbering a refinement round gives its signatures: each the next id the
-/// first time it is seen.
-///
-/// A hash map where a signature can be hashed and an ordered map where it can
-/// only be compared -- a sequence automaton's signature holds guards, which are
-/// ordered rather than hashed. The ids depend only on the order the states are
-/// read in, not on the map, so the two give one numbering.
-pub(super) trait Numbering<K>: Default {
-    /// The id of `signature`, the next one where it is new.
-    fn number(&mut self, signature: K) -> u32;
-}
-
-impl<K: Hash + Eq> Numbering<K> for FxHashMap<K, u32> {
-    fn number(&mut self, signature: K) -> u32 {
-        let fresh = u32::try_from(self.len()).unwrap_or(0);
-        *self.entry(signature).or_insert(fresh)
-    }
-}
-
-impl<K: Ord> Numbering<K> for BTreeMap<K, u32> {
-    fn number(&mut self, signature: K) -> u32 {
-        let fresh = u32::try_from(self.len()).unwrap_or(0);
-        *self.entry(signature).or_insert(fresh)
-    }
-}
-
 /// The coarsest partition of `count` states that `signature` cannot split,
 /// refined from `block` (Moore's algorithm).
 ///
@@ -119,15 +99,24 @@ impl<K: Ord> Numbering<K> for BTreeMap<K, u32> {
 /// last, and a block cannot split more often than it has members. Bounding it
 /// is what makes a wrong termination test leave a coarser table -- which the
 /// canonicity properties reject -- rather than run without end.
-pub(super) fn refine<K, N: Numbering<K>>(
+///
+/// The signatures are numbered in an ordered map rather than a hash map,
+/// because a sequence automaton's signature holds guards and a guard is
+/// ordered rather than hashed. A scan for an equal signature would give the
+/// same ids and read every kept signature per state, which is a round
+/// quadratic in the state count on a table a length bound sizes.
+pub(super) fn refine<K: Ord>(
     count: usize,
     mut block: Vec<u32>,
     signature: impl Fn(usize, &[u32]) -> K,
 ) -> Vec<u32> {
     for _ in 0..=count {
-        let mut ids = N::default();
+        let mut ids: BTreeMap<K, u32> = BTreeMap::new();
         let next: Vec<u32> = (0..count)
-            .map(|state| ids.number(signature(state, &block)))
+            .map(|state| {
+                let fresh = u32::try_from(ids.len()).unwrap_or(0);
+                *ids.entry(signature(state, &block)).or_insert(fresh)
+            })
             .collect();
         if next == block {
             break;

@@ -1347,7 +1347,8 @@ jobs:
             --sharding round-robin \
             --output core-diff-mutants \
             -- -- --skip deep_subtype_into_bottom_terminates \
-            --skip subtyping_terminates_on_a_distributed_tower
+            --skip subtyping_terminates_on_a_distributed_tower \
+            --skip a_word_of_a_hundred_thousand_bytes_builds
           status=$?
           set -e
           # A change confined to excluded files generates nothing; that is a clean
@@ -1687,10 +1688,11 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      # The two SWEEP-SKIP cases are skipped for the reason the sweep skips
-      # them: each proves the decision budget's bound by running until the
-      # budget stops it, and a deeper draw makes that proof slower without
-      # making it stronger. tests/test_sweep_skips.py holds the list.
+      # The two SWEEP-SKIP cases that prove the decision budget's bound are
+      # skipped for the reason the sweep skips them: each runs until the budget
+      # stops it, and a deeper draw makes that proof slower without making it
+      # stronger. The third, a long word's build, draws nothing and runs here.
+      # tests/test_sweep_skips.py holds the list.
       - name: The core laws, deep
         run: >
           cargo test --locked -p valgebra-core --
@@ -2064,10 +2066,11 @@ jobs:
           # timeouts are test-gap signals reported in the summary without
           # failing the lane; a usage error or a broken baseline fails it.
           set +e
-          # The two SWEEP-SKIP cases leave the sweep, not the test lane. Each
-          # exists to prove the decision budget's bound, so a mutation removing
-          # that bound makes it run without end and the whole run returns no
-          # verdict. tests/test_sweep_skips.py holds this list to the sources.
+          # The three SWEEP-SKIP cases leave the sweep, not the test lane. Each
+          # exists to prove a bound -- two the decision budget's, one the work
+          # a word's table takes to minimise -- so a mutation removing it makes
+          # the case outrun the timeout and the whole run returns no verdict.
+          # tests/test_sweep_skips.py holds this list to the sources.
           # Round-robin rather than the default consecutive slices: a slice
           # puts one expensive file in one shard, and the last sweep's shards
           # ran twenty-one to forty-eight minutes for a critical path near
@@ -2076,7 +2079,8 @@ jobs:
           cargo mutants --package valgebra-core -j 4 --timeout-multiplier 20 \
             --shard "${{ matrix.shard }}/36" --sharding round-robin \
             -- -- --skip deep_subtype_into_bottom_terminates \
-            --skip subtyping_terminates_on_a_distributed_tower
+            --skip subtyping_terminates_on_a_distributed_tower \
+            --skip a_word_of_a_hundred_thousand_bytes_builds
           status=$?
           set -e
 

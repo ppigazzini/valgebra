@@ -3640,7 +3640,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "CONTRIBUTING.md",
-            " --skip subtyping_terminates_on_a_distributed_tower` |",
+            " --skip a_word_of_a_hundred_thousand_bytes_builds` |",
             "` |",
         ),
         trips=("test_the_documented_rerun_command_carries_the_same_skips",),

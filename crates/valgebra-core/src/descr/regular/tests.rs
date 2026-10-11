@@ -144,6 +144,84 @@ fn regular_set() -> impl Strategy<Value = RegularSet> {
     })
 }
 
+/// A well-formed table whose states come in pairs no word tells apart, and
+/// whose other transitions and accepting states are drawn.
+///
+/// State `s` and state `s + n` accept alike and step alike, each step landing
+/// on one of a pair drawn at random, so every pair shares a block and a drawn
+/// table has merges to find rather than states that are all distinct.
+fn paired_table() -> impl Strategy<Value = super::Dfa> {
+    (1..=8usize, 1..=4usize).prop_flat_map(|(half, classes)| {
+        (
+            prop::collection::vec(0..half, half * classes),
+            prop::collection::vec(any::<bool>(), 2 * half * classes),
+            prop::collection::vec(any::<bool>(), half),
+            prop::collection::vec(0..classes, 256),
+        )
+            .prop_map(move |(pairs, upper, accepting, bytes)| {
+                // A row steps where its pair's lower row does, onto either
+                // member of the pair that row names.
+                let transitions = upper
+                    .iter()
+                    .enumerate()
+                    .map(|(at, upper)| {
+                        let (state, class) = (at / classes, at % classes);
+                        let pair = pairs[state % half * classes + class];
+                        let target = pair + if *upper { half } else { 0 };
+                        u32::try_from(target).expect("a drawn table is small")
+                    })
+                    .collect();
+                super::Dfa {
+                    classes: bytes
+                        .into_iter()
+                        .map(|class| u16::try_from(class).expect("four classes at most"))
+                        .collect(),
+                    class_count: classes,
+                    transitions,
+                    accepting: accepting.iter().chain(&accepting).copied().collect(),
+                }
+            })
+    })
+}
+
+/// The partition the rounds reach: every state signed afresh, each round, by
+/// its own block and the blocks its classes lead to, until a round changes
+/// nothing. The refinement the sequence automaton runs, asked of a word table.
+fn blocks_by_rounds(dfa: &super::Dfa) -> Vec<u32> {
+    let seed = dfa.accepting.iter().map(|a| u32::from(*a)).collect();
+    crate::descr::automaton::refine(dfa.state_count(), seed, |state, block| {
+        let state = u32::try_from(state).expect("a drawn table is small");
+        let mut signature = vec![block[state as usize]];
+        for class in 0..dfa.class_count {
+            let class = u16::try_from(class).expect("four classes at most");
+            signature.push(block[dfa.step(state, class) as usize]);
+        }
+        signature
+    })
+}
+
+/// Whether two numberings of the states are one partition: each block of one
+/// is a block of the other, whatever the numbers.
+fn same_partition(a: &[u32], b: &[u32]) -> bool {
+    let mut forward = std::collections::HashMap::new();
+    let mut backward = std::collections::HashMap::new();
+    a.len() == b.len()
+        && a.iter().zip(b).all(|(x, y)| {
+            *forward.entry(x).or_insert(y) == y && *backward.entry(y).or_insert(x) == x
+        })
+}
+
+/// A word spelled as a bytes pattern, every byte escaped.
+fn escaped(word: &[u8]) -> String {
+    use std::fmt::Write;
+    let mut pattern = String::from("(?-u:");
+    for byte in word {
+        write!(pattern, r"\x{byte:02X}").expect("a string takes a write");
+    }
+    pattern.push(')');
+    pattern
+}
+
 proptest! {
     // A quarter of the default, for the reason the descriptor module
     // gives: every operation here is an automaton product, and shrinking a
@@ -236,6 +314,34 @@ proptest! {
                 word
             );
         }
+    }
+
+    /// Cutting blocks by the smaller half finds the partition the rounds find,
+    /// and it puts each pair of the drawn table in one block.
+    ///
+    /// The two reach it by different work -- the halves read the transitions
+    /// backwards, the rounds sign every state forwards -- so agreeing on every
+    /// drawn table is two constructions of one partition agreeing, and the
+    /// pairs are a merge each must make whatever else the table holds.
+    #[test]
+    fn the_halves_cut_where_the_rounds_do(table in paired_table()) {
+        let halves = table.equivalent_states();
+        prop_assert!(same_partition(&halves, &blocks_by_rounds(&table)));
+        let half = table.state_count() / 2;
+        prop_assert!((0..half).all(|state| halves[state] == halves[state + half]));
+        prop_assert_eq!(halves[0], 0, "the merged table starts at block zero");
+    }
+
+    /// A word's table is the table its escaped pattern lowers to: the chain
+    /// built here and the automaton `regex-automata` determinises are one
+    /// language, so the two minimal, canonically numbered tables are equal.
+    #[test]
+    fn a_word_is_the_language_its_escaped_pattern_spells(
+        word in prop::collection::vec(prop::sample::select(vec![b'a', b'b', 0x00, 0xFF]), 0..24),
+    ) {
+        let spelled = RegularSet::pattern(&escaped(&word), Alphabet::Bytes)
+            .expect("an escaped word builds");
+        prop_assert_eq!(RegularSet::word(&word), spelled);
     }
 }
 
@@ -661,4 +767,76 @@ fn each_defect_of_a_table_is_one_well_formed_refuses() {
     ] {
         assert!(!table.well_formed(), "{defect}");
     }
+}
+
+/// A cut gives the smaller part a new block and queues it, and the larger part
+/// keeps the block.
+///
+/// The rule the `k n log n` bound stands on: a state that takes a new number is
+/// one whose block at least halved, which happens to it at most `log n` times,
+/// and the part queued is the part relabelled. A tie moves the marked part, a
+/// state marked twice counts once, a block whose members are all marked stays
+/// whole, and a cut clears the marks it read. The rejecting states are block
+/// zero before any cut, and the accepting ones block one.
+#[test]
+fn a_cut_moves_the_smaller_part() {
+    let sides = super::Partition::by_acceptance(&[true, false, true, false]);
+    assert_eq!(
+        (sides.block, sides.members),
+        (vec![1, 0, 1, 0], vec![1, 3, 0, 2])
+    );
+
+    let cut = |states: usize, marks: &[u32]| {
+        let mut partition = super::Partition::by_acceptance(&vec![false; states]);
+        for state in marks {
+            partition.mark(*state);
+        }
+        let mut queued = Vec::new();
+        partition.cut_marked(&mut queued);
+        (partition, queued)
+    };
+    let (two_of_five, queued) = cut(5, &[1, 3, 3]);
+    assert_eq!((two_of_five.block, queued), (vec![0, 1, 0, 1, 0], vec![1]));
+    let (three_of_five, queued) = cut(5, &[0, 2, 4]);
+    assert_eq!(
+        (three_of_five.block, queued),
+        (vec![0, 1, 0, 1, 0], vec![1])
+    );
+    let (tie, queued) = cut(6, &[3, 4, 5]);
+    assert_eq!((tie.block, queued), (vec![0, 0, 0, 1, 1, 1], vec![1]));
+    let (all, queued) = cut(3, &[0, 1, 2]);
+    assert_eq!((all.block, queued), (vec![0, 0, 0], vec![]));
+
+    let (mut cleared, _) = cut(5, &[1]);
+    let mut queued = Vec::new();
+    cleared.cut_marked(&mut queued);
+    assert_eq!((cleared.block, queued), (vec![0, 1, 0, 0, 0], vec![]));
+}
+
+/// A word is a chain of states, which is the table a refinement by rounds
+/// spends a round per state on: four thousand bytes took 0.6 s that way on a
+/// release build and 4.7 s on a debug one, four times as long at each
+/// doubling, so a hundred thousand would take about six minutes there and
+/// fifty here. Cut by halves, the word builds, and holds itself and neither
+/// neighbour.
+// SWEEP-SKIP: this case exists to prove a bound, so a mutation that relabels
+// the larger part of a cut makes it quadratic, past ten minutes on a debug
+// build. It stays in the test lane and leaves the mutation sweep, where a run
+// that returns no verdict is a rig fault; `a_cut_moves_the_smaller_part`
+// catches that mutation there.
+#[test]
+fn a_word_of_a_hundred_thousand_bytes_builds() {
+    let word: Vec<u8> = b"abc".iter().copied().cycle().take(100_000).collect();
+    let set = RegularSet::word(&word);
+    assert!(set.holds(&word));
+    assert!(!set.holds(&word[..word.len() - 1]));
+    assert!(!set.holds(&[word.as_slice(), b"a"].concat()));
+}
+
+/// A product that keeps a word's chain is a chain again, minimised again: a
+/// word of four thousand bytes met with a language that holds it is the word.
+#[test]
+fn a_product_keeping_a_long_word_is_the_word() {
+    let set = RegularSet::word(&[b'a'; 4_000]);
+    assert_eq!(set.intersect(&language("a*")), Some(set.clone()));
 }
