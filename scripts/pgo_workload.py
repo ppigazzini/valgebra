@@ -26,6 +26,7 @@ counts.
 from __future__ import annotations
 
 import datetime
+import json
 import sys
 from collections.abc import Callable, Sequence
 from contextlib import suppress
@@ -84,35 +85,36 @@ TRAINED: dict[str, tuple[str, ...]] = {
     "binding-refined": ("_lists_with_readers",),
     "binding-mapping": ("_mappings",),
     "binding-nullable": ("_lists_with_readers",),
+    "json_document": ("_json_documents",),
+    "binding-json": ("_json_documents",),
+    "binding-json-reject": ("_json_documents",),
 }
 
-#: The JSON shapes' common reason: training any of them re-weights the profile
-#: every timed shape is laid out by.
+#: Why a JSON shape the training has not been measured on is left out of it:
+#: the records are trained, and the reading the shape adds to them is not.
 _JSON_UNTRAINED = (
-    "A parsed JSON array of records is read element by element through the "
-    "general loop of `json_array_matches` in "
-    "`crates/valgebra-py/src/check/walk/sequence.rs`, and the calls here read "
-    "JSON records and JSON arrays of one scalar kind, which a loop of their own "
-    "takes. The wheel lays the general loop out by the inliner's guess, as the "
-    "list scan of a nested list was before it was trained; training it "
-    "re-weights the profile every timed shape is laid out by, so it is read on "
-    "the comparison gate before and after rather than added here."
+    "A parsed JSON array of records is trained (`_json_documents`), and the "
+    "reading this shape adds to it is not. Training a reading re-weights the "
+    "profile every timed shape is laid out by, so each is read on the "
+    "comparison gate before and after rather than added here."
 )
 
 #: The shapes no call here takes the reading of, each with what it reads. The
 #: shipped wheel lays each one's path out without counts.
 UNTRAINED: dict[str, str] = {
-    "json_document": _JSON_UNTRAINED,
-    "binding-json": _JSON_UNTRAINED,
-    "binding-json-reject": _JSON_UNTRAINED,
     "binding-json-union": (
         "A union of two record kinds over parsed JSON objects, each element "
-        "asked of the second branch after failing the first: no call here "
-        "validates a JSON document against a union. " + _JSON_UNTRAINED
+        "asked of the second branch after failing the first. The records' "
+        "training reaches it, 12% faster on CPython 3.14; trained beside them, "
+        "it read no faster, and took the list nested twenty-five deep from 5% "
+        "faster than untrained to 3%."
     ),
     "binding-json-open": (
-        "JSON records read through a key-type clause: no call here validates a "
-        "JSON document against a record with a catch-all. " + _JSON_UNTRAINED
+        "JSON records read through a key-type clause. The records' training "
+        "reaches it, 3% fewer instructions on CPython 3.14; trained beside them "
+        "and the union, it read 3% fewer again, 2% slower on one build and 10% "
+        "faster on another, and took the list nested twenty-five deep from 3% "
+        "faster than untrained to 3% slower."
     ),
     "binding-json-bounded": (
         "JSON records under a length bound, whose length is the count of the "
@@ -302,6 +304,33 @@ def _documents() -> None:
     )
 
 
+def _json_documents() -> None:
+    # A parsed JSON array of records, read element by element through the
+    # general loop of the JSON array, which a single JSON record and an array
+    # of one scalar kind each skip: two hundred records accepted, and the same
+    # refused at the hundredth, whose `id` is a string.
+    class JsonRecord(TypedDict):
+        id: int
+        name: str
+        email: str
+        tags: list[str]
+        meta: dict[str, str]
+
+    records = [
+        {
+            "id": i,
+            "name": "Ada",
+            "email": "a@b.c",
+            "tags": ["x", "y"],
+            "meta": {"k": "v"},
+        }
+        for i in range(200)
+    ]
+    refused = [*records[:100], {**records[100], "id": "x"}, *records[101:]]
+    document = Validator(list[JsonRecord])
+    _run(document.is_valid_json, [json.dumps(records), json.dumps(refused)], 400)
+
+
 def _unions() -> None:
     # Literal unions (string enum and integer codes) and a structural union.
     status = Validator(Literal["pending", "active", "paused", "finished", "failed"])
@@ -342,6 +371,7 @@ def main(argv: list[str]) -> None:
     _mappings()
     _scalars()
     _relations()
+    _json_documents()
 
 
 def _relations() -> None:

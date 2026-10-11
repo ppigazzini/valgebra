@@ -179,6 +179,13 @@ builds without a profile, reads 0.9%. So the workload reads a list of records
 and a list nested twenty-five deep, and trained on them that shape reads 0.125 of
 pydantic's time on CPython 3.14.
 
+A parsed JSON array of records is read through a general loop of its own, and
+untrained it is laid out by chance too: two builds of one source read the
+comparison gate's document 10% apart in instructions, and a source path one
+character longer is enough to move it. Trained, every build reads one count,
+within 0.2%, and the document takes 12 to 14% less time than untrained on
+CPython 3.14.
+
 The same holds for a reader the workload never enters: the lists a reader of
 their own settles -- a union of literals, one class, a union of scalars, a tuple
 of scalars, a named tuple of them -- sit beside the general scan, and untrained,
@@ -1001,9 +1008,9 @@ shapes it costs, is [measured above](#baseline-matrix). A path the training
 workload never enters is laid out by chance, so the workload reads lists of
 scalars, of literals, of one class, of tuples, of named tuples and of
 dataclasses, records open and closed, a deeply nested list, the explaining walk,
-and relations at both of their levels. `TRAINED` in the workload names, for each
-shape a gate measures, the calls that take its reading, and `UNTRAINED` names
-the shapes none does with what each reads: a JSON array of records, a set, a
+a JSON array of records, and relations at both of their levels. `TRAINED` in the
+workload names, for each shape a gate measures, the calls that take its reading,
+and `UNTRAINED` names the shapes none does with what each reads: a set and a
 value walked against a recursive schema among them.
 
 ### Measured and not taken
