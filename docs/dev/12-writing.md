@@ -142,6 +142,7 @@ who broke it.
 
 | Page | Temperature |
 |---|---|
+| [`ARCHITECTURE.md`](../../ARCHITECTURE.md) | cold — a map with no claim of its own: a claim that lands there belongs on the page owning its zone |
 | [00-architecture.md](00-architecture.md) | warm — the crate boundary is compiler-checked, so it moves rarely |
 | [01-schema-ir.md](01-schema-ir.md) | hot — a node added here is an edit there |
 | [02-decision.md](02-decision.md) | hot — the decided fragment grows |

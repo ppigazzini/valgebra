@@ -1,7 +1,10 @@
 # Architecture
 
 Two Rust crates and a Python package. This page owns the split between them, the
-direction their dependencies run, and the two invariants the compiler holds.
+direction their dependencies run, how a value and a pair of schemas pass through
+them, the invariants every zone keeps, every bound, and the designs refused for
+the shape of the whole. `ARCHITECTURE.md` at the root is a map onto this page and
+the ones beside it, and carries no claim of its own.
 
 ## The zones
 
@@ -137,25 +140,109 @@ for them. [02-decision.md](02-decision.md) owns that boundary.
 
 ## How a value flows
 
-```
-  a typing annotation
-        |  build.rs                        crates/valgebra-py/src/build.rs
-        v
-  Schema + a constants pool + definitions  crates/valgebra-core/src/ir.rs
-        |  checked and pruned              crates/valgebra-py/src/validator.rs
-        v
-  a compiled Validator                     crates/valgebra-py/src/validator.rs
-        |  member()                        crates/valgebra-py/src/check/walk.rs
-        v
-  a bool, or a Violation list              crates/valgebra-core/src/violation.rs
+```mermaid
+flowchart LR
+    subgraph py["valgebra-py (PyO3 bindings)"]
+        direction TB
+        FE["build.rs<br/>frontend"]
+        CHK["check/walk.rs<br/>membership walk"]
+        INP["input.rs<br/>Value: object | JSON"]
+        ERRM["errors.rs<br/>ValidationError"]
+        REN["render.rs<br/>repr"]
+    end
+    subgraph core["valgebra-core (pure Rust)"]
+        IR["Schema IR<br/>+ denotations + Violation"]
+    end
+
+    SPEC["typing annotation /<br/>native form / compiled validator"] --> FE
+    FE --> IR
+    FE -. interns .-> POOL[("constants pool<br/>literals · classes · predicates")]
+    IR --> CV(["Validator"])
+
+    OBJ["Python object"] --> INP
+    JS["JSON str/bytes<br/>(jiter)"] --> INP
+    CV --> CHK
+    INP --> CHK
+    CHK -->|fast mode| BOOL["bool"]
+    CHK -->|explain mode| VIO["Violation"]
+    VIO --> ERRM
+    CV --> REN
 ```
 
-Compilation happens once. A validator never changes after it is built and is safe
-to share across threads.
+**Compile once.** The frontend (`crates/valgebra-py/src/build.rs`) reads a
+typing annotation, a native form (a dict literal as a closed record, a constant
+as a typed literal), or an already compiled validator, and builds the `Schema`
+IR, interning any literal, class or predicate it references into the constants
+pool. `checked` in `crates/valgebra-py/src/validator.rs` refuses a schema past
+the construction limits and prunes the definitions nothing reaches, and the
+result is wrapped in a `Validator`, which never changes after it is built.
+
+**Validate fast.** Each call crosses into Rust once. The value -- a Python object
+or a JSON document -- is presented through one `Value`
+(`crates/valgebra-py/src/input.rs`), and one membership walk
+(`crates/valgebra-py/src/check/walk.rs`) decides it, in one of three modes: a
+*fast* mode that returns a bool and allocates nothing but what a measured
+reading pays for ([04-walk.md](04-walk.md)), an *explain* mode that builds a
+`Violation` with the path, the expected label and a value summary for each
+independent failure, and a *fail-fast* explain mode that builds the first. A
+`Violation` becomes the `ValidationError` (`crates/valgebra-py/src/errors.rs`)
+that `validate` raises.
+
+`is_valid_json` walks the parsed document in place, and `validate_json` and
+`load` walk the Python value the parser builds, so a document gets the decision
+and the errors `json.loads` of it would, except where the JSON grammar is
+stricter (`docs/07-json.md`).
 
 The constants pool is one `Vec<Py<PyAny>>` holding four kinds of object — a
 literal's constant, a class, a comparison operand, a user predicate — addressed
 by four distinct index types. [06-type-design.md](06-type-design.md) owns why.
+
+## How two schemas are compared
+
+`is_subtype_of`, `relation_to`, `is_equivalent` and `is_empty` take no value, so
+they run entirely in the core. Two sound deciders answer them, each in three
+values -- proved, refuted, or neither: the structural rules in `decision.rs`
+recurse over the two trees, and the set representation in `descr/` builds the
+set each schema denotes and asks whether `a ∧ ¬b` admits a value. The rules are
+asked first and the descriptor only where they decline, because building a set
+costs about three orders of magnitude more than a rule that already answered
+(`scripts/perf_gate.py --decision-sets` against `--decision-rules`, one corpus
+asked of both); the rules alone reach a recursive schema, a predicate or a
+hooked class. A question about a class, a constant or a comparison operand is
+asked back through `LeafRelations`, which `crates/valgebra-py/src/oracle.rs`
+implements. [02-decision.md](02-decision.md) owns the detail and
+`docs/15-decidability.md` the published boundary.
+
+## The invariants every zone keeps
+
+A change that breaks one of these is a defect, not a trade-off.
+
+- **One walk.** Deciding and explaining are one `member` function parameterised
+  by the walk's mode. Where a reading has a reader per mode, a test rather than
+  the construction holds the pair to one verdict ([04-walk.md](04-walk.md)).
+- **One boundary crossing.** Tree walks, key lookups and bound checks run in the
+  Rust validator tree, and no per-element Python work is added to the loop. A
+  user predicate is a documented Python-callback slow path, never a silent
+  fallback.
+- **Check, don't parse.** `validate` and `is_valid` check membership of the
+  object the caller holds and never copy or coerce it. `ensure` is the
+  separate, value-returning mode, and `load` the one for JSON.
+- **Immutable validators.** A compiled validator never changes after it is
+  built, so one is shared across threads. The extension declares
+  `gil_used = false` (`crates/valgebra-py/src/lib.rs`), so a free-threaded
+  CPython imports it without re-enabling the GIL, and `tests/test_concurrency.py`
+  validates in parallel there.
+
+## One zone a file
+
+**A production file is one zone of the table above, or the readers of one node
+family inside a zone, and a test file is the test module of the file that
+declares it.** `check/walk/sequence.rs` is the sequences, `descr/records.rs` the
+record atoms, `decision/tests.rs` the tests `decision.rs` declares. A file
+holding neither is split along what it holds. A file holding one is not split
+for its length: the zone table, the mutation sweeps and the per-file coverage
+floors each take a file as their unit, so one family across two files is half a
+family to all three.
 
 ## What the core does not contain
 
@@ -205,6 +292,16 @@ sort of thing and only one of them is a defect.
 A bound that is `debt` carries the change that retires it in its own doc
 comment, and a `cost` carries where its termination argument is written. A
 `limit`, a `shape` or a `reach` carries the reason it is where it is.
+
+**A bound that protects the stack is a reading of the shipped wheel on a 1 MiB
+thread.** The profile-guided build inlines a walk's arms into frames several
+times a plain release build's, so a depth bound is set from the profile-guided
+wheel's frames against 1 MiB, the least stack any thread CPython creates has,
+and `tests/test_adversarial_bounds.py` runs the deepest walks and relations on a
+thread of that size, which the release smoke runs on every wheel. A plain or
+unoptimised build fits another figure and is a build nothing ships; a thread a
+host starts smaller can overflow before the bound refuses, which
+`docs/10-limits.md` tells a caller.
 
 A row kinded **not a bound** is possible. The scan that holds this table to the
 tree reads every file-scope integer constant in a crate's source whose value is a

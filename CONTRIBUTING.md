@@ -14,9 +14,10 @@ the set representation in `descr/`; the PyO3 bindings (`crates/valgebra-py/`)
 hold the schema frontend, the single membership walk, and the oracle the core
 asks about a Python class or constant; and `python/valgebra/` is the public
 surface.
-[ARCHITECTURE.md](ARCHITECTURE.md) maps the components and the path a value takes
-from a typing annotation through the walk to a violation; read it before a
-non-trivial change.
+[ARCHITECTURE.md](ARCHITECTURE.md) maps the components onto the pages that own
+them, and [docs/dev/00-architecture.md](docs/dev/00-architecture.md) traces the
+path a value takes from a typing annotation through the walk to a violation;
+read it before a non-trivial change.
 
 **The developer documentation set is [docs/dev/](docs/dev/README.md).** One page
 per zone of the source, each the live claim about it: what a node denotes, what

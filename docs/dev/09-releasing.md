@@ -1,7 +1,8 @@
 # Cutting a release
 
-How a version reaches an index: the surfaces a bump touches, the two dispatches
-that publish, what to check between them, and the tag that records the result.
+How a version reaches an index: the wheels a release builds, the surfaces a bump
+touches, the two dispatches that publish, what to check between them, and the tag
+that records the result.
 `.github/workflows/release.yml` owns the build and the upload; this page owns the
 order and the checks that happen outside it.
 
@@ -202,6 +203,33 @@ selector resolves to whichever build is on the machine: `uv venv --python 3.14`
 can land on the free-threaded interpreter, so read
 `sysconfig.get_config_var("Py_GIL_DISABLED")` in the venv to record which wheel
 the check actually covered.
+
+## The wheels a release builds
+
+**One wheel per interpreter version, not one per platform.** The extension is
+built for each interpreter a platform row of `.github/workflows/release.yml`
+names, not as a stable-ABI (`abi3`) wheel, so a minor `requires-python` admits
+gets a wheel only where a row builds for it, and `tests/test_release_matrix.py`
+holds each row's list to the classifiers. On manylinux and macOS the workflow
+names each interpreter, on Windows it installs them before maturin's
+`--find-interpreter` runs, and the musllinux rows build for what their image
+carries. The rows name their free-threaded interpreters the same way: Linux,
+macOS and Windows x64 by name, musllinux the free-threaded build its image
+carries, and Windows arm64 none.
+
+**Profile-guided where the host runs its own output.** A row marked `pgo: true`
+builds an instrumented extension, trains it with the `pgo-command` in
+`pyproject.toml` (`scripts/pgo_workload.py`), and rebuilds with the profile; the
+musllinux cross-builds, the PyPy wheels and the Windows arm64 row ship plain
+release builds with the same compatibility.
+
+**No wheel links an interpreter.** maturin injects the pyo3 `extension-module`
+behaviour at build time, and `crates/valgebra-py/Cargo.toml` leaves the feature
+unset, so `cargo test` and the workloads link an interpreter as any other
+library does.
+
+A dispatch whose publish target is left at none builds the whole matrix as a
+dry run, which is how the matrix is checked before a release.
 
 ## Which interpreters a release supports
 
