@@ -90,6 +90,7 @@ TRAINED: dict[str, tuple[str, ...]] = {
     "binding-json-reject": ("_json_documents",),
     "binding-json-deep": ("_json_documents",),
     "binding-set": ("_sets",),
+    "binding-subclass": ("_subclasses",),
 }
 
 #: Why a JSON shape the training has not been measured on is left out of it:
@@ -136,11 +137,6 @@ UNTRAINED: dict[str, str] = {
         "and met with the element's shape: `_relations` reaches the sequence "
         "automaton's product through a meet of lists, and no call here relates "
         "a length-bounded list."
-    ),
-    "binding-subclass": (
-        "A named tuple read against `tuple[int, ...]`, through the length "
-        "accessor a subclass inherits: the calls here read named tuples against "
-        "their own class and plain tuples against a tuple schema."
     ),
     "binding-protocol": (
         "Compiling a protocol, whose members `typing` lists and the frontend "
@@ -347,6 +343,18 @@ def _sets() -> None:
     _run(words.is_valid, [names, {*names, 1}], 2000)
 
 
+def _subclasses() -> None:
+    # A named tuple read against `tuple[int, ...]`, through the length accessor
+    # a subclass of `tuple` inherits rather than the plain tuple's own.
+    class Point(NamedTuple):
+        x: int
+        y: int
+        z: int
+
+    ints = Validator(tuple[int, ...])
+    _run(ints.is_valid, [Point(1, 2, 3), _Point(1, "a")], 8000)
+
+
 def _unions() -> None:
     # Literal unions (string enum and integer codes) and a structural union.
     status = Validator(Literal["pending", "active", "paused", "finished", "failed"])
@@ -389,6 +397,7 @@ def main(argv: list[str]) -> None:
     _relations()
     _json_documents()
     _sets()
+    _subclasses()
 
 
 def _relations() -> None:
