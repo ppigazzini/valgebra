@@ -100,22 +100,28 @@ either. The reverse edge is allowed and used: `decision.rs` asks
 holds both halves, and [02-decision.md](02-decision.md) says what each decider
 reaches.
 
-Within the binding, `crates/valgebra-py/src/validator.rs` and
-`crates/valgebra-py/src/build.rs` depend on each other, and that pair is a
-dependency rather than a placement: the frontend needs the validator because an
-already compiled validator is itself a schema description, and the validator
-needs the frontend to compile one. Two more pairs import each other, each across
-a function rather than a type: `crates/valgebra-py/src/check/walk.rs` calls the
-violation builders in `check/violation.rs`, which call back into the walk's
-`record_if_fatal`; and in the core, `ir.rs` folds the complement law through
-`oracle.rs`, which reads the `Schema` it is asked about. One cycle runs through
-three, across a function too: the validator renders its schema through
+Modules import each other in five places, each named with what crosses it in
+`ADMITTED_CYCLES` of `tests/test_refusals_ledger.py`, which fails on a cycle it
+does not name and on a named one the tree does not hold. Within the binding,
+`crates/valgebra-py/src/validator.rs` and `crates/valgebra-py/src/build.rs`
+depend on each other, and that pair is a dependency rather than a placement:
+the frontend needs the validator because an already compiled validator is
+itself a schema description, and the validator needs the frontend to compile
+one. The validator also renders its schema through
 `crates/valgebra-py/src/render.rs`, which asks the frontend's `declares_fields`
-(`build/classes.rs`) whether a class declares fields, and the frontend needs
-the validator. Every shared type lives in a leaf module its users import
-directly — `crates/valgebra-py/src/exception.rs`,
-`crates/valgebra-py/src/check/ctx.rs` — with the aggregator re-exporting, so no
-call site spells a longer path.
+whether a class declares fields, so the three are one cycle.
+`crates/valgebra-py/src/check/walk.rs` calls the violation builders in
+`check/violation.rs`, which call back into the walk's `record_if_fatal`. Two
+pairs sit inside one zone and cross only functions: the record and scalar
+walks in `check/walk/`, and what a class declares and the typing introspection
+in `build/`. In the core, `ir.rs` folds the complement law through `oracle.rs`,
+which reads the `Schema` it is asked about and the `Constants` a lowering is
+given, so the term, the oracle and the descriptor's lowering are one cycle,
+with the components a lowering builds and the budget they spend, which reads
+the allowance `descr/lower.rs` defines. A type the binding's modules share
+lives outside the aggregator that re-exports it --
+`crates/valgebra-py/src/exception.rs`, `crates/valgebra-py/src/check/ctx.rs` --
+so no member imports its parent back and no call site spells a longer path.
 
 No cycle costs anything the build can see. rustc's compilation unit is the crate,
 and the shipped artifact is one `.so` statically linking `valgebra-core`, so at
@@ -357,6 +363,127 @@ Two of them bound a depth for different reasons, and the difference matters
 when one moves: `MAX_SCHEMA_DEPTH` is what a *caller* may build, and
 `DEPTH` is what a *lowering* will descend. A schema at the first is refused by
 the second, and answered by the structural rules instead.
+
+## Refused, and what each one stands on
+
+A proposal to change the shape of the whole starts here. Each entry is the rule
+the tree keeps in the proposal's place and what that rule stands on -- a figure
+with the command or the page that reproduces it, or the reason where no figure
+exists -- and it ends with the tests that hold it. `tests/test_refusals_ledger.py`
+holds every entry to holders that exist and every holder it defines to an
+entry. The algebra's refusals are on [01-schema-ir.md](01-schema-ir.md) and the
+frontend's on [03-frontend.md](03-frontend.md), each with the test it fails.
+
+**Breaking the module cycles, or gating a coupling metric over them.** The crate
+is rustc's compilation unit and the wheel one `.so` statically linking the core,
+so a cycle between two modules costs no compile time, link edge or rebuild the
+build can see, and a coupling figure computed over modules measures a cost this
+build does not have. What a cycle costs is a reader's, and naming it pays that:
+"The direction" names the five, and a sixth fails until it is named. Held by
+`test_the_module_cycles_are_the_ones_the_page_admits` and
+`test_every_admitted_cycle_says_what_crosses_it` in
+`tests/test_refusals_ledger.py`.
+
+**A validator tree of trait objects, or `enum_dispatch` over one.** The walk
+dispatches with an exhaustive `match` over the closed `Schema` enum: no vtable
+stands between a node and its reader, the reader can be inlined into the
+dispatch, and a variant added to the IR fails to compile at every walk until it
+has an arm. No figure is measured either way; the exhaustiveness is the reason,
+and the holder refuses a trait object in the walk's production files and the
+crate in the lockfile. Held by `test_the_walk_dispatches_by_match` in
+`tests/test_refusals_ledger.py`.
+
+**A stable-ABI wheel, `abi3` or `abi3t`.** A release builds one wheel per
+interpreter version ([09-releasing.md](09-releasing.md)), because the walk
+chooses its readings by the interpreter it is built against:
+`crates/valgebra-py/build.rs` re-emits the interpreter's `Py_3_x` and
+`Py_GIL_DISABLED` flags, and which reading of a list is cheaper differs by
+interpreter, as the doc comment on `snapshot_pays` in
+`crates/valgebra-py/src/check/walk/sequence.rs` measures. A stable-ABI build
+compiles once against the floor's flags, so every interpreter would take the
+floor's reading, and against the limited API, whose cost to the walk's readings
+is not measured. Profile guidance is not what it gives up: training needs an
+interpreter to run the instrumented build, and nothing about the ABI. Held by
+`test_no_build_targets_the_stable_abi` in `tests/test_refusals_ledger.py`.
+
+**One decider in place of two.** Each reaches what the other cannot: the
+descriptor builds no cycle, predicate or hooked class, and the rules decline
+pairs it decides. Where both reach, a set costs about three orders of magnitude
+more than a rule that answers (`scripts/perf_gate.py --decision-sets` against
+`--decision-rules`), and [02-decision.md](02-decision.md) owns both halves. Held
+by `test_the_pages_give_the_gap_between_the_deciders_the_record_holds` in
+`tests/test_perf_gate.py`, and `test_the_two_deciders_are_measured_against_each_other`
+in `tests/test_completeness_probe.py`.
+
+**Normalising a query's arguments where a decision starts.** The lattice laws
+are settled once, where a schema is built
+([01-schema-ir.md](01-schema-ir.md#which-laws-construction-settles)), so the
+deciders read a schema already in the constructors' normal form and rebuild none
+per query: a construction happens once, a query many times. No figure for the
+per-query cost is recorded, and the holder refuses a reference to the
+simplifier from the deciders' production files. Held by
+`test_the_deciders_never_normalise_a_query` in `tests/test_refusals_ledger.py`,
+and `test_eq_is_the_normal_form_and_not_the_set` in `tests/test_operators.py`.
+
+**A streaming JSON check.** [04-walk.md](04-walk.md) refuses it: a stream saves
+at most the tree's construction and drop, and nothing where a node reads its
+value again, and it answers differently from the tree on three documents. Held
+by `test_invalid_utf8_in_an_unread_value_is_not_a_document`,
+`test_the_nesting_limit_counts_from_the_root` and
+`test_a_predicate_sees_only_what_a_parsed_document_holds` in
+`tests/test_json.py`.
+
+**A wall-clock gate.** The performance gates count instructions under
+cachegrind, which a build reads alike on every run, and compare with
+pydantic-core as a per-call ratio, which cancels the runner's speed; no absolute
+time gates a merge. The ratio's ratchet stays unarmed too, since the bench lane
+reads one tree on two classes of machine further apart than a tolerance
+([07-tooling-ci.md](07-tooling-ci.md)). Held by
+`test_only_the_argued_tests_read_a_clock` in `tests/test_clock_ledger.py`, and
+`test_a_tolerance_is_a_spread_rather_than_a_wish` in
+`tests/test_compare_ratchet.py`.
+
+**A zero-survivor mutation target.** Whether a mutant is equivalent to the code
+it mutates is undecidable, so no procedure tells an equivalent survivor from a
+weak test. Every sweep accepts the survivors its baseline lists, each with its
+argument beside it, and fails on a survivor it does not list and on a listed one
+that is killed. Held by `test_a_baselined_survivor_passes` and
+`test_a_killed_baseline_survivor_fails_until_the_baseline_shrinks` in
+`tests/test_mutation_gate.py`.
+
+**A `cargo xtask` crate for the gates.** The gates are Python scripts under
+`scripts/`, run by `python` and tested by pytest beside the suite. An xtask crate
+is a third build surface with a manifest and a lane of its own, which buys a
+vocabulary rather than a check, and the holder keeps the root workspace to its
+two members and the cargo configuration to no alias. Held by
+`test_the_workspace_is_the_two_crates` in `tests/test_refusals_ledger.py`.
+
+**A per-file lint ratchet.** The lints are one rule for the workspace --
+clippy's pedantic group under `-D warnings`, which every member takes, and three
+restriction lints on the library targets -- rather than a baseline per file that
+may only improve, which is a weaker rule under a stricter name. Held by
+`test_every_crate_takes_the_workspace_lints` in `tests/test_refusals_ledger.py`.
+
+**A constructor that keeps a repeated member.** A union and a meet sort their
+members and keep each once where they are built, so `==` compares normal forms
+under every law the constructors apply: `union(int, int)` is `int` exactly as
+`union(int, complement(int))` is the top. A constructor folding some laws and
+not others makes `==` an equality of nothing in particular. Held by
+`test_eq_is_the_normal_form_and_not_the_set` in `tests/test_operators.py`.
+
+**An arena of nodes addressed by id.** Nodes built alike share one handle:
+`crates/valgebra-core/src/ir/intern.rs` keeps a per-thread, direct-mapped table
+of weak handles, so a schema built twice is one tree of shared nodes, and a node
+drops when nothing holds it, where an arena keeps every node until the arena
+goes. The `SLOTS` row above carries what the table saves. Held by
+`a_node_built_twice_is_one_node_in_every_family` in
+`crates/valgebra-core/src/ir/intern/tests.rs`.
+
+**Keeping the construction limits private.** `MAX_SCHEMA_DEPTH`,
+`MAX_DEFINITIONS` and `MAX_SCHEMA_NODES` are importable from `valgebra`, since a
+number a caller may not import is not published. Held by
+`test_the_construction_limits_are_importable_from_the_package` in
+`tests/test_public_surface.py`.
 
 ## Where to look next
 

@@ -210,7 +210,8 @@ the check actually covered.
 built for each interpreter a platform row of `.github/workflows/release.yml`
 names, not as a stable-ABI (`abi3`) wheel, so a minor `requires-python` admits
 gets a wheel only where a row builds for it, and `tests/test_release_matrix.py`
-holds each row's list to the classifiers. On manylinux and macOS the workflow
+holds each row's list to the classifiers. Why no stable-ABI wheel is on
+[00-architecture.md](00-architecture.md#refused-and-what-each-one-stands-on). On manylinux and macOS the workflow
 names each interpreter, on Windows it installs them before maturin's
 `--find-interpreter` runs, and the musllinux rows build for what their image
 carries. The rows name their free-threaded interpreters the same way: Linux,

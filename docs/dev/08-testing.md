@@ -191,6 +191,7 @@ for and misses the other. The ledgers:
 | `tests/test_sdist.py` | the source distribution carries every build input and nothing else |
 | `tests/test_oracle_ledger.py` | every question the core asks the oracle is on the decision page, and every reading that refutes |
 | `tests/test_module_direction.py` | the definition, the term and the membership walk import nothing from the structural procedure |
+| `tests/test_refusals_ledger.py` | every refusal on the architecture page names a test that holds it, every holder beside them is named by one, and the modules that import each other are the cycles it admits |
 | `tests/test_memo_placement.py` | every table keyed by a goal in the coinductive procedure says how it reverts |
 | `tests/test_workflow_actions.py` | every toolchain a workflow installs comes from the rustup wrapper |
 | `tests/test_workflow_syncs.py` | every sync installs the lock, and every run in a checkout runs on it |

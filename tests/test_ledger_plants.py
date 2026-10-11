@@ -1640,6 +1640,123 @@ PLANTS = (
         trips=("test_every_detached_surface_is_built_by_a_lane",),
     ),
     Plant(
+        # A refusal naming a holder by a name no test has, which leaves the
+        # real holder named by nothing.
+        "tests/test_refusals_ledger.py",
+        ("docs/dev/00-architecture.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/00-architecture.md",
+            "Held by `test_the_walk_dispatches_by_match` in",
+            "Held by `test_the_walk_dispatches_by_a_table` in",
+        ),
+        trips=(
+            "test_every_refusal_names_a_holder_that_exists",
+            "test_every_holder_here_is_named_by_a_refusal",
+        ),
+    ),
+    Plant(
+        # A holder no refusal names: a check that outlived its reason.
+        "tests/test_refusals_ledger.py",
+        ("tests/test_refusals_ledger.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_refusals_ledger.py",
+            "workspace's rule: {lax}\"\n",
+            "workspace's rule: {lax}\"\n"
+            "\n\ndef test_a_planted_holder() -> None:\n    assert True\n",
+        ),
+        trips=("test_every_holder_here_is_named_by_a_refusal",),
+    ),
+    Plant(
+        # An admitted cycle whose reason is a word.
+        "tests/test_refusals_ledger.py",
+        ("tests/test_refusals_ledger.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_refusals_ledger.py",
+            '        "the walk calls the violation builders, which call back the '
+            "walk's \"\n"
+            '        "record_if_fatal, a function each way"\n',
+            '        "a cycle"\n',
+        ),
+        trips=("test_every_admitted_cycle_says_what_crosses_it",),
+    ),
+    Plant(
+        # The input layer reaching into the walk that reads it: a cycle nobody
+        # named, which also swallows the walk's admitted one.
+        "tests/test_refusals_ledger.py",
+        ("crates/valgebra-py/src/input.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-py/src/input.rs",
+            "use crate::errors::json_invalid_error;\n",
+            "use crate::check::walk::member;\nuse crate::errors::json_invalid_error;\n",
+        ),
+        trips=("test_the_module_cycles_are_the_ones_the_page_admits",),
+    ),
+    Plant(
+        # A trait object in the walk.
+        "tests/test_refusals_ledger.py",
+        ("crates/valgebra-py/src/check/walk.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-py/src/check/walk.rs",
+            "use crate::input::Value;\n",
+            "use crate::input::Value;\n"
+            "type Reader = Box<dyn Fn(&Value<'_>) -> bool>;\n",
+        ),
+        trips=("test_the_walk_dispatches_by_match",),
+    ),
+    Plant(
+        # The workspace's PyO3 built for the stable ABI.
+        "tests/test_refusals_ledger.py",
+        ("Cargo.toml",),
+        lambda tree: _edit(
+            tree,
+            "Cargo.toml",
+            'pyo3 = "0.29"\n',
+            'pyo3 = { version = "0.29", features = ["abi3-py310"] }\n',
+        ),
+        trips=("test_no_build_targets_the_stable_abi",),
+    ),
+    Plant(
+        # The structural rules reaching for the simplifier.
+        "tests/test_refusals_ledger.py",
+        ("crates/valgebra-core/src/decision.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/decision.rs",
+            "use crate::descr::lower::{",
+            "use crate::simplify::simplify;\nuse crate::descr::lower::{",
+        ),
+        trips=("test_the_deciders_never_normalise_a_query",),
+    ),
+    Plant(
+        # A cargo alias standing for a task crate.
+        "tests/test_refusals_ledger.py",
+        (".cargo/config.toml",),
+        lambda tree: _edit(
+            tree,
+            ".cargo/config.toml",
+            "[build]\n",
+            '[alias]\nxtask = "run --package xtask --"\n\n[build]\n',
+        ),
+        trips=("test_the_workspace_is_the_two_crates",),
+    ),
+    Plant(
+        # A member that takes lints of its own.
+        "tests/test_refusals_ledger.py",
+        ("crates/valgebra-core/Cargo.toml",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/Cargo.toml",
+            "[lints]\nworkspace = true\n",
+            '[lints.clippy]\npedantic = "allow"\n',
+        ),
+        trips=("test_every_crate_takes_the_workspace_lints",),
+    ),
+    Plant(
         # A command the contributor gate gains and the agent's copy does not:
         # an agent running its own list skips a step the guide calls the gate.
         "tests/test_build_surfaces.py",
