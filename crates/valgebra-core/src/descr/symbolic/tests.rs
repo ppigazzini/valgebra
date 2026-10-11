@@ -194,6 +194,51 @@ proptest! {
             }
         }
     }
+
+    /// A shape whose prefix letters all hold a value is put in canonical form
+    /// without the merge, and that form is the one the merge gives.
+    ///
+    /// The letters include the empty set and the whole one, so a prefix can
+    /// hold a letter that leaves its position unable to reach acceptance --
+    /// the case the shortcut must leave to the merge -- and a letter that
+    /// spells its position with the else edge alone.
+    #[test]
+    fn a_chain_of_inhabited_letters_is_minimal_as_built(
+        prefix in prop::collection::vec(letter(), 0..5),
+        tail in prop::option::of(letter()),
+    ) {
+        let (table, minimal) = SymbolicDfa::chain(&prefix, tail.as_ref());
+        prop_assert_eq!(
+            minimal,
+            prefix.iter().all(|guard| guard.emptiness() == Verdict::Inhabited)
+        );
+        prop_assert_eq!(SymbolicDfa::shape(&prefix, tail.as_ref()), table.minimal());
+    }
+
+    /// A side that is the whole language or the empty one is answered by the
+    /// algebra's identities, and the answer is the table the product builds.
+    #[test]
+    fn a_whole_or_empty_side_answers_as_the_product_does(a in language()) {
+        let (all, empty) = (SymbolicDfa::all(), SymbolicDfa::empty());
+        let both = |p: bool, q: bool| p && q;
+        let either = |p: bool, q: bool| p || q;
+        prop_assert_eq!(a.intersect(&all), a.product(&all, both));
+        prop_assert_eq!(all.intersect(&a), all.product(&a, both));
+        prop_assert_eq!(a.intersect(&empty), a.product(&empty, both));
+        prop_assert_eq!(empty.intersect(&a), empty.product(&a, both));
+        prop_assert_eq!(a.union(&empty), a.product(&empty, either));
+        prop_assert_eq!(empty.union(&a), empty.product(&a, either));
+        prop_assert_eq!(a.union(&all), a.product(&all, either));
+        prop_assert_eq!(all.union(&a), all.product(&a, either));
+    }
+}
+
+/// A letter for a shape: one of the drawn guards, the empty set or every
+/// integer.
+fn letter() -> impl Strategy<Value = IntSet> {
+    let mut letters = guards();
+    letters.extend([IntSet::empty(), IntSet::all()]);
+    prop::sample::select(letters)
 }
 
 /// A product past the build's allowance refuses, and the same product
@@ -670,4 +715,22 @@ fn each_defect_of_a_table_is_one_well_formed_refuses() {
     ] {
         assert!(!table.well_formed(), "{defect}");
     }
+}
+
+/// A letter that cannot say whether it holds a value leaves a shape to the
+/// merge, which is what keeps an unproved position from being read as one
+/// that reaches acceptance.
+#[test]
+fn a_chain_with_an_undecided_letter_is_left_to_the_merge() {
+    let held = Opaque::Exact(IntSet::just(1));
+    for prefix in [
+        vec![Opaque::Undecided],
+        vec![held.clone(), Opaque::Undecided],
+        vec![Opaque::Undecided, held.clone()],
+    ] {
+        let (table, minimal) = SymbolicDfa::chain(&prefix, Some(&held));
+        assert!(!minimal, "{prefix:?}");
+        assert_eq!(SymbolicDfa::shape(&prefix, Some(&held)), table.minimal());
+    }
+    assert!(SymbolicDfa::chain(&[held.clone(), held.clone()], None).1);
 }

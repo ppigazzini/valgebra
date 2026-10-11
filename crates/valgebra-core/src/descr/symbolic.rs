@@ -27,6 +27,7 @@
 use super::automaton::{Reached, canonical_order, reaches, refine};
 use super::budget;
 use crate::verdict::Verdict;
+use rustc_hash::FxHashMap;
 
 pub use super::automaton::MAX_STATES;
 
@@ -228,20 +229,75 @@ impl<G: Guard> SymbolicDfa<G> {
     /// `tuple[A, *tuple[B, ...]]`. A sequence longer than the prefix with no
     /// tail, or holding an element the guard rejects, reaches the sink and is
     /// not accepted.
+    ///
+    /// **A chain whose every prefix letter holds a value is minimal as built**,
+    /// so it is put in canonical form without the merge. Position `i` accepts
+    /// no sequence shorter than the `last - i` letters ahead of it and one of
+    /// exactly that length, so no two positions accept the same sequences; the
+    /// accepting state is the only one taking the empty sequence, and the sink
+    /// the only one taking none. The merge would find nothing, and it spends a
+    /// round per state on a chain, which is what a length bound is: 0.9 s on
+    /// four thousand elements, on a release build. A letter that is empty, or
+    /// that cannot say, leaves the table to the merge.
+    /// `a_chain_of_inhabited_letters_is_minimal_as_built` holds the two
+    /// readings to one table.
     #[must_use]
     pub fn shape(prefix: &[G], tail: Option<&G>) -> SymbolicDfa<G> {
+        let (table, minimal) = SymbolicDfa::chain(prefix, tail);
+        if !minimal {
+            return table.minimal();
+        }
+        debug_assert!(table.well_formed(), "a table is minimised as it was built");
+        let canonical = table.sorted().renumber();
+        debug_assert!(canonical.well_formed(), "renumbering the states kept it");
+        canonical
+    }
+
+    /// The table a shape spells, and whether every prefix letter is proved to
+    /// hold a value, which is what makes it minimal as built.
+    fn chain(prefix: &[G], tail: Option<&G>) -> (SymbolicDfa<G>, bool) {
         let last = prefix.len();
         // The sink sits past the prefix states and the tail state.
         let sink = u32::try_from(last + 1).unwrap_or(0);
         let mut edges: Vec<Vec<Edge<G>>> = Vec::with_capacity(last + 2);
+        // Whether a letter takes every value, and whether it is proved to take
+        // one: asked here rather than in [`SymbolicDfa::sorted`] because they
+        // are questions *about the guard*, and a letter may be a descriptor
+        // whose own complement rebuilds automata -- asking during minimisation
+        // would run the minimisation again, without end. The answers are kept
+        // for the next position, so a run of one letter -- a length bound is
+        // one letter per element -- asks them once rather than once a position.
+        let mut before: Option<(G, bool, bool)> = None;
+        let mut ask = |guard: &G| -> (bool, bool) {
+            if let Some((seen, covers, holds)) = &before
+                && seen == guard
+            {
+                return (*covers, *holds);
+            }
+            let covers = guard.complement().is_empty();
+            let holds = guard.emptiness() == Verdict::Inhabited;
+            before = Some((guard.clone(), covers, holds));
+            (covers, holds)
+        };
+        let mut inhabited = true;
         for (position, guard) in prefix.iter().enumerate() {
             let next = u32::try_from(position + 1).unwrap_or(sink);
-            edges.push(partition(guard, next, sink));
+            let (covers, holds) = ask(guard);
+            inhabited &= holds;
+            edges.push(partition(guard, covers, next, sink));
         }
         match tail {
             // The tail state loops on itself, which is the cycle that makes the
             // language infinite without anything recursive in the guard.
-            Some(guard) => edges.push(partition(guard, u32::try_from(last).unwrap_or(0), sink)),
+            Some(guard) => {
+                let (covers, _) = ask(guard);
+                edges.push(partition(
+                    guard,
+                    covers,
+                    u32::try_from(last).unwrap_or(0),
+                    sink,
+                ));
+            }
             None => edges.push(vec![Edge {
                 guard: None,
                 target: sink,
@@ -255,7 +311,7 @@ impl<G: Guard> SymbolicDfa<G> {
         if let Some(flag) = accepting.get_mut(last) {
             *flag = true;
         }
-        SymbolicDfa { edges, accepting }.minimal()
+        (SymbolicDfa { edges, accepting }, inhabited)
     }
 
     pub(crate) fn state_count(&self) -> usize {
@@ -392,15 +448,42 @@ impl<G: Guard> SymbolicDfa<G> {
 
     /// The sequences in either language, or `None` past [`MAX_STATES`],
     /// [`MAX_ROW`] or [`MAX_EDGES`], or where a guard operation refuses.
+    ///
+    /// The empty language is the identity and the whole one absorbs, so a side
+    /// that is either answers without a product -- whose table would be the
+    /// other side's again, rebuilt and minimised a round per state.
     #[must_use]
     pub fn union(&self, other: &SymbolicDfa<G>) -> Option<SymbolicDfa<G>> {
-        self.product(other, |a, b| a || b)
+        match (self.constant(), other.constant()) {
+            (Some(true), _) | (_, Some(true)) => Some(SymbolicDfa::all()),
+            (Some(false), _) => Some(other.clone()),
+            (_, Some(false)) => Some(self.clone()),
+            (None, None) => self.product(other, |a, b| a || b),
+        }
     }
 
-    /// The sequences in both languages.
+    /// The sequences in both languages: the whole language is the identity and
+    /// the empty one absorbs, as [`union`](Self::union) reads them.
     #[must_use]
     pub fn intersect(&self, other: &SymbolicDfa<G>) -> Option<SymbolicDfa<G>> {
-        self.product(other, |a, b| a && b)
+        match (self.constant(), other.constant()) {
+            (Some(false), _) | (_, Some(false)) => Some(SymbolicDfa::empty()),
+            (Some(true), _) => Some(other.clone()),
+            (_, Some(true)) => Some(self.clone()),
+            (None, None) => self.product(other, |a, b| a && b),
+        }
+    }
+
+    /// Whether this is the whole language (`Some(true)`) or the empty one
+    /// (`Some(false)`), read off the canonical form: one state, taking every
+    /// value back to itself.
+    fn constant(&self) -> Option<bool> {
+        match (self.edges.as_slice(), self.accepting.as_slice()) {
+            ([row], [accepts]) if matches!(row.as_slice(), [Edge { guard: None, .. }]) => {
+                Some(*accepts)
+            }
+            _ => None,
+        }
     }
 
     /// The product, accepting where `accept` says so.
@@ -429,13 +512,19 @@ impl<G: Guard> SymbolicDfa<G> {
         let mut edges: Vec<Vec<Edge<G>>> = Vec::new();
         let mut accepting: Vec<bool> = Vec::new();
         let mut held = 0usize;
+        // What each side's else edge takes, which is what its guarded edges
+        // leave: needed to meet an else edge with a guarded one, and the one
+        // place the letters are asked to complement. The rests and the meets
+        // the pairs of edges ask are kept for the pairs to come, since a chain
+        // -- which a length bound is -- repeats its rows state after state.
+        let mut our_rests = Rests::of(self.state_count());
+        let mut your_rests = Rests::of(other.state_count());
+        let mut met = Met::default();
         while let Some((mine, theirs)) = reached.next() {
             accepting.push(accept(self.accepts(mine), other.accepts(theirs)));
             let (ours, yours) = (self.outgoing(mine), other.outgoing(theirs));
-            // What each side's else edge takes, which is what its guarded edges
-            // leave. Needed to meet an else edge with a guarded one, and the one
-            // place the letters are asked to complement.
-            let (our_rest, your_rest) = (rest_of(ours)?, rest_of(yours)?);
+            let our_rest = our_rests.at(mine, ours)?;
+            let your_rest = your_rests.at(theirs, yours)?;
             // The product's else edge takes what *both* sides leave, so one side
             // leaving nothing is enough to make it dead. Asked of the two rests
             // already in hand rather than of their meet: a meet here would be a
@@ -443,17 +532,20 @@ impl<G: Guard> SymbolicDfa<G> {
             // does not descend.
             let rest_is_empty = our_rest.is_empty() || your_rest.is_empty();
             let mut row: Vec<Edge<G>> = Vec::new();
-            for ours in ours {
-                for yours in yours {
+            for (at_ours, ours) in ours.iter().enumerate() {
+                for (at_yours, yours) in yours.iter().enumerate() {
                     // A pair of edges meets on the values both take. The else
                     // edge's set is the rest, so each of the four combinations
                     // is one meet -- and the else-with-else pair is the
                     // product's own else edge, which needs no guard at all.
-                    let guard = match (&ours.guard, &yours.guard) {
-                        (Some(a), Some(b)) => Some(a.meet(b)?),
-                        (Some(a), None) => Some(a.meet(&your_rest)?),
-                        (None, Some(b)) => Some(our_rest.meet(b)?),
-                        (None, None) => None,
+                    let at = (at_ours, at_yours);
+                    let guard = match (&ours.guard, &yours.guard, &our_rest, &your_rest) {
+                        (Some(a), Some(b), _, _) => Some(met.meet(at, a, b)?),
+                        (Some(a), None, _, Rest::Everything) => Some(a.clone()),
+                        (Some(a), None, _, Rest::Left(rest)) => Some(met.meet(at, a, rest)?),
+                        (None, Some(b), Rest::Everything, _) => Some(b.clone()),
+                        (None, Some(b), Rest::Left(rest), _) => Some(met.meet(at, rest, b)?),
+                        (None, None, _, _) => None,
                     };
                     if guard.as_ref().is_some_and(Guard::is_empty) {
                         continue;
@@ -692,18 +784,15 @@ impl<G: Guard> SymbolicDfa<G> {
 /// else edge takes the rest. Together they cover the universe, which is the
 /// invariant every state's edge list carries -- and the else edge is why the
 /// guard's complement is not needed to state it.
-fn partition<G: Guard>(guard: &G, taken: u32, sink: u32) -> Vec<Edge<G>> {
+///
+/// `covers` says whether the guard takes every value, which the caller asks.
+fn partition<G: Guard>(guard: &G, covers: bool, taken: u32, sink: u32) -> Vec<Edge<G>> {
     // A guard that leaves nothing leaves the else edge dead, and a row with a
     // dead else edge is the same transition table as one whose only edge *is*
     // the else edge. Spelling it the second way here is what keeps a loop
     // guarded by every value equal to a state that accepts everything --
     // otherwise one language carries two tables.
-    //
-    // Asked here rather than in [`SymbolicDfa::sorted`] because it is a question
-    // *about the guard*, and a letter may be a descriptor whose own complement
-    // rebuilds automata: asking it during minimisation would run the
-    // minimisation again, without end.
-    if guard.complement().is_empty() {
+    if covers {
         return vec![Edge {
             guard: None,
             target: taken,
@@ -719,6 +808,100 @@ fn partition<G: Guard>(guard: &G, taken: u32, sink: u32) -> Vec<Edge<G>> {
             target: sink,
         },
     ]
+}
+
+/// What a state's else edge takes, as a product reads it.
+#[derive(Clone)]
+enum Rest<G> {
+    /// Every value: the row has no guarded edge, so a guard met with its else
+    /// edge is the guard, and nothing needs complementing to say so.
+    Everything,
+    /// What the row's guarded edges leave.
+    Left(G),
+}
+
+impl<G: Guard> Rest<G> {
+    fn is_empty(&self) -> bool {
+        match self {
+            Rest::Everything => false,
+            Rest::Left(rest) => rest.is_empty(),
+        }
+    }
+}
+
+/// The rests one side's states leave, as one product asks them.
+struct Rests<G> {
+    /// Each state's rest, where a pair has asked it: a state is part of a
+    /// pair with each state of the other side it is reached beside.
+    by_state: Vec<Option<Rest<G>>>,
+    /// The guards of the last row whose rest was taken, with the rest: the
+    /// states of a chain carry one row each, and the rows repeat their guards.
+    last: Option<(Vec<Option<G>>, Rest<G>)>,
+}
+
+impl<G: Guard> Rests<G> {
+    fn of(states: usize) -> Rests<G> {
+        Rests {
+            by_state: vec![None; states],
+            last: None,
+        }
+    }
+
+    /// The rest of `row`, the row of `state`, or `None` where a guard
+    /// refuses, as [`rest_of`] does.
+    fn at(&mut self, state: u32, row: &[Edge<G>]) -> Option<Rest<G>> {
+        if let Some(Some(rest)) = self.by_state.get(state as usize) {
+            return Some(rest.clone());
+        }
+        let guards = || row.iter().map(|edge| &edge.guard);
+        let rest = if guards().all(Option::is_none) {
+            Rest::Everything
+        } else if let Some((seen, rest)) = &self.last
+            && seen.iter().eq(guards())
+        {
+            rest.clone()
+        } else {
+            let rest = Rest::Left(rest_of(row)?);
+            self.last = Some((guards().cloned().collect(), rest.clone()));
+            rest
+        };
+        if let Some(slot) = self.by_state.get_mut(state as usize) {
+            *slot = Some(rest.clone());
+        }
+        Some(rest)
+    }
+}
+
+/// The meets one product has asked, by the places of the two edges in their
+/// rows: a chain's rows repeat, so the pair at one place meets the same two
+/// guards state after state, and meets them once. Compared by equality, which
+/// a shared handle answers by pointer.
+struct Met<G> {
+    asked: FxHashMap<(usize, usize), (G, G, G)>,
+}
+
+impl<G> Default for Met<G> {
+    fn default() -> Met<G> {
+        Met {
+            asked: FxHashMap::default(),
+        }
+    }
+}
+
+impl<G: Guard> Met<G> {
+    /// `left` met with `right`, the guards of the edges at `at`.
+    fn meet(&mut self, at: (usize, usize), left: &G, right: &G) -> Option<G> {
+        if let Some((seen_left, seen_right, met)) = self.asked.get(&at)
+            && seen_left == left
+            && seen_right == right
+        {
+            return Some(met.clone());
+        }
+        let met = left.meet(right)?;
+        self.asked
+            .insert(at, (left.clone(), right.clone(), met.clone()));
+        Some(met)
+    }
 }
 
 /// The values a state's else edge takes: everything its guarded edges do not.

@@ -922,6 +922,21 @@ as a list against a length-bounded list of the same element.
   product that keeps its chain is minimised again at the same cost.
   `--decision-sets` reads 6.12% fewer instructions, the signatures the rounds
   allocated.
+- **A length bound costs a state an element and little else.** A bound over a
+  list is an automaton of one letter repeated, so the letter is held by one
+  handle and asked whether it takes every value once (`chain` in
+  `descr/symbolic.rs`); a chain whose letters all hold a value is minimal as
+  built and skips the merge; a row with no guarded edge leaves everything, so
+  meeting its else edge is the guard itself (`Rest`); a product keeps the rests
+  and the meets it has asked for the pairs to come, since a chain repeats its
+  rows (`Rests`, `Met`); and a side that is the whole language or the empty
+  one is answered without a product. A bound of forty elements over
+  `list[int]` lowers on 194 units of the allowance, against 3,409 when every
+  position asks its own letter and every pair its own rest, and two bounds are
+  compared up to 1,340 elements where asking at every pair stops at 169;
+  `MinLen(4000)` refuses in 4 ms against 1.2 s.
+  `--decision-lengths` reads 88.31% fewer instructions and `--decision-sets`
+  21.80% fewer.
 
 **A pair's constants are read once per validator, not once per question.**
 Relating two validators pools one's constants into the other's, and the key a

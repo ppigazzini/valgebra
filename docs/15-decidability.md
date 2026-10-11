@@ -206,7 +206,10 @@ answers `"undecided"`.
   set holds each member once, so a bound over one asks how many values its
   element has: `set[bool]` under `MinLen(3)` is empty, `set[int]` under it has
   a value, and an element the rules cannot count declines. A dict's bound is
-  not counted, and declines. That decides a
+  not counted, and declines. A bound over a list is an automaton with a
+  state per element, and the sets compare two such bounds up to about 1,340
+  elements over a list of integers before the work a relation may spend runs
+  out; past that they decline. That decides a
   fixpoint every unfolding of which needs one more element -- each element is a
   value of the fixpoint, and no finite value satisfies it. A bound over a
   *fixed* position, or over a base whose values have no length at all, is not

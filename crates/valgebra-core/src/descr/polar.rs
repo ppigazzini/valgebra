@@ -276,3 +276,6 @@ pub(super) fn tidy<S: Summand>(summands: Vec<S>) -> Option<Vec<S>> {
     let kept = S::compacted(summands)?;
     (kept.len() <= S::MAX).then_some(kept)
 }
+
+#[cfg(test)]
+mod tests;

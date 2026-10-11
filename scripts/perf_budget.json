@@ -69,8 +69,8 @@
   "decision_rules_workload_checksum": 460000,
   "decision_rules_workload_irefs": 94308238,
   "decision_sets_workload_checksum": 460,
-  "decision_sets_workload_irefs": 168109389,
+  "decision_sets_workload_irefs": 131467900,
   "_decision_lengths_comment": "Four length bounds over a list of integers asked of the sets through the reading the sets half takes, two passes: a longer lower bound inside a shorter one, the converse, a shorter upper bound inside a longer one, and a bound on both sides inside a lower one. Every bound is short enough that each pair is decided, so a change that lets a longer bound lower moves this count and not the checksum. Re-record with --decision-lengths --update.",
   "decision_lengths_workload_checksum": 22,
-  "decision_lengths_workload_irefs": 477334015
+  "decision_lengths_workload_irefs": 55786139
 }

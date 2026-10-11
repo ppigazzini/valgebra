@@ -2,7 +2,7 @@ use std::sync::{Arc, LazyLock};
 
 use proptest::prelude::*;
 
-use super::{BUDGET, Bounds, Constants, DEPTH, Operand, lower, lower_within};
+use super::{BUDGET, Bounds, Constants, DEPTH, Operand, WORK, lower, lower_within};
 use crate::descr::classes::Class;
 use crate::descr::{Descr, Value};
 use crate::ir::{
@@ -1170,6 +1170,97 @@ fn a_length_bound_stays_within_the_kinds_of_its_base() {
     assert!(over_lists.admits(Value::sequence(ONE, Kind::List)));
     assert!(!over_lists.admits(Value::word(b"a", Kind::Str)));
     assert!(!over_lists.admits(Value::sequence(ONE, Kind::Tuple)));
+}
+
+/// A length bound over a base of two counted kinds bounds each: the words and
+/// the sequences are two parts of one union, and each part counts its own kind.
+#[test]
+fn a_length_bound_over_words_and_lists_bounds_both() {
+    let pool = empty_pool();
+    let both = Schema::refine(
+        Schema::union([
+            Schema::Str,
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+        ]),
+        vec![Constraint::MinLen(2)],
+    );
+    let lowered = lower(&both, &pool).expect("a bound over words and lists lowers");
+    assert!(lowered.admits(Value::word(b"ab", Kind::Str)));
+    assert!(!lowered.admits(Value::word(b"a", Kind::Str)));
+    assert!(lowered.admits(integers(2)));
+    assert!(!lowered.admits(integers(1)));
+}
+
+/// A list of `n` integers.
+fn integers(n: usize) -> Value {
+    Value::sequence(Vec::leak(vec![Value::integer(1); n]), Kind::List)
+}
+
+/// A list of integers bounded by `constraint`.
+fn bounded_list(constraint: Constraint) -> Schema {
+    Schema::refine(
+        Schema::list(SeqShape::homogeneous(Schema::Int)),
+        vec![constraint],
+    )
+}
+
+/// A length bound over a list lowers two hundred elements deep under the bounds
+/// every relation lowers under, either way round, and admits the lengths it
+/// says and no others.
+#[test]
+fn a_length_bound_over_a_list_lowers_two_hundred_elements_deep() {
+    let pool = empty_pool();
+    let lowered = |constraint| {
+        lower_within(Bounds::DEFAULT, &bounded_list(constraint), &pool)
+            .expect("a bound of two hundred lowers")
+    };
+    let at_least = lowered(Constraint::MinLen(200));
+    assert!(at_least.admits(integers(200)) && !at_least.admits(integers(199)));
+    let at_most = lowered(Constraint::MaxLen(200));
+    assert!(at_most.admits(integers(200)) && !at_most.admits(integers(201)));
+}
+
+/// What a length bound over a list costs: three units of the build's allowance
+/// an element, for a lower bound and an upper one, and 134 at twenty elements
+/// for a lower one. So the longest lower bound the default allowance of 4,096
+/// lowers is 1,340 elements. Asking every position its own letter and every
+/// pair its own rest costs 83 an element, which stops a bound near 48.
+#[test]
+fn a_length_bound_costs_three_units_an_element() {
+    let pool = empty_pool();
+    let cost = |constraint: Constraint| {
+        let schema = bounded_list(constraint);
+        let lowers = |work| {
+            lower_within(
+                Bounds {
+                    work,
+                    ..Bounds::DEFAULT
+                },
+                &schema,
+                &pool,
+            )
+            .is_some()
+        };
+        let (mut refused, mut lowered) = (0, WORK);
+        assert!(
+            lowers(lowered),
+            "the bound lowers under the default allowance"
+        );
+        while refused + 1 < lowered {
+            let middle = u64::midpoint(refused, lowered);
+            if lowers(middle) {
+                lowered = middle;
+            } else {
+                refused = middle;
+            }
+        }
+        lowered
+    };
+    for bound in [Constraint::MinLen, Constraint::MaxLen] {
+        let (twenty, forty) = (cost(bound(20)), cost(bound(40)));
+        assert_eq!(forty - twenty, 60, "{:?}", bound(0));
+    }
+    assert_eq!(cost(Constraint::MinLen(20)), 134);
 }
 
 /// An integer bound no float equals is read against the neighbour on the

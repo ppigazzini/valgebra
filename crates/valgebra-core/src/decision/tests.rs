@@ -2677,6 +2677,41 @@ fn a_length_bound_over_a_set_asks_its_element_for_that_many_values() {
 /// A length bound is read for the values its base has, not only for the values
 /// it cannot have.
 ///
+/// Two length bounds over a list six hundred elements long are compared by the
+/// sets: a lower bound is refuted inside a longer one and an upper bound inside
+/// a shorter one, each by a list the length of the bound it falls short of.
+///
+/// The difference is a product of two chains, and the rows of a chain repeat:
+/// each state's rest and each pair of guards is the same as the last. Asked
+/// once, a relation reaches 1,340 elements before the allowance is spent; with
+/// the meets asked at every state it stops at 508, with the rests at 239, and
+/// with both at 169.
+#[test]
+fn two_length_bounds_six_hundred_elements_long_are_compared() {
+    let bounded = |constraint| {
+        Schema::refine(
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            vec![constraint],
+        )
+    };
+    let relation =
+        |sub: Schema, sup: Schema| sub.subtype_relation_under(&sup, &NoLeafRelations, &[]);
+    assert_eq!(
+        relation(
+            bounded(Constraint::MinLen(599)),
+            bounded(Constraint::MinLen(600))
+        ),
+        Relation::Fails
+    );
+    assert_eq!(
+        relation(
+            bounded(Constraint::MaxLen(600)),
+            bounded(Constraint::MaxLen(599))
+        ),
+        Relation::Fails
+    );
+}
+
 /// A bound is satisfiable in the abstract and still empty over its base, which
 /// is why a refinement is unknown in general. The bases a length bound is
 /// *written* for are the exception: a string and a bytes take any length, and a

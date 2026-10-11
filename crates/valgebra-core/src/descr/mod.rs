@@ -575,11 +575,16 @@ impl Descr {
         // descriptor becomes a letter.
         let prefix: Vec<Arc<Descr>> = prefix.iter().cloned().map(Arc::new).collect();
         let tail = tail.cloned().map(Arc::new);
+        Descr::shaped(&prefix, tail.as_ref(), kind)
+    }
+
+    /// [`sequence`](Self::sequence) with its letters already behind handles.
+    fn shaped(prefix: &[Arc<Descr>], tail: Option<&Arc<Descr>>, kind: Kind) -> Option<Descr> {
+        if !is_sequence(kind) {
+            return None;
+        }
         let mut descr = Descr::nothing();
-        descr.put(
-            kind,
-            Component::Sequences(SymbolicDfa::shape(&prefix, tail.as_ref())),
-        );
+        descr.put(kind, Component::Sequences(SymbolicDfa::shape(prefix, tail)));
         Some(descr)
     }
 
@@ -594,6 +599,15 @@ impl Descr {
     /// Refuses past the state bound rather than building an automaton with one
     /// state per element a caller asked for: `MinLen(100_000)` is a schema
     /// nobody writes and an automaton nobody can hold.
+    ///
+    /// **The state bound is not what stops a relation.** Built, the bound
+    /// spends one unit of the build's allowance; met with an element's shape,
+    /// it spends about three an element, since the product holds two states an
+    /// element: one where every element so far is the shape's, and one where
+    /// some element is not. So the
+    /// allowance ([`lower::WORK`]) stops a relation over a list of integers at
+    /// 1,340 elements, well inside the state bound, and
+    /// `a_length_bound_costs_three_units_an_element` holds the figures.
     #[must_use]
     pub fn sequences_at_least(least: usize, kind: Kind) -> Option<Descr> {
         Descr::sequences_at_least_within(least, symbolic::MAX_STATES, kind)
@@ -606,8 +620,11 @@ impl Descr {
         if least > bound {
             return None;
         }
-        let anything = Descr::anything();
-        Descr::sequence(&vec![anything.clone(); least], Some(&anything), kind)
+        // One handle at every position: the letter is one set throughout, and
+        // the automaton reads a run of one handle's guard once, by pointer,
+        // where a copy per element is a descriptor compared per element.
+        let anything = Arc::new(Descr::anything());
+        Descr::shaped(&vec![Arc::clone(&anything); least], Some(&anything), kind)
     }
 
     /// The sequences of `kind` holding at most `most` elements.

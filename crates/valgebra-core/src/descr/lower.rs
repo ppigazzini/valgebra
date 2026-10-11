@@ -944,21 +944,27 @@ fn lengths(
     if !base.within(&[Kind::Str, Kind::Bytes, Kind::List, Kind::Tuple]) {
         return None;
     }
-    let mut whole = Descr::nothing();
-    for kind in WORDS {
+    // The first kind's part is the union so far, rather than a union with the
+    // empty set: that union is a product of automata, one state per element
+    // of a sequence bound, spent to rebuild the part it was given.
+    let mut whole: Option<Descr> = None;
+    let parts = WORDS
+        .iter()
+        .map(|kind| (*kind, words))
+        .chain(SEQUENCES.iter().map(|kind| (*kind, sequences)));
+    for (kind, part) in parts {
         if base.reaches(kind) {
-            whole = whole.union(&words(kind)?)?;
+            let part = part(kind)?;
+            whole = Some(match whole {
+                Some(whole) => whole.union(&part)?,
+                None => part,
+            });
         }
     }
-    for kind in SEQUENCES {
-        if base.reaches(kind) {
-            whole = whole.union(&sequences(kind)?)?;
-        }
-    }
-    // The base lies within the counted kinds, so `whole` is empty exactly when
-    // the base is -- and a bound over an empty base denotes the empty set, which
-    // is an answer rather than a refusal.
-    Some(whole)
+    // The base lies within the counted kinds, so no part is built exactly when
+    // the base is empty -- and a bound over an empty base denotes the empty
+    // set, which is an answer rather than a refusal.
+    Some(whole.unwrap_or_else(Descr::nothing))
 }
 
 /// The words a pattern matches, under whichever word kind the base admits.
