@@ -980,8 +980,8 @@ jobs:
       # `scripts/compare_gate.py` refuses to judge across those, so a recording
       # made anywhere but here is a number about somewhere else. This lane
       # cannot commit, so the reading leaves as an artifact, and one run is one
-      # of the lane's two classes of machine: it is set beside the lane's other
-      # readings by a human before any floor is chosen from it.
+      # of the lane's classes of machine: it joins a window of the lane's other
+      # readings, which `compare_gate.py --record-window` arms the floor from.
       #
       # Only this lane records. The free-threaded job below measures a second
       # environment and the file holds one recorded block, so a recording from

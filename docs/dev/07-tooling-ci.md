@@ -588,20 +588,28 @@ and the spread it was measured across -- the ratchet the mutation sweep and the
 instruction gate already have. Once armed, a shape measuring worse than
 `recorded + tolerance` is red while still under its ceiling.
 
-**The ratchet is not armed, and one run cannot arm it.** The bench lane's
-runners come in two classes of machine, and one tree reads differently on each:
-three runs of one commit read the one-integer check 0.156, 0.197 and 0.159,
-and one commit's push read the nested schema 0.165 where its dispatch
-read 0.124 and 0.126. Both differences are wider than the shape's tolerance of
-0.025, and across the lane's 47 readings on CPython 3.14, from 2026-10-04 to
-2026-10-09, five of the six ratcheted shapes spread wider than their tolerance,
-two of them twice as wide. The tolerances were read on one box. A recording
-taken from one run, which is what `--update` writes, lands on one class of
-machine and fires on the next run that lands on the other, with nothing
-changed. So the ratios and the environment in `scripts/perf_compare.json` stay
-empty until a recording is a figure of the lane rather than of a run
-(`_how_to_arm` there says what it wants), and the gate prints `ratchet not
-armed` and judges the ceilings alone.
+**The ratchet is armed from a window of the lane's readings, because one run
+cannot arm it.** The bench lane's runners come in classes of machine -- a
+pydantic one-integer check takes about 160, 240 or 310 ns on them -- and one
+tree reads differently on each: three runs of one commit read the one-integer
+check 0.156, 0.197 and 0.159, and one commit's push read the nested schema 0.165
+where its dispatch read 0.124 and 0.126. A recording taken from one run, which
+is what `--update` writes, lands on one class and fires on the next run that
+lands on another, with nothing changed. So `scripts/compare_gate.py
+--record-window` arms it from a window instead: each shape's ratio is the
+median of the window's readings, and its tolerance is half again the widest
+reading above that median, rounded up to a two-hundredth. The window is kept in
+`scripts/perf_compare.json` beside the ratios it gave, and a row holds the two
+to each other and holds every reading of the window under its own floor.
+
+Which readings the window holds, the runs they come from and why it starts
+where it does are the `recorded` block's own `_how_recorded` note and `window`
+list in `scripts/perf_compare.json`, beside the ratios they gave; a copy of
+those figures here would be stale at the next recording. The tolerances also
+reach half again the widest of the lane's earlier readings above the recorded
+median, so a short window does not set a floor the runs it missed would cross.
+A change that moves a shape on the lane, or a profile that lays one out
+differently, is recorded again from readings taken after it.
 
 The travel problem is answered rather than avoided. The recorded block names the
 environment it was taken in -- the interpreter, whether it has a global lock,
@@ -612,7 +620,7 @@ the lane that builds the wheel the same way every time: a recording made
 elsewhere would match the lane's fingerprint while carrying another machine's
 noise.
 
-A tolerance is the shape's own spread across runs of one build, measured per
+A tolerance is the shape's own spread across the lane's runs, measured per
 shape rather than assumed, so `--update` leaves it alone -- one run cannot see a
 spread, and a recording that narrowed it silently would fire on noise. A shape
 whose spread is too wide to ratchet at all carries a written reason instead of

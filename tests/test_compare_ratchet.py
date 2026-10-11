@@ -178,6 +178,60 @@ def test_every_shape_is_ratcheted_or_argued_out_of_it() -> None:
         assert is_a_reason(reason), f"{shape} is excused without an argument"
 
 
+def _recorded() -> dict:
+    return json.loads((ROOT / "scripts" / "perf_compare.json").read_text())["recorded"]
+
+
+def test_a_window_records_its_median_and_half_again_its_widest_reading() -> None:
+    runs = [
+        {"scalar": 0.180, "build": 0.004},
+        {"scalar": 0.190, "build": 0.006},
+        {"scalar": 0.214, "build": 0.006},
+    ]
+    ratios, tolerance = GATE.window_record(runs, {"scalar": 0.020, "build": 0.005})
+    # 0.214 sits 0.024 above the median; half again that is 0.036, rounded up
+    # to a two-hundredth. The build's spread is under its own tolerance, which
+    # stands.
+    assert ratios == {"scalar": 0.190, "build": 0.006}
+    assert tolerance == {"scalar": 0.040, "build": 0.005}
+
+
+def test_the_recorded_ratios_are_the_medians_of_their_window() -> None:
+    """The floor the file carries is the one its window gives, and no wider.
+
+    A ratio recorded from one run -- what `--update` writes -- lands on one
+    class of the lane's machines, so the file keeps the window it was armed
+    from and is held to it: its ratios are the window's medians, and each
+    tolerance already covers half again the widest reading above them.
+    """
+    recorded = _recorded()
+    window = [run["ratios"] for run in recorded["window"]]
+    ratios, tolerance = GATE.window_record(window, recorded["tolerance"])
+    assert ratios == recorded["ratios"]
+    assert tolerance == recorded["tolerance"]
+    assert set(recorded["ratios"]) == set(recorded["tolerance"]), (
+        "a judged shape with no recorded ratio is judged by nothing"
+    )
+
+
+def test_no_reading_of_the_recorded_window_drifts() -> None:
+    recorded = {**_recorded(), "environment": GATE.environment()}
+    for run in recorded["window"]:
+        moved, unarmed = GATE.drifted(run["ratios"], recorded)
+        assert unarmed is None
+        assert moved == [], f"run {run['run']} fires against the floor it set"
+
+
+def test_a_reading_past_its_tolerance_drifts_against_the_record() -> None:
+    recorded = {**_recorded(), "environment": GATE.environment()}
+    for shape, ratio in recorded["ratios"].items():
+        reading = dict(recorded["ratios"])
+        reading[shape] = ratio + recorded["tolerance"][shape] + 0.001
+        moved, unarmed = GATE.drifted(reading, recorded)
+        assert unarmed is None
+        assert moved == [shape]
+
+
 def test_a_tolerance_is_a_spread_rather_than_a_wish() -> None:
     # A tolerance wider than the shape's ceiling judges nothing; one at zero
     # fires on the first run. Both are ways of having a ratchet that is not one.

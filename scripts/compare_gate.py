@@ -50,9 +50,18 @@ pydantic-core it was measured against, because a faster pydantic-core raises
 every ratio without anything here changing. Run somewhere else, the ratchet says
 so and judges the ceilings alone rather than reporting a drift it cannot read.
 
+**The recorded ratios are a window's, not a run's.** The bench lane reads one
+tree on several classes of machine, further apart than a shape's tolerance, so
+a ratio recorded from one run fires on the next run that lands on another
+class. Each recorded ratio is the median of a window of the lane's readings,
+and each tolerance is widened, where it has to be, to half again the widest
+reading above that median: no reading of the window fires against the floor it
+set. The window is kept in the block beside the ratios it gave.
+
 Usage:
     python scripts/compare_gate.py            # ceilings, and the ratchet where it arms
-    python scripts/compare_gate.py --update   # re-record the ratios here
+    python scripts/compare_gate.py --update   # one run's ratios, for a window
+    python scripts/compare_gate.py --record-window WINDOW.json   # arm from a window
 
 Requires the ``bench`` dependency group (pydantic) and the built extension.
 
@@ -66,6 +75,8 @@ not read as one that passed.
 from __future__ import annotations
 
 import json
+import math
+import statistics
 import sys
 import timeit
 from pathlib import Path
@@ -75,7 +86,7 @@ from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments
 
 if TYPE_CHECKING:
     import argparse
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
 
 CEILING_FILE = ROOT / "scripts" / "perf_compare.json"
@@ -362,11 +373,20 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "--update", action="store_true", help="record the ratios and the ceilings"
     )
+    parser.add_argument(
+        "--record-window",
+        type=Path,
+        metavar="WINDOW",
+        help="arm the ratchet from a JSON window of the lane's readings",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] = ()) -> int:
     args = _arguments(argv)
+    if args.record_window is not None:
+        _record_window(args.record_window)
+        return EXIT_OK
     prepared = _prepare()
     if prepared is None:
         return EXIT_CANNOT_RUN
@@ -493,12 +513,15 @@ def _recorded_block() -> dict[str, object]:
 
 
 def _record(measured: dict[str, float]) -> None:
-    """Write this run's ratios as the floor the next run is held to.
+    """Write this run's ratios, the reading a window of the lane takes in.
 
-    The tolerance is left alone: it is the shape's measured spread across runs
-    of one build, which one run cannot see, and lowering it silently would make
-    the ratchet fire on noise. Widening or narrowing it is an edit with its own
-    argument, like a ceiling.
+    The floor the file carries is a window's (`--record-window`), and a
+    recording committed from one run fails the test that holds the ratios to
+    the window beside them: one run lands on one class of machine. The
+    tolerance is left alone: it is the shape's spread across runs, which one
+    run cannot see, and lowering it silently would make the ratchet fire on
+    noise. Widening or narrowing it is an edit with its own argument, like a
+    ceiling.
     """
     document = json.loads(CEILING_FILE.read_text(encoding="utf-8"))
     block = document.setdefault("recorded", {})
@@ -510,6 +533,50 @@ def _record(measured: dict[str, float]) -> None:
     block.setdefault("unratcheted", {})
     CEILING_FILE.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
     print(f"\nrecorded {len(measured)} ratios for {block['environment']}")
+
+
+def window_record(
+    runs: Sequence[Mapping[str, float]], tolerance: Mapping[str, float]
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Read the ratios and tolerances a window of readings arms the ratchet with.
+
+    For each shape the file judges: its ratio is the median of the window, and
+    its tolerance the larger of the one carried and half again the widest
+    reading above that median, rounded up to a two-hundredth. A shape is
+    judged where it carries a tolerance, so one argued out of the ratchet is
+    not recorded at all.
+    """
+    ratios: dict[str, float] = {}
+    widened: dict[str, float] = {}
+    for name, carried in sorted(tolerance.items()):
+        readings = [run[name] for run in runs]
+        median = statistics.median(readings)
+        needed = math.ceil(round(1.5 * (max(readings) - median) * 200, 6)) / 200
+        ratios[name] = round(median, 3)
+        widened[name] = round(max(float(carried), needed), 3)
+    return ratios, widened
+
+
+def _record_window(path: Path) -> None:
+    """Arm the ratchet from the window at `path`, and keep the window beside it.
+
+    The window is a list of runs, each naming where it was read and carrying
+    every shape's ratio from that run's table. The environment is this
+    interpreter's, so the window is recorded in one matching the lane's.
+    """
+    runs = json.loads(path.read_text(encoding="utf-8"))["runs"]
+    document = json.loads(CEILING_FILE.read_text(encoding="utf-8"))
+    block = document.setdefault("recorded", {})
+    ratios, tolerance = window_record(
+        [run["ratios"] for run in runs], block.get("tolerance", {})
+    )
+    block["environment"] = environment()
+    block["ratios"] = ratios
+    block["tolerance"] = tolerance
+    block["window"] = runs
+    CEILING_FILE.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    where = block["environment"]
+    print(f"armed {len(ratios)} ratios from {len(runs)} runs for {where}")
 
 
 def environment() -> str:
@@ -551,7 +618,7 @@ def drifted(
     running a timer or pydantic.
     """
     if not recorded or not recorded.get("ratios"):
-        return [], "no ratios are recorded; `_how_to_arm` in the file says why"
+        return [], "no ratios are recorded; `_how_recorded` in the file says how"
     was = recorded.get("environment")
     now = environment()
     if was != now:

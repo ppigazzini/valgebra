@@ -365,10 +365,11 @@ so a Python exception's cost is inside the number. It is excluded from the
 gate's drift ratchet, and `scripts/perf_compare.json` gives the reason rather
 than leaving an absent entry to mean it: a spread read on another build, five
 runs between 0.86 and 1.19. On this one the shape spreads less than the JSON
-document does. The ratchet holds neither yet: it is not armed, because the
-bench lane reads one tree on two classes of machine further apart than a
-tolerance (`docs/dev/07-tooling-ci.md` has the readings), and the gate judges
-every shape against its ceiling alone.
+document does. The ratchet holds the JSON document and the other five shapes,
+armed from a window of the bench lane's readings rather than one run, since the
+lane reads one tree on several classes of machine further apart than a
+tolerance (`docs/dev/07-tooling-ci.md` has the window); the error report is
+judged against its ceiling alone.
 
 A failing validation walks the value **twice** here -- once to decide, once to
 say which field -- where pydantic-core walks it once and collects as it goes.

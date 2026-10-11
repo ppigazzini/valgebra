@@ -436,11 +436,13 @@ by `test_invalid_utf8_in_an_unread_value_is_not_a_document`,
 **A wall-clock gate.** The performance gates count instructions under
 cachegrind, which a build reads alike on every run, and compare with
 pydantic-core as a per-call ratio, which cancels the runner's speed; no absolute
-time gates a merge. The ratio's ratchet stays unarmed too, since the bench lane
-reads one tree on two classes of machine further apart than a tolerance
+time gates a merge. The ratio's ratchet is armed from a window of the lane's
+readings, never one run, since the bench lane reads one tree on several classes
+of machine further apart than a tolerance
 ([07-tooling-ci.md](07-tooling-ci.md)). Held by
 `test_only_the_argued_tests_read_a_clock` in `tests/test_clock_ledger.py`, and
-`test_a_tolerance_is_a_spread_rather_than_a_wish` in
+`test_a_tolerance_is_a_spread_rather_than_a_wish` and
+`test_no_reading_of_the_recorded_window_drifts` in
 `tests/test_compare_ratchet.py`.
 
 **A zero-survivor mutation target.** Whether a mutant is equivalent to the code

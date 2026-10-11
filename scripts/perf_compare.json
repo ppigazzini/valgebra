@@ -16,19 +16,182 @@
   },
   "_recorded_comment": "The ratio each shape last measured, the spread it was measured across, and the environment both belong to. See docs/dev/07-tooling-ci.md for why a claim alone stopped being enough.",
   "recorded": {
-    "environment": null,
-    "ratios": {},
+    "environment": "cpython3.14-gil-pydantic_core-2.46.5",
+    "ratios": {
+      "build": 0.006,
+      "deep_nesting": 0.131,
+      "json_document": 0.655,
+      "large_array": 0.118,
+      "scalar": 0.184,
+      "wide_record": 0.262
+    },
     "tolerance": {
-      "scalar": 0.025,
-      "large_array": 0.01,
-      "wide_record": 0.03,
-      "deep_nesting": 0.025,
-      "json_document": 0.06,
-      "build": 0.005
+      "build": 0.005,
+      "deep_nesting": 0.065,
+      "json_document": 0.085,
+      "large_array": 0.05,
+      "scalar": 0.04,
+      "wide_record": 0.03
     },
     "unratcheted": {
       "error_report": "Not measurable on this instrument. Five runs of one PGO CPython 3.12 build read 0.861, 0.882, 0.889, 1.056 and 1.193 -- a spread of 0.33, a third of the shape's own value, where every other shape spreads between 0.001 and 0.048. Twelve runs of another PGO CPython 3.12 build read 0.43 to 0.46 (docs/11-performance.md), so the spread is the build's as much as the shape's. A tolerance wide enough not to fire on that noise would be wider than any regression worth catching, and a tighter one would fire constantly. The shape keeps its ceiling of 1.60, which it is nowhere near crossing, and the reason it is noisy is worth its own reading: it is the only shape timing a path that raises and formats an exception, so a Python exception's cost is inside the measurement."
     },
-    "_how_to_arm": "Unrecorded on a measurement. A recording made off the bench lane would match its fingerprint while carrying another machine's noise, and one made on it is one run on one of the lane's two classes of machine: three runs of one commit read scalar 0.156, 0.197 and 0.159, and one commit's push read deep_nesting 0.165 where its dispatch read 0.124 and 0.126, each pair further apart than the shape's tolerance. A ratio recorded from one run fires on the next run that lands on the other class, with nothing changed. What arms the ratchet is a ratio that is a figure of the lane, with a tolerance read from the same readings; docs/dev/07-tooling-ci.md gives the lane's spread. The tolerances below cover the shapes' own spread on CPython 3.14 read twice on one box: twelve runs of a PGO wheel on uv's build and eighteen on a source build. Each is at least the wider of the two, rounded up (scalar 0.021, large_array 0.010, deep_nesting 0.023, wide_record 0.022, json_document 0.058, build 0.001)."
+    "_how_recorded": "Armed from a window of the bench lane's own readings, not from one run: the lane reads one tree on several classes of machine further apart than a tolerance, and a ratio recorded from one run fires on the next run that lands on another class. `window` holds the readings -- the comparison table each bench job printed on CPython 3.14 from run 38075383084 on 2026-10-10, the first after the walk context was cut to seven words (the nested schema read about 0.157 before it and 0.131 after), to run 38169864035 on 2026-10-11: eleven runs, on all three classes of runner the lane drew, a pydantic scalar taking about 160, 240 and 310 ns on them. Each ratio is the window's median. Each tolerance is half again the widest reading above the recorded median, in the window or in the lane's 53 readings of 2026-10-04 to 2026-10-10 before it, rounded up to a two-hundredth, and never below what the shape spreads on one box. The nested schema's is its own reading of 0.173 on run 38169864035, where the run before it, with the same walk and the same profile on the same class of runner, read 0.125: one tree lays that walk out differently from one profiled build to the next. large_array's carries one reading of 0.149, on a run whose next two read 0.118 and 0.127. The last two runs follow the profile's training of the JSON document, which reads about 0.58 after it against 0.66 before, so its floor is loose until a window read after the training records it again. A change that moves a shape on the lane is recorded again from readings taken after it, with --record-window.",
+    "window": [
+      {
+        "run": 38075383084,
+        "at": "2026-10-10T18:20:30Z",
+        "event": "push",
+        "ratios": {
+          "scalar": 0.198,
+          "large_array": 0.124,
+          "wide_record": 0.262,
+          "deep_nesting": 0.128,
+          "json_document": 0.579,
+          "build": 0.006,
+          "error_report": 0.467
+        }
+      },
+      {
+        "run": 38081931683,
+        "at": "2026-10-10T19:59:06Z",
+        "event": "push",
+        "ratios": {
+          "scalar": 0.191,
+          "large_array": 0.118,
+          "wide_record": 0.263,
+          "deep_nesting": 0.131,
+          "json_document": 0.589,
+          "build": 0.006,
+          "error_report": 0.488
+        }
+      },
+      {
+        "run": 38084525082,
+        "at": "2026-10-10T20:38:20Z",
+        "event": "push",
+        "ratios": {
+          "scalar": 0.181,
+          "large_array": 0.113,
+          "wide_record": 0.271,
+          "deep_nesting": 0.133,
+          "json_document": 0.573,
+          "build": 0.004,
+          "error_report": 0.505
+        }
+      },
+      {
+        "run": 38091701511,
+        "at": "2026-10-10T22:30:47Z",
+        "event": "push",
+        "ratios": {
+          "scalar": 0.184,
+          "large_array": 0.114,
+          "wide_record": 0.257,
+          "deep_nesting": 0.128,
+          "json_document": 0.655,
+          "build": 0.004,
+          "error_report": 0.484
+        }
+      },
+      {
+        "run": 38110546602,
+        "at": "2026-10-11T04:06:53Z",
+        "event": "workflow_dispatch",
+        "ratios": {
+          "scalar": 0.185,
+          "large_array": 0.119,
+          "wide_record": 0.259,
+          "deep_nesting": 0.134,
+          "json_document": 0.671,
+          "build": 0.006,
+          "error_report": 0.475
+        }
+      },
+      {
+        "run": 38129551606,
+        "at": "2026-10-11T09:46:12Z",
+        "event": "push",
+        "ratios": {
+          "scalar": 0.196,
+          "large_array": 0.122,
+          "wide_record": 0.262,
+          "deep_nesting": 0.127,
+          "json_document": 0.661,
+          "build": 0.006,
+          "error_report": 0.479
+        }
+      },
+      {
+        "run": 38135124712,
+        "at": "2026-10-11T11:19:19Z",
+        "event": "push",
+        "ratios": {
+          "scalar": 0.183,
+          "large_array": 0.118,
+          "wide_record": 0.271,
+          "deep_nesting": 0.132,
+          "json_document": 0.711,
+          "build": 0.006,
+          "error_report": 0.464
+        }
+      },
+      {
+        "run": 38144705425,
+        "at": "2026-10-11T13:49:24Z",
+        "event": "push",
+        "ratios": {
+          "scalar": 0.174,
+          "large_array": 0.119,
+          "wide_record": 0.261,
+          "deep_nesting": 0.133,
+          "json_document": 0.664,
+          "build": 0.006,
+          "error_report": 0.474
+        }
+      },
+      {
+        "run": 38154742024,
+        "at": "2026-10-11T16:16:04Z",
+        "event": "push",
+        "ratios": {
+          "scalar": 0.183,
+          "large_array": 0.111,
+          "wide_record": 0.261,
+          "deep_nesting": 0.129,
+          "json_document": 0.66,
+          "build": 0.004,
+          "error_report": 0.487
+        }
+      },
+      {
+        "run": 38165972683,
+        "at": "2026-10-11T18:57:20Z",
+        "event": "push",
+        "ratios": {
+          "scalar": 0.188,
+          "large_array": 0.113,
+          "wide_record": 0.273,
+          "deep_nesting": 0.125,
+          "json_document": 0.587,
+          "build": 0.004,
+          "error_report": 0.506
+        }
+      },
+      {
+        "run": 38169864035,
+        "at": "2026-10-11T19:52:48Z",
+        "event": "push",
+        "ratios": {
+          "scalar": 0.163,
+          "large_array": 0.124,
+          "wide_record": 0.259,
+          "deep_nesting": 0.173,
+          "json_document": 0.584,
+          "build": 0.005,
+          "error_report": 0.457
+        }
+      }
+    ]
   }
 }
