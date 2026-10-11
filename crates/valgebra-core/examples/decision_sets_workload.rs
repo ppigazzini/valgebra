@@ -24,6 +24,14 @@
 //! bounds, a set against a frozen set, and an optional against its base. Keep
 //! the corpus and both iteration counts fixed; changing either moves both
 //! records.
+//!
+//! A third reading, `lengths`, asks the sets a corpus of its own: a list of
+//! integers bounded in length against a looser bound and a tighter one. A
+//! length bound is an automaton with a state per element, met with the
+//! element's shape, so this is the shape that reads what a bound costs per
+//! element; no pair of the nine has one. Its bounds are short enough that
+//! every pair is decided, so a change that lets a longer bound lower moves
+//! the count and not the answers.
 
 use std::sync::Arc;
 
@@ -42,6 +50,11 @@ const RULES_ITERATIONS: usize = 20_000;
 /// Iterations through the sets, a thousand times fewer, which leaves the two
 /// halves within a factor of two of each other in total.
 const SETS_ITERATIONS: usize = 20;
+
+/// Iterations of the length bounds through the sets. A bound builds a state per
+/// element and meets it with the element's shape, so two passes are already
+/// far above the startup.
+const LENGTHS_ITERATIONS: usize = 2;
 
 /// A pool that reads every operand and constant as its own index, and orders
 /// two bounds by it, so both deciders can read what a literal and a bound name
@@ -134,21 +147,54 @@ fn corpus() -> Vec<(Schema, Schema)> {
     ]
 }
 
+/// The four length bounds, each a subject and the bound it is asked against:
+/// a longer lower bound inside a shorter one, the converse, a shorter upper
+/// bound inside a longer one, and a bound on both sides inside a lower one.
+fn lengths() -> Vec<(Schema, Schema)> {
+    let bounded = |constraints| {
+        Schema::refine(
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            constraints,
+        )
+    };
+    vec![
+        (
+            bounded(vec![Constraint::MinLen(32)]),
+            bounded(vec![Constraint::MinLen(16)]),
+        ),
+        (
+            bounded(vec![Constraint::MinLen(16)]),
+            bounded(vec![Constraint::MinLen(32)]),
+        ),
+        (
+            bounded(vec![Constraint::MaxLen(16)]),
+            bounded(vec![Constraint::MaxLen(32)]),
+        ),
+        (
+            bounded(vec![Constraint::MinLen(8), Constraint::MaxLen(16)]),
+            bounded(vec![Constraint::MinLen(4)]),
+        ),
+    ]
+}
+
 fn main() {
     // A reading is named rather than defaulted: a run measuring the wrong
     // half would print a checksum of the wrong size and nothing else.
     let reading = std::env::args().nth(1);
-    let (iterations, decide): (usize, fn(&Schema, &Schema) -> Relation) = match reading.as_deref() {
-        Some("rules") => (RULES_ITERATIONS, |sub, sup| {
-            sub.subtype_relation_under(sup, &Indexed, &[])
-        }),
-        Some("sets") => (SETS_ITERATIONS, by_the_sets),
-        _ => {
-            eprintln!("usage: decision_sets_workload rules|sets");
-            std::process::exit(2);
-        }
-    };
-    let pairs = corpus();
+    let (iterations, decide, pairs): (usize, fn(&Schema, &Schema) -> Relation, _) =
+        match reading.as_deref() {
+            Some("rules") => (
+                RULES_ITERATIONS,
+                |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &Indexed, &[]),
+                corpus(),
+            ),
+            Some("sets") => (SETS_ITERATIONS, by_the_sets, corpus()),
+            Some("lengths") => (LENGTHS_ITERATIONS, by_the_sets, lengths()),
+            _ => {
+                eprintln!("usage: decision_sets_workload rules|sets|lengths");
+                std::process::exit(2);
+            }
+        };
     // Fold the three-valued answer, so a pair moving between decided and
     // declined, or between the two answers, moves the checksum.
     let weigh = |relation: Relation| match relation {

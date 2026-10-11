@@ -22,18 +22,20 @@ not to flake is too wide to see a real 5% regression. The record is read in
 one place: a shape the base does not carry has no count to compare with, and
 is held to its recorded one inside that band instead. ``--update`` writes it.
 
-Three workloads, and thirty-four shapes across them:
+Three workloads, and thirty-five shapes across them:
 
 * The default **core** workload (`perf_workload`, pure Rust) measures the schema
   operations and is fully deterministic, so its recorded count carries the
   narrower band.
 * The **decision** workloads measure the three relations, which the core one
-  never calls, in six shapes: relations that hold (`--decision`), relations
+  never calls, in seven shapes: relations that hold (`--decision`), relations
   that are refuted (`--decision-refute`), goals asked again
   (`--decision-repeat`), the pairs that reach the set representation
-  (`--decision-matrix`), and one corpus asked of the rules
-  (`--decision-rules`) and of the sets (`--decision-sets`), whose two counts
-  are what a rule's answer saves over building the sets for it.
+  (`--decision-matrix`), one corpus asked of the rules (`--decision-rules`)
+  and of the sets (`--decision-sets`), whose two counts are what a rule's
+  answer saves over building the sets for it, and length bounds over a list
+  asked of the sets (`--decision-lengths`), which read what a bound costs an
+  element.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
   twenty-seven shapes: the membership walk (`--binding`), the call boundary
@@ -148,6 +150,7 @@ BRANCH_MODES = frozenset(
         "decision-matrix",
         "decision-rules",
         "decision-sets",
+        "decision-lengths",
     }
 )
 # Both workloads print one trailing line holding the checksum, bare or prefixed.
@@ -407,6 +410,7 @@ MODES = {
     "decision-matrix": ("decision_matrix_workload", "matrix decision workload"),
     "decision-rules": ("decision_sets_workload", "relations asked of the rules"),
     "decision-sets": ("decision_sets_workload", "relations asked of the sets"),
+    "decision-lengths": ("decision_sets_workload", "length bounds asked of the sets"),
     "binding": ("binding_workload", "binding walk"),
     "binding-boundary": ("binding_workload", "binding call boundary"),
     "binding-record": ("binding_workload", "binding record walk"),
@@ -439,12 +443,18 @@ MODES = {
     "binding-set": ("binding_workload", "binding set walk"),
 }
 
-#: The reading a core shape passes its example, for the two that share one.
+#: The reading a core shape passes its example, for the three that share one.
 #:
 #: The rules and the sets are asked the same pairs, so the ratio of the two
 #: counts is a ratio over one question rather than over two corpora. One
 #: example holds the corpus, and the argument names which decider answers it.
-CORE_READINGS = {"decision-rules": "rules", "decision-sets": "sets"}
+#: The length bounds are a corpus of their own, asked of the sets through the
+#: same reading.
+CORE_READINGS = {
+    "decision-rules": "rules",
+    "decision-sets": "sets",
+    "decision-lengths": "lengths",
+}
 
 #: The iteration pair each binding mode runs at.
 #: Iterations per shape, high and low, chosen so each measurement is a minute or
@@ -759,12 +769,17 @@ def absent_at(checkout: Path, mode: str) -> bool:
     A binding shape is an argument of one example, and the base can carry the
     example without the shape: its parser has no arm for the name, and the
     binary refuses the argument. That is a shape the base does not carry, read
-    where the base names its shapes rather than from the refusal.
+    where the base names its shapes rather than from the refusal. A core
+    reading is the same: the example names it in an arm of its own, and a base
+    whose example has no such arm carries the example and not the shape.
     """
     example = MODES[mode][0]
     sources = list(checkout.glob(f"crates/*/examples/{example}.rs"))
     if not sources:
         return True
+    reading = CORE_READINGS.get(mode)
+    if reading is not None:
+        return f'Some("{reading}")' not in sources[0].read_text(encoding="utf-8")
     shape = BINDING_SHAPES.get(mode)
     if shape is None:
         return False

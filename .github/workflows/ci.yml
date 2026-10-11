@@ -917,13 +917,14 @@ jobs:
       # the core one runs the transformations and never calls `is_subtype_of`,
       # `is_empty` or `is_equivalent`, so without this the whole decision surface
       # is invisible here in both directions: neither what a new rule costs nor
-      # what a cheaper one saves. The last two shapes ask one corpus of the
-      # rules and of the sets, which is the ratio the pages give between them.
+      # what a cheaper one saves. Two shapes ask one corpus of the rules and of
+      # the sets, which is the ratio the pages give between them, and the last
+      # asks the sets length bounds over a list, a state per element.
       - name: Decision-path instruction-count regression gate
         run: >
           uv run --no-sync python scripts/perf_gate.py
           --decision --decision-refute --decision-repeat --decision-matrix
-          --decision-rules --decision-sets
+          --decision-rules --decision-sets --decision-lengths
           --against "$BASE"
         env:
           BASE: ${{ steps.base.outputs.sha }}

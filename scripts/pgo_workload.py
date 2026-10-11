@@ -131,6 +131,12 @@ UNTRAINED: dict[str, str] = {
     "binding-set": (
         "A `set[str]` read through its own iterator: no call here validates a set."
     ),
+    "decision-lengths": (
+        "A list's length bound lowered to an automaton with a state per element "
+        "and met with the element's shape: `_relations` reaches the sequence "
+        "automaton's product through a meet of lists, and no call here relates "
+        "a length-bounded list."
+    ),
     "binding-subclass": (
         "A named tuple read against `tuple[int, ...]`, through the length "
         "accessor a subclass inherits: the calls here read named tuples against "

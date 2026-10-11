@@ -451,6 +451,30 @@ def test_a_shape_the_base_does_not_name_is_absent_there(tmp_path: Path) -> None:
     assert not gate.absent_at(ROOT, "core"), "a core workload is its example alone"
 
 
+def test_a_reading_the_base_example_does_not_name_is_absent_there(
+    tmp_path: Path,
+) -> None:
+    """A core shape that is a reading of a shared example is new where the arm is.
+
+    The rules, the sets and the length bounds are three arguments of one
+    example. A base older than one of them builds the example and refuses the
+    argument, which is a shape the base does not carry rather than a rig that
+    failed -- so the gate reads it from the arm that names the reading.
+    """
+    mode, reading = next(iter(gate.CORE_READINGS.items()))
+    example = gate.MODES[mode][0]
+    base = tmp_path / "base"
+    examples = base / "crates" / "valgebra-core" / "examples"
+    examples.mkdir(parents=True)
+    assert gate.absent_at(base, mode), "no example, so no shape"
+    (examples / f"{example}.rs").write_text('Some("other") => (),')
+    assert gate.absent_at(base, mode), "the example without the reading's arm"
+    (examples / f"{example}.rs").write_text(f'Some("{reading}") => (),')
+    assert not gate.absent_at(base, mode)
+    for known in gate.CORE_READINGS:
+        assert not gate.absent_at(ROOT, known), f"the tree does not name {known}"
+
+
 def test_every_binding_shape_has_iterations_and_a_budget() -> None:
     """A shape the gate can name is one it can measure and judge.
 
