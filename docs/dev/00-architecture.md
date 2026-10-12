@@ -401,9 +401,12 @@ chooses its readings by the interpreter it is built against:
 interpreter, as the doc comment on `snapshot_pays` in
 `crates/valgebra-py/src/check/walk/sequence.rs` measures. A stable-ABI build
 compiles once against the floor's flags, so every interpreter would take the
-floor's reading, and against the limited API, whose cost to the walk's readings
-is not measured. Profile guidance is not what it gives up: training needs an
-interpreter to run the instrumented build, and nothing about the ABI. Held by
+floor's reading, and against the limited API. The mechanism is the reason, and
+no figure for the limited API's cost is kept: it moves with every change to the
+walk, every new interpreter and every toolchain, so a number measured once is
+stale within weeks, and keeping one current is hours of measurement at each of
+those. Profile guidance is not what a stable-ABI build gives up: training needs
+an interpreter to run the instrumented build, and nothing about the ABI. Held by
 `test_no_build_targets_the_stable_abi` in `tests/test_refusals_ledger.py`.
 
 **One decider in place of two.** Each reaches what the other cannot: the
