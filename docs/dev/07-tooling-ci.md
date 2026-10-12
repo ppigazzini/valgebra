@@ -1125,7 +1125,11 @@ generates most of the baseline.
 
 Whole files, not the diff's lines: the miss that matters is an edit that stops an
 **existing** test from killing a mutant elsewhere in the same file, and that
-mutant is not in the diff.
+mutant is not in the diff. **A file whose diff is comments and blank lines
+alone is not swept:** it compiles to what it compiled to before, so each of its
+mutants answers as it did, and a doc edit to a large file would otherwise put
+the whole file's mutants on the push. `scripts/code_changes.py` names the files
+whose code changed, for both sweeps.
 
 **A change starts where its commits leave the history they replace.** The
 bench gate's `rev` and the sweeps' file list come from one base, which
