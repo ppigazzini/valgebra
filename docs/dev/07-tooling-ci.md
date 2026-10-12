@@ -553,13 +553,28 @@ One refusal is the relative gate's own: **a workload that changed is not a
 comparison.** Two builds of a workload computing the same thing agree on its
 checksum exactly, so a disagreement says the workload moved between the two
 commits and the counts are of different work. That exits 2 -- neither a pass nor
-a regression.
+a regression. The commit that moves a workload re-records its count and checksum
+with `--update`, and a pure-Rust shape whose recorded checksum differs from the
+base's is a workload replaced on the record (`rerecorded_at` in
+`scripts/perf_gate.py`). The base is built with the change's workload source, so
+the two counts are of one work and compared at 2% (`judge_replaced`); where the
+base cannot build that source, or computes other work with it, the shape is held
+to its record, as a new shape is below.
+
+**A step the budget argues is crossed once.** Where a change trades
+instructions for time -- reading a list through a snapshot executes more and
+spends less -- the commit records the step in `scripts/perf_budget.json`
+(`steps`), named by its shape and the base count it steps from, and the
+comparison that crosses that commit is excused for it; the next change is held
+to the 2% ceiling again (`recorded_step` in `scripts/perf_gate.py`). The
+profiled shapes record no steps.
 
 **A shape the base does not carry is a new shape**, not a comparison and not a
 pass: it is held to its recorded count in the same run, inside the band the
 record carries for a change of machine (`judge_new` in `scripts/perf_gate.py`).
-That is the one place the record is read, and the band is wide enough for it,
-since the next change has this one as its base and is compared with it at 2%.
+A new shape and a re-recorded workload the base cannot build are where the
+record is read, and the band is wide enough for both, since the next change has this one as its base and
+is compared with it at 2%.
 The gate reads this
 from the base's *source* before it builds anything -- the example the mode
 names, and for a binding shape the arm that names the shape (`absent_at` in

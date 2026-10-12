@@ -18,9 +18,12 @@ uncommitted change.
 count is deterministic for a build, but not across toolchains or target
 features. Measured, the commit that recorded the core count re-measures 5.35%
 away from it on another machine of the same rustc line, so a band wide enough
-not to flake is too wide to see a real 5% regression. The record is read in
-one place: a shape the base does not carry has no count to compare with, and
-is held to its recorded one inside that band instead. ``--update`` writes it.
+not to flake is too wide to see a real 5% regression. The record is read where
+there is no base count to compare with -- a shape the base does not carry, and
+a re-recorded workload the base cannot build -- and the shape is held to its
+recorded count inside that band instead. A re-recorded workload the base can
+build is built there from this change's source and compared at 2%.
+``--update`` writes it.
 
 Three workloads, and thirty-five shapes across them:
 
@@ -807,6 +810,77 @@ def absent_at(checkout: Path, mode: str) -> bool:
     )
 
 
+def rerecorded_at(checkout: Path, record: dict, mode: str) -> bool:
+    """Whether this change records another workload for `mode` than `checkout`.
+
+    A workload that moved between the two commits is no comparison, and the
+    commit that moves one re-records its count and checksum in the same change.
+    A pure-Rust shape whose recorded checksum differs from the one the base
+    records is that: a workload replaced on the record, which the base is built
+    with (`transplant_workloads`) and `judge_replaced` judges. A checksum that
+    moved with nothing re-recorded reads as a workload that changed. A binding
+    shape records no checksum, since its checksum is its iteration count, so it
+    is never read as replaced.
+    """
+    if mode in BINDING_SHAPES:
+        return False
+    key = checksum_key(mode)
+    try:
+        carried = json.loads(
+            (checkout / "scripts" / "perf_budget.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return False
+    return key in carried and key in record and carried[key] != record[key]
+
+
+def transplant_workloads(checkout: Path, modes: Sequence[str]) -> None:
+    """Put this change's workload source for each of `modes` into `checkout`.
+
+    A shape whose workload this change re-records has no base count of the work
+    it measures, and the base's own example measures other work. Built at the
+    base from this change's source instead, the workload measures the same work
+    against the code it runs on there, which is the comparison the gate exists
+    for. Where the base cannot build it -- the source names something the base
+    does not have -- the base reading fails, and `judge_replaced` falls back to
+    the record.
+    """
+    for example in sorted({MODES[mode][0] for mode in modes}):
+        for source in ROOT.glob(f"crates/*/examples/{example}.rs"):
+            target = checkout / source.relative_to(ROOT)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+
+
+def judge_replaced(
+    head: Measurement,
+    base: Measurement | None,
+    budget: dict,
+    mode: str,
+    step: dict | None = None,
+) -> int:
+    """Judge a shape whose workload this change re-records.
+
+    The base was built with this change's workload source
+    ([`transplant_workloads`]). Where it built and computed what the change
+    computes, the two counts are of one work and the ordinary ceiling holds;
+    where it did not, there is no base count, and the shape is held to the
+    count recorded with it, as a new shape is.
+    """
+    subject = MODES[mode][1]
+    print("RE-RECORDED: this change records another workload for the shape than")
+    print("the base does, so the base is built with this change's workload.")
+    if base is not None and base.checksum == head.checksum:
+        return judge_relative(head, base, subject, step)
+    if base is None:
+        print("The base cannot build it, so it is held to the count recorded")
+        print("with it instead.")
+    else:
+        print(f"The base computes other work with it (checksum {base.checksum},")
+        print(f"head {head.checksum}), so it is held to the count recorded with it.")
+    return judge_recorded(head, budget, mode)
+
+
 def measure_base(
     modes: list[str], checkout: Path, target: Path
 ) -> tuple[dict[str, Measurement], dict[str, BaseException]]:
@@ -868,7 +942,13 @@ def run_relative(modes: list[str], rev: str) -> int:
             check=True,
         )
         fresh = [mode for mode in modes if absent_at(checkout, mode)]
+        replaced = [
+            mode
+            for mode in modes
+            if mode not in fresh and rerecorded_at(checkout, record, mode)
+        ]
         carried = carried_steps(checkout)
+        transplant_workloads(checkout, replaced)
         base, broken = measure_base(
             [mode for mode in modes if mode not in fresh],
             checkout,
@@ -891,6 +971,12 @@ def run_relative(modes: list[str], rev: str) -> int:
         print(f"\n--- {subject}")
         if mode in fresh:
             outcomes.append(judge_new(head[mode], record, mode))
+            continue
+        if mode in replaced:
+            step = recorded_step(mode, record.get("steps", []), carried)
+            outcomes.append(
+                judge_replaced(head[mode], base.get(mode), record, mode, step)
+            )
             continue
         if mode in broken:
             print(f"head:     {head[mode].irefs:,} instructions")
@@ -935,8 +1021,9 @@ def judge_relative(
     if head.checksum != base.checksum:
         print(f"WORKLOAD CHANGED: base checksum {base.checksum}, head {head.checksum}.")
         print("The two runs measured different work, so their counts do not")
-        print("compare. Re-record the count in the same commit that changes")
-        print("the workload, and say what moved.")
+        print("compare. Re-record the count and checksum with --update in the")
+        print("commit that changes the workload, which holds the shape to that")
+        print("record, and say what moved.")
         return EXIT_CANNOT_RUN
     print(f"checksum: {head.checksum} ({subject}, unchanged from the base)")
     return check_against_base(head, base, subject, step)
@@ -987,9 +1074,19 @@ def judge_new(head: Measurement, budget: dict, mode: str) -> int:
     with it at 2%. What it sees is a shape measuring other work than the one
     recorded, and a workload that stopped doing the work.
     """
-    subject = MODES[mode][1]
     print("NEW SHAPE: the base does not carry this workload, so there is no")
     print("comparison to make. It is held to its recorded count instead.")
+    return judge_recorded(head, budget, mode)
+
+
+def judge_recorded(head: Measurement, budget: dict, mode: str) -> int:
+    """Hold a shape with no base count to the count and checksum recorded for it.
+
+    A new shape and a workload this change re-recorded are both read here: the
+    checksum first, since a count inside the band of other work is other work,
+    and then the band the record carries for a change of machine.
+    """
+    subject = MODES[mode][1]
     recorded = budget.get(record_key(mode))
     expected = None if mode in BINDING_SHAPES else budget.get(checksum_key(mode))
     if recorded is None or (mode not in BINDING_SHAPES and expected is None):

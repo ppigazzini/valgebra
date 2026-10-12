@@ -361,6 +361,68 @@ def test_a_workload_that_changed_is_not_a_comparison() -> None:
     assert _relative(100_000_000, checksum=134001) == gate.EXIT_CANNOT_RUN
 
 
+def test_a_workload_the_change_re_records_is_held_to_its_record(
+    tmp_path: Path,
+) -> None:
+    """A pure-Rust shape whose recorded checksum moved is a replaced workload.
+
+    The commit that changes a workload records the new count and checksum, so
+    the base records another checksum for the shape than the change does. That
+    is no comparison and no failure: the shape is held to its record, as a new
+    one is. A checksum the change did not re-record is a workload that changed,
+    and a binding shape records no checksum to read.
+    """
+    record = _record()
+    base = tmp_path / "base"
+    (base / "scripts").mkdir(parents=True)
+    carried = base / "scripts" / "perf_budget.json"
+    assert not gate.rerecorded_at(base, record, "core"), "no record at the base"
+    carried.write_text(
+        json.dumps({**record, "core_workload_checksum": 133000}), encoding="utf-8"
+    )
+    assert gate.rerecorded_at(base, record, "core")
+    assert not gate.rerecorded_at(base, record, "binding-set")
+    carried.write_text(json.dumps(record), encoding="utf-8")
+    assert not gate.rerecorded_at(base, record, "core")
+    carried.write_text("{", encoding="utf-8")
+    assert not gate.rerecorded_at(base, record, "core"), "an unreadable record"
+
+    read = gate.Measurement(irefs=1_050_000, checksum=134000)
+    assert gate.judge_recorded(read, record, "core") == gate.EXIT_OK
+    other = gate.Measurement(irefs=BUDGET, checksum=133000)
+    assert gate.judge_recorded(other, record, "core") == gate.EXIT_FAIL
+
+
+def test_a_re_recorded_workload_is_compared_where_the_base_builds_it(
+    tmp_path: Path,
+) -> None:
+    """A re-recorded shape is built at the base from this change's source.
+
+    Where the base builds it and computes the same work, the two counts are of
+    one work and the 2% ceiling holds, so re-recording a workload does not
+    excuse a regression in the code it reads. Where the base cannot build it,
+    or computes other work with it, the shape is held to its record.
+    """
+    record = _record()
+    base = gate.Measurement(irefs=100_000_000, checksum=134000)
+    slower = gate.Measurement(irefs=103_000_000, checksum=134000)
+    assert gate.judge_replaced(slower, base, record, "core") == gate.EXIT_FAIL
+    within = gate.Measurement(irefs=101_000_000, checksum=134000)
+    assert gate.judge_replaced(within, base, record, "core") == gate.EXIT_OK
+
+    recorded = gate.Measurement(irefs=1_050_000, checksum=134000)
+    assert gate.judge_replaced(recorded, None, record, "core") == gate.EXIT_OK
+    other = gate.Measurement(irefs=100_000_000, checksum=133000)
+    assert gate.judge_replaced(recorded, other, record, "core") == gate.EXIT_OK
+    off = gate.Measurement(irefs=2_000_000, checksum=134000)
+    assert gate.judge_replaced(off, None, record, "core") == gate.EXIT_FAIL
+
+    gate.transplant_workloads(tmp_path, ["core"])
+    source = ROOT / "crates" / "valgebra-core" / "examples" / "perf_workload.rs"
+    copied = tmp_path / source.relative_to(ROOT)
+    assert copied.read_text(encoding="utf-8") == source.read_text(encoding="utf-8")
+
+
 def test_every_mode_names_an_example_the_tree_builds() -> None:
     # The relative gate builds by mode name, so a mode naming an example that
     # does not exist fails at build time in the lane rather than here. Held to
