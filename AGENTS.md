@@ -48,8 +48,9 @@ counting it here would be a second copy that drifts.
 
 ```bash
 uv sync                 # resolve and install dev dependencies into .venv
-maturin develop --uv    # build the Rust extension into the venv (rerun after
-                        # any change under crates/)
+uv run --no-sync maturin develop --uv   # build the Rust extension into the
+                                        # venv (rerun after any change under
+                                        # crates/)
 ```
 
 Stable Rust (edition 2024, MSRV 1.88) and `uv` must be on PATH.

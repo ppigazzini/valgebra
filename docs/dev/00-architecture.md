@@ -59,7 +59,7 @@ flowchart TB
         DECISION["decision.rs, decision/<br/>the structural rules -- asked first"]
         DESCR["descr/<br/>the set representation -- asked where the rules decline"]
         IR["ir.rs<br/>the node set and what each denotes"]
-        FRAME["kind.rs, verdict.rs<br/>the partition, and the two three-valued answers"]
+        FRAME["kind.rs, verdict.rs, oracle.rs<br/>the partition, the two three-valued answers,<br/>and the questions only the host answers"]
         DECISION -->|"asks only where its own rules decline"| DESCR
         DECISION --> IR
         DESCR --> IR
@@ -70,7 +70,7 @@ flowchart TB
     BUILD --> IR
     VAL --> DECISION
     WALK --> IR
-    ORACLE -.->|"answers the questions only Python can:<br/>a class, a constant, an ordering"| DECISION
+    ORACLE -.->|"answers the questions only Python can:<br/>a class, a constant, an ordering"| FRAME
 
     classDef frame fill:#0d47a1,stroke:#90caf9,color:#ffffff
     classDef definition fill:#4a148c,stroke:#ce93d8,color:#ffffff
@@ -352,8 +352,8 @@ table's length is outside the scan: it is the table's size, in one place.
 | `crates/valgebra-core/src/descr/records.rs` | `MAX_ATOMS` | `256` | limit | the atoms a record union holds, which a complement multiplies | its own tests |
 | `crates/valgebra-core/src/descr/automaton.rs` | `MAX_STATES` | `4096` | limit | a product of two automata, word or sequence, multiplying the state counts past memory, and a complement of a product doing it again | `crates/valgebra-core/src/descr/regular.rs` tests, `crates/valgebra-core/src/descr/symbolic.rs` tests |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_ROW` | `MAX_STATES` | limit | one row of a product growing past the alternatives a shape has | its own tests |
-| `crates/valgebra-core/src/ir/intern.rs` | `SLOTS` | `1024` | shape | the table of shared handles growing into a record of every schema a process has built: it is direct-mapped, so a collision evicts | its own tests, and `scripts/perf_gate.py --decision`, which reads 65% higher with the table answering nothing |
-| `crates/valgebra-core/src/ir/intern.rs` | `SUMMARY` | `4` | shape | a wide list paying a hash per entry for a table that is about to compare the entries anyway; the hash chooses a slot and the comparison decides, so reading fewer costs a collision and never an answer | its own tests, and `scripts/perf_gate.py --core`, which reads 6.8% higher when the hash reads every entry |
+| `crates/valgebra-core/src/ir/intern.rs` | `SLOTS` | `1024` | shape | the table of shared handles growing into a record of every schema a process has built: it is direct-mapped, so a collision evicts | its own tests, and `scripts/perf_gate.py --decision`, which reads higher with the table answering nothing; the doc comment on `SLOTS` carries the reading |
+| `crates/valgebra-core/src/ir/intern.rs` | `SUMMARY` | `4` | shape | a wide list paying a hash per entry for a table that is about to compare the entries anyway; the hash chooses a slot and the comparison decides, so reading fewer costs a collision and never an answer | its own tests, and `scripts/perf_gate.py --core`, which reads higher when the hash reads every entry; the doc comment on `SUMMARY` carries the reading |
 | `crates/valgebra-py/src/errors.rs` | `SUMMARY_CHARS` | `80` | shape | a value summary built in full and then cut, so a huge repr is paid for and thrown away | `tests/test_error_contract.py` |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_EDGES` | `1 << 16` | limit | a table inside both dimensions and still too large: 4,096 states each with a 4,096-wide row is sixteen million edges | its own tests |
 | `crates/valgebra-core/src/descr/regular.rs` | `BUILD_SIZE_LIMIT` | `8 * 1024 * 1024` | limit | a pattern whose determinisation is exponential, which reaches `MAX_STATES` only after the table it refuses has been built | nothing at its edge: `tests/test_bound_ledger.py` accepts it, since the smallest pattern whose table sits inside the band it leaves takes seconds to build |

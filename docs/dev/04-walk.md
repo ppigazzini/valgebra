@@ -33,9 +33,10 @@ unreachable by construction, and a document reaches the same codes with the same
 the question whose answer is no object, the one that answers a `bool`. It builds
 the object `json.loads` would give only for a node that compares the value with
 a Python object -- a literal, an instance or object check, a refinement's
-comparison or predicate -- and a length bound compares nothing: an array's
-items and an object's distinct keys are counted where they lie
-([below](#a-narrow-object-is-covered-where-it-lies)).
+comparison or predicate -- and a length bound on an array or an object compares
+nothing: an array's items and an object's distinct keys are counted where they
+lie ([below](#a-narrow-object-is-covered-where-it-lies)). A length bound on a
+string counts the `str` it builds.
 
 **A streaming check is refused.** Reading the document with jiter's pull
 parser instead of its tree saves at most the tree's construction and drop, and
@@ -139,8 +140,8 @@ and a meet refuses on either, so neither needs the cell.
 walk would open asks whether the level is free first (`room_to_descend`), so a
 deciding walk and an explaining one refuse at one depth. The literal-union
 table is such a shortcut, in `check_union` and in `literal_list_matches`
-alike: a value whose union of literals sat one level past the bound was a
-member to `is_valid` and refused by `validate` while the union's table asked
+alike, so a value whose union of literals sits one level past the bound is
+refused by `is_valid` and `validate` alike, though the union's table would ask
 nothing.
 
 ## The union reports the closest branch
@@ -158,17 +159,17 @@ branch before it explains any (`refused_branches`) -- a record branch by its own
 deciding pass, which keeps where it stopped, and any other on the fast path --
 and a value one of them admits returns with no branch explained. A fatal signal
 a branch raises while they are decided unwinds the walk before any is
-explained. Explaining a branch renders the
-value, which runs its `__repr__`, so a member whose matching branch came after a
-list, a set, a tuple, a meet, a complement or a named tuple ran it, and a repr
-raising `MemoryError` made `validate` raise for a member. What it costs a
-refused value is one fast walk of each branch that is not a record, beside the
-explaining one; a record branch's deciding pass is the one it always had. Each
-branch is asked what it answers without a walk first, and where one branch is
-left to walk, deciding it first protects no other branch, so it is explained
-once: a union over a recursive branch, `int | list[T]`, otherwise walked the
-levels below every level it explained, and a refused chain cost the square of
-its depth (`a_union_explains_a_lone_walked_branch_once`).
+explained. Explaining a branch renders the value, which runs its `__repr__`,
+so deciding first is what keeps a member from running one -- and a repr raising
+`MemoryError` from making `validate` raise for a member. What it costs a refused
+value is one fast walk of each branch that is not a record, beside the
+explaining one; a record branch's deciding pass is the one it takes in any
+case. Each branch is asked what it answers without a walk first, and where one
+branch is left to walk, deciding it first protects no other branch, so it is
+explained once: decided and then explained, a union over a recursive branch,
+`int | list[T]`, would walk the levels below every level it explained, and a
+refused chain would cost the square of its depth
+(`a_union_explains_a_lone_walked_branch_once`).
 
 **A branch the walk could not answer for keeps its own report.** A branch whose
 first failure says the *walk* stopped -- `recursion_limit`, `recursion_loop`,
@@ -205,10 +206,10 @@ one of them: the one whose deciding pass admitted the most before refusing --
 fields, in the order the plan reads them, or entries where the record is read
 by scanning its entries -- then one that refused inside a structured field's
 value before one that refused at a field, the earliest on a tie
-(`chosen_record`, `Decided::progress`). Explaining
-each walked every field of every branch, a branch refused at its tag walking
-its recursive child all the same, so a refused chain of a union of records
-doubled per level. The chosen branch's report then stands beside the other
+(`chosen_record`, `Decided::progress`). Explaining every branch would walk
+every field of each, a branch refused at its tag walking its recursive child
+all the same, so a refused chain of a union of records would double per level.
+The chosen branch's report then stands beside the other
 branches' by the progress rule above. A fatal signal raised while one branch is
 explained stops the explaining of the rest, as it stops every later walk.
 `a_refused_union_reports_what_its_chosen_branch_reports_alone` in
@@ -216,17 +217,17 @@ explained stops the explaining of the rest, as it stops every later walk.
 `a_union_explains_the_record_branch_that_got_furthest` the choice.
 
 **A record's deciding pass reads its tag first.** Fields are stored sorted by
-name, so a tag such as `type` beside a recursive `left` was read after the
-child, and a union of records told apart by the tag walked the whole child in
-every branch the tag refused: branches to the power of the depth. The record
+name, so a tag such as `type` sorts after a recursive `left`; read in that
+order, a union of records told apart by the tag would walk the whole child in
+every branch the tag refuses: branches to the power of the depth. The record
 plan lists the fields decided by their own value (a scalar, a literal, a union
 of them) that are declared after one that is not (`RecordPlan::early`), and the
-deciding pass reads those first, on both input paths, before the declared loop
-it always ran. The list is empty for most records, which then pay nothing; a
+deciding pass reads those first, on both input paths, before the declared
+loop. The list is empty for most records, which then pay nothing; a
 record with one reads each early field twice. A refusal among the early fields
 read no declared prefix, so the explaining pass starts at the first field; a
-refusal in the declared loop resumes where it stopped, as before, and the
-report keeps the declared order. How far a refusal got counts the early fields
+refusal in the declared loop resumes where it stopped, and the report keeps
+the declared order. How far a refusal got counts the early fields
 it had read.
 
 **Each branch is walked in the caller's mode.** The choice reads the first
@@ -240,11 +241,14 @@ anywhere in a branch would need every branch walked whole in every mode, and a
 fail-fast report would then cost the size of the value.
 
 A predicate is asked again wherever the walk reads a value twice, and the walk
-keeps no memo over the answers. An explaining walk reads each branch of a union
-once, since the walk that chooses the branch is the walk that reports it; what
-it reads twice is a keyed map that fails, whose explaining pass re-reads the
-field its deciding pass stopped at and everything beneath it, and walks a clause
-once more against an undeclared key it does not cover, to report it. A keyed map
+keeps no memo over the answers. An explaining walk reads each branch a refused
+union has to walk twice -- once to decide whether any branch admits the value,
+once to explain it -- and a union left with one branch to walk once. It reads
+twice a keyed map that fails: a record read by its keys re-reads the field its
+deciding pass stopped at and everything beneath it, a map read by a scan
+re-reads every entry up to the refused one (`resume` in `Decided` is `None`
+there), and either walks a clause once more against an undeclared key it does
+not cover, to report it. A keyed map
 that is a union's branch takes the second read only where the union refuses the
 value, since its explaining pass waits for that. A predicate
 is user code, so each occurrence the walk reaches is a call, and a cache keyed
@@ -505,8 +509,9 @@ was when the copy was taken, so the count is compared again afterwards and a
 value that moved reports the move. The **instruction** count moves the other way
 -- the copy is instructions and the stall it removes is not, so a sixty-four
 element walk executes 47% more of them. The walk's budget in
-`scripts/perf_budget.json` is recorded on CPython 3.12 over the snapshot
-reading, so the count it holds is the higher one.
+`scripts/perf_budget.json` is recorded on CPython 3.14, which reads the list in
+place, so the snapshot's instructions are a cost the budget does not see;
+`scripts/perf_gate.py --against` on 3.12 reads them.
 
 ## A scalar is its type test wherever the walk asks one
 
@@ -739,9 +744,11 @@ thirty-second position repeats thirty-one probes and thirty-one checks for
 nothing, because a field the deciding walk **passed** has no violation to report.
 
 So the deciding walk hands over where it stopped, and the explaining walk starts
-there. What it hands over is three integers and no allocation (`Decided` in
-`walk/record.rs`): the entry count the dict held, the position, and
-how many declared keys had been found by then. The found count travels because
+there. What it hands over is a few integers and no allocation (`Decided` in
+`walk/record.rs`): the three the resumption reads -- the entry count the dict
+held, the position, and how many declared keys had been found by then --
+beside how far the walk got, which a union reads to choose the record branch it
+explains. The found count travels because
 it is load-bearing — a record holding exactly the keys it declares skips the
 scan for undeclared ones, and a walk that resumed without it would fall into a
 scan that finds nothing.
@@ -800,8 +807,8 @@ is keyed by `str` or by anything: a parsed object's keys are strings by
 construction, so such a clause admits every one of them and only its value schema
 is walked. That is a smaller saving than the table -- one key-schema walk per
 undeclared key rather than one allocation per object -- and the two compose.
-Both are on the comparison gate's JSON document, which reads 0.78 of
-pydantic-core with them and 0.87 with only the first.
+Both are on the comparison gate's JSON document (`scripts/compare_gate.py`),
+and `scripts/perf_compare.json` holds what it reads.
 
 The two readings count a parsed object's keys for a length bound too
 (`distinct_keys`): the dict `json.loads` builds holds a repeated key once, so an

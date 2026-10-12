@@ -12,7 +12,7 @@ it.
 
 | Page | Owns |
 |---|---|
-| [00-architecture.md](00-architecture.md) | the two crates, the module layers, the dependency direction |
+| [00-architecture.md](00-architecture.md) | the zones and the direction their dependencies run, how a value and a pair of schemas flow, the invariants every zone keeps, every bound, and the designs refused for the shape of the whole |
 | [01-schema-ir.md](01-schema-ir.md) | `crates/valgebra-core/src/ir.rs` — the node set and what each node denotes |
 | [02-decision.md](02-decision.md) | `crates/valgebra-core/src/decision.rs` and `descr/` — what is decided and what stays conservative |
 | [03-frontend.md](03-frontend.md) | `crates/valgebra-py/src/build.rs` and `build/` — typing annotations into the IR |

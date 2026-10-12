@@ -589,9 +589,9 @@ const SIZED: [Sized; 7] = [
 /// The length of a value, read the way the rest of the walk reads it.
 ///
 /// **One value has one length.** A container subclass may override `__len__`
-/// and say anything; before this, `MinLen(5)` believed it and the shape beside
-/// it counted the storage, so the two constraints described different sets and a
-/// value could satisfy each in a different sense. A length that two parts of one
+/// and say anything; a `MinLen(5)` that believed it, beside a shape counting the
+/// storage, would make the two constraints describe different sets, and a value
+/// could satisfy each in a different sense. A length that two parts of one
 /// schema disagree about is not a property of the value, and a set defined by
 /// one is not a set.
 ///

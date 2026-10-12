@@ -9,7 +9,10 @@ toolchain.
 ## Reference implementations
 
 These are **read-only design references**, consulted as checkouts elsewhere on
-disk. None is vendored into this tree, and none is a dependency.
+disk. None is vendored into this tree. jiter is a dependency of the binding
+(`crates/valgebra-py/Cargo.toml`); pydantic, which carries pydantic-core, is
+the `bench` group's differential oracle, and ruff and ty are `dev` tools
+(`pyproject.toml`); none of the three is linked as design.
 
 - **pydantic-core** — <https://github.com/pydantic/pydantic-core>. The
   compile-once, validate-fast architecture valgebra's shape follows: a validator
@@ -24,9 +27,8 @@ disk. None is vendored into this tree, and none is a dependency.
   represented and decided. valgebra does not link them.
 
 **The divergences from pydantic-core on the schemas
-`tests/test_differential.py` draws are enumerated there** and are deliberate:
-`bool` as a subtype of `int`, `int` and `float` as disjoint, and exact-match
-`Literal` membership. Read them there — a second list drifts. Outside that
+`tests/test_differential.py` draws are enumerated in that module's docstring**,
+each with the choice behind it; read them there — a second list drifts. Outside that
 fragment there are more, each a choice another page owns: `MultipleOf` refuses
 `nan` and `inf` where pydantic admits them, a `NamedTuple` refuses a plain
 tuple, and a held dataclass is re-checked (`tests/test_pydantic_boundary.py`).
@@ -74,11 +76,12 @@ is where they are applied.
   type per collection, constructed in one place. This is the five index spaces.
 - **`rustc_index::newtype_index!`** — the same pattern at compiler scale, named
   as the reference implementation and not as a dependency: valgebra writes the
-  struct with a macro of its own, `pool_index!` in `ir.rs`.
+  four pool indices with a macro of its own, `pool_index!` in `ir.rs`, and
+  `DefIx` by hand.
 - **Wlaschin, "Designing with types: making illegal states unrepresentable"** —
   <https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/>.
-  The sealed walk mode, where a pair of booleans admitted a fourth state nothing
-  meant.
+  The sealed walk mode: three states, where a pair of booleans would admit a
+  fourth that means nothing.
 - **King, "Parse, Don't Validate"** —
   <https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/>. The
   frontend is a parser from annotations into the IR, and the indices it mints are
@@ -119,5 +122,5 @@ proptest; cachegrind
 Read the pins from the files that own them, not from prose: `Cargo.toml` for the
 Rust edition and MSRV, `pyproject.toml` for the supported Python range and the
 pinned tool versions, and `.github/workflows/ci.yml` for the interpreter matrix
-and the nightly the fuzz lane uses. Every one of those has been quoted in a doc
-somewhere and gone stale within a release.
+and the nightly the fuzz lane uses. A pin quoted in prose goes stale the
+release it moves.

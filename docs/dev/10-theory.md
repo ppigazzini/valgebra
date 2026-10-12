@@ -12,10 +12,12 @@ work; **DEVIATION**, a point where the tree departs from its source on purpose
 and names the cost; and **NOT-REACHED**, a thing this tree does not do, given
 only where a test fails on the day it starts doing it.
 
-Every tagged paragraph is followed by a `HELD-BY:` line naming the tests that
-fail when the sentence is false, or an `OWED:` line naming the tests it is owed
-and why they do not exist yet. `tests/test_theory_ledger.py` holds both
-directions: a tagged sentence with neither line fails, a name that resolves to
+Every paragraph tagged LOAD-BEARING, OBLIGATION, DEVIATION or NOT-REACHED is
+followed by a `HELD-BY:` line naming the tests that fail when the sentence is
+false, or an `OWED:` line naming the tests it is owed and why they do not exist
+yet; a GUIDING or PLANNED tag carries an id and no holding line.
+`tests/test_theory_ledger.py` holds both directions: a claim with neither line
+fails, a name that resolves to
 no test fails, an owed name that already resolves to one fails, and the count of
 `OWED:` lines is recorded there and may only fall.
 
@@ -178,8 +180,9 @@ HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_
 `t` is `t_down ∨ (? ∧ t_up)` and is represented by **two** descriptors, with
 the operations run on each separately. valgebra carries one, because it has one
 type to carry: `typing.Any` builds the top with a spelling beside it, a
-spelling is what `repr` reads and nothing else does, and the two spellings
-lower to the same descriptor. The pair exists so that every lattice rule can
+spelling is what `repr` reads to print and the sharing table (`ir/intern.rs`)
+reads to keep the two apart, no relation or law reads it, and the two
+spellings lower to the same descriptor. The pair exists so that every lattice rule can
 exclude a gradual case; having no such case does the same work by having
 nothing to exclude. **[NOT-REACHED: one-descriptor-one-type]**
 
@@ -290,7 +293,8 @@ SOURCE: §5 "converts any unbounded descent"
 HELD-BY: test_every_entry_point_reports_the_bound_it_reaches, test_a_value_past_the_depth_bound_reports_the_bound, test_the_parser_and_the_walk_bound_a_document_in_that_order
 
 **A value that contains itself is caught by identity.** The guard on the
-descent path is a set of `(id(value), ref)` pairs, so a value reachable from
+descent path is a stack of `(id(value), ref)` pairs, entered and left level by
+level, so a value reachable from
 itself is refused with `recursion_loop` and a value that merely *repeats* is
 not: a list holding two equal sublists is an ordinary finite value, and a guard
 reading equality would refuse it. That is the coinductive reading observing a
@@ -306,7 +310,7 @@ assume the goal, unfold, and a pair already on the trail is a local success
 `crates/valgebra-core/src/decision.rs` is that idea, with terms where the paper
 has addresses.
 
-SOURCE: §13.4 "for the trail idea; CORRECTED 2026-09-02"
+SOURCE: §13.4 "for the trail idea, not arm for arm"
 
 The arms are not the paper's: it decides an ordering over
 `⊥/⊤/→/µ` and valgebra decides a lattice with no arrow.
@@ -338,7 +342,8 @@ HELD-BY: test_the_membership_walk_never_consults_subtyping, test_a_callable_anno
 coinductively too: a *simulation* is "a self-justifying set, that is a
 co-inductive proof of the fact that all its elements are equal to `0`".
 **[GUIDING: emptiness-is-a-simulation]** — valgebra's emptiness recurses on the structure and reads a cycle
-back to a visiting reference as uninhabited, which is the inductive reading of
+back to a visiting reference, or to a meet held open on its path (`OPEN_MEETS`
+in `decision/emptiness.rs`), as uninhabited, which is the inductive reading of
 the same fact over finite values.
 
 Coinduction also governs the *value* side: a value that contains itself is
@@ -353,8 +358,9 @@ crosses between typed and untyped code. **[GUIDING: the-dynamic-type-declined]**
 — a runtime
 validator asks one question, membership, and to it the dynamic type is the top.
 There is no `Dynamic` node: `typing.Any` builds `Schema::Anything` carrying a
-[`Spelling`](../../crates/valgebra-core/src/ir.rs) that `render` reads and
-nothing else does, so every law and every relation sees the top
+[`Spelling`](../../crates/valgebra-core/src/ir.rs) that `render` reads to print
+and the sharing table reads to keep the two apart, and no law or relation
+reads, so every law and every relation sees the top
 ([01-schema-ir.md](01-schema-ir.md#what-any-is)). The paper is kept here because
 the reason it separates the two is the reason this project does not: it names
 the question a validator has no site for.
@@ -410,8 +416,9 @@ distribution asks the meet of each branch and the meet rule asks the class atom
 against the same thing once per member, with no cache between the two rules.
 A shape where one goal is reached by two rules with no cache between them is
 what reopens this question, and the matrix carries two of them.
-So the interning earns its place for what it already does — a cheap key for the
-mutation sweep's diff, and a pointer-identity short-circuit on the trail's
+So the interning earns its place for what it already does — one handle per
+structurally equal subtree, so a lowering and the per-rule caches do not repeat
+themselves over a copy, and a pointer-identity short-circuit on the trail's
 comparisons — and a table over goals would buy a saving on that one shape,
 which is a measurement away rather than a guess.
 
@@ -578,7 +585,8 @@ SOURCE: §13.1 "positives of mixed kind make a clause empty outright"
 HELD-BY: the_same_shape_under_two_kinds_does_not_meet, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart, a_kind_is_an_independent_question
 
 **Two fixpoints, one procedure.** Emptiness reads a cycle back to a visiting
-reference as uninhabited -- the least fixpoint, no finite value reaches it --
+reference, or to a meet held open on its path, as uninhabited -- the least
+fixpoint, no finite value reaches it --
 and subtyping reads a cycle back to an assumed goal as proved -- the greatest.
 The two are one procedure asked in two directions, and the unfolding is sound
 in both. **[LOAD-BEARING: two-fixpoints-one-procedure]**
@@ -608,8 +616,8 @@ SOURCE: §13.3 "**Sequences as regular expression types.**"
 HELD-BY: the_lattice_laws_hold_of_the_sequences, the_complement_laws_hold_of_the_sequences, the_edges_leaving_a_state_cover_the_letters, an_accepting_state_behind_an_undecided_letter_is_unproved
 
 **`Any` is the top, spelled.** `typing.Any` builds the top with a spelling that
-`repr` reads and nothing else does, so every law and every relation sees one
-set and the complement laws hold of it however it is spelled.
+`repr` reads to print and the sharing table reads to keep the two apart, and no
+law or relation reads, so every law and every relation sees one set and the complement laws hold of it however it is spelled.
 **[LOAD-BEARING: any-is-the-top-spelled]**
 
 HELD-BY: the_complement_laws_hold_of_the_top_however_it_is_spelled, no_relation_can_tell_the_two_spellings_apart
@@ -789,14 +797,15 @@ SOURCE: §13.1 "`is_subtype_of` is not that reduction applied uniformly"
 HELD-BY: test_decision_decides_true_relations, test_the_two_deciders_are_measured_against_each_other, the_structural_inclusion_rules_decide_without_the_descriptor
 
 **The term is built in a normal form short of negation normal form, and it is
-not canonical.** Construction settles the lattice laws and pushes no complement
-inward, and no pass reduces a term further. So `==` is the form and not the
+not canonical.** Construction applies associativity, commutativity,
+idempotence and the identity laws, not absorption, and pushes no complement
+inward; no pass reduces a term further. So `==` is the form and not the
 set, and two spellings of one set can build to two terms -- `A | (A & B)` and
 `A` -- which is why the laws are asserted over the values and the deciders'
 agreement over a corpus that adds shapes.
 **[DEVIATION: the-normal-form-is-not-canonical]**
 
-SOURCE: §13.1 "`simplify` produces negation normal form and no further"; §3 "A rewriter missing rules is sound and incomplete"
+SOURCE: §13.1 "construction builds the lattice normal form and no pass reduces it further"; §3 "A rewriter missing rules is sound and incomplete"
 
 HELD-BY: test_eq_is_the_normal_form_and_not_the_set, laws.rs::construction_preserves_membership_over_values
 
@@ -825,7 +834,8 @@ HELD-BY: every_key_falls_in_exactly_one_part, a_map_constrains_one_part_of_the_k
 **The trail holds terms, not addresses.** Assumption pairs are compared by
 structural equality in a linear scan, short-circuiting on pointer identity for
 interned subtrees; the longest trail any recursive shape in hand builds is
-three pairs, counted by a recorder at the two push sites over the shapes the
+three pairs, counted by a recorder at the one push site, `Cx::assuming`, which
+both unfoldings of a reference go through, over the shapes the
 goal counter carries -- a list over a reference against a union holding that
 reference is the one that reaches three. A decision leaves the trail as it was
 given. **[DEVIATION: the-trail-holds-terms]**

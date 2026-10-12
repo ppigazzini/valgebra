@@ -111,8 +111,9 @@ and `decision/tests.rs` pins its edge.
 **A pair no rule decided is worth three kinds of reading**, in this order, and
 every arm that answers for a shape and then declines hands its pair to them
 rather than ending the match: the readings that refute on a value, the last of
-them two sets that *share no value* (`unstructured` in `decision.rs` asks them,
-and [What a refutation stands on](#what-a-refutation-stands-on) lists them);
+them two sets that *share no value* (`unstructured` in `decision.rs` asks the
+four any pair can take, and [What a refutation stands on](#what-a-refutation-stands-on)
+lists every one with the rule that asks it);
 then the oracle, the only reader of a class or a constant; then the supertype's
 own shape, where a **refinement** takes its base's refutation and not its proof --
 the value outside the base is outside a subset of it, while being inside the
@@ -318,7 +319,8 @@ is the non-empty non-scalar region, not the empty set. A test asserts the six ar
 non-empty and pairwise disjoint, because either half alone is satisfied by a
 region that collapsed to nothing.
 
-Off that fragment a schema's region is `None` — opaque. Literals, instances,
+Off that fragment a schema's regions are `Regions::Unknown` — opaque, and
+absorbing under both lattice operations. Literals, instances,
 refinements, content-bearing containers and references are all opaque.
 
 A combination holding one is read two ways, and which way depends on what the
@@ -363,8 +365,8 @@ corpus of its own driving every question below
 - `literal_sets_disjoint` — do these two *sets* of constants share a value. The
   same relation `literals_disjoint` answers for one pair, asked of every pair at
   once: the core compares a union with a union member by member, which is
-  quadratic in the oracle, and two twenty-thousand-member literal unions were
-  four hundred million calls and six seconds. An implementor that can hash its
+  quadratic in the oracle, and two twenty-thousand-member literal unions are
+  four hundred million calls. An implementor that can hash its
   constants answers in one pass; the default declines and the member walk
   stands;
 - `literals_disjoint` — do these two constants share a value, the one-pair form
@@ -422,9 +424,9 @@ corpus of its own driving every question below
 user code -- a predicate or an `__eq__` a literal is probed with, a comparison,
 `%`, a metaclass hook, an enumeration's iteration -- reads a raise as a decline,
 which the core folds conservatively. The first fatal signal is kept as well,
-and `PoolRelations::answer` hands it back in place of the verdict: a predicate
-interrupted while `Literal[5]` was probed read as a non-member, and the query
-answered `not_subset` about a refinement it never finished asking. `is_empty`,
+and `PoolRelations::answer` hands it back in place of the verdict: read as a
+non-member, a predicate interrupted while `Literal[5]` is probed would answer
+`not_subset` about a refinement the query never finished asking. `is_empty`,
 `is_subtype_of`, `relation_to` and `is_equivalent` each return through it.
 
 **A layout is the class that laid it down.** The snapshot a class enters the
@@ -588,7 +590,11 @@ These are the readings that refute, each with the value it stands on:
   own, and the union of their values is a term neither side spelled, outside
   the closure of subterms the budget's argument counts goals in.
 
-**They run in a cost order, and the order is free to choose.** Each answers
+**They run in a cost order, and the order is free to choose.** `unstructured`
+asks the four any pair can take -- `shorter_than`, `spills_past`,
+`outside_the_class`, then `disjoint_with` -- and the other two are asked where
+their shape is: `outside_every_kind` by the meet rule (`meet_below`), and
+`clause_escapes` by `keyed_map_subtype`. Each answers
 `Fails` on its own and none of them proves, so a pair that two of them refute is
 refuted whichever ran first: what the order decides is which reading names the
 value, never whether one is named. What it does decide is what an *unrefuted*
@@ -785,8 +791,9 @@ answer is undecided. The product rule takes a level for each branch it narrows
 by, so its depth is a union's width rather than a schema's nesting, and the
 step budget caps that width without capping the goal asked at the bottom of
 it. A level costs about 1 KiB on the profile-guided wheel, so
-the bound fits half of a 1 MiB thread. The count costs the decision workloads
-2.5% to 3.1%.
+the bound fits half of a 1 MiB thread. What the count costs the decision
+workloads, against the two placements it is not given, is the `Budget` doc
+comment's in `decision.rs`.
 `the_depth_bound_declines_and_gives_its_levels_back` holds the goal and
 emptiness recursions to it, and the levels to being given back, and
 `the_product_rule_takes_a_level_for_each_branch_it_narrows_by` holds the
@@ -934,11 +941,11 @@ asks nothing of the subject: the reference denotes exactly its definition, and a
 definition that is the universe bounds every set. A reference that resolves
 reaches that rule through its definition's own descent, so it is asked directly
 only where the subject's unfolding has nothing to unfold, and a pair both rules
-decline is not decided twice against the shared budget. The set reading decided
-the pair alone, since it widens a reference it cannot resolve to the top, and
-missed it beside a literal it could not lower: `Literal[1] | R₂ ⊆ R₁`, with `R₁`
-the universe and `R₂` past the table, declined while `¬R₁` was proven empty.
-The nightly fuzzer drew it, `fuzz/seeds/decision/` keeps the input, and
+decline is not decided twice against the shared budget. The set reading alone
+widens a reference it cannot resolve to the top, and misses the pair beside a
+literal it cannot lower: `Literal[1] | R₂ ⊆ R₁`, with `R₁` the universe and
+`R₂` past the table, declines there while `¬R₁` is proven empty.
+`fuzz/seeds/decision/` keeps the input, and
 `a_reference_to_the_universe_bounds_a_subject_no_table_resolves` in `laws.rs`
 draws the family. A finished validator carries no such reference -- `pruned`
 keeps what the schema reaches and nothing it names is dropped -- so no answer a
@@ -963,19 +970,18 @@ stays a decline.
 **A length bound reads the lengths a sequence's shape can take.** A sequence
 is never shorter than its fixed positions and never longer where its tail
 admits nothing, so `MinLen(5)` over a list of exactly three elements is empty.
-Compared with `MaxLen` alone, the refinement read as inhabited, and its
-complement as short of the universe. The nightly fuzzer drew a subject holding
-an unresolved back edge against that complement: the set representation proved
-the refinement empty and declined on the subject, and the rules, asked next,
-answered that the subject was not below it.
+Read from `MaxLen` alone, the refinement is inhabited and its complement short
+of the universe, so a subject holding an unresolved back edge against that
+complement -- which the set representation declines on, having proved the
+refinement empty -- would be answered not below it by the rules asked next.
 `lengths_miss_the_shape` in `decision/emptiness.rs` reads the shape, the
 seed `below-the-complement-of-a-length-the-shape-cannot-take` keeps the input,
 and `every_set_is_below_the_complement_of_an_empty_set` in `decision/tests.rs`
 keeps the pair.
 
-## Two more places a shape stood in for the question
+## Two more places a shape would stand in for the question
 
-The bounds were not the only ones, and the same search found the rest.
+The same reading governs two more rules.
 
 **A complement on the right is one question, not a shape to recurse into.**
 `A ⊆ ¬B` holds exactly when `A ∩ B = ∅`, which emptiness answers through kind

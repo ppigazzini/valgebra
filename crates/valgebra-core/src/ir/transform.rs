@@ -372,8 +372,9 @@ impl Schema {
     /// payload the way `remap` moves its index space.
     ///
     /// The arms here are exactly the nodes that *carry* an index; the structural
-    /// descent is [`map_children`](Self::map_children). The match deliberately
-    /// takes **no wildcard**: a variant that carries a pooled index and reaches
+    /// descent is [`map_children`](Self::map_children). The match in
+    /// [`remapped_where_moved`](Self::remapped_where_moved) deliberately takes
+    /// **no wildcard**: a variant that carries a pooled index and reaches
     /// this by a catch-all would keep its index and read a real object of the
     /// wrong kind, which is a plausible wrong verdict rather than a crash. Listing
     /// the structural variants costs a line each and makes a new variant a

@@ -105,9 +105,9 @@ const SLOTS: usize = 1024;
 /// with another's is the collision this trades for, and a collision costs one
 /// comparison that fails.
 ///
-/// **What holds this number is `perf_gate.py --core`** (measured 2026-09-14):
-/// hashing every entry instead of four reads that workload **4.47% higher**,
-/// and the decision workload 0.10%, because the core one is the one that
+/// **What holds this number is `perf_gate.py --core`**: hashing every entry
+/// instead of four reads that workload **6.8% higher**, and the decision
+/// workload 0.01%, because the core one is the one that
 /// builds wide lists. The validator-building shape does not see it: that shape
 /// reads a Python spelling once per iteration, so it interns one list per build
 /// and repeats none.

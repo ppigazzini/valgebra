@@ -30,10 +30,11 @@ in `sys.modules`.
 **An attribute name is no protocol.** msgspec's `Meta`, pydantic's `Field` and
 `AfterValidator`, and a class of a caller's own may each carry a `ge`, a
 `pattern` or a `func` and mean what their own library means by it. Read by
-name, `Meta(pattern="a+", max_length=3)` was a whole-string pattern with its
-length dropped, where msgspec searches and keeps the length; `Meta(ge=0)` was
-refused for the pattern it leaves unset; and `AfterValidator(f)` was called as
-a predicate and judged a value by the truth of what `f` returned. Each is that
+name, `Meta(pattern="a+", max_length=3)` would be a whole-string pattern with
+its length dropped, where msgspec searches and keeps the length; `Meta(ge=0)`
+would be refused for the pattern it leaves unset; and `AfterValidator(f)` would
+be called as a predicate and judge a value by the truth of what `f` returns.
+Each is that
 library's metadata, and is ignored, as pydantic ignores msgspec's and msgspec
 pydantic's. The vocabulary's README says how a third party joins it -- a
 `GroupedMetadata` that yields the vocabulary's markers -- and that is read:
@@ -60,10 +61,10 @@ ignored.
 `is_typing_form` in `build/refine.rs` knows one by its class:
 `types.GenericAlias` by identity, since PyPy defines it in a module of its own,
 and any other by its module, `typing` or `typing_extensions`, which no
-predicate's class names. Called with
-a value, `list[int]` built a list and `at.IsFinite[float]` built a float, and
-the truth of what came back was the verdict: `Annotated[float,
-at.IsFinite[float]]` admitted infinity and refused zero. The rule mirrors the
+predicate's class names. Called with a value, `list[int]` builds a list and
+`at.IsFinite[float]` a float, so read as a predicate the truth of what comes
+back would be the verdict: `Annotated[float, at.IsFinite[float]]` would admit
+infinity and refuse zero. The rule mirrors the
 one for a class: an `Annotated` alias carrying something this frontend would
 read where the alias stands is refused, and any other typing form is ignored.
 
@@ -96,7 +97,7 @@ The rest are read in this order:
    grouping, and nothing is read off the group itself. What a group carries as
    attributes is its members' to say: `StringConstraints` carries a `pattern`
    and yields it as an object of pydantic's own, which pydantic searches with,
-   and read off the group it was a whole-string match;
+   and read off the group it would be a whole-string match;
 2. a pattern marker — its `pattern`, with its `flags`;
 3. a marker of the vocabulary — the bounds, lengths and step it carries;
 4. a marker that is itself callable — the marker becomes the predicate;
@@ -241,8 +242,11 @@ symmetry:
     and a `NewType`'s supertype are type *arguments*, read as a parametrized
     form's are (`build_type_argument` in `build/generics.rs`): a string there
     is a forward reference and refused, where read as a constant
-    `NewType("N", "int")` was the literal `'int'`.
-11. Anything else — a literal of itself.
+    `NewType("N", "int")` would be the literal `'int'`.
+11. Anything else — a literal of itself, except a forward reference, an
+    `InitVar`, `TypedDict` or `NamedTuple` itself, a typing construct, and a
+    callable that is no class, each refused by name (`build_unrecognised` in
+    `build.rs`).
 
 Moving a branch earlier is a behaviour change, not a refactor. `Any` above the
 type branch is the sharp one. Steps 6 and 7 are the moves that are not, and the
@@ -265,11 +269,7 @@ before 3.15 a `TypeAliasType` as a literal of the alias. `Extensions` in
 `build.rs` holds those objects, looked up in `sys.modules` once the module has
 finished loading -- a module is in `sys.modules` while its body runs, and a
 form read then would be kept as absent -- and is asked only where a form would
-otherwise be misread: the class fallback (`Any`), the literal fallback
-(`Never`, `TypeAliasType`, its own `TypedDict` and `NamedTuple`, and its
-`_SpecialForm` for `Self` and `LiteralString`), a `TypedDict` field's
-`Required` or `NotRequired` (`qualified_required` in `build/classes.rs`), and
-an origin no other arm reads (the three field qualifiers and `Unpack`). A
+otherwise be misread, each place naming the `Extensions` field it reads. A
 schema naming none of them pays nothing for it.
 
 ## What a class declares
@@ -482,9 +482,10 @@ a dict or a set: the typing spec allows `None`, an enum member, or an `int`,
 `bool`, `str` or `bytes` value, and a type or a container there would be read as
 a schema of its own rather than as a constant (`refuse_unhashable_literal` in
 `build/generics.rs`). A typing form is refused the same way, with the words
-for a form (`refuse_literal_form`): `Literal[list[int]]` built `list[int]`,
-`Literal[NewType("U", int)]` built `int`, a validator its set, and on 3.10,
-where `Any` is not yet a class, `Literal[Any]` built `Any`. An exact builtin
+for a form (`refuse_literal_form`): read as schemas, `Literal[list[int]]`
+would build `list[int]`, `Literal[NewType("U", int)]` `int`, a validator its
+set, and on 3.10, where `Any` is not yet a class, `Literal[Any]` `Any`. An
+exact builtin
 scalar is answered first, so a wide `Literal` asks none of the rest. The
 refusal names the spelling that was meant. A constant the spec does not admit
 there -- a float, an instance -- is read all the same, as the constant
@@ -662,6 +663,12 @@ frame are two sets of slots in every unoptimized descent, and the 129-level
 chain at the depth bound then needs 2,146 KiB of stack on 3.11, past the 2 MiB
 a test thread is given, against 1,673 KiB with one.
 
+The counts are a build's own. Every entry a caller reaches begins one through
+`build_root`, which sets the thread's counts and open aliases aside
+(`RootScope` in `build.rs`) and hands them back when it ends, so a validator an
+annotation constructs while it is read -- a predicate built in a field's
+metadata -- is measured on its own, not against the build around it.
+
 ## Refused, and the test each one fails
 
 A proposal to read a form another way starts here. Each row says what it
@@ -688,8 +695,8 @@ mypy, pyright and ty all read the form as `Validator[object]`, where
 and `close`, and the one the IR cannot define: dropping "the record the class
 brought" needs to know which record that was, and a record built from two
 classes is one interned node (`a_node_built_twice_is_one_node_in_every_family`
-in `crates/valgebra-core/src/ir/intern/tests.rs`). `open` and `close` already
-had to stop being called functions of the set
+in `crates/valgebra-core/src/ir/intern/tests.rs`). `open` and `close` are not
+functions of the set
 (`test_a_meet_of_open_records_closes_apart_from_its_record` in
 `tests/test_projection_laws.py`).
 

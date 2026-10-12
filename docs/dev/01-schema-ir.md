@@ -187,10 +187,10 @@ form the typing spec gives for "an object with these attributes" is the
 spelling, which is the surface rule.
 
 **A spelling for the class alone.** `instance_of(C)` is that spelling: the
-node is `Instance`, a generator the closure ledger already held, and a class
-that declares fields -- a dataclass, a `NamedTuple` -- had no annotation
-reaching it, since the frontend reads the class's name as the class met with
-its declaration. No node was added for it. It is a combinator rather than an
+node is `Instance`, a generator the closure ledger holds, and a class that
+declares fields -- a dataclass, a `NamedTuple` -- has no annotation reaching
+its instances alone, since the frontend reads the class's name as the class met
+with its declaration. The spelling adds no node. It is a combinator rather than an
 annotation form because the typing form for "the instances of `C`" is `C`
 itself, which the declaration reading takes, and the alternatives to a
 combinator are refused in [03-frontend.md](03-frontend.md), "Refused, and the
@@ -339,7 +339,8 @@ child set holds the other half of that argument. It is written in two places,
 `push_children` for one that only reads, both exhaustive, so a walk that only
 descends inherits the child set instead of restating it, and
 `the_functor_and_the_traversal_describe_the_same_children` holds the two to one
-set. `Schema::remapped_by` takes no wildcard on purpose:
+set. `remapped_where_moved`, behind `Schema::remapped_by`, takes no wildcard
+on purpose:
 a future variant carrying a pooled index must be a compile error there rather
 than a node that silently keeps an index into the wrong pool.
 
@@ -451,8 +452,10 @@ reports `no_match`. That is recorded in
 
 ## What a length is
 
-`MinLen` and `MaxLen` on a `list` or a `tuple` read the number of elements the
-value **holds**. Every other kind answers `__len__`.
+`MinLen` and `MaxLen` read the number of items a builtin container **holds** --
+a `str`, `bytes`, `list`, `tuple`, `set`, `frozenset` or `dict`, a subclass
+included -- and `len(value)` for any other value (`Constraint::MinLen` in
+`ir.rs`, `stored_len` in `crates/valgebra-py/src/check/walk/scalar.rs`).
 
 The rule exists because a value must have *one* length. A sequence schema walks
 the storage a `list` or `tuple` holds, so `[int, int]` counts elements, while a
@@ -465,10 +468,10 @@ same set as a one-element prefix, which is what lets the algebra hold sequence
 lengths structurally at all.
 
 The choice is between *what the value reports* and *what the walk can see*, and
-only the second is available to both halves. `__len__` remains the length of a
-`str`, `bytes`, `set` and `dict`, because the walk reads those through it too:
-the rule is not "distrust `__len__`", it is "one length, and it is the one the
-walk already uses for that kind".
+only the second is available to both halves. `__len__` answers only for a value
+with no builtin container behind it, which has no storage to read past it: the
+rule is not "distrust `__len__`", it is "one length, and it is the one the walk
+reads for that kind".
 
 ## What `Any` is
 
@@ -639,9 +642,9 @@ A question about a base is **read** rather than built. Lowering a refinement
 asks whether the base lies within a handful of kinds, and the components answer
 that one at a time and in place; constructing the complement of a union of those
 kinds and meeting the base with it gives a descriptor whose only use is to be
-tested for emptiness, and it costs two thirds of the relation matrix. Measured
-both ways on the instruction gate, the read is **51% of the whole workload**
-cheaper, with every checksum unchanged.
+tested for emptiness, and it costs two thirds of the relation matrix; reading
+the question in place is what the instruction gate's `--decision-matrix` shape
+holds, with every checksum unchanged.
 
 That last number is the shape of the problem. `MAX_LINES`, `MAX_ATOMS` and
 `MAX_STATES` -- rows in the table of every bound in the tree
@@ -687,16 +690,15 @@ where `DEPTH` sits; the shapes that blow up nest ten and deeper. Bounded at
 instruction-count gate holds, and the validation path, which no relation is on,
 is unchanged.
 
-What it does cost is the fuzzer. The decision target runs at 139 executions a
-second against 10,544, over five times the covered features and twice the
-resident memory: every input the fuzzer generates that the rules decline builds
-two descriptors. That is a testing-capability cost rather than a
-user-facing one, and the route out of it is a target that asks the rules
-directly for the high-volume properties, with the descriptor on a target of its
-own. Until there is one, the nightly run buys the reach back with time: the
-decision target's budget is 360 seconds rather than 180
-(`.github/workflows/ci.yml`), because the throughput is CPU-bound and nothing
-else moves it.
+What it does cost is the fuzzer. Every input the rules decline builds two
+descriptors, so the decision target executes far fewer inputs a second than a
+target asking the rules alone would, over more covered features and more
+resident memory. That is a testing-capability cost rather than a user-facing
+one, and the route out of it is a target that asks the rules directly for the
+high-volume properties, with the descriptor on a target of its own. Until there
+is one, the nightly run buys the reach back with time: each target's budget is
+`nightly-libfuzzer`'s in `.github/workflows/ci.yml`, because the throughput is
+CPU-bound and nothing else moves it.
 
 ## What a bare builtin class denotes
 
@@ -810,7 +812,8 @@ says what to send instead ([docs/17-boundaries.md](../17-boundaries.md)).
 
 ## The limit
 
-The IR is a tree of shared handles with back edges, not an interned graph. A
+The IR is a tree of shared handles with back edges, interned per thread by
+`ir/intern.rs` rather than held in an arena of ids. A
 node's child is a shared pointer and the lists it holds -- a join's members, a
 record's fields, a map's clauses, a refinement's constraints -- are shared
 slices, so *carrying* a subtree costs a reference count rather than a copy of

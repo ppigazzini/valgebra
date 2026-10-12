@@ -424,10 +424,12 @@ jobs:
     # fails the lane if it does, where the parallel tests would only skip -- and
     # the concurrency test exercises true parallel validation there.
     #
-    # Every interpreter the package supports runs on every event. The release
-    # ships a wheel built per version against a version-specific ABI, so each
-    # one is a separate artifact a caller installs, and a lane that does not run
-    # is a wheel nothing exercised until somebody reported it. Sampling the ends
+    # Every release the package supports runs on every event, and its
+    # free-threaded build at 3.14; the cp315t wheel is run by the release's
+    # smoke alone, and no leg here runs it. The release ships a wheel built per
+    # version against a version-specific ABI, so each one is a separate
+    # artifact a caller installs, and a lane that does not run is a wheel
+    # nothing exercised until somebody reported it. Sampling the ends
     # rests on the claim that a break between two neighbours shows at the floor
     # or at the current release first, and that claim is about the interpreters
     # rather than about this extension -- so it is not one to hold a supported
@@ -1536,9 +1538,9 @@ jobs:
   # own copy of this file: checking `github_ci` out from here would run
   # `main`'s copy against the other tree, and a change to this file on
   # `github_ci` would read as a false red or a skip. The nightly lanes run
-  # here as well only where `main`'s tip is not `github_ci`'s, since the
-  # dispatched run reads that tree otherwise. Every nightly lane reads this
-  # job's output, directly or through the sweep it ratchets, and
+  # here only where nothing was dispatched -- a repository without the branch
+  # -- since the dispatched run reads every one of them there. Every nightly
+  # lane reads this job's output, directly or through the sweep it ratchets, and
   # `tests/test_required_jobs.py` holds them to it.
   nightly-dispatch:
     name: nightly dispatch
@@ -1547,9 +1549,10 @@ jobs:
     # every push job and every nightly lane there. So a push job and a nightly
     # lane run on this scheduled run only where nothing was dispatched -- a
     # repository without the branch -- and read `dispatched` to know: two full
-    # nightlies side by side compete for the runners and double the night. `main`'s own tip, behind the
-    # branch or beside it, is a tree the next fast-forward replaces, and its
-    # push jobs would redden on what the branch has already repaired.
+    # nightlies side by side compete for the runners and double the night.
+    # `main`'s own tip, behind the branch or beside it, is a tree the next
+    # fast-forward replaces, and its push jobs would redden on what the branch
+    # has already repaired.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Dispatching a run writes to the repository's actions, and no other job

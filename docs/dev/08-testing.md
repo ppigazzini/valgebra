@@ -107,7 +107,7 @@ frontend, so an agreement is evidence rather than a tautology.
 
 Read the "blind to" column of the ledger row again: *a relation nobody
 enumerated*. That is not a small gap. Every layer above it shares a version of
-it, and they shared it at once:
+it, and they share it at once:
 
 - the algebra laws assert soundness, which inspects a `True` and has nothing to
   say about a `False`, so a relation wrongly answered `False` is examined by
@@ -119,8 +119,8 @@ it, and they shared it at once:
 - a fuzz law that hardcodes an atom where a property is meant confirms the rule
   using the rule.
 
-So a missing rule was invisible to all of them together, and stayed invisible for
-months while every gate was green. `tests/test_completeness_probe.py` is the
+So a missing rule is invisible to all of them together, with every gate green.
+`tests/test_completeness_probe.py` is the
 direction none of them face. It takes a wide value universe, and for each pair
 the procedure answers `False` it looks for a witness — a value in the subtype and
 outside the supertype. **No witness means the relation looks true and the
@@ -211,8 +211,9 @@ the last release tag, and `actions/checkout` takes one commit and no tags, so
 that leg takes the whole history, and its name says so; the two checks in
 `test_mutation_scope.py` that list the mutants a sweep is offered need
 `cargo-mutants`, which the same leg installs. The audit is most of what the
-suite costs -- 313 of 385 seconds, measured on one interpreter -- and reading
-it on every leg paid for one answer eleven times.
+suite costs -- 313 of 385 seconds, measured on one interpreter -- and its
+answer is the same on every leg, so one leg reads it rather than every leg the
+matrix runs.
 
 A few checks read the interpreter running them as well as the tree, and those
 are the exception. `test_floor_names.py` holds its table to the running
@@ -238,11 +239,10 @@ the page and the notes are held together on one machine, and a green matrix
 says nothing about them.
 
 The last is a ledger over the rest, and it exists because reading a
-ledger cannot tell you whether it can fail. `test_local_gate.py` filtered its
-steps with `not runnable(name) and name not in NEEDS_A_RUNNER`, which is `X and
-not X` -- a list empty for every possible workflow, so the assertion passes on
-any tree, including one that breaks the claim, and reads exactly like one that
-checked something. `tests/test_ledger_plants.py`
+ledger cannot tell you whether it can fail. A filter of the shape `X and not
+X` selects nothing on any workflow, so an assertion over it passes on any tree,
+including one that breaks the claim, and reads exactly like one that checked
+something. `tests/test_ledger_plants.py`
 plants the defects the ledgers exist to catch: a schema variant in no column, a
 gate script in no lane, a job the merge gate does not require, a `feat` commit
 off the roll. Each is planted in a throwaway clone of the working tree, the
@@ -321,10 +321,10 @@ nothing.
 
 Running them against **every** supported interpreter rather than one is what a
 corpus of live objects is for: a `typing` member arrives in a release, and the
-floor is where the tree finds out. The corpora name `Never`, `Required`,
-`NotRequired` and the star-unpack inside a subscript, which reach the language
-in 3.11, and a self-naming `type` alias, which reaches it in 3.12; below that
-release the interpreter
+floor is where the tree finds out. The corpora name `typing` members and
+syntax that releases after the floor add -- 3.11's `Never`, `Required` and the
+star-unpack inside a subscript, 3.12's `type` aliases, 3.13's
+`warnings.deprecated` among them; below the release a row needs, the interpreter
 answers `AttributeError` or a `SyntaxError` the row does not expect. So a row
 states the release it needs as `Since(n)` -- the one spelling the corpora use
 for one -- and stands down below it, which is the `skipif` the Python suite
@@ -373,9 +373,8 @@ runs its source in the `sys.modules` entry of the name it is given when there
 is one, not in a module of its own, so two tests that build a module under one
 name rebind each other's classes. On a free-threaded interpreter the two run at
 once, and one test's pooled class stops being the class of the instances it
-reads next: `a_list_of_named_tuples_answers_as_the_walk_does`, sharing its
-module with the test of its reader, failed thirty runs in forty on 3.14t at four
-test threads and none at one. A helper that builds a module takes the name from
+reads next. Two tests sharing one module therefore pass on one test thread
+and fail at several on 3.14t. A helper that builds a module takes the name from
 its caller.
 
 A release written onto a row is a claim about the lanes, and
@@ -463,15 +462,16 @@ uploads it. `tests/test_property_profiles.py` reads each profile in a child
 interpreter with `CI` set, where the inheritance happens, and the lane's steps
 around the deep suite. It also holds the deep suite to every file a property is
 drawn in: a file the nightly lane does not name asks only the `ci` profile's
-examples, the same ones on every push, and seven did -- the four properties
-that hold the walk to pydantic-core and jsonschema among them, which the deep
+examples, the same ones on every push -- which would leave out the four
+properties that hold the walk to pydantic-core and jsonschema, which the deep
 suite asks with the oracles installed and required.
 
 **A budget beside a property is a fraction of the profile's.** A
 `max_examples` written as a number draws that many under every profile, so
-the nightly asks it what the merge gate asks: the refinement leaves of the
-denotation suite drew fifty everywhere until they took a tenth of the
-profile's. `tests/test_property_profiles.py` refuses a number there, spelled
+the nightly asks it what the merge gate asks, so a budget beside a property
+is written as a fraction of the profile's, as the refinement leaves of the
+denotation suite take a tenth. `tests/test_property_profiles.py` refuses a
+number there, spelled
 as a literal or as a module constant.
 
 ## What a use case is, and how many there are
@@ -509,8 +509,8 @@ cell a test cannot reach is accepted with a reason, and a reason for a cell that
 words: reaching a node is not asserting its answer, naming a method is not
 driving its documented failure, and a pair of variants is covered by a
 *witness* or by a reason, never by silence. A table that said only "a test
-touches it" would report nine products as one claim and be wrong about eight of
-them.
+touches it" would report every product above as one claim, and be wrong about
+all but one of them.
 
 A cell is covered when a test *does* something with it, not when a paragraph
 mentions it: the search runs over the code with the comments and docstrings cut,
@@ -575,7 +575,8 @@ and the suite drives the concrete ones.
 What a ledger cannot see is the half that matters most: naming a method is not
 asserting its documented outcome, and reaching a node is not checking every
 answer it gives. That is what the matrices beside them are for — the node matrix
-runs each node through all six entry points, and `test_error_contract.py` holds
+runs each node through every entry point the stub declares
+(`_ASKED_ENTRY_POINTS` in `tests/test_node_matrix.py`), and `test_error_contract.py` holds
 each promise the error model makes at each site that makes it. The ledger's job
 is narrower and nothing else does it: a name the tree grows and the suite never
 mentions, which is the state every one of them starts in.
@@ -620,11 +621,14 @@ costs whatever its draw asks, and a suite whose cost is a property of its draw
 is one the sweep cannot be sized against -- a mutant's timeout is a multiple of
 the baseline's test time, so a baseline free to move between runs makes every
 verdict in the shard a statement about the seed rather than about the mutation.
-Every law that reads a refusal as a skip arms one per case through
-`budget::law`, over whole descriptors in `descr/tests.rs` and over each lattice
-in its own `tests.rs`; the laws over `descr()` assert that their operations
-*succeed*, which is a claim about a fragment rather than about a build, and
-they do not.
+The laws that read a refusal as a skip arm one per case through `budget::law`,
+over whole descriptors in `descr/tests.rs` and over each lattice in its own
+`tests.rs`, with three exceptions that run unarmed: the lattice laws over
+`descr()` and the lattice and complement laws over the sequence automata
+(`descr/symbolic/tests.rs`). Each reads a refusal in the shared body as a skip,
+so what one of their cases costs is a property of its draw; the descriptors'
+law also compares the two orders' refusals, which an allowance spent by the
+first order could part, so arming it is not a one-line change.
 
 **A bounded shrink is the other half and does not stand in for it.** Each law
 block bounds `max_shrink_time` so a broken invariant cannot outlast a sweep,

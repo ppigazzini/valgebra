@@ -106,14 +106,16 @@ lane red. `tests/test_build_surfaces.py` holds every manifest in the tree to
 being a workspace member or a detached surface named here with the command that
 builds it.
 
-`pre-commit run --all-files` runs the file-hygiene, ruff, `ty`, cargo and
-docs-lint gates in one step. Each clippy hook runs a lint step's own command,
+`pre-commit run --all-files` runs every hook `.pre-commit-config.yaml` names in
+one step. Each clippy hook runs a lint step's own command,
 `--locked` included, so a commit the hooks pass reads the lock the lane reads;
 `tests/test_commit_hooks.py` holds them to it.
 
 ## Contract inventory
 
-The gate above is the whole set. This is the other question: **what does this
+The gate above is the local preview: `.github/workflows/ci.yml` owns the whole
+set, and `scripts/gate.py --list` names each of its steps and whether a
+developer's machine can run it. This is the other question: **what does this
 project promise, and how do I check just that one promise?** Every row names the
 file that owns the contract and the single command that reproduces its verdict.
 
@@ -187,8 +189,10 @@ each layer is blind to beside it.
   predicate over a value generator; the membership walk is property-tested to
   agree with it. This is the core correctness check.
 - **Differential fuzzers.** The JSON path is fuzzed against the object path
-  (a document is judged as `json.loads` of it would be), and the fast `bool`
-  walk against the explaining walk, so the two never diverge.
+  (a document is judged as `json.loads` of it would be), and the walk's `Fast`
+  mode against its explaining modes -- the `decide` harness in
+  `check/walk/interpreter.rs` and `tests/test_equivalence.py` -- so a verdict
+  never depends on which mode asked.
 - **External ground truth.** The same schemas and values run through valgebra and
   through pydantic-core (strict object path) and jsonschema (JSON path); every
   divergence is either a valgebra bug that fails the gate or one of a small,
@@ -242,8 +246,9 @@ job is. `ci.yml` owns the job set, and
 `tests/test_required_jobs.py` holds the aggregator to it in both directions, so
 the list is not restated here: a second copy drifts by one entry and reads
 exactly like one that has not. What is worth knowing about its shape is the
-Python matrix, which runs **every supported interpreter on every push**, the
-free-threaded build among them. `ci.yml` owns the matrix too:
+Python matrix, which runs **every supported release on every push**, and the
+free-threaded build at 3.14; the `cp315t` wheel is run by the release
+workflow's smoke alone, and no push leg runs it. `ci.yml` owns the matrix too:
 `tests/test_python_lifecycle.py` holds the releases it carries to the schedule
 each release follows, and which leg may fail without blocking to the release's
 stage, and `tests/test_required_jobs.py` holds that the job runs on every event
@@ -259,20 +264,24 @@ against their own committed baselines: a survivor the baseline does not accept f
 baseline entry whose mutant the tests kill. The target is never zero —
 equivalent mutants exist and are undecidable — so an accepted survivor carries
 the argument for why no test can kill it.
-Every push also runs the first two **restricted to the whole files the diff
-touches** of the ones each examines, which is bounded by the change rather than
+Every push also runs the first two **restricted to the whole files whose code
+the diff changes** of the ones each examines -- a file whose diff is comments
+and blank lines alone compiles as it did and is left out
+(`scripts/code_changes.py`) -- which is bounded by the change rather than
 by the tree and so blocks merges, under one fixed proptest seed, so a push's
 verdict is the tree's and not the draw's; the third costs a suite run per
 mutant and stays on the schedule. Each
 checks the new-survivor direction alone, because a partial sweep never generates
 most of the baseline and the expiry direction is not its to judge.
-Performance is gated two ways: a **deterministic cachegrind instruction count**
-of the core, decision and binding workloads, compared with the same workloads
-built at the change's merge base (`scripts/perf_gate.py --against`), and a
-**competitive ratio** of per-call time against pydantic-core across a shape
-matrix. Both are independent of the runner's absolute speed — the instruction
-count by construction, the ratio by cancellation — so they block merges where a
-wall-clock budget could not.
+Performance is gated three ways: a **deterministic cachegrind instruction
+count** of the core, decision and binding workloads, compared with the same
+workloads built at the change's merge base (`scripts/perf_gate.py --against`);
+the same count of the comparison shapes on the profile-guided wheel built at
+both (`--profiled`), which sees a change to the training the plain builds
+cannot; and a **competitive ratio** of per-call time against pydantic-core
+across a shape matrix. All three are independent of the runner's absolute
+speed — the counts by construction, the ratio by cancellation — so they block
+merges where a wall-clock budget could not.
 
 ## Vocabulary
 

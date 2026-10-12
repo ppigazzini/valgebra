@@ -316,9 +316,9 @@ NOTES_STEPS = (
 #: `sudo`. The *comparison* wants none of those, and it runs here in three
 #: minutes.
 #:
-#: One mode, and it is the one that moves: `--decision-matrix` is the workload
-#: whose shapes reach the set representation, and a union or complement change
-#: reads 0.00% on the other three. A binding-path regression is held by the
+#: One mode: `--decision-matrix`, the relation matrix whose shapes reach the
+#: set representation. `--decision-sets` and `--decision-lengths` reach it too,
+#: and are read in the lane alone. A binding-path regression is held by the
 #: `--binding-*` modes, which want the extension built into an interpreter and
 #: are left to the lane.
 PERF_STEPS = (

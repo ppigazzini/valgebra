@@ -75,13 +75,13 @@ one workload, measured against the base by the lane's own rule (the merge base
 with the remote-tracking branch, or `HEAD`'s parent where that merge base is
 `HEAD` itself; `perf_base` in `scripts/gate.py`), is three minutes in the caller's
 tree, and the tree is where it has to run: the shallow clone holds one commit
-and a comparison needs the other. Excusing it with the rest of the lane is how a
-change that read sound and cost **seventy-one times** the instructions -- 6.45
-billion against 89.8 million on the relation matrix -- passed this script green.
-One mode runs, `--decision-matrix`, because it is the workload whose shapes
-reach the set representation and a union or complement change reads 0.00% on the
-others; the `--binding-*` modes want the extension built into an interpreter and
-stay with the lane. Missing valgrind is named as the reason rather than passed
+and a comparison needs the other. Excused with the rest of the lane, a change
+that reads sound and costs **seventy-one times** the instructions on the
+relation matrix would pass this script green. One mode runs, `--decision-matrix`
+(`PERF_STEPS` in `scripts/gate.py`), the relation matrix whose shapes reach the
+set representation; `--decision-sets` and `--decision-lengths` reach it too and
+are read in the lane alone, and the `--binding-*` modes want the extension
+built into an interpreter and stay with the lane. Missing valgrind is named as the reason rather than passed
 over.
 
 **The floor interpreter is built beside the caller's, and the suite runs on
@@ -117,27 +117,27 @@ a clone of `HEAD`. Without it, `uv pip` finds the clone's `.venv` from the
 working directory, as a runner's step does. The venv's `bin` leaves `PATH` with
 it, and the clone runs the lane's own sync and build rather than excusing them,
 because every later step runs under `uv run --no-sync`: with neither, a clone
-with no environment of its own found the caller's pytest, which imported the
-caller's package and reported green on the caller's tree.
+with no environment of its own would find the caller's pytest, which imports
+the caller's package and reports green on the caller's tree.
 
-**The whole list, since two of these cost a day each.** The table is what a
+**The whole list, since any one of these can cost a day.** The table is what a
 lane differs from a local run in, and the `modelled` column is what the gate
 reproduces; the count is the table's rather than this sentence's:
 
-| difference | modelled | what it cost when it was not |
+| difference | modelled | what it costs when it is not |
 | --- | --- | --- |
-| the clone: one commit, no tags | yes, `shallow_clone` | a ledger read `git describe` and reddened eight jobs at once |
-| the step's declared `env:` | yes, since the plan carries it | `RUSTDOCFLAGS=-D warnings` was dropped, so `cargo doc` could not fail locally |
-| the terminal's own variables | yes, `runner_environment` | `FORCE_COLOR` turned `pip-audit` red against a clean dependency tree |
-| the machine's git identity | yes, `deep_clone` and `NO_IDENTITY` | a checkout configures no `user.name`, this repository has one in its own `.git/config`, and a ledger that plants a commit with `git commit-tree` passed here and failed there |
-| the interpreter the lane names | partly: `PYO3_PYTHON` follows the caller's, and the gate's closing line says so | the mutation lanes name CPython 3.12 in `ci.yml` and the cachegrind lane 3.14; a local sweep on 3.14 read two mutants as survivors that the lane kills, which is half an hour spent on a difference that was the interpreter |
-| the *release* of the interpreter, not only the caller's | yes, at the floor: the gate builds it beside the caller's and runs the product suite and the checks marked `interpreter` on it | `typing.Self`, `LiteralString` and `Unpack` are 3.11 members; a test module naming them collected here on 3.14, failed to collect on the floor, and took nine jobs red with it |
+| the clone: one commit, no tags | yes, `shallow_clone` | a ledger reading `git describe` passes here and reddens every job that runs it there |
+| the step's declared `env:` | yes, since the plan carries it | without `RUSTDOCFLAGS=-D warnings`, `cargo doc` cannot fail locally |
+| the terminal's own variables | yes, `runner_environment` | `FORCE_COLOR` turns `pip-audit` red against a clean dependency tree |
+| the machine's git identity | yes, `deep_clone` and `NO_IDENTITY` | a checkout configures no `user.name`, this repository has one in its own `.git/config`, and a ledger that plants a commit with `git commit-tree` passes here and fails there |
+| the interpreter the lane names | partly: `PYO3_PYTHON` follows the caller's, and the gate's closing line says so | the mutation lanes name CPython 3.12 in `ci.yml` and the cachegrind lane 3.14; a local sweep on 3.14 can read as survivors mutants the lane kills, a difference that is the interpreter's |
+| the *release* of the interpreter, not only the caller's | yes, at the floor: the gate builds it beside the caller's and runs the product suite and the checks marked `interpreter` on it | `typing.Self`, `LiteralString` and `Unpack` are 3.11 members; a test module naming them collects here on 3.14, fails to collect on the floor, and takes every job on it red |
 | the operating system and architecture | no | a macOS or Windows leg fails where Linux does not, and nothing local sees it |
 | the pinned tool versions | no, for the tools `taiki-e/install-action` installs | `ci.yml` installs `cargo-deny`, `cargo-llvm-cov` and `cargo-mutants` at versions it names, and the gate runs whichever is on the caller's `PATH`; a `uvx` step carries its pin in its own command, so the gate runs the lane's version of it |
-| the build of the interpreter, not only its version | no: a rule answers it instead | `sys.stdlib_module_names` is the build's, not the release's -- this box's 3.12 lists the Windows-only `_wmi` and a runner's does not, so a table of every name reported a difference between two builds as a moved row. The floor table records the modules this tree imports, which are portable by construction |
-| the machine's own speed | not modelled, and not a gate: every merge-blocking number is an instruction count | an absolute count reads 5--8% apart between two machines on one `rustc` line, which is why a recorded count gates only a shape new to a change, inside a band that wide |
+| the build of the interpreter, not only its version | no: a rule answers it instead | `sys.stdlib_module_names` is the build's, not the release's -- one 3.12 build lists the Windows-only `_wmi` and a runner's does not, so a table of every name would report a difference between two builds as a moved row. The floor table records the modules this tree imports, which are portable by construction |
+| the machine's own speed | not modelled, and not a gate: every merge-blocking number is an instruction count | an absolute count reads 5--8% apart between two machines on one `rustc` line, which is why a recorded count is read only where there is no base count, inside a band that wide |
 | secrets, tokens and the event payload | no, and the steps that need one are excused by name | the merge base comes from the event, so `--against` runs only in the lane |
-| what a gate **counts**, against what it claims to | no: a scope is a claim in prose, and no check reads it | the binding coverage floor counted the instruction gate's own workloads, which no suite runs, and the lane went red at 94.50% over a change that added none of its own uncovered lines; the build shape counted the harness formatting fifty names, and three quarters of what it reported was that |
+| what a gate **counts**, against what it claims to | no: a scope is a claim in prose, and no check reads it | a coverage floor that counts the instruction gate's own workloads, which no suite runs, reddens over a change that adds no uncovered line of its own; a shape that counts its harness reports the harness |
 
 The first four are closed. Named rather than numbered from here, since the
 table grows: *the interpreter the lane names* is a row rather than a fix
@@ -244,7 +244,8 @@ why strict generic narrowing stays off. A warning fails the run as an error
 does, so the level written is the intent, not the exit code.
 
 **pyright runs in the profile `[tool.pyright]` names**, so a release that moves
-pyright's default moves nothing here. The type lane runs it and `mypy --strict`
+pyright's default moves nothing here. The `python` job's floor leg runs it and
+`mypy --strict`
 over the package as well as over the typed consumer, because a checker reports
 nothing inside an installed library's stub: a stub one of them refuses is
 refused nowhere a caller looks. An ignore in the stub is coded for the one
@@ -298,7 +299,7 @@ gate only catches what it exercises, and the wheel a release ships:
   reads on its own shape rather than as a share of the matrix's, and the last
   asks the sets length bounds over a list, whose automaton holds a state per
   element, so a cost an element pays reads as one;
-- the **binding** shapes (`--binding`, `--binding-boundary`,
+- the **binding** shapes, which `MODES` in `scripts/perf_gate.py` owns (`--binding`, `--binding-boundary`,
   `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-mapping`,
   `--binding-subclass`, `--binding-recursive`, `--binding-deep`,
   `--binding-refined`, `--binding-nullable`, `--binding-set`,
@@ -324,10 +325,9 @@ gate only catches what it exercises, and the wheel a release ships:
   walk is the shipped
   hot path neither pure-Rust workload reaches; schema construction grew twelve
   percent over a release cycle while only the walk was counted, and an open
-  record was read a third dearer than a closed one while only the closed one
-  was. Each shape builds what it reads outside its loop: the build shape once
-  formatted fifty names and filled a dict per iteration, and three quarters of
-  its count was that.
+  record can read a third dearer than a closed one while only the closed one
+  is. Each shape builds what it reads outside its loop: formatting its names and
+  filling a dict per iteration would be most of a build shape's count.
 
   **One accepting JSON shape measured every JSON change**, and the paths a
   change could lose on had no count: the reject a fast walk stops at, the union
@@ -365,7 +365,7 @@ gate only catches what it exercises, and the wheel a release ships:
 
   **And a shape that wins by a wide margin measures nothing.** The JSON
   document is the comparison gate's closest race, and its ratio moves by a tenth
-  -- 0.78 to 0.87 -- with no gate red, because a wall clock under a ceiling it
+  with no gate red, because a wall clock under a ceiling it
   clears by a third says nothing until somebody looks — which the section on the
   competitive ratio, below, records as the reason the recorded block exists at
   all. `--binding-json` is that shape's deterministic twin, over the same two
@@ -378,8 +378,8 @@ gate only catches what it exercises, and the wheel a release ships:
   roughly a third of its size, which is the price of measuring the shape a
   caller actually runs rather than a walk with the parse taken out.
 
-  **And a relation is not a decision workload.** The four decision shapes
-  relate classes that are identities with nothing behind them, so what the
+  **And a relation is not a decision workload.** The decision shapes relate
+  classes that are identities with nothing behind them, so what the
   bindings read off a real class -- the namespaces of its `__mro__`, which a
   refutation about the class stands on -- had no count. Read whole for every
   class of every query, with `object`'s namespace among them and a `hasattr`
@@ -497,8 +497,8 @@ verdict:
 - **Branch mispredicts are read beside the decision shapes, and not gated.**
   The decision path dispatches on a node's kind through jump tables taken
   several times per goal, so a change can trade instructions for predicted
-  branches, which an instruction count reads as a regression. The four
-  decision modes run under `--branch-sim=yes`, which leaves the instruction
+  branches, which an instruction count reads as a regression. Every decision
+  mode runs under `--branch-sim=yes`, which leaves the instruction
   count as it is, and print the simulated mispredicts and their movement
   against the base (`BRANCH_MODES` in `perf_gate.py`). No verdict reads them:
   cachegrind predicts an indirect branch by its last target, a model its
@@ -591,7 +591,8 @@ time it moves.
 `scripts/compare_gate.py` compares per-call time against pydantic's strict
 `TypeAdapter.validate_python`, the entry point a caller holds, across a
 shape matrix -- the accept walk, a large array, a wide record, deep nesting, a
-JSON document, compilation, and the report a failure builds -- as a **ratio**.
+JSON document, compilation, and the report a failure builds, the shapes
+`ceilings` in `scripts/perf_compare.json` names -- as a **ratio**.
 A ratio cancels the runner's absolute speed, which is what lets a wall-clock
 measurement gate at all.
 
@@ -613,10 +614,10 @@ instruction count and 64% in this gate's `deep_nesting`, because the training
 workload held no counts for the loop the branch moved out of the walk.
 
 **A ceiling a shape passes by a wide margin stops measuring it**, which is why a
-claim is not the whole of the file. The JSON document's ratio moves between
-0.62 and 0.78 under a ceiling of 1.00 with no gate red -- thirty runs on CPython
-3.12 and 3.14 on one box -- and nothing reports the move until somebody re-runs
-this gate and reads the number. So beside each
+claim is not the whole of the file. The JSON document's ratio moves by a tenth
+under its ceiling with no gate red -- the `window` in `scripts/perf_compare.json`
+holds the readings -- and nothing reports the move until somebody re-runs this
+gate and reads the number. So beside each
 ceiling the file has a `recorded` block for the ratio the shape last measured
 and the spread it was measured across -- the ratchet the mutation sweep and the
 instruction gate already have. Once armed, a shape measuring worse than
@@ -631,8 +632,9 @@ where its dispatch read 0.124 and 0.126. A recording taken from one run, which
 is what `--update` writes, lands on one class and fires on the next run that
 lands on another, with nothing changed. So `scripts/compare_gate.py
 --record-window` arms it from a window instead: each shape's ratio is the
-median of the window's readings, and its tolerance is half again the widest
-reading above that median, rounded up to a two-hundredth. The window is kept in
+median of the window's readings, and its tolerance is the larger of the one it
+carries and half again the widest reading above that median, rounded up to a
+two-hundredth, so `--record-window` never narrows one. The window is kept in
 `scripts/perf_compare.json` beside the ratios it gave, and a row holds the two
 to each other and holds every reading of the window under its own floor.
 
@@ -676,7 +678,8 @@ reading to set beside the lane's others, not a block to commit as it stands:
 the lane cannot commit, which is the point -- a floor is a thing somebody
 chose, and choosing one wants the lane's spread in hand. A run that reads the
 profiled build against the plain one is the run to tick it on: both readings
-then come off one box, one image and one toolchain.
+then come from one run, one image and one toolchain, though from two runners
+that may be of different classes.
 
 **What a profile buys is read from the same lane, and it is per shape.**
 Profile-guided optimisation arranges what fat LTO left to arrange, so a shape
@@ -701,8 +704,8 @@ killable on the interpreter that takes the branch and unviable on the one that
 compiles it out. `tests/test_lane_interpreters.py` holds every lane to naming
 one. A name is a release, and the build behind it is uv's: the wrapper action
 sets `UV_PYTHON_PREFERENCE=only-managed`, since uv otherwise takes a runner
-image's own interpreter where the image has the release, and every "3.12" lane
-ran Ubuntu's 3.12.3, eleven patch releases behind the one uv installs. A lane
+image's own interpreter where the image has the release, which for a "3.12"
+lane is Ubuntu's 3.12.3, patch releases behind the one uv installs. A lane
 that builds against its interpreter keys its Rust cache on that choice, as
 `bench` argues: `PYO3_PYTHON` is `.venv/bin/python` whichever build stands
 behind it. And uv's Windows `python.exe` reserves 2,000,000 bytes for the main
@@ -725,8 +728,9 @@ shapes where it is a different environment rather than the same one on a slower
 clock: reading an element out of a mutable container takes that container's lock
 there, so a shape whose cost is per-element pays what no interpreter with a
 global lock pays. A schema nested twenty-five deep is twenty-five
-single-element lists, and it reads 0.26 to 0.27 against the 0.13 to 0.15 of the
-builds with a lock. A shape absent from that set is held to the shared ceiling,
+single-element lists, and it reads about twice what the builds with a lock
+read; `_free_threaded_comment` in `scripts/perf_compare.json` holds the lane's
+readings and the argument for each ceiling. A shape absent from that set is held to the shared ceiling,
 and the gate selects between them by asking the interpreter whether its global
 lock is enabled.
 
@@ -760,10 +764,9 @@ outlived what it excused.
 An entry is the survivor's file and description without its position, so it
 outlives code moving around it, and where one function holds several mutants
 of one description -- the two `||` of one condition -- its place among them
-too, `#2` for the second in the source. Without the place, one entry accepted
-every sibling: at 0.0.16 eleven entries named 26 mutants between them, and a
-sibling an entry's own note said a test killed read as accepted when it
-survived. The places are read from
+too, `#2` for the second in the source. Without the place, one entry would
+accept every sibling of its description, including one its own note says a test
+kills. The places are read from
 every mutant the sweep generated, which its four outcome files list between
 them; a shard holds part of each function's mutants, so the push sweeps pass
 the gate the whole listing, `cargo mutants --list` over the same files, with
@@ -897,7 +900,7 @@ python scripts/mutation_gate.py --baseline pytest --out pytest-sweep/mutants.out
 
 Budget an hour a shard: a mutant costs a rebuild and a suite run, about a
 minute each, against the seconds an ordinary mutant takes. The lane shards it
-six ways and is scheduled only.
+(`nightly-mutants-pytest` in `ci.yml`) and is scheduled only.
 
 **The walk sweep links one interpreter.** `cargo test` for the binding embeds
 the interpreter `ci.yml` names for that lane (CPython 3.12), and a survivor's
@@ -906,15 +909,16 @@ interpreter: a mutant two spellings of `typing.Union` cannot tell apart on 3.14
 is caught where they are two objects, and the ratchet reads it as caught. The
 same holds for what the lane's environment installs. The embedded interpreter
 imports from the lane's venv, where the lock puts `typing_extensions`, and on
-3.12 that module's `Required`, `NotRequired` and `Unpack` are `typing`'s own
-objects. So the frontend's arms for the module's own objects are killable only
-where it defines them -- 3.10, or the corpus row's stand-in on an interpreter
-that cannot import it -- and three notes in the baseline say so. A reading only
+3.12 that module's `Required`, `NotRequired`, `Unpack`, `Any` and `Never` are
+`typing`'s own objects. So the frontend's arms for the module's own objects are
+killable only where it defines them -- 3.10, or the corpus row's stand-in on an
+interpreter that cannot import it -- and the notes in
+`scripts/mutation_baseline_walk.json` that cite the module say so. A reading only
 PyPy takes is compiled for PyPy alone, `#[cfg(PyPy)]`, so the sweep's build does
 not compile it: every mutant of it builds and passes and says nothing, and
 `exclude_re` names them in `.cargo/mutants.toml` beside the PyPy lane's rows
-that hold them. Compiled everywhere, the same code was regions the binding's
-coverage floor counted and no CPython test could reach.
+that hold them. Compiled everywhere, the same code would be regions the
+binding's coverage floor counts and no CPython test can reach.
 
 **A reading compiled per interpreter names what it answers, and is measured on
 one side.** `crates/valgebra-py/build.rs` re-emits the interpreter's `Py_3_x`
@@ -970,9 +974,8 @@ branch and every scheduled lane to that reading.
 
 **The push jobs run on `main`'s night only where nothing was dispatched.** The
 dispatched run reads every push job on the development tree, and on `main`'s
-tip they read a tree the next fast-forward replaces: the scheduled run of
-2026-10-09 was red on `main` in eleven push jobs, on a ruff row the branch had
-already repaired. So each push job reads the dispatcher's `dispatched` output
+tip they read a tree the next fast-forward replaces, and redden on what the
+branch has already repaired. So each push job reads the dispatcher's `dispatched` output
 and runs on a schedule only where it is `false`, a repository without the
 branch, where the scheduled run is the only one.
 
@@ -1024,9 +1027,8 @@ most of what the suite costs: on one interpreter, 313 of 385 seconds. So the
 floor leg reads it in a step of its own, and every leg reads the product suite
 and the checks marked `interpreter`, the few whose answer is the running
 interpreter's (`docs/dev/08-testing.md` names them). `pypy` reads what a leg
-reads. `binding coverage` reads the product suite alone: with this lane's flow
-on 2026-10-09 the binding left the same 930 of 13,576 regions unreached with
-the audit and without it.
+reads. `binding coverage` reads the product suite alone: the binding's
+unreached regions are the same with the audit and without it.
 `test_the_floor_leg_reads_the_audit_and_every_leg_the_rest` in
 `tests/test_required_jobs.py` evaluates each step's selection and condition on
 each leg, and holds the audit to the floor leg and every other kind to once a
@@ -1050,14 +1052,17 @@ with every warning an error; the PyPy wheel the image also builds is the
 `pypy 3.11` lane's, which builds and runs one of its own. The lanes test the extension `maturin develop` builds, so a
 wheel that builds and does not load would otherwise wait for the release smoke.
 
-**PyPy builds, links, and runs the suite.** The release matrix publishes four
-PyPy 3.11 wheels, and a push that does not link against PyPy cannot see what
+**PyPy builds, links, and runs the suite.** The release matrix publishes PyPy
+3.11 wheels for each ABI on manylinux and for the one the musllinux image
+carries (`release.yml` owns the rows), and a push that does not link against
+PyPy cannot see what
 breaks there: `cpyext` carries the limited API and not every static type object
 CPython exports, so an extension naming one links on CPython and fails at
-`import` on PyPy. The release smoke runs the suite on every glibc, macOS and
-Windows wheel it ships, the PyPy ones included -- the musllinux wheels are the
-set it does not reach ([09-releasing.md](09-releasing.md)) -- but a release is
-where a break is dearest to find, so the push runs one first. The `pypy 3.11`
+`import` on PyPy. The release smoke runs the product suite on every wheel set
+it ships, the manylinux PyPy ones included and the musllinux sets in Alpine
+containers, except the musllinux PyPy and free-threaded wheels, which no Alpine
+image can load ([09-releasing.md](09-releasing.md)) -- but a release is where a
+break is dearest to find, so the push runs one first. The `pypy 3.11`
 job builds a release wheel against PyPy and runs `scripts/pypy_import_check.py`
 first, which imports it and builds the annotation forms whose compilation
 reaches a type object: that is the *link*, and it fails with one line naming the
@@ -1150,10 +1155,10 @@ and it fails that one job while every other lane in the same run installs uv
 fine. Every lane installs through
 `.github/actions/setup-uv` instead: it pins the uv release, which is one fewer
 thing resolved over the network, and makes a second attempt when the first one
-fails. The release workflow's two smoke jobs stay on the upstream action, because
-they install uv before the repository is on disk -- their checkout comes later,
-into `tree/`, for `tests/` alone -- and a local action needs its own files on
-disk.
+fails. The release workflow's three smoke jobs stay on the upstream action:
+each checks the repository out into `tree/`, for `tests/` alone, so the local
+action's files are not where it looks for them, and two of them install uv
+before that checkout.
 
 **A toolchain comes from rustup, not from an action.** A third-party action is
 pinned by hash with a comment naming its tag, and `zizmor` checks that the tag
@@ -1161,8 +1166,9 @@ still names the hash. A toolchain action that publishes one moving tag moves it
 with every upstream change, so the pin drifts from its comment and the audit
 fails every lane behind it until somebody re-pins. Every lane installs through
 `.github/actions/setup-rust` instead, which runs `rustup toolchain install` and
-`rustup default` itself -- the runner carries rustup -- with the one retry the
-release server needs while it publishes, and leaves no tag to drift. The
+`rustup default` itself -- the runner carries rustup -- retrying, a few times
+and on the release server's checksum failure alone, while that server
+publishes, and leaves no tag to drift. The
 release workflow's sdist smoke job runs the same two commands as a plain step,
 because nothing is checked out when it installs. `tests/test_workflow_actions.py`
 fails on a toolchain installed by any third-party action.
@@ -1257,9 +1263,9 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
     An out-of-memory artifact from this target is read the same way before it
     is believed. libFuzzer's unnamed process ceiling fires against whichever
     input happened to be running when the *process* crossed it, which is not a
-    claim about that input: the two artifacts from 2026-09-08 replay in 0 ms and
-    2 ms under the allocation bound, and are in `fuzz/seeds/decision/` as inputs
-    rather than in `fuzz/artifacts/` as findings. `-malloc_limit_mb` is the flag
+    claim about that input: an artifact that replays in milliseconds under the
+    allocation bound is kept in `fuzz/seeds/decision/` as an input rather than in
+    `fuzz/artifacts/` as a finding. `-malloc_limit_mb` is the flag
     that names a defect, because it fires on an allocation.
 
     And a ceiling fails the lane only if the soak is let stop on it. Under

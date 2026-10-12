@@ -675,8 +675,8 @@ pub type Constraints = Arc<[Constraint]>;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Schema {
     /// Top. Denotes every Python value; membership always holds. The payload
-    /// records how the top was written and is read by `repr` alone
-    /// ([`Spelling`]).
+    /// records how the top was written, and is read by `repr` to print it and
+    /// by the sharing table to keep the two apart ([`Spelling`]).
     Anything(Spelling),
     /// Bottom. Denotes the empty set; membership never holds.
     Nothing,

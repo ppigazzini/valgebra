@@ -62,9 +62,9 @@ the structure is wrong. So:
 | whether a set is expressible at all | the node set, and [01-schema-ir.md](01-schema-ir.md)'s admission test |
 
 The failure this prevents has a shape: arguing from **behaviour** or from **what
-the implementation computes internally** to **what the algebra denotes**. Three
-false claims in this project's own analysis had that shape, and each survived a
-REPL check because a REPL cannot see a denotation.
+the implementation computes internally** to **what the algebra denotes**. A
+REPL check cannot see a denotation, so a false claim of that shape survives
+one.
 
 **Never pin a number a gate computes.** The instruction budgets, a mutation
 score, a test count, a line count. Quote the file or the gate that owns it.
@@ -94,8 +94,9 @@ is true **now**.
 `scripts/docs_lint.py` holds a narrow list of those words -- `previously`,
 `formerly`, `historically`, `originally`, `used to`, `at one point`, `in the
 past`, `back then`, `before this change`, `this was fixed in`, `the old
-behaviour`, `we had` -- over every tracked page, every line comment in the Rust,
-Python, TOML and YAML sources, and the comment fields of the JSON baselines. A
+behaviour`, `we had` -- over every tracked page, every line comment in the
+sources `COMMENTED_SOURCES` names, and the comment fields of the baselines
+`COMMENTED_BASELINES` names, both in `scripts/docs_lint.py`. A
 comment ages exactly as a page does and is read by fewer people, which is why it
 is in the sweep. The list stops there on purpose: `no longer` states a rule a
 reader applies to a run -- a baseline entry that is no longer a survivor fails --
@@ -143,7 +144,7 @@ who broke it.
 | Page | Temperature |
 |---|---|
 | [`ARCHITECTURE.md`](../../ARCHITECTURE.md) | cold — a map with no claim of its own: a claim that lands there belongs on the page owning its zone |
-| [00-architecture.md](00-architecture.md) | warm — the crate boundary is compiler-checked, so it moves rarely |
+| [00-architecture.md](00-architecture.md) | hot — every production source file is a row of its zone table, so a file added or moved is an edit there |
 | [01-schema-ir.md](01-schema-ir.md) | hot — a node added here is an edit there |
 | [02-decision.md](02-decision.md) | hot — the decided fragment grows |
 | [03-frontend.md](03-frontend.md) | hot — every new annotation form lands here |
@@ -153,7 +154,7 @@ who broke it.
 | [07-tooling-ci.md](07-tooling-ci.md) | hot — a gate added here is a page edit there |
 | [08-testing.md](08-testing.md) | warm |
 | [09-releasing.md](09-releasing.md) | warm — a change to the release workflow's inputs makes the page wrong |
-| [10-theory.md](10-theory.md) | cold — a theorem does not expire |
+| [10-theory.md](10-theory.md) | warm — a theorem does not expire, and every `HELD-BY` name is held to a test that can be renamed |
 | [11-references.md](11-references.md) | cold |
 | this page | cold |
 | [13-glossary.md](13-glossary.md) | warm — every entry names an owner, and a rename dates it |

@@ -348,8 +348,10 @@ fn a_kind_whose_values_are_not_sequences_refuses() {
 /// The allowance every case below runs under; see [`budget::law`].
 ///
 /// Armed here as well as at the four lattices' own laws, because a law over a
-/// whole descriptor reaches every one of them. The laws over `descr()` further
-/// down assert that their operations *succeed*, so they are not armed.
+/// whole descriptor reaches every one of them. The lattice laws over `descr()`
+/// further down are not armed: they read a refusal in the shared body as a
+/// skip and compare the two orders' refusals, which an allowance spent by the
+/// first order could part, so what one of their cases costs is its draw's.
 fn allowance() -> budget::Allowance {
     budget::law()
 }

@@ -11,9 +11,9 @@ order and the checks that happen outside it.
 `Cargo.toml`'s `[workspace.package] version` is the only declaration.
 `pyproject.toml` is `dynamic = ["version"]`, so maturin reads the crate version
 and the wheel cannot disagree with the workspace. `valgebra.__version__` is that
-same crate version, compiled into the extension: reading it back out of the
-installed metadata answered the same question and cost two thirds of
-`import valgebra`, so the number travels in the `.so` instead.
+same crate version, compiled into the extension: reading it from the installed
+metadata answers the same question and costs two thirds of `import valgebra`,
+so the number travels in the `.so` instead.
 
 That is what makes `tests/test_version.py` worth having. `__version__` and the
 distribution metadata are two *different* readings of one manifest, so holding
@@ -117,12 +117,12 @@ Then run the suite against the installed wheel rather than a local build. Nothin
 puts `python/` on the path, so the tests import whichever `valgebra` the
 environment holds — install the test group into the same environment first,
 at the lock's versions, **from PyPI and in their own install**, as the release
-smokes do:
+smokes do, and run the product suite, as they run it:
 
 ```bash
 uv export --locked --only-group test --no-emit-project -o /tmp/vg-test.txt   # from the repository root
 VIRTUAL_ENV=/tmp/vg uv pip install -r /tmp/vg-test.txt
-/tmp/vg/bin/python -m pytest -q
+/tmp/vg/bin/python -m pytest -q -m "not repository"
 ```
 
 **The separate install is the point.** The test dependencies are not the package
@@ -187,7 +187,7 @@ host, where `--find-interpreter` sees only the interpreters installed on the
 image, so the workflow installs every supported one first; Windows builds its
 free-threaded wheels in a job of their own, since a release and its
 free-threaded build can fail to co-install in one step. On macOS a free-threaded
-install also answers to the release's name, and `--find-interpreter` found it
+install also answers to the release's name, and `--find-interpreter` finds it
 there in the release's place, so the macOS builds find each interpreter in the
 tool cache `setup-python` records it in, under the runner's architecture, and
 ask it which build it is -- a framework path holds only some releases. The
