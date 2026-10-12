@@ -174,10 +174,13 @@ no counts for the general scan every list of records and every nested list is
 read through, and whether that scan stays inside the recursive walk is the
 inliner's guess. A change to the list arm's code can turn it: untrained on the
 scan, the comparison gate's list nested twenty-five deep takes 64% longer in the
-PGO wheel, 405 ns against 245 on one box, while the instruction gate, which
-builds without a profile, reads 0.9%. So the workload reads a list of records
-and a list nested twenty-five deep, and trained on them that shape reads 0.125 of
-pydantic's time on CPython 3.14.
+PGO wheel, 405 ns against 245 on one box, while the instruction gate's plain
+workloads, which build without a profile, read 0.9%. So the workload reads a list
+of records and a list nested twenty-five deep, and trained on them that shape
+reads 0.125 of pydantic's time on CPython 3.14. The instruction gate holds the
+training too, counting the comparison gate's shapes on the PGO wheel built at a
+change and at its base (`perf_gate.py --profiled`): built with the nested list's
+training taken out, that shape reads 50.89% more instructions.
 
 A parsed JSON array of records is read through a general loop of its own, and
 untrained it is laid out by chance too: two builds of one source read the

@@ -681,6 +681,9 @@
     },
     "weakref": {
       "since": "3.10"
+    },
+    "zipfile": {
+      "since": "3.10"
     }
   }
 }

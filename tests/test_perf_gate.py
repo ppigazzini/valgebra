@@ -22,6 +22,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -539,6 +540,121 @@ def test_every_decision_shape_is_measured_by_a_lane() -> None:
         f"decision shapes with a recorded count that no bench step measures: "
         f"{missing}. Add the flag to the decision gate step of the bench job."
     )
+
+
+def test_the_profiled_shapes_are_the_comparison_gates() -> None:
+    """The profiled shapes count what the comparison gate times, every one of it.
+
+    A shape the comparison gate adds with no call pair is timed and never
+    counted, and a pair for a shape it dropped asks `--count` for a shape it
+    refuses. Both registries are the comparison gate's shapes, read from the
+    file that carries its ceilings.
+    """
+    ceilings = json.loads(
+        (ROOT / "scripts" / "perf_compare.json").read_text(encoding="utf-8")
+    )["ceilings"]
+    assert set(gate.PROFILED_CALLS) == set(ceilings), (
+        f"profiled call pairs {sorted(gate.PROFILED_CALLS)} against the comparison "
+        f"gate's shapes {sorted(ceilings)}: a pair per shape, and none else"
+    )
+    for shape, (hi, lo) in gate.PROFILED_CALLS.items():
+        assert hi > lo > 0, f"{shape}: a difference needs two counts, high first"
+
+
+def test_the_profiled_shapes_are_compared_and_never_recorded(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A recording of a profiled count is refused before anything is built.
+
+    The wheel such a count reads is rebuilt by nobody: its layout is the
+    directory and the toolchain it was built with. So the flag is a comparison
+    with a base or nothing, and the refusal is exit 2, the gate's "could not
+    run", after no build at all.
+    """
+    assert gate.main(["--profiled", "--update"]) == gate.EXIT_CANNOT_RUN
+    assert "never" in capsys.readouterr().out
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the tree is unpacked by tar")
+def test_a_snapshot_is_the_checkout_as_it_stands(tmp_path: Path) -> None:
+    """The change's tree holds what is edited and what is new, not what is ignored.
+
+    `--against HEAD` reads an uncommitted change, so the snapshot a profiled
+    wheel is built from must hold it: a snapshot of the last commit would build
+    the base twice and pass every change. What `.gitignore` names stays out of
+    it, as it does of a commit, and taking it moves neither the index nor the
+    branch.
+    """
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    _git(tree, "init", "--quiet", "--initial-branch=main")
+    _git(tree, "config", "user.email", "gate@example.invalid")
+    _git(tree, "config", "user.name", "gate")
+    (tree / ".gitignore").write_text("built/\n", encoding="utf-8")
+    (tree / "kept.txt").write_text("committed\n", encoding="utf-8")
+    _git(tree, "add", ".gitignore", "kept.txt")
+    _git(tree, "commit", "--quiet", "-m", "base")
+    (tree / "kept.txt").write_text("edited\n", encoding="utf-8")
+    (tree / "new.txt").write_text("new\n", encoding="utf-8")
+    (tree / "built").mkdir()
+    (tree / "built" / "artifact").write_text("ignored\n", encoding="utf-8")
+    status = _git(tree, "status", "--porcelain")
+
+    unpacked = tmp_path / "unpacked"
+    unpacked.mkdir()
+    gate.unpack(gate.snapshot(tree), unpacked, tree)
+
+    assert (unpacked / "kept.txt").read_text(encoding="utf-8") == "edited\n"
+    assert (unpacked / "new.txt").read_text(encoding="utf-8") == "new\n"
+    assert not (unpacked / "built").exists()
+    assert _git(tree, "status", "--porcelain") == status
+    head = _git(tree, "rev-parse", "HEAD:kept.txt")
+    assert _git(tree, "cat-file", "-p", head) == "committed"
+
+
+def test_a_wheel_takes_the_place_of_the_one_before(tmp_path: Path) -> None:
+    """Installing the base's wheel leaves nothing of the change's behind.
+
+    One environment holds each side's wheel in turn, so a module the change
+    adds and the base lacks would otherwise be read by the base's count.
+    """
+    python = gate.bare_environment(tmp_path / "env")
+
+    def wheel(name: str, modules: dict[str, str]) -> Path:
+        path = tmp_path / f"{name}.whl"
+        with zipfile.ZipFile(path, "w") as archive:
+            for module, body in modules.items():
+                archive.writestr(f"valgebra/{module}", body)
+            archive.writestr(f"valgebra-{name}.dist-info/METADATA", f"Version: {name}")
+        return path
+
+    gate.install(wheel("1", {"__init__.py": "SIDE = 1\n", "added.py": ""}), python)
+    gate.install(wheel("2", {"__init__.py": "SIDE = 2\n"}), python)
+    read = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        [
+            str(python),
+            "-c",
+            (
+                "import importlib.util, valgebra; "
+                "print(valgebra.SIDE, importlib.util.find_spec('valgebra.added'))"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert read.stdout.split() == ["2", "None"]
+
+
+def test_the_profiled_shapes_are_measured_by_a_lane() -> None:
+    """A gate no step runs reads nothing; the bench job passes the flag."""
+    steps = _bench_steps(prefix="--profiled")
+    assert steps, (
+        "no bench step passes --profiled: the profile's training is read by no "
+        "instruction count. Add the step to the bench job in "
+        ".github/workflows/ci.yml."
+    )
+    assert all("--against" in step for step in steps)
 
 
 #: The pages that give the gap between the two deciders as an order of

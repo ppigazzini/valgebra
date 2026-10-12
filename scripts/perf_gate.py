@@ -68,6 +68,19 @@ Three workloads, and thirty-five shapes across them:
   cost. Their recorded counts carry a wider band to absorb cross-interpreter
   FFI variance while still catching a per-node regression, which is far larger.
 
+**The profiled shapes** (`--profiled`) are the comparison gate's seven, counted
+on the wheel a release ships: built with profile-guided optimisation, which the
+three workloads above are not, so a change to the profile's training moves
+nothing they read. The wheel is built at the change and at its base, each from
+a snapshot of its tree unpacked into **one** directory, since the directory a
+profiled build runs in moves the layout of a loop the training does not reach
+by a tenth; each side's wheel is installed into one bare environment in turn,
+and each shape is the difference of two call counts, as a binding shape is.
+They are compared with the base and never recorded: their counts are of a
+build no record could reproduce elsewhere. So a recorded step cannot excuse one
+of them, since a step expires by its shape's recorded count; a trade on the
+profiled wheel is red until one is argued here.
+
 ``--against`` takes every shape named on the command line and measures them all
 against **one** build of the base: the build is minutes and a measurement is
 seconds, so shapes are cheap and invocations are not.
@@ -92,6 +105,7 @@ Usage:
     python scripts/perf_gate.py --against HEAD           # an uncommitted change
     python scripts/perf_gate.py --against HEAD~1 --decision
     python scripts/perf_gate.py --against HEAD~1 --binding --binding-build
+    python scripts/perf_gate.py --against origin/main --profiled
     python scripts/perf_gate.py --update                 # record the core count
     python scripts/perf_gate.py --decision --update      # record that shape's
     python scripts/perf_gate.py --binding --update       # and the walk's
@@ -101,7 +115,9 @@ exit 2: there is nothing to compare with.
 
 Requires valgrind on PATH and a Rust toolchain. The binding shapes also need an
 embedded interpreter: the build links libpython, so run them with the
-interpreter's library directory on the loader path.
+interpreter's library directory on the loader path. The profiled shapes need
+maturin and the LLVM tools a profile is merged with, and build for the
+interpreter running this script.
 """
 
 from __future__ import annotations
@@ -113,6 +129,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -884,11 +901,7 @@ def run_relative(modes: list[str], rev: str) -> int:
             continue
         step = recorded_step(mode, record.get("steps", []), carried)
         outcomes.append(judge_relative(head[mode], base[mode], subject, step))
-    outcome = EXIT_OK
-    if EXIT_CANNOT_RUN in outcomes:
-        outcome = EXIT_CANNOT_RUN
-    elif EXIT_FAIL in outcomes:
-        outcome = EXIT_FAIL
+    outcome = worst(outcomes)
     if batch and outcome == EXIT_FAIL:
         print("\nThe ceiling is written for one commit and this reading covers")
         print("more, so the first step is `git bisect` over the window rather")
@@ -897,6 +910,15 @@ def run_relative(modes: list[str], rev: str) -> int:
         print("\nA pass over a batch is a pass on the sum: a regression inside it")
         print("cancelled by an improvement beside it reads exactly like this.")
     return outcome
+
+
+def worst(outcomes: Sequence[int]) -> int:
+    """Rank verdicts by severity: could not run, then failed, then passed."""
+    if EXIT_CANNOT_RUN in outcomes:
+        return EXIT_CANNOT_RUN
+    if EXIT_FAIL in outcomes:
+        return EXIT_FAIL
+    return EXIT_OK
 
 
 def judge_relative(
@@ -980,6 +1002,208 @@ def judge_new(head: Measurement, budget: dict, mode: str) -> int:
     return check_against_budget(head.irefs, int(recorded), float(band))
 
 
+COMPARE_GATE = ROOT / "scripts" / "compare_gate.py"
+
+#: The pair of call counts each of the comparison gate's shapes is counted at on
+#: a profiled wheel, chosen so a difference is tens of millions of instructions
+#: and a run a few seconds under cachegrind. A pair, not a count per call: a
+#: shape's cost per call moves a little with how many calls a run makes -- the
+#: list of ten thousand integers reads 210,083 a call over 300 and 100 calls
+#: and 210,204 over 1,000 and 300 -- so a count is exact for its pair alone.
+PROFILED_CALLS = {
+    "scalar": (200_000, 50_000),
+    "large_array": (300, 100),
+    "wide_record": (20_000, 5_000),
+    "deep_nesting": (50_000, 15_000),
+    "json_document": (100, 30),
+    "build": (2_000, 500),
+    "error_report": (5_000, 1_500),
+}
+
+
+def snapshot(root: Path = ROOT) -> str:
+    """Name the checkout as it stands -- changes, new files and all -- as a tree.
+
+    The profiled wheels are built from trees unpacked into one directory, so
+    the change has to be a tree as the base is. The files are written to an
+    index of their own, so neither the caller's index nor its branch moves, and
+    what `.gitignore` leaves out stays out, as it does of a commit.
+    """
+    with tempfile.TemporaryDirectory() as scratch:
+        env = {**os.environ, "GIT_INDEX_FILE": str(Path(scratch) / "index")}
+        for args in (["read-tree", "HEAD"], ["add", "--all"]):
+            subprocess.run(["git", *args], cwd=root, check=True, env=env)
+        return subprocess.run(
+            ["git", "write-tree"],
+            cwd=root,
+            check=True,
+            env=env,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+
+def unpack(tree: str, into: Path, root: Path = ROOT) -> None:
+    """Write the files of `tree` into the empty directory `into`."""
+    archive = subprocess.Popen(
+        ["git", "archive", "--format=tar", tree], cwd=root, stdout=subprocess.PIPE
+    )
+    subprocess.run(["tar", "-x", "-C", str(into)], stdin=archive.stdout, check=True)
+    if archive.stdout is not None:
+        archive.stdout.close()
+    if archive.wait() != 0:
+        raise subprocess.CalledProcessError(archive.returncode, "git archive")
+
+
+def build_profiled(tree: str, scratch: Path, out: Path) -> Path:
+    """Build the profile-guided wheel of `tree` in `scratch`, and return it.
+
+    The tree is unpacked into the same directory and built into the same,
+    emptied, target directory whichever side it is, so the two builds differ in
+    their sources and nothing else. The target is emptied rather than reused:
+    a profile is a file the compiler flags name by path, so a dependency
+    optimised by the first side's profile would read as current to the second.
+    The training runs with its hash seed fixed, so a profile is the tree's.
+    """
+    maturin = shutil.which("maturin")
+    if maturin is None:
+        print("perf_gate: maturin is not on PATH, so no profiled wheel can be built")
+        raise SystemExit(EXIT_CANNOT_RUN)
+    source, target = scratch / "tree", scratch / "target"
+    for path in (source, target):
+        shutil.rmtree(path, ignore_errors=True)
+    source.mkdir()
+    unpack(tree, source)
+    env = {**os.environ, "CARGO_TARGET_DIR": str(target), "PYTHONHASHSEED": "0"}
+    subprocess.run(
+        [
+            maturin,
+            *("build", "--release", "--pgo", "--out", str(out)),
+            *("--interpreter", sys.executable),
+        ],
+        cwd=source,
+        check=True,
+        env=env,
+    )
+    wheels = sorted(out.glob("*.whl"))
+    if len(wheels) != 1:
+        print(f"perf_gate: the profiled build left {len(wheels)} wheels in {out}")
+        raise SystemExit(EXIT_CANNOT_RUN)
+    return wheels[0]
+
+
+def bare_environment(where: Path) -> Path:
+    """Make an environment holding nothing but the standard library; return its Python.
+
+    The shapes are counted with no dependency installed, so what a run imports
+    is the interpreter's and the wheel's, and the same on both sides.
+    """
+    subprocess.run(
+        [sys.executable, "-m", "venv", "--without-pip", str(where)], check=True
+    )
+    return where / "bin" / "python"
+
+
+def install(wheel: Path, python: Path) -> None:
+    """Put `wheel` in the environment of `python`, in place of any it holds.
+
+    A wheel is unpacked rather than installed by a tool, which would be one
+    more thing the job needs: the package and its metadata are all a run reads.
+    """
+    site = Path(
+        subprocess.run(
+            [
+                str(python),
+                "-c",
+                "import sysconfig; print(sysconfig.get_path('platlib'))",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
+    for old in [*site.glob("valgebra"), *site.glob("valgebra-*.dist-info")]:
+        shutil.rmtree(old)
+    with zipfile.ZipFile(wheel) as archive:
+        archive.extractall(site)
+
+
+def measure_profiled(python: Path, shape: str) -> Measurement:
+    """Count one shape's valgebra half on the installed wheel, as a difference.
+
+    The interpreter's start-up and the shapes' construction cancel between the
+    two counts; the checksum is the number of calls that did the work, which
+    must be every call. One uncounted call first compiles what both counted
+    runs import, as `warm_the_interpreter` does for a binding shape.
+    """
+    hi, lo = PROFILED_CALLS[shape]
+    environment = workload_environment(os.environ)
+    del environment["PYTHONDONTWRITEBYTECODE"]
+    subprocess.run(
+        [str(python), str(COMPARE_GATE), "--count", shape, "1"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        env=environment,
+    )
+    high = measure(python, str(COMPARE_GATE), "--count", shape, str(hi))
+    low = measure(python, str(COMPARE_GATE), "--count", shape, str(lo))
+    for result, calls in ((high, hi), (low, lo)):
+        if check_checksum(result.checksum, calls, f"profiled {shape} x{calls:,}"):
+            raise SystemExit(EXIT_FAIL)
+    return Measurement(high.irefs - low.irefs, hi - lo)
+
+
+def profiled_side(
+    tree: str, scratch: Path, python: Path, side: str
+) -> dict[str, Measurement] | BaseException:
+    """Build one side's profiled wheel and count every shape on it."""
+    try:
+        install(build_profiled(tree, scratch, scratch / f"wheel-{side}"), python)
+        return {shape: measure_profiled(python, shape) for shape in PROFILED_CALLS}
+    except (subprocess.CalledProcessError, SystemExit) as err:
+        return err
+
+
+def run_profiled(rev: str) -> int:
+    """Count the comparison gate's shapes on a profiled wheel here and at `rev`.
+
+    The base is built second, in the directory the change was built in, so a
+    base that cannot be built leaves the change's counts read and says why the
+    comparison is the rig's failure. Every shape is counted before any is
+    judged, as `run_relative` does.
+    """
+    sha = resolve_rev(rev)
+    tree = snapshot()
+    scratch = Path(tempfile.mkdtemp(prefix="valgebra-perf-profiled-"))
+    try:
+        python = bare_environment(scratch / "env")
+        head = profiled_side(tree, scratch, python, "head")
+        base = profiled_side(sha, scratch, python, "base")
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+    print(f"comparing profiled wheels against {rev} ({sha[:12]})")
+    print(describe_window(commits_since(sha))[0])
+    if isinstance(head, BaseException):
+        print(
+            f"NOT MEASURED: this checkout's profiled wheel could not be read ({head})."
+        )
+        return EXIT_CANNOT_RUN
+    outcomes = []
+    for shape, measured in head.items():
+        subject = f"profiled {shape}"
+        print(f"\n--- {subject}")
+        if isinstance(base, BaseException):
+            print(f"head:     {measured.irefs:,} instructions")
+            print("NOT COMPARABLE: the base's profiled wheel could not be built or")
+            print(f"read ({base}). That is the rig rather than this change.")
+            outcomes.append(EXIT_CANNOT_RUN)
+            continue
+        outcomes.append(judge_relative(measured, base[shape], subject))
+    return worst(outcomes)
+
+
 def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     """Read the command line, refusing a flag it does not know.
 
@@ -990,6 +1214,11 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser = arguments(__doc__)
     for name, (_, label) in MODES.items():
         parser.add_argument(f"--{name}", action="store_true", help=f"the {label}")
+    parser.add_argument(
+        "--profiled",
+        action="store_true",
+        help="the comparison gate's shapes, counted on a profile-guided wheel",
+    )
     # One or the other: a command line naming neither has nothing to compare
     # with, and `argparse` refuses it with exit 2.
     action = parser.add_mutually_exclusive_group(required=True)
@@ -1007,7 +1236,17 @@ def main(argv: Sequence[str] = ()) -> int:
     # `--binding` keeps its meaning -- the walk -- so an existing invocation and
     # the count recorded under it still name the same measurement.
     chosen = vars(args)
-    flagged = [name for name in MODES if chosen[name.replace("-", "_")]] or ["core"]
+    flagged = [name for name in MODES if chosen[name.replace("-", "_")]]
+    if args.profiled:
+        if args.against is None:
+            print("perf_gate: the profiled shapes are compared with a base and never")
+            print("recorded, since no record could rebuild the wheel they count.")
+            return EXIT_CANNOT_RUN
+        outcomes = [run_profiled(args.against)]
+        if flagged:
+            outcomes.append(run_relative(flagged, args.against))
+        return worst(outcomes)
+    flagged = flagged or ["core"]
     if args.against is not None:
         # Every flagged shape against one base build, since the build is the
         # expensive half and the shapes share it.

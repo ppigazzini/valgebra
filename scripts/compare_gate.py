@@ -58,12 +58,21 @@ and each tolerance is widened, where it has to be, to half again the widest
 reading above that median: no reading of the window fires against the floor it
 set. The window is kept in the block beside the ratios it gave.
 
+**The valgebra half of each shape is counted as well as timed.**
+``--count SHAPE N`` calls that half N times and prints how many calls did the
+work, with no pydantic imported: ``scripts/perf_gate.py --profiled`` runs it
+under cachegrind against a profile-guided wheel built at a change and at its
+base, which reads to the instruction what this gate's clock reads to a few
+percent.
+
 Usage:
     python scripts/compare_gate.py            # ceilings, and the ratchet where it arms
     python scripts/compare_gate.py --update   # one run's ratios, for a window
     python scripts/compare_gate.py --record-window WINDOW.json   # arm from a window
+    python scripts/compare_gate.py --count json_document 100     # one half, counted
 
-Requires the ``bench`` dependency group (pydantic) and the built extension.
+Requires the ``bench`` dependency group (pydantic) and the built extension;
+``--count`` the built extension alone.
 
 Three outcomes, three exit codes: **0** every shape is under its ceiling and has
 not drifted, **1** a shape is over one, has drifted past its tolerance, or the
@@ -189,34 +198,35 @@ def _reporting(
     return call
 
 
-def shapes() -> dict[str, Shape]:
-    # Imported here, not at module scope: pydantic is a benchmark-only dependency
-    # and valgebra is the built extension, so a module-level import would make
-    # this file unimportable on every lane that has neither -- including the one
-    # that drives `judge` to prove this gate can fail.
-    from pydantic import TypeAdapter  # noqa: PLC0415
-    from pydantic import ValidationError as PydanticError  # noqa: PLC0415
+class Corpus(NamedTuple):
+    """The types and payloads both libraries are asked about, built once.
 
-    from valgebra import ValidationError, Validator  # noqa: PLC0415
+    A shape's two sides must be asked the same question, and the counted half
+    the question the timed one is: the instruction gate reads a shape through
+    `valgebra_sides` without pydantic, so the types and values live here rather
+    than beside either library's validators.
+    """
 
-    array_data = list(range(10_000))
+    array: list[int]
+    record_fields: dict[str, type]
+    record: dict[str, int]
+    wide_record: type
+    nested: object
+    nested_value: object
+    json_records: object
+    json_document: str
+    wrong_record: dict[str, object]
+
+
+def corpus() -> Corpus:
     record_fields = {f"f{i}": int for i in range(50)}
     record_data = {f"f{i}": i for i in range(50)}
 
-    def nested_type(depth: int) -> object:
-        schema: object = int
-        for _ in range(depth):
-            schema = list[schema]  # type: ignore[valid-type]
-        return schema
-
-    def nested_value(depth: int) -> object:
-        value: object = 0
-        for _ in range(depth):
-            value = [value]
-        return value
-
-    nested_t = nested_type(25)
-    nested_v = nested_value(25)
+    nested: object = int
+    nested_value: object = 0
+    for _ in range(25):
+        nested = list[nested]  # type: ignore[valid-type]
+        nested_value = [nested_value]
 
     # A JSON document of records: the shape a request path carries, and the one
     # where both libraries parse and check in a single pass.
@@ -228,74 +238,117 @@ def shapes() -> dict[str, Shape]:
         "meta": dict[str, str],
     }
     json_record = TypedDict("JsonRecord", json_fields)  # type: ignore[operator]
-    json_doc = json.dumps(
-        [
-            {
-                "id": i,
-                "name": "Ada",
-                "email": "a@b.c",
-                "tags": ["x", "y"],
-                "meta": {"k": "v"},
-            }
-            for i in range(200)
-        ]
+    return Corpus(
+        array=list(range(10_000)),
+        record_fields=record_fields,
+        record=record_data,
+        wide_record=TypedDict("Wide", record_fields),  # type: ignore[operator]
+        nested=nested,
+        nested_value=nested_value,
+        json_records=list[json_record],  # type: ignore[valid-type]
+        json_document=json.dumps(
+            [
+                {
+                    "id": i,
+                    "name": "Ada",
+                    "email": "a@b.c",
+                    "tags": ["x", "y"],
+                    "meta": {"k": "v"},
+                }
+                for i in range(200)
+            ]
+        ),
+        # One field of fifty holds the wrong type, so both libraries walk again
+        # to say which one.
+        wrong_record={**record_data, "f7": "not an int"},
     )
-    wide_record_type = TypedDict("Wide", record_fields)  # type: ignore[operator]
-    # One field of fifty holds the wrong type, so both libraries walk again to
-    # say which one.
-    wrong_record = {**record_data, "f7": "not an int"}
+
+
+def valgebra_sides(given: Corpus) -> dict[str, tuple[Callable[..., object], object]]:
+    """Each shape's valgebra half and the payload it is called with.
+
+    Every validator is built here, once, as the schema is compiled ahead of the
+    hot path in both libraries; the build shape is the one whose call is the
+    compile.
+    """
+    from valgebra import ValidationError, Validator  # noqa: PLC0415
+
+    fields = given.record_fields
+    return {
+        "scalar": (Validator(int).is_valid, 42),
+        "large_array": (Validator(list[int]).is_valid, given.array),
+        "wide_record": (Validator(fields).is_valid, given.record),
+        "deep_nesting": (Validator(given.nested).is_valid, given.nested_value),
+        "json_document": (
+            Validator(given.json_records).is_valid_json,
+            given.json_document,
+        ),
+        "build": (_building(lambda: Validator(fields)), None),
+        "error_report": (
+            _reporting(Validator(fields).validate, ValidationError),
+            given.wrong_record,
+        ),
+    }
+
+
+def shapes() -> dict[str, Shape]:
+    # Imported here, not at module scope: pydantic is a benchmark-only dependency
+    # and valgebra is the built extension, so a module-level import would make
+    # this file unimportable on every lane that has neither -- including the one
+    # that drives `judge` to prove this gate can fail.
+    from pydantic import TypeAdapter  # noqa: PLC0415
+    from pydantic import ValidationError as PydanticError  # noqa: PLC0415
+
+    given = corpus()
+    ours = valgebra_sides(given)
 
     # Build every validator and adapter exactly once -- both libraries compile
     # the schema ahead of the hot path, so the per-call comparison must too.
     def strict(adapter: TypeAdapter) -> Callable[[object], object]:
         return lambda v: adapter.validate_python(v, strict=True)
 
-    return {
-        "scalar": Shape(
-            valgebra=Validator(int).is_valid,
-            pydantic=strict(TypeAdapter(int)),
-            data=42,
-            number=200_000,
-        ),
-        "large_array": Shape(
-            valgebra=Validator(list[int]).is_valid,
-            pydantic=strict(TypeAdapter(list[int])),
-            data=array_data,
-            number=200,
-        ),
-        "wide_record": Shape(
-            valgebra=Validator(record_fields).is_valid,
-            pydantic=strict(TypeAdapter(wide_record_type)),
-            data=record_data,
-            number=2_000,
-        ),
-        "deep_nesting": Shape(
-            valgebra=Validator(nested_t).is_valid,
-            pydantic=strict(TypeAdapter(nested_t)),
-            data=nested_v,
-            number=20_000,
-        ),
-        "json_document": Shape(
-            valgebra=Validator(list[json_record]).is_valid_json,
-            pydantic=TypeAdapter(list[json_record]).validate_json,
-            data=json_doc,
-            number=200,
-        ),
-        "build": Shape(
-            valgebra=_building(lambda: Validator(record_fields)),
-            pydantic=_building(lambda: TypeAdapter(wide_record_type)),
-            data=None,
-            number=200,
-        ),
-        "error_report": Shape(
-            valgebra=_reporting(Validator(record_fields).validate, ValidationError),
-            pydantic=_reporting(
-                TypeAdapter(wide_record_type).validate_python, PydanticError
-            ),
-            data=wrong_record,
-            number=2_000,
+    wide = given.wide_record
+    theirs: dict[str, tuple[Callable[..., object], int]] = {
+        "scalar": (strict(TypeAdapter(int)), 200_000),
+        "large_array": (strict(TypeAdapter(list[int])), 200),
+        "wide_record": (strict(TypeAdapter(wide)), 2_000),
+        "deep_nesting": (strict(TypeAdapter(given.nested)), 20_000),
+        "json_document": (TypeAdapter(given.json_records).validate_json, 200),
+        "build": (_building(lambda: TypeAdapter(wide)), 200),
+        "error_report": (
+            _reporting(TypeAdapter(wide).validate_python, PydanticError),
+            2_000,
         ),
     }
+    return {
+        name: Shape(
+            valgebra=ours[name][0],
+            pydantic=pydantic,
+            data=ours[name][1],
+            number=number,
+        )
+        for name, (pydantic, number) in theirs.items()
+    }
+
+
+def count(shape: str, calls: int) -> int:
+    """Call one shape's valgebra half `calls` times, and say how many did the work.
+
+    The reading the instruction gate takes under cachegrind: the count is the
+    workload's checksum, which equals `calls` only where every call answered
+    `True` -- what `warm_up` asks of each half before it is timed. A shape this
+    gate does not define is refused with exit 2, as an unknown flag is.
+    """
+    sides = valgebra_sides(corpus())
+    if shape not in sides:
+        print(f"compare_gate: no shape {shape!r}; the shapes are {sorted(sides)}")
+        return EXIT_CANNOT_RUN
+    call, data = sides[shape]
+    done = 0
+    for _ in range(calls):
+        done += call(data) is True
+    print(done)
+    return EXIT_OK
 
 
 def per_call_ns(call: Callable[[object], object], data: object, number: int) -> float:
@@ -370,23 +423,44 @@ def warm_up(shapes: dict[str, Shape]) -> bool:
 def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     """Read the command line before measuring anything; an unknown flag exits 2."""
     parser = arguments(__doc__)
-    parser.add_argument(
+    # One mode a run: a recording, a window, a count and a comparison are four
+    # things to do, and naming two would leave one of them silently undone.
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--update", action="store_true", help="record the ratios and the ceilings"
     )
-    parser.add_argument(
+    mode.add_argument(
         "--record-window",
         type=Path,
         metavar="WINDOW",
         help="arm the ratchet from a JSON window of the lane's readings",
+    )
+    mode.add_argument(
+        "--count",
+        nargs=2,
+        metavar=("SHAPE", "CALLS"),
+        help="call one shape's valgebra half CALLS times and print how many did "
+        "the work",
     )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] = ()) -> int:
     args = _arguments(argv)
+    if args.count is not None:
+        shape, calls = args.count
+        if not calls.isdigit():
+            print(f"compare_gate: {calls!r} is not a number of calls")
+            return EXIT_CANNOT_RUN
+        return count(shape, int(calls))
     if args.record_window is not None:
         _record_window(args.record_window)
         return EXIT_OK
+    return _compare(update=args.update)
+
+
+def _compare(*, update: bool) -> int:
+    """Time every shape on both sides, report it, and judge the ratios."""
     prepared = _prepare()
     if prepared is None:
         return EXIT_CANNOT_RUN
@@ -411,7 +485,7 @@ def main(argv: Sequence[str] = ()) -> int:
     stored = _recorded_block()
     moved, unarmed = drifted(measured, stored)
     _report(rows, ceilings, stored, over, moved)
-    if args.update:
+    if update:
         _record(measured)
         return EXIT_OK
     if unarmed is not None:

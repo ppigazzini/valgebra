@@ -279,7 +279,7 @@ every rule's default level, which is the list to read against
 Wall-clock benchmarks on shared runners are too noisy to gate, so
 `scripts/perf_gate.py` gates **instruction counts under cachegrind**, which are
 identical across runs of a build. Three workloads, one per surface, because a
-gate only catches what it exercises:
+gate only catches what it exercises, and the wheel a release ships:
 
 - the **core** transformations — the constructors' normal form, the composition
   remap, the record transform;
@@ -396,6 +396,24 @@ gate only catches what it exercises:
   argument. What makes accepting it honest is `--binding-pattern`: delete the
   arm and one validation costs 462,318 instructions against 783, which is the
   whole suite passing while every pattern check compiles a regex.
+
+- the **profiled** shapes (`--profiled`) — the comparison gate's seven, counted
+  on the profile-guided wheel rather than a plain build. The three workloads
+  above build without a profile, so a change the profile lays out differently,
+  or a change to what `scripts/pgo_workload.py` trains, moves nothing they
+  read. `run_profiled` builds the wheel at the change and at the base, each
+  from a snapshot of its tree unpacked into one directory and built into one
+  emptied target, because the directory a profiled build runs in moves the
+  layout of a loop the training does not reach: a source path one character
+  longer moved the untrained JSON document by a tenth. Each shape is
+  `compare_gate.py --count` calling its valgebra half, in an environment that
+  holds the wheel and nothing else, as the difference of two call counts. Two
+  builds of one tree read every shape to the same instruction; with the nested
+  list's training taken out of the workload, `deep_nesting` reads 50.89% more
+  and the other six move by under half a percent. They are compared and never
+  recorded, since a count belongs to a wheel no record could rebuild -- which
+  leaves a trade a change makes on purpose no step to excuse it, because a step
+  expires by the count its shape records.
 
 The binding workload embeds CPython, whose startup is not a fixed instruction
 count, so the gate measures the **difference** between two iteration counts:
@@ -572,9 +590,10 @@ mutable container takes that container's lock. This gate is the coarse tripwire
 for ceding ground, with `perf_gate.py --against` doing the fine-grained work at
 2%. Changing a ceiling is an edit with an argument in its commit message.
 
-It is also the one gate that times the wheel the release ships. `perf_gate.py`
+It is also the one gate that times the wheel the release ships, and
+`perf_gate.py --profiled` counts its shapes there. The rest of `perf_gate.py`
 builds without a profile, so a change the profile lays out differently is
-invisible there: a list arm that grew by one branch read 0.9% in its
+invisible to it: a list arm that grew by one branch read 0.9% in its
 instruction count and 64% in this gate's `deep_nesting`, because the training
 workload held no counts for the loop the branch moved out of the walk.
 

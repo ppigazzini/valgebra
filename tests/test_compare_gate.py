@@ -40,6 +40,22 @@ gate = _load_gate()
 CEILINGS = {"scalars": 1.000, "records": 2.000}
 
 
+def test_a_run_names_one_mode() -> None:
+    """A recording, a window, a count and a comparison are four things to do.
+
+    Naming two would leave one of them undone without a word, so the command
+    line refuses the pair with exit 2, the gate's "could not run".
+    """
+    for argv in (
+        ["--update", "--count", "scalar", "3"],
+        ["--record-window", "window.json", "--update"],
+        ["--count", "scalar", "3", "--record-window", "window.json"],
+    ):
+        with pytest.raises(SystemExit) as excinfo:
+            gate._arguments(argv)  # noqa: SLF001
+        assert excinfo.value.code == gate.EXIT_CANNOT_RUN, argv
+
+
 def test_a_ratio_under_its_ceiling_passes() -> None:
     over, disagree = gate.judge({"scalars": 0.999, "records": 2.000}, CEILINGS)
     assert over == []

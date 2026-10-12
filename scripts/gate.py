@@ -73,6 +73,9 @@ NEEDS_A_RUNNER = {
     "Instruction-count regression gate": "cachegrind, and a second build of the base",
     "Decision-path instruction-count regression gate": "cachegrind, as above",
     "Binding-path instruction-count regression gate": "cachegrind, as above",
+    "Profiled-wheel instruction-count regression gate": (
+        "cachegrind over two PGO builds, minutes per run"
+    ),
     "Smoke-run the benchmarks": "needs the optimized wheel above",
     "Competitive comparison gate": "needs the optimized wheel above",
     "Record the competitive ratios": (
