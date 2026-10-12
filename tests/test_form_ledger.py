@@ -128,12 +128,14 @@ P = typing.ParamSpec("P")
 PROTOCOL_BASES = "bare `Protocol`, and a generic `Protocol[T]`"
 
 #: The two rows of `typing` aliases: the five read bare or parametrized, and the
-#: six read bare and refused parametrized. Each names more than one form.
+#: rest read bare and refused parametrized. Each names more than one form.
 TYPING_ALIASES = (
     "`typing.List`, `typing.Tuple`, `typing.Dict`, `typing.Set`, `typing.FrozenSet`"
 )
 TYPING_ALIASES_BARE = (
-    "`typing.Deque`, `DefaultDict`, `OrderedDict`, `Counter`, `ChainMap`, `Type`"
+    "`typing.Deque`, `DefaultDict`, `OrderedDict`, `Counter`, `ChainMap`, `Type`,"
+    " and every other `typing` alias of a class -- `typing.Sequence`,"
+    " `typing.Mapping`, `typing.Text` among them"
 )
 
 
@@ -264,7 +266,7 @@ FORMS: dict[str, Reads | Refuses] = {
     '`{"key": T, "key2?": T}`': Reads(
         {"key": int, "key2?": int}, {"key": 1}, {"key2": 1}
     ),
-    "any constant `c`": Reads(7, 7, 8),
+    "any other constant `c`, not a tuple, a set or a callable": Reads(7, 7, 8),
     # -- the prefix-and-tail table's own row --------------------------------
     "`[T, T, ...]`": Reads([int, int, ...], [1], []),
     # -- the class forms ----------------------------------------------------

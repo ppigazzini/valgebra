@@ -141,10 +141,9 @@ profile buys on every shape but one, by the median of the six: the list nested
 twenty-five deep 19%, the JSON document 14%, the one-`int` call 12%,
 compilation 7%, the error report 6% and the accepting walk over a fifty-field
 record 3%. The ten-thousand element `list[int]` reads level, between 2% faster
-and 2% slower across the six. On an earlier run the first reading of the
-profiled build after it was installed took the nested list 12% *slower* and the
-five after it read it faster; on this one the first read like the rest, so a
-single reading of one shape is not a verdict either way.
+and 2% slower across the six. A single reading of one shape is not a verdict
+either way: the first reading after an install can part from the five after it
+by 12%.
 
 The shape the profile leaves level is the one with the least left to arrange: a
 list of one scalar kind is read by a loop of its own for that kind, a type test
@@ -366,9 +365,8 @@ resolution; the build spreads under a thousandth, and the array, the nesting
 and the record between 0.006 and 0.021. It is the only shape timing a path that raises and formats a Python exception,
 so a Python exception's cost is inside the number. It is excluded from the
 gate's drift ratchet, and `scripts/perf_compare.json` gives the reason rather
-than leaving an absent entry to mean it: a spread read on another build, five
-runs between 0.86 and 1.19. On this one the shape spreads less than the JSON
-document does. The ratchet holds the JSON document and the other five shapes,
+than leaving an absent entry to mean it: a spread on another build wider than
+any regression worth catching. The ratchet holds the JSON document and the other five shapes,
 armed from a window of the bench lane's readings rather than one run, since the
 lane reads one tree on several classes of machine further apart than a
 tolerance (`docs/dev/07-tooling-ci.md` has the window); the error report is
@@ -431,8 +429,9 @@ them to one verdict, so a rule changed in one and not the other fails. Where
 only the cost moves, no test can tell the readings apart, and a shape of the
 instruction gate holds the cost instead: `scripts/perf_gate.py --against <rev>`
 measures it against a base, and the flag a figure below names is the shape that
-reproduces it. A percentage compares a technique with the general reading it
-stands beside, which stays in the tree as the fallback.
+reproduces it. A percentage compares a technique with the reading it stands
+beside or replaces; where that reading stays in the tree, it is the fallback,
+and where a test keeps it, the test holds the two to one answer.
 
 Each entry names the code that owns it. The developer pages in the repository
 carry the arguments in full: the walk (`docs/dev/04-walk.md`), the frontend
@@ -481,7 +480,7 @@ error model (`docs/dev/05-errors.md`) and the schema representation
   object -- hashes with `ahash` instead, keyed per process, because an
   unseeded hash lets a document carry keys computed to collide; it is also
   filled once a key, the position a repeat displaces read off the insert, which
-  makes the wide object 9% to 14% cheaper than the FxHash table was.
+  makes the wide object 9% to 14% cheaper than an FxHash table.
 
 ### Building a validator
 
@@ -928,7 +927,8 @@ as a list against a length-bounded list of the same element.
   work over `n` states and `k` byte classes. Signing every state afresh each
   round reaches the same partition and spends a round per state on a chain,
   which is what a literal is: a literal of four thousand bytes takes about
-  1.5 ms to build on a release build, where the rounds took 603 ms, and a
+  1.5 ms to build on a release build, where signing every state each round
+  takes 603 ms, and a
   product that keeps its chain is minimised again at the same cost.
   `--decision-sets` reads 6.12% fewer instructions, the signatures the rounds
   allocated.
@@ -1024,12 +1024,15 @@ nothing behind them; `--binding-relation` relates two dataclasses through
 The release profile in `Cargo.toml` links with fat LTO into one codegen unit and
 wraps rather than checks integer overflow, which the dev and test profiles trap;
 `[profile.profiling]` is the same build with its symbols kept, for a profiler.
-The published wheels are profile-guided, trained by `scripts/pgo_workload.py`,
-which `pyproject.toml` names as `pgo-command`; what that buys, and on which
+The published CPython wheels for glibc Linux, macOS and Windows x64 are
+profile-guided, trained by `scripts/pgo_workload.py`, which `pyproject.toml`
+names as `pgo-command`, and the musllinux, Windows arm64 and PyPy wheels are
+plain release builds (`.github/workflows/release.yml` says why); what that buys, and on which
 shapes it costs, is [measured above](#baseline-matrix). A path the training
 workload never enters is laid out by chance, so the workload reads lists of
 scalars, of literals, of one class, of tuples, of named tuples and of
-dataclasses, records open and closed and built as often as they are checked, a
+dataclasses, records open and closed, the closed ones built two hundred times
+each so the frontend holds counts of its own, a
 deeply nested list, the explaining walk, a JSON array of records and a recursive
 JSON document, a set, a named tuple read against a tuple schema, and relations
 at both of their levels. `TRAINED` in the workload names, for each shape a gate
@@ -1102,15 +1105,18 @@ measuring both sides in one job cancels what another machine or another
 toolchain would add, while an algorithmic regression is far larger than the
 band. The counts in `scripts/perf_budget.json` are a record of one
 environment rather than a gate, since the same commit re-measures several
-percent away on another machine: the gate reads one only for a shape its base
-does not carry.
+percent away on another machine: the gate reads one only where the base has no
+count to compare with -- a shape the base does not carry, or a re-recorded
+workload the base cannot build -- and a step the file records excuses the one
+comparison that crosses it (`docs/dev/07-tooling-ci.md`).
 
 The gate holds one workload per surface, because a gate only catches what it
 exercises. `crates/valgebra-core/examples/` holds the pure-Rust ones: the schema
 transformations (`perf_workload`), and the decision procedures, one workload for
-each path a relation takes -- a proof, a refutation, a repeated goal and a shape
-only the structural readings decide each walk a different path, and a workload
-that asks only one of them measures only that one. The binding's shapes are
+each path a relation takes, which `MODES` in `scripts/perf_gate.py` names -- a
+proof, a refutation, a repeated goal, a shape only the structural readings
+decide, and one corpus asked of the rules and of the sets each walk a different
+path, and a workload that asks only one of them measures only that one. The binding's shapes are
 `BindingShape` in `crates/valgebra-py/src/workload.rs`, run by
 `crates/valgebra-py/examples/binding_workload.rs`, and `BINDING_SHAPES` in
 `scripts/perf_gate.py` names every one the gate measures: the membership walk
@@ -1149,8 +1155,8 @@ not what it measured -- and, where the file carries a ratio recorded in the same
 environment, within that shape's tolerance of it. The lambda and the adapter are
 a Python frame a direct pydantic-core `SchemaValidator` call does not pay, and
 on a scalar that frame is most of pydantic's time: against `SchemaValidator`
-the scalar shape reads about 1.0, where its ceiling against the adapter is 0.30,
-on one box with a release build and no profile. So the ratio is to what a caller
+the scalar shape reads about 1.0, several times what its ceiling against the
+adapter allows (`ceilings` in `scripts/perf_compare.json`), on one box with a release build and no profile. So the ratio is to what a caller
 reaches, not to pydantic-core. A
 ratio cancels the runner's absolute speed: if the machine is slow, both
 libraries are slow in proportion, so the comparison survives the shared-runner
@@ -1162,5 +1168,6 @@ Re-record the counts after an intentional change with:
 
 ```bash
 python scripts/perf_gate.py --update            # the core count; --decision, --binding-record, ... for the others
-python scripts/compare_gate.py --update         # competitive ratios
+python scripts/compare_gate.py --update         # one run's ratios, a reading for a window
+python scripts/compare_gate.py --record-window WINDOW.json  # arms the ratchet from the lane's window
 ```

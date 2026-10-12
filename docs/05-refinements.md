@@ -519,11 +519,17 @@ attribute checks, and comparison bounds also compare against Python objects, but
 against fixed operators, not arbitrary callables — so it is a **documented slow
 path**, never a silent fallback. `is_valid` runs it once per value it reaches,
 and stops at the first value that fails. `validate` explains as it decides, in
-one walk, and a union in it walks each branch once. A dict schema -- a record, a
-`TypedDict`, a mapping -- that refuses a value is read twice: a deciding pass,
-then an explaining pass that resumes at the entry the first one stopped at, so
-a predicate on or under that entry runs a second time, and one on the clause an
-undeclared key falls under runs once to find whether the clause covers the
+one walk, except at a union: a refused union walks each branch it has to once
+to decide whether any branch admits the value and again to explain it, so a
+predicate inside runs twice there, and a union left with one branch to walk
+explains it once. A dict schema -- a record, a `TypedDict`, a mapping -- that
+refuses a value is read twice: a deciding pass, then an explaining pass. A
+record read by its keys -- a closed record, a `TypedDict` -- resumes at the
+field the first pass stopped at, so a predicate on or under that field runs a
+second time. A mapping, or a record whose catch-all clause reads its values, is
+read by a scan, and its explaining pass starts at the first entry: a predicate
+on every entry up to the refused one runs a second time, and one on the clause
+an undeclared key falls under runs once to find whether the clause covers the
 entry and again to report it (`docs/dev/04-walk.md`). A dict schema
 that is a branch of a union is read the second time only where no branch admits
 the value. Without
@@ -566,7 +572,8 @@ assert not positive.is_valid(-1)
 
 `Predicate` is the portable spelling — pydantic reads it — so prefer it in an
 annotation other tools also consume. The bare form is
-valgebra's own convenience, and it excludes a class for the reason above.
+valgebra's own convenience, and it excludes a class, which [is never read as a
+marker](#unrecognized-markers): calling one constructs rather than asks.
 
 ### A bare callable is metadata only
 
@@ -643,7 +650,7 @@ reads an object, it would denote the one function object, and
 `intersection(Record, kind_is_known)` would be a schema admitting nothing that
 nothing reports: `is_empty` answering `False` is "no, or not yet proven" (see
 the [decidability boundary](15-decidability.md#the-contract)), and the meet of a
-record with a literal is one it does not decide. The refusal names the two
+record with a function object's literal is one it does not decide. The refusal names the two
 spellings that were meant, the refinement as `Annotated` and the constant as
 `Literal`:
 

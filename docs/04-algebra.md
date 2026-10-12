@@ -428,13 +428,16 @@ assert union(bool, int) != Validator(int)  # different shape
 The other side of a comparison is any schema spec or compiled validator. These
 decisions are **sound**: a `True` is always correct, and a `False` (or a
 "not empty") is either a genuine non-relation or a relation valgebra does not yet
-prove — never a wrong answer. They decide completely over a wide fragment — the
-scalar Boolean algebra, class and literal inclusion, refinements with bound and
-length constraints, prefix-and-tail sequences, sets and frozensets, records and
+prove — never a wrong answer. They decide a wide fragment — the scalar Boolean
+algebra, class and literal inclusion, refinements with bound and length
+constraints, prefix-and-tail sequences, sets and frozensets, records and
 mappings (including multi-clause mixed maps, a closed record against a catch-all
 mapping, and mixed maps where the supertype's extra field is optional and the
 subtype's catch-all covers it), inclusion in a complement where the two schemas
-share no value, and recursion. Where a rule declines, the relation is asked again
+share no value, and recursion -- and [the decidability
+boundary](15-decidability.md) lists the pairs inside it that decline: a key
+holding part of a kind, a record against a mapping keyed by literals, and
+recursion past the relation's depth bound. Where a rule declines, the relation is asked again
 of the *sets* the two schemas denote, which decides what no rule about shapes
 reaches — a container meet, a complement nested inside another, one regular
 language inside another, a kind against its own literals, one step dividing

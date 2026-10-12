@@ -78,7 +78,8 @@ valgebra as a bare class and is not deep-checked.
 - **Typing-first.** Standard annotations are the primary notation, read through
   the typing spec's own introspection.
 - **Check, don't parse.** `validate` and `is_valid` never copy or coerce; `ensure`
-  is the explicit, separate conversion mode.
+  is the explicit, separate mode that hands back the object it checked,
+  unchanged.
 - **Few boundary crossings.** Tree walks, key lookups, and bound checks run in
   Rust; a comparison against a Python object — a literal, a refinement predicate,
   or an instance or attribute check — is the documented step into Python, never a

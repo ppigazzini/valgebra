@@ -124,7 +124,7 @@ release.
 | `tuple[A, *tuple[B, ...]]` | a fixed prefix `A`, then zero or more `B` (see below; 3.11+) |
 | `tuple[A, B, ...]` | the same, in the spelling 3.10 can write and a static checker refuses |
 | `typing.List`, `typing.Tuple`, `typing.Dict`, `typing.Set`, `typing.FrozenSet` | the class each aliases, bare or parametrized |
-| `typing.Deque`, `DefaultDict`, `OrderedDict`, `Counter`, `ChainMap`, `Type` | the class each aliases when bare; parametrized, refused, as `deque[int]` is |
+| `typing.Deque`, `DefaultDict`, `OrderedDict`, `Counter`, `ChainMap`, `Type`, and every other `typing` alias of a class -- `typing.Sequence`, `typing.Mapping`, `typing.Text` among them | the class each aliases when bare; parametrized, refused, as `deque[int]` is, but `Callable[...]`, which reads as the class ([below](#classes)) |
 
 ```python
 from valgebra import Validator
@@ -152,7 +152,7 @@ to the typing spelling.
 | `[A, B, ...]` | a fixed prefix, then a repeated tail (see below) |
 | `{K: V}` | `dict[K, V]` |
 | `{"key": T, "key2?": T}` | a **record** (see below) |
-| any constant `c` | `Literal[c]` |
+| any other constant `c`, not a tuple, a set or a callable | `Literal[c]` |
 
 ```python
 from valgebra import Validator
@@ -235,10 +235,13 @@ assert not Validator(Literal[1]).is_valid(1.0)
 `bool` value, an enum member, `None` -- and a static checker refuses anything
 else there. Any other constant, a `float` or an instance, is written bare:
 `Validator(1.0)` is the schema `Literal[1.0]` names, and a checker accepts it
-([static checkers](18-static-checking.md)). A tuple is the exception: a bare
+([static checkers](18-static-checking.md)). A tuple is one exception: a bare
 tuple, a named tuple's value included, is refused as a tuple literal, which
 `(int, str)` would read as a shape and a constant alike, and the constant
-`(1, 2)` is written `tuple[Literal[1], Literal[2]]`.
+`(1, 2)` is written `tuple[Literal[1], Literal[2]]`. A callable is the other:
+written bare it is refused ([below](#anything-unrecognized-is-a-literal)), and
+the constant is `Literal[fn]`, which reads at run time and which a static
+checker refuses.
 
 **The constant `nan` denotes nothing.** Membership is equality, and a `nan` is
 equal to nothing at all — itself included — so the set has no member. That is not a
@@ -464,7 +467,7 @@ assert not Validator(Query).is_valid({})  # required
 ```
 
 That is the form whose `repr` reads back quietly as a different schema: it
-renders the field as `{'page?': int, ...}`, which reads back as the optional key
+renders as `{'page?': int, str: anything}`, which reads back as the optional key
 `page` ([boundaries](17-boundaries.md), and [stable repr](#stable-repr) below).
 
 Open the record with `open` (undeclared keys admitted) or re-close it with

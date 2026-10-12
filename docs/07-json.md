@@ -19,7 +19,7 @@ assert not users.is_valid_json('{"name": 5}')  # name is not a str
 assert Validator(list[int]).is_valid_json(b"[1, 2, 3]")
 ```
 
-`validate_json(data, *, fail_fast=False)` mirrors `validate`: it raises
+`validate_json(data, /, *, fail_fast=False)` mirrors `validate`: it raises
 `ValidationError` on failure and aggregates every independent failure by default.
 `is_valid_json(data)` mirrors `is_valid`: it returns a bool, and raises only
 where a comparison raises a fatal interpreter signal.
@@ -36,7 +36,7 @@ record = users.load('{"name": "Ada", "age": 36}')
 assert record == {"name": "Ada", "age": 36}
 ```
 
-`load(data, *, fail_fast=False)` raises `ValidationError` on malformed JSON or a
+`load(data, /, *, fail_fast=False)` raises `ValidationError` on malformed JSON or a
 non-member, exactly as `validate_json` does, and otherwise returns the parsed
 object.
 
@@ -248,14 +248,15 @@ the parts are:
 | jiter's pull parser over the same bytes, building nothing | 16 us | in Rust, release, no profile |
 
 The first two rows are one process. The parse moves with the heap a process
-starts from -- one process in seventeen read it two fifths dearer on an earlier
-run, where the five here agree within 1% -- and the walk does not. Read in one
+starts from, by as much as two fifths between processes of one build, and the
+walk does not: compare a parse figure only within one process. Read in one
 build, the tree costs three and a half times the parse that builds nothing: the cost is the tree's containers -- a
 vector per array and per object, each behind its own allocation -- and not the
 scanning. pydantic-core validates from the parser's events and builds no tree,
-and the comparison gate's `json_document` reads it at 1.6 times valgebra's whole
-call on CPython 3.14, so the tree is most of valgebra's call and the call is
-still the shorter.
+and still takes longer than valgebra's whole call on this document -- the ratio
+is the `json_document` entry `scripts/compare_gate.py` records in
+`scripts/perf_compare.json` -- so the tree is most of valgebra's call and the
+call is the shorter.
 
 Two readings would remove that cost, and the page states both as the limits
 they are.

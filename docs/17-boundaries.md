@@ -191,11 +191,13 @@ predicate that re-enters without a base case raises `RecursionError`. The
 native frames between two Python calls are not what the recursion limit
 counts, though, so where each re-entry walks levels of nesting, or on a thread
 with a small stack, the native stack can run out first and the process ends.
-On the main thread, two thousand re-entries walking ten levels each ended it on
-CPython 3.12 and raised `RecursionError` on 3.15, whose own stack check catches
-the overflow while the frames between two Python calls stay under its margin;
-at 120 levels each, 3.15 ended it too, after sixty-four. Give a re-entering
-predicate a base case, and run it on a thread of 1 MiB or more. A fatal signal is **not** turned into a verdict: a base
+Which of the two a run reaches depends on the interpreter's own stack check --
+CPython 3.15 catches an overflow while the frames between two Python calls stay
+under its margin, and 3.12 does not -- and on how many levels each re-entry
+walks. Give a re-entering predicate a base case, and run it on a thread of
+1 MiB or more.
+
+A fatal signal is **not** turned into a verdict: a base
 exception that is not an ordinary `Exception` (`KeyboardInterrupt`,
 `SystemExit`, `GeneratorExit`), and `MemoryError` and `RecursionError`,
 propagate, because a check that swallowed one would make the process

@@ -113,7 +113,8 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
 ///
 /// Raises:
 ///     `NotImplementedError`: If an argument uses a form with no set (a set or
-///         tuple literal, or a typing construct that is not a type).
+///         tuple literal, a callable that is not a class, or a typing construct
+///         that is not a type).
 ///     `ValueError`: If the joined schema crosses a size bound: depth,
 ///         definitions, or nodes.
 #[pyfunction]
@@ -133,7 +134,8 @@ fn union(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
 ///
 /// Raises:
 ///     `NotImplementedError`: If an argument uses a form with no set (a set or
-///         tuple literal, or a typing construct that is not a type).
+///         tuple literal, a callable that is not a class, or a typing construct
+///         that is not a type).
 ///     `ValueError`: If the met schema crosses a size bound: depth, definitions,
 ///         or nodes.
 #[pyfunction]
@@ -167,7 +169,8 @@ fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
 ///
 /// Raises:
 ///     `NotImplementedError`: If `schema` uses a form with no set (a set or
-///         tuple literal, or a typing construct that is not a type).
+///         tuple literal, a callable that is not a class, or a typing construct
+///         that is not a type).
 ///     `ValueError`: If the complemented schema crosses a size bound: depth,
 ///         definitions, or nodes.
 #[pyfunction]

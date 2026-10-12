@@ -427,15 +427,21 @@ impl Validator {
     /// The schema is any supported form: a type or typing annotation (`int`,
     /// `list[str]`, `int | None`, `Literal[...]`, a `TypedDict`, a dataclass, an
     /// `Annotated` refinement, ...), a native form (a `[T]` list, a `{K: V}`
-    /// mapping, an all-string-key dict record, or any constant as a literal), or
-    /// another `Validator`.
+    /// mapping, an all-string-key dict record, or a constant as a literal), or
+    /// another `Validator`. A callable that is not a class is refused rather
+    /// than read as a constant: it is spelled `Annotated[T, fn]` for the values
+    /// it accepts, or `Literal[fn]` for the object itself.
     ///
     /// Args:
     ///     schema: The schema to compile.
     ///
     /// Raises:
     ///     NotImplementedError: If the schema uses an unsupported form (for
-    ///         example a recursive class, which must be written with `recursive`).
+    ///         example a recursive class, which must be written with `recursive`),
+    ///         or a callable that is not a class.
+    ///     ValueError: If a marker's value denotes no set, a `recursive` body is
+    ///         not contractive, or the schema crosses a size bound: depth,
+    ///         definitions, or nodes.
     #[new]
     #[pyo3(signature = (schema, /))]
     fn py_new(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {

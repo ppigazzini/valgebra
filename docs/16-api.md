@@ -167,13 +167,14 @@ checking](18-static-checking.md)).
 | Raised | When | Example |
 | --- | --- | --- |
 | `NotImplementedError` | The spec names a form with no decidable runtime membership. | `Sequence[int]`, `Mapping[str, int]`, a `TypeVar`, `Final`, `ClassVar` |
+| `NotImplementedError` | A callable that is not a class, or the annotation `Validator[T]`, stands where a schema goes. The message names the spelling that was meant: `Annotated[T, fn]` or `Literal[fn]` for a callable, the schema or a compiled validator for `Validator[T]`. | `Validator(fn)`, `intersection(Record, fn)`, `list[fn]`, `Validator(Validator[int])` |
 | `NotImplementedError` | Compiling descends one level past the construction depth bound without reaching a leaf. | a self-referential class, whose field type names the class |
 | `ValueError` | A constructed schema crosses a size bound: depth, definitions, or nodes. | growing a schema in a loop with `\|`, `union`, `intersection`, `open` |
 | `ValueError` | A marker's value cannot denote a set. | `MultipleOf(0)` |
 | `ValueError` | A `recursive` body is not contractive — its back edge is not under a structural constructor. | `recursive(lambda s: s)` |
 | `TypeError` | An argument is the wrong Python type for the call. | `validate_json(123)`, `load(123)` |
 
-The two `NotImplementedError` rows are **different bounds** that happen to share
+The form row and the depth row are **different bounds** that happen to share
 a class. The first is about the *form* and no depth would help it; the second is
 about *depth while compiling*, and is what a self-referential class reaches
 because its field type names the class again — the frontend descends one level
@@ -238,9 +239,9 @@ instance, so they are written here rather than generated.
 | `value` | `str` | A repr-style summary of the first item's offending value. |
 
 The [error model](08-error-model.md) guide gives the path format and the
-properties a code carries; the codes themselves are enumerated by
-`tests/test_error_codes.py`, which asserts each against the node kind that emits
-it, because a list written out beside the walk drifts from it.
+properties a code carries, and the files that declare the codes;
+`tests/test_error_matrix.py` drives every code a report can carry, because a
+list written out beside the walk drifts from it.
 
 ```python
 import json

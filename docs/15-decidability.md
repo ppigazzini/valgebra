@@ -157,9 +157,12 @@ answers `"undecided"`.
   fixed-length ones it splits across, where no single branch contains it:
   `tuple[int | str, int]` is below `tuple[int, int] | tuple[str, int]`. The rule
   needs a fixed component count, so a homogeneous or variadic sequence — a star,
-  matching every length — is not decomposed. The split multiplies one choice per
-  component and runs under the work budget: six components each `int | str` are
-  decided below their sixty-four corners, and seven decline against their 128.
+  matching every length — is not decomposed. The split narrows the product by
+  one branch a level, so it runs under the work budget and the relation's depth
+  bound both, and its reach grows with components and branches together: six
+  components each `int | str` are decided below their sixty-four corners, seven
+  decline against their 128, and a two-component tuple declines against a few
+  dozen branches that each fix its first position.
 - **Sets and frozensets.** By element inclusion.
 - **Records and mappings.** Closed-record width, depth, and required-ness; pure
   mappings with several key-pattern clauses (each subtype clause subsumed by a
@@ -254,8 +257,12 @@ answers `"undecided"`.
   never the reference's -- the key of `t & {"a": None | {"a": None}}`, for `t =
   None | {"a": t}`, asks `t & (None | {"a": None})`, which `{"a": None}` is in,
   and reading that `t` as the reference already open would read the meet
-  empty. A reference written inside a key's union, the way a record that names
-  itself is spelled, decides the same way:
+  empty. Emptiness is decided wherever the meet reads, and a value is named
+  only where every record in it is closed: a meet with an open record or with
+  a class -- `intersection(chain, Validator({"next": None}).open())`, which
+  `{"next": None}` is in -- answers `"undecided"` (below). A reference written
+  inside a key's union, the way a record that names itself is spelled, decides
+  the same way:
 
     ```python
     from valgebra import intersection, nothing, recursive, union
@@ -390,12 +397,14 @@ The assumption is the set representation's open world, which both readings
 share. Neither decides it; the bindings could not answer it without running a
 constructor at decision time, which is the same code the pure-metaclass test
 exists to refuse. What it buys is every relation between two classes decided by
-a rule, at about a microsecond rather than a hundred.
+a rule, without building a set representation.
 
-**A declared attribute does not widen this.** A class with declared
-attributes -- a dataclass, a `NamedTuple` -- compiles to the class beside a
-record of its fields, and the record narrows the class's instances rather than
-reaching outside them. So a relation that declines beside one declines for the
+**A declared attribute does not widen this.** A dataclass compiles to the
+class beside a record of its fields, and the record narrows the class's
+instances rather than reaching outside them. A `NamedTuple` compiles to the
+class met with the tuple its fields lay out, with no record beside it: it is
+laid out as `tuple` and decides as a kind does, and a protocol over its fields
+is not proved above it. So a relation that declines beside one declines for the
 class: `int ≤ ~C` is "not proven" for a dataclass and for a class with no
 fields alike, and a class laid out as a kind decides either way. The record is
 not a second source of conservatism, and in the one place it tells two schemas
@@ -628,8 +637,8 @@ the shape. What is left below is what the descriptor cannot hold.
     representation instead. What that gives up is the union whose branches the
     subject shares no value with and which none of them refutes: it is outside
     the union and is answered `"undecided"`. Reaching for it on every union
-    costs the decision path 36% against 0.14% asked of the unions a branch
-    refutes, measured on the relation matrix.
+    adds a reading per branch to every union the decision path meets, which
+    `scripts/perf_gate.py --decision-matrix` measures.
 
     The other half is the lowering. A reference is a cycle and a finite set
     representation has no room for one, so a recursive schema is lowered by
@@ -641,6 +650,21 @@ the shape. What is left below is what the descriptor cannot hold.
     relation that needs the body *twice* — a fixpoint below a
     differently-written fixpoint whose bodies only agree after two steps — and
     there the coinductive rule is the whole of the answer.
+
+- **An inhabited meet with a recursive reference, beside an open record or a
+  class.** The meet's emptiness is decided ([above](#decided-exactly)), and a
+  value is named only where every record in it is closed, so a meet with an
+  open record or with a class that holds a value is not proved to:
+
+    ```python
+    from valgebra import Validator, intersection, nothing, recursive, union
+
+    chain = recursive(lambda t: union(None, {"next": t}))
+    opened = intersection(chain, Validator({"next": None}).open())
+    assert opened.is_valid({"next": None})
+    assert opened.relation_to(nothing) == "undecided"
+    assert intersection(chain, Validator({"next": int}).open()).is_empty()
+    ```
 
 - **A length bound over a set or a dict, in the sets.** A length is not a word's alone, and
   two of the kinds that have one state it: a word's length is a pattern over
@@ -662,7 +686,7 @@ the shape. What is left below is what the descriptor cannot hold.
   set[Literal[True]]`, since every set of it holds one member, and that pair
   answers `undecided`. Two members `==` keeps apart -- an `int` and a `str`, two
   integers, or two number kinds with other numbers to choose, as
-  `frozenset[int | float]` against the frozensets of each -- refute as before.
+  `frozenset[int | float]` against the frozensets of each -- are refuted.
 
 - **An integer bound outside the 64-bit range.** The integer component carries
   its bounds as `i64`, so `Annotated[int, Ge(2**70)]` is held as the widest set
@@ -769,8 +793,8 @@ mark for a relation that holds and is not decided, so the row fails on the day
 it decides. Those rows are the bound-limited relations above — the four-field
 record and the seven-component tuple against their corners and the
 thirteen-link chain of differences, each carrying the width at which the bound
-stops it — the two sets whose members are one number in two kinds, and the two
-meets with a recursive reference; the ledger's `_LEDGERED` list owns them.
+stops it — and the two sets whose members are one number in two kinds; the
+ledger's `_LEDGERED` list owns them.
 
 ```python
 from typing import Annotated, Literal, NamedTuple
@@ -802,15 +826,17 @@ assert Validator(Annotated[tuple[int, int], at.MinLen(3)]).is_empty()
 # relation is structural.
 assert Validator(Pair).is_subtype_of(tuple[int, int])
 # A recursive schema: the laws reach it, and one unfolding decides the kinds its
-# body admits. What one unfolding does not reach is a relation needing the body
-# twice -- here, that every value of the integer tree is a value of the list
-# tree, which holds and is not proved.
+# body admits. A relation needing the body twice is the coinductive rule's: a
+# tree of lists of lists is an integer tree, and `[1]` is an integer tree that
+# is not one.
 mu = lambda: Validator(recursive(lambda t: union(int, list[t])))  # noqa: E731
+nu = recursive(lambda t: union(int, list[list[t]]))
 assert intersection(mu(), complement(mu())).is_empty()
 assert intersection(mu(), str).is_empty()
-assert not mu().is_subtype_of(recursive(lambda t: union(int, list[list[t]])))
+assert Validator(nu).is_subtype_of(mu())
+assert mu().relation_to(nu) == "not_subset"
 
-# Everything else here decides, on the sets rather than by a rule.
+# Everything else here decides, on the sets or by a rule.
 pattern = Validator(Annotated[str, Regex("a")])
 assert pattern.is_subtype_of(Annotated[str, Regex("ab?")])  # L(a) <= L(ab?)
 # L(a) is the word "a", and a `str` subclass's "a" is in the pattern and not the
@@ -842,8 +868,8 @@ rather than built from the other operand — a distinction that matters, because
 the shortcuts the procedure takes are keyed on two schemas sharing their
 constants. An entry of the list above that stops deciding fails there as a
 defect rather than a known gap; its strict expected-failure marks are for the
-other direction, a relation that holds and is not decided, and name the
-bound-limited relations this page describes. `tests/test_completeness_probe.py`
+other direction, a relation that holds and is not decided, each naming the
+limit that leaves it. `tests/test_completeness_probe.py`
 searches a fixed universe for relations answered `False` that no value refutes
 and fails when one appears without a written reason, so a gap nobody thought of
 cannot arrive unnoticed. It reaches a gap only where some atom in its universe

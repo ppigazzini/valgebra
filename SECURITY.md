@@ -7,7 +7,8 @@ review. This policy describes what a security issue is and how to report one.
 
 ## Supported versions
 
-Until a stable `1.0`, only the latest published `0.0.x` release receives fixes,
+Until the stable `0.1.0` release, only the latest published `0.0.x` release
+receives fixes,
 and a fix supersedes the release it patches rather than being backported to an
 earlier one.
 

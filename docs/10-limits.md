@@ -7,7 +7,10 @@ description: Resource limits and the bounds the validator enforces.
 A validator runs against untrusted values, so every recursive descent and every
 error-reporting probe is bounded. A pathological input meets a gated limit and is
 rejected cleanly; on a thread with the stack its platform gives one, it never
-overflows the native stack, raises a Python `RecursionError`, or hangs. The limits bound work driven by the *value* — the
+overflows the native stack or raises a Python `RecursionError`. The bounds cap
+sizes, not time: [what the bounds do not bound](#what-the-bounds-do-not-bound)
+names the inputs whose cost grows inside them. The limits bound work driven by
+the *value* — the
 untrusted part. A schema's own size (the width of a union, the number of declared
 fields) is written by the developer and is trusted.
 
@@ -28,7 +31,8 @@ fields) is written by the developer and is trusted.
   walk. Three bounds apply, and passing any one raises `ValueError`:
     - **depth** — at most `MAX_SCHEMA_DEPTH` levels of structural nesting,
       128 (a chain built in a loop, such as repeatedly wrapping a validator in
-      a set or a union). Every node counts one level, containers and the leaf
+      a list or a set; a union of unions flattens and adds no level). Every
+      node counts one level, containers and the leaf
       they end in included, so 127 nested lists around an `int` are the deepest
       chain it admits and the 128th list is refused. A refinement counts one
       more on top of whatever it narrows, since the set it denotes is a node of
@@ -39,8 +43,9 @@ fields) is written by the developer and is trusted.
       `recursive` schemas, which the depth measure alone cannot see because a
       back edge counts as a leaf);
     - **nodes** — at most 100,000 total schema nodes (a shallow but exponentially
-      wide schema, such as combining a validator with itself in a loop, which
-      doubles its node count each step). The constructor holds it while it
+      wide schema, such as a loop putting a validator twice in one container,
+      `Validator([v, v])`, which doubles its node count each step; `v | v`
+      folds to `v`). The constructor holds it while it
       reads: a class, an alias or any annotation object is built once per place
       it is named, so a part shared through several levels multiplies the
       schema's size with each, and the frontend refuses at the step after the
@@ -71,13 +76,15 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   128th unfolding, and 128 lists are refused.
 
     The walk fits a **1 MiB** thread stack, the least any thread CPython
-  creates has. The shipped wheels are built with profile-guided optimization,
-  whose inlining makes a level cost 2.5 to 3 KiB on the dict and union shapes,
-  and the dearest walk, explaining a value refused at the bound, needs between
-  828 and 844 KiB on the CPython 3.12 wheel. The release smoke runs the
-  deepest walks on a 1 MiB thread on every wheel it ships. A thread given less
-  can run out before the bound does, and the process ends with it; a thread an
-  embedding host starts at the 512 KiB pthread default on macOS is one. Give a
+  creates has. The CPython wheels for glibc Linux, macOS and Windows x64 are
+  built with profile-guided optimization, whose inlining makes a level cost 2.5
+  to 3 KiB on the dict and union shapes, and the dearest walk, explaining a
+  value refused at the bound, needs between 828 and 844 KiB on the CPython 3.12
+  wheel; the musllinux, Windows arm64 and PyPy wheels are plain builds,
+  without the profile's inlining. The release smoke runs the deepest walks on
+  a 1 MiB thread on every wheel it ships. A thread given less can run out
+  before the bound does, and the process ends with it; a thread an embedding
+  host starts at the 512 KiB pthread default on macOS is one. Give a
   thread that validates deep values 1 MiB or more. This holds on both the object path and the JSON path; an
   over-deep JSON document is rejected by the parser as `json_invalid`.
 
@@ -98,8 +105,9 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   and past them answers undecided, which a relation may always answer. Two
   recursive schemas whose bodies nest 100 and 99 lists around the back edge
   prove nothing about each other until the two cycles realign, 9,900 levels
-  down, and a long chain of definitions asks its emptiness as deep: each
-  overflowed the stack before the bound. A level costs about 1 KiB on the
+  down; a long chain of definitions asks its emptiness as deep, and a product
+  split across a wide union takes a level for each branch it narrows by --
+  without the bound each would outrun the stack. A level costs about 1 KiB on the
   shipped wheels, so the deepest relation fits in half of a 1 MiB thread, and
   the release smoke runs it there.
 - **Self-reference.** A value that contains itself is caught by an
@@ -111,8 +119,8 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   **labels** before truncating with `...`. The two counts differ — a branch that
   is itself a union, such as a wide `Literal[...]`, contributes one branch and
   many labels — so each carries its own bound. With `fail_fast` the explanation
-  costs a fail-fast walk of each branch it searches, whatever the size of the
-  value. Without it every failure of the chosen branch is reported, so the
+  costs a deciding walk of each branch and a fail-fast walk of each branch it
+  searches, whatever the size of the value. Without it every failure of the chosen branch is reported, so the
   report grows with the value; a service answering untrusted input with the
   report asks for it with `fail_fast`.
 

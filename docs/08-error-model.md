@@ -391,9 +391,10 @@ because it is the same failure: the check has no stable value to decide about.
 ## The set of codes
 
 There is no hand-maintained list of every code on this page, because a list that
-drifts from the walk is worse than none. The codes are declared in two tables —
-`Schema::error_code` in `crates/valgebra-core/src/ir.rs` for a leaf's own code,
-and `crates/valgebra-py/src/codes.rs` for the rest — and
+drifts from the walk is worse than none. The codes are declared in three files —
+`Schema::error_code` in `crates/valgebra-core/src/ir.rs` for a node's own code,
+`crates/valgebra-py/src/codes.rs` for the codes the walk writes, and
+`crates/valgebra-core/src/codes.rs` for the ones both read, spelled once — and
 `tests/test_error_matrix.py` drives every code a report can carry, with the path
 it reports. Read those as the enumeration.
 

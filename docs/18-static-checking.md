@@ -142,7 +142,7 @@ pyright accept.
 | Written | Why a checker refuses it | Write instead |
 | --- | --- | --- |
 | `tuple[str, int, ...]` | `...` is legal only as the second of two arguments | `tuple[str, *tuple[int, ...]]` (Python 3.11+) |
-| `Literal[1.5]`, `Literal[(1, 2)]`, `Literal[obj]` | `Literal` takes an `int`, `str`, `bytes` or `bool` value, an enum member or `None` | the constant itself: `Validator(1.5)`, `union(1.5, "a")` |
+| `Literal[1.5]`, `Literal[(1, 2)]`, `Literal[obj]` | `Literal` takes an `int`, `str`, `bytes` or `bool` value, an enum member or `None` | the constant itself: `Validator(1.5)`, `union(1.5, "a")`; a callable `obj` is the exception, refused bare, and `Literal[fn]` is its one spelling, which a checker reports |
 | `list[v]`, `dict[str, v]` for a validator `v` | a variable is not a type expression | the native forms `[v]` and `{str: v}` |
 | `{"name": str}` where a type is expected | a dict literal is not a type expression | a `TypedDict` class |
 | `count: v` for a validator `v`, as a class field | a variable is not a type expression | `count: Annotated[T, v]`, for a `T` holding every member of `v`: a checker reads `T` |
