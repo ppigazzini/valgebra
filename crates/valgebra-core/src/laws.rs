@@ -5840,19 +5840,42 @@ pub(crate) fn drawn_defs() -> impl Strategy<Value = Vec<Schema>> {
 /// schemas that read it.
 ///
 /// The values are drawn from each side's unfolding at [`ORACLE_UNFOLDS`] and
-/// read one unfolding deeper. A reference at the top of a schema costs an
-/// unfolding and no container, and every reference a drawn body holds sits
-/// under one, so a value drawn from one side reaches one unfolding past where
-/// the other side's reading at the same depth has cut its reference to the
-/// empty set. Read one deeper, every value the universe holds is inside both
-/// readings, as the reference law reads its reference.
+/// read at one unfolding more than the deepest of them nests. The depth the
+/// values were drawn at does not bound them: a reference cut under a
+/// complement reads as the top, whose edges are any value of the pool, and the
+/// second pass of [`boundary_values`] wraps the deep ones again. What bounds
+/// the cut is the value: a reference at the top of a schema costs an unfolding
+/// and no container, and every reference a drawn body holds sits under one, so
+/// the reference a reading cuts at `n` unfoldings is under `n` containers, and
+/// a value nested fewer deep never reaches it. Both sides then read every
+/// value of the universe exactly, however many unfoldings one of them spends
+/// before the other.
 fn drawn_reading(a: &Schema, b: &Schema, defs: &[Schema]) -> (Vec<Obj>, Schema, Schema) {
     let values = boundary_values(&[
         &unfold_for_oracle(a, defs, ORACLE_UNFOLDS),
         &unfold_for_oracle(b, defs, ORACLE_UNFOLDS),
     ]);
-    let read = |schema: &Schema| unfold_for_oracle(schema, defs, ORACLE_UNFOLDS + 1);
+    let unfolds = 1 + values.iter().map(nesting).max().unwrap_or(0);
+    let read = |schema: &Schema| unfold_for_oracle(schema, defs, unfolds);
     (values, read(a), read(b))
+}
+
+/// How many containers a value nests: none for a scalar, and a mapping's keys
+/// are names rather than values.
+fn nesting(value: &Obj) -> usize {
+    match value {
+        Obj::List(items) | Obj::Tuple(items) | Obj::Set(items) | Obj::FrozenSet(items) => {
+            1 + items.iter().map(nesting).max().unwrap_or(0)
+        }
+        Obj::Map(entries) => {
+            1 + entries
+                .iter()
+                .map(|(_, item)| nesting(item))
+                .max()
+                .unwrap_or(0)
+        }
+        _ => 0,
+    }
 }
 
 /// A value one side's unfolding reaches is read by the other side's.
@@ -5888,6 +5911,56 @@ fn a_value_one_unfolding_reaches_is_read_by_the_other() {
         ),
     ];
     let a = Schema::list(SeqShape::fixed([Schema::Bool, d1]));
+    let b = Schema::Ref(DefIx::new(0));
+    // The premise the law carries: a pair that is not proved asserts nothing.
+    assert!(
+        a.is_subtype_of_under(&b, &NoLeafRelations, &defs),
+        "the pair is not proved"
+    );
+    let pool = const_pool();
+    let (values, subject, other) = drawn_reading(&a, &b, &defs);
+    let counterexample = values
+        .iter()
+        .find(|value| member_full(&subject, value, &pool) && !member_full(&other, value, &pool));
+    assert!(
+        counterexample.is_none(),
+        "{counterexample:?} is in the subject and outside the other side"
+    );
+}
+
+/// A value nested deeper than the unfolding it was drawn from is read at its
+/// own depth.
+///
+/// `list[list[None, tuple[bool, str]], D1]` against `D0`, where
+/// `D0 = set[Any] | list[D1]` and `D1 = list[float >= 1] | list[¬D1]`, is an
+/// inclusion: the first element is a list of two values that are not lists,
+/// so one of `list[¬D1]`, and the second is a `D1`. The complement in `D1`
+/// reads the reference it cuts as the top, whose edges are the pool's deepest
+/// lists, and the universe held a list of `D1` nested seven deep. Read at the
+/// depth the values were drawn at, `D0` spends an unfolding before it reaches
+/// `D1` and so cut at a different list from the subject, and the two readings
+/// parted on a value of both. The pair came out of the push lane.
+#[test]
+fn a_value_deeper_than_its_unfolding_is_read_at_its_depth() {
+    let d1 = Schema::Ref(DefIx::new(1));
+    let defs = vec![
+        union(
+            Schema::set(Schema::Anything(Spelling::Any)),
+            Schema::list(SeqShape::homogeneous(d1.clone())),
+        ),
+        union(
+            Schema::list(SeqShape::homogeneous(Schema::Refine {
+                base: Arc::new(Schema::Float),
+                constraints: vec![Constraint::Ge(OperandIx::new(1))].into(),
+            })),
+            Schema::list(SeqShape::homogeneous(not(d1.clone()))),
+        ),
+    ];
+    let pair = Schema::tuple(SeqShape::fixed([Schema::Bool, Schema::Str]));
+    let a = Schema::list(SeqShape::fixed([
+        Schema::list(SeqShape::fixed([Schema::NoneType, pair])),
+        d1,
+    ]));
     let b = Schema::Ref(DefIx::new(0));
     // The premise the law carries: a pair that is not proved asserts nothing.
     assert!(
