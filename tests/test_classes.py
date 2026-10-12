@@ -1,6 +1,6 @@
 import collections
 import dataclasses
-import datetime
+import datetime as dt
 import decimal
 import enum
 import numbers
@@ -986,12 +986,12 @@ def test_a_callable_annotation_erases_the_arrow_it_writes() -> None:
 #: one out for a reading of its own.
 _STDLIB_ATOMS: list[tuple[type, object, object]] = [
     (
-        datetime.datetime,
-        datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
+        dt.datetime,
+        dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc),
         "2026-01-01",
     ),
-    (datetime.date, datetime.date(2026, 1, 1), "2026-01-01"),
-    (datetime.timedelta, datetime.timedelta(seconds=1), 1.0),
+    (dt.date, dt.date(2026, 1, 1), "2026-01-01"),
+    (dt.timedelta, dt.timedelta(seconds=1), 1.0),
     (uuid.UUID, uuid.UUID(int=0), "00000000-0000-0000-0000-000000000000"),
     (pathlib.PurePosixPath, pathlib.PurePosixPath("a/b"), "a/b"),
     (pathlib.Path, pathlib.Path("a/b"), "a/b"),
@@ -1046,12 +1046,12 @@ def test_a_stdlib_class_is_not_the_kind_it_serialises_as() -> None:
     # flavour it does not: the class order, again.
     assert Validator(pathlib.Path).relation_to(pathlib.PurePath) == "subset"
     assert Validator(pathlib.PurePosixPath).relation_to(pathlib.Path) == "not_subset"
-    assert Validator(datetime.datetime).relation_to(str) == "not_subset"
+    assert Validator(dt.datetime).relation_to(str) == "not_subset"
     # A date is a datetime's base, and that inclusion is real: the class order
     # is what the answer reads, so the one pair that holds here holds for the
     # reason the others do not.
-    assert Validator(datetime.datetime).relation_to(datetime.date) == "subset"
-    assert Validator(datetime.date).relation_to(datetime.datetime) == "not_subset"
+    assert Validator(dt.datetime).relation_to(dt.date) == "subset"
+    assert Validator(dt.date).relation_to(dt.datetime) == "not_subset"
 
 
 _HINT_FORMS = """

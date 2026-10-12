@@ -9,7 +9,7 @@ inputs:
       morning. Dependabot bumps the action SHA below but not this pin: rotate it
       on the monthly maintenance pass, in step with the uv-pre-commit rev.
     required: false
-    default: "0.12.23"
+    default: "0.13.0"
   python-version:
     description: >-
       Interpreter for uv to install and put on the path. Left empty, uv picks
@@ -41,7 +41,7 @@ runs:
       shell: bash
       run: echo "UV_PYTHON_PREFERENCE=only-managed" >> "$GITHUB_ENV"
     - id: install
-      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       continue-on-error: true
       with:
         version: ${{ inputs.uv-version }}
@@ -49,7 +49,7 @@ runs:
         enable-cache: ${{ inputs.enable-cache }}
     - name: Retry the uv install
       if: steps.install.outcome == 'failure'
-      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       with:
         version: ${{ inputs.uv-version }}
         python-version: ${{ inputs.python-version }}

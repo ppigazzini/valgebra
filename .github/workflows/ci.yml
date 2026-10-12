@@ -155,7 +155,7 @@ jobs:
       # runner. proptest writes it beside the test module, so a red lane hands
       # back the file rather than a hash in a log.
       - if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: proptest-regressions-${{ matrix.os }}
           path: crates/*/proptest-regressions/**
@@ -242,7 +242,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-nextest,cargo-llvm-cov@0.9.1
       # Run the workspace tests under nextest and enforce the core's coverage
@@ -316,7 +316,7 @@ jobs:
           # is `.venv/bin/python` whichever build stands behind it, so a cache
           # saved on the image's 3.12 would link this lane against that one.
           key: managed-python
-      - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-llvm-cov@0.9.1
         # The version-gated reading of a list is live below 3.14, so coverage
@@ -486,7 +486,7 @@ jobs:
       # The sweeps that carry it run `-m "not repository"`, so without it here
       # no lane runs them. One leg is enough: the listing is the source's,
       # not the interpreter's. Pinned as the sweeps pin it.
-      - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == env.FLOOR }}
         with:
           tool: cargo-mutants@27.1.0
@@ -1005,7 +1005,7 @@ jobs:
         if: ${{ inputs.record_compare }}
         run: uv run --no-sync --group bench python scripts/compare_gate.py --update
       - if: ${{ inputs.record_compare }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: perf-compare-recorded
           path: scripts/perf_compare.json
@@ -1078,7 +1078,7 @@ jobs:
       # The lane cannot commit, so the readings leave as an artifact and a human
       # puts what they decide on the page -- the same division the competitive
       # recording keeps, and what makes the matrix a thing somebody chose.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pgo-compare-${{ matrix.python-version }}
           path: |
@@ -1190,7 +1190,7 @@ jobs:
             uv pip install --python ".venv-$abi" --no-index --find-links dist valgebra
             ".venv-$abi/bin/python" -W error -c "import sys, valgebra as v; assert v.Validator(list[int]).is_valid([1, 2]); print('wheel ok', sys.version.split()[0], v.__version__)"
           done
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wheel-linux
           path: dist
@@ -1316,7 +1316,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # Pinned for the reason the nightly sweep gives: the mutant set is compared
       # against a committed baseline.
-      - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-mutants@27.1.0
       - name: List the Rust files the diff touches
@@ -1454,7 +1454,7 @@ jobs:
           key: managed-python
       # Pinned for the reason the nightly sweep gives: the mutant set is compared
       # against a committed baseline.
-      - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-mutants@27.1.0
         # A mutation sweep can only kill a mutant on a branch its interpreter
@@ -1668,7 +1668,7 @@ jobs:
       # A red night is replayable locally from the same database rather than
       # from a seed nobody recorded. Hidden, so it is asked for by name.
       - if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: hypothesis-examples-nightly
           path: .hypothesis/examples
@@ -1720,7 +1720,7 @@ jobs:
           --skip deep_subtype_into_bottom_terminates
           --skip subtyping_terminates_on_a_distributed_tower
       - if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: proptest-regressions-deep
           path: crates/*/proptest-regressions/**
@@ -1755,7 +1755,7 @@ jobs:
           toolchain: ${{ env.FUZZ_NIGHTLY }}
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-llvm-cov@0.9.1
       - uses: $/.github/actions/setup-uv
@@ -1813,7 +1813,7 @@ jobs:
       # A prebuilt cargo-fuzz, pinned: the action has no cargo-fuzz of its own and
       # falls back to cargo-binstall, so the version is what makes the fetch
       # reproducible. See the fuzz-build lane for the whole argument.
-      - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-fuzz@0.13.2
       # `--target` forces the host (gnu) triple: the prebuilt cargo-fuzz is a
@@ -1947,7 +1947,7 @@ jobs:
           done
       - name: Upload crash artifacts
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-artifacts
           path: fuzz/artifacts
@@ -2077,7 +2077,7 @@ jobs:
       # `--locked` pins only the deps of, not the tool). Pinned by version: the
       # sweep's survivors are compared against a committed baseline, so a mutant
       # set that moves with the tool moves the baseline under the ratchet.
-      - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-mutants@27.1.0
       - name: Mutation report over the core
@@ -2163,7 +2163,7 @@ jobs:
       # shard's own outcome says nothing about the baseline: a survivor is a
       # survivor of the *sweep*, and an entry whose mutant the tests kill is
       # known to be one only once every shard has reported.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: core-mutants-${{ matrix.shard }}
           path: mutants.out
@@ -2193,7 +2193,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: core-mutants-*
           path: shards
@@ -2285,7 +2285,7 @@ jobs:
           # is `.venv/bin/python` whichever build stands behind it, so a cache
           # saved on the image's 3.12 would link this lane against that one.
           key: managed-python
-      - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-mutants@27.1.0
       # The membership walk is the product's hottest correctness surface and the
@@ -2346,7 +2346,7 @@ jobs:
             *) exit "$status" ;;
           esac
       # Each shard's results, for the job that ratchets the whole sweep.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: walk-mutants-${{ matrix.shard }}
           path: walk-mutants/mutants.out
@@ -2368,7 +2368,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: walk-mutants-*
           path: shards
@@ -2439,7 +2439,7 @@ jobs:
           # is `.venv/bin/python` whichever build stands behind it, so a cache
           # saved on the image's 3.12 would link this lane against that one.
           key: managed-python
-      - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-mutants@27.1.0
       # The interpreter the verdict is about, pinned as the walk sweep pins it:
@@ -2489,7 +2489,7 @@ jobs:
             0 | 2 | 3) ;;
             *) exit "$status" ;;
           esac
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pytest-mutants-${{ matrix.shard }}
           path: pytest-mutants/mutants.out
@@ -2511,7 +2511,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: pytest-mutants-*
           path: shards
@@ -2571,7 +2571,7 @@ jobs:
       # falls back to cargo-binstall, which fetches a GitHub release and says so.
       # Unpinned, that fallback installs whatever is newest, and the toolchain
       # pinned in FUZZ_NIGHTLY buys nothing while the fuzzer driving it floats.
-      - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-fuzz@0.13.2
       - name: Build the fuzz targets
@@ -2604,7 +2604,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a # v2.87.25
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-deny@0.20.2
       - name: Audit the workspace dependency tree

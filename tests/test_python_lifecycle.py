@@ -31,7 +31,7 @@ LEDGER: every supported interpreter is one CPython's calendar supports today
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 import re
 from typing import NamedTuple
@@ -61,7 +61,7 @@ FLOOR_NAMES = json.loads(
 
 #: The day the claims are read against. UTC, because a schedule PEP gives a day
 #: and no timezone, and a day of slack either way decides nothing.
-TODAY = datetime.datetime.now(datetime.timezone.utc).date()
+TODAY = dt.datetime.now(dt.timezone.utc).date()
 
 
 class Release(NamedTuple):
@@ -69,22 +69,22 @@ class Release(NamedTuple):
 
     minor: int
     pep: int
-    first_alpha: datetime.date
-    first_candidate: datetime.date
+    first_alpha: dt.date
+    first_candidate: dt.date
     end_of_life: tuple[int, int]
     """The year and month the PEP gives for the last security release."""
 
-    def supported(self, on: datetime.date) -> bool:
+    def supported(self, on: dt.date) -> bool:
         """Whether the release is supported on `on`: frozen and still secured."""
         return self.first_candidate <= on and (on.year, on.month) <= self.end_of_life
 
-    def in_development(self, on: datetime.date) -> bool:
+    def in_development(self, on: dt.date) -> bool:
         """Whether `on` falls between the first alpha and the first candidate."""
         return self.first_alpha <= on < self.first_candidate
 
 
-def _day(text: str) -> datetime.date:
-    return datetime.date.fromisoformat(text)
+def _day(text: str) -> dt.date:
+    return dt.date.fromisoformat(text)
 
 
 #: Every release the tree can name, from its schedule PEP. The end of life is
@@ -103,14 +103,14 @@ BY_MINOR = {release.minor: release for release in RELEASES}
 
 #: PEP 602's cadence: a feature release's first alpha comes a year after the
 #: previous one's, give or take the weekday it falls on.
-CADENCE = datetime.timedelta(days=372)
+CADENCE = dt.timedelta(days=372)
 
 
-def _supported(on: datetime.date) -> set[int]:
+def _supported(on: dt.date) -> set[int]:
     return {release.minor for release in RELEASES if release.supported(on)}
 
 
-def _in_development(on: datetime.date) -> set[int]:
+def _in_development(on: dt.date) -> set[int]:
     return {release.minor for release in RELEASES if release.in_development(on)}
 
 

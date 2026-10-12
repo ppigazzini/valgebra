@@ -26,7 +26,7 @@ from valgebra import Validator, anything, complement, intersection
 class _HashableList(list):  # type: ignore[type-arg]
     """A list that is hashable, so a set may hold it."""
 
-    def __hash__(self) -> int:  # type: ignore[override]
+    def __hash__(self) -> int:  # type: ignore[override]  # ty: ignore[invalid-attribute-override]
         return 0
 
 

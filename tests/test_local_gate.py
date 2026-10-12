@@ -243,6 +243,74 @@ def test_the_interpreter_backed_binding_tests_are_in_the_plan() -> None:
     )
 
 
+def test_a_job_hands_its_steps_the_interpreter_its_uv_setup_names() -> None:
+    """The uv setup action leaves its job an interpreter, as `UV_PYTHON`.
+
+    A clone that dropped it would build on uv's default, which moves with uv,
+    and a wheel built for the release a build links would find no venv to take
+    it. A CPython release, written or a matrix leg's, is the caller's, since
+    the jobs share one clone; another implementation is the one named.
+    """
+    spec = {
+        "jobs": {
+            "named": {
+                "steps": [
+                    {"run": "before"},
+                    {
+                        "uses": "$/.github/actions/setup-uv",
+                        "with": {"python-version": "pypy-3.11"},
+                    },
+                    {"name": "after", "run": "uv sync"},
+                    {"name": "theirs", "run": "uv sync", "env": {"UV_PYTHON": "3.12"}},
+                ]
+            },
+            "leg": {
+                "steps": [
+                    {
+                        "uses": "$/.github/actions/setup-uv",
+                        "with": {"python-version": "${{ matrix.python-version }}"},
+                    },
+                    {"name": "after", "run": "uv sync"},
+                ]
+            },
+            "unnamed": {
+                "steps": [
+                    {"uses": "$/.github/actions/setup-uv"},
+                    {"name": "after", "run": "uv sync"},
+                ]
+            },
+        }
+    }
+    named = {name: env for name, _, env in gate.steps(spec, "named")}
+    assert "UV_PYTHON" not in named["before"]
+    assert named["after"]["UV_PYTHON"] == "pypy-3.11"
+    assert named["theirs"]["UV_PYTHON"] == "3.12"
+    leg = {name: env for name, _, env in gate.steps(spec, "leg")}
+    assert leg["after"]["UV_PYTHON"] == gate.caller_release()
+    release = {
+        "jobs": {
+            "job": {
+                "steps": [
+                    {
+                        "uses": "$/.github/actions/setup-uv",
+                        "with": {"python-version": "3.12"},
+                    },
+                    {"name": "after", "run": "uv sync"},
+                ]
+            }
+        }
+    }
+    written = {name: env for name, _, env in gate.steps(release, "job")}
+    assert written["after"]["UV_PYTHON"] == gate.caller_release()
+    unnamed = {name: env for name, _, env in gate.steps(spec, "unnamed")}
+    assert "UV_PYTHON" not in unnamed["after"]
+    # And the workflow's own: the PyPy job installs into a venv of the release
+    # its setup names, which a step left on uv's default would not find.
+    pypy = [env for _, _, env in gate.steps(gate.workflow(), "pypy")]
+    assert pypy, "the workflow has no pypy job to read"
+    assert all(env.get("UV_PYTHON") == "pypy-3.11" for env in pypy)
+
+
 def test_the_workspace_test_step_is_handed_the_interpreter_on_the_loader_path(
     tmp_path: Path,
 ) -> None:

@@ -109,7 +109,7 @@ class _Str(str):
 class _HashableList(list):
     """A hashable `list`, which is a legal member of a `set` of lists."""
 
-    __hash__ = object.__hash__  # type: ignore[assignment]
+    __hash__ = object.__hash__  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
 
 
 def _v(annotation: Any) -> Validator:

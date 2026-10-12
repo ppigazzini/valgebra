@@ -33,7 +33,7 @@ here, which is the check on whoever writes one.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import itertools
 import math
 from dataclasses import dataclass
@@ -63,7 +63,7 @@ class HashableList(list):
     """
 
     __slots__ = ()
-    __hash__ = object.__hash__
+    __hash__ = object.__hash__  # ty: ignore[invalid-assignment]
 
 
 class LyingKey(str):
@@ -692,7 +692,7 @@ def test_a_multiple_is_a_remainder_of_zero() -> None:
     assert Validator(Annotated[float, at.MultipleOf(0.5)]).is_valid(1.5)
     assert not Validator(Annotated[float, at.MultipleOf(0.1)]).is_valid(0.3)
 
-    span = datetime.timedelta
+    span = dt.timedelta
     assert (span(seconds=6) % span(seconds=2) == 0) is False
     with pytest.raises(ValueError, match=r"number"):
         Validator(Annotated[span, at.MultipleOf(span(seconds=2))])

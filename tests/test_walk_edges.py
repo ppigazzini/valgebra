@@ -14,7 +14,7 @@ message that sends a reader somewhere else.
 from __future__ import annotations
 
 import collections
-import datetime
+import datetime as dt
 import decimal
 import enum
 import fractions
@@ -212,9 +212,7 @@ def test_a_step_that_is_not_a_number_is_refused() -> None:
     everything without saying why.
     """
     with pytest.raises(ValueError, match=r"number"):
-        Validator(
-            Annotated[datetime.timedelta, at.MultipleOf(datetime.timedelta(seconds=2))]
-        )
+        Validator(Annotated[dt.timedelta, at.MultipleOf(dt.timedelta(seconds=2))])
     # The numeric steps are unmoved, across the carriers arithmetic reaches.
     assert Validator(Annotated[int, at.MultipleOf(2)]).is_valid(4) is True
     assert Validator(Annotated[float, at.MultipleOf(0.5)]).is_valid(1.5) is True
@@ -253,9 +251,9 @@ OFF_THE_SCALARS: list[tuple[str, object, object, object]] = [
     ("a fraction", fractions.Fraction, at.Ge(0), fractions.Fraction(-1, 2)),
     (
         "a duration",
-        datetime.timedelta,
-        at.Ge(datetime.timedelta(0)),
-        datetime.timedelta(seconds=-1),
+        dt.timedelta,
+        at.Ge(dt.timedelta(0)),
+        dt.timedelta(seconds=-1),
     ),
 ]
 

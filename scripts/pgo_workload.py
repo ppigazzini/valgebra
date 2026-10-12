@@ -25,7 +25,7 @@ counts.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 import sys
 from collections.abc import Callable, Sequence
@@ -202,8 +202,8 @@ def _lists_with_readers() -> None:
     # out.
     statuses = Validator(list[Literal["new", "open", "done"]])
     _run(statuses.is_valid, [["new", "open", "done"] * 8, ["new", "gone"]], 2000)
-    days = Validator(list[datetime.date])
-    _run(days.is_valid, [[datetime.date(2020, 1, 1)] * 24, [1]], 2000)
+    days = Validator(list[dt.date])
+    _run(days.is_valid, [[dt.date(2020, 1, 1)] * 24, [1]], 2000)
     optional = Validator(list[int | None])
     _run(optional.is_valid, [[1, None] * 12, [1, "x"]], 2000)
     _explain(optional.validate, [[1, None] * 12], 500)

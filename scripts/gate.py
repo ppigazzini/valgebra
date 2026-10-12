@@ -47,6 +47,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -213,16 +214,55 @@ def steps(spec: dict, job: str) -> Iterator[tuple[str, str, dict[str, str]]]:
     and runs without one -- rather than the flags that decide whether a command
     can fail at all, which are written in the workflow as literals.
     """
+    uv_python: dict[str, str] = {}
     for step in spec["jobs"][job].get("steps", []):
         command = step.get("run")
         if command is None:
-            continue  # a `uses:` step: an action, not a command
+            # A `uses:` step: an action, not a command, though the uv setup
+            # action leaves the job an interpreter.
+            uv_python = setup_uv_python(step) or uv_python
+            continue
         env = {
             key: str(value)
             for key, value in (step.get("env") or {}).items()
             if "${{" not in str(value)
         }
-        yield step.get("name", command.strip().splitlines()[0]), command, env
+        yield (
+            step.get("name", command.strip().splitlines()[0]),
+            command,
+            {**uv_python, **env},
+        )
+
+
+def caller_release() -> str:
+    """Name the release this gate runs on as uv names one: `3.14`, or `3.14t`."""
+    gil = "t" if sysconfig.get_config_var("Py_GIL_DISABLED") else ""
+    return f"{sys.version_info[0]}.{sys.version_info[1]}{gil}"
+
+
+def setup_uv_python(step: dict) -> dict[str, str]:
+    """Read the `UV_PYTHON` a uv setup step leaves every step after it.
+
+    The setup action exports the `python-version` it is given as `UV_PYTHON`,
+    so each later `uv` command in the job builds on that interpreter, and a
+    clone that left it out would build on uv's default, which moves with uv.
+    A CPython release is the caller's here, as `PYO3_PYTHON` is: the jobs share
+    one clone, its venv and the extension each build leaves in `python/`, so a
+    second release would rebuild the venv under the next job and leave a
+    second extension beside the first. Another implementation keeps a venv and
+    a build directory of its own, and takes the interpreter its setup names.
+    """
+    uses = str(step.get("uses", ""))
+    if not uses.endswith("/.github/actions/setup-uv") and not uses.startswith(
+        "astral-sh/setup-uv"
+    ):
+        return {}
+    version = str((step.get("with") or {}).get("python-version", "")).strip()
+    if not version:
+        return {}
+    if "${{" in version or version[0].isdigit():
+        return {"UV_PYTHON": caller_release()}
+    return {"UV_PYTHON": version}
 
 
 def runnable(name: str) -> bool:

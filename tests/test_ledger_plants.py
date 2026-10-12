@@ -26,7 +26,7 @@ LEDGER: every ledger fails on the defect it exists to catch
 from __future__ import annotations
 
 import ast
-import datetime
+import datetime as dt
 import functools
 import json
 import os
@@ -443,7 +443,7 @@ def _empty_the_roll(tree: Path) -> None:
 _LIFECYCLE = "tests/test_python_lifecycle.py"
 
 
-_NOW = "TODAY = datetime.datetime.now(datetime.timezone.utc).date()"
+_NOW = "TODAY = dt.datetime.now(dt.timezone.utc).date()"
 
 
 _RELEASE_ROW = re.compile(
@@ -451,16 +451,16 @@ _RELEASE_ROW = re.compile(
 )
 
 
-def _newest_alpha(tree: Path) -> tuple[int, datetime.date]:
+def _newest_alpha(tree: Path) -> tuple[int, dt.date]:
     """Give the newest row's minor release and its first alpha."""
     minor, day = _RELEASE_ROW.findall((tree / _LIFECYCLE).read_text(encoding="utf-8"))[
         -1
     ]
-    return int(minor), datetime.date.fromisoformat(day)
+    return int(minor), dt.date.fromisoformat(day)
 
 
-def _set_the_clock(tree: Path, day: datetime.date) -> None:
-    _edit(tree, _LIFECYCLE, _NOW, f'TODAY = datetime.date.fromisoformat("{day}")')
+def _set_the_clock(tree: Path, day: dt.date) -> None:
+    _edit(tree, _LIFECYCLE, _NOW, f'TODAY = dt.date.fromisoformat("{day}")')
 
 
 def _reach_the_next_alpha(tree: Path) -> None:
@@ -481,7 +481,7 @@ def _reach_the_next_alpha(tree: Path) -> None:
 def _outlive_the_table(tree: Path) -> None:
     """Move the clock past the day the release after the newest row reaches alpha."""
     _, alpha = _newest_alpha(tree)
-    _set_the_clock(tree, alpha + datetime.timedelta(days=373))
+    _set_the_clock(tree, alpha + dt.timedelta(days=373))
 
 
 def _shift_a_floor_statement(tree: Path) -> None:
@@ -2124,6 +2124,19 @@ PLANTS = (
             "\nEXIT_CANNOT_RUN = 3\n",
         ),
         trips=("test_a_gate_script_answers_in_the_three_code_vocabulary",),
+    ),
+    Plant(
+        # The uv setup's interpreter dropped: a clone's `uv` builds on its own
+        # default, and a wheel built for the caller's release finds no venv.
+        "tests/test_local_gate.py",
+        ("scripts/gate.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/gate.py",
+            "            uv_python = setup_uv_python(step) or uv_python\n",
+            "",
+        ),
+        trips=("test_a_job_hands_its_steps_the_interpreter_its_uv_setup_names",),
     ),
     Plant(
         # The offline substitution dropped: the plan runs the online form.
