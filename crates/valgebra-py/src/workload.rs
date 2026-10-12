@@ -40,7 +40,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyInt, PyList, PyModule, PyString};
 use valgebra_core::{Constraint, DefIx, Field, MapClause, Schema, SeqKind, SeqShape};
 
-use crate::build::{Pool, build_schema};
+use crate::build::{Pool, build_root};
 use crate::check::{Frame, Unwritten, WalkMode, WalkState, member};
 use crate::input::Value;
 use crate::validator::Validator;
@@ -487,7 +487,7 @@ fn related_classes(py: Python<'_>) -> (Py<PyAny>, Py<PyAny>) {
     let compiled = |name: &str| {
         let mut literals = Pool::default();
         let mut definitions = Vec::new();
-        let schema = build_schema(
+        let schema = build_root(
             &module.getattr(name).expect("the class is defined"),
             &mut literals,
             &mut definitions,
@@ -728,7 +728,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             for _ in 0..iters {
                 let mut literals = Pool::default();
                 let mut definitions = Vec::new();
-                let schema = build_schema(
+                let schema = build_root(
                     std::hint::black_box(&spelling).as_any(),
                     &mut literals,
                     &mut definitions,
@@ -768,7 +768,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             for _ in 0..iters {
                 let mut literals = Pool::default();
                 let mut definitions = Vec::new();
-                let schema = build_schema(
+                let schema = build_root(
                     std::hint::black_box(spelling.bind(py)),
                     &mut literals,
                     &mut definitions,
@@ -853,7 +853,7 @@ fn json_walk(py: Python<'_>, iters: usize, source: &str, expect: Expect) -> u64 
     let (spelling, document) = json_document(py, source);
     let mut literals = Pool::default();
     let mut definitions = Vec::new();
-    let schema = build_schema(spelling.bind(py), &mut literals, &mut definitions)
+    let schema = build_root(spelling.bind(py), &mut literals, &mut definitions)
         .expect("a JSON shape's spelling always builds");
     let validator = Validator::checked(schema, literals.into_items(), definitions)
         .expect("a JSON shape's schema is within every limit");
@@ -939,7 +939,7 @@ fn spelled_walk(py: Python<'_>, iters: usize, source: &str) -> u64 {
     let mut literals = Pool::default();
     let mut definitions = Vec::new();
     let spelling = module.getattr("SPELLING").expect("the spelling is defined");
-    let schema = build_schema(&spelling, &mut literals, &mut definitions)
+    let schema = build_root(&spelling, &mut literals, &mut definitions)
         .expect("a walk shape's spelling always builds");
     let validator = Validator::checked(schema, literals.into_items(), definitions)
         .expect("a walk shape's schema is within every limit");

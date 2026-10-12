@@ -36,7 +36,7 @@ pub use crate::validator::Validator;
 
 use crate::validator::{MAX_DEFINITIONS, MAX_SCHEMA_DEPTH, MAX_SCHEMA_NODES, OpenDefinition};
 
-use crate::build::{Pool, build_instances, build_schema, combine};
+use crate::build::{Pool, build_instances, build_root, combine};
 
 /// Build a recursive schema as a checked fixpoint.
 ///
@@ -76,7 +76,7 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
     };
     let mut literals = Pool::default();
     let mut definitions = Vec::new();
-    let body = build_schema(&body_obj, &mut literals, &mut definitions)?;
+    let body = build_root(&body_obj, &mut literals, &mut definitions)?;
     // The body becomes a definition; the self-reference resolves to it.
     let ref_id = DefIx::new(definitions.len());
     // The marker is resolved wherever the build put it. A `recursive` inside the
@@ -175,7 +175,7 @@ fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
 fn complement(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
     let mut literals = Pool::default();
     let mut definitions = Vec::new();
-    let inner = build_schema(schema, &mut literals, &mut definitions)?;
+    let inner = build_root(schema, &mut literals, &mut definitions)?;
     Validator::checked(inner.complement(), literals.into_items(), definitions)
 }
 

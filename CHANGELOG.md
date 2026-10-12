@@ -23,6 +23,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a product split across a wide union is held to the depth bound
 - fix: a named tuple is read once, as the positions it lays out
 - feat!: a validator carries no simplify method
+- fix: a validator built inside another build is measured on its own
 
 -->
 
@@ -75,6 +76,12 @@ answer of its own, or a repair to a change not yet released.
 
 ### Fixed
 
+- **A validator built inside another build is measured on its own.** An
+  annotation the frontend evaluates can construct a `Validator` -- a predicate
+  built in a field's `Annotated` metadata -- and that build started from the
+  depth and the node count of the build around it, so a schema within the
+  bounds was refused as nested too deep. Each build begun from the API counts
+  only itself. The refusal past the depth bound names the bound it passed.
 - **A map is refuted on a key the other reads one way.** A relation between two
   maps was left undecided wherever a refutation needed a key the subject's
   clause admits: `{str: int}.open()` against `{str: int}`, `dict` and `{str:

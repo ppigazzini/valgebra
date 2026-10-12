@@ -27,7 +27,7 @@ import sys
 import textwrap
 import time
 import types
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal, TypedDict
 
 import pytest
 from annotated_types import MultipleOf
@@ -225,6 +225,35 @@ def test_a_schema_at_the_depth_limit_still_works() -> None:
     # One more step crosses the bound and is rejected.
     with pytest.raises(ValueError, match="too deep"):
         Validator([deep])
+
+
+def _a_predicate_built_while_reading() -> Callable[[object], bool]:
+    """Build a validator sixty lists deep, from inside an annotation.
+
+    The frontend evaluates the annotation that names this call, so the build
+    here begins while the build reading that annotation is still open.
+    """
+    return Validator(_nested_annotation(60)).is_valid
+
+
+def test_a_build_begun_inside_a_build_counts_only_its_own_depth() -> None:
+    """A validator built while another build runs is measured on its own.
+
+    A record eighty lists down whose field's predicate is a validator sixty
+    lists deep: each schema is well within the depth bound, and the two
+    together are past it. The inner build is a build of its own, so it starts
+    from no depth rather than from the outer one's.
+    """
+
+    class Record(TypedDict):
+        value: Annotated[object, _a_predicate_built_while_reading()]
+
+    schema: object = Record
+    value: object = {"value": _nested_value(60)}
+    for _ in range(80):
+        schema = list[schema]  # type: ignore[valid-type]
+        value = [value]
+    assert Validator(schema).is_valid(value)
 
 
 def test_the_definition_bound_admits_its_own_number_and_refuses_one_past() -> None:

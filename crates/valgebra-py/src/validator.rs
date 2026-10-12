@@ -18,7 +18,7 @@ use pyo3::{PyTraverseError, PyVisit};
 use rustc_hash::FxHashMap;
 use valgebra_core::{Measure, Openness, Relation, Schema};
 
-use crate::build::{Pool, PoolKeys, build_schema};
+use crate::build::{Pool, PoolKeys, build_root};
 use crate::check::{
     Ctx, Frame, Unwritten, ValidatorIndex, WalkMode, WalkState, build_index, member,
 };
@@ -343,7 +343,7 @@ impl Validator {
         let mut literals =
             Pool::seeded(py, self.literals.iter().map(|o| o.clone_ref(py)).collect());
         let mut definitions = self.definitions.clone();
-        let other_schema = build_schema(other, &mut literals, &mut definitions)?;
+        let other_schema = build_root(other, &mut literals, &mut definitions)?;
         let members = if side == Operand::Left {
             vec![other_schema, self.schema.clone()]
         } else {
@@ -441,7 +441,7 @@ impl Validator {
     fn py_new(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
         let mut literals = Pool::default();
         let mut definitions = Vec::new();
-        let schema = build_schema(schema, &mut literals, &mut definitions)?;
+        let schema = build_root(schema, &mut literals, &mut definitions)?;
         Validator::checked(schema, literals.into_items(), definitions)
     }
 
@@ -673,7 +673,7 @@ impl Validator {
     fn is_subtype_of(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         let mut literals = self.relation_pool(py, other);
         let mut definitions = self.definitions.clone();
-        let other = build_schema(other, &mut literals, &mut definitions)?;
+        let other = build_root(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations::new(py, literals.items(), &definitions);
         let holds = self
             .schema
@@ -718,7 +718,7 @@ impl Validator {
     fn relation_to(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<&'static str> {
         let mut literals = self.relation_pool(py, other);
         let mut definitions = self.definitions.clone();
-        let other = build_schema(other, &mut literals, &mut definitions)?;
+        let other = build_root(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations::new(py, literals.items(), &definitions);
         let relation = self
             .schema
@@ -751,7 +751,7 @@ impl Validator {
     fn is_equivalent(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         let mut literals = self.relation_pool(py, other);
         let mut definitions = self.definitions.clone();
-        let other = build_schema(other, &mut literals, &mut definitions)?;
+        let other = build_root(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations::new(py, literals.items(), &definitions);
         let equivalent = self
             .schema

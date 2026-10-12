@@ -482,16 +482,12 @@ impl BuildGuard {
         });
         if depth > MAX_BUILD_DEPTH {
             BUILD.with(|build| build.depth.set(depth - 1));
-            return Err(not_implemented(
-                format!(
-                    "schema nesting is too deep to compile: the frontend descended \
-                 {MAX_BUILD_DEPTH} levels without reaching a leaf. A class whose \
-                 own type appears in its fields is recursive and never bottoms \
-                 out; write it with recursive(...), which ties the fixpoint \
-                 explicitly."
-                )
-                .as_str(),
-            ));
+            return Err(not_implemented(format!(
+                "schema nesting is too deep to compile: the frontend descended \
+                 past {MAX_BUILD_DEPTH} levels, one more than a schema may nest. \
+                 A class whose own type appears in its fields never bottoms out; \
+                 write it with recursive(...), which ties the fixpoint explicitly."
+            )));
         }
         if before > MAX_SCHEMA_NODES {
             BUILD.with(|build| build.depth.set(depth - 1));
@@ -838,6 +834,63 @@ fn read_extension(
         return build_alias(obj, lits, defs).map(Some);
     }
     Ok(None)
+}
+
+/// The state a build in progress keeps on this thread, set aside while a build
+/// begun from the API runs and handed back when it ends.
+///
+/// The guard's counts and the open aliases are the thread's, and a build can
+/// begin inside another: an annotation the frontend evaluates may construct a
+/// `Validator` of its own. Without this the inner build would start at the
+/// outer one's depth and node count, and a schema within the bounds would be
+/// refused for the build around it.
+struct RootScope {
+    depth: usize,
+    descents: usize,
+    held: usize,
+    aliases: Vec<OpenAlias>,
+}
+
+impl RootScope {
+    fn enter() -> RootScope {
+        let (depth, descents, held) = BUILD.with(|build| {
+            (
+                build.depth.replace(0),
+                build.descents.replace(0),
+                build.held.replace(0),
+            )
+        });
+        let aliases = OPEN_ALIASES.with_borrow_mut(std::mem::take);
+        RootScope {
+            depth,
+            descents,
+            held,
+            aliases,
+        }
+    }
+}
+
+impl Drop for RootScope {
+    fn drop(&mut self) {
+        BUILD.with(|build| {
+            build.depth.set(self.depth);
+            build.descents.set(self.descents);
+            build.held.set(self.held);
+        });
+        OPEN_ALIASES.with_borrow_mut(|open| *open = std::mem::take(&mut self.aliases));
+    }
+}
+
+/// Build the IR from a native Python schema description, as a build of its
+/// own: the entry every caller outside the frontend takes, where
+/// [`build_schema`] is one descent inside a build.
+pub(crate) fn build_root(
+    obj: &Bound<'_, PyAny>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let _scope = RootScope::enter();
+    build_schema(obj, lits, defs)
 }
 
 /// Build the IR from a native Python schema description.
@@ -1278,7 +1331,7 @@ pub(crate) fn combine(
     let mut definitions = Vec::new();
     let mut members = Vec::with_capacity(args.len());
     for arg in args.iter() {
-        members.push(build_schema(&arg, &mut literals, &mut definitions)?);
+        members.push(build_root(&arg, &mut literals, &mut definitions)?);
     }
     // The definitions go to the fold as well as to the validator: a member that
     // is a reference is not a set on its own evidence, and the complement law
@@ -1566,6 +1619,18 @@ pub(crate) fn not_implemented(message: impl Into<String>) -> PyErr {
     PyNotImplementedError::new_err(message.into())
 }
 
+mod classes;
+mod dialect;
+mod generics;
+mod refine;
+
+#[cfg(all(test, feature = "interpreter-tests"))]
+use classes::annotations_as_written;
+use classes::build_type_object;
+pub(crate) use classes::{build_instances, declares_fields};
+use generics::{build_dict, build_parametrized, build_sequence};
+use refine::build_refine;
+
 // Needs a live interpreter; compiled and run only under the `interpreter-tests`
 // feature, which links an embedded Python.
 /// The frontend, driven against real annotations through a real interpreter.
@@ -1592,18 +1657,6 @@ pub(crate) fn not_implemented(message: impl Into<String>) -> PyErr {
 /// order names `annotated_types` as its `__module__`, never by importing the
 /// module, so a class here that sets its `__module__` to that name exercises
 /// the same arm as the vocabulary's own.
-mod classes;
-mod dialect;
-mod generics;
-mod refine;
-
-#[cfg(all(test, feature = "interpreter-tests"))]
-use classes::annotations_as_written;
-use classes::build_type_object;
-pub(crate) use classes::{build_instances, declares_fields};
-use generics::{build_dict, build_parametrized, build_sequence};
-use refine::build_refine;
-
 #[cfg(all(test, feature = "interpreter-tests"))]
 mod interpreter;
 

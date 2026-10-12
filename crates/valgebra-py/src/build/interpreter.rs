@@ -1458,6 +1458,45 @@ fn the_build_descends_one_level_past_the_construction_bound() {
     });
 }
 
+/// A build begun from the API is a build of its own: begun while another
+/// build stands deep, as one does while it evaluates an annotation that
+/// constructs a validator, it counts from nought, and it hands the thread back
+/// the counts it found.
+#[test]
+fn a_build_begun_inside_a_build_counts_from_nought_and_gives_the_counts_back() {
+    Python::attach(|py| {
+        let namespace = namespace(py).expect("the corpus namespace");
+        let mut chain = "int".to_owned();
+        for _ in 0..crate::validator::MAX_SCHEMA_DEPTH {
+            chain = format!("list[{chain}]");
+        }
+        let chain = CString::new(chain).expect("an annotation holds no NUL");
+        let annotation = py
+            .eval(&chain, Some(&namespace), None)
+            .expect("the chain evaluates");
+        let standing = (100, 7, 11);
+        BUILD.with(|build| {
+            build.depth.set(standing.0);
+            build.descents.set(standing.1);
+            build.held.set(standing.2);
+        });
+        let mut pool = Pool::default();
+        let mut defs = Vec::new();
+        let inner = build_root(&annotation, &mut pool, &mut defs);
+        let after = BUILD.with(|build| (build.depth.get(), build.descents.get(), build.held.get()));
+        BUILD.with(|build| {
+            build.depth.set(0);
+            build.descents.set(0);
+            build.held.set(0);
+        });
+        assert!(
+            inner.is_ok(),
+            "a chain at the bound, begun inside a build, was refused: {inner:?}"
+        );
+        assert_eq!(after, standing, "the build kept the thread's counts");
+    });
+}
+
 /// A bound of exactly `int`, `float` or `bool` is placed in `numbers.Number`'s
 /// register without asking the ABC, whose question is a Python function called
 /// once a bound; a bound of any other type is asked. The count is of this
