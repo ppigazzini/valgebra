@@ -22,10 +22,7 @@ from the top-level `valgebra` namespace.
 ::: valgebra.instance_of
 
 The whole-schema transforms `open` and `close` are methods on the compiled
-validator (`Validator.open`/`close`), documented above, and so is `simplify`,
-which is **deprecated**: a schema is built in the lattice normal form, and what
-`simplify` folds beyond it the relations decide ([the algebra
-guide](04-algebra.md)).
+validator (`Validator.open`/`close`), documented above.
 
 What `open` and `close` move is the **key-type region no clause claims**:
 opening frees it and closing refuses it, and neither touches a region a clause

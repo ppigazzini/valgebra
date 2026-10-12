@@ -270,39 +270,6 @@ assert intersection(int, str).is_equivalent(nothing)
 assert intersection(int, str) != Validator(nothing)
 ```
 
-## The simplifier is going
-
-`simplify` is **deprecated** and is removed in the next minor version. Calling it
-emits a `DeprecationWarning`, which is raised only where warnings are errors
-(`-W error`).
-
-A schema is built in the lattice normal form, so the reduction `simplify`
-promises is the schema you already hold: `repr` shows it and `==` compares it.
-
-```python
-from valgebra import complement, intersection, union
-
-assert repr(complement(complement(int))) == "int"
-assert repr(union(int, int)) == "int"
-assert repr(intersection(int, complement(int))) == "nothing"
-```
-
-What `simplify` still does beyond that is not a law but a **decision**: a meet of
-two provably disjoint kinds is the bottom, a join whose members cover every
-region is the top. The three relations decide those and a great deal more,
-without rewriting a term:
-
-```python
-from valgebra import Validator, complement, intersection, union
-
-assert intersection(int, str).is_empty()  # disjoint kinds
-assert union(int, complement(bool), Validator(1)).is_equivalent(object)
-```
-
-Ask the relation the question. A schema is a set, and `is_empty`,
-`is_subtype_of` and `is_equivalent` are how you ask about one; a smaller term
-that denotes the same set answers nothing a relation does not answer better.
-
 ## Subtyping, equivalence, and emptiness
 
 A compiled validator can be compared with another schema as *sets*. `is_subtype_of`

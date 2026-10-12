@@ -527,7 +527,7 @@ dunders the stub declares behind `in`, `|`, `==`, `hash`, `copy` and `pickle`
 
 | Product | Cells | Named | Asserted | Empty, with a reason |
 |---|---|---|---|---|
-| every public name a caller reaches | 39 | 39 | 39 | 0 |
+| every public name a caller reaches | 38 | 38 | 38 | 0 |
 | every error code a report can carry | 41 | 35 | 35 | 6 |
 
 **Named and asserted are two different claims**, and the ratio the lane prints
@@ -697,7 +697,7 @@ fails.
 
 **What a coverage figure leaves over, and why.** Reading the annotated report
 for the core's shipped scope leaves **under a hundred** statement lines no
-test executes, and they are four kinds rather than a backlog. The figure is
+test executes, and they are three kinds rather than a backlog. The figure is
 rounded on purpose: an exact one is right for a day and no gate reads it, and a
 page carrying a number nothing holds is wrong the day the number moves. Take the
 reading in a fresh `CARGO_TARGET_DIR` -- a profile merged against objects
@@ -715,28 +715,23 @@ hold.
   bound refuses first. `budget::under` reaches some of them by shrinking the
   allowance instead, which is how the map lattice's declining verdict is
   driven, and the rest are the same arm one representation over;
-- the deprecated simplifier's folds, which go with it in the next minor;
 - an arm only the binding reaches. A label a report carries, a path segment a
   key renders into: the core writes them and the Python suite reads them, so
   the *line* runs on the other side of the boundary from the crate whose figure
   this is.
 
-**A fifth kind was there and is not a kind: a branch the caller already
-answered.** Three of them, and no input reached any: a reflexivity check whose
-caller returns on schema equality one frame up, a region comparison its caller
-makes four lines above, and the arm of a search for a class the guard beside it
-had matched. They read like the first kind and are not -- an invariant a
+**A branch the caller already answered is not a fourth kind.** A reflexivity
+check whose caller returns on schema equality one frame up, a region comparison
+its caller makes four lines above, the arm of a search for a class the guard
+beside it matches: they read like the first kind and are not -- an invariant a
 *value* cannot break is a line worth keeping, while a question answered one
 frame up is a line to delete. What separates them is whether the answer comes
 from the shape of the data or from the shape of the call, and the second is
-closed by deletion rather than by a test. Two files read every line and every
-region once those went and the walk through a resolved reference gained the
-test it never had.
+closed by deletion rather than by a test.
 
-None of the four is closed by a test worth writing, and saying so is what
-separates them from the lines that were: a table over the node set closed a
-file's worth of them in one commit, and it closed them because they were
-reachable and nobody had asked.
+None of the three is closed by a test worth writing, and saying so is what
+separates them from lines a test can reach: a table over the node set closes a
+file's worth of those at once, because they are reachable and nobody asked.
 
 **Some arms only a free-threaded interpreter reaches, and no lane measures
 one.**

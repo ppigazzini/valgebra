@@ -1,9 +1,9 @@
 //! A fixed, deterministic workload over the core schema operations.
 //!
 //! This is the body of the instruction-count regression gate. It runs the
-//! simplifier, the composition index remap, and the open/closed record
-//! transform a fixed number of times over a fixed corpus, then prints a
-//! checksum so the optimizer cannot discard the work. Run under cachegrind, its
+//! composition index remap and the open/closed record transform a fixed
+//! number of times over a fixed corpus, then prints a checksum so the
+//! optimizer cannot discard the work. Run under cachegrind, its
 //! instruction count is deterministic for a given build, so a committed budget
 //! catches a regression without depending on a noisy wall clock.
 //!
@@ -11,40 +11,10 @@
 //! iteration count is large. Keep the corpus and `ITERATIONS` fixed; changing
 //! either moves the budget and requires re-recording it.
 
-#![expect(
-    deprecated,
-    reason = "the reducer is measured while it is still shipped; a deprecation is not a licence to let its cost drift"
-)]
-
-use std::sync::Arc;
-
 use valgebra_core::{ConstIx, DefShift, Field, Openness, PoolShift, Schema, SeqShape};
 
 /// Iterations per operation. Large enough that startup is a rounding error.
 const ITERATIONS: usize = 2_000;
-
-/// A redundant Boolean expression exercising every simplifier rewrite.
-fn boolean_corpus(depth: usize) -> Schema {
-    let mut node = Schema::Union(
-        vec![
-            Schema::Int,
-            Schema::Int,
-            Schema::Nothing,
-            Schema::Complement(Arc::new(Schema::Complement(Arc::new(Schema::Str)))),
-        ]
-        .into(),
-    );
-    for _ in 0..depth {
-        node = Schema::Complement(Arc::new(Schema::Intersection(
-            vec![
-                node.clone(),
-                Schema::Union(vec![Schema::Bool, Schema::ANYTHING, node].into()),
-            ]
-            .into(),
-        )));
-    }
-    node
-}
 
 /// A wide record whose fields carry pool-indexed leaves.
 fn wide_record(width: usize) -> Schema {
@@ -82,14 +52,12 @@ fn nested_records(depth: usize) -> Schema {
 }
 
 fn main() {
-    let boolean = boolean_corpus(8);
     let record = wide_record(64);
     let nested = nested_records(32);
 
     // Fold a checksum through each result so nothing is optimized away.
     let mut checksum: usize = 0;
     for _ in 0..ITERATIONS {
-        checksum = checksum.wrapping_add(std::hint::black_box(&boolean).simplify().depth_marker());
         checksum = checksum.wrapping_add(
             std::hint::black_box(&record)
                 .shifted(PoolShift::new(100), DefShift::new(0))

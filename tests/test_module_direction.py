@@ -31,9 +31,9 @@ rather than a separation.
 `ir.rs` is under the same rule and for a stronger reason: it is the term, which
 both readings are readings *of*. Its constructors apply the lattice laws while a
 schema is built -- a join carrying a member together with its complement is the
-top -- and the one statement of that law is in `oracle.rs`, which `simplify.rs`
-and the emptiness decision read from there too. Stated inside either decider it
-would be an edge from the term to a reading of it.
+top -- and the one statement of that law is in `oracle.rs`, which the emptiness
+decision reads from there too. Stated inside a decider it would be an edge from
+the term to a reading of it.
 
 LEDGER: the definition, the term and the membership walk import nothing from
 the structural procedure
@@ -99,7 +99,7 @@ def test_the_term_imports_nothing_from_the_optimisation() -> None:
     reader. The edge this refuses is the one that was there: `ir.rs` naming
     `crate::decision` to fold `A | ~A` at construction.
     """
-    for name in ("ir.rs", "ir/transform.rs", "ir/intern.rs", "simplify.rs"):
+    for name in ("ir.rs", "ir/transform.rs", "ir/intern.rs"):
         source = CORE / name
         assert source.exists(), f"{name} is gone; this rule names a file that moved"
         offenders = [

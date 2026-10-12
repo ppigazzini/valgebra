@@ -1,8 +1,3 @@
-#![expect(
-    deprecated,
-    reason = "the laws of a deprecated reducer are held until it is removed, and a law nobody checks is how a deprecation period ships a regression"
-)]
-
 use std::sync::Arc;
 
 use crate::ir::Polarity;
@@ -1305,8 +1300,7 @@ fn sequence_transforms_reach_the_prefix_and_the_tail() {
 
     // The Ref sits under the sequence guard, so it is not unguarded.
     assert!(!seq.occurs_unguarded(DefIx::new(0), Guarded::No));
-    // simplify and with_records_open preserve the sequence shape.
-    assert!(matches!(seq.simplify(), Schema::Seq { .. }));
+    // with_records_open preserves the sequence shape.
     assert!(matches!(
         seq.with_records_open(Openness::Open),
         Schema::Seq { .. }
@@ -1360,14 +1354,14 @@ fn not(s: Schema) -> Schema {
 }
 
 #[test]
-fn simplify_decides_the_complement_laws() {
-    // X ∩ ¬X = ⊥ and X ∪ ¬X = ⊤.
+fn construction_folds_the_complement_laws_and_the_relations_decide_the_kinds() {
+    // X ∩ ¬X = ⊥ and X ∪ ¬X = ⊤, folded where the schema is built.
     assert_eq!(
-        Schema::Intersection(vec![Schema::Int, not(Schema::Int)].into()).simplify(),
+        Schema::meet([Schema::Int, Schema::Int.complement()]),
         Schema::Nothing
     );
     assert_eq!(
-        Schema::Union(vec![Schema::Int, not(Schema::Int)].into()).simplify(),
+        Schema::union([Schema::Int, Schema::Int.complement()]),
         Schema::ANYTHING
     );
     // The law is the complementary pair itself, not scalar-region coverage: an
@@ -1375,30 +1369,24 @@ fn simplify_decides_the_complement_laws() {
     // the pair, with the whole universe left unaccounted for by the bitset.
     let opaque = Schema::list(SeqShape::homogeneous(Schema::Int));
     assert_eq!(
-        Schema::Union(vec![opaque.clone(), not(opaque)].into()).simplify(),
+        Schema::union([opaque.clone(), opaque.complement()]),
         Schema::ANYTHING
     );
-    // Disjoint basics and disjoint container kinds give an empty intersection.
-    assert_eq!(
-        Schema::Intersection(vec![Schema::Int, Schema::Str].into()).simplify(),
-        Schema::Nothing
-    );
-    assert_eq!(
-        Schema::Intersection(
-            vec![
-                Schema::list(SeqShape::homogeneous(Schema::Int)),
-                Schema::set(Schema::Int),
-            ]
-            .into()
-        )
-        .simplify(),
-        Schema::Nothing
+    // Disjoint basics and disjoint container kinds give an empty intersection,
+    // which needs a decision rather than a law: the meet is built as written
+    // and the relation proves it empty.
+    let kinds = Schema::meet([Schema::Int, Schema::Str]);
+    assert!(matches!(kinds, Schema::Intersection(_)));
+    assert!(kinds.is_empty());
+    assert!(
+        Schema::meet([
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Schema::set(Schema::Int),
+        ])
+        .is_empty()
     );
     // bool ⊆ int, so their intersection is not empty.
-    assert_ne!(
-        Schema::Intersection(vec![Schema::Bool, Schema::Int].into()).simplify(),
-        Schema::Nothing
-    );
+    assert!(!Schema::meet([Schema::Bool, Schema::Int]).is_empty());
 }
 
 // THEORY: any-is-the-top-spelled
@@ -1455,7 +1443,6 @@ fn no_relation_can_tell_the_two_spellings_apart() {
         .zip(around(Schema::ANYTHING))
     {
         assert_eq!(any, top, "the spellings are one schema");
-        assert_eq!(any.simplify(), top.simplify());
         assert_eq!(any.is_empty(), top.is_empty(), "{any:?}");
         for other in &others {
             assert_eq!(
@@ -1477,35 +1464,35 @@ fn no_relation_can_tell_the_two_spellings_apart() {
 /// `Any` is the top, spelled, so the complement laws hold of it: it is the
 /// same node as `anything`, and a rule cannot tell the two apart because the
 /// spelling compares equal. What survives is the spelling itself, which
-/// `simplify` carries through an identity so `repr` still gives back what
+/// construction carries through an identity so `repr` still gives back what
 /// the user wrote.
 #[test]
 fn the_complement_laws_hold_of_the_top_however_it_is_spelled() {
     assert_eq!(Schema::ANY, Schema::ANYTHING);
     for top in [Schema::ANY, Schema::ANYTHING] {
         assert_eq!(
-            Schema::Intersection(vec![top.clone(), not(top.clone())].into()).simplify(),
+            Schema::meet([top.clone(), top.clone().complement()]),
             Schema::Nothing
         );
         assert_eq!(
-            Schema::Union(vec![top.clone(), not(top.clone())].into()).simplify(),
+            Schema::union([top.clone(), top.clone().complement()]),
             Schema::ANYTHING
         );
-        assert_eq!(not(top.clone()).simplify(), Schema::Nothing);
+        assert_eq!(top.clone().complement(), Schema::Nothing);
     }
     // Mixed spellings are one set, so the law fires across them too.
     assert_eq!(
-        Schema::Intersection(vec![Schema::ANY, not(Schema::ANYTHING)].into()).simplify(),
+        Schema::meet([Schema::ANY, Schema::ANYTHING.complement()]),
         Schema::Nothing
     );
     // And the spelling survives an identity, which is what `repr` reads.
     assert!(matches!(
-        Schema::Union(vec![Schema::ANY, Schema::Int].into()).simplify(),
+        Schema::union([Schema::ANY, Schema::Int]),
         Schema::Anything(Spelling::Any)
     ));
 
     // The laws are about the *set*, and the fold above is one way to reach
-    // them: it rewrites the term. The decision is the other, and it reads a
+    // them: construction builds the term folded. The decision is the other, and it reads a
     // term the fold never touched, so the two together say the spelling is
     // invisible to both halves of the tree rather than folded away before
     // either looks. Built through the enum rather than through `meet`/`join`,
@@ -1936,94 +1923,6 @@ fn an_unguarded_occurrence_is_found_through_a_definition() {
     // A reference naming no definition is a term the frontend never builds;
     // the guard reads it as reaching nothing rather than as a panic.
     assert!(!Schema::Ref(DefIx::new(9)).occurs_unguarded_under(first, Guarded::No, &bare));
-}
-
-/// The De Morgan path collapses the bounds it meets, in both directions.
-///
-/// A complement of a meet becomes a join of complements, built from members
-/// the pass has already normalised -- re-normalising them is the exponential
-/// blowup the helpers exist to avoid, so they fold the bounds themselves
-/// rather than delegating. That leaves two small tables to get right, and the
-/// arms reachable only along this path are the ones a complement of a bound
-/// produces: the top absorbing a join, the bottom absorbing a meet, and each
-/// dropping out of the other.
-///
-/// Read as sets, this is the top and bottom identities surviving De Morgan,
-/// which is the one thing a fast path around normalisation can quietly lose.
-#[test]
-fn the_de_morgan_path_folds_the_bounds_it_builds() {
-    // ¬(⊥ ∩ int) = ¬⊥ ∪ ¬int = ⊤ ∪ ¬int = ⊤: the top absorbs the join.
-    assert_eq!(
-        not(Schema::Intersection(
-            vec![Schema::Nothing, Schema::Int].into()
-        ))
-        .simplify(),
-        Schema::ANYTHING
-    );
-    // ¬(⊤ ∪ int) = ¬⊤ ∩ ¬int = ⊥ ∩ ¬int = ⊥: the bottom absorbs the meet.
-    assert_eq!(
-        not(Schema::Union(vec![Schema::ANYTHING, Schema::Int].into())).simplify(),
-        Schema::Nothing
-    );
-    // ¬(⊤ ∩ int) = ⊥ ∪ ¬int = ¬int: the bottom drops out of a join.
-    assert_eq!(
-        not(Schema::Intersection(
-            vec![Schema::ANYTHING, Schema::Int].into()
-        ))
-        .simplify(),
-        not(Schema::Int).simplify()
-    );
-    // ¬(⊥ ∪ int) = ⊤ ∩ ¬int = ¬int: the top drops out of a meet.
-    assert_eq!(
-        not(Schema::Union(vec![Schema::Nothing, Schema::Int].into())).simplify(),
-        not(Schema::Int).simplify()
-    );
-
-    // And a member that is itself a join flattens into the one being built,
-    // rather than nesting a level per complement crossed.
-    let nested = not(Schema::Intersection(
-        vec![
-            Schema::Complement(Arc::new(Schema::Union(
-                vec![Schema::Int, Schema::Str].into(),
-            ))),
-            Schema::Bytes,
-        ]
-        .into(),
-    ))
-    .simplify();
-    assert!(
-        matches!(&nested, Schema::Union(members) if members
-            .iter()
-            .all(|member| !matches!(member, Schema::Union(_)))),
-        "a join nested inside the join it is built into: {nested:?}"
-    );
-    // The dual, so neither table is held by the other's row. The inner meet
-    // is two refinements of one base, which the pass leaves standing: a meet
-    // of two kinds would fold to the bottom before the arm was reached.
-    let bounded = |constraint| Schema::Refine {
-        base: Arc::new(Schema::Str),
-        constraints: vec![constraint].into(),
-    };
-    let nested = not(Schema::Union(
-        vec![
-            Schema::Complement(Arc::new(Schema::Intersection(
-                vec![
-                    bounded(Constraint::MinLen(1)),
-                    bounded(Constraint::MaxLen(5)),
-                ]
-                .into(),
-            ))),
-            Schema::Bytes,
-        ]
-        .into(),
-    ))
-    .simplify();
-    assert!(
-        matches!(&nested, Schema::Intersection(members) if members
-            .iter()
-            .all(|member| !matches!(member, Schema::Intersection(_)))),
-        "a meet nested inside the meet it is built into: {nested:?}"
-    );
 }
 
 /// A tree over every way a schema holds a child, with markers among its

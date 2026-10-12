@@ -1,8 +1,3 @@
-#![expect(
-    deprecated,
-    reason = "the laws of a deprecated reducer are held until it is removed, and a law nobody checks is how a deprecation period ships a regression"
-)]
-
 use std::sync::Arc;
 
 use super::*;
@@ -100,8 +95,9 @@ fn carriers() -> Vec<fn(Schema) -> Schema> {
 /// for -- a list of at most zero elements is the empty list, and its base is
 /// nowhere near it -- and no pair drawn from atoms and connectives would have
 /// shown it. The laws are left over the fragment they were written for, because
-/// their claim is structural equality after simplification and a sequence is
-/// ordered into a normal form differently; the claim here is about answers.
+/// their claim is structural equality of the normal form construction builds
+/// and a sequence is ordered into a normal form differently; the claim here is
+/// about answers.
 fn shaped_schema() -> impl Strategy<Value = Schema> {
     let atom = prop_oneof![
         Just(Schema::ANYTHING),
@@ -349,6 +345,22 @@ fn intersection(a: Schema, b: Schema) -> Schema {
 }
 fn not(a: Schema) -> Schema {
     Schema::Complement(Arc::new(a))
+}
+
+/// The schema `raw` spells, built the way a caller builds one: every join,
+/// meet, complement and refinement through its constructor, so the folds
+/// construction applies -- flattening, the bounds, order and repeats, a
+/// complement and its double, a member beside its own complement -- are applied
+/// at every level. The three builders above leave a term as written, so a law
+/// comparing two built forms is a law of the constructors.
+fn built(raw: &Schema) -> Schema {
+    match raw {
+        Schema::Union(members) => Schema::union(members.iter().map(built)),
+        Schema::Intersection(members) => Schema::meet(members.iter().map(built)),
+        Schema::Complement(inner) => built(inner).complement(),
+        Schema::Refine { base, constraints } => Schema::refine(built(base), constraints.to_vec()),
+        _ => raw.map_children(&built),
+    }
 }
 
 /// One representative value per distinguishable scalar region. The five
@@ -1217,77 +1229,32 @@ fn reindexed_remaps_pool_and_definition_indices() {
 }
 
 #[test]
-fn simplify_canonicalizes_refinement_constraints() {
-    let refine = |base, constraints: Vec<Constraint>| Schema::Refine {
-        base: Arc::new(base),
-        constraints: constraints.into(),
+fn a_refinement_is_built_with_its_constraints_ordered_and_once() {
+    let at_least = Constraint::Ge(OperandIx::new(0));
+    let at_most = Constraint::Le(OperandIx::new(1));
+    let canonical = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![at_least.clone(), at_most.clone()].into(),
     };
     // A repeated constraint collapses (idempotence over the conjunction).
     assert_eq!(
-        refine(
-            Schema::Int,
-            vec![
-                Constraint::Ge(OperandIx::new(0)),
-                Constraint::Ge(OperandIx::new(0))
-            ]
-        )
-        .simplify(),
-        refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(0))])
+        Schema::refine(Schema::Int, vec![at_least.clone(), at_least.clone()]),
+        Schema::refine(Schema::Int, vec![at_least.clone()])
     );
-    // Constraint order does not matter: both spellings share one normal form.
+    // Constraint order does not matter: both spellings build one term.
     assert_eq!(
-        refine(
-            Schema::Int,
-            vec![
-                Constraint::Le(OperandIx::new(1)),
-                Constraint::Ge(OperandIx::new(0))
-            ]
-        )
-        .simplify(),
-        refine(
-            Schema::Int,
-            vec![
-                Constraint::Ge(OperandIx::new(0)),
-                Constraint::Le(OperandIx::new(1))
-            ]
-        )
-        .simplify()
+        Schema::refine(Schema::Int, vec![at_most.clone(), at_least.clone()]),
+        canonical
     );
-    // A refinement of a refinement flattens into one refinement over the base.
     assert_eq!(
-        refine(
-            refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(0))]),
-            vec![Constraint::Le(OperandIx::new(1))],
-        )
-        .simplify(),
-        refine(
+        Schema::refine(
             Schema::Int,
-            vec![
-                Constraint::Ge(OperandIx::new(0)),
-                Constraint::Le(OperandIx::new(1))
-            ]
-        )
+            vec![at_most.clone(), at_least.clone(), at_least.clone()]
+        ),
+        canonical
     );
-    // The base is simplified before the refinement is rebuilt.
-    assert_eq!(
-        refine(
-            Schema::Union(vec![Schema::Int, Schema::Int].into()),
-            vec![Constraint::Ge(OperandIx::new(0))],
-        )
-        .simplify(),
-        refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(0))])
-    );
-    // Canonicalization is idempotent.
-    let once = refine(
-        Schema::Int,
-        vec![
-            Constraint::Le(OperandIx::new(1)),
-            Constraint::Ge(OperandIx::new(0)),
-            Constraint::Ge(OperandIx::new(0)),
-        ],
-    )
-    .simplify();
-    assert_eq!(once.clone(), once.simplify());
+    // With no constraint there is nothing to narrow, and the base comes back.
+    assert_eq!(Schema::refine(Schema::Int, Vec::new()), Schema::Int);
 }
 
 #[test]
@@ -2149,21 +2116,23 @@ proptest! {
         }
     }
 
+    /// Construction reaches its normal form in one pass: building a built
+    /// schema again gives the same term.
     #[test]
-    fn simplify_is_idempotent(a in schema()) {
-        let once = a.simplify();
-        prop_assert_eq!(once.clone(), once.simplify());
+    fn construction_is_idempotent(a in schema()) {
+        let once = built(&a);
+        prop_assert_eq!(once.clone(), built(&once));
     }
 
     // THEORY: lattice-theory, property-testing, each-kind-is-closed
     /// The laws, as statements about the *sets* two schemas denote.
     ///
-    /// The properties below them compare two simplified schemas for
-    /// structural equality, which is a property of the simplifier: it says
-    /// the normal form does not depend on the order the members were
-    /// written in. That is worth holding and it is not the law. The law is
-    /// that the two sides admit the same values, and over the fragment the
-    /// oracle decides exactly, that is what this checks.
+    /// The properties below them compare two built schemas for structural
+    /// equality, which is a property of the constructors: it says the normal
+    /// form does not depend on the order the members were written in. That is
+    /// worth holding and it is not the law. The law is that the two sides admit
+    /// the same values, and over the fragment the oracle decides exactly, that
+    /// is what this checks.
     #[test]
     fn the_lattice_laws_hold_of_the_sets(
         a in scalar_or_set_schema(),
@@ -2196,7 +2165,7 @@ proptest! {
         prop_assert!(same(&intersection(a.clone(), Schema::ANYTHING), &a));
         prop_assert!(same(&union(a.clone(), Schema::ANYTHING), &Schema::ANYTHING));
         prop_assert!(same(&intersection(a.clone(), Schema::Nothing), &Schema::Nothing));
-        // Distributivity, which the simplifier does not apply at all, so no
+        // Distributivity, which the constructors do not apply at all, so no
         // structural property below could state it.
         prop_assert!(same(
             &intersection(a.clone(), union(b.clone(), c.clone())),
@@ -2233,61 +2202,64 @@ proptest! {
         ));
     }
 
-    /// Simplifying two sides of a law reaches one normal form. A property of
-    /// the simplifier, not of the algebra: the law itself is above.
+    /// Building two sides of a law reaches one normal form. A property of the
+    /// constructors, not of the algebra: the law itself is above.
     #[test]
     fn union_and_intersection_commute(a in schema(), b in schema()) {
-        prop_assert_eq!(union(a.clone(), b.clone()).simplify(), union(b.clone(), a.clone()).simplify());
-        prop_assert_eq!(intersection(a.clone(), b.clone()).simplify(), intersection(b, a).simplify());
+        let (a, b) = (built(&a), built(&b));
+        prop_assert_eq!(
+            Schema::union([a.clone(), b.clone()]),
+            Schema::union([b.clone(), a.clone()])
+        );
+        prop_assert_eq!(Schema::meet([a.clone(), b.clone()]), Schema::meet([b, a]));
     }
 
     #[test]
     fn union_and_intersection_associate(a in schema(), b in schema(), c in schema()) {
+        let (a, b, c) = (built(&a), built(&b), built(&c));
         prop_assert_eq!(
-            union(a.clone(), union(b.clone(), c.clone())).simplify(),
-            union(union(a.clone(), b.clone()), c.clone()).simplify()
+            Schema::union([a.clone(), Schema::union([b.clone(), c.clone()])]),
+            Schema::union([Schema::union([a.clone(), b.clone()]), c.clone()])
         );
         prop_assert_eq!(
-            intersection(a.clone(), intersection(b.clone(), c.clone())).simplify(),
-            intersection(intersection(a, b), c).simplify()
+            Schema::meet([a.clone(), Schema::meet([b.clone(), c.clone()])]),
+            Schema::meet([Schema::meet([a, b]), c])
         );
     }
 
     #[test]
     fn idempotence(a in schema()) {
-        prop_assert_eq!(union(a.clone(), a.clone()).simplify(), a.clone().simplify());
-        prop_assert_eq!(intersection(a.clone(), a.clone()).simplify(), a.simplify());
+        let a = built(&a);
+        prop_assert_eq!(Schema::union([a.clone(), a.clone()]), a.clone());
+        prop_assert_eq!(Schema::meet([a.clone(), a.clone()]), a);
     }
 
     #[test]
     fn identities(a in schema()) {
-        prop_assert_eq!(union(a.clone(), Schema::Nothing).simplify(), a.clone().simplify());
-        prop_assert_eq!(intersection(a.clone(), Schema::ANYTHING).simplify(), a.clone().simplify());
-        prop_assert_eq!(union(a.clone(), Schema::ANYTHING).simplify(), Schema::ANYTHING);
-        prop_assert_eq!(intersection(a, Schema::Nothing).simplify(), Schema::Nothing);
+        let a = built(&a);
+        prop_assert_eq!(Schema::union([a.clone(), Schema::Nothing]), a.clone());
+        prop_assert_eq!(Schema::meet([a.clone(), Schema::ANYTHING]), a.clone());
+        prop_assert_eq!(Schema::union([a.clone(), Schema::ANYTHING]), Schema::ANYTHING);
+        prop_assert_eq!(Schema::meet([a, Schema::Nothing]), Schema::Nothing);
     }
 
     #[test]
     fn double_negation(a in schema()) {
-        prop_assert_eq!(not(not(a.clone())).simplify(), a.simplify());
+        prop_assert_eq!(built(&not(not(a.clone()))), built(&a));
     }
 
     /// De Morgan, asserted over the values rather than over the two forms.
     ///
-    /// The simplifier puts a schema in negation normal form and no further,
-    /// and NNF is not canonical -- so `simplify(a) == simplify(b)` is not an
-    /// equivalence test, and a law that spells it as one is asserting
-    /// *confluence*: that two rewrite sequences reach one form. The two sides
-    /// here do take different sequences. The left simplifies a union and then
-    /// pushes the complement through it; the right complements each member
-    /// first and may then collapse the meet through a rule the left never
-    /// reaches. Any sound improvement to the simplifier that fires on one side
-    /// only fails such a law, which is what happened to a disjointness rule
-    /// that was measured, found sound, and dropped for it.
+    /// The constructors do not push a complement inward, and their normal form
+    /// is not canonical -- so `built(a) == built(b)` is not an equivalence
+    /// test, and a law that spells it as one is asserting *confluence*: that
+    /// two rewrite sequences reach one form. The two sides here are two terms:
+    /// the left complements a join, and the right meets the complements, and
+    /// any sound fold that fires on one side only fails such a law.
     ///
     /// What de Morgan actually claims is about the values, and that is what
-    /// this asserts: both forms and the unsimplified one admit the same values
-    /// over the corpus. The deciders are asked too, in the one direction that
+    /// this asserts: both forms, written and built, admit the same values over
+    /// the corpus. The deciders are asked too, in the one direction that
     /// is a defect rather than a decline -- neither may *refute* a pair the law
     /// says is one set.
     #[test]
@@ -2315,10 +2287,10 @@ proptest! {
                     "{:?} tells {:?} and {:?} apart",
                     value, left, right
                 );
-                // And simplifying moves no value of either, which is the
+                // And building moves no value of either, which is the
                 // property the structural form was standing in for.
-                prop_assert_eq!(held, member_full(&left.clone().simplify(), value, &pool));
-                prop_assert_eq!(held, member_full(&right.clone().simplify(), value, &pool));
+                prop_assert_eq!(held, member_full(&built(&left), value, &pool));
+                prop_assert_eq!(held, member_full(&built(&right), value, &pool));
             }
             prop_assert_ne!(
                 left.subtype_relation(
@@ -2343,32 +2315,31 @@ proptest! {
         }
     }
 
-    /// The strongest law check: simplification preserves membership, not just
-    /// structural shape. Over the scalar-and-set fragment the `member_v` oracle
-    /// decides exactly, so a simplified schema must admit each sample value
-    /// exactly when the original does. This catches an unsound rewrite that the
-    /// structural-equality laws above cannot, since they only compare two
-    /// already-simplified forms. Refinements carry value-level bounds the
-    /// kind-only samples cannot evaluate, so their membership preservation is
-    /// covered by the Python suite over real values.
+    /// Construction preserves membership, not just structural shape. Over the
+    /// scalar-and-set fragment the `member_v` oracle decides exactly, so a
+    /// built schema must admit each sample value exactly when the term as
+    /// written does. This catches an unsound fold that the structural-equality
+    /// laws above cannot, since they only compare two built forms. The
+    /// value-aware oracle below holds the same over refinements, literals and
+    /// records.
     #[test]
-    fn simplify_preserves_membership(a in scalar_or_set_schema()) {
-        let simplified = a.simplify();
+    fn construction_preserves_membership(a in scalar_or_set_schema()) {
+        let constructed = built(&a);
         for value in &samples_v() {
-            prop_assert_eq!(member_v(&simplified, value), member_v(&a, value));
+            prop_assert_eq!(member_v(&constructed, value), member_v(&a, value));
         }
     }
 
     /// The sound invariants over the whole structural fragment: every
-    /// procedure terminates without panicking, `simplify` reaches a fixpoint
-    /// after one application, the order is reflexive with the lattice bounds
+    /// procedure terminates without panicking, construction reaches its normal
+    /// form in one pass, the order is reflexive with the lattice bounds
     /// above and below every schema, and equivalence is exactly mutual
     /// inclusion. These hold despite the conservatism, so a violation is a
     /// defect; this is the stable-toolchain mirror of the fuzz targets.
     #[test]
     fn structural_decision_invariants(a in structural_schema(), b in structural_schema()) {
-        let once = a.simplify();
-        prop_assert_eq!(once.clone(), once.simplify());
+        let once = built(&a);
+        prop_assert_eq!(once.clone(), built(&once));
         prop_assert!(a.is_subtype_of(&a));
         prop_assert!(a.is_equivalent(&a));
         prop_assert!(a.is_subtype_of(&Schema::ANYTHING));
@@ -2389,20 +2360,6 @@ proptest! {
     }
 }
 
-/// A balanced tree of complements over unions: every level wraps two copies
-/// of the level below in a union and complements the result. Its node count
-/// doubles per level, so a single bottom-up simplification visits each node
-/// once and finishes in milliseconds, while a pass that re-normalises every
-/// member once per level it is nested under grows superlinearly on top of
-/// that and takes tens of seconds at this depth.
-fn complemented_tower(depth: usize) -> Schema {
-    if depth == 0 {
-        return Schema::Complement(Arc::new(Schema::Int));
-    }
-    let child = complemented_tower(depth - 1);
-    Schema::Complement(Arc::new(Schema::Union(vec![child.clone(), child].into())))
-}
-
 /// A tower of intersections of unions, the shape whose subtyping decision
 /// re-explored shared subtrees before the goal memo. The leaves are sets so
 /// the scalar region fast path does not short-circuit the descent.
@@ -2418,31 +2375,6 @@ fn intersection_of_unions_tower(depth: usize, leaf: Schema) -> Schema {
         );
     }
     node
-}
-
-/// The simplifier stays within a single bottom-up pass: a deeply nested
-/// complemented tree is reduced by visiting each of its nodes once. A
-/// regression to re-normalising each member per nesting level visits them
-/// once per level instead, which is what this separates.
-///
-/// The pass is measured in nodes visited rather than in seconds. One visit
-/// per node *is* the claim, and the count is the same number on every
-/// machine; a duration is a claim about the machine as much as about the
-/// pass, and it separates a linear pass from a quadratic one only where the
-/// machine is fast enough to notice.
-#[test]
-fn simplify_stays_linear_on_a_complemented_tower() {
-    let schema = complemented_tower(18);
-    // The duplicate union members collapse, so the reduced form is small. What
-    // this measures is the work of reaching it, not the size of the result.
-    assert!(matches!(schema.simplify(), Schema::Complement(_)));
-    let nodes = schema.node_count() as u64;
-    let steps = schema.simplify_steps();
-    assert!(
-        steps <= nodes,
-        "simplify visited {steps} nodes of a {nodes}-node tower; a single \
-         bottom-up pass visits each at most once"
-    );
 }
 
 /// A decision says which of the three things it established, and an exhausted
@@ -2849,15 +2781,17 @@ fn a_tail_empty_under_defs_reduces_to_the_prefix() {
     assert!(just_int.is_subtype_of_under(&with_phantom_tail, &oracle, &defs));
 }
 
-/// The union-covers-the-universe fold is a live simplification, not dead code:
-/// the complement of a scalar carries the non-scalar region, so a complement
-/// beside a covering scalar reduces to the top even when no complementary or
-/// disjoint-complement pair is present.
+/// The union-covers-the-universe reading is a live decision, not dead code: the
+/// complement of a scalar carries the non-scalar region, so a complement beside
+/// a covering scalar is the top even when no complementary pair is present,
+/// and construction leaves the join standing for the decision to read.
 #[test]
 fn a_complement_plus_a_covering_scalar_is_the_universe() {
     // ¬bool covers everything except bools; int adds the bools back.
     let everything = union(not(Schema::Bool), Schema::Int);
-    assert_eq!(everything.simplify(), Schema::ANYTHING);
+    assert!(matches!(built(&everything), Schema::Union(_)));
+    assert!(Schema::ANYTHING.is_subtype_of(&everything));
+    assert!(everything.is_equivalent(&Schema::ANYTHING));
 }
 
 // -- An independent, value-aware denotation oracle ----------------------------
@@ -2866,9 +2800,9 @@ fn a_complement_plus_a_covering_scalar_is_the_universe() {
 // `Literal[2]` or `Ge(0)` from `Ge(5)`. This oracle carries concrete values
 // and a fixed constant pool, so it decides membership for the whole
 // non-opaque fragment — literals, refinement bounds and lengths, sequences,
-// sets, and records — and is the ground truth `simplify` is checked against
-// over that fragment. It is a direct transcription of each node's denotation,
-// sharing no code with `simplify` or the decision procedure under test.
+// sets, and records — and is the ground truth construction and the decision
+// procedure are checked against over that fragment. It is a direct
+// transcription of each node's denotation, sharing no code with either.
 
 /// A concrete Python-shaped value.
 #[derive(Clone, Debug, PartialEq)]
@@ -4821,20 +4755,21 @@ fn the_value_oracle_matches_sequences_and_open_records_independently() {
 }
 
 proptest! {
-    /// Simplification preserves membership over the whole non-opaque fragment,
+    // THEORY: property-testing, the-normal-form-is-not-canonical
+    /// Construction preserves membership over the whole non-opaque fragment,
     /// judged by an independent value-aware oracle. This is the strong form of
     /// the scalar-only check above: it distinguishes literal values and bound
-    /// thresholds, so a rewrite that quietly changes which values a literal,
+    /// thresholds, so a fold that quietly changes which values a literal,
     /// refinement, sequence, set, or record admits is caught.
     #[test]
-    fn simplify_preserves_membership_over_values(schema in decidable_schema()) {
+    fn construction_preserves_membership_over_values(schema in decidable_schema()) {
         let pool = const_pool();
-        let simplified = schema.simplify();
+        let constructed = built(&schema);
         for value in &boundary_values(&[&schema]) {
             prop_assert_eq!(
-                member_full(&simplified, value, &pool),
+                member_full(&constructed, value, &pool),
                 member_full(&schema, value, &pool),
-                "simplify changed membership of {:?}", value
+                "construction changed membership of {:?}", value
             );
         }
     }

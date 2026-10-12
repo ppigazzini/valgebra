@@ -1,11 +1,10 @@
 """Node coverage matrix.
 
-For a representative schema of every IR node kind, the frontend builds it, the
-decision procedure handles it (reflexive, self-equivalent, emptiness
-terminates), and its rendered form is stable under simplification. The
-sequence-regex shapes are checked under both the list and tuple containers, so a
-capability reachable for one container but not the other -- the asymmetry class
-of hole -- fails here rather than shipping silently.
+For a representative schema of every IR node kind, the frontend builds it and
+the decision procedure handles it (reflexive, self-equivalent, emptiness
+terminates). The sequence-regex shapes are checked under both the list and
+tuple containers, so a capability reachable for one container but not the other
+-- the asymmetry class of hole -- fails here rather than shipping silently.
 
 PRODUCT: every schema node, in every walk mode
 """
@@ -31,12 +30,6 @@ from valgebra import (
     nothing,
     recursive,
     union,
-)
-
-# `simplify` is deprecated and these exercise it deliberately: the folds it
-# still performs are its own, and they are checked until it goes.
-pytestmark = pytest.mark.filterwarnings(
-    "ignore:Validator.simplify is deprecated:DeprecationWarning"
 )
 
 
@@ -91,8 +84,6 @@ def test_every_node_is_reachable_and_handled(spec: object) -> None:
     assert isinstance(compiled.is_empty(), bool)  # emptiness terminates
     assert compiled.is_subtype_of(spec)  # reflexivity
     assert compiled.is_equivalent(spec)  # self-equivalence
-    # The rendered form is stable under simplification.
-    assert repr(compiled.simplify()) == repr(compiled.simplify().simplify())  # ty: ignore[deprecated]
 
 
 # Each sequence shape must be reachable via both containers; the list and tuple
@@ -337,7 +328,6 @@ _SELF_ANSWERS: dict[str, Callable[[Validator, object], bool]] = {
     "is_empty": lambda v, spec: v.is_empty() is (spec is nothing),
     "open": lambda v, _spec: v.is_subtype_of(v.open()),
     "close": lambda v, _spec: v.close().is_subtype_of(v),
-    "simplify": lambda v, _spec: v.simplify().is_equivalent(v),  # ty: ignore[deprecated]
     "__eq__": lambda v, spec: v == Validator(spec),
     "__hash__": lambda v, spec: hash(v) == hash(Validator(spec)),
     "__or__": lambda v, _spec: (v | nothing).is_equivalent(v),

@@ -10,7 +10,7 @@ the ones beside it, and carries no claim of its own.
 
 | Zone | Owns | Page |
 |---|---|---|
-| `crates/valgebra-core/src/ir.rs`, `ir/`, `simplify.rs` | the schema IR: the node set, what each node denotes, the sharing of nodes built alike (`ir/intern.rs`), the rewrites from one node to another (`ir/transform.rs`), and the lattice-law pass the deprecated `Validator.simplify` runs (`simplify.rs`) | [01-schema-ir.md](01-schema-ir.md) |
+| `crates/valgebra-core/src/ir.rs`, `ir/` | the schema IR: the node set, what each node denotes, the sharing of nodes built alike (`ir/intern.rs`), and the rewrites from one node to another (`ir/transform.rs`) | [01-schema-ir.md](01-schema-ir.md) |
 | `crates/valgebra-core/src/lib.rs` | the core crate's root: the modules it declares, the names the binding imports from it, and the `forbid(unsafe_code)` below | this page |
 | `crates/valgebra-core/src/kind.rs`, `verdict.rs`, `oracle.rs` | the value-universe partition, its region summary, the two three-valued answers, and `LeafRelations`, the questions only the host can answer and the default that answers none — the frame both deciders and the constructors read | [02-decision.md](02-decision.md) |
 | `crates/valgebra-core/src/carries.rs` | whether the values a base admits can answer a constraint: the one rule the frontend refuses a refinement by and the laws' generator draws its refinements by | [03-frontend.md](03-frontend.md) |
@@ -353,7 +353,7 @@ table's length is outside the scan: it is the table's size, in one place.
 | `crates/valgebra-core/src/descr/automaton.rs` | `MAX_STATES` | `4096` | limit | a product of two automata, word or sequence, multiplying the state counts past memory, and a complement of a product doing it again | `crates/valgebra-core/src/descr/regular.rs` tests, `crates/valgebra-core/src/descr/symbolic.rs` tests |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_ROW` | `MAX_STATES` | limit | one row of a product growing past the alternatives a shape has | its own tests |
 | `crates/valgebra-core/src/ir/intern.rs` | `SLOTS` | `1024` | shape | the table of shared handles growing into a record of every schema a process has built: it is direct-mapped, so a collision evicts | its own tests, and `scripts/perf_gate.py --decision`, which reads 65% higher with the table answering nothing |
-| `crates/valgebra-core/src/ir/intern.rs` | `SUMMARY` | `4` | shape | a wide list paying a hash per entry for a table that is about to compare the entries anyway; the hash chooses a slot and the comparison decides, so reading fewer costs a collision and never an answer | its own tests, and `scripts/perf_gate.py --core`, which reads 4.5% higher when the hash reads every entry |
+| `crates/valgebra-core/src/ir/intern.rs` | `SUMMARY` | `4` | shape | a wide list paying a hash per entry for a table that is about to compare the entries anyway; the hash chooses a slot and the comparison decides, so reading fewer costs a collision and never an answer | its own tests, and `scripts/perf_gate.py --core`, which reads 6.8% higher when the hash reads every entry |
 | `crates/valgebra-py/src/errors.rs` | `SUMMARY_CHARS` | `80` | shape | a value summary built in full and then cut, so a huge repr is paid for and thrown away | `tests/test_error_contract.py` |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_EDGES` | `1 << 16` | limit | a table inside both dimensions and still too large: 4,096 states each with a 4,096-wide row is sixteen million edges | its own tests |
 | `crates/valgebra-core/src/descr/regular.rs` | `BUILD_SIZE_LIMIT` | `8 * 1024 * 1024` | limit | a pattern whose determinisation is exponential, which reaches `MAX_STATES` only after the table it refuses has been built | nothing at its edge: `tests/test_bound_ledger.py` accepts it, since the smallest pattern whose table sits inside the band it leaves takes seconds to build |
@@ -423,8 +423,8 @@ are settled once, where a schema is built
 ([01-schema-ir.md](01-schema-ir.md#which-laws-construction-settles)), so the
 deciders read a schema already in the constructors' normal form and rebuild none
 per query: a construction happens once, a query many times. No figure for the
-per-query cost is recorded, and the holder refuses a reference to the
-simplifier from the deciders' production files. Held by
+per-query cost is recorded, and the holder refuses a normalising pass, named
+`simplify`, in the deciders' production files. Held by
 `test_the_deciders_never_normalise_a_query` in `tests/test_refusals_ledger.py`,
 and `test_eq_is_the_normal_form_and_not_the_set` in `tests/test_operators.py`.
 

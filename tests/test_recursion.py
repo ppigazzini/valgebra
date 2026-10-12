@@ -23,12 +23,6 @@ json_value = recursive(
     lambda j: union(None, bool, int, float, str, [j], {str: j}),
 )
 
-# `simplify` is deprecated and these exercise it deliberately: the folds it
-# still performs are its own, and they are checked until it goes.
-pytestmark = pytest.mark.filterwarnings(
-    "ignore:Validator.simplify is deprecated:DeprecationWarning"
-)
-
 
 def _is_json(value: object) -> bool:
     """Independent reference denotation for `json_value`, by structural recursion."""
@@ -277,11 +271,11 @@ def test_close_removes_the_catch_all_from_a_recursive_definition() -> None:
     assert not node.close().is_valid(extra)
 
 
-def test_simplify_reduces_a_recursive_definition() -> None:
+def test_a_recursive_definition_is_built_in_the_normal_form() -> None:
     node = recursive(
         lambda n: Validator({"a": union(int, int, int), "n": union(None, n)})
     )
-    assert repr(node.simplify()).count("int") == 1  # ty: ignore[deprecated]
+    assert repr(node).count("int") == 1
 
 
 # PEP 695 is 3.12+ syntax, so the alias is written in a source string rather than

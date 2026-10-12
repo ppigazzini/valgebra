@@ -198,8 +198,8 @@ impl Validator {
     /// Assemble a validator, rejecting one whose schema is too deep, holds too
     /// many recursive definitions, or spans too many nodes. Every growth path —
     /// the `Validator(...)` constructor, the `|`/`union`/`intersection`/
-    /// `complement` combinators, `recursive`, and `simplify` — routes through
-    /// here, so no public call can build a schema that overflows the stack or
+    /// `complement` combinators, `recursive`, `instance_of`, and the
+    /// whole-schema rewrites `open` and `close` — routes through here, so no public call can build a schema that overflows the stack or
     /// exhausts memory on a later walk. A combinator's schema reaching this point
     /// grew by one step from operands already within the bounds, so it is at most
     /// one step past them — shallow and small enough that measuring it and
@@ -294,8 +294,7 @@ impl Validator {
     /// no-op on exactly the schemas with the most to rewrite.
     ///
     /// The result goes through [`checked`](Self::checked) because a rewrite is a
-    /// growth path: opening a closed record adds a catch-all clause, and
-    /// negation-normal form distributes a complement over a union.
+    /// growth path: opening a closed record adds a catch-all clause.
     fn map_schemas(&self, py: Python<'_>, f: impl Fn(&Schema) -> Schema) -> PyResult<Validator> {
         Validator::checked(
             f(&self.schema),
@@ -871,44 +870,6 @@ impl Validator {
     ///     claims.
     fn close(&self, py: Python<'_>) -> PyResult<Validator> {
         self.map_schemas(py, |schema| schema.with_records_open(Openness::Closed))
-    }
-
-    /// An equivalent validator reduced by the lattice laws. **Deprecated.**
-    ///
-    /// A schema is built in the lattice normal form, so the reduction this
-    /// promises is the schema a caller already holds: `repr` shows it and `==`
-    /// compares it. What remains here is a handful of folds that are not laws
-    /// but *decisions* -- a meet of two disjoint kinds is the bottom, a join
-    /// covering every region is the top -- and `is_empty`, `is_subtype_of` and
-    /// `is_equivalent` decide those, and more, without rewriting the term.
-    ///
-    /// Deprecated since 0.0.10 and removed in the next minor version. Ask the
-    /// relation the question instead: `intersection(int, str).is_empty()` rather
-    /// than `repr(intersection(int, str).simplify()) == "nothing"`.
-    ///
-    /// Returns:
-    ///     A validator denoting the same set in negation-normal form.
-    ///
-    /// Raises:
-    ///     ValueError: If negation-normal form expands the schema past the size
-    ///         bound (distributing a complement over a wide union can grow the
-    ///         node count); a schema built within the bounds does not hit this.
-    #[expect(
-        deprecated,
-        reason = "the binding that carries the deprecation to a Python caller calls the \
-                  deprecated core method to do it; the two are removed together"
-    )]
-    fn simplify(&self, py: Python<'_>) -> PyResult<Validator> {
-        PyErr::warn(
-            py,
-            &py.get_type::<pyo3::exceptions::PyDeprecationWarning>(),
-            c"Validator.simplify is deprecated and is removed in the next minor \
-              version: a schema is built in the lattice normal form, so `repr` \
-              already shows it, and `is_empty`/`is_subtype_of`/`is_equivalent` \
-              decide what this folds and more.",
-            1,
-        )?;
-        self.map_schemas(py, Schema::simplify)
     }
 
     /// Whether `obj` is a member of the schema's set: the operator form of

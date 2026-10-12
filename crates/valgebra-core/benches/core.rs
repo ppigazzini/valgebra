@@ -1,16 +1,11 @@
 //! Wall-clock micro-benchmarks for the pure-Rust schema operations.
 //!
 //! These cover the transformations the compiler and combinators lean on:
-//! `simplify` (the law-justified reducer), `shifted` (validator composition),
-//! `with_records_open` (the `lax`/`strict` recursive transform), and the
-//! decision procedures over the shapes a real annotation produces. The walk
+//! `shifted` (validator composition), `with_records_open` (the `lax`/`strict`
+//! recursive transform), and the decision procedures over the shapes a real
+//! annotation produces. The walk
 //! over Python values lives in the bindings crate and is benchmarked from
 //! Python; this harness isolates the work that is independent of `PyO3`.
-
-#![expect(
-    deprecated,
-    reason = "the reducer is timed while it is still shipped; a deprecation is not a licence to let its cost drift"
-)]
 
 use std::hint::black_box;
 use std::sync::Arc;
@@ -21,31 +16,6 @@ use valgebra_core::descr::lower::{Bounds, Constants, Operand, lower, lower_withi
 use valgebra_core::{
     ClassIx, ConstIx, Constraint, DefShift, Field, Openness, OperandIx, PoolShift, Schema, SeqShape,
 };
-
-/// A redundant Boolean expression that exercises every simplifier rewrite:
-/// nested unions and intersections, duplicate members, top/bottom identities,
-/// and double-negated complements.
-fn boolean_corpus(depth: usize) -> Schema {
-    let mut node = Schema::Union(
-        vec![
-            Schema::Int,
-            Schema::Int,
-            Schema::Nothing,
-            Schema::Complement(Arc::new(Schema::Complement(Arc::new(Schema::Str)))),
-        ]
-        .into(),
-    );
-    for _ in 0..depth {
-        node = Schema::Complement(Arc::new(Schema::Intersection(
-            vec![
-                node.clone(),
-                Schema::Union(vec![Schema::Bool, Schema::ANYTHING, node].into()),
-            ]
-            .into(),
-        )));
-    }
-    node
-}
 
 /// A wide record whose fields carry pool-indexed leaves, so `shifted` has to
 /// rewrite many indices in one pass.
@@ -89,13 +59,6 @@ fn nested_records(depth: usize) -> Schema {
         );
     }
     inner
-}
-
-fn bench_simplify(c: &mut Criterion) {
-    let schema = boolean_corpus(8);
-    c.bench_function("simplify_boolean_depth8", |b| {
-        b.iter(|| black_box(&schema).simplify());
-    });
 }
 
 fn bench_shifted(c: &mut Criterion) {
@@ -246,7 +209,6 @@ fn bench_lowering(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    bench_simplify,
     bench_shifted,
     bench_with_records_open,
     bench_decision,

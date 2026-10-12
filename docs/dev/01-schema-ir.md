@@ -249,6 +249,15 @@ of the string. The cost is completeness on a schema nobody can decide anyway, an
 `tests/test_combinators.py` pins the witness so the fold cannot be added back by
 someone reading only the law.
 
+**A method that reduces a schema.** Refused. Construction settles the lattice
+laws -- see "Which laws construction settles" below -- so the schema a caller
+holds already *is* the normal form a reduction would give: `repr` shows it,
+`==` compares it, and a reducing method is the identity under another name.
+What one would fold beyond the laws -- a meet of disjoint kinds, a join
+covering every region -- is a decision, and the relations make it without
+rewriting the term. `test_no_method_reduces_a_schema` in
+`tests/test_public_surface.py` fails if one named `simplify` is added.
+
 ### Arguments for the carrier change, and why each fails
 
 | argument | why it fails |
@@ -420,9 +429,8 @@ holds it to a search from the front. The digest `__hash__` reads is kept on the
 validator once computed.
 
 **Both sides or neither.** A law folded in `union` and left standing in
-`intersection` is two answers to one question, and the simplifier folds the meet
-— so such constructors would disagree with each other and with it. Stating a
-law once, in the place a schema is built, is what lets a rule downstream assume
+`intersection` is two answers to one question, so such constructors would
+disagree with each other. Stating a law once, in the place a schema is built, is what lets a rule downstream assume
 no such shape reaches it.
 
 That assumption is why a transform that *descends* must refold. Opening the
@@ -773,7 +781,8 @@ is what the three bounds hold.
 
 ## Which whole-schema operations stay
 
-`open`, `close` and `ensure` stay; `simplify` goes.
+`open`, `close` and `ensure` stay; a method that reduces a schema is refused
+above.
 
 The test is the one this page states for a node, applied to a method: a method is
 justified by what neither typing nor the algebra can express. `open` and `close`
@@ -798,13 +807,6 @@ is answering the language. `&` and `~` would be second spellings of
 `intersection` and `complement`, which the ship-versus-recipe rule refuses:
 shorter is not a reason. A validator does not pickle either, and the refusal
 says what to send instead ([docs/17-boundaries.md](../17-boundaries.md)).
-
-`simplify` is the lattice normal form of a term, and construction settles the
-laws -- see "Which laws construction settles" above -- so the schema a caller
-holds already *is* that normal form: `repr` shows it, `==` compares it, and the
-method is the identity under another name. It is deprecated rather than removed
-at once, because a method that quietly starts returning its
-argument is worse than one that says it is going.
 
 ## The limit
 

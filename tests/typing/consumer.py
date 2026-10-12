@@ -201,7 +201,6 @@ def reshape(schema: Validator[int]) -> Validator[object]:
     """
     assert_type(schema.open(), Validator[object])
     assert_type(schema.close(), Validator[int])
-    assert_type(schema.simplify(), Validator[int])  # ty: ignore[deprecated]
     assert_type(copy.copy(schema), Validator[int])
     assert_type(copy.deepcopy(schema), Validator[int])
     return schema.open().close()

@@ -77,17 +77,7 @@ _AS_WRITTEN = {"py_new": "Validator"}
 #: a note that nobody has written the row yet. Keyed by `(method, outcome)`,
 #: which is one space for both kinds: an exception a call raises and a value it
 #: answers with are both outcomes, and an excuse for either expires the same way.
-ACCEPTED: dict[tuple[str, str], str] = {
-    ("simplify", "ValueError"): (
-        "the expansion the docstring names does not happen: a schema is built in "
-        "the lattice normal form, so a complement is already distributed by the "
-        "constructors and `simplify` has nothing to grow. Driven at a union of "
-        "thirty thousand records under a complement -- past the size a build "
-        "itself refuses -- the call returns rather than raising. The method is "
-        "deprecated and goes with the next minor, and the docstring is stale "
-        "rather than the bound unreachable."
-    ),
-}
+ACCEPTED: dict[tuple[str, str], str] = {}
 
 
 def _block(doc: str, name: str) -> str:

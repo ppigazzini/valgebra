@@ -24,12 +24,6 @@ from valgebra import (
     union,
 )
 
-# `simplify` is deprecated and these exercise it deliberately: the folds it
-# still performs are its own, and they are checked until it goes.
-pytestmark = pytest.mark.filterwarnings(
-    "ignore:Validator.simplify is deprecated:DeprecationWarning"
-)
-
 _bases = st.sampled_from([int, str, bool, float, bytes, None, complex, bytearray])
 _lits = st.sampled_from(
     [
@@ -147,8 +141,8 @@ def _json_safe(value: object) -> bool:
 @given(sa=_specs, v=_values)
 def test_membership_walks_and_paths_agree(sa: object, v: object) -> None:
     # Metamorphic checks needing no oracle: the fast and explaining walks agree,
-    # simplify preserves acceptance, the JSON path matches validating the parsed
-    # value, and ensure returns the input unchanged exactly when it is a member.
+    # the JSON path matches validating the parsed value, and ensure returns the
+    # input unchanged exactly when it is a member.
     try:
         compiled = Validator(_build(sa))
     except (ValueError, TypeError, NotImplementedError, RecursionError):
@@ -160,7 +154,6 @@ def test_membership_walks_and_paths_agree(sa: object, v: object) -> None:
     except ValidationError:
         explained = False
     assert member == explained
-    assert compiled.simplify().is_valid(v) == member  # ty: ignore[deprecated]
     if _json_safe(v):
         text = json.dumps(v)
         assert compiled.is_valid_json(text) == compiled.is_valid(json.loads(text))

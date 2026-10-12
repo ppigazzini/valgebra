@@ -1242,11 +1242,9 @@ impl<'a> Cx<'a> {
 
 /// Every unordered pair of distinct elements, each once.
 ///
-/// The pairwise-disjointness law is asked of an intersection's members and of the
-/// inners of a union's complements, and the scan was written out at both. One
-/// function decides where the pairs come from, and it reads the tail through
-/// `get`, so the law needs no panicking index.
-pub(crate) fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> {
+/// The pairwise-disjointness law is asked of a meet's members, and this reads
+/// the tail through `get`, so the law needs no panicking index.
+fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> {
     items.iter().enumerate().flat_map(|(i, a)| {
         items
             .get(i + 1..)
@@ -1259,9 +1257,8 @@ pub(crate) fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> 
 /// Whether some two members are provably disjoint (distinct concrete kinds,
 /// `bool ⊆ int` aside), so their intersection is empty. This decides the
 /// structural-kind disjointness (a list is never a set) the scalar region
-/// bitset cannot see, and the simplifier reads it too so both consume one
-/// statement of the lattice law.
-pub(crate) fn has_disjoint_pair(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
+/// bitset cannot see.
+fn has_disjoint_pair(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
     unordered_pairs(members).any(|(a, b)| a.disjoint_with(b, oracle))
 }
 

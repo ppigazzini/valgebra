@@ -52,16 +52,15 @@
 //! its children with it on the spot, and the entry left behind is a miss the
 //! next time that slot is read, and freed by the entry that replaces it.
 //!
-//! A strong entry was measured against this one, and it shares more: the core
-//! workload rebuilds the same three trees two thousand times and throws each
-//! away, so with strong entries the table answers every rebuild after the first
-//! and the workload allocates **1.4 MB in 16,502 blocks** against 21.8 MB in
-//! 190,427. It also reads *worse* -- the core workload 1.91% down against 4.46%,
-//! the record walk 2.29% up against 1.28% down -- because what a rebuild saves
-//! in allocation it pays back in the comparison that agrees to share, and
-//! because a table that holds trees alive holds the cache they sit in. The
-//! sharing this keeps is between schemas that are both alive, which is where
-//! the question that reads both of them is asked.
+//! A strong entry shares more and reads worse. The core workload rebuilds its
+//! trees two thousand times and throws each away, so with strong entries the
+//! table answers every rebuild after the first and the workload allocates a
+//! fraction of the blocks; and the core and record-walk workloads read slower
+//! for it, because what a rebuild saves in allocation it pays back in the
+//! comparison that agrees to share, and because a table that holds trees alive
+//! holds the cache they sit in. The sharing this keeps is between schemas that
+//! are both alive, which is where the question that reads both of them is
+//! asked.
 //!
 //! A miss costs the hash, an upgrade and the allocation it was going to make
 //! anyway. That is the price of the table, and it is paid by the construction
@@ -91,9 +90,9 @@ use super::{Clauses, Field, Fields, MapClause, Members, Schema, SeqShape, Spelli
 /// sharing is what makes the second one free. Eight times the slots moves it
 /// by nothing. The *core* workload is the other side of the trade and not
 /// evidence for this number: it builds trees and drops them, so every probe
-/// there finds a handle whose `Arc` is already gone -- 174,066 probes, no hit
-/// -- and disabling the table reads 1.97% **cheaper**. Two percent on a
-/// pipeline that cannot share, for sixty-five on one that can.
+/// there finds a handle whose `Arc` is already gone, and disabling the table
+/// reads it **cheaper**. A little on a pipeline that cannot share, for
+/// sixty-five percent on one that can.
 const SLOTS: usize = 1024;
 
 /// Entries of a list the hash reads before it stops.

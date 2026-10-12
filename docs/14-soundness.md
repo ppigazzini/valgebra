@@ -20,11 +20,7 @@ Write `⟦S⟧` for the set of Python values a schema `S` denotes (its
    check.
 2. **Construction preserves meaning.** The normal form a constructor builds
    denotes the set the spelling names: `⟦union(A, B)⟧ = ⟦A⟧ ∪ ⟦B⟧` however the
-   members are flattened, absorbed, ordered or folded on the way in. The
-   deprecated `simplify` method preserves meaning because every fold it applies
-   holds of the sets: the laws, and the disjoint-kind and region-cover folds,
-   which are decisions rather than laws
-   ([the algebra](04-algebra.md#the-simplifier-is-going)).
+   members are flattened, absorbed, ordered or folded on the way in.
 3. **Decisions are sound.** If `is_subtype_of(A, B)` is `True` then `⟦A⟧ ⊆ ⟦B⟧`;
    if `is_empty(S)` is `True` then `⟦S⟧ = ∅`. The converses are *not* claimed —
    the decision is deliberately conservative.

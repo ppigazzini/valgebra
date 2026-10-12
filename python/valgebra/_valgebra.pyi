@@ -18,7 +18,7 @@ from collections.abc import Callable
 from types import GenericAlias
 from typing import Any, Generic, Literal, NoReturn, TypeGuard, final, overload
 
-from typing_extensions import Never, TypeVar, deprecated
+from typing_extensions import Never, TypeVar
 
 # The set a validator denotes, as a checker reads it: `Validator[int]` is a
 # validator whose members are ints. `Any` by default, so a bare `Validator` is
@@ -114,11 +114,6 @@ class Validator(Generic[_T]):
     # within the annotation's; `close` and the copies keep or narrow it.
     def open(self) -> Validator[object]: ...
     def close(self) -> Validator[_T]: ...
-    # A schema is built in the lattice normal form, so this returns the schema
-    # the caller already holds plus a handful of folds the three relations
-    # decide better. Removed in the next minor version.
-    @deprecated("a schema is built in normal form; the relations decide what it folds")
-    def simplify(self) -> Validator[_T]: ...
     def is_empty(self) -> bool: ...
     def is_subtype_of(self, other: object, /) -> bool: ...
     def relation_to(

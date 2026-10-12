@@ -51,12 +51,6 @@ from valgebra._valgebra import (
     _debug_build,
 )
 
-# `simplify` is deprecated and these exercise it deliberately: the folds it
-# still performs are its own, and they are checked until it goes.
-pytestmark = pytest.mark.filterwarnings(
-    "ignore:Validator.simplify is deprecated:DeprecationWarning"
-)
-
 
 def _run_construction_loop(body: str) -> subprocess.CompletedProcess[str]:
     """Run a schema-construction loop in a fresh interpreter.
@@ -665,7 +659,7 @@ def test_hostile_dict_keys_are_handled() -> None:
 # past the ceiling. Opening a closed record adds a catch-all clause, so `open` is
 # a growth path and not a size-preserving rebuild.
 
-_TRANSFORMS = ["open", "close", "simplify", "__copy__"]
+_TRANSFORMS = ["open", "close", "__copy__"]
 
 
 def test_opening_past_the_node_bound_refuses() -> None:

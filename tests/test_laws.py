@@ -29,15 +29,9 @@ from valgebra import (
     union,
 )
 
-# `simplify` is deprecated and these exercise it deliberately: the folds it
-# still performs are its own, and they are checked until it goes.
-pytestmark = pytest.mark.filterwarnings(
-    "ignore:Validator.simplify is deprecated:DeprecationWarning"
-)
-
 # Schema specs: each is an annotation or native form valgebra can compile. The
-# container and sequence forms make the laws (and the simplifier) recurse into a
-# Seq/Coll/Mapping node, not just scalars.
+# container and sequence forms make the laws recurse into a Seq/Coll/Mapping
+# node, not just scalars.
 ATOM_SCHEMAS = [
     # The top. Drawn rather than left out, because an optional field holding it
     # is the one shape where `open` is not injective -- `{"a?": anything}` and
@@ -411,48 +405,29 @@ def test_distributivity(a: object, b: object, c: object, vals: list[object]) -> 
     )
 
 
-# THEORY: property-testing, the-normal-form-is-not-canonical
-@given(a=schemas, b=schemas, c=schemas, vals=value_lists)
-def test_simplify_preserves_acceptance(
-    a: object, b: object, c: object, vals: list[object]
-) -> None:
-    original = complement(union(a, intersection(b, complement(c))))
-    assert equivalent(original, original.simplify(), vals)  # ty: ignore[deprecated]
-
-
-@given(a=schemas, b=schemas, vals=value_lists)
-def test_simplify_is_idempotent_on_acceptance(
-    a: object, b: object, vals: list[object]
-) -> None:
-    once = intersection(a, complement(b)).simplify()  # ty: ignore[deprecated]
-    twice = once.simplify()  # ty: ignore[deprecated]
-    assert equivalent(once, twice, vals)
-
-
-def test_simplify_decides_the_complement_laws() -> None:
-    # The decision the conservative canonicalizer could not make: a schema and
-    # its complement collapse, and provably disjoint types collapse. Asserted on
-    # the *denotation* of the simplified form (empty / universal) through the
-    # decision procedure, not on the printed node string.
-    assert intersection(int, complement(int)).simplify().is_empty()  # ty: ignore[deprecated]
-    assert union(int, complement(int)).simplify().is_equivalent(anything)  # ty: ignore[deprecated]
-    assert intersection(int, str).simplify().is_empty()  # ty: ignore[deprecated]
-    assert union(complement(int), complement(str)).simplify().is_equivalent(anything)  # ty: ignore[deprecated]
+def test_the_relations_decide_the_complement_laws() -> None:
+    # A schema and its complement, and two provably disjoint types, asserted on
+    # the *denotation* (empty / universal) through the decision procedure, not
+    # on the printed node string.
+    assert intersection(int, complement(int)).is_empty()
+    assert union(int, complement(int)).is_equivalent(anything)
+    assert intersection(int, str).is_empty()
+    assert union(complement(int), complement(str)).is_equivalent(anything)
 
 
 def test_the_complement_laws_hold_of_any_as_of_the_top() -> None:
     # `Any` is the top, spelled: one node, one set, and the same laws. A rule
     # cannot tell the spellings apart, so the laws fire across them too.
-    assert intersection(Any, complement(Any)).simplify().is_empty()  # ty: ignore[deprecated]
-    assert union(Any, complement(Any)).simplify().is_equivalent(anything)  # ty: ignore[deprecated]
-    assert intersection(Any, complement(anything)).simplify().is_empty()  # ty: ignore[deprecated]
+    assert intersection(Any, complement(Any)).is_empty()
+    assert union(Any, complement(Any)).is_equivalent(anything)
+    assert intersection(Any, complement(anything)).is_empty()
     assert Validator(Any) == Validator(anything)
     assert Validator(Any).is_equivalent(anything)
 
     # What survives is the spelling, which `repr` gives back.
     assert repr(Validator(Any)) == "Any"
     assert repr(Validator(anything)) == "anything"
-    assert repr(complement(Any).simplify()) == "nothing"  # ty: ignore[deprecated]
+    assert repr(complement(Any)) == "nothing"
 
 
 #: Bodies a fixpoint is built from: each takes the leaf beside the recursion

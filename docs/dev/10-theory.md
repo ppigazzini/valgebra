@@ -508,7 +508,7 @@ membership by a property suite rather than asserted
 
 SOURCE: §13.8 "**Property-based testing.**"; §9 "Hypothesis adds integrated test-case shrinking"
 
-HELD-BY: test_de_morgan, laws.rs::the_lattice_laws_hold_of_the_sets, test_simplify_preserves_acceptance,
+HELD-BY: test_de_morgan, laws.rs::the_lattice_laws_hold_of_the_sets, laws.rs::construction_preserves_membership_over_values,
 a_set_line_is_read_as_python_holds_its_members
 
 **Chen, Cheung & Yiu, "Metamorphic Testing: A New Approach for Generating Next
@@ -788,15 +788,17 @@ SOURCE: §13.1 "`is_subtype_of` is not that reduction applied uniformly"
 
 HELD-BY: test_decision_decides_true_relations, test_the_two_deciders_are_measured_against_each_other, the_structural_inclusion_rules_decide_without_the_descriptor
 
-**Simplification stops at negation normal form, which is not canonical.**
-`simplify(a) == simplify(b)` is not an equivalence test, `==` is the form and
-not the set, and two spellings of one set can order differently -- which is why
-the laws are asserted over Boolean combinations and the deciders' agreement over
-a corpus that adds shapes. **[DEVIATION: the-normal-form-is-not-canonical]**
+**The term is built in a normal form short of negation normal form, and it is
+not canonical.** Construction settles the lattice laws and pushes no complement
+inward, and no pass reduces a term further. So `==` is the form and not the
+set, and two spellings of one set can build to two terms -- `A | (A & B)` and
+`A` -- which is why the laws are asserted over the values and the deciders'
+agreement over a corpus that adds shapes.
+**[DEVIATION: the-normal-form-is-not-canonical]**
 
 SOURCE: §13.1 "`simplify` produces negation normal form and no further"; §3 "A rewriter missing rules is sound and incomplete"
 
-HELD-BY: test_eq_is_the_normal_form_and_not_the_set, test_simplify_preserves_acceptance
+HELD-BY: test_eq_is_the_normal_form_and_not_the_set, laws.rs::construction_preserves_membership_over_values
 
 **The IR's keyed map carries no negative component and is not canonicalised.**
 The descriptor has one -- `MapAtom::wanted` -- so a negated record has a

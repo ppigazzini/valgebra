@@ -611,8 +611,7 @@ fn with_field_buffer<R>(build: impl FnOnce(&mut Vec<Field>) -> R) -> R {
 ///
 /// The pool is a stack rather than a single spare because construction nests
 /// deeply -- a member is built while the join holding it is being assembled --
-/// and a single spare leaves every inner call allocating its own. Measured, the
-/// stack is worth five percent of the core workload over one spare.
+/// and a single spare leaves every inner call allocating its own.
 pub(crate) fn with_member_buffer<R>(build: impl FnOnce(&mut Vec<Schema>) -> R) -> R {
     thread_local! {
         static POOL: RefCell<Vec<Vec<Schema>>> = const { RefCell::new(Vec::new()) };
@@ -1004,11 +1003,11 @@ impl Schema {
             flat.dedup();
             // A join carrying a schema together with its complement is the top,
             // whatever those are, so no such join survives construction and no rule
-            // downstream may assume one does. `has_complementary_pair` is the one
-            // statement of the law, read here, by the simplifier and by the
-            // emptiness decision from `oracle.rs` -- which is below all three,
-            // because a lattice law belongs to none of them. It reaches a pairwise
-            // comparison only for a member that is itself a complement.
+            // downstream may assume one does. `has_complementary_pair_within` is
+            // the one statement of the law, read here and by the emptiness
+            // decision from `oracle.rs` -- which is below both, because a lattice
+            // law belongs to neither of them. It reaches a pairwise comparison
+            // only for a member that is itself a complement.
             // With no oracle here the law declines for an atom only the bindings can
             // read, which is the safe direction: a join left unfolded still denotes
             // what it denotes. `definitions` is what a *recursive* member needs: a

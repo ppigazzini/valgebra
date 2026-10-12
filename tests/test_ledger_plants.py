@@ -1721,7 +1721,7 @@ PLANTS = (
         trips=("test_no_build_targets_the_stable_abi",),
     ),
     Plant(
-        # The structural rules reaching for the simplifier.
+        # The structural rules reaching for a normalising pass.
         "tests/test_refusals_ledger.py",
         ("crates/valgebra-core/src/decision.rs",),
         lambda tree: _edit(
@@ -3338,10 +3338,9 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".cargo/mutants.toml",
-            'exclude_re = [\n    "has_disjoint_complement_pair",\n',
+            "exclude_re = [\n",
             "exclude_re = [\n"
-            '    "replace LeafRelations::divides .* with Some\\\\(true\\\\)",\n'
-            '    "has_disjoint_complement_pair",\n',
+            '    "replace LeafRelations::divides .* with Some\\\\(true\\\\)",\n',
         ),
         trips=("test_the_sweep_excuses_no_oracle_default",),
     ),
@@ -3388,12 +3387,12 @@ PLANTS = (
     Plant(
         # The term reaching into a decider for an answer type.
         "tests/test_module_direction.py",
-        ("crates/valgebra-core/src/simplify.rs",),
+        ("crates/valgebra-core/src/ir/transform.rs",),
         lambda tree: _edit(
             tree,
-            "crates/valgebra-core/src/simplify.rs",
-            "use crate::kind::{Region, Regions};\n",
-            "use crate::decision::Verdict;\nuse crate::kind::{Region, Regions};\n",
+            "crates/valgebra-core/src/ir/transform.rs",
+            "use std::sync::Arc;\n",
+            "use std::sync::Arc;\n\nuse crate::decision::Verdict;\n",
         ),
         trips=("test_the_term_imports_nothing_from_the_optimisation",),
     ),
@@ -4388,17 +4387,17 @@ PLANTS = (
         trips=("test_every_documented_raise_is_asserted_somewhere",),
     ),
     Plant(
-        # The gap closed and the excuse kept: a test that drives the accepted
-        # cell, beside the reason it cannot be driven.
+        # An excuse kept for a gap the suite closes: an accepted cell that a
+        # test drives, beside the reason it cannot be driven.
         "tests/test_surface_outcomes.py",
-        ("tests/test_planted_outcome.py",),
-        lambda tree: _write(
+        ("tests/test_surface_outcomes.py",),
+        lambda tree: _edit(
             tree,
-            "tests/test_planted_outcome.py",
-            "import pytest\n\nfrom valgebra import Validator\n\n\n"
-            "def test_planted() -> None:\n"
-            "    with pytest.raises(ValueError):\n"
-            "        Validator(int).simplify()\n",
+            "tests/test_surface_outcomes.py",
+            "ACCEPTED: dict[tuple[str, str], str] = {}\n",
+            "ACCEPTED: dict[tuple[str, str], str] = {\n"
+            '    ("is_empty", "OverflowError"): "the suite exhausts no budget",\n'
+            "}\n",
         ),
         trips=("test_no_reason_outlives_the_gap_it_excuses",),
     ),

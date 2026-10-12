@@ -251,10 +251,11 @@ impl Constants for NoLeafRelations {}
 /// A predicate that alternates puts a value in `A` and in `¬A` at once, and the
 /// law would report the meet empty with that value as a witness against it.
 ///
-/// This is the completeness law `simplify` applies, decided structurally on the
-/// (small) member list. Shared with the simplifier so both read the same lattice
-/// law -- and so the simplifier does not rewrite to `nothing` what the decision
-/// declines to call empty.
+/// The emptiness decision's reading of the complement law, with no definitions,
+/// decided structurally on the (small) member list. The constructors read
+/// [`has_complementary_pair_within`] with the definitions they hold, so the two
+/// apply one statement of the law, and construction does not fold to `nothing`
+/// what the decision declines to call empty.
 pub(crate) fn has_complementary_pair(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
     has_complementary_pair_within(members, oracle, &[])
 }

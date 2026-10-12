@@ -63,19 +63,10 @@ exclude_globs = [
     "crates/valgebra-py/src/workload.rs",
 ]
 
-# has_disjoint_complement_pair is redundant with the covers_universe region check
-# in finish_union, so its mutants are equivalent — they cannot change any result.
-# Two schemas being disjoint forces their complements' region sets to together
-# cover every region, so covers_universe already returns true whenever this helper
-# would; a value only leaves both complements by belonging to both inners, which
-# an empty intersection has none of. Excluding an unkillable equivalent mutant
-# keeps the sweep honest rather than chasing a target no test can hit.
-#
 # Every entry below names a mutant `cargo mutants --list` really offers, which
 # `tests/test_mutation_scope.py` checks: a regex matching nothing excuses a
 # target that does not exist, which reads as coverage and is not.
 exclude_re = [
-    "has_disjoint_complement_pair",
     # A function compiled for PyPy alone -- `#[cfg(PyPy)]`, where `cpyext`
     # reads a container subclass through the methods it overrides -- is not
     # compiled on the interpreter the binding sweep links. Every mutant of it

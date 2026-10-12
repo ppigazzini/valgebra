@@ -1,8 +1,3 @@
-#![expect(
-    deprecated,
-    reason = "a decision is compared against the reducer's answer while the reducer is still shipped"
-)]
-
 use std::sync::Arc;
 
 use super::records::keyed_map_meet_verdict;
@@ -2380,7 +2375,7 @@ fn equal_bounds_keep_the_strict_end_when_narrowing() {
 }
 
 #[test]
-fn a_union_of_disjoint_complements_simplifies_to_the_top() {
+fn a_union_of_disjoint_complements_is_the_top() {
     // De Morgan: ¬A ∪ ¬B = ¬(A ∩ B), which is ⊤ when A and B are disjoint. int
     // and str are disjoint, so their complements cover the universe.
     let disjoint = Schema::Union(
@@ -2390,7 +2385,7 @@ fn a_union_of_disjoint_complements_simplifies_to_the_top() {
         ]
         .into(),
     );
-    assert_eq!(disjoint.simplify(), Schema::ANYTHING);
+    assert!(disjoint.is_equivalent(&Schema::ANYTHING));
     // bool is a subtype of int, so int and bool overlap and their complements
     // do not cover the universe.
     let overlapping = Schema::Union(
@@ -2400,7 +2395,7 @@ fn a_union_of_disjoint_complements_simplifies_to_the_top() {
         ]
         .into(),
     );
-    assert_ne!(overlapping.simplify(), Schema::ANYTHING);
+    assert!(!Schema::ANYTHING.is_subtype_of(&overlapping));
 }
 
 /// A union member that is proven empty but whose region is opaque does not

@@ -19,8 +19,8 @@ with the CPU, and the comparison points do different amounts of work.
 Two harnesses, one per side of the boundary:
 
 - **Core micro-benchmarks** (`crates/valgebra-core/benches/core.rs`, criterion)
-  time the pure-Rust schema transformations — the simplifier, the index remap
-  behind validator composition, and the recursive open/closed record transform —
+  time the pure-Rust schema transformations — the index remap behind
+  validator composition and the recursive open/closed record transform —
   and the relations, a rule's answer (`subtype_*`, `is_empty_*`) beside the set
   representation's (`lower_*`). No Python is involved.
 - **End-to-end benchmarks** (`benches/`, pytest-benchmark) time a single
@@ -395,7 +395,6 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
 
 | Operation | Corpus | Median |
 | --- | --- | --- |
-| `simplify` | redundant Boolean expression, depth 8 | ~1.9 us |
 | `shifted` | 64-field pool-indexed record | ~1.1 us |
 | `with_records_open` | record spine, depth 32 | ~4.3 us |
 

@@ -128,12 +128,6 @@ budget holds. `Validator.relation_to` is the boundary's reading of the same
 three values, and `tests/test_completeness_probe.py` holds a reported refutation
 to naming a value its universe contains.
 
-`crates/valgebra-core/src/simplify.rs` is the pass that would normalise a
-term afterwards. It is **deprecated** and goes in the next minor version: a
-schema is built in the lattice normal form, so the reduction it promises is the
-schema a caller already holds, and the folds it adds beyond the laws are
-decisions the three relations make better.
-
 ## What the descriptor is made of
 
 The shape is three layers deep, and reading it in that order is what makes the
@@ -352,9 +346,7 @@ member's own complement (`has_complementary_pair_within`), so a union whose
 readable members cover every region between them stays a union: `int | str |
 list[int] | ~(int | str)` is spelled and kept, the fast reading stops at the
 list, and the complete reading is what decides it -- as it decides the terms the
-fuzz target builds by hand. The region-cover fold belongs to the deprecated
-`simplify` (`simplify::finish_union`), which reads the regions the same way, so
-the decision agrees with what that pass would return.
+fuzz target builds by hand.
 
 ## What the core cannot decide alone
 
@@ -860,10 +852,6 @@ Absorption is the law on the far side of that line. It is one case of `A | B`
 folding to `A` wherever `A` contains `B`, so `A | (A & B)` and `A` are one set
 and two terms: `is_equivalent` proves it and `==` does not. `is_empty` on a structural schema is true in places
 construction leaves standing, for the same reason.
-
-(`simplify` was a pass that folded a little more than construction does. It is
-deprecated and goes in the next minor version; what it still folds beyond the
-laws is listed in `docs/04-algebra.md`.)
 
 ## The bounds are decided by emptiness, not by the atom
 

@@ -37,7 +37,6 @@ pub mod descr;
 mod ir;
 mod kind;
 mod oracle;
-mod simplify;
 mod verdict;
 mod violation;
 

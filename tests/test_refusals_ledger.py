@@ -360,7 +360,7 @@ def test_the_deciders_never_normalise_a_query() -> None:
     )
     assert len(deciders) > 10, f"the deciders read as {deciders}"
     normalising = [path for path in deciders if re.search(r"\bsimplify\b", _code(path))]
-    assert not normalising, f"a decider names the simplifier: {normalising}"
+    assert not normalising, f"a decider names a normalising pass: {normalising}"
 
 
 # --- the gates are scripts ------------------------------------------------------

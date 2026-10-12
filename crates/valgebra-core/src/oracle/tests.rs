@@ -1,9 +1,8 @@
 //! What the shared laws decide, and where each declines.
 //!
-//! The two laws below `oracle.rs` are read by three callers -- the
-//! constructors in `ir.rs`, the reducer in `simplify.rs` and the emptiness
-//! decision -- so their tests sit with the law rather than with any one of
-//! them. A test in a caller's module holds the caller; these hold the law.
+//! The two laws below `oracle.rs` are read by two callers -- the
+//! constructors in `ir.rs` and the emptiness decision -- so their tests sit
+//! with the law rather than with either of them. A test in a caller's module holds the caller; these hold the law.
 
 use std::sync::Arc;
 

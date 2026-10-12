@@ -144,9 +144,9 @@ UNTRAINED: dict[str, str] = {
         "protocol."
     ),
     "core": (
-        "The simplifier, the composition remap and the record transform, run "
-        "directly in Rust: the calls here reach the simplifier through `union`, "
-        "`intersection` and `complement`, and no call opens or closes a record."
+        "The composition remap and the record transform, run directly in Rust: "
+        "the calls here reach the remap through `union`, `intersection` and "
+        "`complement`, and no call opens or closes a record."
     ),
 }
 

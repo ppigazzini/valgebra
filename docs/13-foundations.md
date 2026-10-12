@@ -48,11 +48,9 @@ bound, except where it carries a predicate or a class
 is the law construction does **not** apply: `A | (A & B)` and `A` are one set
 and two terms. Absorption is one case of `A | B` folding to `A`
 wherever `A` contains `B`, and that fold needs a containment, which is a
-decision rather than a shape. `repr` shows the built form and `==` compares it.
-The deprecated `simplify` method folds a few decisions more -- a meet of
-disjoint kinds to the bottom, a join covering every region to the top -- and the
-relations decide all of them; [the algebra guide](04-algebra.md) says what
-remains of it.
+decision rather than a shape. `repr` shows the built form and `==` compares it,
+and the relations decide what construction leaves standing -- a meet of
+disjoint kinds is empty, a join covering every region is the top.
 
 ## Semantic (set-theoretic) subtyping
 

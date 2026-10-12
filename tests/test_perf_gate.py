@@ -322,7 +322,7 @@ def test_the_committed_core_checksum_matches_the_workload() -> None:
     budget = json.loads(
         (ROOT / "scripts" / "perf_budget.json").read_text(encoding="utf-8")
     )
-    assert budget["core_workload_checksum"] == 134000
+    assert budget["core_workload_checksum"] == 130000
 
 
 BASE = gate.Measurement(irefs=100_000_000, checksum=134000)

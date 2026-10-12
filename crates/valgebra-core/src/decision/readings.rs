@@ -390,10 +390,9 @@ impl Schema {
     /// mean: what the members cover between them is a *lower* bound, exact only
     /// where it reaches the universe.
     ///
-    /// It is the reading `simplify::finish_union` already takes -- it folds the
-    /// regions of the members it can read and ignores the rest, "keeping the
-    /// decision independent of grouping" -- so this is the decision agreeing
-    /// with the construction rather than a new claim about a union.
+    /// It folds the regions of the members it can read and ignores the rest,
+    /// which keeps the answer independent of how the members are grouped: a
+    /// member nobody can read only adds to what the union covers.
     pub(super) fn covers_the_universe(&self) -> bool {
         let Schema::Union(members) = self else {
             // Nothing else folds a member list, so nothing else has a stop to

@@ -22,6 +22,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet with a recursive reference is decided
 - fix: a product split across a wide union is held to the depth bound
 - fix: a named tuple is read once, as the positions it lays out
+- feat!: a validator carries no simplify method
 
 -->
 
@@ -60,6 +61,17 @@ answer of its own, or a repair to a change not yet released.
   of `T` the callable accepts, and `Literal[fn]` for the object itself, which
   reads as the constant. `Annotated` metadata reads a callable as a predicate,
   as it did, and a class is read as the class it is.
+
+### Removed
+
+- **`Validator.simplify`.** It warned through eight releases, from 0.0.10. A
+  schema is built in the lattice normal form, so `repr` already shows the
+  reduction it promised and `==` compares it; what it folded beyond the laws
+  -- a meet of disjoint kinds, a join covering every region -- is a decision
+  the relations make. Write `intersection(int, str).is_empty()` rather than
+  `repr(intersection(int, str).simplify()) == "nothing"`, and
+  `union(int, complement(bool), Validator(1)).is_equivalent(object)` for a join
+  that covers every value.
 
 ### Fixed
 

@@ -175,16 +175,14 @@ def test_every_exported_name_exists() -> None:
         assert hasattr(valgebra, name), name
 
 
-def test_simplify_warns_that_it_is_going() -> None:
-    """The reduction it promises is the schema a caller already holds.
+def test_no_method_reduces_a_schema() -> None:
+    """A reduction of a schema is the schema a caller already holds.
 
     A schema is built in the lattice normal form, so `repr` shows it and `==`
-    compares it. What is left here is a handful of folds that are decisions
-    rather than laws, and the three relations decide those and more without
-    rewriting the term.
+    compares it. What a reducing method would fold beyond the laws is a
+    decision, and the three relations make it without rewriting the term.
     """
-    with pytest.deprecated_call(match="simplify is deprecated"):
-        Validator(int).simplify()  # ty: ignore[deprecated]
+    assert not hasattr(Validator, "simplify")
 
 
 def test_the_whole_schema_rewrites_stay() -> None:
