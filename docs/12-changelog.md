@@ -8,7 +8,8 @@ The version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html),
 and while the line is `0.x` the **minor** number is the breaking one: `0.1.0` to
 `0.2.0` may break, `0.1.0` to `0.1.1` may not. Below `0.1.0` there is no minor
 number to carry a break, so every `0.0.x` release may break, and its notes say
-where.
+where. The line stays on `0.0.x` for a long time, so a break does not wait for
+`0.1.0`: it ships in a `0.0.x` release, after the warning below.
 
 What a break means here is specific, because a validator has two surfaces and
 only one of them is the API:
@@ -29,10 +30,10 @@ only one of them is the API:
 
 ## Deprecation
 
-A name on its way out keeps working for **one minor release** and warns:
-calling it emits a `DeprecationWarning` naming what replaces it, and the notes
-below carry an entry saying when it goes. It is then removed in the next minor
-release.
+A name on its way out keeps working, and warns, for **at least three
+releases**: calling it emits a `DeprecationWarning` naming what replaces it, and
+the notes below carry an entry saying it is going. A later release removes it,
+and its notes say so.
 
 Nothing is removed without that window, and nothing that warns is left warning
 indefinitely -- a warning that never resolves is a cost with no end, and a
