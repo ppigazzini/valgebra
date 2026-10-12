@@ -13,19 +13,27 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: a map is refuted on a key the other reads one way
-- fix: a map keyed by a complement of kinds lowers to the other kinds
-- fix: an annotation is refused at the node bound as it is read
-- fix: deprecated and Unit in metadata are ignored
-- fix: a callable where a schema goes is refused
-- feat: a generic type alias is read applied to its arguments
-- feat: a meet with a recursive reference is decided
-- fix: a product split across a wide union is held to the depth bound
-- fix: a named tuple is read once, as the positions it lays out
-- feat!: a validator carries no simplify method
-- fix: a validator built inside another build is measured on its own
-
 -->
+
+## [0.0.18] - 2026-10-12
+
+A release with one break, announced: `Validator.simplify` is removed after
+warning through eight releases. Two additions, one change, one removal and
+seven fixes.
+
+A schema is built in the lattice normal form, so `repr` and `==` read the
+reduction `simplify` promised, and the relations decide what it folded beyond
+the laws. A callable where a schema goes is refused rather than read as a
+constant, and the refusal names both spellings that were meant. Two readings
+are new: a generic type alias applied to its arguments, and a meet with a
+recursive reference, decided. Relations between maps decide where they
+answered `undecided`: one is refuted on a key the other reads one way, and a
+key written as a complement of kinds is read as the other kinds. The frontend
+refuses an annotation at the node bound as it reads, in milliseconds where a
+shared part built for over a minute; a named tuple is read once; a validator
+built inside another build counts only itself; `deprecated` and
+`annotated_types.Unit` in metadata are ignored; and a product split across a
+wide union is held to the relation's depth bound.
 
 ### Added
 
@@ -2620,7 +2628,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.17...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.18...HEAD
+[0.0.18]: https://github.com/ppigazzini/valgebra/compare/v0.0.17...v0.0.18
 [0.0.17]: https://github.com/ppigazzini/valgebra/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/ppigazzini/valgebra/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/ppigazzini/valgebra/compare/v0.0.14...v0.0.15
