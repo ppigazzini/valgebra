@@ -12,7 +12,8 @@ suite runs on:
   release is a blocking leg of the `python` job and a classifier, and none
   other is;
 * a release past its first alpha and short of its first candidate is a leg the
-  job forgives, so a break shows a year early and blocks nothing;
+  job forgives, so a break shows a year early and blocks nothing, and each step
+  the leg runs forgives it too, so the break leaves no red cross on the commit;
 * every place the tree states its floor names the oldest supported release,
   and every place it states its newest release names the newest.
 
@@ -249,6 +250,47 @@ def test_a_release_in_development_runs_forgiven() -> None:
         assert not lanes[minor], (
             f"{_name(minor)} is a prerelease: its leg must be forgiven, so a break "
             "in an alpha is news rather than a red merge"
+        )
+
+
+#: A release a `continue-on-error` expression names: `'3.16'`, `'3.14t'`.
+_NAMED_RELEASE = re.compile(r"'(3\.\d+t?)'")
+
+
+def _forgives(flag: object) -> set[str]:
+    """Read the releases a `continue-on-error` names, and `*` for a literal `true`."""
+    text = str(False if flag is None else flag).strip().lower()
+    if text == "true":
+        return {"*"}
+    return set(_NAMED_RELEASE.findall(text))
+
+
+def test_a_forgiven_leg_turns_no_commit_red() -> None:
+    """Each step a forgiven leg runs forgives it too, and no step forgives more.
+
+    The job's `continue-on-error` keeps the workflow's result green, and with it
+    the `ci` gate, but not the job's own check: a failed step leaves that red,
+    and GitHub marks the commit with a red cross for any red check. A step's own
+    `continue-on-error` is what ends the job green, so every `run:` step the leg
+    reaches names the releases the job names. A step that runs on the floor
+    alone reaches no forgiven leg and forgives nothing, and no step names a
+    release the job holds: a forgiveness the job does not share turns a
+    supported release's failure green.
+    """
+    job = read_workflow()["jobs"]["python"]
+    forgiven = _forgives(job.get("continue-on-error"))
+    for step in job["steps"]:
+        if "run" not in step:
+            continue
+        name = step.get("name", str(step["run"]).splitlines()[0])
+        floor_only = "env.FLOOR" in str(step.get("if", ""))
+        expected = set() if floor_only else forgiven
+        named = _forgives(step.get("continue-on-error"))
+        assert named == expected, (
+            f"the python job's step {name!r} forgives {sorted(named) or 'nothing'} "
+            f"where the job forgives {sorted(expected) or 'nothing'} on the legs "
+            "the step runs: give each step a forgiven leg runs the job's own "
+            "continue-on-error, and no step another"
         )
 
 

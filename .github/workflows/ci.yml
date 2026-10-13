@@ -452,10 +452,15 @@ jobs:
             python-version: "3.14"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
-    # The prerelease leg is forgiven by name, so its red is news and the job's
-    # result stays `success` for the `ci` gate. `tests/test_python_lifecycle.py`
-    # holds the name to the release the schedule PEPs put in development, and
-    # refuses the forgiveness from that release's first candidate on.
+    # The prerelease leg is forgiven by name, so a break in an alpha blocks no
+    # merge: the job's flag keeps the workflow's result, and the `ci` gate,
+    # green. It leaves the leg's own check red, and a red check is a red cross
+    # on the commit, so each step the leg runs names the release as well: a
+    # failing step is forgiven where it fails, the job ends green, and the
+    # failure is the step's annotation in the run rather than the commit's
+    # mark. `tests/test_python_lifecycle.py` holds the name to the release the
+    # schedule PEPs put in development, refuses the forgiveness from that
+    # release's first candidate on, and holds each step's to the job's.
     continue-on-error: ${{ matrix.python-version == '3.16' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -499,6 +504,7 @@ jobs:
         with:
           tool: cargo-mutants@27.1.0
       - name: Install dev dependencies
+        continue-on-error: ${{ matrix.python-version == '3.16' }}
         run: uv sync --locked --no-install-project
       # A Windows row optimizes the dev profile one level, and keeps its debug
       # assertions. Its main thread's stack is what `python.exe` reserves --
@@ -511,6 +517,7 @@ jobs:
       # the walk rather than the executable's reserve. Linux and macOS give the
       # main thread 8 MiB, and the value 0 is the dev profile's own.
       - name: Build the extension into the venv
+        continue-on-error: ${{ matrix.python-version == '3.16' }}
         env:
           CARGO_PROFILE_DEV_OPT_LEVEL: ${{ matrix.os == 'windows-2025-vs2026' && '1' || '0' }}
         run: uv run --no-sync maturin develop --uv
@@ -535,6 +542,7 @@ jobs:
       # With a bound, a hang is a failing step in five minutes.
       - name: The binding's interpreter corpora
         if: ${{ matrix.os == 'ubuntu-26.04' }}
+        continue-on-error: ${{ matrix.python-version == '3.16' }}
         run: |
           base="$(uv run --no-sync python -c 'import sys; print(sys.base_prefix)')"
           PYO3_PYTHON="$base/bin/python3"
@@ -555,6 +563,7 @@ jobs:
       # Each run lists its thirty slowest tests, so what the suite costs is
       # read off a log rather than believed.
       - name: pytest
+        continue-on-error: ${{ matrix.python-version == '3.16' }}
         env:
           HYPOTHESIS_PROFILE: ci
         run: >-

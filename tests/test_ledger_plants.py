@@ -478,6 +478,36 @@ def _reach_the_next_alpha(tree: Path) -> None:
     workflow.write_text(re.sub(rf', "3\.{minor}t?"', "", text), encoding="utf-8")
 
 
+#: The python job's pytest step and the forgiveness it carries, in three parts:
+#: the step's name, the expression up to its closing quote, and the close.
+_PYTEST_FORGIVEN = re.compile(
+    r"(      - name: pytest\n)"
+    r"(        continue-on-error: \$\{\{ matrix\.python-version == '[^']+')"
+    r"( \}\}\n)"
+)
+
+
+def _unforgive_a_step(tree: Path) -> None:
+    """Drop the pytest step's forgiveness and keep the job's."""
+    path = tree / ".github" / "workflows" / "ci.yml"
+    text, count = _PYTEST_FORGIVEN.subn(r"\1", path.read_text(encoding="utf-8"))
+    assert count == 1, "the plant did not land: the pytest step's continue-on-error"
+    path.write_text(text, encoding="utf-8")
+
+
+def _forgive_a_held_leg(tree: Path) -> None:
+    """Have the pytest step forgive the floor beside the release the job forgives."""
+    path = tree / ".github" / "workflows" / "ci.yml"
+    text = path.read_text(encoding="utf-8")
+    floor = re.search(r'^  FLOOR: "([^"]+)"$', text, re.MULTILINE)
+    assert floor is not None, "the plant did not land: the workflow's FLOOR"
+    text, count = _PYTEST_FORGIVEN.subn(
+        rf"\1\2 || matrix.python-version == '{floor.group(1)}'\3", text
+    )
+    assert count == 1, "the plant did not land: the pytest step's continue-on-error"
+    path.write_text(text, encoding="utf-8")
+
+
 def _outlive_the_table(tree: Path) -> None:
     """Move the clock past the day the release after the newest row reaches alpha."""
     _, alpha = _newest_alpha(tree)
@@ -4193,6 +4223,22 @@ PLANTS = (
         (_LIFECYCLE, ".github/workflows/ci.yml"),
         _reach_the_next_alpha,
         trips=("test_a_release_in_development_runs_forgiven",),
+    ),
+    Plant(
+        # A step of the forgiven leg left unforgiven: the gate stays green and
+        # the commit carries the leg's red cross.
+        "tests/test_python_lifecycle.py",
+        (".github/workflows/ci.yml",),
+        _unforgive_a_step,
+        trips=("test_a_forgiven_leg_turns_no_commit_red",),
+    ),
+    Plant(
+        # A step forgiving a release the job holds, which turns a supported
+        # release's failure green.
+        "tests/test_python_lifecycle.py",
+        (".github/workflows/ci.yml",),
+        _forgive_a_held_leg,
+        trips=("test_a_forgiven_leg_turns_no_commit_red",),
     ),
     Plant(
         # A year past the newest row with no row added for the next release.

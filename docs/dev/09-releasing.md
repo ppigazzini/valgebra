@@ -245,7 +245,11 @@ release after the next one's first candidate supports it.
 
 **The next release runs a year early, and forgiven.** From its first alpha it is
 a leg of the `python` job with a `continue-on-error` that names its version, so
-a break shows while there is time to fix it and blocks no merge. PyO3 builds for
+a break shows while there is time to fix it and blocks no merge. Each step the
+leg runs names the version as well: the job's flag keeps the gate green but not
+the job's own check, and a red check marks the commit with a red cross, so a
+failure is forgiven at the step that fails and reads as that step's annotation
+in the run. PyO3 builds for
 the release after the newest it supports with a warning that the artifact must
 not be distributed, which is what a forgiven leg is; it refuses the release
 after that unless `UNSAFE_PYO3_SKIP_VERSION_CHECK=1` is set.
