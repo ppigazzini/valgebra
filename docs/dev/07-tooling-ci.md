@@ -1000,6 +1000,9 @@ and runs the dispatcher's step with `git` and `gh` stood in.
 built per version against a version-specific ABI, so each interpreter is a
 separate artifact a caller installs, and a leg that runs only at night is a
 wheel nothing exercised until somebody reported it. `ci.yml` owns the matrix.
+The release in development is a leg beside them, forgiven by name from its
+first alpha to its first candidate, as
+[09-releasing.md](09-releasing.md#which-interpreters-a-release-supports) states.
 `tests/test_python_lifecycle.py` holds the releases it carries to the schedule
 each follows, and the floor `requires-python` claims to the oldest of them;
 `test_every_supported_interpreter_runs_on_every_event` in

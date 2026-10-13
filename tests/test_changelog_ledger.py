@@ -237,12 +237,12 @@ def test_the_workflow_runs_this_ledger_with_full_history() -> None:
 def test_the_leg_that_takes_the_history_says_so_in_its_name() -> None:
     """The leg that reads the history is the leg whose name says it has one.
 
-    The check above puts the history on one leg of nine. That one leg is why
-    this ledger and `tests/test_cited_commits.py` report anything at all, and
-    from outside it is invisible: eight legs skip those checks, one runs them,
-    and the checks list shows nine results with the same shape of name. A
-    reader cannot tell which of the nine they are reading, and neither can the
-    next person to move the depth somewhere else.
+    The check above puts the history on one leg of the matrix. That one leg is
+    why this ledger and `tests/test_cited_commits.py` report anything at all,
+    and from outside it is invisible: every other leg skips those checks, one
+    runs them, and the checks list shows a column of results with the same
+    shape of name. A reader cannot tell which one they are reading, and neither
+    can the next person to move the depth somewhere else.
 
     So the leg says so in its name, and it says so under the *same* condition
     that gives it the depth. Two conditions that mean the same thing today is
@@ -256,7 +256,7 @@ def test_the_leg_that_takes_the_history_says_so_in_its_name() -> None:
 
     assert _equalities(marker) == _equalities(depth), (
         f"the name is leg-specific on {sorted(_equalities(marker))} and the "
-        f"history is on {sorted(_equalities(depth))}, so one of the nine legs "
+        f"history is on {sorted(_equalities(depth))}, so a leg of the matrix "
         f"says it has a history it does not have"
     )
 

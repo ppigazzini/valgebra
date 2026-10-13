@@ -960,8 +960,8 @@ PLANTS = (
     ),
     # The other half of the same claim, and the half a reader acts on: the leg
     # that takes the history says so in its name. Pointed at a leg that does not
-    # take it, the name is still there and still specific -- and it now names
-    # the one result of nine that skipped everything it advertises. A ledger
+    # take it, the name is still there and still specific -- and it names the
+    # one result in the column that skipped everything it advertises. A ledger
     # that holds the depth and not the name leaves that state green.
     Plant(
         "tests/test_changelog_ledger.py",
@@ -3164,8 +3164,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            'python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t", "3.15"]',
-            'python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]',
+            '"3.14", "3.14t", ',
+            '"3.14", ',
         ),
         trips=("test_every_supported_interpreter_runs_on_every_event",),
     ),

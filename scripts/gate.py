@@ -495,7 +495,7 @@ def floor_environment() -> dict[str, str]:
 def floor_steps() -> tuple[tuple[str, str, str], ...]:
     """Build the floor interpreter beside the caller's, and run the suite on it.
 
-    The matrix runs seven releases; a developer runs one. Every difference
+    The matrix runs a leg per release; a developer runs one. Every difference
     between two of them is one this gate cannot see, and the floor is the end
     of the range where those land: the suite is written on the newest release
     the tree supports and read on the oldest, so a member that release does not

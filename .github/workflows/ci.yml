@@ -402,11 +402,11 @@ jobs:
           python3 scripts/coverage_gate.py --json coverage-binding.json --scope binding
 
   python:
-    # The trailing arm is not decoration: one leg of nine checks out the whole
-    # history (below) and reads the repository audit, the checks that read the
-    # history among them, and the other eight read neither. Nine results with
-    # the same shape of name give a reader no way to tell which one ran them, so
-    # the leg that does says so. The condition is the checkout's, spelled once
+    # The trailing arm is not decoration: one leg checks out the whole history
+    # (below) and reads the repository audit, the checks that read the history
+    # among them, and every other leg reads neither. A column of results with
+    # the same shape of name gives a reader no way to tell which one ran them,
+    # so the leg that does says so. The condition is the checkout's, spelled once
     # more here and held to it by `tests/test_changelog_ledger.py`. It spells
     # the floor rather than reading `env.FLOOR`: an expression in a job's
     # `name` may read `matrix` and not `env`.
@@ -418,9 +418,12 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    # 3.15 is the newest supported release. 3.14t (free-threaded) is a
-    # supported lane: the extension declares `gil_used = false`, imports without
-    # re-enabling the GIL -- `test_a_free_threaded_build_keeps_the_gil_off_after_import`
+    # 3.15 is the newest supported release. 3.16 is the release in development:
+    # a leg from its first alpha, forgiven by the `continue-on-error` below
+    # until its first release candidate freezes the ABI, so a break shows a year
+    # early and blocks no merge. 3.14t (free-threaded) is a supported lane: the
+    # extension declares `gil_used = false`, imports without re-enabling the
+    # GIL -- `test_a_free_threaded_build_keeps_the_gil_off_after_import`
     # fails the lane if it does, where the parallel tests would only skip -- and
     # the concurrency test exercises true parallel validation there.
     #
@@ -438,7 +441,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t", "3.15"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t", "3.15", "3.16"]
         # One representative interpreter on macOS and Windows, so the binding, the
         # membership walk, the JSON path, and the error model are exercised on
         # every OS the release ships wheels for, not only Linux.
@@ -449,6 +452,11 @@ jobs:
             python-version: "3.14"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    # The prerelease leg is forgiven by name, so its red is news and the job's
+    # result stays `success` for the `ci` gate. `tests/test_python_lifecycle.py`
+    # holds the name to the release the schedule PEPs put in development, and
+    # refuses the forgiveness from that release's first candidate on.
+    continue-on-error: ${{ matrix.python-version == '3.16' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -564,7 +564,7 @@ def _matrix_interpreters() -> list[str]:
 def test_the_gate_builds_the_floor_interpreter_the_matrix_names() -> None:
     """The floor the gate builds is the floor the workflow runs, or it is a guess.
 
-    The matrix runs seven interpreters and the gate runs one: the caller's. A
+    The matrix runs a leg per interpreter and the gate runs one: the caller's. A
     difference between two releases is therefore a difference this gate cannot
     see, and the floor is the end of that range where the difference actually
     lands -- `typing.Self`, `LiteralString` and `Unpack` are 3.11, and each of
