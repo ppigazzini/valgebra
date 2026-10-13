@@ -83,7 +83,7 @@ exclude_re = [
     # per element, and so absent from the 3.12 the sweep links. Built against
     # 3.14t, the interpreter tests kill each of their mutants -- a count read as
     # moved, a position or an entry count that steps backwards or stands still,
-    # and a stop at the count taken never or at once -- and the 3.14t lane's
+    # and a stop at the count taken never or at once -- and the 3.15t lane's
     # product suite reads both scans on every push. `scan_list`,
     # `scan_list_from` and `scan_dict` each have a body for each kind of
     # build, and what `cargo mutants` offers for any whole body is a `Scan`,

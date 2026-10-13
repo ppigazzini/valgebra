@@ -421,15 +421,16 @@ jobs:
     # 3.15 is the newest supported release. 3.16 is the release in development:
     # a leg from its first alpha, forgiven by the `continue-on-error` below
     # until its first release candidate freezes the ABI, so a break shows a year
-    # early and blocks no merge. 3.14t (free-threaded) is a supported lane: the
+    # early and blocks no merge. 3.15t (free-threaded) is a supported lane: the
     # extension declares `gil_used = false`, imports without re-enabling the
     # GIL -- `test_a_free_threaded_build_keeps_the_gil_off_after_import`
     # fails the lane if it does, where the parallel tests would only skip -- and
     # the concurrency test exercises true parallel validation there.
     #
     # Every release the package supports runs on every event, and its
-    # free-threaded build at 3.14; the cp315t wheel is run by the release's
-    # smoke alone, and no leg here runs it. The release ships a wheel built per
+    # free-threaded build at the newest release, 3.15. The cp314t build is
+    # timed by `bench (free-threaded)` and its wheel run by the release's smoke,
+    # and no leg here runs the suite on it. The release ships a wheel built per
     # version against a version-specific ABI, so each one is a separate
     # artifact a caller installs, and a lane that does not run is a wheel
     # nothing exercised until somebody reported it. Sampling the ends
@@ -441,15 +442,16 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-26.04]
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t", "3.15", "3.16"]
-        # One representative interpreter on macOS and Windows, so the binding, the
-        # membership walk, the JSON path, and the error model are exercised on
-        # every OS the release ships wheels for, not only Linux.
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15", "3.15t", "3.16"]
+        # One representative interpreter on macOS and Windows, the newest
+        # supported release, so the binding, the membership walk, the JSON path,
+        # and the error model are exercised on every OS the release ships wheels
+        # for, not only Linux.
         include:
           - os: macos-26
-            python-version: "3.14"
+            python-version: "3.15"
           - os: windows-2025-vs2026
-            python-version: "3.14"
+            python-version: "3.15"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     # The prerelease leg is forgiven by name, so a break in an alpha blocks no
@@ -485,7 +487,7 @@ jobs:
           # incompatible module (not a stable-ABI wheel), the compiled extension
           # is ABI-specific per interpreter. Sharing one `target/` lets a leg
           # restore a `pyo3-ffi` build made for a different ABI — Cargo sees the
-          # sources unchanged and skips the rebuild — so the free-threaded (3.14t)
+          # sources unchanged and skips the rebuild — so the free-threaded (3.15t)
           # leg can link against with-GIL FFI layout and fail at import with
           # "init function of _valgebra returned uninitialized object". Key the
           # cache on the interpreter (and OS) so each ABI keeps its own build,
@@ -509,8 +511,8 @@ jobs:
       # A Windows row optimizes the dev profile one level, and keeps its debug
       # assertions. Its main thread's stack is what `python.exe` reserves --
       # 2,000,000 bytes in uv's build, 3,000,000 in python.org's -- and the
-      # unoptimized build walks to the depth bound in more than uv's: the first
-      # row on uv's 3.14.8 overflowed in
+      # unoptimized build walks to the depth bound in more than uv's: it
+      # overflows in
       # `test_a_deep_body_reaches_the_walk_bound_rather_than_the_stack`, which
       # on Linux needs between 1.5 and 1.9 MiB unoptimized. At `opt-level=1`
       # every walk to the bound in the suite passes on 800 KiB, so the row tests

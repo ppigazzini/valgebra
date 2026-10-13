@@ -247,13 +247,14 @@ job is. `ci.yml` owns the job set, and
 the list is not restated here: a second copy drifts by one entry and reads
 exactly like one that has not. What is worth knowing about its shape is the
 Python matrix, which runs **every supported release on every push**, and the
-free-threaded build at 3.14; the `cp315t` wheel is run by the release
-workflow's smoke alone, and no push leg runs it. `ci.yml` owns the matrix too:
-`tests/test_python_lifecycle.py` holds the releases it carries to the schedule
-each release follows, and which leg may fail without blocking to the release's
-stage, and `tests/test_required_jobs.py` holds that the job runs on every event
-and has a free-threaded leg. [docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md)
-says why each interpreter is a lane of its own.
+free-threaded build at 3.15; the `cp314t` wheel is run by the release
+workflow's smoke alone, and no push leg runs the suite on it. `ci.yml` owns
+the matrix too: `tests/test_python_lifecycle.py` holds the releases it carries
+to the schedule each release follows, and which leg may fail without blocking
+to the release's stage, and `tests/test_required_jobs.py` holds that the job
+runs on every event and has a free-threaded leg.
+[docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md) says why each
+interpreter is a lane of its own.
 
 Scheduled lanes, on `github_ci` by a dispatch from the scheduled run on
 `main`, run the deep property suites, a libFuzzer soak over the core, and three

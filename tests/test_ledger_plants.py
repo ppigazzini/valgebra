@@ -1172,8 +1172,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            '"3.12", "3.13", "3.14", "3.14t"',
-            '"3.12", "3.14", "3.14t"',
+            '"3.12", "3.13", "3.14", "3.15"',
+            '"3.12", "3.14", "3.15"',
         ),
         trips=("test_the_matrix_blocks_on_every_supported_release_and_no_other",),
     ),
@@ -3194,8 +3194,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            '"3.14", "3.14t", ',
-            '"3.14", ',
+            '"3.15", "3.15t", ',
+            '"3.15", ',
         ),
         trips=("test_every_supported_interpreter_runs_on_every_event",),
     ),
