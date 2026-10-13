@@ -72,6 +72,26 @@ runs:
         if [ -z "${CARGO_INCREMENTAL+set}" ]; then
           echo CARGO_INCREMENTAL=0 >> "$GITHUB_ENV"
         fi
+    # A build cache restores by its key, and the key Swatinem/rust-cache
+    # computes names the OS family, the architecture, the toolchain and every
+    # variable whose name starts with CARGO, CC, CFLAGS, CXX, CMAKE or RUST --
+    # not the image. A `target/` saved on one image therefore restores on the
+    # next with its build scripts' answers in it, and pyo3's answer is the
+    # image's own interpreter, which it asks for again only when `PYO3_PYTHON`
+    # changes: a cache saved on Ubuntu 24.04 links libpython3.12 on an image
+    # that has none. Every hosted image names itself in `ImageOS` (`ubuntu26`,
+    # `macos26`, `win25-vs2026`), and the name under a prefix the key reads
+    # moves every cache with the image. Unset is refused rather than read as
+    # empty, which the key would skip. `tests/test_lane_interpreters.py` holds
+    # every cache behind this step.
+    #
+    # The workflow audit refuses a computed value written to the environment
+    # file, since an attacker who controls the value can append variables of
+    # their own. This one is the image's, set before any checkout, so no event
+    # payload and no checked-out file reaches it.
+    - name: Key the build cache on the runner image
+      shell: bash
+      run: echo "RUST_CACHE_IMAGE=${ImageOS:?the runner names no image}" >> "$GITHUB_ENV" # zizmor: ignore[github-env]
     - name: rustc --version --verbose
       shell: bash
       env:

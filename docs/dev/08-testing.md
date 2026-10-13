@@ -310,7 +310,7 @@ by a naming convention.
 where a mistake changes what a schema means carry their own corpus under the
 `interpreter-tests` feature, which links an embedded Python.
 
-**Where they run.** Every `ubuntu-latest` leg of the `python` matrix runs them,
+**Where they run.** Every `ubuntu-26.04` leg of the `python` matrix runs them,
 against the interpreter that leg installs, and `tests/test_feature_lanes.py`
 holds the rule that puts them there: a feature a crate declares is passed to a
 `cargo test` by some lane that is not itself a measurement, or it is excused

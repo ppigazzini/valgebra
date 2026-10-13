@@ -723,6 +723,19 @@ directory, links the lane's, and every binding shape reads the distance between
 two interpreters as the change's own. The `python` matrix keys its cache on the
 interpreter for the same reason.
 
+**Every build cache is keyed on the runner image as well.** A lane that names no
+interpreter -- `rust test`, `rust coverage` -- builds against the image's own,
+and pyo3 asks for it again only when `PYO3_PYTHON` changes. The key
+Swatinem/rust-cache computes names the OS family, the architecture, the
+toolchain and the variables whose names start with `CARGO`, `CC`, `CFLAGS`,
+`CXX`, `CMAKE` or `RUST`, and not the image, so a `target/` saved on Ubuntu
+24.04 restores on 26.04 and links libpython3.12, which 26.04 does not carry.
+`.github/actions/setup-rust` exports the name every hosted image gives itself in
+`ImageOS` as `RUST_CACHE_IMAGE`, and every lane restores its cache after that
+action, so an image move costs a cold build rather than a link against an
+interpreter the image does not have. `tests/test_lane_interpreters.py` holds
+both halves.
+
 The **free-threaded** build is held to its own set, in the same file, for the
 shapes where it is a different environment rather than the same one on a slower
 clock: reading an element out of a mutable container takes that container's lock

@@ -636,14 +636,14 @@ def test_the_floor_build_does_not_write_the_callers_environment() -> None:
 
 
 #: The gate runs the merge gate's own steps, and those are `runs-on:
-#: ubuntu-latest`; this drives one of them through a shell. A Windows checkout
+#: ubuntu-26.04`; this drives one of them through a shell. A Windows checkout
 #: resolves `bash` to Git-Bash or to WSL, neither of which is the shell the step
 #: runs in, so a run there reports on the shell that answered rather than on the
 #: step. Every other lane asks it -- each Linux interpreter and macOS -- so the
 #: skip is the one platform the step never reaches.
 @pytest.mark.skipif(
     sys.platform == "win32",
-    reason="the gate's steps run on ubuntu-latest; Git-Bash is a different shell",
+    reason="the gate's steps run on ubuntu-26.04; Git-Bash is a different shell",
 )
 def test_the_floor_build_runs_a_second_time(tmp_path: Path) -> None:
     """A gate run is repeatable, and the floor step is the one that was not.

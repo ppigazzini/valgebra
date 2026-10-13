@@ -88,7 +88,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -131,7 +131,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-26.04, macos-26, windows-2025-vs2026]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     # Property laws run deeper on the merge gate than the proptest default of
@@ -167,7 +167,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -195,7 +195,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -231,7 +231,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -300,7 +300,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -412,7 +412,7 @@ jobs:
     # `name` may read `matrix` and not `env`.
     name: >-
       python ${{ matrix.python-version }} (${{ matrix.os }})${{
-      (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10') &&
+      (matrix.os == 'ubuntu-26.04' && matrix.python-version == '3.10') &&
       ', full history' || '' }}
     needs: nightly-dispatch
     if: >-
@@ -440,15 +440,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-26.04]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t", "3.15", "3.16"]
         # One representative interpreter on macOS and Windows, so the binding, the
         # membership walk, the JSON path, and the error model are exercised on
         # every OS the release ships wheels for, not only Linux.
         include:
-          - os: macos-latest
+          - os: macos-26
             python-version: "3.14"
-          - os: windows-latest
+          - os: windows-2025-vs2026
             python-version: "3.14"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -469,7 +469,7 @@ jobs:
           # `tests/test_changelog_ledger.py` holds the depth here. Quoted,
           # because `0` is falsy in a workflow expression and an unquoted
           # `&& 0 || 1` is always 1.
-          fetch-depth: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == env.FLOOR) && '0' || '1' }}
+          fetch-depth: ${{ (matrix.os == 'ubuntu-26.04' && matrix.python-version == env.FLOOR) && '0' || '1' }}
       - uses: $/.github/actions/setup-rust
         with:
           toolchain: stable
@@ -495,7 +495,7 @@ jobs:
       # no lane runs them. One leg is enough: the listing is the source's,
       # not the interpreter's. Pinned as the sweeps pin it.
       - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
-        if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == env.FLOOR }}
+        if: ${{ matrix.os == 'ubuntu-26.04' && matrix.python-version == env.FLOOR }}
         with:
           tool: cargo-mutants@27.1.0
       - name: Install dev dependencies
@@ -512,7 +512,7 @@ jobs:
       # main thread 8 MiB, and the value 0 is the dev profile's own.
       - name: Build the extension into the venv
         env:
-          CARGO_PROFILE_DEV_OPT_LEVEL: ${{ matrix.os == 'windows-latest' && '1' || '0' }}
+          CARGO_PROFILE_DEV_OPT_LEVEL: ${{ matrix.os == 'windows-2025-vs2026' && '1' || '0' }}
         run: uv run --no-sync maturin develop --uv
       # The binding's four corpora drive live Python objects through the
       # frontend, the walk and the oracle, and they are the tests `cargo test
@@ -534,7 +534,7 @@ jobs:
       # than failed, which the aggregate gate reads as red without saying why.
       # With a bound, a hang is a failing step in five minutes.
       - name: The binding's interpreter corpora
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.os == 'ubuntu-26.04' }}
         run: |
           base="$(uv run --no-sync python -c 'import sys; print(sys.base_prefix)')"
           PYO3_PYTHON="$base/bin/python3"
@@ -565,7 +565,7 @@ jobs:
       # share a copy. Work stealing, because the plants' times differ tenfold
       # and a worker handed a fixed share finishes last.
       - name: The repository audit
-        if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == env.FLOOR }}
+        if: ${{ matrix.os == 'ubuntu-26.04' && matrix.python-version == env.FLOOR }}
         env:
           HYPOTHESIS_PROFILE: ci
         run: >-
@@ -622,7 +622,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -667,7 +667,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -704,7 +704,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -741,7 +741,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     # The extension is built for PyPy and published for it, and nothing on a
     # push built one: the wheel matrix lives in the release workflow, which runs
@@ -806,7 +806,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -853,7 +853,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1021,7 +1021,7 @@ jobs:
 
   pgo-compare:
     name: pgo compare (${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     # Dispatch only. A profiled build is trained before it is compiled, so this
     # lane builds the extension twice over and pays for it; a merge waits on
@@ -1100,7 +1100,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     # A supported lane that nothing times is one the project makes claims about
     # without reading them. Every read of an element out of a mutable container
@@ -1138,7 +1138,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1266,7 +1266,7 @@ jobs:
     # mutants and keeps the file granularity, which is the part that matters --
     # see the note above on why the lines are not enough. Each shard runs its
     # own baseline, and the ratchet is already written for a partial sweep.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 105
     # One seed for the baseline and every mutant of this shard. A mutation is
     # caught when the tests answer differently with it than without it, so the
@@ -1414,7 +1414,7 @@ jobs:
     # window can: about nineteen hundred mutants, whose slowest shard read
     # 43.5 minutes on 2026-10-08, so the ceiling is 90, twice that, by the
     # rule the core's sweep states.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 90
     # One seed for the baseline and every mutant of this shard, and the same
     # literal on every push, for the reasons `mutants-diff-core` gives.
@@ -1561,7 +1561,7 @@ jobs:
     # `main`'s own tip, behind the branch or beside it, is a tree the next
     # fast-forward replaces, and its push jobs would redden on what the branch
     # has already repaired.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     # Dispatching a run writes to the repository's actions, and no other job
     # writes anything, so the permission is this job's alone.
@@ -1608,7 +1608,7 @@ jobs:
       !cancelled() && (github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1699,7 +1699,7 @@ jobs:
       !cancelled() && (github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Eight times the push lanes' depth. A passing run takes most of the hour
     # on a shared runner, as the drawn laws have grown, so the ceiling is the
     # hour: a run past it is a red to read as growth, not a limit to raise.
@@ -1750,7 +1750,7 @@ jobs:
       !cancelled() && (github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1806,7 +1806,7 @@ jobs:
       !cancelled() && (github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1969,7 +1969,7 @@ jobs:
       !cancelled() && (github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     # `tests/floor_names.json` dates every public `typing` and `enum` name, and
     # a push cannot check it: the fact it records is a property of six
@@ -2009,7 +2009,7 @@ jobs:
       !cancelled() && (github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # A cancelled job is red, and a job that runs out of time is cancelled --
     # so the ceiling has to clear the slowest shard rather than sit near it,
     # and what clears it is the shard COUNT rather than the ceiling. The sweep
@@ -2195,7 +2195,7 @@ jobs:
     if: >-
       always() && needs['nightly-mutants'].result != 'skipped' &&
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -2243,7 +2243,7 @@ jobs:
       !cancelled() && (github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Three round-robin shards, merged and ratcheted by the job after them, as
     # the core and pytest sweeps are. One job swept the whole binding in 34
     # minutes on 2026-09-26 and 47 to 52 at 0.0.15, and was cancelled at its
@@ -2370,7 +2370,7 @@ jobs:
     if: >-
       always() && needs['nightly-mutants-walk'].result != 'skipped' &&
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -2426,7 +2426,7 @@ jobs:
       !cancelled() && (github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Six shards of a sweep whose mutants cost a minute apiece on two cores;
     # twice the reading, as the core sweep's ceiling is twice its slowest shard.
     timeout-minutes: 90
@@ -2513,7 +2513,7 @@ jobs:
     if: >-
       always() && needs['nightly-mutants-pytest'].result != 'skipped' &&
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -2559,7 +2559,7 @@ jobs:
     # target unseen until the scheduled soak; building it here fails the change
     # instead. Runs unconditionally so the aggregate gate never sees it skipped;
     # the soak (nightly-libfuzzer) still runs the fuzzers.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -2606,7 +2606,7 @@ jobs:
     # workspace and the detached fuzz workspace. Runs on the daily schedule too,
     # so a newly published advisory against an unchanged tree surfaces without a
     # push.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -2628,7 +2628,7 @@ jobs:
       needs['nightly-dispatch'].outputs.dispatched == 'false')
     # Supply-chain audit of the locked Python dependencies (dev, bench, and docs
     # groups — everything CI installs) against the PyPI advisory database.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -2650,7 +2650,7 @@ jobs:
       needs['nightly-dispatch'].outputs.dispatched == 'false')
     # Static analysis of the workflows themselves: template injection, credential
     # persistence, over-broad permissions, and unpinned actions.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -2706,7 +2706,7 @@ jobs:
         nightly-floor-names,
         nightly-branch-coverage,
       ]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       # Gate on every required job having *succeeded*, so a skipped or otherwise

@@ -227,7 +227,7 @@ def test_the_workflow_runs_this_ledger_with_full_history() -> None:
     # The expression is read for what it *yields*, not matched as text: a
     # rewording that keeps the full history is fine, and a `'1'` in both arms is
     # not -- which a substring match reads the other way round on both counts.
-    floor = {"matrix.os": "ubuntu-latest", "matrix.python-version": FLOOR}
+    floor = {"matrix.os": "ubuntu-26.04", "matrix.python-version": FLOOR}
     assert _expression(depth, floor) == "0", (
         f"the python lane takes fetch-depth {_expression(depth, floor)!r} on its "
         f"floor leg, so the changelog ledger skips in every lane that runs it"
@@ -260,8 +260,8 @@ def test_the_leg_that_takes_the_history_says_so_in_its_name() -> None:
         f"says it has a history it does not have"
     )
 
-    floor = {"matrix.os": "ubuntu-latest", "matrix.python-version": FLOOR}
-    other = {"matrix.os": "ubuntu-latest", "matrix.python-version": "3.14"}
+    floor = {"matrix.os": "ubuntu-26.04", "matrix.python-version": FLOOR}
+    other = {"matrix.os": "ubuntu-26.04", "matrix.python-version": "3.14"}
     said = _expression(marker.group(0), floor)
     assert "history" in said, (
         f"the floor leg is named {said!r}, which does not say it carries the "
@@ -350,4 +350,4 @@ def test_a_condition_is_read_whole_and_a_variable_filled_in() -> None:
     spelled = _tests(f"matrix.python-version == '{FLOOR}'")
     assert _tests("matrix.python-version == env.FLOOR") == spelled
     with pytest.raises(AssertionError, match="cannot read"):
-        _tests("matrix.os == 'ubuntu-latest' && startsWith(matrix.os, 'ubuntu')")
+        _tests("matrix.os == 'ubuntu-26.04' && startsWith(matrix.os, 'ubuntu')")

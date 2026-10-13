@@ -957,7 +957,7 @@ def test_the_floor_leg_reads_the_audit_and_every_leg_the_rest() -> None:
     """
     workflow = read_workflow()
     reads = _reads(workflow)
-    floor = ("python", f"ubuntu-latest {workflow['env']['FLOOR']}")
+    floor = ("python", f"ubuntu-26.04 {workflow['env']['FLOOR']}")
     assert floor in reads, f"the python job runs no floor leg: {sorted(reads)}"
 
     def expected(where: tuple[str, str], kind: str) -> int:
@@ -992,8 +992,8 @@ def test_a_selection_and_a_condition_are_read_as_the_runner_reads_them() -> None
     assert _selects("repository and not interpreter", audit)
     assert not _selects("repository and not interpreter", product)
     assert _selects("", audit)
-    leg = {"matrix.os": "ubuntu-latest", "matrix.python-version": "3.10"}
-    floor = "${{ matrix.os == 'ubuntu-latest' && matrix.python-version == env.FLOOR }}"
+    leg = {"matrix.os": "ubuntu-26.04", "matrix.python-version": "3.10"}
+    floor = "${{ matrix.os == 'ubuntu-26.04' && matrix.python-version == env.FLOOR }}"
     assert _holds(floor, leg, {"FLOOR": "3.10"})
     assert not _holds(floor, leg, {"FLOOR": "3.11"})
     with pytest.raises(AssertionError, match="cannot read"):
@@ -1001,17 +1001,17 @@ def test_a_selection_and_a_condition_are_read_as_the_runner_reads_them() -> None
     job = {
         "strategy": {
             "matrix": {
-                "os": ["ubuntu-latest"],
+                "os": ["ubuntu-26.04"],
                 "python-version": ["3.10", "3.11"],
                 "include": [
-                    {"os": "ubuntu-latest", "python-version": "3.10", "floor": True},
-                    {"os": "macos-latest", "python-version": "3.14"},
+                    {"os": "ubuntu-26.04", "python-version": "3.10", "floor": True},
+                    {"os": "macos-26", "python-version": "3.14"},
                 ],
             }
         }
     }
     assert [" ".join(leg.values()) for leg in _legs(job)] == [
-        "ubuntu-latest 3.10 True",
-        "ubuntu-latest 3.11",
-        "macos-latest 3.14",
+        "ubuntu-26.04 3.10 True",
+        "ubuntu-26.04 3.11",
+        "macos-26 3.14",
     ]

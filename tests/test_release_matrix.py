@@ -37,25 +37,25 @@ FREE_THREADED_FROM = (3, 14)
 
 #: Releases a platform does not build, by platform, each with the reason.
 GAPS: dict[tuple[str, str], str] = {
-    ("windows-11-arm aarch64", "3.10"): "the Windows arm64 set starts at 3.12",
-    ("windows-11-arm aarch64", "3.11"): "the Windows arm64 set starts at 3.12",
+    ("windows-11-vs2026-arm aarch64", "3.10"): "the Windows arm64 set starts at 3.12",
+    ("windows-11-vs2026-arm aarch64", "3.11"): "the Windows arm64 set starts at 3.12",
     (
-        "windows-11-arm aarch64",
+        "windows-11-vs2026-arm aarch64",
         "3.14t",
     ): "no free-threaded row builds for Windows arm64",
     (
-        "windows-11-arm aarch64",
+        "windows-11-vs2026-arm aarch64",
         "3.15t",
     ): "no free-threaded row builds for Windows arm64",
 }
 
 #: Rows that name no interpreters, leaving them to the build image.
 UNNAMED: dict[str, str] = {
-    "ubuntu-latest x86_64 musllinux_1_2": (
+    "ubuntu-26.04 x86_64 musllinux_1_2": (
         "`--find-interpreter` builds for what the musllinux image carries: in "
         "0.0.17, 3.10 through 3.14, 3.14t and PyPy 7.3"
     ),
-    "ubuntu-latest aarch64 musllinux_1_2": (
+    "ubuntu-26.04 aarch64 musllinux_1_2": (
         "`--find-interpreter` builds for what the musllinux image carries: in "
         "0.0.17, 3.10 through 3.14, 3.14t and PyPy 7.3"
     ),

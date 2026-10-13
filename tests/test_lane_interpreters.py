@@ -29,6 +29,11 @@ the interpreter the first built against: pyo3 resolves it again only when
 `PYO3_PYTHON` changes, and every lane names `.venv/bin/python` whichever build
 stands behind it. So the jobs sharing a rust cache install one interpreter, and
 the key names that interpreter: a lane moving its interpreter moves the key.
+A lane that builds against the image's own interpreter has the image for its
+interpreter, and the key the cache action computes does not name the image: a
+cache saved on Ubuntu 24.04 links libpython3.12 on an image that has none. So
+the toolchain wrapper exports the image's name under a prefix the key reads,
+and every job restores its cache behind the wrapper.
 
 LEDGER: no lane installs an interpreter without naming it
 """
@@ -58,6 +63,21 @@ CPYTHON = "cpython"
 _RUNS_PYTEST = re.compile(r"(?:^|\s)(?:uv run |[\w./-]*python -m )?pytest\b")
 
 
+#: The toolchain wrapper, which names the runner image for the cache key.
+TOOLCHAIN = "/.github/actions/setup-rust"
+
+#: The build cache every Rust lane restores.
+RUST_CACHE = "Swatinem/rust-cache@"
+
+#: The prefixes a variable's name starts with for the cache action to read it
+#: into the key.
+_KEYED_PREFIXES = ("CARGO", "CC", "CFLAGS", "CXX", "CMAKE", "RUST")
+
+#: A `run:` line exporting the image's name to the steps after it.
+_EXPORTS_IMAGE = re.compile(
+    r'\b([A-Z][A-Z_]*)=\$\{ImageOS\b[^}]*\}.*>>\s*"\$GITHUB_ENV"'
+)
+
 #: An interpreter uv is asked for by name: `pypy-3.11`, `graalpy-24`.
 _NAMED = re.compile(r"\b([a-z][a-z_]*[a-z])-\d")
 
@@ -72,7 +92,9 @@ def _interpreter_text(job: dict, step: dict) -> str:
     says `${{ matrix.python-version }}` and nothing about an implementation.
     The matrix's own value -- a list, or the expression that chooses between
     two lists -- is the text that does, so it is read in the expression's
-    place rather than the lane being read as CPython by default.
+    place rather than the lane being read as CPython by default. An `include`
+    row is read for the same key alone: its other keys name a runner, and a
+    runner label such as `macos-26` is not an interpreter.
     """
     named = str((step.get("with") or {}).get("python-version") or "")
     if "matrix." not in named:
@@ -81,7 +103,12 @@ def _interpreter_text(job: dict, step: dict) -> str:
     parts = [named]
     for key, value in matrix.items():
         if key == "include":
-            parts.extend(str(row) for row in value)
+            parts.extend(
+                str(row[name])
+                for row in value
+                for name in row
+                if f"matrix.{name}" in named
+            )
         elif f"matrix.{key}" in named:
             parts.append(str(value))
     return " ".join(parts)
@@ -227,3 +254,43 @@ def test_jobs_sharing_a_rust_cache_install_the_interpreter_it_names() -> None:
             f"`{key}` does not name {interpreter}, so moving the interpreter "
             "leaves the cache behind"
         )
+
+
+def test_the_toolchain_wrapper_names_the_image_in_the_cache_key() -> None:
+    wrapper = ROOT / TOOLCHAIN.removeprefix("/") / "action.yml"
+    exported = [
+        name
+        for step in read_workflow(wrapper)["runs"]["steps"]
+        for name in _EXPORTS_IMAGE.findall(str(step.get("run", "")))
+    ]
+    assert any(name.startswith(_KEYED_PREFIXES) for name in exported), (
+        f"the toolchain wrapper exports the image as {exported or 'nothing'}, "
+        f"and the cache key reads only names starting {_KEYED_PREFIXES}: a cache "
+        "saved on one image restores on the next, linking the interpreter the "
+        "first image carried"
+    )
+
+
+def test_every_rust_cache_restores_behind_the_toolchain_wrapper() -> None:
+    restored = 0
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        for job_name, job in (read_workflow(path).get("jobs") or {}).items():
+            wrapped = False
+            for step in job.get("steps") or []:
+                uses = str(step.get("uses", ""))
+                wrapped = wrapped or uses.endswith(TOOLCHAIN)
+                if not uses.startswith(RUST_CACHE):
+                    continue
+                restored += 1
+                where = f"{path.name}:{job_name}"
+                assert wrapped, (
+                    f"{where} restores a rust cache before the toolchain wrapper "
+                    "names the image, so its key is the same on every image"
+                )
+                hashed = (step.get("with") or {}).get("add-rust-environment-hash-key")
+                assert str(hashed).lower() != "false", (
+                    f"{where} keeps the environment out of its cache key, and "
+                    "the image's name with it"
+                )
+    # The scan is the detector: no cache at all would pass having read nothing.
+    assert restored, "no job restores a rust cache"

@@ -868,14 +868,14 @@ def stage(tmp_path: Path) -> tuple[Path, Path]:
     return upstream, tree
 
 
-#: `bench` is `runs-on: ubuntu-latest`, so this step's shell is that runner's.
+#: `bench` is `runs-on: ubuntu-26.04`, so this step's shell is that runner's.
 #: Driving it through Git-Bash measures the shell rather than the step, and a
 #: platform the step never reaches cannot say anything about it either way. Every
 #: other lane runs this -- each Linux interpreter and macOS -- so the check is
 #: narrowed to the one platform it says nothing on, not to one that it does.
 @pytest.mark.skipif(
     sys.platform == "win32",
-    reason="the step runs on ubuntu-latest; Git-Bash is a different shell",
+    reason="the step runs on ubuntu-26.04; Git-Bash is a different shell",
 )
 def test_the_merge_base_is_never_the_commit_being_measured(
     stage: tuple[Path, Path],

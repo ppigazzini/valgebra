@@ -23,7 +23,7 @@ concurrency:
 jobs:
   build:
     name: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     # configure-pages and upload-pages-artifact need to write the Pages artifact.
     permissions:
@@ -59,7 +59,7 @@ jobs:
   deploy:
     name: deploy
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     # deploy-pages publishes the artifact and mints the OIDC token Pages verifies.
     permissions:

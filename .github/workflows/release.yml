@@ -39,10 +39,11 @@ jobs:
     name: wheels (${{ matrix.platform.runner }} ${{ matrix.platform.target }} ${{ matrix.platform.manylinux || matrix.platform.variant || 'native' }})
     runs-on: ${{ matrix.platform.runner }}
     # Twice the slowest row's reading, rounded up, as a sweep shard's ceiling
-    # is twice its slowest shard's: the macos-15-intel row builds eight
-    # interpreters with a profile each and read 34.7 to 50.9 minutes in the six
-    # release runs that built 0.0.15, 0.0.16 and 0.0.17, and a row that reaches
-    # the ceiling is cancelled with the release waiting on it.
+    # is twice its slowest shard's: the macOS x86_64 row builds eight
+    # interpreters with a profile each, and read 34.7 to 50.9 minutes over six
+    # release runs on the macOS 15 x86_64 image, the four-core Intel VM size
+    # macos-26-intel runs on. A row that reaches the ceiling is cancelled with
+    # the release waiting on it.
     timeout-minutes: 105
     strategy:
       fail-fast: false
@@ -99,33 +100,31 @@ jobs:
         # other ABI under this row's name. Each wheel is smoked on the PyPy it
         # is built for.
         platform:
-          - { runner: ubuntu-latest, target: x86_64, pgo: true, interpreter: python3.10 python3.11 python3.12 python3.13 python3.14 python3.15 python3.14t python3.15t }
-          - { runner: ubuntu-24.04-arm, target: aarch64, pgo: true, interpreter: python3.10 python3.11 python3.12 python3.13 python3.14 python3.15 python3.14t python3.15t }
-          - { runner: ubuntu-latest, target: x86_64, interpreter: pypy3.11, variant: pypy73 }
-          - { runner: ubuntu-24.04-arm, target: aarch64, interpreter: pypy3.11, variant: pypy73 }
-          - { runner: ubuntu-latest, target: x86_64, manylinux: 2_28, interpreter: /opt/python/pp311-pypy311_pp80/bin/python, variant: pypy80 }
-          - { runner: ubuntu-24.04-arm, target: aarch64, manylinux: 2_28, interpreter: /opt/python/pp311-pypy311_pp80/bin/python, variant: pypy80 }
-          - { runner: ubuntu-latest, target: x86_64, manylinux: musllinux_1_2 }
-          - { runner: ubuntu-latest, target: aarch64, manylinux: musllinux_1_2 }
-          # macos-15-intel is the last GitHub-hosted x86_64 macOS image (macOS
-          # 15, available through August 2027); it replaces the retired
-          # macos-13. The arm64 build below runs on macos-latest.
+          - { runner: ubuntu-26.04, target: x86_64, pgo: true, interpreter: python3.10 python3.11 python3.12 python3.13 python3.14 python3.15 python3.14t python3.15t }
+          - { runner: ubuntu-26.04-arm, target: aarch64, pgo: true, interpreter: python3.10 python3.11 python3.12 python3.13 python3.14 python3.15 python3.14t python3.15t }
+          - { runner: ubuntu-26.04, target: x86_64, interpreter: pypy3.11, variant: pypy73 }
+          - { runner: ubuntu-26.04-arm, target: aarch64, interpreter: pypy3.11, variant: pypy73 }
+          - { runner: ubuntu-26.04, target: x86_64, manylinux: 2_28, interpreter: /opt/python/pp311-pypy311_pp80/bin/python, variant: pypy80 }
+          - { runner: ubuntu-26.04-arm, target: aarch64, manylinux: 2_28, interpreter: /opt/python/pp311-pypy311_pp80/bin/python, variant: pypy80 }
+          - { runner: ubuntu-26.04, target: x86_64, manylinux: musllinux_1_2 }
+          - { runner: ubuntu-26.04, target: aarch64, manylinux: musllinux_1_2 }
+          # Both macOS rows build on macOS 26, the newest release GitHub hosts
+          # for either architecture: macos-26-intel for x86_64, macos-26 for
+          # arm64.
           #
           # On a host runner `--find-interpreter` builds for what the image
-          # carries, and the images carry no free-threaded build, no 3.15 and, on
-          # macOS arm64, no 3.10: 0.0.12 shipped no cp314t or cp315 wheel off
-          # Linux and no cp310 one for Apple silicon. `pythons` installs every
-          # supported interpreter first. Windows takes its free-threaded builds in
-          # a job of their own, because co-installing a release and its
-          # free-threaded build in one setup step can fail there (maturin-action's
-          # README, python/cpython#127294), and that job builds the interpreters
-          # by name. Windows arm64 installs 3.12 onward, the releases its 0.0.12
-          # wheels covered, and 3.15 beside them.
-          - { runner: macos-15-intel, target: x86_64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
-          - { runner: macos-latest, target: aarch64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
-          - { runner: windows-latest, target: x64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.15" }
-          - { runner: windows-latest, target: x64, pgo: true, pythons: "3.14t\n3.15t", interpreter: python3.14t python3.15t, variant: freethreaded }
-          - { runner: windows-11-arm, target: aarch64, pythons: "3.12\n3.13\n3.14\n3.15" }
+          # carries, and an image's tool cache is not the supported set.
+          # `pythons` installs every supported interpreter first. Windows takes
+          # its free-threaded builds in a job of their own, because
+          # co-installing a release and its free-threaded build in one setup
+          # step can fail there (maturin-action's README, python/cpython#127294),
+          # and that job builds the interpreters by name. Windows arm64 installs
+          # 3.12 onward.
+          - { runner: macos-26-intel, target: x86_64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
+          - { runner: macos-26, target: aarch64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
+          - { runner: windows-2025-vs2026, target: x64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.15" }
+          - { runner: windows-2025-vs2026, target: x64, pgo: true, pythons: "3.14t\n3.15t", interpreter: python3.14t python3.15t, variant: freethreaded }
+          - { runner: windows-11-vs2026-arm, target: aarch64, pythons: "3.12\n3.13\n3.14\n3.15" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -249,7 +248,7 @@ jobs:
 
   sdist:
     name: sdist
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -285,20 +284,20 @@ jobs:
           # whose wheels are installed, imported and checked: each is a build of
           # its own, profiled on its own interpreter, and a release with none of
           # its wheels loaded ships a build nothing ran.
-          - { name: linux-x86_64, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
-          - { name: linux-aarch64, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
+          - { name: linux-x86_64, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
+          - { name: linux-aarch64, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-arm-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
           # Each PyPy wheel is smoked on the PyPy it is built for, named by the
           # release that carries the ABI: 3.11.15 is PyPy 7.3 and 3.11.16 is
           # PyPy 8.0.
-          - { name: linux-x86_64-pypy73, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-pypy73, pythons: "pypy@3.11.15" }
-          - { name: linux-aarch64-pypy73, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-pypy73, pythons: "pypy@3.11.15" }
-          - { name: linux-x86_64-pypy80, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-pypy80, pythons: "pypy@3.11.16" }
-          - { name: linux-aarch64-pypy80, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-pypy80, pythons: "pypy@3.11.16" }
-          - { name: macos-x86_64, runner: macos-15-intel, artifact: wheels-macos-15-intel-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
-          - { name: macos-arm64, runner: macos-latest, artifact: wheels-macos-latest-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
-          - { name: windows-x64, runner: windows-latest, artifact: wheels-windows-latest-x64-native, pythons: "3.10 3.15", imports: "3.11 3.12 3.13 3.14" }
-          - { name: windows-x64-freethreaded, runner: windows-latest, artifact: wheels-windows-latest-x64-freethreaded, pythons: "3.14t 3.15t" }
-          - { name: windows-arm64, runner: windows-11-arm, artifact: wheels-windows-11-arm-aarch64-native, pythons: "3.12 3.15", imports: "3.13 3.14", host: "3.12\n3.13\n3.14\n3.15" }
+          - { name: linux-x86_64-pypy73, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-pypy73, pythons: "pypy@3.11.15" }
+          - { name: linux-aarch64-pypy73, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-arm-aarch64-pypy73, pythons: "pypy@3.11.15" }
+          - { name: linux-x86_64-pypy80, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-pypy80, pythons: "pypy@3.11.16" }
+          - { name: linux-aarch64-pypy80, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-arm-aarch64-pypy80, pythons: "pypy@3.11.16" }
+          - { name: macos-x86_64, runner: macos-26-intel, artifact: wheels-macos-26-intel-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
+          - { name: macos-arm64, runner: macos-26, artifact: wheels-macos-26-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
+          - { name: windows-x64, runner: windows-2025-vs2026, artifact: wheels-windows-2025-vs2026-x64-native, pythons: "3.10 3.15", imports: "3.11 3.12 3.13 3.14" }
+          - { name: windows-x64-freethreaded, runner: windows-2025-vs2026, artifact: wheels-windows-2025-vs2026-x64-freethreaded, pythons: "3.14t 3.15t" }
+          - { name: windows-arm64, runner: windows-11-vs2026-arm, artifact: wheels-windows-11-vs2026-arm-aarch64-native, pythons: "3.12 3.15", imports: "3.13 3.14", host: "3.12\n3.13\n3.14\n3.15" }
     runs-on: ${{ matrix.wheel.runner }}
     timeout-minutes: 45
     # The musllinux wheels are smoked in `smoke-musl`, in Alpine containers: a
@@ -384,8 +383,8 @@ jobs:
       fail-fast: false
       matrix:
         wheel:
-          - { name: linux-x86_64-musl, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-musllinux_1_2, pythons: "3.10 3.14", imports: "3.11 3.12 3.13" }
-          - { name: linux-aarch64-musl, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-latest-aarch64-musllinux_1_2, pythons: "3.10 3.14", imports: "3.11 3.12 3.13" }
+          - { name: linux-x86_64-musl, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-musllinux_1_2, pythons: "3.10 3.14", imports: "3.11 3.12 3.13" }
+          - { name: linux-aarch64-musl, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-aarch64-musllinux_1_2, pythons: "3.10 3.14", imports: "3.11 3.12 3.13" }
     runs-on: ${{ matrix.wheel.runner }}
     timeout-minutes: 45
     steps:
@@ -446,7 +445,7 @@ jobs:
   sdist-smoke:
     name: smoke sdist
     needs: [sdist]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     # The source distribution is the fallback install for any platform without a
     # wheel, so build it from source, import it and run the product suite on it
@@ -506,7 +505,7 @@ jobs:
   github-release:
     name: attach wheels to a github pre-release
     needs: [wheels, sdist, smoke, smoke-musl, sdist-smoke]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     # A dispatch can attach the built artifacts to a deletable GitHub
     # pre-release so the exact wheels install by their asset URL with no package
@@ -547,7 +546,7 @@ jobs:
     # The wheel and sdist smoke must pass before anything publishes: a broken wheel fails
     # its import here and blocks the upload.
     needs: [wheels, sdist, smoke, smoke-musl, sdist-smoke]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     # Publishing requires a deliberate dispatch that selects a real index, from
     # the main branch: a dry-run dispatch (target "none") uploads nothing, no tag

@@ -607,7 +607,7 @@ RUNNER_ONLY_STEP = """      - name: A step only a runner can fill in
 #: A pull-request job the `ci` aggregator does not wait for.
 UNREQUIRED_JOB = """jobs:
   planted:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - run: echo planted
 """
@@ -923,8 +923,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "fetch-depth: ${{ (matrix.os == 'ubuntu-latest'",
-            "fetch-depth: ${{ (matrix.os == 'macos-latest'",
+            "fetch-depth: ${{ (matrix.os == 'ubuntu-26.04'",
+            "fetch-depth: ${{ (matrix.os == 'macos-26'",
         ),
         trips=(
             "test_the_leg_that_takes_the_history_says_so_in_its_name",
@@ -969,8 +969,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "\n      (matrix.os == 'ubuntu-latest'",
-            "\n      (matrix.os == 'macos-latest'",
+            "\n      (matrix.os == 'ubuntu-26.04'",
+            "\n      (matrix.os == 'macos-26'",
         ),
         trips=("test_the_leg_that_takes_the_history_says_so_in_its_name",),
     ),
@@ -1059,7 +1059,7 @@ PLANTS = (
             tree,
             ".github/workflows/ci.yml",
             "      - name: The repository audit\n        if: ${{ matrix.os == "
-            "'ubuntu-latest' && matrix.python-version == env.FLOOR }}\n",
+            "'ubuntu-26.04' && matrix.python-version == env.FLOOR }}\n",
             "      - name: The repository audit\n",
         ),
         trips=("test_the_floor_leg_reads_the_audit_and_every_leg_the_rest",),
@@ -1358,8 +1358,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/release.yml",
-            "artifact: wheels-ubuntu-latest-x86_64-pypy73,",
-            "artifact: wheels-ubuntu-latest-x86_64-native,",
+            "artifact: wheels-ubuntu-26.04-x86_64-pypy73,",
+            "artifact: wheels-ubuntu-26.04-x86_64-native,",
         ),
         trips=(
             "test_every_built_wheel_set_is_smoked_or_excused",
@@ -2175,7 +2175,7 @@ PLANTS = (
             (
                 "\n  ci:\n",
                 (
-                    "\n  planted-job:\n    runs-on: ubuntu-latest\n    steps:\n"
+                    "\n  planted-job:\n    runs-on: ubuntu-26.04\n    steps:\n"
                     "      - uses: actions/checkout@v4\n\n  ci:\n"
                 ),
             ),
@@ -2878,8 +2878,8 @@ PLANTS = (
             "(github.event_name == 'workflow_dispatch' ||\n      "
             "(github.event_name == 'schedule' &&\n      "
             "needs['nightly-dispatch'].outputs.dispatched == 'false'))\n"
-            "    runs-on: ubuntu-latest\n    # Six shards",
-            "    runs-on: ubuntu-latest\n    # Six shards",
+            "    runs-on: ubuntu-26.04\n    # Six shards",
+            "    runs-on: ubuntu-26.04\n    # Six shards",
         ),
         trips=("test_a_lane_runs_the_sweep_off_the_merge_path",),
     ),
@@ -3051,7 +3051,7 @@ PLANTS = (
             "tests/test_release_matrix.py",
             "GAPS: dict[tuple[str, str], str] = {\n",
             "GAPS: dict[tuple[str, str], str] = {\n"
-            '    ("ubuntu-latest sparc64", "3.12"): "a platform no row builds",\n',
+            '    ("ubuntu-26.04 sparc64", "3.12"): "a platform no row builds",\n',
         ),
         trips=("test_every_gap_is_one_the_matrix_has",),
     ),
@@ -3583,6 +3583,55 @@ PLANTS = (
             "      - run: uv sync --locked --group docs\n",
         ),
         trips=("test_jobs_sharing_a_rust_cache_install_the_interpreter_it_names",),
+    ),
+    Plant(
+        # The toolchain wrapper exporting the image under a name the cache key
+        # does not read: every cache restores across an image move.
+        "tests/test_lane_interpreters.py",
+        (".github/actions/setup-rust/action.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/actions/setup-rust/action.yml",
+            'echo "RUST_CACHE_IMAGE=${ImageOS',
+            'echo "IMAGE=${ImageOS',
+        ),
+        trips=("test_the_toolchain_wrapper_names_the_image_in_the_cache_key",),
+    ),
+    Plant(
+        # A lane restoring its cache before the wrapper has named the image.
+        "tests/test_lane_interpreters.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "      - uses: $/.github/actions/setup-rust\n"
+            "        with:\n"
+            "          toolchain: stable\n"
+            "      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+            " # v2.9.2\n"
+            "      # The default feature set",
+            "      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+            " # v2.9.2\n"
+            "      - uses: $/.github/actions/setup-rust\n"
+            "        with:\n"
+            "          toolchain: stable\n"
+            "      # The default feature set",
+        ),
+        trips=("test_every_rust_cache_restores_behind_the_toolchain_wrapper",),
+    ),
+    Plant(
+        # A cache keeping the environment, and the image's name in it, out of
+        # its key.
+        "tests/test_lane_interpreters.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "          key: free-threaded\n",
+            "          key: free-threaded\n"
+            "          add-rust-environment-hash-key: false\n",
+        ),
+        trips=("test_every_rust_cache_restores_behind_the_toolchain_wrapper",),
     ),
     Plant(
         # A module finding the checkout for itself: a second answer to where
