@@ -172,14 +172,15 @@ const MAX_ENUM_MEMBERS: usize = 512;
 /// decided against another literal. An `IntEnum` inherits `int.__eq__` and is
 /// refused here, which is right: its members are equal to the integers they
 /// carry.
-fn compares_by_identity(ty: &Bound<'_, PyType>) -> bool {
+///
+/// The lookup runs a metaclass's own attribute hook, so it can raise, and the
+/// caller hears what it raised: a check that raised has answered nothing, and
+/// a signal among it is the query's to raise.
+fn compares_by_identity(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let py = ty.py();
-    let Ok(theirs) = ty.getattr(intern!(py, "__eq__")) else {
-        return false;
-    };
-    PyAny::type_object(py)
-        .getattr(intern!(py, "__eq__"))
-        .is_ok_and(|inherited| theirs.is(&inherited))
+    let theirs = ty.getattr(intern!(py, "__eq__"))?;
+    let inherited = PyAny::type_object(py).getattr(intern!(py, "__eq__"))?;
+    Ok(theirs.is(&inherited))
 }
 
 impl PoolRelations<'_, '_> {
@@ -216,7 +217,7 @@ impl PoolRelations<'_, '_> {
         if self.heard(class.is_subclass(flag.bind(py)))? {
             return None;
         }
-        if !compares_by_identity(class) {
+        if !self.heard(compares_by_identity(class))? {
             return None;
         }
         let members: Vec<Bound<'py, PyAny>> = self.heard(
@@ -327,7 +328,10 @@ fn builtin_of(py: Python<'_>, kind: Kind) -> Option<Bound<'_, PyType>> {
 /// lays down a layout of its own and its instances are still strings; one whose
 /// `__slots__` add to `object` lays down a layout and its instances are of no
 /// listed kind, which is the reading [`Class::lays_down_a_layout`] carries.
-fn layout_of<'py>(ty: &Bound<'py, PyType>) -> (Option<Bound<'py, PyType>>, Option<Kind>) {
+///
+/// Reading a class's own `__slots__` runs its code, and an error it raises is
+/// the caller's to hear, as every other probe's is.
+fn layout_of<'py>(ty: &Bound<'py, PyType>) -> PyResult<(Option<Bound<'py, PyType>>, Option<Kind>)> {
     let py = ty.py();
     let builtins = [
         (PyInt::type_object(py), Kind::Int),
@@ -345,16 +349,22 @@ fn layout_of<'py>(ty: &Bound<'py, PyType>) -> (Option<Bound<'py, PyType>>, Optio
     // pair is disjoint for a reason the layout does not carry. It is also why
     // the kind is `Int` and not `Bool`: `bool` is final, so an `int` subclass
     // is never a boolean.
-    let kind = builtins
-        .iter()
-        .find(|(builtin, _)| ty.is_subclass(builtin).unwrap_or(false))
-        .map(|(_, kind)| *kind);
-    let solid = ty
-        .mro()
-        .iter()
-        .filter_map(|base| base.cast_into::<PyType>().ok())
-        .find(|base| builtins.iter().any(|(builtin, _)| base.is(builtin)) || adds_slots(base));
-    (solid, kind)
+    let mut kind = None;
+    for (builtin, of) in &builtins {
+        if ty.is_subclass(builtin)? {
+            kind = Some(*of);
+            break;
+        }
+    }
+    for base in ty.mro().iter() {
+        let Ok(base) = base.cast_into::<PyType>() else {
+            continue;
+        };
+        if builtins.iter().any(|(builtin, _)| base.is(builtin)) || adds_slots(&base)? {
+            return Ok((Some(base), kind));
+        }
+    }
+    Ok((None, kind))
 }
 
 /// Whether a class's own `__slots__` add an instance slot.
@@ -365,40 +375,53 @@ fn layout_of<'py>(ty: &Bound<'py, PyType>) -> (Option<Bound<'py, PyType>>, Optio
 /// plain instance has anyway, and Python lays down no layout for them -- a
 /// class listing only those meets any other. A name is one slot, and a sequence
 /// of names is each of them; an empty sequence is no slot at all.
-fn adds_slots(ty: &Bound<'_, PyType>) -> bool {
+///
+/// A class without `__slots__` of its own adds none; any other error reading
+/// them -- the namespace through a metaclass's hook, the names through an
+/// iterable of the class's -- is the caller's.
+fn adds_slots(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let py = ty.py();
-    let Ok(slots) = ty
-        .getattr(intern!(py, "__dict__"))
-        .and_then(|namespace| namespace.get_item(intern!(py, "__slots__")))
-    else {
-        return false;
-    };
+    let namespace = ty.getattr(intern!(py, "__dict__"))?;
+    // Asked before it is read: most classes declare no slots, and a `KeyError`
+    // built for each of them and read for its type costs a relation between
+    // two dataclasses more than the rest of its class reading.
+    if !namespace.contains(intern!(py, "__slots__"))? {
+        return Ok(false);
+    }
+    let slots = namespace.get_item(intern!(py, "__slots__"))?;
     let adds = |name: &Bound<'_, PyAny>| {
         !name
             .cast::<PyString>()
             .is_ok_and(|name| name == "__dict__" || name == "__weakref__")
     };
     if slots.is_instance_of::<PyString>() {
-        return adds(&slots);
+        return Ok(adds(&slots));
     }
-    slots
-        .try_iter()
-        .is_ok_and(|names| names.filter_map(Result::ok).any(|name| adds(&name)))
+    for name in slots.try_iter()? {
+        if adds(&name?) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
-/// Whether a class's own `__slots__` -- one name, or a sequence of them --
-/// names `name`.
-fn names_slot(slots: &Bound<'_, PyAny>, name: &str) -> bool {
-    let is = |slot: &Bound<'_, PyAny>| {
+/// The names a class's own `__slots__` -- one name, or a sequence of them --
+/// lists, read once. Iterating them runs the class's code, and what it raises
+/// is the caller's; an entry that is not a string names no slot.
+fn slot_names(slots: &Bound<'_, PyAny>) -> PyResult<Vec<Box<str>>> {
+    let name = |slot: &Bound<'_, PyAny>| {
         slot.cast::<PyString>()
-            .is_ok_and(|slot| slot.to_str().is_ok_and(|slot| slot == name))
+            .ok()
+            .and_then(|slot| slot.to_str().ok().map(Box::from))
     };
     if slots.is_instance_of::<PyString>() {
-        return is(slots);
+        return Ok(name(slots).into_iter().collect());
     }
-    slots
-        .try_iter()
-        .is_ok_and(|names| names.filter_map(Result::ok).any(|slot| is(&slot)))
+    let mut names = Vec::new();
+    for slot in slots.try_iter()? {
+        names.extend(name(&slot?));
+    }
+    Ok(names)
 }
 
 /// The classes whose own `__getattribute__` is the generic lookup rather than a
@@ -527,6 +550,13 @@ fn read_namespace<'py>(
         }
         entries.push((name, value));
     }
+    // The slots are read before the names they are checked against, so the
+    // loop over the namespace runs none of the class's code but its
+    // descriptors' types.
+    let slots = match &slots {
+        Some(slots) => slot_names(slots)?,
+        None => Vec::new(),
+    };
     let (mut carries_dict, mut getattr, mut getattribute) = (false, false, false);
     let mut names = Vec::new();
     for (name, value) in entries {
@@ -536,7 +566,7 @@ fn read_namespace<'py>(
             "__getattribute__" => getattribute = !generic,
             _ => {}
         }
-        let member = if slots.as_ref().is_some_and(|slots| names_slot(slots, &name)) {
+        let member = if slots.contains(&name) {
             Member::Slot
         } else if is_data_descriptor(&value, descriptors)? {
             Member::Descriptor
@@ -615,7 +645,7 @@ impl<'py> PoolRelations<'py, '_> {
                 bases.push(Class::plain(self.class_id(&base)));
             }
         }
-        let (solid, kind) = layout_of(ty);
+        let (solid, kind) = self.heard(layout_of(ty))?;
         let layout = solid.map(|base| self.class_id(&base));
         let class = Class::new(self.class_id(ty), layout, &bases).carrying(self.attributes_of(ty)?);
         Some(match kind {
@@ -807,7 +837,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
         if !self.denotes_a_set(class)? {
             return None;
         }
-        let (solid, own) = layout_of(class);
+        let (solid, own) = self.heard(layout_of(class))?;
         // `bool` lays down `int`'s layout, so a class laid out as an int may be
         // `bool` itself and hold booleans. Sound and coarse: the pair is never
         // refuted here.
@@ -835,7 +865,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
         if !self.denotes_a_set(class)? {
             return None;
         }
-        let (_, own) = layout_of(class);
+        let (_, own) = self.heard(layout_of(class))?;
         Some(match own {
             Some(own) => own == kind || matches!((own, kind), (Kind::Int, Kind::Bool)),
             // A direct instance of a class that lays down no builtin layout is
@@ -950,7 +980,9 @@ impl LeafRelations for PoolRelations<'_, '_> {
         // asked only where the type's equality is one this oracle can trust: a
         // builtin scalar, whose equality is Python's, or a type that compares by
         // identity, where two distinct objects are two values by definition.
-        if self.literal_kind(left).is_none() && !compares_by_identity(&left_value.get_type()) {
+        if self.literal_kind(left).is_none()
+            && !self.heard(compares_by_identity(&left_value.get_type()))?
+        {
             return None;
         }
         self.heard(left_value.eq(right_value)).map(|equal| !equal)
@@ -974,14 +1006,18 @@ impl LeafRelations for PoolRelations<'_, '_> {
             // which is the condition `literals_disjoint` applies per pair: a
             // builtin scalar, whose equality is Python's, or a type comparing by
             // identity, where two distinct objects are two values.
-            if self.literal_kind(*index).is_none() && !compares_by_identity(&value.get_type()) {
+            if self.literal_kind(*index).is_none()
+                && !self.heard(compares_by_identity(&value.get_type()))?
+            {
                 return None;
             }
             self.heard(seen.add((value.get_type(), value)))?;
         }
         for index in probe {
             let value = self.literals.get(index.get())?.bind(self.py);
-            if self.literal_kind(*index).is_none() && !compares_by_identity(&value.get_type()) {
+            if self.literal_kind(*index).is_none()
+                && !self.heard(compares_by_identity(&value.get_type()))?
+            {
                 return None;
             }
             if self.heard(seen.contains((value.get_type(), value)))? {

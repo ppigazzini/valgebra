@@ -963,3 +963,70 @@ fn a_record_a_class_cannot_carry_is_not_refuted_against_a_kind() {
         });
     });
 }
+
+/// A class is read through code of its own -- its namespace and the `__eq__`
+/// on it through its metaclass, its `__slots__` by iterating them -- and a
+/// signal any of them raises is the relation's to raise: the oracle declines
+/// the question, and the query's answer is the signal.
+#[test]
+fn a_signal_reading_a_class_is_the_answer() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Loud(dict):\n\
+              \x20   def __contains__(self, key):\n\
+              \x20       if key == '__slots__':\n\
+              \x20           raise KeyboardInterrupt\n\
+              \x20       return dict.__contains__(self, key)\n\
+              class Namespace(type):\n\
+              \x20   def __getattribute__(cls, name):\n\
+              \x20       if name == '__dict__':\n\
+              \x20           return Loud(type.__getattribute__(cls, '__dict__'))\n\
+              \x20       return type.__getattribute__(cls, name)\n\
+              class Unread(metaclass=Namespace):\n\
+              \x20   pass\n\
+              class Names:\n\
+              \x20   read = False\n\
+              \x20   def __iter__(self):\n\
+              \x20       if Names.read:\n\
+              \x20           raise KeyboardInterrupt\n\
+              \x20       Names.read = True\n\
+              \x20       return iter(['x'])\n\
+              class Slotted:\n\
+              \x20   __slots__ = Names()\n\
+              class Equality(type):\n\
+              \x20   def __getattribute__(cls, name):\n\
+              \x20       if name == '__eq__':\n\
+              \x20           raise KeyboardInterrupt\n\
+              \x20       return type.__getattribute__(cls, name)\n\
+              class Opaque(metaclass=Equality):\n\
+              \x20   pass\n\
+              first, second = Opaque(), Opaque()\n",
+            c"class_reads.py",
+            c"class_reads",
+        )
+        .expect("the module compiles");
+        let slot = |name: &str| module.getattr(name).expect("the name").unbind();
+        let interrupted = |oracle: PoolRelations<'_, '_>| {
+            let raised = oracle.answer(()).expect_err("the signal is the answer");
+            assert!(raised.is_instance_of::<pyo3::exceptions::PyKeyboardInterrupt>(py));
+        };
+        for class in ["Unread", "Slotted"] {
+            let held = pooled(vec![slot(class)]);
+            let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
+            assert_eq!(
+                oracle.direct_instance_of_kind(ClassIx::new(0), Kind::Int),
+                None,
+                "{class}"
+            );
+            interrupted(oracle);
+        }
+        let held = pooled(vec![slot("first"), slot("second")]);
+        let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
+        assert_eq!(
+            oracle.literals_disjoint(ConstIx::new(0), ConstIx::new(1)),
+            None
+        );
+        interrupted(oracle);
+    });
+}

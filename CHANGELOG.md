@@ -18,6 +18,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a definition two branches read at one value is walked once
 - fix: an error's text and a value's summary are read from storage
 - fix: a signal while the special forms are first read is raised
+- fix: a relation raises a signal its class readings meet
 
 -->
 
@@ -62,6 +63,11 @@ answer of its own, or a repair to a change not yet released.
   absence, which the process kept: every later `Validator(typing.Never)` was
   refused as a typing construct. The signal is raised, and the forms are read
   again by the next validator.
+- **A relation raises a signal its reading of a class meets.** A metaclass hook
+  raising on the class's `__eq__`, or a `__slots__` whose iteration raised,
+  were folded into an answer, `undecided` or a verdict, and the signal was
+  lost. They raise it, and an ordinary exception there declines the class's
+  reading.
 
 ## [0.0.18] - 2026-10-12
 
