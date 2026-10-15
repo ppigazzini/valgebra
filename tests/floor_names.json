@@ -631,6 +631,9 @@
     "shutil": {
       "since": "3.10"
     },
+    "signal": {
+      "since": "3.10"
+    },
     "statistics": {
       "since": "3.10"
     },

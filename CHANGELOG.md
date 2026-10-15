@@ -20,6 +20,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a signal while the special forms are first read is raised
 - fix: a relation raises a signal its class readings meet
 - fix: pickling an error leaves the error untouched
+- fix: an integer key past the digit limit reaches the path as an integer
 
 -->
 
@@ -73,6 +74,11 @@ answer of its own, or a repair to a change not yet released.
   deleted the error's internal failures from the instance being pickled, which
   a thread reading the error at the same moment could meet half done. It
   pickles a copy of the state.
+- **An integer key past the interpreter's digit limit reaches the path as an
+  integer.** A key longer than `sys.set_int_max_str_digits` allows was named
+  `'<unrepresentable>'`, a string that indexes nothing. It is carried in
+  hexadecimal, which the limit does not bind: `path` holds the key, and the
+  message writes it `[0x...]`.
 
 ## [0.0.18] - 2026-10-12
 

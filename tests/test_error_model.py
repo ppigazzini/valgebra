@@ -2,6 +2,10 @@ import copy
 import dataclasses
 import json
 import pickle
+import signal
+import subprocess
+import sys
+import textwrap
 from typing import Annotated, Literal, NamedTuple, TypedDict
 
 import annotated_types as at
@@ -149,6 +153,64 @@ def test_a_big_integer_key_is_named_by_its_stored_digits() -> None:
         with pytest.raises(ValidationError) as info:
             Validator(dict[int, int]).validate({key: "x"})
         assert info.value.errors[0]["path"] == (2**70,)
+
+
+def test_an_integer_key_past_the_digit_limit_is_carried_as_an_integer() -> None:
+    """Python converts at most 4,300 decimal digits by default, and keys may be longer.
+
+    `int.__repr__` raises past the limit, and the key's `repr` with it, so a
+    key read for its decimal digits alone is named `'<unrepresentable>'`, a
+    string that indexes nothing. Past the limit the digits are hexadecimal,
+    which the limit does not bind, and the path holds the key.
+    """
+    key = 10**5000
+    holder = {key: "x"}
+    with pytest.raises(ValidationError) as info:
+        Validator(dict[int, int]).validate(holder)
+    path, message = info.value.errors[0]["path"], info.value.errors[0]["message"]
+    assert isinstance(path, tuple)
+    assert isinstance(message, str)
+    (segment,) = path
+    assert holder[segment] == "x"
+    assert message.startswith("at [0x")
+
+
+@pytest.mark.skipif(
+    not hasattr(signal, "setitimer"), reason="no interval timer to raise a signal with"
+)
+def test_a_signal_while_an_integer_keys_digits_are_read_is_raised() -> None:
+    """Only the digit limit's own error sends an integer key to hexadecimal.
+
+    With the limit lifted, a key of a million digits converts to decimal for
+    about a quarter of a second, and the conversion takes the signals that
+    arrive meanwhile: an interrupt there is raised, not read as a key past the
+    limit. Run in a fresh interpreter, whose signal handlers are its own.
+    """
+    script = textwrap.dedent(
+        """
+        import signal, sys
+        from valgebra import Validator
+        sys.set_int_max_str_digits(0)
+        key = 10**1_000_000
+        def interrupt(signum, frame):
+            raise KeyboardInterrupt
+        signal.signal(signal.SIGALRM, interrupt)
+        validator = Validator(dict[int, int])
+        signal.setitimer(signal.ITIMER_REAL, 0.02)
+        try:
+            validator.validate({key: "x"})
+        except KeyboardInterrupt:
+            print("ok")
+        """
+    )
+    result = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ok"
 
 
 def test_a_string_key_with_no_text_is_named_not_read_as_empty() -> None:

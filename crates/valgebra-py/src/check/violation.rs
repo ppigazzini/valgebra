@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use pyo3::exceptions::PyValueError;
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::{PyInt, PyString};
@@ -109,8 +110,13 @@ pub(crate) fn summarize_value(value: &Value<'_, '_>, ctx: Ctx<'_>) -> String {
 /// render, and the message says so. One that raises a fatal signal is the
 /// interpreter unwinding, and the walk carries it out rather than folding it
 /// into a summary -- which is the rule at every other site an object answers a
-/// question.
+/// question. A walk already carrying a signal out reads nothing more: the
+/// summary is for a report the signal replaces, and a `repr` runs the value's
+/// code again -- a long `int` converts in full once more.
 pub(crate) fn summarize_in(obj: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> String {
+    if ctx.state.signals.fatal_seen.get() {
+        return UNREPRESENTABLE.to_owned();
+    }
     try_summarize(obj).unwrap_or_else(|err| {
         record_if_fatal(err, obj.py(), ctx);
         UNREPRESENTABLE.to_owned()
@@ -170,14 +176,24 @@ pub(crate) fn key_segment(key: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> PathSegment {
     PathSegment::Key(Arc::from(summarize_in(key, ctx).as_str()))
 }
 
-/// An integer's decimal digits, read from its storage: `int.__repr__`, the
-/// base's own method, called on it. A subclass's `__str__` answers what it
-/// likes, which is a spelling of some other key or a raise; the small-integer
-/// path above reads the storage too, so both halves name the same entry.
+/// An integer's digits, read from its storage: `int.__repr__`, the base's own
+/// method, called on it. A subclass's `__str__` answers what it likes, which
+/// is a spelling of some other key or a raise; the small-integer path above
+/// reads the storage too, so both halves name the same entry.
+///
+/// Decimal where the interpreter writes it, and hexadecimal past its limit on
+/// the digits it converts (`sys.set_int_max_str_digits`, 4,300 by default),
+/// which binds the decimal base alone: the key then reaches the path as the
+/// literal `0x...` rather than as its `repr`, which past the limit raises too.
 fn stored_digits(number: &Bound<'_, PyInt>) -> PyResult<String> {
     let py = number.py();
-    py.get_type::<PyInt>()
-        .getattr(intern!(py, "__repr__"))?
-        .call1((number,))?
-        .extract()
+    let int = py.get_type::<PyInt>();
+    match int.getattr(intern!(py, "__repr__"))?.call1((number,)) {
+        Ok(digits) => digits.extract(),
+        Err(err) if err.is_instance_of::<PyValueError>(py) => int
+            .getattr(intern!(py, "__format__"))?
+            .call1((number, intern!(py, "#x")))?
+            .extract(),
+        Err(err) => Err(err),
+    }
 }

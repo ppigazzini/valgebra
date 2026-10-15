@@ -517,10 +517,11 @@ fn build_path<'py>(py: Python<'py>, path: &[PathSegment]) -> PyResult<Bound<'py,
             PathSegment::Key(key) => (&**key).into_pyobject(py)?.into_any(),
             PathSegment::IntKey(key) => (*key).into_pyobject(py)?.into_any(),
             // Back to the `int` it came from: a caller indexes with the key, not
-            // with its digits.
+            // with its digits. Base 0 reads the literal as Python does, so a key
+            // carried in hexadecimal past the digit limit reads back too.
             PathSegment::BigIntKey(key) => py
                 .get_type::<pyo3::types::PyInt>()
-                .call1((key.as_str(),))?
+                .call1((key.as_str(), 0))?
                 .into_any(),
             PathSegment::Index(index) => (*index).into_pyobject(py)?.into_any(),
         };

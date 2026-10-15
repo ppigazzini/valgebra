@@ -394,10 +394,11 @@ pub enum PathSegment {
     ///
     /// Python's integers are unbounded and a dict may be keyed by any of them,
     /// so a key of `2**70` has to reach a caller as an integer or the path stops
-    /// walking back down. Carried as its decimal digits because the core holds
-    /// no Python object and has no big integer of its own; the binding turns it
-    /// back into the `int` it came from, which is the only form a caller can
-    /// index with.
+    /// walking back down. Carried as its digits, a Python integer literal,
+    /// because the core holds no Python object and has no big integer of its
+    /// own: decimal, and `0x` hexadecimal past the interpreter's limit on the
+    /// decimal digits it converts. The binding turns it back into the `int` it
+    /// came from, which is the only form a caller can index with.
     BigIntKey(String),
     /// A sequence, tuple, or set position.
     Index(usize),

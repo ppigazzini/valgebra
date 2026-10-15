@@ -27,7 +27,9 @@ A `ValidationError` exposes:
     index back with.
   - `message` — the rendered one-line human message, `at <location>: expected
     <expected>, got <value> [<code>]`. The location writes a key as itself and
-    an index or an integer key in brackets, `items[2].id`; a key that is not a
+    an index or an integer key in brackets, `items[2].id`, an integer longer
+    than the interpreter converts to decimal (`sys.set_int_max_str_digits`) in
+    hexadecimal, `[0x...]`; a key that is not a
     bare name — empty, or holding a `.`, a bracket, whitespace or a control
     character — is written as a subscript of its Python literal, `['a.b']`, so
     no two string or integer keys read alike and the message stays on one
