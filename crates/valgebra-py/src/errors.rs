@@ -130,7 +130,7 @@ pub(crate) fn try_summarize(value: &Bound<'_, PyAny>) -> PyResult<String> {
         && !value.is_instance_of::<PySet>()
         && !value.is_instance_of::<PyFrozenSet>()
     {
-        return Ok(shorten(value.repr()?.to_string(), SUMMARY_CHARS));
+        return Ok(shorten(stored(&value.repr()?), SUMMARY_CHARS));
     }
     let py = value.py();
     let rendered = match bounded_repr(py) {
@@ -150,8 +150,20 @@ pub(crate) fn try_summarize(value: &Bound<'_, PyAny>) -> PyResult<String> {
         // `reprlib` is a standard-library module and the call is total, so this
         // is unreachable in practice; falling back to the plain repr keeps the
         // message right rather than trading correctness for the bound.
-        None => Ok(shorten(value.repr()?.to_string(), SUMMARY_CHARS)),
+        None => Ok(shorten(stored(&value.repr()?), SUMMARY_CHARS)),
     }
+}
+
+/// The text a `str` holds, read from its storage.
+///
+/// `__repr__` may return a `str` subclass, and formatting one calls its own
+/// `__str__`: code of the value's, run a second time, whose raised signal the
+/// formatter hands to `sys.unraisablehook` and replaces with a placeholder.
+/// The storage is the text the repr returned, and reading it runs nothing. A
+/// lone surrogate, which no UTF-8 spells, reads as the replacement character,
+/// as the formatter writes it.
+pub(crate) fn stored(text: &Bound<'_, PyString>) -> String {
+    text.to_string_lossy().into_owned()
 }
 
 /// Truncate a string this code already owns, keeping it where it is short.

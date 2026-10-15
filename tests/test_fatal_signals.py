@@ -130,6 +130,56 @@ def test_fatal_signal_in_a_predicate_propagates(signal: type[BaseException]) -> 
         validator.is_valid(5)
 
 
+@pytest.mark.parametrize("signal", FATAL)
+def test_a_signal_the_raised_errors_str_raises_propagates(
+    signal: type[BaseException],
+) -> None:
+    """A predicate's error is named by its own `__str__`, which may raise too.
+
+    The error's formatter reads a raise from `__str__` as `<exception str()
+    failed>` and drops it, so a text built through it loses the interrupt and
+    reports a `predicate_error`; built on the deciding walk, which reports no
+    text, it runs the `__str__` for nothing.
+    """
+    calls = []
+
+    class UnnamedError(Exception):
+        def __str__(self) -> str:
+            calls.append(signal)
+            raise signal
+
+    validator = _predicate_raising(UnnamedError())
+    assert validator.is_valid(5) is False
+    assert calls == []
+    with pytest.raises(signal):
+        validator.validate(5)
+
+
+class NamedError(Exception):
+    """An error whose `str()` is a `str` subclass that would say something else."""
+
+    def __str__(self) -> str:
+        return type("Text", (str,), {"__str__": lambda _: "lied"})("told")
+
+
+class UnnamedError(Exception):
+    """An error whose `str()` raises an ordinary exception."""
+
+    def __str__(self) -> str:
+        raise ValueError
+
+
+def test_a_raised_errors_str_reads_as_it_returns() -> None:
+    """The text is what `str()` returns, and an ordinary raise from it is named."""
+    for raised, text in (
+        (NamedError(), "NamedError: told"),
+        (UnnamedError(), "UnnamedError: <exception str() failed>"),
+    ):
+        with pytest.raises(ValidationError) as info:
+            _predicate_raising(raised).validate(5)
+        assert text in str(info.value.errors[0]["expected"])
+
+
 def _key_raising_once(exc: BaseException) -> str:
     """Build a `str` key that raises `exc` from its first `__eq__`, as a signal does."""
 
@@ -220,6 +270,30 @@ def test_a_signal_an_elements_repr_raises_once_propagates_from_the_summary(
 
     with pytest.raises(signal):
         Validator(int).validate([Once()])
+
+
+def test_a_repr_returning_a_str_subclass_is_read_from_its_storage() -> None:
+    """A `__repr__` may return a `str` subclass, and its text is what it holds.
+
+    Formatting one calls its own `__str__`, code of the value's run a second
+    time: a signal raised there goes to `sys.unraisablehook`, and the summary
+    reads `<unprintable Text object>`.
+    """
+
+    class Text(str):
+        __slots__ = ()
+
+        def __str__(self) -> str:
+            raise KeyboardInterrupt
+
+    class Value:
+        def __repr__(self) -> str:
+            return Text("held")
+
+    for value, summary in ((Value(), "held"), ([Value()], "[held]")):
+        with pytest.raises(ValidationError) as info:
+            Validator(int).validate(value)
+        assert info.value.errors[0]["value"] == summary
 
 
 def _forget_annotated() -> None:

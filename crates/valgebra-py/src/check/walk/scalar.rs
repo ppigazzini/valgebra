@@ -14,6 +14,7 @@
 use std::ops::ControlFlow;
 
 use jiter::JsonValue;
+use pyo3::exceptions::PyBaseException;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyDict, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple};
 use valgebra_core::{
@@ -32,7 +33,7 @@ use crate::codes::{
     Code, GREATER_THAN, GREATER_THAN_EQUAL, LESS_THAN, LESS_THAN_EQUAL, LITERAL_ERROR, MULTIPLE_OF,
     PREDICATE_ERROR, PREDICATE_FAILED, STRING_PATTERN_MISMATCH, TOO_LONG, TOO_SHORT,
 };
-use crate::errors::{SUMMARY_CHARS, shorten};
+use crate::errors::{SUMMARY_CHARS, shorten, stored};
 use crate::input::Value;
 
 /// A schema whose membership is decided by the value alone.
@@ -639,9 +640,11 @@ enum Expected<'py> {
     Pattern(&'py str),
     /// A message with nothing to render into it.
     Fixed(&'static str),
-    /// A predicate that raised, carrying the error it raised. Only ever built on
-    /// the failing path, so it renders no sooner than the rest.
-    Raised(String),
+    /// A predicate that raised, carrying the exception it raised. Only ever
+    /// built on the failing path, and rendered only where a violation is
+    /// recorded: its text is the exception's own `__str__`, code the deciding
+    /// walk has no reason to run.
+    Raised(Bound<'py, PyBaseException>),
 }
 
 impl Expected<'_> {
@@ -654,7 +657,10 @@ impl Expected<'_> {
             Self::Pattern(pattern) => format!("a string matching {}", quoted(pattern)),
             Self::Fixed(text) => (*text).to_owned(),
             Self::Raised(error) => {
-                format!("a predicate that does not raise (raised {error})")
+                format!(
+                    "a predicate that does not raise (raised {})",
+                    raised_text(error, ctx)
+                )
             }
         }
     }
@@ -825,21 +831,49 @@ fn check_predicate(index: PredIx, value: &Bound<'_, PyAny>, frame: &mut Frame<'_
     explained(ok, code, || expected, value, frame)
 }
 
-/// What a predicate that raised `err` reports: the error, or `None` where it is
-/// a fatal signal, recorded for the walk to unwind on and the entry point to
-/// raise again -- the interpreter unwinding, not a predicate that merely
-/// errored. The error's text is bounded like every other value a message
-/// carries: a predicate raising a megabyte of text is a message nobody reads.
+/// What a predicate that raised `err` reports: the exception, or `None` where
+/// it is a fatal signal, recorded for the walk to unwind on and the entry
+/// point to raise again -- the interpreter unwinding, not a predicate that
+/// merely errored.
 ///
 /// Out of line and cold, for the reason [`set_aside`] is.
 #[cold]
 #[inline(never)]
-fn predicate_raised(err: PyErr, py: Python<'_>, ctx: Ctx<'_>) -> Option<Expected<'static>> {
+fn predicate_raised<'py>(err: PyErr, py: Python<'py>, ctx: Ctx<'_>) -> Option<Expected<'py>> {
     if is_fatal(&err, py) {
         record_fatal(err, ctx);
         return None;
     }
-    Some(Expected::Raised(shorten(err.to_string(), SUMMARY_CHARS)))
+    Some(Expected::Raised(err.into_value(py).into_bound(py)))
+}
+
+/// What a raised exception says of itself, as `Name: text`: its class's
+/// qualified name and what its `str()` returns, both read from storage.
+///
+/// The spelling an error's own formatter gives, which drops a signal the
+/// exception's `__str__` raises and prints `<exception str() failed>` in its
+/// place: the interrupt is lost and the walk carries on. Here the signal is
+/// recorded, so the walk unwinds and the entry point raises it, and an
+/// ordinary exception keeps the placeholder. The text is bounded like every
+/// other value a message carries: a predicate raising a megabyte of text is a
+/// message nobody reads.
+fn raised_text(error: &Bound<'_, PyBaseException>, ctx: Ctx<'_>) -> String {
+    let py = error.py();
+    let name = match error.get_type().qualname() {
+        Ok(name) => stored(&name),
+        Err(err) => {
+            record_if_fatal(err, py, ctx);
+            "<exception>".to_owned()
+        }
+    };
+    let text = match error.str() {
+        Ok(text) => stored(&text),
+        Err(err) => {
+            record_if_fatal(err, py, ctx);
+            "<exception str() failed>".to_owned()
+        }
+    };
+    shorten(format!("{name}: {text}"), SUMMARY_CHARS)
 }
 
 /// Drop an error a constraint reads as its answer, out of line.

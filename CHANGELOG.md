@@ -16,6 +16,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a pattern is a set of strings in the relations, whatever its base
 - fix: the universe bound reads a union nested in a union as its members -- internal
 - fix: a definition two branches read at one value is walked once
+- fix: an error's text and a value's summary are read from storage
 
 -->
 
@@ -47,6 +48,14 @@ answer of its own, or a repair to a change not yet released.
   that code is called at each one; [the limits
   page](https://ppigazzini.github.io/valgebra/10-limits/#what-the-bounds-do-not-bound)
   says so.
+- **A signal raised while a predicate's error is named propagates.** The
+  error's text was read through its formatter, which drops a signal its
+  `__str__` raises: `validate` reported a `predicate_error` reading
+  `<exception str() failed>` and the interrupt was lost, and `is_valid` called
+  the `__str__` for a text it never reports. The text is read where a
+  violation is recorded, and a signal is raised. A `__repr__` returning a `str`
+  subclass is read for the text it holds, rather than formatted through the
+  subclass's `__str__`, which put `<unprintable ...>` in the summary.
 
 ## [0.0.18] - 2026-10-12
 
