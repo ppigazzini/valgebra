@@ -2525,3 +2525,48 @@ fn an_optional_attribute_reads_what_getattr_opt_reads() {
         }
     });
 }
+
+/// A module the release lacks reads as missing, and any other error importing
+/// one is the caller's: the special forms are read once a process, and a
+/// signal folded into a missing module would be kept as one.
+#[test]
+fn a_module_that_raises_on_import_is_raised_rather_than_missing() {
+    Python::attach(|py| {
+        assert!(
+            optional_module(py, "valgebra_no_such_module")
+                .expect("a missing module is no error")
+                .is_none()
+        );
+        let finder = PyModule::from_code(
+            py,
+            c"class Raising:\n\
+              \x20   def find_spec(self, name, path=None, target=None):\n\
+              \x20       if name == 'valgebra_raising_module':\n\
+              \x20           raise RuntimeError('raised')\n\
+              \x20       return None\n\
+              raising = Raising()\n",
+            c"raising_finder.py",
+            c"raising_finder",
+        )
+        .expect("the module compiles")
+        .getattr("raising")
+        .expect("the finder");
+        let meta_path = py
+            .import("sys")
+            .and_then(|sys| sys.getattr("meta_path"))
+            .expect("sys.meta_path");
+        // Last: a module no other finder holds reaches it, and a lookup another
+        // test runs meanwhile meets the finders ahead of it where they stand.
+        // One put first shifts the list under that lookup's loop as it leaves,
+        // and the loop steps past `itertools`'s own finder.
+        meta_path
+            .call_method1("append", (&finder,))
+            .expect("the finder goes last");
+        let raised = optional_module(py, "valgebra_raising_module");
+        meta_path
+            .call_method1("remove", (&finder,))
+            .expect("the finder leaves");
+        let raised = raised.expect_err("an error that is not ImportError is raised");
+        assert!(raised.is_instance_of::<pyo3::exceptions::PyRuntimeError>(py));
+    });
+}

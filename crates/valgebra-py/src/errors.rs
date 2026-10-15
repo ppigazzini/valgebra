@@ -42,31 +42,32 @@ static BOUNDED_REPR: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 /// The limits are set well above anything a readable message shows, so a value
 /// small enough to print renders exactly as `repr` would and only a value that
 /// was going to be cut anyway takes a different path.
-fn bounded_repr(py: Python<'_>) -> Option<&Py<PyAny>> {
-    BOUNDED_REPR
-        .get_or_try_init(py, || {
-            let repr = py
-                .import("reprlib")?
-                .getattr(intern!(py, "Repr"))?
-                .call0()?;
-            for (limit, value) in [
-                ("maxlevel", 12_usize),
-                ("maxtuple", 32),
-                ("maxlist", 32),
-                ("maxarray", 32),
-                ("maxdict", 32),
-                ("maxset", 32),
-                ("maxfrozenset", 32),
-                ("maxdeque", 32),
-                ("maxstring", SUMMARY_CHARS),
-                ("maxlong", SUMMARY_CHARS),
-                ("maxother", SUMMARY_CHARS),
-            ] {
-                repr.setattr(limit, value)?;
-            }
-            Ok::<_, PyErr>(repr.unbind())
-        })
-        .ok()
+///
+/// An error building it is the caller's, a signal among them: the cell stays
+/// empty, and the next summary builds it again.
+fn bounded_repr(py: Python<'_>) -> PyResult<&Py<PyAny>> {
+    BOUNDED_REPR.get_or_try_init(py, || {
+        let repr = py
+            .import("reprlib")?
+            .getattr(intern!(py, "Repr"))?
+            .call0()?;
+        for (limit, value) in [
+            ("maxlevel", 12_usize),
+            ("maxtuple", 32),
+            ("maxlist", 32),
+            ("maxarray", 32),
+            ("maxdict", 32),
+            ("maxset", 32),
+            ("maxfrozenset", 32),
+            ("maxdeque", 32),
+            ("maxstring", SUMMARY_CHARS),
+            ("maxlong", SUMMARY_CHARS),
+            ("maxother", SUMMARY_CHARS),
+        ] {
+            repr.setattr(limit, value)?;
+        }
+        Ok::<_, PyErr>(repr.unbind())
+    })
 }
 
 /// Whether a raised error is a *fatal* interpreter signal that must propagate
@@ -134,7 +135,7 @@ pub(crate) fn try_summarize(value: &Bound<'_, PyAny>) -> PyResult<String> {
     }
     let py = value.py();
     let rendered = match bounded_repr(py) {
-        Some(repr) => match repr.bind(py).call_method1(intern!(py, "repr"), (value,)) {
+        Ok(repr) => match repr.bind(py).call_method1(intern!(py, "repr"), (value,)) {
             Ok(text) => text.extract::<String>().ok(),
             // `reprlib` catches what an element's `__repr__` raises and prints a
             // placeholder, so what reaches here is a signal it let through --
@@ -143,7 +144,10 @@ pub(crate) fn try_summarize(value: &Bound<'_, PyAny>) -> PyResult<String> {
             Err(err) if is_fatal(&err, py) => return Err(err),
             Err(_) => None,
         },
-        None => None,
+        // A signal while the renderer was built is the interpreter unwinding,
+        // and the summary raises it rather than render the value another way.
+        Err(err) if is_fatal(&err, py) => return Err(err),
+        Err(_) => None,
     };
     match rendered {
         Some(text) => Ok(shorten(text, SUMMARY_CHARS)),

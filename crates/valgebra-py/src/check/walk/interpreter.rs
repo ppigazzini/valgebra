@@ -101,6 +101,15 @@ fn decide(
     fast
 }
 
+/// [`scan_dict`] with a walk state of its own: the scan reads one only where
+/// `PyPy` copies the dict, and these tests are about the count.
+fn scanned<'py>(
+    dict: &Bound<'py, PyDict>,
+    visit: impl FnMut(&Bound<'py, PyAny>, &Bound<'py, PyAny>) -> ControlFlow<()>,
+) -> Scan {
+    scan_dict(dict, &WalkState::new(), visit)
+}
+
 /// A dict scan stops at the entry count it began with, and reports rather
 /// than reads a dict whose size moved.
 ///
@@ -122,7 +131,7 @@ fn a_dict_scan_visits_each_entry_once_and_stops_where_it_is_told() {
         // per entry would visit fewer, and one that compared loosely would
         // step past the end.
         let mut seen = 0;
-        let scan = scan_dict(&dict, |_, _| {
+        let scan = scanned(&dict, |_, _| {
             seen += 1;
             ControlFlow::Continue(())
         });
@@ -133,7 +142,7 @@ fn a_dict_scan_visits_each_entry_once_and_stops_where_it_is_told() {
         // stop is not a complete reading, and the caller reports the miss
         // that caused it rather than the container.
         let mut before_break = 0;
-        let scan = scan_dict(&dict, |_, _| {
+        let scan = scanned(&dict, |_, _| {
             before_break += 1;
             if before_break == 2 {
                 ControlFlow::Break(())
@@ -149,7 +158,7 @@ fn a_dict_scan_visits_each_entry_once_and_stops_where_it_is_told() {
         for i in 0..4 {
             moving.set_item(i, i).expect("set_item");
         }
-        let scan = scan_dict(&moving, |key, _| {
+        let scan = scanned(&moving, |key, _| {
             if key.extract::<i64>().unwrap_or(-1) == 0 {
                 moving.set_item("added", 1).expect("set_item");
             }
@@ -166,7 +175,7 @@ fn a_dict_scan_visits_each_entry_once_and_stops_where_it_is_told() {
         for i in 0..4 {
             shrinking.set_item(i, i).expect("set_item");
         }
-        let scan = scan_dict(&shrinking, |key, _| {
+        let scan = scanned(&shrinking, |key, _| {
             if key.extract::<i64>().unwrap_or(-1) == 0 {
                 shrinking.del_item(3).expect("del_item");
             }
@@ -183,7 +192,7 @@ fn a_dict_scan_visits_each_entry_once_and_stops_where_it_is_told() {
             swapped.set_item(i, i).expect("set_item");
         }
         let mut visited = 0;
-        let scan = scan_dict(&swapped, |key, _| {
+        let scan = scanned(&swapped, |key, _| {
             visited += 1;
             if key.extract::<i64>().unwrap_or(-1) == 1 {
                 swapped.del_item(0).expect("del_item");

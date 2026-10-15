@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use pyo3::PyTypeInfo;
-use pyo3::exceptions::{PyNotImplementedError, PyValueError};
+use pyo3::exceptions::{PyImportError, PyNotImplementedError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
@@ -628,6 +628,18 @@ struct Forms {
 
 static FORMS: PyOnceLock<Forms> = PyOnceLock::new();
 
+/// The module `name`, or `None` where the release has none: an `ImportError`
+/// reads as the module missing, and any other error -- a signal among them --
+/// is the caller's, so a cache built from the answer never keeps a signal as a
+/// module the release lacks.
+fn optional_module<'py>(py: Python<'py>, name: &str) -> PyResult<Option<Bound<'py, PyModule>>> {
+    match py.import(name) {
+        Ok(module) => Ok(Some(module)),
+        Err(err) if err.is_instance_of::<PyImportError>(py) => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
 /// The special-form cache for this interpreter, built once. `PyOnceLock` makes
 /// the one-time initialization safe under free-threading.
 ///
@@ -645,17 +657,22 @@ static FORMS: PyOnceLock<Forms> = PyOnceLock::new();
 /// reads `typing`'s, as every optional form here is read.
 fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
     FORMS.get_or_try_init(py, || {
-        let annotationlib = py.import("annotationlib").ok();
+        let annotationlib = optional_module(py, "annotationlib")?;
         let typing = py.import("typing")?;
         let builtins = py.import("builtins")?;
-        let optional_form = |module: &Bound<'_, PyModule>, name: &str| -> Option<Py<PyAny>> {
-            module.getattr(name).ok().map(Bound::unbind)
-        };
+        // A form the release lacks reads as absent, and any other error
+        // raises: the cache holds what it reads for the process's life, and a
+        // signal folded into an absent form would keep the form refused after
+        // the interrupt had passed.
+        let optional_form =
+            |module: &Bound<'_, PyModule>, name: &str| -> PyResult<Option<Py<PyAny>>> {
+                Ok(module.getattr_opt(name)?.map(Bound::unbind))
+            };
         Ok(Forms {
             any: typing.getattr("Any")?.unbind(),
-            never: optional_form(&typing, "Never"),
-            noreturn: optional_form(&typing, "NoReturn"),
-            type_alias_type: optional_form(&typing, "TypeAliasType"),
+            never: optional_form(&typing, "Never")?,
+            noreturn: optional_form(&typing, "NoReturn")?,
+            type_alias_type: optional_form(&typing, "TypeAliasType")?,
             union: typing.getattr("Union")?.unbind(),
             optional: typing.getattr("Optional")?.unbind(),
             union_type: py.import("types")?.getattr("UnionType")?.unbind(),
@@ -670,27 +687,27 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             get_origin: typing.getattr("get_origin")?.unbind(),
             get_args: typing.getattr("get_args")?.unbind(),
             type_var: typing.getattr("TypeVar")?.unbind(),
-            forward_ref: optional_form(annotationlib.as_ref().unwrap_or(&typing), "ForwardRef"),
+            forward_ref: optional_form(annotationlib.as_ref().unwrap_or(&typing), "ForwardRef")?,
             type_variables: ["TypeVar", "ParamSpec", "TypeVarTuple", "_SpecialForm"]
                 .iter()
-                .filter_map(|name| optional_form(&typing, name))
-                .collect(),
-            required: optional_form(&typing, "Required"),
-            not_required: optional_form(&typing, "NotRequired"),
-            read_only: optional_form(&typing, "ReadOnly"),
-            unpack: optional_form(&typing, "Unpack"),
+                .filter_map(|name| optional_form(&typing, name).transpose())
+                .collect::<PyResult<_>>()?,
+            required: optional_form(&typing, "Required")?,
+            not_required: optional_form(&typing, "NotRequired")?,
+            read_only: optional_form(&typing, "ReadOnly")?,
+            unpack: optional_form(&typing, "Unpack")?,
             get_type_hints: typing.getattr("get_type_hints")?.unbind(),
             object: builtins.getattr("object")?.unbind(),
-            frozendict: optional_form(&builtins, "frozendict"),
+            frozendict: optional_form(&builtins, "frozendict")?,
             class_factories: ["TypedDict", "NamedTuple"]
                 .iter()
-                .filter_map(|name| optional_form(&typing, name))
-                .collect(),
+                .filter_map(|name| optional_form(&typing, name).transpose())
+                .collect::<PyResult<_>>()?,
             enum_class: py.import("enum")?.getattr("Enum")?.unbind(),
             callable: py.import("collections.abc")?.getattr("Callable")?.unbind(),
             ellipsis: builtins.getattr("Ellipsis")?.unbind(),
             protocol: typing.getattr("Protocol")?.unbind(),
-            get_protocol_attrs: optional_form(&typing, "_get_protocol_attrs"),
+            get_protocol_attrs: optional_form(&typing, "_get_protocol_attrs")?,
             class_var: typing.getattr("ClassVar")?.unbind(),
             final_qualifier: typing.getattr("Final")?.unbind(),
             property: builtins.getattr("property")?.unbind(),

@@ -17,6 +17,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the universe bound reads a union nested in a union as its members -- internal
 - fix: a definition two branches read at one value is walked once
 - fix: an error's text and a value's summary are read from storage
+- fix: a signal while the special forms are first read is raised
 
 -->
 
@@ -56,6 +57,11 @@ answer of its own, or a repair to a change not yet released.
   violation is recorded, and a signal is raised. A `__repr__` returning a `str`
   subclass is read for the text it holds, rather than formatted through the
   subclass's `__str__`, which put `<unprintable ...>` in the summary.
+- **A signal while the first validator reads the special forms is raised.** An
+  interrupt while `typing.Never` was first read was folded into the form's
+  absence, which the process kept: every later `Validator(typing.Never)` was
+  refused as a typing construct. The signal is raised, and the forms are read
+  again by the next validator.
 
 ## [0.0.18] - 2026-10-12
 

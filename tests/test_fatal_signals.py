@@ -13,6 +13,9 @@ resource-exhausted check stops rather than continuing.
 from __future__ import annotations
 
 import dataclasses
+import subprocess
+import sys
+import textwrap
 import typing
 from typing import TYPE_CHECKING, Annotated, Literal
 
@@ -352,6 +355,92 @@ def test_a_fatal_signal_in_a_relation_query_propagates(
     loud = type("Loud", (_LoudBound,), {"signal": signal})
     with pytest.raises(signal):
         Validator(Annotated[int, at.Gt(loud(5)), at.Lt(1)]).is_empty()
+
+
+def test_a_signal_while_the_forms_are_first_read_is_raised_and_not_kept() -> None:
+    """The special forms are read once a process, and a signal is not a form.
+
+    An interrupt while the first validator reads `typing.NoReturn`, a form every
+    supported release has, folded into the form's absence, is kept by the
+    process: the build carries on, and every later `Validator(typing.NoReturn)`
+    refuses the form it never read. Run in a fresh interpreter, which has read
+    none of them yet.
+    """
+    script = textwrap.dedent(
+        """
+        import types, typing
+        class Trap(types.ModuleType):
+            armed = True
+            def __getattribute__(self, name):
+                if name == "NoReturn" and Trap.armed:
+                    Trap.armed = False
+                    raise KeyboardInterrupt
+                return super().__getattribute__(name)
+        typing.__class__ = Trap
+        from valgebra import Validator
+        try:
+            Validator(int)
+        except KeyboardInterrupt:
+            pass
+        else:
+            raise AssertionError("the first build read the signal as an answer")
+        assert repr(Validator(typing.NoReturn)) == "nothing", Validator(typing.NoReturn)
+        print("ok")
+        """
+    )
+    result = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ok"
+
+
+def test_a_signal_while_the_summary_renderer_is_built_is_raised() -> None:
+    """The bounded renderer is built at the first summary of a container.
+
+    A signal while it is built is the caller's; folded into a renderer missing,
+    the value renders by its plain `repr` and the report goes on as though
+    nothing were raised. An ordinary error building it does fall back to the
+    plain `repr`, and the renderer is built again at the next summary. Run in
+    a fresh interpreter, which has built none yet.
+    """
+    script = textwrap.dedent(
+        """
+        import reprlib
+        from valgebra import ValidationError, Validator
+        class Raising:
+            raised = KeyboardInterrupt
+            def __init__(self):
+                raise Raising.raised
+        reprlib.Repr = Raising
+        validator = Validator(int)
+        try:
+            validator.validate([1, 2])
+        except KeyboardInterrupt:
+            pass
+        else:
+            raise AssertionError("the signal was read as a renderer missing")
+        Raising.raised = RuntimeError
+        try:
+            validator.validate([1, 2])
+        except ValidationError as error:
+            assert error.value == "[1, 2]", error.value
+        else:
+            raise AssertionError("a list is an int")
+        print("ok")
+        """
+    )
+    result = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ok"
 
 
 def _raising_zero(raised: Callable[..., object]) -> Callable[[int, object], bool]:

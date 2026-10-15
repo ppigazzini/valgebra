@@ -26,7 +26,7 @@ use super::{
     Frame, Scan, Unwritten, again, fast, fold, is_fatal, member, mutated, record_fatal,
     record_if_fatal, record_stop, stop,
 };
-use crate::check::ctx::Ctx;
+use crate::check::ctx::{Ctx, WalkState};
 use crate::check::index::{RecordPlan, decided_by_its_value};
 use crate::check::violation::{at_key, key_segment, located, summarize_value, type_mismatch};
 use crate::codes::{
@@ -63,13 +63,29 @@ use crate::input::Value;
 #[cfg(not(Py_GIL_DISABLED))]
 pub(super) fn scan_dict<'py>(
     dict: &Bound<'py, PyDict>,
+    state: &WalkState,
     mut visit: impl FnMut(&Bound<'py, PyAny>, &Bound<'py, PyAny>) -> ControlFlow<()>,
 ) -> Scan {
+    // The state is read where the copy is taken, which is `PyPy` alone. A
+    // reference rather than the walk's context: the context is seven words,
+    // and handed by value to a function this size it is copied to the stack
+    // by every caller, which the profile-guided build hoisted to the entry of
+    // `member`, a copy on every level of every walk.
+    #[cfg(not(PyPy))]
+    let _ = state;
     with_critical_section(dict.as_any(), || {
         let entries = dict.len();
+        // A copy that cannot be taken is a dict the scan could not read, and a
+        // fatal signal taking it raised is recorded, as [`stored`] records one.
         #[cfg(PyPy)]
-        let Ok(copied) = held_dict(dict) else {
-            return Scan::Unreadable;
+        let copied = match held_dict(dict) {
+            Ok(copied) => copied,
+            Err(err) => {
+                if is_fatal(&err, dict.py()) {
+                    state.keep_fatal(err);
+                }
+                return Scan::Unreadable;
+            }
         };
         #[cfg(PyPy)]
         let mut iter = copied.iter();
@@ -103,8 +119,11 @@ pub(super) fn scan_dict<'py>(
 #[cfg(Py_GIL_DISABLED)]
 pub(super) fn scan_dict<'py>(
     dict: &Bound<'py, PyDict>,
+    state: &WalkState,
     visit: impl FnMut(&Bound<'py, PyAny>, &Bound<'py, PyAny>) -> ControlFlow<()>,
 ) -> Scan {
+    // Read where `PyPy` copies the dict, which a free-threaded build is not.
+    let _ = state;
     with_critical_section(dict.as_any(), || scan_held_dict(dict, visit))
 }
 
@@ -557,7 +576,7 @@ fn keyed_map_asks_for_its_keys(
             // their type and nothing else -- no name is resolved, no value is
             // walked -- and the first key of another type refuses the record.
             Undeclared::AnyStr => {
-                let keys = scan_dict(dict, |key, _| {
+                let keys = scan_dict(dict, ctx.state, |key, _| {
                     if key.is_instance_of::<PyString>() {
                         ControlFlow::Continue(())
                     } else {
@@ -650,7 +669,7 @@ fn keyed_map_scan(
     let room = ctx.room_to_descend();
     let mut admitted = 0usize;
     let mut inside = false;
-    let scan = scan_dict(dict, |key, val| {
+    let scan = scan_dict(dict, ctx.state, |key, val| {
         // A non-string key, or a string carrying a lone surrogate (which cannot
         // equal a field name, since names are valid UTF-8 by build-time check),
         // resolves to no field and must instead be covered by a default clause.
@@ -1086,7 +1105,7 @@ fn undeclared_explained(
     // held for the scan rather than built per key.
     let mut unwritten = Unwritten::default();
     let mut deciding = unwritten.frame(ctx);
-    let scan = scan_dict(dict, |key, val| {
+    let scan = scan_dict(dict, ctx.state, |key, val| {
         if let Some(name) = as_field_name(key, ctx)
             && declared.contains(name)
         {
