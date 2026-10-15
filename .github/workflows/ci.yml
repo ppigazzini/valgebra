@@ -71,6 +71,7 @@ env:
     crates/valgebra-py/src/check/walk/sequence.rs
     crates/valgebra-py/src/check/ctx.rs
     crates/valgebra-py/src/check/index.rs
+    crates/valgebra-py/src/check/memo.rs
     crates/valgebra-py/src/input.rs
     crates/valgebra-py/src/build.rs
     crates/valgebra-py/src/build/classes.rs

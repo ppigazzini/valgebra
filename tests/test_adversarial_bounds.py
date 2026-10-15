@@ -975,6 +975,102 @@ def test_explaining_a_refused_union_of_records_does_not_double_per_level() -> No
     assert large < small * 6 + 0.05, (small, large)
 
 
+def _every_entry_point(schema: Validator) -> dict[str, Callable[[object], object]]:
+    """Each way a caller asks a validator about a value, a refusal swallowed."""
+
+    def refusing(call: Callable[[object], object]) -> Callable[[object], object]:
+        def asked(value: object) -> object:
+            try:
+                return call(value)
+            except ValidationError:
+                return None
+
+        return asked
+
+    return {
+        "is_valid": schema.is_valid,
+        "is_valid_json": lambda v: schema.is_valid_json(json.dumps(v)),
+        "validate": refusing(schema.validate),
+        "validate, fail_fast": refusing(lambda v: schema.validate(v, fail_fast=True)),
+        "validate_json": refusing(lambda v: schema.validate_json(json.dumps(v))),
+        "load": refusing(lambda v: schema.load(json.dumps(v))),
+    }
+
+
+def test_a_definition_two_branches_share_is_walked_once_per_level() -> None:
+    """A union whose branches read one child as one definition is linear in the value.
+
+    `int | list[T] | list[T | str]` reads a list's element as `T` under both
+    list branches, and walked as it reads, each level walks the level below
+    once per branch: `validate_json` takes two seconds that way to refuse a
+    document of 44 bytes, and every two levels multiply it by four. The walk
+    keeps what it answered for a definition at a value, and the next branch
+    finds it there.
+    """
+    schema = Validator(recursive(lambda t: union(int, [t], [union(t, str)])))
+
+    def chain(depth: int) -> object:
+        value: object = None
+        for _ in range(depth):
+            value = [value]
+        return value
+
+    short, long = chain(8), chain(16)
+    for name, check in _every_entry_point(schema).items():
+        assert not schema.is_valid(long)
+        small = _fastest(lambda check=check: check(short))
+        large = _fastest(lambda check=check: check(long))
+        # Twice the depth: linear is a factor of two, and a walk of each level
+        # once per branch is 256.
+        assert large < small * 5 + 0.01, (name, small, large)
+
+
+def test_a_value_every_branch_walks_is_linear_where_one_admits_it() -> None:
+    """A value the schema admits is linear too, and so are a meet and two clauses.
+
+    The members of a union, a meet and a map's clauses each read one value
+    in turn, and a value the second admits has the first walk it whole: a
+    pair of tuples, a pair of lists met, a pair of clauses covering one key,
+    each doubling with the depth on a member.
+    """
+    tuples = Validator(
+        recursive(
+            lambda t: union(
+                int,
+                tuple[t, int],  # ty: ignore[invalid-type-form]
+                tuple[t, str],  # ty: ignore[invalid-type-form]
+            )
+        )
+    )
+    met = Validator(recursive(lambda t: union(int, intersection([t], [union(t, str)]))))
+    clauses = Validator(
+        recursive(lambda t: union(int, {str: t, complement(int): union(t, bytes)}))
+    )
+
+    def nest(depth: int, wrap: Callable[[object], object]) -> object:
+        value: object = 0
+        for _ in range(depth):
+            value = wrap(value)
+        return value
+
+    cases = [
+        ("a pair of tuples", tuples, lambda inner: (inner, "x")),
+        ("a meet", met, lambda inner: [inner]),
+        ("a pair of clauses", clauses, lambda inner: {"k": inner}),
+    ]
+    for label, schema, wrap in cases:
+        short, long = nest(8, wrap), nest(16, wrap)
+        assert schema.is_valid(long), label
+        for name, check in _every_entry_point(schema).items():
+            # A tuple is not a JSON value, so the document reads as a list the
+            # tuples refuse; the object paths read the shape.
+            if schema is tuples and (name.endswith("json") or name == "load"):
+                continue
+            small = _fastest(lambda check=check, short=short: check(short))
+            large = _fastest(lambda check=check, long=long: check(long))
+            assert large < small * 5 + 0.01, (label, name, small, large)
+
+
 def test_a_bounded_summary_still_names_a_small_value_exactly() -> None:
     """The bound must not cost the messages that were already readable."""
 

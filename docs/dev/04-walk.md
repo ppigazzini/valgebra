@@ -241,7 +241,9 @@ anywhere in a branch would need every branch walked whole in every mode, and a
 fail-fast report would then cost the size of the value.
 
 A predicate is asked again wherever the walk reads a value twice, and the walk
-keeps no memo over the answers. An explaining walk reads each branch a refused
+keeps no memo over the answers: the memo the walk keeps over a definition
+([below](#a-definition-is-walked-once-at-a-value)) leaves out every definition
+that reaches one. An explaining walk reads each branch a refused
 union has to walk twice -- once to decide whether any branch admits the value,
 once to explain it -- and a union left with one branch to walk once. It reads
 twice a keyed map that fails: a record read by its keys re-reads the field its
@@ -259,7 +261,7 @@ the caller's to choose.
 
 ## What is precomputed, and what correctness may not depend on
 
-Four per-validator indexes -- `ValidatorIndex` in
+Five per-validator indexes -- `ValidatorIndex` in
 `crates/valgebra-py/src/check/index.rs` -- are built once on first use and keyed
 by the address of a node's own buffer:
 
@@ -267,7 +269,10 @@ by the address of a node's own buffer:
 - interned attribute names per attribute record;
 - value sets for unions whose members are all literals, with the addresses of
   the pooled constants behind them;
-- compiled patterns per pattern constraint.
+- compiled patterns per pattern constraint;
+- the memo's plan: which definitions the walk may remember, and the unions,
+  meets and clause lists two of whose members reach one in common (`MemoPlan`
+  in `check/memo.rs`).
 
 A thread that finds another building them waits **detached** from the
 interpreter. The build interns strings, and on a free-threaded interpreter that
@@ -306,9 +311,12 @@ little else.
 Two files beside them are read by every arm. `crates/valgebra-py/src/input.rs`
 is the `Value` above — the two input paths and the decoders that produce them.
 `crates/valgebra-py/src/check/index.rs` is the precompute the section above is
-about: the record-field lookups, the attribute names, the literal-union tables
-and the compiled patterns, built on the validator's first use (`Validator::index`
-in `crates/valgebra-py/src/validator.rs`) and read by the walk that uses them.
+about: the record-field lookups, the attribute names, the literal-union tables,
+the compiled patterns and the memo's plan, built on the validator's first use
+(`Validator::index` in `crates/valgebra-py/src/validator.rs`) and read by the
+walk that uses them. `crates/valgebra-py/src/check/memo.rs` is the memo
+([below](#a-definition-is-walked-once-at-a-value)): the plan, and what one call
+keeps.
 
 `walk/scalar.rs` answers what a value is **without descending into it**: a
 scalar kind, a literal, and the constraints that narrow one. A container's
@@ -844,6 +852,92 @@ platform's thread-stack bounds that no lane measures, musl, Windows arm64 and
 PyPy among them. A proposal starts from the test it must pass: a value at the
 depth bound on a 128 KiB thread raises `recursion_limit` on every wheel
 platform, and the walk shapes stay inside the perf gate's band.
+
+## A definition is walked once at a value
+
+A union's branches, a meet's members and a map's clauses each read one value in
+turn, and two of them can reach the same recursive definition there:
+`int | list[T] | list[T | str]` reads a list's element as `T` under both list
+branches. Walked as it reads, each level of the value walks the level below
+once per such member -- the members' count to the power of the depth, inside
+the walk's bounds, which cap the depth and not the product. A value the second
+member admits pays it as well as a refused one, and so does the explaining walk,
+which explains each branch of a refused union: `validate_json` takes two seconds
+that way to refuse a document of 44 bytes.
+
+The reference arm of `member` answers a definition at a value from the walk that
+answered it before (`remembered_ref`), keyed by the value's address and the
+definition's index, in the call's `WalkState`: `Memo` in `check/memo.rs` is a
+word, the definitions entered and two flags, and the tables (`Kept`) are boxed
+beside the walk's fatal signal (`Rare` in `check/ctx.rs`), so a call that keeps
+nothing writes one word for them and tests one at its end. The deciding and the
+explaining walks keep apart, the second with the violations it reported and the
+path's length where it began, so a later walk at another path reports them at
+its own. Four conditions make a kept answer the value's:
+
+- **A walk that stopped answers only a walk with no more room.** A walk that
+  decided answers any later one, one with less room included: its answer is
+  the value's, so where a walk with less room would stop, the memo decides
+  instead. One that stopped and refused -- at a bound, at
+  a value inside itself, at one that moved -- answered for the room it had: the
+  walk levels open and the definitions unfolded where it began (`Room`). Every
+  answer a walk decides it decides with more room as well, so a walk with no
+  more room refuses too; the refusal is kept with its room and its stop, and
+  said again with the stop, so a complement or a kept walk above reads it as it
+  read the walk. A value nested past the bounds stops every walk of it, so
+  without this nothing would be kept for it. A room is two counts, and two paths
+  can each have more of one: a walk compared by levels alone would find a stop
+  where the path reaching the pair has definitions to spare, and refuse a
+  member, so each pair keeps the rooms of its stopped walks that no other
+  covers (`Kept`).
+  A pair is walked at most once for each room its paths reach it with, which
+  the two bounds cap: nearly four thousand walks a level on a map whose three
+  clauses read one key through two definitions, nested past the point the
+  costliest of them stops, where a value inside the bounds on every path is
+  walked once. A fatal signal keeps nothing.
+- **No definition reaching code the walk calls at each occurrence.** A
+  definition whose body, or any definition it reaches, holds a predicate or a
+  class whose metaclass is not `type` is never remembered
+  (`MemoPlan::remembers`): the refinements page promises a predicate a call at
+  each occurrence, and a class with a metaclass of its own may answer
+  `isinstance` by code, which `docs/17-boundaries.md` reads as two calls.
+- **For one call.** The memo is the call's and is dropped with it.
+- **A reference to each Python value it keys.** User code the walk runs -- an
+  `__eq__` behind a literal, a key's `__hash__` -- can replace a list's element
+  at the same length, which no size check sees; freed, the element's address
+  could be a later value's. A parsed document frees nothing while it is walked.
+
+**Remembering is armed where a member can be met again.** A hash insert and a
+reference a walk are dearer than the walk of `int | list[T]`, so nothing is kept
+until a node walks a value by a member after the first: `member_again` and
+`again` arm the memo for that member's walk where an earlier one entered a
+definition (`Memo::entered`, a count the reference arm advances) and the node's
+members reach a remembered definition in common (`MemoPlan::shares`). A member
+refused by its kind enters none, so the branches of a JSON schema -- whose
+list and object branches share the element definition and never read one value
+twice -- arm nothing, and a schema whose union has one branch reaching the
+definition never meets a second member at all. Once armed, every later walk of
+the call looks the memo up, which is what lets a first member's walk find what a
+second kept below it.
+
+**An explaining walk says a stopped report again where its deciding walk
+stops.** Past the bounds each path reaches a value with its own room, and
+explaining again for each copies the path of every violation: a report of a
+chain past the bounds costs twelve times its deciding walk that way. A walk finding a
+report kept where its walk stopped, with more room than that walk had, asks its
+deciding walk here (`stopped_again`); where that refuses and stops too, the kept
+report is said again, so `validate` refuses exactly where `is_valid` does, and
+what the report names is where the first explaining walk met the stop.
+
+**What it does not reach.** A definition reaching a predicate or a hooked class
+is walked at each occurrence, and [the limits
+page](../10-limits.md#what-the-bounds-do-not-bound) says so. A meet's full
+report holds each member's failures, and where both members read one child the
+report itself doubles with each level: the memo shortens the walk, and the
+report is the size it is. `memo_tests.rs` beside the walk holds the memo to the
+walk without it, answer for answer and violation for violation, in every mode
+inside the bounds, and holds the entries a walk makes to linear in the depth and
+to a constant past the bounds.
 
 ## The limit
 

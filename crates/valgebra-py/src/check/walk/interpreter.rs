@@ -1811,7 +1811,7 @@ fn decide_with_fatal(
         &Value::Py(value),
         &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
     );
-    (ok, state.fatal.borrow().is_some())
+    (ok, state.take_fatal().is_some())
 }
 
 /// Decide membership of a parsed JSON value, in the mode `is_valid_json` uses.
@@ -4501,7 +4501,7 @@ fn recorded(
         &Value::Py(value),
         &mut Frame::new(&mut Vec::new(), &mut out, ctx),
     );
-    (state.fatal.take(), out)
+    (state.take_fatal(), out)
 }
 
 /// A message renders the constant a literal names, the bound or step a value
@@ -4623,7 +4623,7 @@ fn a_fatal_signal_from_a_branch_label_is_recorded() {
                 mode: WalkMode::Explain,
             };
             push_branch_label(&schema, ctx, py, &mut BranchLabels::new());
-            assert!(state.fatal.take().is_some(), "{site} was not carried out");
+            assert!(state.take_fatal().is_some(), "{site} was not carried out");
         }
 
         // The control: an ordinary error is a value that cannot render.

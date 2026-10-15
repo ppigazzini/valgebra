@@ -6,11 +6,13 @@
 //! caller spells a new path.
 
 use std::cell::{Cell, RefCell};
+use std::mem::ManuallyDrop;
 
 use pyo3::prelude::*;
 use valgebra_core::Schema;
 
 use super::index::ValidatorIndex;
+use super::memo::{Kept, Memo};
 use crate::codes::Code;
 
 /// The read-only context threaded through a validation walk: the constants pool,
@@ -110,6 +112,11 @@ impl Trail {
         Entered::Open
     }
 
+    /// How many levels are open: the definitions unfolded on the current path.
+    pub(crate) fn height(&self) -> usize {
+        self.0.len()
+    }
+
     /// Close the level [`enter`](Self::enter) opened.
     pub(crate) fn leave(&mut self) {
         let left = self.0.pop();
@@ -121,10 +128,10 @@ impl Trail {
 /// reference.
 #[derive(Default)]
 pub(crate) struct Signals {
-    /// A `Cell` mirror of whether [`WalkState::fatal`] holds a signal yet, set
-    /// alongside it in `record_fatal`. The per-node short-circuit reads this
-    /// with a plain load instead of taking a `RefCell` borrow on every
-    /// membership step.
+    /// A `Cell` mirror of whether the state holds a fatal signal yet, set
+    /// where [`WalkState::keep_fatal`] keeps one. The per-node short-circuit
+    /// reads this with a plain load instead of taking a `RefCell` borrow on
+    /// every membership step.
     pub(crate) fatal_seen: Cell<bool>,
     /// The code of the first walk that stopped rather than decided: one past
     /// the depth bound, at a value inside itself, at a value that moved while
@@ -146,13 +153,10 @@ pub(crate) struct WalkState {
     /// `(object id, definition index)` pairs open on the current path, so a value
     /// that contains itself fails with `recursion_loop` instead of looping.
     pub(crate) guard: RefCell<Trail>,
-    /// A fatal interpreter signal raised mid-walk — a base exception that is not
-    /// an ordinary exception (`KeyboardInterrupt`, `SystemExit`, `GeneratorExit`),
-    /// or a `MemoryError`/`RecursionError`. The first such error is recorded here;
-    /// the walk then short-circuits and the entry point re-raises it instead of
-    /// silently reporting a non-member. An ordinary exception during a membership
-    /// probe stays folded to non-membership and never lands here.
-    pub(crate) fatal: RefCell<Option<PyErr>>,
+    /// What a walk rarely holds ([`Rare`]): the first fatal signal, and the
+    /// memo's tables. Boxed, so a walk that holds neither writes one word and
+    /// tests one at its end.
+    rare: RareSlot,
     /// What the walk has met that is not an answer: whether a fatal signal is
     /// recorded, and the first stop.
     pub(crate) signals: Signals,
@@ -160,22 +164,119 @@ pub(crate) struct WalkState {
     /// native stack frame, and [`MAX_WALK_DEPTH`] is the ceiling
     /// [`descend`](Ctx::descend) holds it under.
     pub(crate) depth: Cell<usize>,
+    /// Where the walk's memo stands: the definitions entered, and whether a
+    /// node has armed it ([`Memo`]). Its tables are in `rare`.
+    pub(crate) memo: Memo,
+}
+
+/// The pointer [`WalkState`] holds what a walk rarely holds behind, released
+/// by hand.
+///
+/// The compiler's drop of a box this size is a call out of line, and inlined
+/// into the state's own drop it made that a call too: fifteen instructions a
+/// call, where the state's drop had been a few written where it is dropped.
+/// Held in `ManuallyDrop`, the box has no drop code, and the `Drop` below tests
+/// the pointer and releases a box out of line only where there is one, as
+/// `Unwritten` holds its buffers in `walk.rs` for the same reason.
+#[derive(Default)]
+struct RareSlot(ManuallyDrop<RefCell<Option<Box<Rare>>>>);
+
+impl Drop for RareSlot {
+    #[inline]
+    fn drop(&mut self) {
+        if self.0.get_mut().is_some() {
+            self.release();
+        }
+    }
+}
+
+impl RareSlot {
+    /// Drop the box, out of line: only a walk that met a fatal signal or kept
+    /// a definition has one.
+    #[cold]
+    #[inline(never)]
+    fn release(&mut self) {
+        drop(self.0.get_mut().take());
+    }
+}
+
+/// What a walk rarely holds, behind one pointer in [`WalkState`].
+///
+/// Both are on the paths a walk seldom takes, and each is a resource the state
+/// must release. Held inline, the memo's tables are eleven words to write and
+/// three drops to run on every call, which the instruction gate's
+/// call-boundary shape, about a hundred instructions a call, reads as 43%
+/// more; behind the pointer the signal's slot already was, a call that holds
+/// neither writes and tests that one word.
+#[derive(Default)]
+struct Rare {
+    /// A fatal interpreter signal raised mid-walk — a base exception that is not
+    /// an ordinary exception (`KeyboardInterrupt`, `SystemExit`, `GeneratorExit`),
+    /// or a `MemoryError`/`RecursionError`. The first such error is recorded here;
+    /// the walk then short-circuits and the entry point re-raises it instead of
+    /// silently reporting a non-member. An ordinary exception during a membership
+    /// probe stays folded to non-membership and never lands here.
+    fatal: Option<PyErr>,
+    /// What the walk keeps of a definition it walked at a value.
+    kept: Kept,
 }
 
 impl WalkState {
     pub(crate) fn new() -> Self {
         Self {
             guard: RefCell::new(Trail::default()),
-            fatal: RefCell::new(None),
+            rare: RareSlot::default(),
             signals: Signals::default(),
             depth: Cell::new(0),
+            memo: Memo::default(),
         }
     }
 
     /// The fatal interpreter signal the walk recorded, taken by the entry point
     /// that re-raises it.
-    pub(crate) fn into_fatal(self) -> Option<PyErr> {
-        self.fatal.into_inner()
+    pub(crate) fn into_fatal(mut self) -> Option<PyErr> {
+        if !self.signals.fatal_seen.get() {
+            return None;
+        }
+        self.rare.0.get_mut().take().and_then(|rare| rare.fatal)
+    }
+
+    /// Record `err` as the walk's fatal signal, unless one is recorded already:
+    /// the first is the one raised. Mirrored into the cheap flag the per-node
+    /// short-circuit reads.
+    pub(crate) fn keep_fatal(&self, err: PyErr) {
+        {
+            let mut rare = self.rare.0.borrow_mut();
+            let rare = rare.get_or_insert_with(Box::default);
+            if rare.fatal.is_none() {
+                rare.fatal = Some(err);
+            }
+        }
+        self.signals.fatal_seen.set(true);
+    }
+
+    /// Take the fatal signal the walk recorded, leaving none.
+    pub(crate) fn take_fatal(&self) -> Option<PyErr> {
+        self.rare
+            .0
+            .borrow_mut()
+            .as_mut()
+            .and_then(|rare| rare.fatal.take())
+    }
+
+    /// What `read` finds in the memo's tables, where a walk has kept anything.
+    pub(crate) fn recall<R>(&self, read: impl FnOnce(&Kept) -> Option<R>) -> Option<R> {
+        self.rare
+            .0
+            .borrow()
+            .as_ref()
+            .and_then(|rare| read(&rare.kept))
+    }
+
+    /// Write to the memo's tables, building them on the first write.
+    pub(crate) fn keep(&self, write: impl FnOnce(&mut Kept)) {
+        let mut rare = self.rare.0.borrow_mut();
+        write(&mut rare.get_or_insert_with(Box::default).kept);
     }
 }
 

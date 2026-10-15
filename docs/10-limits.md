@@ -122,12 +122,17 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   costs a deciding walk of each branch and a fail-fast walk of each branch it
   searches, whatever the size of the value. Without it every failure of the chosen branch is reported, so the
   report grows with the value; a service answering untrusted input with the
-  report asks for it with `fail_fast`.
+  report asks for it with `fail_fast`. A meet reports each member's failures,
+  so where two members read one child the report names the child's failures
+  once per member, and doubles with each level of the value that does:
+  `recursive(lambda t: union(int, intersection(list[t], list[union(t, str)])))`
+  reports 4,096 failures for a refused list nested twelve deep, and one with
+  `fail_fast`.
 
 ## What the bounds do not bound
 
 Each bound above caps a size -- a depth, a count of nodes, of definitions or of
-decision steps. None caps time, and three costs grow inside them:
+decision steps. None caps time, and four costs grow inside them:
 
 - **A value is walked as a tree.** The identity guard is a loop guard on the
   current path, so a sub-object reached by two paths is walked once per path.
@@ -135,6 +140,22 @@ decision steps. None caps time, and three costs grow inside them:
   the value at the bottom, and each level of sharing doubles the walk. A JSON document cannot share a
   sub-object; a value built in Python, unpickled or loaded from a YAML document
   with aliases can.
+- **A definition that runs your code is walked once per member that reaches
+  it.** Two branches of a union, two members of a meet or two clauses of a
+  map can read one value as one recursive definition: `recursive(lambda t:
+  union(int, [t], [union(t, str)]))` reads a list's element as `t` under both
+  list branches. The walk keeps what it answered for the definition at that
+  value, for the call, and the next member finds it there, so the walk is
+  linear in the value on every entry point, a JSON document included. A
+  definition that reaches a predicate, or a class whose metaclass is not
+  `type`, is not kept: the walk calls that code at each occurrence it reaches
+  ([refinements](05-refinements.md)), so each level of the value is walked once
+  per such member, and the time doubles with the depth. Keep the predicate
+  outside the definition, or write the branches so one value enters one of
+  them. A value nested past the bounds is reached by each path to it with its
+  own room -- the walk levels open and the definitions unfolded -- and walked
+  once for each, at most the product of the two bounds per definition and
+  value, where a value inside them on every path is walked once.
 - **A relation's budget counts steps, not their size.** A query spends at most
   a million decision steps, and a step whose work is linear in a leaf it reads
   is one step whatever the leaf holds. So a relation over a large leaf costs

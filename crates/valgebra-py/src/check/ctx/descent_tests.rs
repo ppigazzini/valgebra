@@ -90,7 +90,7 @@ fn the_recorded_signal_leaves_with_the_state() {
         "a walk that saw no signal carries none out"
     );
     let state = WalkState::new();
-    *state.fatal.borrow_mut() = Some(PyKeyboardInterrupt::new_err("stop"));
+    state.keep_fatal(PyKeyboardInterrupt::new_err("stop"));
     state.signals.fatal_seen.set(true);
     assert!(
         state.into_fatal().is_some(),

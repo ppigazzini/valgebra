@@ -44,6 +44,7 @@ use valgebra_core::{
 };
 
 use crate::check::ctx::{Ctx, Entered, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, WalkMode};
+use crate::check::memo::{Answer, Room};
 use crate::check::violation::{class_label_in, summarize_in, summarize_value, type_mismatch};
 use crate::codes::{
     Code, INSTANCE_TYPE, MUTATED_DURING_VALIDATION, PREDICATE_ERROR, RECURSION_LIMIT,
@@ -379,12 +380,7 @@ pub(crate) use crate::errors::is_fatal;
 /// Record the first fatal signal so the walk unwinds (every later `member` call
 /// returns at once) and the entry point re-raises it.
 pub(super) fn record_fatal(err: PyErr, ctx: Ctx<'_>) {
-    let mut slot = ctx.state.fatal.borrow_mut();
-    if slot.is_none() {
-        *slot = Some(err);
-    }
-    // Mirror into the cheap flag the per-node short-circuit reads.
-    ctx.state.signals.fatal_seen.set(true);
+    ctx.state.keep_fatal(err);
 }
 
 /// Record that the walk stopped with `code` rather than deciding, for a
@@ -558,7 +554,19 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
         Schema::Instance(index) => check_instance(*index, value, frame),
         Schema::AttrRecord { fields } => check_attr_record(fields, value, frame),
         Schema::Refine { base, constraints } => check_refine(base, constraints, value, frame),
-        Schema::Ref(id) => check_ref(*id, value, frame),
+        // Every definition entered is counted, and once a node has armed the
+        // memo one it may remember is answered there ([`remembered_ref`]).
+        // The question is asked here rather than in `check_ref`, which stays
+        // the walk of the definition alone: held there, it made `check_ref` a
+        // call the profile-guided build kept out of `member`, and laid out
+        // `member` around the call, which the profiled shape of a list nested
+        // twenty-five deep, which enters no definition, read as 3.6% more.
+        Schema::Ref(id) => {
+            if ctx.state.memo.enter() && ctx.index.memo.remembers(*id) {
+                return remembered_ref(*id, value, frame);
+            }
+            check_ref(*id, value, frame)
+        }
     }
 }
 
@@ -802,14 +810,65 @@ fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, 
     // its type test, asked without the walk around it, and any other is walked
     // in this frame: the walk here is a fast one, which writes neither of the
     // frame's buffers, so a frame of its own per branch would be two buffers
-    // built and dropped for nothing.
+    // built and dropped for nothing. A branch walked after one that entered a
+    // definition is walked again ([`member_again`]): the definitions entered
+    // are read where the first branch is walked, so a union of scalars, and
+    // one walking a single branch, reads them once at most. Until then the
+    // reading is `usize::MAX`, which no walk's reaches: its count would have
+    // to pass every address the process has.
     let room = ctx.room_to_descend();
+    let unread = usize::MAX;
+    let mut entered = unread;
     members
         .iter()
         .any(|m| match scalar_member(m, value, ctx, room) {
             Some(admitted) => admitted,
-            None => member(m, value, frame),
+            None if entered == unread => {
+                entered = ctx.state.memo.entered();
+                member(m, value, frame)
+            }
+            None if ctx.state.memo.entered() == entered => member(m, value, frame),
+            None => member_again(members.as_ptr() as usize, m, value, frame),
         })
+}
+
+/// Run `walk`, one more member's walk of a node that reads one value by
+/// several, armed as [`member_again`] arms it: where an earlier member entered
+/// a definition since the node read `entered`, and the node's members reach a
+/// remembered definition in common.
+///
+/// For the explaining union, whose walks are not one call each: a record
+/// branch's deciding pass, and a branch explained into a buffer of its own.
+fn again<R>(node: usize, entered: usize, ctx: Ctx<'_>, walk: impl FnOnce() -> R) -> R {
+    if ctx.state.memo.entered() != entered && ctx.index.memo.shares(node) {
+        ctx.state.memo.armed(walk)
+    } else {
+        walk()
+    }
+}
+
+/// Walk one more member of a node that reads `value` by several, after an
+/// earlier member entered a definition: with the memo armed where the node's
+/// members reach a remembered definition in common, so what this one walks
+/// is kept for the next, and found where the earlier one kept it.
+///
+/// `node` is the address of the node's member or clause buffer, which is
+/// what the plan keys a shared node by. Out of line: a node walks a second
+/// member only where the first refused, or, in a meet, admitted.
+#[cold]
+#[inline(never)]
+pub(super) fn member_again(
+    node: usize,
+    schema: &Schema,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let ctx = frame.ctx;
+    if ctx.index.memo.shares(node) {
+        ctx.state.memo.armed(|| member(schema, value, frame))
+    } else {
+        member(schema, value, frame)
+    }
 }
 
 /// Decide a union **and** explain it in one walk of each branch.
@@ -867,13 +926,19 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
     // walk stopped -- and its failure sits at the union's own location, so the
     // progress rule below would fold it into a summary and drop the reason.
     let mut declined: Option<Vec<Violation>> = None;
+    // Each branch explained is one more of the union's, armed as the deciding
+    // scan arms it ([`again`]).
+    let node = members.as_ptr() as usize;
+    let entered = ctx.state.memo.entered();
     for (at, walked) in refused.into_iter().enumerate() {
         let branch = match walked {
             Refused::Pending(branch_schema) => {
                 let mut branch = Vec::new();
                 let matched = {
                     let mut probing = Frame::new(&mut *frame.path, &mut branch, ctx);
-                    member(branch_schema, value, &mut probing)
+                    again(node, entered, ctx, || {
+                        member(branch_schema, value, &mut probing)
+                    })
                 };
                 // The branch left alone admits the value, or the value moved
                 // between the two walks and the second admits it.
@@ -980,12 +1045,18 @@ fn refused_branches<'s>(
         return Some(vec![Refused::Pending(alone)]);
     }
     let mut refused = Vec::new();
+    // Each walk below is one more of the union's, armed as the deciding scan
+    // arms it ([`again`]).
+    let node = members.as_ptr() as usize;
+    let entered = ctx.state.memo.entered();
     for (position, branch_schema) in members.iter().enumerate() {
         if position >= CLOSEST_BRANCH_PROBE_LIMIT {
             // Past the probe's width the branch is asked the cheap question
             // only: a union this wide reports the closest of the branches
             // already walked, and the rest merely decide membership.
-            if member(branch_schema, value, &mut Unwritten::default().frame(ctx)) {
+            if again(node, entered, ctx, || {
+                member(branch_schema, value, &mut Unwritten::default().frame(ctx))
+            }) {
                 return None;
             }
             continue;
@@ -1000,13 +1071,17 @@ fn refused_branches<'s>(
             && let Some(_level) = ctx.descend()
         {
             let mut decided = Decided::default();
-            if keyed_map_matches(fields, defaults, value, ctx, Some(&mut decided)) {
+            if again(node, entered, ctx, || {
+                keyed_map_matches(fields, defaults, value, ctx, Some(&mut decided))
+            }) {
                 return None;
             }
             refused.push(Refused::Record(fields, defaults, decided));
             continue;
         }
-        if member(branch_schema, value, &mut Unwritten::default().frame(ctx)) {
+        if again(node, entered, ctx, || {
+            member(branch_schema, value, &mut Unwritten::default().frame(ctx))
+        }) {
             return None;
         }
         refused.push(Refused::Pending(branch_schema));
@@ -1153,11 +1228,17 @@ fn check_intersection(
 ) -> bool {
     let ctx = frame.ctx;
     // Every member must hold; in explain mode each member's failure is collected,
-    // until one rejects the value itself.
+    // until one rejects the value itself. A member walked after one that
+    // entered a definition is walked again ([`member_again`]).
     let mut ok = true;
+    let entered = ctx.state.memo.entered();
     for member_schema in members {
         let before = frame.out.len();
-        ok &= member(member_schema, value, frame);
+        ok &= if ctx.state.memo.entered() == entered {
+            member(member_schema, value, frame)
+        } else {
+            member_again(members.as_ptr() as usize, member_schema, value, frame)
+        };
         if !ok && (stop(ctx) || rejected_the_value(frame.out, before, frame.path.len())) {
             return false;
         }
@@ -1266,6 +1347,96 @@ fn is_exactly_a(obj: &Bound<'_, PyAny>, class: &Bound<'_, PyAny>) -> bool {
     }
 }
 
+/// [`check_ref`] where the memo may hold the answer: found there, or walked
+/// and, in a member a node armed, kept.
+///
+/// An answer found is said again with the stop its walk met, so a complement
+/// or a kept walk above reads it as it read that walk. The stop cell is
+/// cleared for a walk to keep and keeps an earlier stop after it, as a
+/// complement reads it. A fail-fast report reads whether anything is reported
+/// yet (`record.rs`), so its walk is answered from the memo only where nothing
+/// is, which is where every kept walk began.
+#[cold]
+#[inline(never)]
+fn remembered_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
+    let memo = &ctx.state.memo;
+    if ctx.mode.stops_at_first() && !frame.out.is_empty() {
+        return check_ref(id, value, frame);
+    }
+    let key = (value.id(), id.get());
+    let room = Room {
+        levels: ctx.state.depth.get(),
+        unfolded: ctx.state.guard.borrow().height(),
+    };
+    let found = if ctx.mode.explains() {
+        let (path, out) = (&*frame.path, &mut *frame.out);
+        ctx.state
+            .recall(|kept| kept.explained(key, room, path, out))
+            .or_else(|| stopped_again(id, value, frame))
+    } else {
+        ctx.state.recall(|kept| kept.decided(key, room))
+    };
+    if let Some(found) = found {
+        if let Some(code) = found.stop() {
+            record_stop(code, ctx);
+        }
+        return found.admitted;
+    }
+    if !memo.is_armed() {
+        return check_ref(id, value, frame);
+    }
+    let earlier = ctx.state.signals.stopped.take();
+    let start = frame.out.len();
+    let admitted = check_ref(id, value, frame);
+    let stopped = ctx.state.signals.stopped.get();
+    ctx.state.signals.stopped.set(earlier.or(stopped));
+    if !ctx.state.signals.fatal_seen.get() {
+        let answer = Answer {
+            admitted,
+            stopped: stopped.map(|code| (code, room)),
+        };
+        if ctx.mode.explains() {
+            let reported = frame.out.get(start..).unwrap_or_default();
+            let from = frame.path.len();
+            ctx.state
+                .keep(|kept| kept.keep_explained(key, value, answer, from, reported));
+        } else {
+            ctx.state.keep(|kept| kept.keep_decided(key, value, answer));
+        }
+    }
+    admitted
+}
+
+/// The refusal an explaining walk kept where it stopped, said again by an
+/// explaining walk with more room than it had, where this walk's deciding walk
+/// refuses and stops too.
+///
+/// Explaining it again would cost what deciding it again costs, and more: a
+/// value nested past the bounds is reached with a different room by each path
+/// to it, and each explanation copies the path of every violation it reports,
+/// so explained again for each, a report of a chain past the bounds costs
+/// twelve times its deciding walk. The answer is the deciding walk's, here, so
+/// `validate` refuses exactly where `is_valid` does; what the report names is
+/// where the first explaining walk met the stop.
+fn stopped_again(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> Option<Answer> {
+    let ctx = frame.ctx;
+    let key = (value.id(), id.get());
+    ctx.state
+        .recall(|kept| kept.explained_a_stop(key).then_some(()))?;
+    let earlier = ctx.state.signals.stopped.take();
+    ctx.state.memo.enter();
+    let admitted = remembered_ref(id, value, &mut Unwritten::default().frame(ctx));
+    let stopped = ctx.state.signals.stopped.get();
+    ctx.state.signals.stopped.set(earlier.or(stopped));
+    if admitted || stopped.is_none() || ctx.state.signals.fatal_seen.get() {
+        return None;
+    }
+    let (path, out) = (&*frame.path, &mut *frame.out);
+    ctx.state
+        .recall(|kept| kept.explained_refusal(key, path, out))
+}
+
 /// Whether this value is a member of the definition the reference names.
 ///
 /// The reference is entered on the trail for the length of the definition's
@@ -1346,6 +1517,9 @@ pub(crate) use scalar::literal_matches;
 // but no `cargo test` reaches — carries evidence a mutation sweep can observe.
 #[cfg(all(test, feature = "interpreter-tests"))]
 mod interpreter;
+
+#[cfg(all(test, feature = "interpreter-tests"))]
+mod memo_tests;
 
 #[cfg(test)]
 mod label_tests;

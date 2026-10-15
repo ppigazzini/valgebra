@@ -23,8 +23,8 @@ use super::scalar::{admitted_quietly, scalar_member};
 #[cfg(PyPy)]
 use super::{Base, held_dict, reads_its_length, reads_its_values};
 use super::{
-    Frame, Scan, Unwritten, fast, fold, is_fatal, member, mutated, record_fatal, record_if_fatal,
-    record_stop, stop,
+    Frame, Scan, Unwritten, again, fast, fold, is_fatal, member, mutated, record_fatal,
+    record_if_fatal, record_stop, stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::index::{RecordPlan, decided_by_its_value};
@@ -314,6 +314,10 @@ fn field_holds(
 /// scalar key or value is its type test -- `dict[str, int]` reads both halves
 /// of every entry that way -- and the frame's context is read where it lies
 /// rather than copied once an entry.
+///
+/// Two clauses can read one entry, so each clause after the first is one more
+/// of the map's walks of it, armed as a union's next branch is ([`again`]).
+/// A map of one clause, which is every `dict[K, V]`, asks it alone.
 fn covered(
     defaults: &[MapClause],
     key: &Value<'_, '_>,
@@ -321,9 +325,17 @@ fn covered(
     sub: &mut Frame<'_, '_>,
 ) -> bool {
     let room = sub.ctx.room_to_descend();
-    defaults.iter().any(|clause| {
+    let holds = |clause: &MapClause, sub: &mut Frame<'_, '_>| {
         field_holds(&clause.key, key, room, sub) && field_holds(&clause.value, val, room, sub)
-    })
+    };
+    if let [clause] = defaults {
+        return holds(clause, sub);
+    }
+    let node = defaults.as_ptr() as usize;
+    let entered = sub.ctx.state.memo.entered();
+    defaults
+        .iter()
+        .any(|clause| again(node, entered, sub.ctx, || holds(clause, sub)))
 }
 
 /// The field name a key resolves to, read the way the dict resolves one.

@@ -392,6 +392,14 @@ The **walk** carries a value corpus in
 Every case runs in **both** the fast and the explaining mode with the two
 required to agree, and with the violation count asserted where it distinguishes
 the modes. A corpus driven only fast leaves half of every composite unobserved.
+Beside it, `crates/valgebra-py/src/check/walk/memo_tests.rs` holds the walk's
+memo to the walk without it, answer for answer and violation for violation in
+every mode inside the bounds, and the definitions a walk enters to a count
+linear in the value's depth. A test that reads a value at the bounds runs the
+shallow checks first -- at least one entry a level, a stop found again on a
+chain ten deep -- and the test of a room's two counts fills the trail to nine
+short of its bound rather than nesting a dict a hundred deep, so a sweep that
+disables the memo reads a failure rather than a walk that does not end.
 
 The **frontend** carries an annotation corpus in
 `crates/valgebra-py/src/build/interpreter.rs`: a table of annotations as a

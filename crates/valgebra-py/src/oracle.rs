@@ -250,7 +250,7 @@ impl PoolRelations<'_, '_> {
             &Value::Py(value),
             &mut Unwritten::default().frame(ctx),
         );
-        if let Some(err) = state.fatal.take() {
+        if let Some(err) = state.take_fatal() {
             self.keep_if_fatal(err);
         }
         admitted

@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a pattern is a set of strings in the relations, whatever its base
 - fix: the universe bound reads a union nested in a union as its members -- internal
+- fix: a definition two branches read at one value is walked once
 
 -->
 
@@ -33,6 +34,19 @@ answer of its own, or a repair to a change not yet released.
   nothing. A pattern over a base wider than the word kinds, such as `str |
   int`, and a pattern no string matches, such as `[^\s\S]`, are decided where
   they answered `undecided`.
+- **A value is walked once per definition where two branches read it as one.**
+  `recursive(lambda t: union(int, [t], [union(t, str)]))` reads a list's
+  element as `t` under both list branches, and each level of the value walked
+  the level below once per branch: `validate_json` took two seconds to refuse a
+  document of 44 bytes on 0.0.17, and each further two levels multiplied it by
+  four, on every entry point and for a value admitted by the second branch as
+  well. The same held of a meet's members and of a map's clauses. A walk keeps
+  what it answered for a definition at a value for the rest of the call, so the
+  walk is linear in the value. A definition reaching a predicate, or a class
+  whose metaclass is not `type`, is walked at each occurrence as before, since
+  that code is called at each one; [the limits
+  page](https://ppigazzini.github.io/valgebra/10-limits/#what-the-bounds-do-not-bound)
+  says so.
 
 ## [0.0.18] - 2026-10-12
 

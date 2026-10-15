@@ -21,6 +21,7 @@
 
 pub(crate) mod ctx;
 mod index;
+mod memo;
 mod violation;
 mod walk;
 

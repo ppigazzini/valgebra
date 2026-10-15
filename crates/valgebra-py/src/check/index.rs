@@ -8,6 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::Arc;
 use valgebra_core::{Constraint, Schema};
 
+use super::memo::{self, MemoPlan};
 use crate::input::Value;
 
 pub(crate) struct RecordPlan {
@@ -216,6 +217,9 @@ pub(crate) struct ValidatorIndex {
     /// text in the schema; the refinement walk reads it for a `Regex(...)`
     /// constraint instead of recompiling.
     pub(crate) regexes: RegexIndex,
+    /// Which definitions a walk may remember at a value, and which nodes arm
+    /// the memo ([`MemoPlan`]). Empty for a schema with no definitions.
+    pub(crate) memo: MemoPlan,
 }
 
 impl ValidatorIndex {
@@ -252,6 +256,7 @@ pub(crate) fn build_index(
     for def in defs {
         collect(py, def, pool, &mut index);
     }
+    index.memo = memo::plan(py, schema, defs, pool);
     index
 }
 

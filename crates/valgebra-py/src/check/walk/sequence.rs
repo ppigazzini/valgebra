@@ -45,20 +45,19 @@ pub(super) fn check_seq(
     frame: &mut Frame<'_, '_>,
 ) -> bool {
     let ctx = frame.ctx;
-    let (kind_word, type_code, len_code) = match container {
-        SeqKind::List => ("list", LIST_TYPE, LIST_LENGTH),
-        SeqKind::Tuple => ("tuple", TUPLE_TYPE, TUPLE_LENGTH),
-    };
+    // The names a failure reports are spelled in each arm, which knows its
+    // container, or chosen in the arm that refuses, rather than once above the
+    // match. Chosen there, they are three selects the profile-guided build is
+    // free to make on every list it walks, a dozen instructions a level of a
+    // nested list.
     let (prefix, tail) = (&shape.prefix[..], shape.tail.as_deref());
     match (container, value) {
         (SeqKind::List, Value::Py(v)) => {
             let Ok(list) = v.cast::<PyList>() else {
-                return type_fail(
-                    type_code, kind_word, value, frame.path, frame.ctx, frame.out,
-                );
+                return type_fail(LIST_TYPE, "list", value, frame.path, frame.ctx, frame.out);
             };
             if !SeqArity::of(prefix.len(), tail).admits(list.len()) {
-                return seq_length_fail(len_code, kind_word, prefix, tail, value, frame);
+                return seq_length_fail(LIST_LENGTH, "list", prefix, tail, value, frame);
             }
             if let Some((kind, schema)) = homogeneous_scalar(prefix, tail, ctx) {
                 return scalar_list_matches(list, kind, schema, value, frame);
@@ -101,22 +100,26 @@ pub(super) fn check_seq(
         }
         (SeqKind::List, Value::Json(py, JsonValue::Array(items))) => {
             if !SeqArity::of(prefix.len(), tail).admits(items.len()) {
-                return seq_length_fail(len_code, kind_word, prefix, tail, value, frame);
+                return seq_length_fail(LIST_LENGTH, "list", prefix, tail, value, frame);
             }
             json_array_matches(prefix, tail, *py, items, frame)
         }
         (SeqKind::Tuple, Value::Py(v)) => {
             let Ok(tuple) = v.cast::<PyTuple>() else {
-                return type_fail(
-                    type_code, kind_word, value, frame.path, frame.ctx, frame.out,
-                );
+                return type_fail(TUPLE_TYPE, "tuple", value, frame.path, frame.ctx, frame.out);
             };
-            tuple_matches(prefix, tail, tuple, value, len_code, kind_word, frame)
+            tuple_matches(prefix, tail, tuple, value, TUPLE_LENGTH, "tuple", frame)
         }
         // A tuple is never a JSON value; a list needs a JSON array.
-        _ => type_fail(
-            type_code, kind_word, value, frame.path, frame.ctx, frame.out,
-        ),
+        _ => {
+            let (type_code, kind_word) = match container {
+                SeqKind::List => (LIST_TYPE, "list"),
+                SeqKind::Tuple => (TUPLE_TYPE, "tuple"),
+            };
+            type_fail(
+                type_code, kind_word, value, frame.path, frame.ctx, frame.out,
+            )
+        }
     }
 }
 
