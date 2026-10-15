@@ -1875,6 +1875,55 @@ fn a_subject_holding_a_reference_nothing_resolves() -> impl Strategy<Value = Sch
         .prop_map(|members| Schema::Union(members.into()))
 }
 
+/// A universe spelled as a member beside its complement, each at a drawn
+/// depth of unions, beside members the set reading builds, in a drawn order.
+///
+/// **The member** is a sequence of no positions, which the region partition
+/// cannot read, so the walk passes it over and the rules read the union one
+/// De Morgan step in. It is one level deep and the set reading builds it
+/// without a pool, which keeps the premise provable under `NoLeafRelations`:
+/// the premise lowers the supertype's complement, and a union nested past a
+/// level more would put that complement past [`DEPTH`](crate::descr::lower::DEPTH)
+/// and fail the premise rather than the conclusion. **The depths** are drawn
+/// on both sides, as in [`a_subject_holding_a_reference_nothing_resolves`]:
+/// the fuzzer's supertype nests the member in a union of one, and a rule
+/// that reads the top-level members alone is a rule about the spelling.
+fn a_universe_through_nested_unions() -> impl Strategy<Value = Schema> {
+    let nested = |leaf: Schema, depth: usize| {
+        (0..depth).fold(leaf, |inner, _| Schema::Union(vec![inner].into()))
+    };
+    let member =
+        prop_oneof![Just(SeqKind::List), Just(SeqKind::Tuple)].prop_map(|container| Schema::Seq {
+            container,
+            shape: SeqShape::default(),
+        });
+    let beside = prop_oneof![Just(Schema::Str), Just(Schema::Bool)];
+    (
+        member,
+        0usize..2,
+        0usize..2,
+        prop::collection::vec(beside, 0..3),
+    )
+        .prop_flat_map(move |(member, outer, inner, rest)| {
+            let mut members = vec![
+                nested(Schema::Complement(Arc::new(member.clone())), outer),
+                nested(member, inner),
+            ];
+            members.extend(rest);
+            Just(members).prop_shuffle()
+        })
+        .prop_map(|members| Schema::Union(members.into()))
+}
+
+/// A structural schema nested in unions of one, one level past the depth the
+/// set reading descends, so the rules answer for it, as they did for the
+/// fuzzer's subject.
+fn a_subject_past_the_set_readings_depth() -> impl Strategy<Value = Schema> {
+    structural_schema().prop_map(|schema| {
+        (0..=crate::descr::lower::DEPTH).fold(schema, |inner, _| Schema::Union(vec![inner].into()))
+    })
+}
+
 /// The universe as a definition spells it: the top, the gradual `Any`, and
 /// the top beside a member the fast region fold stops on, in either order.
 fn a_universe_spelling() -> impl Strategy<Value = Schema> {
@@ -2143,6 +2192,26 @@ proptest! {
             a.is_subtype_of_under(&b, &NoLeafRelations, &defs),
             "{a:?} not below universal {b:?} under {defs:?}"
         );
+    }
+
+    /// The universe bound where the supertype's pair sits in **nested
+    /// unions**.
+    ///
+    /// `X ∪ (Y ∪ Z)` is `X ∪ Y ∪ Z`, so a member beside its own complement
+    /// covers the universe at whatever depth of unions either sits. The
+    /// premise is a proof of emptiness, the set reading's, and the subject is
+    /// past that reading, so the conclusion is the rules' alone: the
+    /// completeness claim the fuzz target asserts of every pair it draws.
+    #[test]
+    fn a_universe_through_nested_unions_bounds_a_subject_past_the_sets(
+        a in a_subject_past_the_set_readings_depth(),
+        b in a_universe_through_nested_unions(),
+    ) {
+        prop_assert!(
+            Schema::Complement(Arc::new(b.clone())).is_empty(),
+            "the premise: {b:?} is the universe"
+        );
+        prop_assert!(a.is_subtype_of(&b), "{a:?} not below universal {b:?}");
     }
 
     #[test]

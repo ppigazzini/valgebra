@@ -962,6 +962,26 @@ and `scripts/perf_gate.py --decision-matrix` is where that cost shows.
 in `decision/tests.rs` holds the pair, with a literal subject the descriptor
 cannot lower.
 
+**That reading takes a union nested in the union as its members.** `X ∪ (Y ∪
+Z)` is `X ∪ Y ∪ Z`, so the meet of the complements is one set however the
+members are grouped, but the meet's fold compares spellings. `¬c ∪ (c)`, with
+`(c)` a union of one member, taken whole gives `c ∩ ¬(c)`, and the fold finds
+`¬(c)` and `c` apart; read through the nested union it is `c ∩ ¬c`, which the
+fold empties. Grouping holds of every set, a class with a hook among them, so
+which pairs cancel is the fold's own guard to say. The constructors flatten
+what they build, so the nesting arrives in a term built raw. The fuzzer's pair
+puts it below a meet nested one level past the depth the set reading descends:
+the set reading proves `¬B` empty, reading `B` alone, and refuses the pair at
+the subject, and the walk reads a nested union as one region or as none.
+`fuzz/seeds/decision/` keeps the input,
+`a_union_nested_in_the_union_is_read_as_its_members` in `decision/tests.rs`
+holds the pair, and
+`a_universe_through_nested_unions_bounds_a_subject_past_the_sets` in `laws.rs`
+draws the family. Three other spellings of the same pair stay declines below
+such a subject: the complement of the member's union of one, a meet of one, and
+a refinement with no constraint. Each is a spelling the fold does not read as
+its member.
+
 **The universe bound is read through a reference on the right even where the
 subject is a set nobody can read.** A reference past the end of the table names
 a set no query can read, so the rule a reference on the left takes -- unfold it

@@ -553,6 +553,17 @@ impl Schema {
     /// `None ∩ set[Any]`, a meet of two kinds that share no value, and the
     /// rules settle it without lowering anything.
     ///
+    /// **A member that is itself a union is read as its members**, at any
+    /// depth. `X ∪ (Y ∪ Z)` is `X ∪ Y ∪ Z`, so the two meets of complements are
+    /// one set, and only the flat one shows the meet's own fold the pair it
+    /// reads. `¬c ∪ (c)`, with `(c)` a union of one member, is the universe;
+    /// taken whole, its complements are `c ∩ ¬(c)`, and the fold compares
+    /// `¬(c)` with `c` and finds two spellings. Grouping holds of every set, a
+    /// class with a hook among them, so which pairs cancel is the fold's own
+    /// guard to say. The constructors flatten what they build, so the nesting
+    /// arrives in a term built raw, which the fuzz target draws, and the walk
+    /// above reads such a member as one region or as none.
+    ///
     /// Asked only of a union, only where every rule and the walk have
     /// declined, and only where the walk passed a member over, so a query
     /// that decides never builds the meet. Building it for every declined
@@ -566,8 +577,22 @@ impl Schema {
         if members.iter().all(|m| m.region_set() != Regions::Unknown) {
             return false;
         }
-        Schema::meet_within(members.iter().map(|m| m.clone().complement()), cx.defs)
-            .is_empty_rec(cx)
+        // A worklist rather than a recursion: each node is taken once and the
+        // term is a finite tree, so the walk ends within its node count. The
+        // list allocates only once a nested union is met, so a flat union
+        // feeds the meet's buffer as directly as its members do.
+        let mut nested: Vec<&Schema> = Vec::new();
+        let mut top = members.iter();
+        let complements = core::iter::from_fn(|| {
+            loop {
+                let member = nested.pop().or_else(|| top.next())?;
+                match member {
+                    Schema::Union(inner) => nested.extend(inner.iter()),
+                    _ => return Some(member.clone().complement()),
+                }
+            }
+        });
+        Schema::meet_within(complements, cx.defs).is_empty_rec(cx)
     }
 
     /// Whether `self` and `other` share no value, which is what decides `self ⊆

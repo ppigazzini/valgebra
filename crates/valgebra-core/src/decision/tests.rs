@@ -488,6 +488,83 @@ fn members_of_the_universe(opaque: &Schema) -> crate::Members {
     .into()
 }
 
+/// A union nested in the union is read as its members: `~c | (c)`, with `(c)`
+/// a union of one member, covers the universe as `~c | c` does.
+///
+/// The fuzzer's pair has an `int` constant and a subject whose unions nest one
+/// level past the depth the set reading descends. The set reading proves the
+/// supertype's complement empty, reading the supertype alone, and refuses the
+/// pair at the subject, so the rules are the whole of the answer. One De Morgan step in, the union taken whole is `c & ~(c)`,
+/// which the meet's fold reads as two spellings; read through the nested
+/// union it is `c & ~c`.
+#[test]
+fn a_union_nested_in_the_union_is_read_as_its_members() {
+    /// A pool holding the one constant, so the set reading can lower it. The
+    /// rules ask the pool nothing.
+    struct MinusTwo;
+    impl Constants for MinusTwo {
+        fn constant(&self, index: ConstIx) -> Option<Operand> {
+            (index.get() == 0).then_some(Operand::Integer(-2))
+        }
+    }
+    impl LeafRelations for MinusTwo {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            None
+        }
+    }
+    let raw = |members: Vec<Schema>| Schema::Union(members.into());
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let constant = Schema::Literal(ConstIx::new(0));
+    let set_of_str = Schema::Coll {
+        container: CollKind::Set,
+        element: Arc::new(Schema::Str),
+    };
+    // `~set[str] & (float | (int | (~c | c)))`, as the fuzzer drew it.
+    let subject = Schema::Intersection(
+        vec![
+            not(set_of_str),
+            raw(vec![
+                Schema::Float,
+                raw(vec![
+                    Schema::Int,
+                    raw(vec![not(constant.clone()), constant.clone()]),
+                ]),
+            ]),
+        ]
+        .into(),
+    );
+    assert!(
+        crate::descr::lower::lower(&subject, &MinusTwo).is_none(),
+        "the premise: the set reading builds no set for {subject:?}"
+    );
+    // The drawn supertype, the nesting moved to the complement's side, and a
+    // nested union of two members one level further in.
+    for universe in [
+        raw(vec![not(constant.clone()), raw(vec![constant.clone()])]),
+        raw(vec![raw(vec![not(constant.clone())]), constant.clone()]),
+        raw(vec![
+            not(constant.clone()),
+            raw(vec![raw(vec![Schema::Int, constant.clone()])]),
+        ]),
+    ] {
+        assert!(
+            not(universe.clone()).is_empty_with(&MinusTwo, &[]),
+            "the premise: {universe:?} is the universe"
+        );
+        let budget = Budget::new(DECISION_BUDGET);
+        assert_eq!(
+            subject.subtype_relation(&universe, &MinusTwo, &[], &budget),
+            Relation::Holds,
+            "{subject:?} below {universe:?} by the rules"
+        );
+        assert_eq!(
+            subject.subtype_relation_under(&universe, &MinusTwo, &[]),
+            Relation::Holds,
+            "{subject:?} below {universe:?}"
+        );
+    }
+}
+
 // THEORY: structural-rather-than-reduction
 /// The structural inclusion rules, held to their own work.
 ///

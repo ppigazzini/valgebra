@@ -14,6 +14,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a pattern is a set of strings in the relations, whatever its base
+- fix: the universe bound reads a union nested in a union as its members -- internal
 
 -->
 
