@@ -4,7 +4,7 @@ use super::*;
 use crate::carries::{Carries, OrderGroup, carries_division, carries_length, carries_order};
 use crate::decision::{DECISION_BUDGET, LeafRelations, NoLeafRelations};
 use crate::descr::classes::{Attributes, Class, Hook, Member};
-use crate::descr::lower::{Constants, Operand};
+use crate::descr::lower::{Constants, Operand, lower};
 use crate::ir::Polarity;
 use crate::kind::Kind;
 use crate::verdict::Relation;
@@ -1892,6 +1892,46 @@ fn a_universe_spelling() -> impl Strategy<Value = Schema> {
     ]
 }
 
+/// A refinement by a pattern beside the complement of one with the same
+/// constraints, each over `str` or `Anything`, shuffled among a few other
+/// members: the universe, since a pattern admits only strings and both denote
+/// the strings the constraints admit, however the two bases are spelled.
+fn a_universe_through_a_pattern_over_two_bases() -> impl Strategy<Value = Schema> {
+    // The bases the set reading lowers a pattern over, so the premise below is
+    // proved; the rule itself reads any base that holds every string.
+    let base = prop_oneof![Just(Schema::Str), Just(Schema::ANYTHING)];
+    let constraints = (
+        prop_oneof![Just("[0-9]*"), Just("a+"), Just("x|y")],
+        prop::option::of(0usize..3),
+    )
+        .prop_map(|(pattern, shortest)| {
+            let mut constraints = vec![Constraint::Regex(pattern.to_owned())];
+            constraints.extend(shortest.map(Constraint::MinLen));
+            constraints
+        });
+    let beside = prop_oneof![
+        Just(Schema::Int),
+        Just(Schema::Bool),
+        Just(Schema::NoneType)
+    ];
+    (
+        base.clone(),
+        base,
+        constraints,
+        prop::collection::vec(beside, 0..3),
+    )
+        .prop_flat_map(|(ours, theirs, constraints, rest)| {
+            let refined = |base: Schema| Schema::Refine {
+                base: Arc::new(base),
+                constraints: constraints.clone().into(),
+            };
+            let mut members = vec![Schema::Complement(Arc::new(refined(ours))), refined(theirs)];
+            members.extend(rest);
+            Just(members).prop_shuffle()
+        })
+        .prop_map(|members| Schema::Union(members.into()))
+}
+
 /// A schema with a `Ref(0)` reachable somewhere inside it, for the
 /// guardedness property below: the reference is what the check looks for, so
 /// a generator that never produces one proves nothing.
@@ -2348,6 +2388,54 @@ proptest! {
         let ba = b.is_subtype_of(&a);
         prop_assert_eq!(a.is_equivalent(&b), ab && ba);
         let _ = a.is_empty();
+    }
+
+    /// A pattern's set holds strings and nothing else, whatever its base.
+    ///
+    /// A pattern matches the text of a `str`, and the walk refuses every other
+    /// value. A lowering holding a value of another kind is a set larger than
+    /// the schema denotes, and on the supertype side that is a subtype proof
+    /// no value supports. The base is drawn over the structural fragment,
+    /// `bytes`, the universe, literals and classes among it, and three of the
+    /// patterns match the empty word, the shortest byte string a `bytes`
+    /// reading would add.
+    #[test]
+    fn a_patterns_set_holds_only_strings(
+        base in structural_schema(),
+        pattern in prop::sample::select(vec!["a*", "a+", "", "(?s:.)*"]),
+    ) {
+        let refined = Schema::Refine {
+            base: Arc::new(base),
+            constraints: vec![Constraint::Regex(pattern.to_owned())].into(),
+        };
+        if let Some(set) = lower(&refined, &CorpusOracle) {
+            prop_assert!(set.within(&[Kind::Str]), "{:?} lowered past `str`", refined);
+        }
+    }
+
+    /// The universe bound where the supertype's pair is a **pattern over two
+    /// bases**.
+    ///
+    /// A pattern admits no value but a string, so `Refine(str, C)` and
+    /// `Refine(Anything, C)` are one set, and a union holding one beside the
+    /// other's complement is the universe. The premise is the set reading's,
+    /// which lowers both to one language, and the subject is one that reading
+    /// cannot lower, so the conclusion is the rules' alone: the completeness
+    /// claim the fuzz target asserts of every pair it draws.
+    #[test]
+    fn a_universe_through_a_pattern_over_two_bases_bounds_a_subject_the_sets_refuse(
+        a in a_subject_holding_a_reference_nothing_resolves(),
+        b in a_universe_through_a_pattern_over_two_bases(),
+    ) {
+        let defs = [Schema::Int, b.clone()];
+        prop_assert!(
+            Schema::Complement(Arc::new(b.clone())).is_empty_under(&defs),
+            "the premise: {b:?} is the universe"
+        );
+        prop_assert!(
+            a.is_subtype_of_under(&b, &NoLeafRelations, &defs),
+            "{a:?} not below universal {b:?} under {defs:?}"
+        );
     }
 
     #[test]

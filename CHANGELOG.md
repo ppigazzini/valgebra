@@ -13,7 +13,25 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: a pattern is a set of strings in the relations, whatever its base
+
 -->
+
+### Fixed
+
+- **A pattern over a base holding `bytes` is a set of strings in the
+  relations.** The set representation read `Annotated[str | bytes,
+  Regex("a*")]` as the pattern's language over `bytes` as well, while the walk
+  refuses every byte string. So `Annotated[bytes, MaxLen(0)]` was answered
+  `subset` of it, though `b""` is in the first and not the second;
+  `intersection(Literal[b"a"], complement(it))` was answered empty, though it
+  admits `b"a"`; and its relation to `str`, and to `Annotated[str,
+  Regex("a*")]`, which it equals, was `not_subset`. The answers were wrong in
+  0.0.15 through 0.0.18. A pattern is read as its language over `str` and
+  nothing else, as the walk reads it, and a base holding no string meets it in
+  nothing. A pattern over a base wider than the word kinds, such as `str |
+  int`, and a pattern no string matches, such as `[^\s\S]`, are decided where
+  they answered `undecided`.
 
 ## [0.0.18] - 2026-10-12
 

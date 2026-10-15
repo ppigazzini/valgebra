@@ -967,30 +967,26 @@ fn lengths(
     Some(whole.unwrap_or_else(Descr::nothing))
 }
 
-/// The words a pattern matches, under whichever word kind the base admits.
+/// The strings a pattern matches whole, whatever else the base admits.
 ///
-/// A length bound counts what the kind's alphabet counts -- code points for a
-/// `str`, bytes for `bytes` -- which is why the pattern is read under the kind
-/// rather than compiled once.
+/// A pattern matches the text of a string, and no other value has any: the
+/// set is the pattern's language over `str`, `bytes` included among the kinds
+/// it leaves out. [`refine`] meets it with the base, which drops the strings
+/// the base does not hold and every value of another kind, so no kind beside
+/// `str` needs reading here. Read over `bytes` as well, the set would be
+/// larger than the schema denotes, and a larger set on the supertype side is
+/// a subtype proof that no value supports: `Annotated[bytes, MaxLen(0)]`
+/// below `Annotated[str | bytes, Regex("a*")]`, with `b""` standing against
+/// it.
 ///
-/// **Refuses unless the base is words and nothing else.** A length is not a
-/// word's alone: a list, a tuple, a set and a dict all have one, and a bound on
-/// them is a constraint the word component cannot express. Lowering the bound as
-/// if it only spoke about words would give a *smaller* set than the schema
-/// denotes -- and a smaller set has a larger complement, which is a subtype
-/// proof that no value supports.
+/// A base holding no string meets the pattern in nothing. That is an answer,
+/// given before the automaton is built, so a pattern past its size bound
+/// still decides it.
 fn words(pattern: &str, base: &Descr) -> Option<Descr> {
-    if !base.within(&[Kind::Str, Kind::Bytes]) {
-        return None;
+    if !base.reaches(Kind::Str) {
+        return Some(Descr::nothing());
     }
-    let mut whole = Descr::nothing();
-    for kind in [Kind::Str, Kind::Bytes] {
-        if !base.reaches(kind) {
-            continue;
-        }
-        whole = whole.union(&Descr::pattern(pattern, kind)?)?;
-    }
-    (!whole.is_empty()).then_some(whole)
+    Descr::pattern(pattern, Kind::Str)
 }
 
 #[cfg(test)]

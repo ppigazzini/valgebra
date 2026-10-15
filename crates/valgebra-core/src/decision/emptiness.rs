@@ -20,6 +20,7 @@ use crate::descr::classes::Reach;
 use crate::descr::lower::{Constants, an_empty_reading_stands, lower_unfolded};
 use crate::ir::{ClassIx, Constraint, Constraints, Field, Polarity, Schema};
 use crate::kind::{Kind, Region, Regions};
+use crate::oracle::denotes_a_set_within;
 use crate::verdict::Verdict;
 
 use super::constraints::{Density, bounds_unsatisfiable, longest, shortest, tightest_bounds};
@@ -444,6 +445,7 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
     let empty = any_empty
         || region.known().is_some_and(Region::is_empty)
         || has_complementary_pair(members, cx.oracle)
+        || has_a_pattern_and_its_complement(members, cx)
         || has_disjoint_pair(members, cx.oracle)
         || intersection_bounds_unsatisfiable(members, cx.oracle)
         || {
@@ -474,6 +476,35 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
         settled => settled,
     };
     (verdict, region)
+}
+
+/// Whether `members` hold a pattern refinement and the complement of one with
+/// the same constraints whose base holds every string.
+///
+/// A pattern admits no value but a `str`, so the two denote one set -- the
+/// strings the constraints admit -- whatever their bases hold beside strings,
+/// and `Refine(B, C) ∧ ¬Refine(B', C)` is `B ∧ C ∧ ¬B'`, empty where `C ⊆ str
+/// ⊆ B'`. The spelling check beside it reads `Refine(str, C)` and
+/// `Refine(Anything, C)` as two sets, while the set reading lowers both to the
+/// same language, so a union of one and the other's complement was the
+/// universe to the set reading and short of it to the rules. The constraints
+/// are read as a set first: a predicate among them may answer the two
+/// occurrences differently.
+fn has_a_pattern_and_its_complement(members: &[Schema], cx: &mut Cx<'_>) -> bool {
+    members.iter().any(|member| {
+        let Schema::Complement(inner) = member else {
+            return false;
+        };
+        let Schema::Refine { base, constraints } = &**inner else {
+            return false;
+        };
+        constraints.iter().any(|c| matches!(c, Constraint::Regex(_)))
+            && members.iter().any(|other| {
+                matches!(other, Schema::Refine { constraints: ours, .. } if ours == constraints)
+            })
+            && denotes_a_set_within(inner, cx.oracle, cx.defs)
+            && Schema::Str.is_subtype_rec(base, cx).holds()
+    })
 }
 
 /// A meet the rules leave undecided, decided by unfolding a reference among

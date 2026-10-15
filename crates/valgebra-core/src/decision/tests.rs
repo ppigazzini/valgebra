@@ -2985,6 +2985,117 @@ fn a_complement_only_the_descriptor_empties_bounds_a_subject_with_no_descriptor(
     );
 }
 
+/// A pattern over a base holding `bytes` relates as the strings it holds.
+///
+/// A pattern matches the text of a `str`, and the walk refuses every other
+/// value, so `Annotated[str | bytes, Regex("a*")]` holds exactly the strings
+/// `Annotated[str, Regex("a*")]` holds. Read over `bytes` too, the pattern
+/// would prove `Annotated[bytes, MaxLen(0)]` below it, with `b""` standing
+/// against the proof, and refute its inclusion in `str`, which every member
+/// satisfies. Each row below asks one of those answers of the relation the
+/// rules and the sets answer together.
+#[test]
+fn a_pattern_over_text_and_bytes_relates_as_its_strings_do() {
+    let pattern = |base| Schema::Refine {
+        base: Arc::new(base),
+        constraints: vec![Constraint::Regex("a*".into())].into(),
+    };
+    let wide = pattern(Schema::union([Schema::Str, Schema::Bytes]));
+    let text = pattern(Schema::Str);
+    let empty_bytes = Schema::Refine {
+        base: Arc::new(Schema::Bytes),
+        constraints: vec![Constraint::MaxLen(0)].into(),
+    };
+    let relation =
+        |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &NoLeafRelations, &[]);
+
+    assert_eq!(relation(&empty_bytes, &wide), Relation::Fails);
+    assert_eq!(relation(&wide, &Schema::Str), Relation::Holds);
+    assert_eq!(relation(&wide, &text), Relation::Holds);
+    assert_eq!(relation(&text, &wide), Relation::Holds);
+    // The byte string outside the pattern is a value of the difference.
+    assert!(!Schema::meet([empty_bytes, wide.complement()]).is_empty());
+    // And over `bytes` alone the pattern holds nothing.
+    assert!(pattern(Schema::Bytes).is_empty());
+}
+
+/// A pattern admits no value but a string, so a refinement by one denotes the
+/// strings its constraints admit whatever its base holds beside strings: the
+/// rules read a refinement and the complement of one with the same pattern as
+/// meeting in nothing wherever the complemented base holds every string. The
+/// fuzzer drew the pair below -- the set reading proves the union universal,
+/// and the rules, comparing `Refine(str, C)` and `Refine(Anything, C)` by
+/// spelling, refused a subject the set reading cannot lower.
+#[test]
+fn a_pattern_over_two_bases_that_hold_every_string_is_one_set() {
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let refined = |base: Schema, constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(base),
+        constraints: constraints.into(),
+    };
+    let digits = || vec![Constraint::Regex("[0-9]*".to_owned())];
+    let rules_empty = |schema: &Schema| {
+        let budget = Budget::new(DECISION_BUDGET);
+        schema.is_empty_rec(&mut Cx::new(&NoLeafRelations, &[], &budget))
+    };
+    let meet = |ours: Schema, theirs: Schema| Schema::Intersection(vec![ours, not(theirs)].into());
+    for (ours, theirs) in [
+        (Schema::Str, Schema::ANYTHING),
+        (Schema::ANYTHING, Schema::Str),
+        (Schema::Str, not(Schema::Int)),
+    ] {
+        let both = meet(refined(ours, digits()), refined(theirs, digits()));
+        assert!(rules_empty(&both), "{both:?} by the rules");
+    }
+    // A complemented base short of the strings leaves values of the first, and
+    // a predicate may answer the two occurrences apart: neither meet is empty.
+    let short = meet(
+        refined(Schema::Str, digits()),
+        refined(Schema::Int, digits()),
+    );
+    assert!(!rules_empty(&short), "{short:?}");
+    let called = || {
+        let mut constraints = digits();
+        constraints.push(Constraint::Predicate(PredIx::new(0)));
+        constraints
+    };
+    let called = meet(
+        refined(Schema::Str, called()),
+        refined(Schema::ANYTHING, called()),
+    );
+    assert!(!rules_empty(&called), "{called:?}");
+
+    let universe = Schema::Union(
+        vec![
+            Schema::KeyedMap {
+                fields: Vec::new().into(),
+                defaults: Vec::new().into(),
+            },
+            not(refined(Schema::Str, digits())),
+            refined(Schema::ANYTHING, digits()),
+        ]
+        .into(),
+    );
+    let subject = Schema::Union(
+        vec![
+            Schema::NoneType,
+            Schema::Literal(ConstIx::new(2)),
+            Schema::ANYTHING,
+        ]
+        .into(),
+    );
+    assert!(
+        not(universe.clone()).is_empty_with(&NoLeafRelations, &[]),
+        "the premise: {universe:?} is the universe"
+    );
+    let budget = Budget::new(DECISION_BUDGET);
+    assert_eq!(
+        subject.subtype_relation(&universe, &NoLeafRelations, &[], &budget),
+        Relation::Holds,
+        "{subject:?} below {universe:?} by the rules"
+    );
+}
+
 /// A record below the complement of a union of records is decided at every
 /// width.
 ///

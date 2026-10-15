@@ -1264,11 +1264,14 @@ pub enum Constraint {
     Predicate(PredIx),
     /// The string fully matches this regular expression, anchored at both ends
     /// as `re.fullmatch` anchors, in the Rust engine's dialect rather than `re`'s
-    /// (`docs/05-refinements.md`). The pattern is held inline rather than pooled;
-    /// the bindings compile it once and match natively. The structural rules
-    /// relate two patterns only when they are written identically; the set
-    /// representation reads a pattern as the regular language it denotes
-    /// (`descr/regular.rs`), so `Regex("a+")` is below `Regex("a*")`.
+    /// (`docs/05-refinements.md`). A value that is not a `str` has no text to
+    /// match and is outside the set, a `bytes` value among them, as is a string
+    /// holding a lone surrogate (`docs/14-soundness.md`). The pattern is held
+    /// inline rather than pooled; the bindings compile it once and match
+    /// natively. The structural rules relate two patterns only when they are
+    /// written identically; the set representation reads a pattern as the
+    /// regular language over `str` it denotes (`descr/regular.rs`), so
+    /// `Regex("a+")` is below `Regex("a*")`.
     Regex(String),
 }
 

@@ -201,6 +201,35 @@ refuses, because the default is a function on the parts and such a key splits
 one; [15-decidability.md](../15-decidability.md) lists what that leaves to the
 rules.
 
+**A pattern is a set of strings, whatever its base.** `refine` in
+`descr/lower.rs` meets the base with the set each constraint denotes, and a
+`Regex` matches the text of a `str`: the walk refuses every other value,
+`bytes` among them, so the set is the pattern's language over `str` alone and
+the meet drops what the base does not hold. Read over `bytes` as well,
+`Annotated[str | bytes, Regex("a*")]` would hold `b""`, and a set wider than
+the schema on the supertype side proves an inclusion a value refutes:
+`Annotated[bytes, MaxLen(0)]` below it. A base holding no string meets the
+pattern in nothing, answered before the automaton is built.
+`a_patterns_set_holds_only_strings` in `laws.rs` draws the base over the
+structural fragment.
+
+**The rules read a pattern over two bases as one set.** `Refine(str, C)` and
+`Refine(Anything, C)`, `C` holding a pattern, denote the strings `C` admits, and
+so does a refinement by the same constraints over any base that holds every
+string. The fold that empties a meet compares spellings and reads the two as two
+sets, while the set reading lowers both to one language, so a union of one with
+the other's complement is the universe to the set reading alone, and below a
+subject that reading cannot lower the pair would decline. The emptiness rules
+read a refinement and the complement of one with the same constraints, a pattern
+among them, as meeting in nothing where the complemented base holds every string
+(`has_a_pattern_and_its_complement` in `decision/emptiness.rs`). The constraints
+are read as a set first, since a predicate may answer two occurrences apart.
+`fuzz/seeds/decision/` keeps the input,
+`a_pattern_over_two_bases_that_hold_every_string_is_one_set` in
+`decision/tests.rs` holds the pair and two neighbours that stay inhabited, and
+`a_universe_through_a_pattern_over_two_bases_bounds_a_subject_the_sets_refuse`
+in `laws.rs` draws the family.
+
 **What no component holds is a cycle**, which is why a recursive schema is
 lowered by unfolding its body once, with a lattice bound where the reference was
 (`UNFOLDS` in `descr/lower.rs`), and belongs to the rules past that. The other

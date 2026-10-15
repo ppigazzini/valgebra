@@ -574,8 +574,8 @@ fn a_literal_naming_an_instance_refuses() {
     assert!(lower(&Schema::Literal(ConstIx::new(0)), &pool).is_none());
 }
 
-/// A length bound and a pattern are sets of *words*, and they lower under
-/// whichever word kind the base admits.
+/// A length bound and a pattern are sets of *words*: a length bound lowers
+/// under whichever word kind the base admits, and a pattern under `str`.
 #[test]
 fn the_word_constraints_lower_to_languages() {
     let pool = empty_pool();
@@ -613,6 +613,54 @@ fn the_word_constraints_lower_to_languages() {
     )
     .expect("two length bounds");
     assert_eq!(impossible.emptiness(), Verdict::Empty);
+}
+
+/// A pattern lowers to strings whatever else its base admits.
+///
+/// A pattern matches the text of a `str`, and the walk refuses every other
+/// value, `bytes` among them. Read over `bytes` as well, a `str | bytes` base
+/// would hold `b""`, which no member of the schema is, and that set on the
+/// supertype side proves `Annotated[bytes, MaxLen(0)]` below it. So the
+/// lowering over any base is the language over `str`, met with the base, and
+/// a base holding no string meets it in nothing: an answer, given even for a
+/// pattern whose automaton does not build. A pattern no string matches is the
+/// empty set too, decided rather than declined.
+#[test]
+fn a_pattern_lowers_to_strings_whatever_the_base() {
+    let pool = empty_pool();
+    let matched = |base, pattern: &str| {
+        lower(
+            &Schema::Refine {
+                base: Arc::new(base),
+                constraints: vec![Constraint::Regex(pattern.to_owned())].into(),
+            },
+            &pool,
+        )
+    };
+    let text = matched(Schema::Str, "a*").expect("a pattern over str");
+    for base in [
+        Schema::Union(vec![Schema::Str, Schema::Bytes].into()),
+        Schema::Union(vec![Schema::Str, Schema::Int].into()),
+        Schema::ANYTHING,
+    ] {
+        let lowered = matched(base.clone(), "a*").expect("a pattern over a wider base");
+        assert_eq!(lowered, text, "{base:?} read the pattern past `str`");
+        assert!(!lowered.admits(Value::word(b"", Kind::Bytes)));
+        assert!(lowered.admits(Value::word(b"", Kind::Str)));
+    }
+    for base in [Schema::Bytes, Schema::Int] {
+        assert_eq!(
+            matched(base.clone(), "a*"),
+            Some(Descr::nothing()),
+            "{base:?}"
+        );
+        assert_eq!(matched(base, "("), Some(Descr::nothing()));
+    }
+    // Over a string, a pattern that does not build is a refusal, and one that
+    // builds an empty language is the empty set.
+    assert!(matched(Schema::Str, "(").is_none());
+    let unmatched = matched(Schema::Str, r"[^\s\S]").expect("a pattern that builds");
+    assert_eq!(unmatched.emptiness(), Verdict::Empty);
 }
 
 /// A word constraint on a base that is *more* than words refuses too.

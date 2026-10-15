@@ -16,6 +16,7 @@ from hypothesis import assume, given
 from hypothesis import strategies as st
 
 from valgebra import (
+    Regex,
     ValidationError,
     Validator,
     complement,
@@ -226,6 +227,30 @@ def test_a_hooked_class_is_not_reported_empty_against_itself() -> None:
     pure = Validator(intersection(_Pure, complement(_Pure)))
     assert not pure.is_valid(_Pure()), "no value is in a class and outside it"
     assert pure.is_empty(), "and the law still decides that"
+
+
+def test_a_pattern_over_text_and_bytes_holds_no_byte_string() -> None:
+    """A pattern matches the text of a ``str``, so its set holds no ``bytes``.
+
+    The base ``str | bytes`` admits byte strings and the pattern refuses every
+    one, so the refinement is the strings the pattern matches. Read over
+    ``bytes`` as well, the set would prove the empty byte string below it,
+    empty a meet holding ``b"a"``, and refute its inclusion in ``str``. Each
+    assertion below has a value standing behind it.
+    """
+    pattern = Validator(Annotated[str | bytes, Regex("a*")])
+    empty_bytes = Validator(Annotated[bytes, at.MaxLen(0)])
+    assert empty_bytes.is_valid(b"")
+    assert not pattern.is_valid(b"")
+    assert empty_bytes.relation_to(pattern) == "not_subset"
+
+    outside = Validator(intersection(Literal[b"a"], complement(pattern)))
+    assert outside.is_valid(b"a")
+    assert not outside.is_empty()
+    assert Validator(Literal[b"a"]).relation_to(pattern) == "not_subset"
+
+    assert pattern.relation_to(str) == "subset"
+    assert pattern.is_equivalent(Annotated[str, Regex("a*")])
 
 
 class _WeirdInt(int):
