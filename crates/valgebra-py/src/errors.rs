@@ -358,18 +358,38 @@ pub(crate) fn install_lazy_attributes(py: Python<'_>) -> PyResult<()> {
 /// live there as a Rust object that does not travel. Forcing the six turns the
 /// error into the plain data the model documents -- which is what crosses a
 /// process boundary, and what `docs/08-error-model.md` promises pickling gives.
+///
+/// The state handed on is a copy of the dictionary without the failures, and
+/// the error itself keeps them. Deleting them from the error is a write a
+/// second thread reading it can meet half done: an attribute the shim has not
+/// forced yet then reads the failures as gone.
 #[pyfunction]
 #[pyo3(signature = (instance, /))]
 pub(crate) fn validation_error_reduce<'py>(
     instance: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    let py = instance.py();
     for name in LAZY_ATTRIBUTES {
         let _ = instance.getattr(name)?;
     }
-    let _ = instance.delattr(intern!(instance.py(), "_failures"));
-    let base = instance.py().get_type::<pyo3::exceptions::PyException>();
-    base.getattr(intern!(instance.py(), "__reduce__"))?
-        .call1((instance,))
+    let base = py.get_type::<pyo3::exceptions::PyException>();
+    let reduced = base
+        .getattr(intern!(py, "__reduce__"))?
+        .call1((instance,))?
+        .cast_into::<PyTuple>()?;
+    // `(type, args)`, and the dictionary third where it holds anything.
+    let Ok(state) = reduced.get_item(2) else {
+        return Ok(reduced.into_any());
+    };
+    let state = state.cast_into::<PyDict>()?.copy()?;
+    if state.contains(intern!(py, "_failures"))? {
+        state.del_item(intern!(py, "_failures"))?;
+    }
+    Ok(PyTuple::new(
+        py,
+        [reduced.get_item(0)?, reduced.get_item(1)?, state.into_any()],
+    )?
+    .into_any())
 }
 
 /// Build the Python [`ValidationError`] for one or more violations.

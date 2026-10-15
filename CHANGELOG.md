@@ -19,6 +19,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an error's text and a value's summary are read from storage
 - fix: a signal while the special forms are first read is raised
 - fix: a relation raises a signal its class readings meet
+- fix: pickling an error leaves the error untouched
 
 -->
 
@@ -68,6 +69,10 @@ answer of its own, or a repair to a change not yet released.
   were folded into an answer, `undecided` or a verdict, and the signal was
   lost. They raise it, and an ordinary exception there declines the class's
   reading.
+- **Pickling a `ValidationError` leaves the error as it was.** The reduction
+  deleted the error's internal failures from the instance being pickled, which
+  a thread reading the error at the same moment could meet half done. It
+  pickles a copy of the state.
 
 ## [0.0.18] - 2026-10-12
 

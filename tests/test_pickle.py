@@ -61,6 +61,22 @@ def test_a_raised_error_survives_a_pickle_round_trip() -> None:
     assert restored.errors == error.errors
 
 
+def test_pickling_an_error_leaves_its_failures_on_it() -> None:
+    """The state pickled is a copy, and the error keeps what it holds.
+
+    Deleting the failures from the error itself, to keep them out of the
+    pickle, is a write a second thread reading the error can meet half done.
+    """
+    error = _raised()
+    held = error.__dict__["_failures"]
+    restored = pickle.loads(  # noqa: S301 -- this test's own dumps, not input
+        pickle.dumps(error)
+    )
+    assert error.__dict__["_failures"] is held
+    assert "_failures" not in restored.__dict__
+    assert restored.errors == error.errors
+
+
 def test_the_aggregate_survives_and_stays_ordered() -> None:
     """Aggregation is the part a caller reads; order is part of the contract."""
     error = _raised()
