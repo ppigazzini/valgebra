@@ -462,6 +462,43 @@ fn a_union_of_fixed_sequences_joins_their_element_sets() {
     ));
 }
 
+/// A state reaching one block through two equivalent targets, by two letters,
+/// merges with a state reaching that block by the two letters joined.
+///
+/// The case the signature's join is for. `merge_targets` leaves one edge per
+/// *target*, so two edges into one block survive it only where the block
+/// holds two distinct targets, which the rounds find equivalent. Read as the
+/// else edge instead, the pair gives the first state a signature naming the
+/// block with no letter where its partners name it with both, so the rounds
+/// keep it apart and the table ends with three states where the language
+/// takes two: a correct table, and not the canonical one that every equality
+/// of two languages compares.
+///
+/// Written row by row because the operations minimise what they build, and a
+/// product reaches this table only on some draws of a property.
+#[test]
+fn two_letters_into_one_block_join_in_the_signature() {
+    let edge = |guard: Option<IntSet>, target| Edge { guard, target };
+    let zero_or_one = IntSet::between(Some(0), Some(1));
+    // `list[0 | 1]`, with the first letter split across two equal states.
+    let table = SymbolicDfa {
+        edges: vec![
+            vec![
+                edge(Some(IntSet::just(0)), 1),
+                edge(Some(IntSet::just(1)), 2),
+                edge(None, 3),
+            ],
+            vec![edge(Some(zero_or_one.clone()), 1), edge(None, 3)],
+            vec![edge(Some(zero_or_one.clone()), 2), edge(None, 3)],
+            vec![edge(None, 3)],
+        ],
+        accepting: vec![true, true, true, false],
+    };
+    let minimal = table.minimal();
+    assert_eq!(minimal.state_count(), 2, "{minimal:?}");
+    assert_eq!(minimal, SymbolicDfa::shape(&[], Some(&zero_or_one)));
+}
+
 /// A guard that leaves nothing leaves no else edge to write down.
 ///
 /// The edges of a state partition the universe, and the else edge is the
