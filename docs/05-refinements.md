@@ -549,7 +549,9 @@ that is a branch of a union is read the second time only where no branch admits
 the value. Without
 `fail_fast`, `validate` also reads past the first failure, running the
 predicate on values `is_valid` never reached. A
-predicate is user code, and every occurrence the walk reaches is a call: the
+predicate is user code, and every occurrence the walk reaches is a call --
+two equal occurrences in one meet or union are one occurrence, deduplicated
+when the schema is built, so `Annotated[int, f, f]` calls `f` once a value. The
 walk keeps no cache over it, because a cache would change what a predicate that
 does not answer from its value alone observes, and the same reading is what
 keeps `A & ~A` from folding when `A` carries one. A predicate that must run once

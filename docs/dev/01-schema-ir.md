@@ -409,6 +409,14 @@ stays a meet of the pair, and `is_empty()` decides it empty. The law holds of th
 set a plain class denotes; only the fold declines, and the decision procedures,
 which do ask the bindings, answer it.
 
+**Deduplication is `A & A = A` and `A | A = A` for every member, a predicate
+included.** Two equal members are one term, so `intersection(P, P)` is `P`, and
+`Annotated[int, f, f]` holds `f` once and calls it once a value. It asks no
+member whether it is a set, as the two complement folds do, though it changes
+how often a predicate runs: one that does not answer from its value alone may
+answer `P & P` and `P` apart, and construction reads the spelling as the one
+call. That is the cost of `==` being equality of a normal form, below.
+
 **Why the normal form rather than a free term.** A constructor that folds some
 laws and not others is neither: it renders `union(int, int)` as `int | int`,
 unequal to `int`, while `union(int, complement(int))` renders `anything`, so `==`
