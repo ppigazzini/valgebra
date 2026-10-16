@@ -1989,3 +1989,53 @@ proptest::proptest! {
         proptest::prop_assert_eq!(measure.escaped_self_ref, escapes(&tree, is_open));
     }
 }
+
+/// The complement laws read a member the constructor flattened into the list.
+///
+/// A join flattens a union into its members, so `A | ~A` with `A = int | str`
+/// is the list `int, str, ~(int | str)`, where no one member is `A`; a meet does
+/// the same to a meet. Each folds where every member of the inner union or meet
+/// is in the list and the inner schema is a set.
+#[test]
+fn the_complement_laws_fold_a_member_the_constructor_flattened() {
+    let union = Schema::union([Schema::Int, Schema::Str]);
+    assert_eq!(
+        Schema::union([union.clone(), union.clone().complement()]),
+        Schema::ANYTHING
+    );
+    assert_eq!(
+        Schema::union([Schema::Bytes, union.clone(), union.clone().complement()]),
+        Schema::ANYTHING,
+        "a member beside the pair changes nothing"
+    );
+    let meet = Schema::meet([Schema::Int, Schema::Bool.complement()]);
+    assert_eq!(
+        Schema::meet([meet.clone(), meet.clone().complement()]),
+        Schema::Nothing
+    );
+
+    // A member of the inner union missing from the list: no law, and the join
+    // stands as written.
+    assert!(matches!(
+        Schema::union([Schema::Int, union.clone().complement()]),
+        Schema::Union(_)
+    ));
+    // An atom construction cannot read as a set declines, as a lone class does.
+    let classed = Schema::union([Schema::Int, Schema::Instance(ClassIx::new(0))]);
+    assert!(matches!(
+        Schema::union([classed.clone(), classed.complement()]),
+        Schema::Union(_)
+    ));
+
+    // The emptiness decision reads the same law over a meet in any order, which
+    // a rule may build without the constructor.
+    let unordered = Schema::Intersection(
+        vec![
+            meet.clone().complement(),
+            Schema::Int,
+            Schema::Bool.complement(),
+        ]
+        .into(),
+    );
+    assert!(unordered.is_empty());
+}

@@ -491,6 +491,55 @@ def test_the_complement_laws_hold_of_every_drawn_schema(
     assert top.is_equivalent(anything), "a | ~a is not decided the top"
 
 
+#: Leaves construction reads as sets: no class, whose `isinstance` hook the
+#: constructors cannot see, and no predicate.
+_SET_LEAVES = [
+    int,
+    str,
+    bytes,
+    float,
+    bool,
+    None,
+    list[int],
+    dict[str, int],
+    *_REFINEMENTS,
+]
+
+
+@given(members=st.lists(st.sampled_from(_SET_LEAVES), min_size=1, max_size=4))
+def test_construction_folds_a_union_or_a_meet_and_its_complement(
+    members: list[object],
+) -> None:
+    """The two complement laws, as terms: `==` and `hash` read the bounds.
+
+    A join flattens a union into its members, so `A | ~A` with `A` a union has
+    no member that is `A`; the fold reads the members, and a meet holding a
+    meet and its complement the same way.
+    """
+    joined = union(*members)
+    top = union(joined, complement(joined))
+    assert top == anything, f"{top!r} stood"
+    assert hash(top) == hash(anything)
+    met = intersection(*members)
+    assert intersection(met, complement(met)) == nothing
+
+
+def test_a_union_holding_a_class_declines_the_fold_and_is_decided() -> None:
+    """A class may answer `isinstance` by a hook, so construction reads none as a set.
+
+    The fold declines and the term stands; the decision, which asks the class,
+    proves the law of it.
+    """
+
+    class Plain:
+        pass
+
+    joined = union(int, Plain)
+    top = union(joined, complement(joined))
+    assert top != anything
+    assert top.is_equivalent(anything)
+
+
 # Two spellings the procedure itself proves equal, for the law below.
 _RESPELLINGS = [
     ("a-or-nothing", lambda a: union(a, nothing)),

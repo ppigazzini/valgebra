@@ -256,27 +256,66 @@ impl Constants for NoLeafRelations {}
 /// [`has_complementary_pair_within`] with the definitions they hold, so the two
 /// apply one statement of the law, and construction does not fold to `nothing`
 /// what the decision declines to call empty.
+///
+/// A member list here may be in any order -- a rule or a law builds a meet
+/// directly -- so a member is found by a scan rather than a search.
 pub(crate) fn has_complementary_pair(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
-    has_complementary_pair_within(members, oracle, &[])
+    has_complementary_pair_within(members, Connective::Meet, oracle, &[], |wanted| {
+        members.contains(wanted)
+    })
 }
 
-/// The same, with the definitions a reference in `members` may name.
+/// Which connective a member list belongs to, which decides the one compound
+/// shape the complement law also reads there.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Connective {
+    /// A union's members: `A | ~A` is the top.
+    Join,
+    /// A meet's members: `A & ~A` is the bottom.
+    Meet,
+}
+
+/// The same, with the definitions a reference in `members` may name, and with
+/// `holds` answering whether a schema is one of `members`.
 ///
 /// A `Ref` is not a set on its own evidence -- what it names is elsewhere -- so
 /// with no definitions to read, the fold declines for every recursive schema and
 /// `json & ~json` stands. Given them, the reference is resolved and the law
 /// applies to a fixpoint like any other set.
+///
+/// **A schema of the connective's own kind is held as its members.** A
+/// constructor flattens a nested join into the join, so `A | ~A` with `A = int |
+/// str` is the list `int, str, ~(int | str)`, where no single member is `A`:
+/// asked of one member at a time the fold would decline, and the join would
+/// stand beside a page saying none does. So a complement of a union, in a
+/// join, pairs with the members of that union, each in the list, and a
+/// complement of a meet, in a meet, with the members of that meet. The inner
+/// schema is asked whether it is a set, which is the whole of what the law
+/// needs.
+///
+/// `holds` is the caller's because the caller knows the list's order: a
+/// constructor's list is sorted, and a search there keeps a join of `n`
+/// complements to `n log n` comparisons where a scan is `n^2` -- two thousand
+/// complements take 22 ms and eight thousand 326 ms that way, in a debug
+/// build.
 pub(crate) fn has_complementary_pair_within(
     members: &[Schema],
+    connective: Connective,
     oracle: &dyn LeafRelations,
     definitions: &[Schema],
+    holds: impl Fn(&Schema) -> bool,
 ) -> bool {
-    members.iter().any(|member| match member {
-        Schema::Complement(inner) => {
-            denotes_a_set_within(inner, oracle, definitions)
-                && members.iter().any(|other| other == &**inner)
-        }
-        _ => false,
+    members.iter().any(|member| {
+        let Schema::Complement(inner) = member else {
+            return false;
+        };
+        let paired = holds(inner)
+            || match (connective, &**inner) {
+                (Connective::Join, Schema::Union(parts))
+                | (Connective::Meet, Schema::Intersection(parts)) => parts.iter().all(&holds),
+                _ => false,
+            };
+        paired && denotes_a_set_within(inner, oracle, definitions)
     })
 }
 

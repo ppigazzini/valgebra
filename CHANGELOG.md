@@ -29,6 +29,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a dataclass field reads Final under Annotated
 - fix: a protocol's cached property holds its return type
 - fix: a Regex marker pickles and refuses a pattern that is not text
+- fix: the complement laws read a union or a meet flattened into the list
 
 -->
 
@@ -137,6 +138,14 @@ answer of its own, or a repair to a change not yet released.
   `Regex(re.compile("x"))`, raises `TypeError` when the marker is made, rather
   than at the build, and comparing a marker with anything but a marker returns
   `NotImplemented`, so the other operand's `__eq__` is asked.
+- **`A | ~A` is the top where `A` is a union, and `M & ~M` the bottom where
+  `M` is a meet.** Construction flattens a union into the join that holds it,
+  so no single member was `A`, and the fold declined: `union(A, complement(A))`
+  with `A = union(int, str)` printed `int | str | complement(int | str)` and
+  compared unequal to `anything`, though it is decided equivalent. The fold
+  reads the flattened members, so `==`, `hash` and `repr` give the bounds. A
+  join of many complements is folded in time near-linear in its width, where
+  the pair check was quadratic.
 
 ## [0.0.18] - 2026-10-12
 

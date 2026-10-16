@@ -36,6 +36,33 @@ fn schema() -> impl Strategy<Value = Schema> {
     })
 }
 
+/// [`schema`]'s draw over the atoms construction reads as sets: every one but
+/// the class, whose `isinstance` hook construction cannot see. Drawn rather
+/// than filtered from [`schema`], which a class reaches in about one draw in
+/// six -- past the rejects a run of the nightly's case count allows.
+fn set_schema() -> impl Strategy<Value = Schema> {
+    let atom = prop_oneof![
+        Just(Schema::ANYTHING),
+        Just(Schema::Nothing),
+        Just(Schema::ANY),
+        Just(Schema::NoneType),
+        Just(Schema::Bool),
+        Just(Schema::Int),
+        Just(Schema::Float),
+        Just(Schema::Str),
+        Just(Schema::Bytes),
+        Just(Schema::Literal(ConstIx::new(0))),
+    ];
+    atom.prop_recursive(4, 24, 3, |inner| {
+        prop_oneof![
+            proptest::collection::vec(inner.clone(), 1..4).prop_map(|m| Schema::Union(m.into())),
+            proptest::collection::vec(inner.clone(), 1..4)
+                .prop_map(|m| Schema::Intersection(m.into())),
+            inner.prop_map(|s| Schema::Complement(Arc::new(s))),
+        ]
+    })
+}
+
 /// A set with no value that no rule proves empty.
 ///
 /// Two sequences of one position each whose positions share no value. Every
@@ -2321,6 +2348,31 @@ proptest! {
             Schema::union([b.clone(), a.clone()])
         );
         prop_assert_eq!(Schema::meet([a.clone(), b.clone()]), Schema::meet([b, a]));
+    }
+
+    /// The complement laws, as construction folds them: a join holding a set
+    /// and its complement is the top, and a meet holding them the bottom, as
+    /// terms -- `==` and `hash` read the fold. Whatever the set is built from,
+    /// a union flattened into the join or a meet into the meet included. A
+    /// schema construction cannot read as a set, a class among its atoms,
+    /// declines, which is the one exception the page states, so the draw
+    /// holds no class.
+    #[test]
+    fn construction_folds_a_set_and_its_complement(a in set_schema()) {
+        let a = built(&a);
+        // The detector: a draw construction does not read as a set would make
+        // the two equalities below a claim the page does not make.
+        prop_assert!(crate::oracle::denotes_a_set_within(&a, &NoLeafRelations, &[]));
+        prop_assert_eq!(
+            Schema::union([a.clone(), a.clone().complement()]),
+            Schema::ANYTHING,
+            "{:?} | its complement stood", a
+        );
+        prop_assert_eq!(
+            Schema::meet([a.clone(), a.clone().complement()]),
+            Schema::Nothing,
+            "{:?} & its complement stood", a
+        );
     }
 
     #[test]

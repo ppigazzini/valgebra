@@ -385,7 +385,11 @@ alone" (`a_reference_under_only_combinators_is_unguarded`).
 All of them: a schema is built in the lattice normal form. Members of a union or
 a meet are flattened, ordered and deduplicated; the two identities are applied
 (`A | nothing` is `A`, `A & anything` is `A`) and the two absorbing elements too;
-`~~A` is `A`, `A | ~A` is the top, and `A & ~A` is the bottom. **Absorption is
+`~~A` is `A`, `A | ~A` is the top, and `A & ~A` is the bottom -- read over the
+flattened list, so a join holding every member of a union and that union's
+complement is the top, and a meet holding every member of a meet and its
+complement the bottom (`has_complementary_pair_within` in
+`crates/valgebra-core/src/oracle.rs`). **Absorption is
 not among them**: `A | (A & B)` and `A` are one set and two terms. Absorption is
 one case of `A | B` folding to `A` wherever `A` contains `B`, and a containment
 is what the decision procedures answer rather than what a constructor folds

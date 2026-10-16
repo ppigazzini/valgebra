@@ -33,7 +33,7 @@ use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 
 use crate::codes;
-use crate::oracle::{NoLeafRelations, has_complementary_pair_within};
+use crate::oracle::{Connective, NoLeafRelations, has_complementary_pair_within};
 
 mod intern;
 mod transform;
@@ -1004,17 +1004,25 @@ impl Schema {
             flat.dedup();
             // A join carrying a schema together with its complement is the top,
             // whatever those are, so no such join survives construction and no rule
-            // downstream may assume one does. `has_complementary_pair_within` is
-            // the one statement of the law, read here and by the emptiness
+            // downstream may assume one does -- a union flattened into the list
+            // included, whose members stand where it did. `has_complementary_pair_within`
+            // is the one statement of the law, read here and by the emptiness
             // decision from `oracle.rs` -- which is below both, because a lattice
-            // law belongs to neither of them. It reaches a pairwise comparison
-            // only for a member that is itself a complement.
+            // law belongs to neither of them. It searches the sorted list only for
+            // a member that is itself a complement.
             // With no oracle here the law declines for an atom only the bindings can
             // read, which is the safe direction: a join left unfolded still denotes
             // what it denotes. `definitions` is what a *recursive* member needs: a
             // reference is not a set on its own evidence, so without them the law
             // declines for every fixpoint, `json | ~json` included.
-            if has_complementary_pair_within(flat, &NoLeafRelations, definitions) {
+            let members: &[Schema] = flat;
+            if has_complementary_pair_within(
+                members,
+                Connective::Join,
+                &NoLeafRelations,
+                definitions,
+                |wanted| members.binary_search(wanted).is_ok(),
+            ) {
                 return Schema::ANYTHING;
             }
             match flat.len() {
@@ -1061,7 +1069,14 @@ impl Schema {
             // is the bottom. Both constructors state it or neither does -- a law
             // folded on one side and left standing on the other is two answers to
             // one question.
-            if has_complementary_pair_within(flat, &NoLeafRelations, definitions) {
+            let members: &[Schema] = flat;
+            if has_complementary_pair_within(
+                members,
+                Connective::Meet,
+                &NoLeafRelations,
+                definitions,
+                |wanted| members.binary_search(wanted).is_ok(),
+            ) {
                 return Schema::Nothing;
             }
             match flat.len() {
