@@ -488,11 +488,16 @@ fn is_typing_form(marker: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// written where its type was meant. Where the alias carries a marker this
 /// frontend would read, ignoring it would widen the schema to its base in
 /// silence, which is why a marker class written bare is refused, and it is
-/// refused the same way. Any other typing form is metadata this frontend does
+/// refused the same way. A PEP 695 alias of one, `type Pos = Annotated[int,
+/// Gt(0)]`, is the same alias under a name, and is read through to it (see
+/// [`aliased_form`]). Any other typing form is metadata this frontend does
 /// not recognise, and is ignored as a class is.
 fn read_a_typing_form(marker: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = marker.py();
-    let Some(metadata) = marker.getattr_opt(intern!(py, "__metadata__"))? else {
+    let Some(form) = aliased_form(marker)? else {
+        return Ok(());
+    };
+    let Some(metadata) = form.getattr_opt(intern!(py, "__metadata__"))? else {
         return Ok(());
     };
     for item in metadata.try_iter()? {
@@ -507,6 +512,44 @@ fn read_a_typing_form(marker: &Bound<'_, PyAny>) -> PyResult<()> {
         }
     }
     Ok(())
+}
+
+/// The form `marker` stands for: itself, or where it is a PEP 695 alias the
+/// form its value names, followed through every alias on the way. `None`
+/// where the aliases name each other in a cycle, and so stand for no form.
+///
+/// A `type` alias has no `__metadata__` of its own, so read as metadata of
+/// its own an alias of an `Annotated` alias would be ignored where the alias
+/// it names is refused, and `Annotated[int, Pos]` would admit `-1`. A generic alias
+/// applied to arguments is read through the alias it applies, whose value
+/// carries the same markers whatever the arguments are. An `Annotated` form is
+/// answered before its `__origin__` is asked, because that is the type it
+/// annotates, which may be an alias itself. Reading an alias's value evaluates
+/// it, and an error that raises is the caller's, as it is where the alias is
+/// read as a type.
+fn aliased_form<'py>(marker: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let py = marker.py();
+    let mut form = marker.clone();
+    let mut seen: Vec<Bound<'py, PyAny>> = Vec::new();
+    loop {
+        if form.getattr_opt(intern!(py, "__metadata__"))?.is_some() {
+            return Ok(Some(form));
+        }
+        let alias = if super::is_type_alias(&form)? {
+            form
+        } else if let Some(origin) = form.getattr_opt(intern!(py, "__origin__"))?
+            && super::is_type_alias(&origin)?
+        {
+            origin
+        } else {
+            return Ok(Some(form));
+        };
+        if seen.iter().any(|met| met.is(&alias)) {
+            return Ok(None);
+        }
+        form = alias.getattr(intern!(py, "__value__"))?;
+        seen.push(alias);
+    }
 }
 
 /// Whether an item of an `Annotated` alias's metadata is one this frontend
@@ -934,6 +977,10 @@ fn parse_constraint_within<'py>(
         && func.is_callable()
     {
         out.push(Constraint::Predicate(lits.intern_predicate(&func)));
+    } else if !probes.of_vocabulary() && super::is_type_alias(marker)? {
+        // `typing`'s alias is not callable, where `typing_extensions`' is and
+        // an applied one is, so it reaches the typing-form reading here.
+        return read_a_typing_form(marker);
     } else if out.len() == before && probes.mask & Probes::CONSTRAINT_CLASS != 0 {
         // The typing spec says to ignore metadata a consumer does not
         // recognise, and that is right for metadata written for someone else.

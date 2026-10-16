@@ -67,6 +67,13 @@ back would be the verdict: `Annotated[float, at.IsFinite[float]]` would admit
 infinity and refuse zero. The rule mirrors the
 one for a class: an `Annotated` alias carrying something this frontend would
 read where the alias stands is refused, and any other typing form is ignored.
+A PEP 695 alias is read through to the form its value names first
+(`aliased_form`), plain, chained or applied to arguments, so `type Pos =
+Annotated[int, Gt(0)]` in metadata is refused as the alias it names is; it has
+no `__metadata__` of its own, so read as itself it would be ignored. Aliases
+naming each other in a
+cycle name no form and are ignored. `typing`'s alias is not callable, so it
+reaches this reading from the arm after the predicate's.
 
 PEP 702's `deprecated` is read with them. `typing_extensions` re-exports the
 standard library's from 3.13, whose class `warnings` defines -- `_py_warnings`

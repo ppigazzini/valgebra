@@ -594,9 +594,10 @@ callable: calling `list[int]`, a `NewType` or an `Annotated` alias with a value
 builds something rather than answering whether the value belongs. A typing form
 is metadata this frontend does not recognise and is ignored, as a class is. An
 `Annotated` alias carrying a marker this page reads -- `at.IsFinite`, or an
-alias of your own over `at.Gt(0)` -- is refused rather than ignored: it carries
-its markers for the type it annotates, and in metadata it annotates nothing, so
-it was written where its type was meant:
+alias of your own over `at.Gt(0)`, written as an assignment or with the `type`
+statement -- is refused rather than ignored: it carries its markers for the
+type it annotates, and in metadata it annotates nothing, so it was written
+where its type was meant:
 
 ```python
 import math

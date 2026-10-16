@@ -23,6 +23,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an integer key past the digit limit reaches the path as an integer
 - fix: a tuple reads what an unpacked tuple splices as its own arguments
 - fix: a dict literal refuses a TypedDict presence qualifier on a field
+- fix: a type alias of an Annotated alias in metadata is refused
 
 -->
 
@@ -95,6 +96,12 @@ answer of its own, or a repair to a change not yet released.
   is optional, in silence. The literal says whether a key is required by its
   `?` alone, so either qualifier on a field is refused, naming the key's
   spelling. `ReadOnly` is read as before.
+- **A `type` alias of an `Annotated` alias in metadata is refused as the alias
+  is.** `Annotated[int, Pos]` with `Pos = Annotated[int, Gt(0)]` is refused,
+  since in metadata the alias annotates nothing, but the same alias written
+  `type Pos = Annotated[int, Gt(0)]`, or with `TypeAliasType`, was ignored and
+  admitted `-1`, in 0.0.17 and 0.0.18. An alias in metadata is read through to
+  what it names, applied to arguments or not, and refused the same way.
 
 ## [0.0.18] - 2026-10-12
 

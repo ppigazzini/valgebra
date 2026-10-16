@@ -326,6 +326,56 @@ def test_an_alias_of_the_vocabulary_in_metadata_is_refused() -> None:
     assert not finite.is_valid(math.inf)
 
 
+def test_an_alias_naming_an_annotated_alias_in_metadata_is_refused() -> None:
+    """A PEP 695 alias of an `Annotated` alias is that alias under a name.
+
+    It carries no `__metadata__` of its own, so read as itself it would be
+    ignored as metadata nobody reads, and `Annotated[int, Positive]` would
+    admit `-1` where the `Annotated` alias it names is refused. It is read
+    through and refused the same way: plain, chained, and applied to
+    arguments. An alias of anything else is metadata this frontend does not
+    read.
+    """
+    extensions = pytest.importorskip("typing_extensions")
+    t = extensions.TypeVar("T")
+    positive = extensions.TypeAliasType("Positive", Annotated[int, at.Gt(0)])
+    chained = extensions.TypeAliasType("Chained", positive)
+    generic = extensions.TypeAliasType(
+        "Generic", Annotated[t, at.Gt(0)], type_params=(t,)
+    )
+    for alias in (positive, chained, generic[int]):
+        with pytest.raises(NotImplementedError, match="is an Annotated alias"):
+            Validator(Annotated[int, alias])
+    plain = extensions.TypeAliasType("Plain", int)
+    noted = extensions.TypeAliasType("Noted", Annotated[int, "a note"])
+    for alias in (plain, noted):
+        assert Validator(Annotated[int, alias]).is_valid(-1)
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 12), reason="the type statement is 3.12 syntax"
+)
+def test_a_type_statement_in_metadata_is_read_through_to_what_it_names() -> None:
+    """`typing`'s alias is not callable, where `typing_extensions`' is.
+
+    So it reaches the marker reading by another road, and is read through all
+    the same. Aliases naming each other in a cycle stand for no form, and are
+    ignored rather than followed forever.
+    """
+    namespace: dict[str, object] = {"Annotated": Annotated, "at": at}
+    exec(  # noqa: S102 - the syntax under test, not user input
+        "type Positive = Annotated[int, at.Gt(0)]\n"
+        "type Loop = Loop\n"
+        "type Ping = Pong\n"
+        "type Pong = Ping\n",
+        namespace,
+    )
+    with pytest.raises(NotImplementedError, match="is an Annotated alias"):
+        Validator(Annotated[int, namespace["Positive"]])
+    for name in ("Loop", "Ping"):
+        assert Validator(Annotated[int, namespace[name]]).is_valid(-1)
+
+
 @pytest.mark.parametrize(
     ("annotation", "marker"),
     [
