@@ -244,6 +244,13 @@ fn each_spelling_builds_its_own_schema() {
             // typing spec says to -- unless it is a constraint from the
             // vocabulary, which is the refusal below.
             ("typing.Annotated[int, 'a note']", "int"),
+            // An object carrying `__metadata__` is no `Annotated` alias unless
+            // it is a typing form, so in metadata it is ignored as one.
+            (
+                "typing.Annotated[int, types.SimpleNamespace(__metadata__=(at.Ge(0),), \
+                 __origin__=int)]",
+                "int",
+            ),
             // And a class is such metadata, where it carries no name a
             // constraint is read through: a unit, a tag, an enumeration.
             ("typing.Annotated[float, Kilograms]", "float"),
@@ -334,6 +341,62 @@ fn each_spelling_a_release_adds_builds_where_that_release_has_it() {
                 Since(11),
                 "tuple[str, *tuple[int, bool]]",
                 "tuple[str, int, bool]",
+            ),
+            // What a splice carries is read as the carrier's own arguments: a
+            // star inside it unpacks and a `...` in it repeats, in either
+            // spelling, and a splice of nothing splices nothing.
+            (
+                Since(11),
+                "tuple[int, *tuple[str, *tuple[bool, ...]]]",
+                "tuple[int, str, bool, ...]",
+            ),
+            (
+                Since(11),
+                "tuple[int, typing.Unpack[tuple[str, typing.Unpack[tuple[bool, ...]]]]]",
+                "tuple[int, str, bool, ...]",
+            ),
+            (
+                Since(11),
+                "tuple[*tuple[*tuple[int, ...]]]",
+                "tuple[int, ...]",
+            ),
+            (
+                Since(11),
+                "tuple[*tuple[int, str, ...]]",
+                "tuple[int, str, ...]",
+            ),
+            (
+                Since(11),
+                "tuple[*tuple[int, *tuple[()]], str]",
+                "tuple[int, str]",
+            ),
+            // A dict literal's field reads `ReadOnly` through, and a clause's
+            // value has no presence a qualifier could contradict.
+            (Since(13), "{'a': typing.ReadOnly[int]}", "{'a': int}"),
+            (
+                Since(11),
+                "{str: typing.NotRequired[int]}",
+                "dict[str, int]",
+            ),
+            // An alias in metadata is read through to what it names, and one
+            // naming no `Annotated` alias is metadata nobody reads -- as are
+            // aliases naming each other in a cycle, which name no form.
+            (
+                Since(12),
+                "typing.Annotated[int, typing.TypeAliasType('Plain', int)]",
+                "int",
+            ),
+            (
+                Since(12),
+                "typing.Annotated[int, typing.TypeAliasType('Noted', \
+                 typing.Annotated[int, 'a note'])]",
+                "int",
+            ),
+            (
+                Since(12),
+                "typing.Annotated[int, (lambda ns: (exec('type Ping = Pong\\ntype Pong = Ping', \
+                 ns), ns['Ping'])[1])({})]",
+                "int",
             ),
         ] {
             if !since.met(py) {
@@ -749,6 +812,102 @@ fn each_refusal_says_what_it_refuses() {
         if Since(11).met(py) {
             refuses("tuple[*list[int]]", "only a tuple can be unpacked");
         }
+    });
+}
+
+/// The refusals of a form read as another set, each by what it spells: a
+/// `...` after a splice and a star outside a tuple, a presence qualifier on a
+/// dict literal's field, an alias naming an `Annotated` alias in metadata,
+/// and a qualifier under `Annotated` where the spec and the runtime part.
+///
+/// Apart from the table above, which they would carry past the length a test
+/// is held to, and gated by release where the form is: a star inside a
+/// subscript, `NotRequired`, `TypeAliasType` and `ReadOnly` each arrive in
+/// one.
+#[test]
+fn each_refusal_of_a_form_read_as_another_set_says_what_it_refuses() {
+    Python::attach(|py| {
+        let refuses = |expression: &str, wanted: &str| {
+            let error = match built(py, expression) {
+                Err(error) => error.to_string(),
+                Ok(schema) => panic!("{expression} built {schema} instead of refusing"),
+            };
+            assert!(
+                error.contains(wanted),
+                "{expression} refused with {error}, which does not name {wanted}"
+            );
+        };
+        if Since(11).met(py) {
+            // A `...` repeats the one element written before it in its own
+            // tuple, which a splice is not, and a tail reached through a
+            // splice is still a tail.
+            refuses("tuple[*tuple[int, str], ...]", "are not one element");
+            refuses("tuple[int, *tuple[()], ...]", "are not one element");
+            refuses("tuple[int, *tuple[..., str]]", "cannot begin with one");
+            refuses(
+                "tuple[*tuple[int, *tuple[str, ...]], bool]",
+                "nothing may follow the tail",
+            );
+            // An unpacked tuple anywhere but a tuple's arguments, in both
+            // spellings: read as a type, the star is `tuple[int]`.
+            for expression in [
+                "[*tuple[int]][0]",
+                "list[*tuple[int]]",
+                "[*tuple[int]]",
+                "list[typing.Unpack[tuple[int]]]",
+            ] {
+                refuses(expression, "unpacks into the arguments");
+            }
+            // A presence qualifier on a dict literal's field, through what
+            // wraps it, where the key's `?` is the one marker.
+            for expression in [
+                "{'a': typing.NotRequired[int]}",
+                "{'a?': typing.Required[int]}",
+                "{'a': typing.Annotated[typing.NotRequired[int], 'm']}",
+            ] {
+                refuses(expression, "of a dict literal is a TypedDict qualifier");
+            }
+        }
+        if Since(13).met(py) {
+            refuses(
+                "{'a': typing.ReadOnly[typing.NotRequired[int]]}",
+                "of a dict literal is a TypedDict qualifier",
+            );
+        }
+        // An alias naming an `Annotated` alias is that alias under a name, in
+        // metadata as the alias itself is: plain, chained, applied, and
+        // written over an alias as its base.
+        if Since(12).met(py) {
+            for expression in [
+                "typing.Annotated[int, typing.TypeAliasType('Pos', \
+                 typing.Annotated[int, at.Ge(0)])]",
+                "typing.Annotated[int, typing.TypeAliasType('Chain', \
+                 typing.TypeAliasType('Pos', typing.Annotated[int, at.Ge(0)]))]",
+                "typing.Annotated[int, (lambda t: typing.TypeAliasType('G', \
+                 typing.Annotated[t, at.Ge(0)], type_params=(t,))[int])(typing.TypeVar('T'))]",
+                "typing.Annotated[int, typing.Annotated[typing.TypeAliasType('Base', int), \
+                 at.Ge(0)]]",
+            ] {
+                refuses(expression, "is an Annotated alias");
+            }
+        }
+        // A qualifier under `Annotated` is still the qualifier: a protocol
+        // member declared so, and a dataclass field the spec reads as a
+        // class variable and `dataclasses` as a field.
+        for qualifier in ["typing.ClassVar[int]", "typing.Final[int]"] {
+            refuses(
+                &format!(
+                    "types.new_class('Shared', (typing.Protocol,), exec_body=lambda ns: \
+                     ns.update(__annotations__={{'count': typing.Annotated[{qualifier}, 'm']}}))"
+                ),
+                "declared ClassVar or Final",
+            );
+        }
+        refuses(
+            "dataclasses.make_dataclass('Shared', [('a', typing.Annotated[typing.ClassVar[int], \
+             at.Ge(0)], dataclasses.field(default=0))])",
+            "a class variable to the typing spec and a field to dataclasses",
+        );
     });
 }
 
@@ -1631,6 +1790,57 @@ fn a_dataclass_declares_what_fields_returns() {
     });
 }
 
+/// A dataclass field declared `Annotated[Final[T], m]` holds `Annotated[T, m]`.
+///
+/// `Annotated` wraps a qualifier without changing what it says, so the field
+/// is the final one `Final[Annotated[T, m]]` declares, and the record reads
+/// the metadata on the type the qualifier wraps.
+#[test]
+fn a_final_field_under_annotated_holds_the_annotated_type() {
+    Python::attach(|py| {
+        let namespace = namespace(py).expect("the corpus namespace builds");
+        for spelling in [
+            "typing.Annotated[typing.Final[int], at.Ge(0)]",
+            "typing.Annotated[typing.Final[int], at.Ge(0), at.Le(9)]",
+            "typing.Final[typing.Annotated[int, at.Ge(0)]]",
+        ] {
+            let source = format!(
+                "dataclasses.make_dataclass('Wrapped', [('a', {spelling}, \
+                 dataclasses.field(default=0))])"
+            );
+            let class = py
+                .eval(
+                    &CString::new(source).expect("no interior nul"),
+                    Some(&namespace),
+                    None,
+                )
+                .expect("the class is made");
+            let mut pool = Pool::default();
+            let mut defs = Vec::new();
+            let schema = build_schema(&class, &mut pool, &mut defs)
+                .unwrap_or_else(|refusal| panic!("{spelling} was refused: {refusal}"));
+            let Schema::Intersection(members) = &schema else {
+                panic!("{spelling} built no meet of a class and a record");
+            };
+            let Some(Schema::AttrRecord { fields }) = members
+                .iter()
+                .find(|member| matches!(member, Schema::AttrRecord { .. }))
+            else {
+                panic!("{spelling} built no record");
+            };
+            let active = RefCell::new(FxHashMap::default());
+            let field = render(py, &fields[0].schema, pool.items(), &defs, &active, 0)
+                .expect("the field renders");
+            let wanted = if spelling.contains("Le(9)") {
+                "Annotated[int, Ge(0), Le(9)]"
+            } else {
+                "Annotated[int, Ge(0)]"
+            };
+            assert_eq!(field, wanted, "{spelling}");
+        }
+    });
+}
+
 /// A class is a dataclass exactly where `dataclasses.is_dataclass` says so.
 ///
 /// The frontend asks the attribute that function reads rather than calling
@@ -1825,6 +2035,7 @@ fn protocols(py: Python<'_>) -> Bound<'_, PyDict> {
              \x20   def __len__(self) -> int: ...\n\
              class Inherits(Sized, typing.Protocol):\n\
              \x20   def __bool__(self) -> bool: ...\n\
+             import functools\n\
              @typing.runtime_checkable\n\
              class Members(Sized, typing.Protocol):\n\
              \x20   data: int\n\
@@ -1834,6 +2045,8 @@ fn protocols(py: Python<'_>) -> Bound<'_, PyDict> {
              \x20   def computed(self) -> bytes: ...\n\
              \x20   @property\n\
              \x20   def unhinted(self): ...\n\
+             \x20   @functools.cached_property\n\
+             \x20   def cached(self) -> float: ...\n\
              \x20   def run(self) -> None: ...\n",
         )
         .expect("a source with no interior nul"),
@@ -1873,8 +2086,8 @@ fn a_protocol_is_the_record_of_its_members_whatever_its_decorator() {
         );
         assert_eq!(
             rendered("Members"),
-            "object(__len__=Callable, computed=bytes, data=int, defaulted=str, \
-             run=Callable, unhinted=anything, value=anything)"
+            "object(__len__=Callable, cached=float, computed=bytes, data=int, \
+             defaulted=str, run=Callable, unhinted=anything, value=anything)"
         );
     });
 }
