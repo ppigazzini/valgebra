@@ -1017,8 +1017,15 @@ impl Schema {
             (Schema::AttrRecord { fields: fa }, Schema::AttrRecord { fields: fb }) => {
                 attr_record_subtype(fa, fb, cx)
             }
-            // Complement is contravariant: ¬A ⊆ ¬B exactly when B ⊆ A.
-            (Schema::Complement(a), Schema::Complement(b)) => b.is_subtype_rec(a, cx),
+            // Complement is contravariant: ¬A ⊆ ¬B exactly when B ⊆ A. That
+            // puts `B` in the subject, where only the rules read its emptiness,
+            // so where they decline an empty `B` settles the pair as it does in
+            // the arm below, read by the set representation alone: the
+            // descriptor route lowers `¬A` first, and a predicate or a class in
+            // `A` leaves it nothing to lower.
+            (Schema::Complement(a), Schema::Complement(b)) => b
+                .is_subtype_rec(a, cx)
+                .or_else(|| Relation::proven(b.denotes_no_value(cx.oracle, cx.defs))),
             // `A ⊆ ¬B` is disjointness, which the rules prove or fail to
             // prove -- they are sound and incomplete, so not proving it is not
             // refuting it. There is one shape where the pair *is* refuted, and

@@ -3062,6 +3062,39 @@ fn a_complement_only_the_descriptor_empties_bounds_a_subject_with_no_descriptor(
     );
 }
 
+/// The same universe bounds a complement with no descriptor. The contravariant
+/// rule reads `¬A ⊆ ¬B` as `B ⊆ A`, where the emptiness of `B` is the subject's
+/// and the rules cannot reach it, and the descriptor route lowers `¬A` first,
+/// which a predicate in `A` refuses. The fuzzer's spelling wraps the universe
+/// in a refinement carrying no constraint, which is read as the complement it
+/// wraps. A complement that is not the universe leaves the pair a decline.
+#[test]
+fn a_complement_only_the_descriptor_empties_bounds_a_complement_with_no_descriptor() {
+    let complement =
+        |constraints| Schema::Complement(Arc::new(Schema::refine(Schema::Str, constraints)));
+    let called = complement(vec![
+        Constraint::MaxLen(0),
+        Constraint::Predicate(PredIx::new(1)),
+    ]);
+    let universe = complement(vec![Constraint::Regex("x".into()), Constraint::MaxLen(0)]);
+    let wrapped = Schema::Refine {
+        base: Arc::new(universe.clone()),
+        constraints: Vec::new().into(),
+    };
+    for supertype in [&universe, &wrapped] {
+        assert_eq!(
+            called.subtype_relation_under(supertype, &NoLeafRelations, &[]),
+            Relation::Holds,
+            "{supertype:?}"
+        );
+    }
+    let all_but_the_empty_string = complement(vec![Constraint::MaxLen(0)]);
+    assert_eq!(
+        called.subtype_relation_under(&all_but_the_empty_string, &NoLeafRelations, &[]),
+        Relation::Unknown
+    );
+}
+
 /// A pattern over a base holding `bytes` relates as the strings it holds.
 ///
 /// A pattern matches the text of a `str`, and the walk refuses every other

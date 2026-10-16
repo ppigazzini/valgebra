@@ -32,6 +32,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the complement laws read a union or a meet flattened into the list
 - fix: close after open takes out only the region open freed
 - fix: the contractivity check enters each definition once
+- fix: a complement is below the complement of an empty refinement
 
 -->
 
@@ -164,6 +165,16 @@ answer of its own, or a repair to a change not yet released.
   so a chain whose every link names the one before it twice took 0.27 s at
   eighteen definitions and doubled per link; the 128 a validator may hold
   never finished. It enters each definition once.
+- **A complement is below the complement of an empty refinement.**
+  `complement(Annotated[str, Regex("x"), MaxLen(0)])` is the universe, since
+  no string both matches `x` and has no characters, yet
+  `complement(Annotated[str, MaxLen(0), str.isdigit])` and the complement of a
+  union of forty patterns answered `undecided` below it in 0.0.18. Two
+  complements relate as their inner sets do the other way round, and there
+  the empty refinement is the subject, whose emptiness the rule read without
+  the set representation, the one reader of a pattern's shortest match. The
+  rule asks it where the inner sets' relation declines, as the rule for a
+  single complement does.
 
 ## [0.0.18] - 2026-10-12
 

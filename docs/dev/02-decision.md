@@ -1016,6 +1016,22 @@ is. `fuzz/seeds/decision/` keeps the input, and
 in `decision/tests.rs` holds the pair and its non-universal neighbour, which
 stays a decline.
 
+**The contravariant rule asks the same where it declines.** `¬A ⊆ ¬B` is read
+as `B ⊆ A`, which puts `B` in the subject, where its emptiness is the
+empty-subject bound and that bound reads the rules' verdict alone. A
+complement of a predicate's refinement, a class or a literal has no
+descriptor, so the descriptor route refuses it as it refuses the literal above,
+and without the reading `¬(str & MaxLen(0) & f)` would be below nothing, not
+even the complement of the empty pattern. Where `B ⊆ A` declines, the rule asks
+`B`'s own emptiness of the set representation, as the complement rule does,
+which leaves the decision workloads' counts where they are.
+`fuzz/seeds/decision/` keeps the input,
+`a_complement_only_the_descriptor_empties_bounds_a_complement_with_no_descriptor`
+in `decision/tests.rs` holds the pair with the universe bare and in the
+fuzzer's spelling, a refinement carrying no constraint, and
+`the_complement_of_an_empty_pattern_bounds_a_complement_that_does_not_lower` in
+`laws.rs` draws the family.
+
 **A length bound reads the lengths a sequence's shape can take.** A sequence
 is never shorter than its fixed positions and never longer where its tail
 admits nothing, so `MinLen(5)` over a list of exactly three elements is empty.

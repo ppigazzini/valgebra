@@ -1149,6 +1149,20 @@ _DECIDED = [
         complement(Annotated[str, Regex("x"), at.MaxLen(0)]),
         id="str:forty-patterns<=the-complement-of-an-empty-pattern",
     ),
+    # A complement the set representation cannot build, below the same
+    # universe: the contravariant rule reads the inner set alone too.
+    pytest.param(
+        "subtype",
+        complement(Annotated[str, at.MaxLen(0), str.isdigit]),
+        complement(Annotated[str, Regex("x"), at.MaxLen(0)]),
+        id="str:the-complement-of-a-predicate<=the-complement-of-an-empty-pattern",
+    ),
+    pytest.param(
+        "subtype",
+        complement(union(*[Annotated[str, Regex(f"a{i}+")] for i in range(40)])),
+        complement(Annotated[str, Regex("x"), at.MaxLen(0)]),
+        id="str:the-complement-of-forty-patterns<=the-complement-of-an-empty-pattern",
+    ),
 ]
 
 # Known decision-completeness misses: true relations neither the rules nor the

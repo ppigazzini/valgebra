@@ -1861,6 +1861,55 @@ fn a_pair_only_the_supertype_settles() -> impl Strategy<Value = (Schema, Schema)
     })
 }
 
+/// A complement with no descriptor, below the complement of a pattern only the
+/// set representation empties.
+///
+/// **The supertype** is a pattern beside a length shorter than the pattern's
+/// shortest match, which no string satisfies and the rules cannot empty, under
+/// a complement: bare, in a refinement carrying no constraint, or in a union of
+/// one. **The subject** is the complement of a predicate's refinement, a
+/// class or a literal, none of which `NoLeafRelations` lets the set
+/// representation build, so the pair goes to the contravariant rule, and the
+/// emptiness it needs is the supertype's inner set's alone.
+fn a_complement_below_the_complement_of_an_empty_pattern() -> impl Strategy<Value = (Schema, Schema)>
+{
+    let opaque = prop_oneof![
+        (0usize..2, 0usize..3).prop_map(|(length, predicate)| Schema::refine(
+            Schema::Str,
+            vec![
+                Constraint::MaxLen(length),
+                Constraint::Predicate(PredIx::new(predicate)),
+            ]
+        )),
+        (0usize..3).prop_map(|i| Schema::Instance(ClassIx::new(i))),
+        (0usize..3).prop_map(|i| Schema::Literal(ConstIx::new(i))),
+    ];
+    let empty = prop_oneof![Just(("x", 0usize)), Just(("ab+", 1)), Just(("[0-9]{3}", 2))]
+        .prop_flat_map(|(pattern, shortest)| {
+            (0..=shortest).prop_map(move |length| {
+                Schema::refine(
+                    Schema::Str,
+                    vec![
+                        Constraint::Regex(pattern.to_owned()),
+                        Constraint::MaxLen(length),
+                    ],
+                )
+            })
+        });
+    (opaque, empty, 0usize..3).prop_map(|(opaque, empty, spelling)| {
+        let universe = Schema::Complement(Arc::new(empty));
+        let spelled = match spelling {
+            0 => universe,
+            1 => Schema::Refine {
+                base: Arc::new(universe),
+                constraints: Vec::new().into(),
+            },
+            _ => Schema::Union(vec![universe].into()),
+        };
+        (Schema::Complement(Arc::new(opaque)), spelled)
+    })
+}
+
 /// A subject holding a reference past the end of the table, beside a literal.
 ///
 /// **The reference** names a set no query can read, so the rule that unfolds
@@ -2188,6 +2237,25 @@ proptest! {
     #[test]
     fn a_universal_supertype_bounds_a_subject_that_does_not_lower(
         (a, b) in a_pair_only_the_supertype_settles(),
+    ) {
+        prop_assert!(
+            Schema::Complement(Arc::new(b.clone())).is_empty(),
+            "the premise: {b:?} is the universe"
+        );
+        prop_assert!(a.is_subtype_of(&b), "{a:?} not below universal {b:?}");
+    }
+
+    /// The universe bound where the subject is **a complement no reading
+    /// builds**.
+    ///
+    /// The contravariant rule turns `¬A ⊆ ¬B` into `B ⊆ A`, so the emptiness
+    /// that makes `¬B` the universe becomes the subject's, which the rules
+    /// cannot read off a pattern beside a length. The premise is a proof of
+    /// emptiness, so the conclusion is the completeness claim the fuzz target
+    /// asserts of every pair it draws.
+    #[test]
+    fn the_complement_of_an_empty_pattern_bounds_a_complement_that_does_not_lower(
+        (a, b) in a_complement_below_the_complement_of_an_empty_pattern(),
     ) {
         prop_assert!(
             Schema::Complement(Arc::new(b.clone())).is_empty(),
