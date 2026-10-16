@@ -19,6 +19,7 @@ from __future__ import annotations
 import builtins
 import collections.abc
 import dataclasses
+import functools
 import subprocess
 import sys
 import typing
@@ -555,6 +556,35 @@ def test_a_protocol_admits_the_same_values_on_every_release() -> None:
     assert not hasattr(unassigned, "x")
     assert not holds_x.is_valid(unassigned)
     assert not holds_x.is_valid(XHoldsText())
+
+
+def test_a_cached_property_member_holds_what_its_function_returns() -> None:
+    """A `functools.cached_property` is read through its function, as a property is.
+
+    Read as a value it would be `anything`, dropping the type its function
+    returns, which a static checker reads as a property's. An instance's
+    first read calls the function and keeps what it returns, so that is what
+    the attribute holds.
+    """
+
+    class Measured(typing.Protocol):
+        @functools.cached_property
+        def size(self) -> int: ...
+
+    class HoldsInt:
+        @functools.cached_property
+        def size(self) -> int:
+            return 3
+
+    class HoldsText:
+        @functools.cached_property
+        def size(self) -> str:
+            return "x"
+
+    schema = Validator(Measured)
+    assert repr(schema) == "object(size=int)"
+    assert schema.is_valid(HoldsInt())
+    assert not schema.is_valid(HoldsText())
 
 
 def test_a_qualifier_is_unwrapped_wherever_it_is_written() -> None:

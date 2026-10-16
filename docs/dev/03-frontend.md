@@ -343,7 +343,7 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    |---|---|---|
    | data | an annotation names it | the annotation's set |
    | method, special method | the class attribute is callable | the `Callable` atom, as `Callable[...]` reads |
-   | property | the first class on the `__mro__` defining it holds a `property` | the getter's return annotation, or `anything` |
+   | property | the first class on the `__mro__` defining it holds a `property` or a `functools.cached_property` | the getter's return annotation, or the cached function's, or `anything` |
    | value | the class attribute is neither callable nor a property | `anything`: present, holding anything |
 
    `@runtime_checkable` is not read. It is what lets `isinstance` answer, and

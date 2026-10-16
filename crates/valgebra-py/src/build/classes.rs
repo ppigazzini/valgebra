@@ -226,8 +226,8 @@ pub(super) enum ProtocolMember<'py> {
     /// attribute is callable; what it accepts is not readable, as for
     /// `Callable[...]`.
     Method,
-    /// A property, and its getter's return hint where it has one: the value's
-    /// attribute is what the getter returns.
+    /// A property or a cached property, and its getter's return hint where it
+    /// has one: the value's attribute is what the getter returns.
     Property(Option<Bound<'py, PyAny>>),
     /// A name the class defines with a value that is neither callable nor a
     /// property, and nothing annotates: the value carries the attribute,
@@ -247,7 +247,7 @@ pub(super) enum ProtocolMember<'py> {
 /// and on 3.10 lists `__protocol_attrs__` itself as a member.
 ///
 /// A member is a property where the first class on the `__mro__` defining the
-/// name holds one, data where an annotation names it, a method where the class
+/// name holds one or a `functools.cached_property`, data where an annotation names it, a method where the class
 /// attribute is callable, and a value otherwise -- callable as `typing` asks
 /// it, `callable(getattr(cls, name))`. A member annotated `ClassVar` or `Final`
 /// is refused: the qualifier says where the value lives, and reading it as the
@@ -286,9 +286,9 @@ pub(super) fn protocol_members<'py>(
     let mut members = Vec::with_capacity(names.len());
     for name in names {
         let member = if let Some(defined) = defined_on(&namespaces, &name)?
-            && defined.is_instance(forms.property.bind(py))?
+            && let Some(getter) = getter_of(&defined)?
         {
-            ProtocolMember::Property(getter_return(&defined)?)
+            ProtocolMember::Property(getter_return(&getter)?)
         } else if let Some(hint) = hints.get_item(&name)? {
             if is_qualified_member(&hint)? {
                 return Err(not_implemented(format!(
@@ -328,11 +328,35 @@ fn defined_on<'py>(
     Ok(None)
 }
 
-/// The return hint a property's getter carries, resolved as `get_type_hints`
-/// resolves it, or `None` for a property with no getter or no return hint.
-fn getter_return<'py>(property: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let py = property.py();
-    let getter = property.getattr(intern!(py, "fget"))?;
+/// The function a member's value is computed by, where the class defines it
+/// with a `property` -- its getter, `None` where it has none -- or a
+/// `functools.cached_property`, whose function an instance's first read calls
+/// and keeps. `None` overall for any other class attribute.
+///
+/// Read as a value, a cached property would be `anything`, dropping the type
+/// its function returns, which a checker reads as a property's.
+///
+/// The attribute's type is asked, rather than the attribute by `isinstance`,
+/// which reads its `__class__` once the type answers no: an attribute lookup
+/// per method a protocol declares and per class asked, and asked that way the
+/// second class costs the fifty-member protocol build 0.86%.
+fn getter_of<'py>(defined: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let py = defined.py();
+    let forms = forms(py)?;
+    let class = defined.get_type();
+    if class.is_subclass(forms.property.bind(py))? {
+        return Ok(Some(defined.getattr(intern!(py, "fget"))?));
+    }
+    if class.is_subclass(forms.cached_property.bind(py))? {
+        return Ok(Some(defined.getattr(intern!(py, "func"))?));
+    }
+    Ok(None)
+}
+
+/// The return hint a member's getter carries, resolved as `get_type_hints`
+/// resolves it, or `None` for no getter or no return hint.
+fn getter_return<'py>(getter: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let py = getter.py();
     if getter.is_none() {
         return Ok(None);
     }

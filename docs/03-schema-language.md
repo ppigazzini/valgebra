@@ -892,8 +892,9 @@ does the same to every record in a schema at once.
 
 A `Protocol` denotes the values that carry every member it declares, each read
 the way an attribute access reads it. An annotated member holds a value of its
-type, a method or special method holds a callable, and a property holds what
-its getter's return annotation names, or anything where it names nothing.
+type, a method or special method holds a callable, and a property -- or a
+`functools.cached_property` -- holds what its function's return annotation
+names, or anything where it names nothing.
 `@runtime_checkable` changes nothing here. It is what lets `isinstance` answer,
 and a schema does not ask `isinstance`, so a protocol reads the same with or
 without it, and the same on every Python release.

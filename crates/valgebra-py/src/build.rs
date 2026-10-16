@@ -621,9 +621,11 @@ struct Forms {
     /// member's value lives rather than what it is.
     class_var: Py<PyAny>,
     final_qualifier: Py<PyAny>,
-    /// `builtins.property`, the one class attribute a protocol member is read
-    /// through its getter for.
+    /// `builtins.property` and `functools.cached_property`, the class
+    /// attributes a protocol member is read through the function of: the
+    /// value's attribute is what the getter, or the cached function, returns.
     property: Py<PyAny>,
+    cached_property: Py<PyAny>,
 }
 
 static FORMS: PyOnceLock<Forms> = PyOnceLock::new();
@@ -711,6 +713,7 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             class_var: typing.getattr("ClassVar")?.unbind(),
             final_qualifier: typing.getattr("Final")?.unbind(),
             property: builtins.getattr("property")?.unbind(),
+            cached_property: py.import("functools")?.getattr("cached_property")?.unbind(),
         })
     })
 }

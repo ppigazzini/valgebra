@@ -27,6 +27,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a possessive quantifier and a spaced count are refused in a pattern
 - fix: instance_of(typing.Any) is the top whatever is imported
 - fix: a dataclass field reads Final under Annotated
+- fix: a protocol's cached property holds its return type
 
 -->
 
@@ -122,6 +123,11 @@ answer of its own, or a repair to a change not yet released.
   that say why: it is a class variable to the typing spec and a field to
   `dataclasses`. A `Protocol` member declared either way is refused as one
   declared `ClassVar` or `Final` is.
+- **A `Protocol` member declared with `functools.cached_property` holds what
+  its function returns.** It was read as a value, holding anything, so
+  `@cached_property def size(self) -> int` admitted an object whose `size` is
+  a string. It is read as a property is, through its function's return
+  annotation.
 
 ## [0.0.18] - 2026-10-12
 
