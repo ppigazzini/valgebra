@@ -1806,20 +1806,29 @@ impl Schema {
     /// the same one, which is why the term entry point is this with an empty
     /// graph rather than a second traversal.
     ///
-    /// A definition already open on the path is not re-entered: the walk that
-    /// opened it is still looking for the target, so a second visit adds no path
-    /// to it and would not terminate.
+    /// **A definition is entered once per check, not once per path.** Its body
+    /// is always read from an unguarded root -- a guarded reference is answered
+    /// before it is entered -- so what the body reaches is the same from every
+    /// path to it: the check is reachability over the references met unguarded.
+    /// A definition entered once and found not to reach the target is not
+    /// entered again, and one still open is the walk already looking from it.
+    /// Forgetting a definition when its walk returns would walk it once per
+    /// path: a chain whose every link names the one before it twice is 2^n
+    /// walks for n definitions that way, 0.27 s at eighteen in a debug build,
+    /// of the 128 a validator may hold.
     #[must_use]
     pub fn occurs_unguarded_under(&self, target: DefIx, guarded: Guarded, defs: &[Schema]) -> bool {
         self.occurs_unguarded_within(target, guarded, defs, &mut Vec::new())
     }
 
-    fn occurs_unguarded_within(
+    /// The walk of [`occurs_unguarded_under`](Self::occurs_unguarded_under),
+    /// with the definitions it has entered so far.
+    pub(crate) fn occurs_unguarded_within(
         &self,
         target: DefIx,
         guarded: Guarded,
         defs: &[Schema],
-        visiting: &mut Vec<DefIx>,
+        entered: &mut Vec<DefIx>,
     ) -> bool {
         if let Schema::Ref(id) = self {
             if guarded == Guarded::Yes {
@@ -1828,20 +1837,18 @@ impl Schema {
             if *id == target {
                 return true;
             }
-            if visiting.contains(id) {
+            if entered.contains(id) {
                 return false;
             }
             let Some(definition) = defs.get(id.get()) else {
                 return false;
             };
-            visiting.push(*id);
-            let reaches = definition.occurs_unguarded_within(target, Guarded::No, defs, visiting);
-            visiting.pop();
-            return reaches;
+            entered.push(*id);
+            return definition.occurs_unguarded_within(target, Guarded::No, defs, entered);
         }
         let below = guarded.join(self.guards_children());
         self.children()
-            .any(|child| child.occurs_unguarded_within(target, below, defs, visiting))
+            .any(|child| child.occurs_unguarded_within(target, below, defs, entered))
     }
 
     /// The three facts a validator is accepted on, read in one walk: how deep

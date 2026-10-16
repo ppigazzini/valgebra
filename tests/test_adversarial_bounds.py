@@ -282,6 +282,35 @@ def test_the_definition_bound_admits_its_own_number_and_refuses_one_past() -> No
         Validator(chain(MAX_DEFINITIONS + 1))
 
 
+def test_a_chain_naming_each_link_twice_builds_at_the_bound() -> None:
+    """Each link names the one before it twice, outside any constructor.
+
+    The contractivity check enters each definition once, so the largest chain
+    a caller is promised builds in time linear in its links; walked once per
+    path it is 2^127 walks. The mechanism is held in the core, by
+    `a_definition_is_entered_once_however_many_paths_reach_it`, which fails at
+    once on a short chain rather than running this one out.
+    """
+    schema: object = list[int]
+    for _ in range(MAX_DEFINITIONS - 1):
+        # Construction folds no absorption, so `before & (before | None)`
+        # holds the link before twice.
+        schema = recursive(
+            lambda t, before=schema: union(
+                list[t],  # ty: ignore[invalid-type-form]
+                intersection(before, union(before, None)),
+            )
+        )
+    validator = Validator(schema)
+    # Named before they are asserted: a failing `assert validator.is_valid(..)`
+    # has pytest render the validator to explain it, and a render prints each
+    # link once per path to it -- 2^127 times here -- so the failure would never
+    # be reported.
+    accepted, refused = validator.is_valid([[]]), validator.is_valid(["a"])
+    assert accepted
+    assert not refused
+
+
 def test_the_published_bounds_are_positive() -> None:
     # The bounds a caller sizes schemas against are exported and sane.
     assert MAX_SCHEMA_DEPTH > 0

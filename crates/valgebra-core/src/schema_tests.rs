@@ -2139,3 +2139,55 @@ fn closing_an_opened_mapping_takes_out_only_the_region_open_freed() {
         )
     );
 }
+
+/// The contractivity check enters a definition once, however many paths
+/// reach it.
+///
+/// Each link of the chain names the one before it twice, unguarded, so a walk
+/// per path is two walks of the link before per link. The small chain shows
+/// the mechanism -- the definitions entered, each once -- and fails at once
+/// where a definition is forgotten when its walk returns; the long one is the
+/// whole of what a validator may hold, which is linear here and 2^127 walks
+/// that way.
+#[test]
+fn a_definition_is_entered_once_however_many_paths_reach_it() {
+    let chain = |length: usize| {
+        let mut definitions = vec![Schema::list(SeqShape::homogeneous(Schema::Int))];
+        for at in 1..length {
+            let before = Schema::Ref(DefIx::new(at - 1));
+            definitions.push(Schema::union([
+                Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(at)))),
+                Schema::meet([
+                    before.clone(),
+                    Schema::refine(before, vec![Constraint::MinLen(1)]),
+                ]),
+            ]));
+        }
+        definitions
+    };
+    let short = chain(8);
+    let mut entered = Vec::new();
+    let top = DefIx::new(7);
+    assert!(!short[7].occurs_unguarded_within(top, Guarded::No, &short, &mut entered));
+    let mut once = entered.clone();
+    once.sort();
+    once.dedup();
+    assert_eq!(
+        once.len(),
+        entered.len(),
+        "a definition entered twice: {entered:?}"
+    );
+    assert_eq!(
+        entered.len(),
+        7,
+        "every definition below the top, each once"
+    );
+
+    let long = chain(128);
+    let top = DefIx::new(127);
+    assert!(!long[127].occurs_unguarded_under(top, Guarded::No, &long));
+    // An unguarded occurrence at the far end is found through every link.
+    let mut looped = long;
+    looped[0] = Schema::Ref(top);
+    assert!(looped[127].occurs_unguarded_under(top, Guarded::No, &looped));
+}

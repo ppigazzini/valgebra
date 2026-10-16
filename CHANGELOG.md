@@ -31,6 +31,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a Regex marker pickles and refuses a pattern that is not text
 - fix: the complement laws read a union or a meet flattened into the list
 - fix: close after open takes out only the region open freed
+- fix: the contractivity check enters each definition once
 
 -->
 
@@ -158,6 +159,11 @@ answer of its own, or a repair to a change not yet released.
   opened key to every key, the round trip is a smaller schema than `close`.
   And `dict[Any, Any]` relates to `dict[Literal["a", "b"], Any]` opened as
   `subset`, where it answered `undecided`.
+- **A chain of recursive definitions is checked in time linear in its
+  length.** The contractivity check walked a definition once per path to it,
+  so a chain whose every link names the one before it twice took 0.27 s at
+  eighteen definitions and doubled per link; the 128 a validator may hold
+  never finished. It enters each definition once.
 
 ## [0.0.18] - 2026-10-12
 
