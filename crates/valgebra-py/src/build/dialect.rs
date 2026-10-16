@@ -37,11 +37,24 @@
 //! the `#`. `[ a]` admits a space under `re` and not here, which is quiet, and
 //! `[#a]` swallows the class's own `]`, which fails with a parse error that
 //! names no cause. Both are refused, by what the character does here.
+//!
+//! Two quantifier spellings part them the same quiet way. A `+` after a
+//! quantifier makes it possessive to `re` from 3.11, an error before, and is a
+//! second repetition here: `a?+` refuses `"aa"` there and admits it here. And
+//! this engine reads a count with whitespace in its braces, `a{1, 3}`, as the
+//! count, where `re` reads a brace that is not exactly a count as text, in
+//! verbose mode too -- and in verbose mode this engine skips a comment there as
+//! well. Each is refused by what it is here. The escapes that take braces --
+//! `\p{..}`, `\P{..}`, `\x{..}`, `\u{..}`, `\U{..}` -- are skipped whole, so
+//! their braces are no count and the quantifier after one is the first.
+
+use std::iter::Peekable;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-/// Refuse a pattern whose character classes carry an operator `re` reserves.
+/// Refuse a pattern both engines accept and read as two sets: a class carrying
+/// an operator `re` reserves, and each other form the module names.
 ///
 /// The scan is a character walk rather than a parse: it needs only to know
 /// whether it stands inside a class, which `\` escapes and `[`/`]` delimit, and
@@ -61,11 +74,15 @@ pub(crate) fn reject_reserved_class_syntax(pattern: &str) -> PyResult<()> {
     // outside each group the cursor is inside, which the group's `)` restores.
     let mut verbose = false;
     let mut outer: Vec<bool> = Vec::new();
+    // Whether the character just read was a quantifier outside a class, which
+    // is what makes a `+` after it possessive to `re`.
+    let mut quantified = false;
     // The cursor advances by taking from the iterator and never by arithmetic,
     // so the scan terminates by construction: an arm that looks ahead either
     // takes what it saw or leaves it for the next turn.
     while let Some((at, here)) = cursor.next() {
         let next = cursor.peek().copied();
+        let after_quantifier = std::mem::replace(&mut quantified, false);
         match here {
             // Inside a class in verbose mode, the two characters the engines
             // read differently, before any arm below reads them as members.
@@ -102,22 +119,20 @@ pub(crate) fn reject_reserved_class_syntax(pattern: &str) -> PyResult<()> {
             }
             // An escape carries its character with it, whichever side of a
             // class it is on: `[\[&&x]` holds an operator and no nested set.
-            // Outside a class three escapes are assertions here and literals
-            // to `re`: `\<` and `\>` the start and end of a word, and `\b{`
-            // the start of a named word boundary, where `re` reads a boundary
-            // and a literal `{`.
-            '\\' => {
-                let escaped = cursor.next().map(|(_, symbol)| symbol);
-                let boundary = match escaped {
-                    Some('<') => Some(("\\<", "the start of a word", "`<`")),
-                    Some('>') => Some(("\\>", "the end of a word", "`>`")),
-                    Some('b') if cursor.peek().map(|&(_, symbol)| symbol) == Some('{') => {
-                        Some(("\\b{", "a named word boundary", "`\\b\\{`"))
+            '\\' => read_escape(&mut cursor, inside, pattern, at)?,
+            '+' if !inside && after_quantifier => return Err(possessive(pattern, at)),
+            '?' | '*' | '+' => quantified = !inside,
+            '{' if !inside => {
+                if let Some((length, spaced)) =
+                    counted(chars.get(at + 1..).unwrap_or_default(), verbose)
+                {
+                    if let Some(what) = spaced {
+                        return Err(spaced_count(what, pattern, at));
                     }
-                    _ => None,
-                };
-                if let Some(boundary) = boundary.filter(|_| !inside) {
-                    return Err(word_boundary(boundary, pattern, at));
+                    for _ in 0..length {
+                        cursor.next();
+                    }
+                    quantified = true;
                 }
             }
             '[' if !inside => {
@@ -177,6 +192,44 @@ pub(crate) fn reject_reserved_class_syntax(pattern: &str) -> PyResult<()> {
     Ok(())
 }
 
+/// Read the escape whose `\` sits at `at`, taking its character from the
+/// cursor.
+///
+/// Outside a class three escapes are assertions here and literals to `re`:
+/// `\<` and `\>` the start and end of a word, and `\b{` the start of a named
+/// word boundary, where `re` reads a boundary and a literal `{`. Each is
+/// refused. An escape that takes braces takes them whole, so they are no
+/// count; one that never closes is the compile's to refuse.
+fn read_escape<I: Iterator<Item = (usize, char)>>(
+    cursor: &mut Peekable<I>,
+    inside: bool,
+    pattern: &str,
+    at: usize,
+) -> PyResult<()> {
+    let escaped = cursor.next().map(|(_, symbol)| symbol);
+    if inside {
+        return Ok(());
+    }
+    let braced = cursor.peek().map(|&(_, symbol)| symbol) == Some('{');
+    let boundary = match escaped {
+        Some('<') => Some(("\\<", "the start of a word", "`<`")),
+        Some('>') => Some(("\\>", "the end of a word", "`>`")),
+        Some('b') if braced => Some(("\\b{", "a named word boundary", "`\\b\\{`")),
+        _ => None,
+    };
+    if let Some(boundary) = boundary {
+        return Err(word_boundary(boundary, pattern, at));
+    }
+    if braced && matches!(escaped, Some('p' | 'P' | 'x' | 'u' | 'U')) {
+        for (_, symbol) in cursor.by_ref() {
+            if symbol == '}' {
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Read an inline flag group at the start of `rest`, which follows a `(`.
 ///
 /// `?` then flag letters, an optional `-` before the ones turned off, and a
@@ -200,6 +253,99 @@ fn inline_flags(rest: &[char]) -> Option<(Option<bool>, bool)> {
         }
     }
     None
+}
+
+/// Read a counted repetition at the start of `rest`, which follows a `{`, as
+/// this engine reads one. Answers how many characters it takes through its
+/// `}`, and what it carries that `re` reads as text: `Some("whitespace")`,
+/// `Some("a comment")`, or `None` for a count both engines read alike. `None`
+/// overall where `rest` is no count here, which the compile refuses.
+///
+/// The grammar is this engine's: a number, then an optional comma and a
+/// second number, closed by `}`. Whitespace may stand around a number in every
+/// mode; in verbose mode whitespace and a comment may stand anywhere, the
+/// digits of a number included. So `a{1 ,3}` is a count in both modes and
+/// `a{1, }` in neither, and nothing this engine refuses is called a count.
+fn counted(rest: &[char], verbose: bool) -> Option<(usize, Option<&'static str>)> {
+    let mut count = Count {
+        rest,
+        at: 0,
+        verbose,
+        spaced: None,
+    };
+    count.skip(false);
+    count.number()?;
+    if count.peek() == Some(',') {
+        count.at += 1;
+        count.skip(false);
+        if count.peek() != Some('}') {
+            count.number()?;
+        }
+    }
+    (count.peek() == Some('}')).then_some((count.at + 1, count.spaced))
+}
+
+/// A cursor over the inside of a counted repetition, for [`counted`].
+struct Count<'a> {
+    rest: &'a [char],
+    at: usize,
+    verbose: bool,
+    /// The first thing read that `re` would read as text.
+    spaced: Option<&'static str>,
+}
+
+impl Count<'_> {
+    fn peek(&self) -> Option<char> {
+        self.rest.get(self.at).copied()
+    }
+
+    /// Skip what this engine skips here: whitespace and a comment in verbose
+    /// mode, and with `always`, whitespace in every mode.
+    ///
+    /// Each turn takes a character or returns, and each loop here is bounded
+    /// by the characters there are besides: a loop that ends only because a
+    /// cursor moves is one a mutation of the move runs forever.
+    fn skip(&mut self, always: bool) {
+        for _ in 0..self.rest.len() {
+            match self.peek() {
+                Some(symbol) if symbol.is_whitespace() && (always || self.verbose) => {
+                    self.spaced = self.spaced.or(Some("whitespace"));
+                    self.at += 1;
+                }
+                Some('#') if self.verbose => {
+                    self.spaced = Some("a comment");
+                    for _ in 0..self.rest.len() {
+                        let Some(symbol) = self.peek() else {
+                            break;
+                        };
+                        self.at += 1;
+                        if symbol == '\n' {
+                            break;
+                        }
+                    }
+                }
+                _ => return,
+            }
+        }
+    }
+
+    /// One number of a count: ASCII digits, with whitespace around them in
+    /// every mode and between them in verbose mode. `None` where there is no
+    /// digit.
+    fn number(&mut self) -> Option<()> {
+        self.skip(true);
+        let mut digits = 0;
+        for _ in 0..self.rest.len() {
+            if !self.peek().is_some_and(|symbol| symbol.is_ascii_digit()) {
+                break;
+            }
+            digits += 1;
+            self.at += 1;
+            self.skip(false);
+        }
+        self.skip(true);
+        (digits > 0).then_some(())
+    }
 }
 
 /// How many characters of `rest` an inline flag group takes before its `)` or
@@ -238,6 +384,28 @@ fn word_boundary(
         "{written} at position {index} in {pattern:?} is {meaning} here and \
          literal characters to `re`, so the two read the pattern as different \
          sets. Write {literal} for what `re` reads, or \\b for a word boundary."
+    ))
+}
+
+/// The refusal for a `+` after a quantifier, which `re` reads as possessive.
+fn possessive(pattern: &str, index: usize) -> PyErr {
+    PyValueError::new_err(format!(
+        "`+` after a quantifier at position {index} in {pattern:?} makes it \
+         possessive to `re`, from Python 3.11, and repeats the quantified item \
+         again here, so the two read the pattern as different sets. This engine \
+         has no possessive quantifier: write `(?:...)+` around the quantified \
+         item to repeat it."
+    ))
+}
+
+/// The refusal for a count carrying whitespace or a comment in its braces.
+fn spaced_count(what: &str, pattern: &str, index: usize) -> PyErr {
+    PyValueError::new_err(format!(
+        "{what} inside the counted repetition at position {index} in \
+         {pattern:?}: this engine reads it as a count and `re` reads it as \
+         literal text, so the two read the pattern as different sets. Write the \
+         count without it, as `{{1,3}}`, or escape the brace, `\\{{`, to mean the \
+         text."
     ))
 }
 

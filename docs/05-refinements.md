@@ -389,6 +389,16 @@ end of a word here and the characters `<` and `>` to `re`, so `\<b\>` admits
 naming what it asserts here. Write `<`, `>` or `\{` for what `re` reads, or `\b`
 for a word boundary in both.
 
+Two quantifier spellings part them the same way. A `+` after a quantifier
+makes it possessive to `re` from Python 3.11, and repeats the quantified item
+again here, so `a?+` refuses `"aa"` there and admits it here. And this engine
+reads a count with whitespace in its braces as the count -- `a{1, 3}` admits
+`"aa"` -- where `re` reads a brace that is not exactly a count as text, and
+admits `"a{1, 3}"`; in verbose mode it skips a comment there too. Each raises
+a `ValueError` naming it. This engine has no possessive quantifier: write
+`(?:a?)+` to repeat the quantified item. Write a count without whitespace, or
+`\{` for the text.
+
 **A pattern Python spells and this engine does not is refused**, which is the
 loud direction and the one to prefer. A lookaround (`(?=...)`, `(?<=...)`), a
 backreference (`\1`, `(?P=name)`), an inline comment (`(?#...)`), a named

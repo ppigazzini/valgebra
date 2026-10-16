@@ -128,6 +128,18 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
         ValueError,
         "the start of a word",
     ),
+    (
+        "a quantifier the other engine reads as possessive",
+        Annotated[str, vg.Regex("a?+")],
+        ValueError,
+        "makes it possessive to `re`",
+    ),
+    (
+        "a count the other engine reads as text",
+        Annotated[str, vg.Regex("a{1, 3}")],
+        ValueError,
+        "whitespace inside the counted repetition",
+    ),
     # `build/generics.rs`: the arities. A mapping needs both halves, and a
     # container that takes one argument is not given two. `typing` guards the
     # qualifiers and `Unpack` at subscription, so the two callers that reach

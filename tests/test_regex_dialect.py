@@ -210,6 +210,49 @@ def test_a_verbose_class_member_is_refused_rather_than_dropped(
 
 
 @pytest.mark.parametrize(
+    ("pattern", "said"),
+    [
+        ("a?+", "possessive"),
+        (r"\d++\d", "possessive"),
+        ("a{2}+", "possessive"),
+        ("a{1, 3}", "whitespace inside the counted repetition"),
+        ("(?x)a{1, 3}", "whitespace inside the counted repetition"),
+    ],
+    ids=["optional", "digits", "count", "spaced-count", "verbose-spaced-count"],
+)
+def test_a_quantifier_the_engines_read_apart_is_refused(
+    pattern: str, said: str
+) -> None:
+    """A possessive quantifier and a spaced count are two sets, both accepted.
+
+    This engine reads a `+` after a quantifier as a second repetition and a
+    count with whitespace in its braces as the count, and both build here.
+    """
+    with pytest.raises(ValueError, match=said):
+        Validator(Annotated[str, Regex(pattern)])
+
+
+def test_what_python_does_with_each_quantifier_refused() -> None:
+    """`re` reads a `+` after a quantifier as possessive, and a spaced brace as text.
+
+    Possessive from 3.11, and an error before it: either way not this engine's
+    `(?:a?)+`, which admits `"aa"`. A brace that is not exactly a count is
+    literal text to `re`, in verbose mode too, where the whitespace after the
+    literal brace is dropped.
+    """
+    if sys.version_info >= (3, 11):
+        assert re.fullmatch("a?+", "aa") is None
+        assert re.fullmatch(r"\d++\d", "12") is None
+    else:
+        with pytest.raises(re.error, match="multiple repeat"):
+            re.compile("a?+")
+    assert _matches("(?:a?)+", "aa")
+    assert re.fullmatch("a{1, 3}", "a{1, 3}") is not None
+    assert re.fullmatch("a{1, 3}", "aa") is None
+    assert re.fullmatch("(?x)a{1, 3}", "a{1,3}") is not None
+
+
+@pytest.mark.parametrize(
     "topic",
     [
         "[[:alpha:]]",
@@ -221,6 +264,8 @@ def test_a_verbose_class_member_is_refused_rather_than_dropped(
         "combining mark",
         "before a final newline",
         r"\B` on the empty string",
+        "possessive",
+        "whitespace in its braces",
     ],
     ids=[
         "posix-classes",
@@ -232,6 +277,8 @@ def test_a_verbose_class_member_is_refused_rather_than_dropped(
         "word-characters",
         "dollar",
         "non-boundary",
+        "possessive-quantifier",
+        "spaced-count",
     ],
 )
 def test_the_page_names_the_divergence(topic: str) -> None:

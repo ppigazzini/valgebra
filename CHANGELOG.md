@@ -24,6 +24,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a tuple reads what an unpacked tuple splices as its own arguments
 - fix: a dict literal refuses a TypedDict presence qualifier on a field
 - fix: a type alias of an Annotated alias in metadata is refused
+- fix: a possessive quantifier and a spaced count are refused in a pattern
 
 -->
 
@@ -102,6 +103,12 @@ answer of its own, or a repair to a change not yet released.
   `type Pos = Annotated[int, Gt(0)]`, or with `TypeAliasType`, was ignored and
   admitted `-1`, in 0.0.17 and 0.0.18. An alias in metadata is read through to
   what it names, applied to arguments or not, and refused the same way.
+- **A pattern `re` reads as a different set is refused in two more forms.** A
+  `+` after a quantifier is possessive to `re` from 3.11 and a second
+  repetition here, so `a?+` admitted `"aa"`, which `re.fullmatch` refuses; and
+  this engine reads `a{1, 3}`, whitespace in its braces, as a count, where
+  `re` reads it as the text `"a{1, 3}"`. Both raise a `ValueError` naming the
+  reading, as the class-set operators do.
 
 ## [0.0.18] - 2026-10-12
 

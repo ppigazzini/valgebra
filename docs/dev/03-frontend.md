@@ -617,7 +617,11 @@ compiles and `re` reads as a different set is refused before the compile:
 carrying `--`, `&&`, `~~` or a nested `[` other than a POSIX class, a space or
 a `#` inside a class under verbose mode, and outside a class the escapes `\<`,
 `\>` and `\b{`, which this engine reads as word boundaries and `re` as the
-characters, each named by the reading this engine would give it.
+characters, a `+` after a quantifier, which `re` reads as possessive, and a
+count holding whitespace or a verbose comment, which `re` reads as text, each
+named by the reading this engine would give it. A count is read by this
+engine's grammar (`counted`), so a brace it refuses at the parse is left to
+the parse rather than called a count.
 
 ## Recursion is tied by `recursive` or by an alias
 

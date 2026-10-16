@@ -78,6 +78,45 @@ fn a_reserved_form_is_refused_by_the_operator_it_would_have_read() {
         (r"a\>", "the end of a word"),
         (r"\b{start}a", "a named word boundary"),
         (r"[a]\<", "the start of a word"),
+        // A `+` after a quantifier: possessive to `re` from 3.11 and an error
+        // before, a second repetition here. `a?+` refuses `"aa"` there and
+        // admits it here. After a lazy quantifier `re` raises, and the scan
+        // refuses it in the same words rather than read it.
+        ("a?+", "possessive"),
+        ("a*+", "possessive"),
+        ("a++", "possessive"),
+        (r"\d++\d", "possessive"),
+        ("(?:a)?+", "possessive"),
+        ("a+?+", "possessive"),
+        // A count is a quantifier too, and taken whole: the `+` is read with
+        // the cursor just past its `}`. An escape's braces are taken whole
+        // before it, so the count after one is still a count.
+        ("a{2}+", "possessive"),
+        ("a{1,3}+", "possessive"),
+        ("a{2,}+", "possessive"),
+        (r"\p{L}{2}+", "possessive"),
+        // Only an escape that takes braces takes them: `\d{2}` is a count, and
+        // `\x41` holds no brace to take, so what follows each is read.
+        (r"\d{2}+", "possessive"),
+        (r"\x41a?+", "possessive"),
+        // Whitespace in a count's braces, which this engine skips in every
+        // mode and `re` reads as text: `a{1, 3}` admits `"aa"` here and
+        // `"a{1, 3}"` there. Verbose mode changes nothing about it in `re`,
+        // which reads a brace that is not exactly a count as a literal and
+        // then drops the whitespace after it.
+        ("a{1, 3}", "whitespace inside the counted repetition"),
+        ("a{1 ,3}", "whitespace inside the counted repetition"),
+        ("a{ 2}", "whitespace inside the counted repetition"),
+        ("a{2 }", "whitespace inside the counted repetition"),
+        ("a{1,\t3}", "whitespace inside the counted repetition"),
+        ("a{\u{3000}2}", "whitespace inside the counted repetition"),
+        ("(?x)a{1, 3}", "whitespace inside the counted repetition"),
+        // In verbose mode this engine also skips whitespace between digits,
+        // after the comma, and a comment, which runs to its line's end and
+        // can hold the `}` the count does not close at.
+        ("(?x)a{1 2}", "whitespace inside the counted repetition"),
+        ("(?x)a{2, }", "whitespace inside the counted repetition"),
+        ("(?x)a{2#}\n}", "a comment inside the counted repetition"),
     ] {
         let err = reject_reserved_class_syntax(pattern)
             .expect_err("a reserved form is refused rather than read");
@@ -147,6 +186,32 @@ fn a_form_the_two_engines_agree_on_is_left_alone() {
         r"(?P<x>a)[ b]",
         // A comment runs to the end of the line, and a `[` in it opens nothing.
         "(?x) a # a comment [ that opens nothing\n b",
+        // Lazy quantifiers, which both engines read alike, and a quantifier
+        // after a character that followed one: the flag lasts one character.
+        "a+?",
+        "a??",
+        "a*?",
+        "a{2,3}?",
+        "a?b+",
+        "a+b+",
+        // Counts both engines read alike, and whitespace in verbose mode
+        // before a count rather than inside it, which both skip.
+        "a{2}",
+        "a{2,}",
+        "a{2,3}",
+        "(?x)a {2}",
+        // An escape's braces are the escape's, taken whole, so the `+` after
+        // them is the first quantifier: `\x{41}` is a count to nobody. `re`
+        // refuses these escapes, which is the loud direction.
+        r"\x{41}+",
+        r"\u{41}+",
+        r"\U{41}+",
+        r"\P{L}+",
+        // Inside a class a `+`, a `?` and a brace are members to both.
+        "[a?+]",
+        "[a{1, 3}]",
+        // An escaped brace is a literal to both, and so is what follows it.
+        r"a\{1, 3}",
     ] {
         assert!(
             reject_reserved_class_syntax(pattern).is_ok(),
@@ -179,6 +244,38 @@ fn an_unbalanced_pattern_is_left_to_the_compile() {
     ] {
         // The answer is the compile's; what is asserted is that there is one.
         let _ = reject_reserved_class_syntax(pattern);
+    }
+}
+
+/// A brace this engine reads as no count is the compile's to refuse.
+///
+/// `re` reads each of these as text and this engine refuses each at the parse,
+/// which is the loud direction: calling one a count with whitespace in it
+/// would say this engine reads it, which it does not. After a brace that is no
+/// count, a `+` follows no quantifier.
+#[test]
+fn a_brace_this_engine_reads_as_no_count_is_left_to_the_compile() {
+    for pattern in [
+        "a{1 2}",
+        "a{2, }",
+        "a{, 3}",
+        "a{,3}",
+        "a{}",
+        "a{}+",
+        "x{a}",
+        "a{",
+        "a{1",
+        // An escape's braces are taken whole whatever they hold, and a `#`
+        // starts a comment in verbose mode alone, which runs to its line's end
+        // past any `}` in it.
+        r"\p{a?+}",
+        "a{2#\n}",
+        "(?x)a{2#}5}",
+    ] {
+        assert!(
+            reject_reserved_class_syntax(pattern).is_ok(),
+            "{pattern} was refused, and this engine's parse refuses it with its own error"
+        );
     }
 }
 
