@@ -137,3 +137,73 @@ def test_an_unpacked_type_variable_tuple_is_refused() -> None:
             # ty: ignore[invalid-type-form,invalid-legacy-type-variable]
             tuple[int, typing.Unpack[typing.TypeVarTuple("Ts")]]
         )
+
+
+@requires_unpacking
+@pytest.mark.parametrize("spell", [_starred, _unpacked], ids=["star", "Unpack"])
+def test_a_spliced_tuple_unpacks_what_it_carries(
+    spell: Callable[[object], object],
+) -> None:
+    # What a splice carries is read as the carrier's own arguments, as both
+    # static checkers reveal it: a star inside it unpacks, and a `...` in it
+    # repeats. Pushed in as elements instead, the inner star would be a nested
+    # tuple and the inner `...` the literal `Ellipsis`.
+    tail = tuple[str, spell(tuple[bool, ...])]  # ty: ignore[invalid-type-form]
+    schema = Validator(tuple[int, spell(tail)])  # ty: ignore[invalid-type-form]
+    assert repr(schema) == "tuple[int, str, bool, ...]"
+    assert schema.is_valid((1, "a"))
+    assert schema.is_valid((1, "a", True))
+    assert not schema.is_valid((1, "a", (True,)))
+
+    inner = spell(tuple[int, ...])
+    assert repr(Validator(tuple[spell(tuple[inner])])) == "tuple[int, ...]"  # ty: ignore[invalid-type-form]
+    assert repr(Validator(tuple[spell(tuple[int, str, ...])])) == "tuple[int, str, ...]"  # ty: ignore[invalid-type-form]
+    spliced = Validator(tuple[spell(tuple[int, spell(tuple[()])]), str])  # ty: ignore[invalid-type-form]
+    assert repr(spliced) == "tuple[int, str]"
+
+    # A tail reached through a splice is still a tail, and nothing follows it.
+    nested = tuple[int, spell(tuple[str, ...])]  # ty: ignore[invalid-type-form]
+    with pytest.raises(NotImplementedError, match="nothing may follow the tail"):
+        Validator(tuple[spell(nested), bool])  # ty: ignore[invalid-type-form]
+
+
+@requires_unpacking
+def test_an_ellipsis_repeats_only_an_element_written_before_it() -> None:
+    # The elements a splice brings in are not one element, and reading the last
+    # of them as the repeated one admits a set the spelling does not say.
+    for spelling in (
+        tuple[_starred(tuple[int, str]), ...],  # ty: ignore[invalid-type-form]
+        tuple[int, _starred(tuple[()]), ...],  # ty: ignore[invalid-type-form]
+    ):
+        with pytest.raises(NotImplementedError, match="are not one element"):
+            Validator(spelling)
+    with pytest.raises(NotImplementedError, match="cannot begin with one"):
+        Validator(tuple[int, _starred(tuple[..., str])])  # ty: ignore[invalid-type-form]
+
+
+@requires_unpacking
+@pytest.mark.parametrize("spell", [_starred, _unpacked], ids=["star", "Unpack"])
+def test_an_unpacked_tuple_outside_a_tuple_is_refused(
+    spell: Callable[[object], object],
+) -> None:
+    # Read as a type, `*tuple[int]` is `tuple[int]`, and `list[*tuple[int]]`
+    # would be a list of one-element tuples, which one checker refuses and
+    # another reads as `list[int]`.
+    one = spell(tuple[int])
+    for spelling in (
+        one,
+        list[one],  # ty: ignore[invalid-type-form]
+        dict[one, int],  # ty: ignore[invalid-type-form]
+        int | one,  # ty: ignore[unsupported-operator]
+        [one],
+    ):
+        with pytest.raises(NotImplementedError, match="unpacks into the arguments"):
+            Validator(spelling)
+
+
+def test_an_unpacked_empty_tuple_splices_nothing() -> None:
+    # 3.10 spells `tuple[()]`'s arguments as the empty tuple itself, which
+    # spliced in as an element would be a tuple literal.
+    extensions = pytest.importorskip("typing_extensions")
+    schema = Validator(tuple[int, extensions.Unpack[tuple[()]]])
+    assert schema == Validator(tuple[int])

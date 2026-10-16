@@ -426,7 +426,7 @@ def test_an_unpack_outside_a_tuple_is_refused() -> None:
     class Fields(typing.TypedDict):
         a: int
 
-    with pytest.raises(NotImplementedError, match="unsupported typing form"):
+    with pytest.raises(NotImplementedError, match="unpacks into the arguments"):
         Validator(typing.Unpack[Fields])
 
 

@@ -497,7 +497,13 @@ sequence of two, `tuple[int, ...]` is a homogeneous one, and `tuple[()]` is the
 empty tuple. `Unpack[Ts]` and `*tuple[int, ...]` are the same unpacking in two
 spellings. A shape is a fixed prefix and then a repeating tail, so nothing may
 follow the tail and a tuple cannot begin with `...`; both are refused by naming
-the spelling that was meant.
+the spelling that was meant. An unpacked fixed tuple splices its arguments,
+which `build_tuple` reads off a worklist as the carrier's own, so a star or a
+`...` inside a splice is read as it would be in its place. A `...` repeats the
+one element written before it in its own tuple, so one after a splice is
+refused. An unpacked tuple anywhere but a tuple's arguments is refused in both
+spellings (`unpacked_outside_a_tuple`): read as a type, `*tuple[int]` is
+`tuple[int]`, which is not what either static checker reads.
 
 Five origins are read as containers — `list`, `set`, `frozenset`, `dict` and
 `tuple` — and their arguments become element and key types. A parametrized

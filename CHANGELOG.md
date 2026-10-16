@@ -21,6 +21,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a relation raises a signal its class readings meet
 - fix: pickling an error leaves the error untouched
 - fix: an integer key past the digit limit reaches the path as an integer
+- fix: a tuple reads what an unpacked tuple splices as its own arguments
 
 -->
 
@@ -79,6 +80,14 @@ answer of its own, or a repair to a change not yet released.
   `'<unrepresentable>'`, a string that indexes nothing. It is carried in
   hexadecimal, which the limit does not bind: `path` holds the key, and the
   message writes it `[0x...]`.
+- **A tuple reads what an unpacked tuple splices into it as written there.**
+  `tuple[int, *tuple[str, *tuple[bool, ...]]]` was read as `tuple[int, str,
+  tuple[bool, ...]]`, whose third element is a tuple, where both static
+  checkers read `tuple[int, str, *tuple[bool, ...]]`, and a `...` inside a
+  splice was the literal `Ellipsis`. The spliced arguments are read as the
+  tuple's own. A `...` after a splice, `tuple[*tuple[int, str], ...]`, which
+  repeated the `str`, is refused, and so is an unpacked tuple outside a
+  tuple's arguments: `list[*tuple[int]]` was a list of one-element tuples.
 
 ## [0.0.18] - 2026-10-12
 

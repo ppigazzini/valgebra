@@ -309,7 +309,7 @@ FORMS: dict[str, Reads | Refuses] = {
     ),
     "`Unpack[X]`": Refuses(
         lambda: typing.Unpack[tuple[int, ...]],
-        "unsupported typing form with origin",
+        "unpacks into the arguments",
         needs=(3, 11),
     ),
     "a user `Generic[T]` parametrisation": Refuses(

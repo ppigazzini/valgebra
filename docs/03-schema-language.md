@@ -189,9 +189,14 @@ and vice versa.
 An **unpacked** variadic tuple says the prefix-and-tail shape the way PEP 646
 spells it, and `Unpack[tuple[B, ...]]` is the same thing written out. An unpacked
 *fixed* tuple splices its elements in, so `tuple[A, *tuple[B, C]]` is
-`tuple[A, B, C]`. What a sequence cannot carry is an element **after** the
-repeating tail — `tuple[*tuple[int, ...], str]` names a set this algebra does not
-spell — so that form is rejected rather than read as something else.
+`tuple[A, B, C]`, and what it splices is read as if written in its place: a
+star inside it unpacks too, so `tuple[A, *tuple[B, *tuple[C, ...]]]` is
+`tuple[A, B, *tuple[C, ...]]`. What a sequence cannot carry is an element
+**after** the repeating tail — `tuple[*tuple[int, ...], str]` names a set this
+algebra does not spell — so that form is rejected rather than read as something
+else. So is a `...` after a splice, `tuple[*tuple[A, B], ...]`, because `...`
+repeats the one element written before it and a splice is not one element, and
+an unpacked tuple anywhere but a tuple's arguments, such as `list[*tuple[int]]`.
 
 ```python
 from valgebra import Validator
@@ -355,7 +360,7 @@ with a message instead:
 | `LiteralString` | a property of where a string came from, which a value does not carry |
 | `TypeVar`, `ParamSpec`, `TypeVarTuple` | a variable stands for a type and is not one |
 | `Final`, `ClassVar` | a declaration about a name, not about a value; a dataclass field's `Final[T]` is read as `T` ([classes](#classes)) |
-| `Unpack[X]` | binds element types into a `tuple[...]`, so it has no meaning alone |
+| `Unpack[X]` | binds element types into a `tuple[...]`, so it has no meaning alone, and nor has `*tuple[...]` outside one |
 | a user `Generic[T]` parametrisation | the parameter is erased at runtime, so the type argument narrows nothing |
 | bare `Protocol`, and a generic `Protocol[T]` | the base a protocol is declared from declares no member, and a protocol over a type parameter names one set per argument |
 | a `Protocol` member declared `ClassVar` or `Final` | the qualifier says where the value lives rather than what it is |

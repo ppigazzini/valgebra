@@ -11,6 +11,7 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::intern;
 use pyo3::prelude::*;
+use pyo3::types::iter::BoundTupleIterator;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple, PyType};
 use rustc_hash::FxHashSet;
 use valgebra_core::{Field, MapClause, Schema, SeqShape};
@@ -85,6 +86,11 @@ pub(super) fn build_parametrized(
         }));
     }
     if origin.is(py.get_type::<PyTuple>()) {
+        // A tuple's own arguments are read by `build_tuple`, which splices an
+        // unpacked one, so one reaching here stands anywhere else.
+        if is_truthy_attr(alias, intern!(py, "__unpacked__"))? {
+            return Err(unpacked_outside_a_tuple(alias)?);
+        }
         return build_tuple(args, lits, defs);
     }
     if is_union_origin(origin)? {
@@ -131,6 +137,9 @@ pub(super) fn build_parametrized(
     // an alias and an alias costs an instance check per spelling.
     if is_type_alias(origin)? {
         return build_applied_alias(origin, args, alias, lits, defs);
+    }
+    if is_unpack_origin(origin)? {
+        return Err(unpacked_outside_a_tuple(alias)?);
     }
     Err(not_implemented(format!(
         "unsupported typing form with origin {}; the subscripted forms read are \
@@ -313,8 +322,9 @@ pub(super) fn build_type_argument(
 
 /// What an unpacked tuple argument contributes to the tuple that carries it.
 pub(super) enum Unpacked<'py> {
-    /// `*tuple[A, B]`: its elements splice in where it stands.
-    Fixed(Vec<Bound<'py, PyAny>>),
+    /// `*tuple[A, B]`: its arguments splice in where it stands, and are read
+    /// as the carrier's own.
+    Fixed(Bound<'py, PyTuple>),
     /// `*tuple[B, ...]`: the tuple repeats `B` from here on.
     Tail(Bound<'py, PyAny>),
 }
@@ -337,18 +347,7 @@ pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Un
     let inner = if is_truthy_attr(arg, intern!(py, "__unpacked__"))? {
         arg.clone()
     } else {
-        // `typing.Unpack`, or `typing_extensions.Unpack` where it is its own
-        // object: 3.10 has only the second. An argument with no origin is an
-        // ordinary element, and asks neither.
-        let origin = origin_of(arg)?;
-        let unpacks = !origin.is_none()
-            && !origin.is_instance_of::<PyType>()
-            && (forms
-                .unpack
-                .as_ref()
-                .is_some_and(|unpack| origin.is(unpack.bind(py)))
-                || is_extension(&origin, |held| &held.unpack)?);
-        if !unpacks {
+        if !is_unpack_origin(&origin_of(arg)?)? {
             return Ok(None);
         }
         let wrapped = forms.get_args.bind(py).call1((arg,))?;
@@ -362,12 +361,46 @@ pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Un
         )));
     }
     let args = forms.get_args.bind(py).call1((&inner,))?;
-    let args = args.cast::<PyTuple>()?;
-    let len = args.len();
-    if len == 2 && is_ellipsis(&args.get_item(1)?) {
+    let args = args.cast_into::<PyTuple>()?;
+    if args.len() == 2 && is_ellipsis(&args.get_item(1)?) {
         return Ok(Some(Unpacked::Tail(args.get_item(0)?)));
     }
-    Ok(Some(Unpacked::Fixed(args.iter().collect())))
+    // `*tuple[()]` splices nothing, in the spelling 3.10 gives it too, where
+    // its one argument is the empty tuple and would splice in as an element.
+    if spells_the_empty_tuple(&args)? {
+        return Ok(Some(Unpacked::Fixed(PyTuple::empty(py))));
+    }
+    Ok(Some(Unpacked::Fixed(args)))
+}
+
+/// Whether `origin` is `typing.Unpack`, or `typing_extensions.Unpack` where it
+/// is its own object: 3.10 has only the second. An argument with no origin is
+/// an ordinary element, and asks neither.
+fn is_unpack_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = origin.py();
+    Ok(!origin.is_none()
+        && !origin.is_instance_of::<PyType>()
+        && (forms(py)?
+            .unpack
+            .as_ref()
+            .is_some_and(|unpack| origin.is(unpack.bind(py)))
+            || is_extension(origin, |held| &held.unpack)?))
+}
+
+/// The refusal for an unpacked argument anywhere but a tuple's arguments.
+///
+/// `*tuple[int]` is the tuple alias carrying a flag, so read as a type it is
+/// `tuple[int]`, and `list[*tuple[int]]` would be a list of one-element
+/// tuples: a form one static checker refuses and another reads as
+/// `list[int]`. Refusing it is the one answer both allow. `Unpack[...]` is the same unpacking
+/// spelled out, and is refused in the same words.
+fn unpacked_outside_a_tuple(spelling: &Bound<'_, PyAny>) -> PyResult<PyErr> {
+    Ok(not_implemented(format!(
+        "{} unpacks into the arguments of the tuple[...] that carries it, and \
+         names no set anywhere else: write the type it unpacks in its place, or \
+         unpack a tuple into a tuple",
+        summarize(spelling)?
+    )))
 }
 
 /// Whether these type arguments spell `tuple[()]`.
@@ -389,17 +422,39 @@ fn spells_the_empty_tuple(args: &Bound<'_, PyTuple>) -> PyResult<bool> {
     }
 }
 
+/// One tuple's arguments as [`build_tuple`] reads them: the carrier's, or a
+/// splice's.
+struct Reading<'py> {
+    /// The arguments still to read, taken from an iterator so the worklist
+    /// ends by construction rather than by a position it advances.
+    args: BoundTupleIterator<'py>,
+    /// Whether an argument of this tuple has been read, which a `...` needs
+    /// before it.
+    begun: bool,
+    /// Whether the argument just read was an element written in this tuple,
+    /// which is what a `...` after it repeats.
+    element_before: bool,
+}
+
 /// `tuple[...]`, in every shape typing spells it.
 ///
 /// A trailing `...` repeats the element before it after a fixed prefix, and an
 /// unpacked variadic tuple — `tuple[A, *tuple[B, ...]]` — is that same shape said
 /// another way, so both compile to the prefix-and-tail form. An unpacked *fixed*
-/// tuple splices its elements in where it stands.
+/// tuple splices its arguments in where it stands, and they are read as the
+/// carrier's own: `tuple[int, *tuple[str, *tuple[bool, ...]]]` is
+/// `tuple[int, str, *tuple[bool, ...]]`, as both static checkers reveal it.
+/// Pushed in as elements instead, the inner star would read as a nested tuple
+/// and the inner `...` as the literal `Ellipsis`.
 ///
 /// What a sequence carries is a fixed prefix and then a repeating tail, with
 /// nothing after it. An element following the tail is therefore refused: the set
 /// it names is one this algebra cannot spell, and reading it as anything else
-/// would admit a different one.
+/// would admit a different one. A `...` repeats the one element written before
+/// it in its own tuple, so one after a splice -- `tuple[*tuple[int, str], ...]`
+/// -- is refused too: the elements spliced in are not one element, and reading
+/// the last of them as the repeated one admits a set the spelling does not
+/// say.
 pub(super) fn build_tuple(
     args: &Bound<'_, PyTuple>,
     lits: &mut Pool,
@@ -415,7 +470,21 @@ pub(super) fn build_tuple(
     }
     let mut prefix: Vec<Bound<'_, PyAny>> = Vec::with_capacity(args.len());
     let mut tail: Option<Bound<'_, PyAny>> = None;
-    for arg in args.iter() {
+    // The tuples whose arguments are being read, the innermost splice last. A
+    // worklist rather than a recursion, so a splice nested as deep as a caller
+    // writes it costs no stack.
+    let mut open = vec![Reading {
+        args: args.iter(),
+        begun: false,
+        element_before: false,
+    }];
+    while let Some(reading) = open.last_mut() {
+        let Some(arg) = reading.args.next() else {
+            open.pop();
+            continue;
+        };
+        let begun = std::mem::replace(&mut reading.begun, true);
+        let element_before = std::mem::replace(&mut reading.element_before, false);
         if tail.is_some() {
             return Err(not_implemented(
                 "a tuple schema carries a fixed prefix and then a repeating \
@@ -424,18 +493,30 @@ pub(super) fn build_tuple(
             ));
         }
         match unpacked_tuple(&arg)? {
-            Some(Unpacked::Fixed(items)) => prefix.extend(items),
+            Some(Unpacked::Fixed(items)) => open.push(Reading {
+                args: items.iter(),
+                begun: false,
+                element_before: false,
+            }),
             Some(Unpacked::Tail(item)) => tail = Some(item),
             None if is_ellipsis(&arg) => {
-                let Some(repeated) = prefix.pop() else {
-                    return Err(not_implemented(
+                let repeated = if element_before { prefix.pop() } else { None };
+                let Some(repeated) = repeated else {
+                    return Err(not_implemented(if begun {
+                        "`...` repeats the one element written before it, and \
+                         the elements an unpacked tuple splices in are not one \
+                         element: write the element to repeat before the `...`"
+                    } else {
                         "`...` repeats the element before it, so a tuple schema \
-                         cannot begin with one",
-                    ));
+                         cannot begin with one"
+                    }));
                 };
                 tail = Some(repeated);
             }
-            None => prefix.push(arg),
+            None => {
+                prefix.push(arg);
+                reading.element_before = true;
+            }
         }
     }
     let mut elements = Vec::with_capacity(prefix.len());
