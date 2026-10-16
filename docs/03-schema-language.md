@@ -581,6 +581,33 @@ assert not mapping.open().close().is_valid({"a": 1})
 `dict[str, int]` above is the ordinary case: its clause carries a value that is
 not the top, nothing folds, and the round trip is exact.
 
+The merged clause is recoverable while the freed region still stands in it.
+`dict[C, Any]` over a class opens to `dict[complement(C) | C, Any]`: the
+complement law is not folded for a class, whose `isinstance` may run a hook,
+so the complement is the region `open` freed, and `close` takes out that and
+nothing else. A clause beside another value keeps its keys the same way. It is
+the folded key above -- every key, with the claim inside it not spelled --
+that closes to the smaller term:
+
+```python
+from typing import Any
+
+from valgebra import Validator
+
+
+class Key:
+    pass
+
+
+mapping = Validator(dict[Key, Any])
+assert mapping.open().is_valid({None: 1})
+assert mapping.open().close() == mapping.close()
+assert not mapping.open().close().is_valid({None: 1})
+
+mixed = Validator({int: Any, str: int})
+assert mixed.open().close() == mixed.close()
+```
+
 To free some key-types and constrain others without `open`, write the
 permissive clause yourself as the `complement` of the keys you constrained —
 which is what `open` writes when the regions it frees are not the whole of what

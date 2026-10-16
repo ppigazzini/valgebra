@@ -30,6 +30,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a protocol's cached property holds its return type
 - fix: a Regex marker pickles and refuses a pattern that is not text
 - fix: the complement laws read a union or a meet flattened into the list
+- fix: close after open takes out only the region open freed
 
 -->
 
@@ -146,6 +147,17 @@ answer of its own, or a repair to a change not yet released.
   reads the flattened members, so `==`, `hash` and `repr` give the bounds. A
   join of many complements is folded in time near-linear in its width, where
   the pair check was quadratic.
+- **`close` after `open` refuses again what `open` freed, and no more.**
+  Opening folds the freed region into a clause admitting every value, and
+  closing kept that clause whole wherever its key was not exactly the region:
+  `dict[C, Any]` over a class, `{int: Any, str: int}`, and
+  `dict[int | str, Any]` each round-tripped to a schema admitting every key,
+  in 0.0.17 and 0.0.18, where the guide says the round trip is at most
+  `close`. Closing takes out the region and keeps the keys the clause claims,
+  so the first two round-trip exactly; where the complement law folds the
+  opened key to every key, the round trip is a smaller schema than `close`.
+  And `dict[Any, Any]` relates to `dict[Literal["a", "b"], Any]` opened as
+  `subset`, where it answered `undecided`.
 
 ## [0.0.18] - 2026-10-12
 

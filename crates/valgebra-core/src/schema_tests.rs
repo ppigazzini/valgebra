@@ -2039,3 +2039,103 @@ fn the_complement_laws_fold_a_member_the_constructor_flattened() {
     );
     assert!(unordered.is_empty());
 }
+
+/// `close` after `open` takes out the region `open` freed and nothing else.
+///
+/// `open` writes the region no clause claims as a clause carrying every value,
+/// and folds it into the clause that already carries every value: the key is
+/// the claimed keys beside the complement of every claimed key. `close` takes
+/// the complement out and keeps the claimed keys, so the round trip gives
+/// what `close` gives, over a class the fold cannot read and beside a clause
+/// carrying another value.
+#[test]
+fn closing_an_opened_mapping_takes_out_only_the_region_open_freed() {
+    let clause = |key: Schema, value: Schema| MapClause { key, value };
+    for clauses in [
+        vec![clause(Schema::Instance(ClassIx::new(0)), Schema::ANYTHING)],
+        vec![
+            clause(Schema::Int, Schema::ANYTHING),
+            clause(Schema::Str, Schema::Int),
+        ],
+        vec![
+            clause(Schema::Instance(ClassIx::new(0)), Schema::ANYTHING),
+            clause(Schema::Str, Schema::Int),
+        ],
+    ] {
+        let map = Schema::keyed_map(Vec::new(), clauses);
+        let opened = map.with_records_open(Openness::Open);
+        assert_ne!(opened, map, "opening frees a region");
+        assert_eq!(
+            opened.with_records_open(Openness::Closed),
+            map.with_records_open(Openness::Closed),
+            "closing {opened:?} took out more or less than open freed"
+        );
+        assert_eq!(opened.with_records_open(Openness::Open), opened);
+    }
+
+    // Two clauses carrying every value are one clause after opening, and the
+    // claimed keys stand together.
+    let two = Schema::keyed_map(
+        Vec::new(),
+        vec![
+            clause(Schema::Int, Schema::ANYTHING),
+            clause(Schema::Bytes, Schema::ANYTHING),
+            clause(Schema::Str, Schema::Int),
+        ],
+    );
+    assert_eq!(
+        two.with_records_open(Openness::Open)
+            .with_records_open(Openness::Closed),
+        Schema::keyed_map(
+            Vec::new(),
+            vec![
+                clause(
+                    Schema::union([Schema::Int, Schema::Bytes]),
+                    Schema::ANYTHING
+                ),
+                clause(Schema::Str, Schema::Int),
+            ],
+        )
+    );
+
+    // Where the complement law folds the opened key to the top, the claimed
+    // keys are not in the term to keep, and closing lands on the smaller term.
+    let folded = Schema::mapping(clause(
+        Schema::union([Schema::Int, Schema::Str]),
+        Schema::ANYTHING,
+    ));
+    let opened = folded.with_records_open(Openness::Open);
+    assert_eq!(
+        opened,
+        Schema::keyed_map(Vec::new(), vec![MapClause::top()])
+    );
+    assert_eq!(
+        opened.with_records_open(Openness::Closed),
+        Schema::keyed_map(Vec::new(), Vec::new())
+    );
+
+    // The clause is recognised by its shape, whoever wrote it.
+    let written = Schema::keyed_map(
+        Vec::new(),
+        vec![
+            clause(
+                Schema::union([
+                    Schema::Int,
+                    Schema::union([Schema::Int, Schema::Str]).complement(),
+                ]),
+                Schema::ANYTHING,
+            ),
+            clause(Schema::Str, Schema::Int),
+        ],
+    );
+    assert_eq!(
+        written.with_records_open(Openness::Closed),
+        Schema::keyed_map(
+            Vec::new(),
+            vec![
+                clause(Schema::Int, Schema::ANYTHING),
+                clause(Schema::Str, Schema::Int),
+            ],
+        )
+    );
+}

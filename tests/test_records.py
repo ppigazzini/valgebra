@@ -1,8 +1,8 @@
-from typing import Annotated, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 import pytest
 
-from valgebra import ValidationError, Validator, nothing
+from valgebra import ValidationError, Validator, anything, nothing
 
 
 def test_record_accepts_a_matching_dict() -> None:
@@ -158,6 +158,43 @@ def test_opening_a_mapping_frees_the_keys_no_clause_claims() -> None:
 
     # So the two are inverse on a mapping, as they are on a record.
     assert opened.close() == mapping
+
+
+# THEORY: open-and-close-read-the-region
+def test_closing_an_opened_mapping_takes_out_only_the_region_opening_freed() -> None:
+    """`close` after `open` refuses again what `open` freed, and nothing more.
+
+    Opening folds the freed region into a clause admitting every value, so
+    `dict[C, Any]` opens to `dict[C | complement(C), Any]`, and closing takes
+    the complement out and keeps `C`. Read as the whole clause, the round trip
+    would keep the region, and admit a `None` key that `close` refuses, over a
+    class and beside a clause carrying another value alike.
+    """
+
+    class Key:
+        pass
+
+    for schema in (Validator(dict[Key, Any]), Validator({int: Any, str: int})):
+        round_trip = schema.open().close()
+        assert round_trip == schema.close(), round_trip
+        assert not round_trip.is_valid({None: 1})
+        assert schema.open().is_valid({None: 1})
+
+    # Where the complement law folds the opened key to every key, the claim is
+    # not in the term to keep, and closing lands on a smaller term than
+    # `close` gives: never a larger one.
+    union_key = Validator(dict[int | str, Any])
+    assert repr(union_key.open()) == "dict[anything, anything]"
+    assert union_key.open().close().relation_to(union_key.close()) == "subset"
+    assert not union_key.open().close().is_valid({None: 1})
+    literal_key = Validator(dict[Literal["a", "b"], Any])
+    assert Validator(dict[Any, Any]).relation_to(literal_key.open()) == "subset"
+
+    # A clause admitting every key beside another keeps the keys the other
+    # claims: closing touches no claimed region.
+    catch_all = Validator({anything: anything, str: int})
+    assert catch_all.close().is_valid({"a": "not an int"})
+    assert not catch_all.close().is_valid({1: 1})
 
 
 def test_opening_a_record_that_claims_a_region_leaves_one_clause() -> None:

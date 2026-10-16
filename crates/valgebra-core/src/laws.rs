@@ -4705,6 +4705,30 @@ pub(crate) fn decidable_schema() -> impl Strategy<Value = Schema> {
 }
 
 /// The same fragment with no `complement` anywhere in it.
+/// A mapping's clauses over the key atoms a mapping is written with -- a class
+/// among them, which construction cannot read as a set -- and values that do
+/// and do not admit every value.
+///
+/// The record generators draw a clause keyed by `str` and a value model keyed
+/// by strings, which the region `open` frees never reaches; this draws the
+/// clauses that region is folded into.
+fn mixed_clauses() -> impl Strategy<Value = Vec<MapClause>> {
+    let atom = prop_oneof![
+        Just(Schema::Int),
+        Just(Schema::Str),
+        Just(Schema::Bytes),
+        Just(Schema::NoneType),
+        Just(Schema::Literal(ConstIx::new(0))),
+        Just(Schema::Instance(ClassIx::new(0))),
+    ];
+    let key = prop::collection::vec(atom, 1..3).prop_map(Schema::union);
+    let value = prop_oneof![Just(Schema::ANYTHING), Just(Schema::Int), Just(Schema::Str)];
+    prop::collection::vec(
+        (key, value).prop_map(|(key, value)| MapClause { key, value }),
+        1..4,
+    )
+}
+
 fn positive_schema() -> impl Strategy<Value = Schema> {
     schema_fragment(Negation::Absent, Producer::Any)
 }
@@ -5141,6 +5165,56 @@ proptest! {
                 "closing an opened term admitted {:?}, which closing it does not",
                 value
             );
+        }
+    }
+
+    // THEORY: open-and-close-read-the-region
+    /// `close` after `open` takes out the region `open` freed, and nothing else.
+    ///
+    /// `open` folds the region into the clause admitting every value, so the
+    /// clause `close` meets is the claimed keys beside the region's complement.
+    /// Over keys a class among them, and values admitting and refusing, the
+    /// round trip is never refuted below closing, and is closing exactly where
+    /// one clause admits every value, no two carry one value, and the
+    /// complement law leaves the opened key standing. Opening is a projection
+    /// on the term.
+    #[test]
+    fn closing_an_opened_mapping_takes_out_the_region_opening_freed(
+        clauses in mixed_clauses(),
+    ) {
+        let map = Schema::keyed_map(Vec::new(), clauses);
+        let opened = map.with_records_open(Openness::Open);
+        let round_trip = opened.with_records_open(Openness::Closed);
+        let closed = map.with_records_open(Openness::Closed);
+        prop_assert_eq!(&opened.with_records_open(Openness::Open), &opened);
+        prop_assert_ne!(
+            round_trip.subtype_relation_under(&closed, &NoLeafRelations, &[]),
+            Relation::Fails,
+            "closing {:?} admitted what closing {:?} refuses", opened, map
+        );
+        let carrying = |schema: &Schema| match schema {
+            Schema::KeyedMap { defaults, .. } => defaults
+                .iter()
+                .filter(|clause| clause.value == Schema::ANYTHING)
+                .map(|clause| clause.key.clone())
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        };
+        let standing = carrying(&opened).iter().all(|key| *key != Schema::ANYTHING);
+        // Opening also writes clauses carrying one value as one clause, so the
+        // terms are compared where no two clauses carry one value.
+        let values = match &map {
+            Schema::KeyedMap { defaults, .. } => {
+                defaults.iter().map(|clause| clause.value.clone()).collect::<Vec<_>>()
+            }
+            _ => Vec::new(),
+        };
+        let distinct = values
+            .iter()
+            .enumerate()
+            .all(|(at, value)| !values[at + 1..].contains(value));
+        if carrying(&map).len() == 1 && standing && distinct {
+            prop_assert_eq!(round_trip, closed);
         }
     }
 

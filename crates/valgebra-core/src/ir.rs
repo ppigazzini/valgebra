@@ -452,22 +452,78 @@ fn unclaimed_region(defaults: &[MapClause]) -> Schema {
     Schema::union(defaults.iter().map(|clause| clause.key.clone())).complement()
 }
 
-/// Whether `clause` is the one carrying the default of the unclaimed region.
+/// What of `clause` stands once the default of the unclaimed region is taken
+/// out: the clause, nothing, or the keys it claims beside that region.
 ///
-/// That is what `close` removes and `open` writes, and it is recognised rather
-/// than marked: the clause that frees exactly the keys the others leave over,
-/// for every value. Recognising it structurally keeps this file below the
+/// That default is what `close` removes and `open` writes, and it is recognised
+/// rather than marked: a clause carrying every value over exactly the keys the
+/// others leave over. Recognising it structurally keeps this file below the
 /// decision procedure, which is where the representation belongs.
-fn frees_the_unclaimed_region(clause: &MapClause, defaults: &[MapClause], index: usize) -> bool {
+///
+/// **`open` folds the region into a clause carrying every value**, since two
+/// clauses carrying one value are one clause over the union of their keys:
+/// `{int: anything, str: int}` opens to `{int | ~(int | str): anything, str:
+/// int}`. The complement in that key is the region `open` freed -- the
+/// complement of every key claimed, the clause's own beside it included --
+/// and the rest of the key is what the clause claims. So the complement alone
+/// goes and the claimed keys stand, which is ICFP 2023's reading of openness
+/// as the default of the key-types a record does not name, the named ones
+/// untouched either way. Read as the whole clause, closing an opened mapping
+/// over a class, or beside a clause with another value, would keep the freed
+/// region and admit every key. Where the complement law has folded the key to
+/// the top, the clause's own claim is not in the term to keep: what stays is
+/// the clause over the keys the other clauses claim, at which it admits every
+/// value, since closing touches no claimed region.
+fn claimed_beside_the_region(
+    clause: &MapClause,
+    defaults: &[MapClause],
+    index: usize,
+) -> Option<MapClause> {
     if clause.value != Schema::ANYTHING {
-        return false;
+        return Some(clause.clone());
     }
-    let others = defaults
-        .iter()
-        .enumerate()
-        .filter(|(at, _)| *at != index)
-        .map(|(_, other)| other.key.clone());
-    clause.key == Schema::union(others).complement()
+    let others = || {
+        defaults
+            .iter()
+            .enumerate()
+            .filter(move |(at, _)| *at != index)
+            .map(|(_, other)| other.key.clone())
+    };
+    let claimed_by_others = Schema::union(others());
+    if clause.key == claimed_by_others.clone().complement() {
+        return None;
+    }
+    // Every key: the region and what the clause claimed, folded by the
+    // complement law, so its own claim is not in the term to read back. What
+    // the other clauses claim it admits every value at too, and that stays.
+    if clause.key == Schema::ANYTHING {
+        return (claimed_by_others != Schema::Nothing).then(|| MapClause {
+            key: claimed_by_others,
+            value: clause.value.clone(),
+        });
+    }
+    let Schema::Union(parts) = &clause.key else {
+        return Some(clause.clone());
+    };
+    for (at, part) in parts.iter().enumerate() {
+        let Schema::Complement(region) = part else {
+            continue;
+        };
+        let claimed = || {
+            parts
+                .iter()
+                .enumerate()
+                .filter(move |(other, _)| *other != at)
+                .map(|(_, kept)| kept.clone())
+        };
+        if **region == Schema::union(claimed().chain(others())) {
+            return Some(MapClause {
+                key: Schema::union(claimed()),
+                value: clause.value.clone(),
+            });
+        }
+    }
+    Some(clause.clone())
 }
 
 /// The clause list an openness gives a node that already carries `defaults`.
@@ -490,8 +546,7 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
     let mut kept: Vec<MapClause> = defaults
         .iter()
         .enumerate()
-        .filter(|(at, clause)| !frees_the_unclaimed_region(clause, defaults, *at))
-        .map(|(_, clause)| clause.clone())
+        .filter_map(|(at, clause)| claimed_beside_the_region(clause, defaults, at))
         .collect();
     if open == Openness::Open {
         let region = unclaimed_region(&kept);
