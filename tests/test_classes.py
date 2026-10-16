@@ -1427,6 +1427,36 @@ def test_the_class_alone_is_isinstance_and_holds_the_declaration(value: object) 
             assert instance_of(cls).is_valid(value)
 
 
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="Any is a class from 3.11")
+def test_the_class_alone_of_any_is_the_top_whatever_is_imported() -> None:
+    """`instance_of(typing.Any)` is what `Validator(typing.Any)` is.
+
+    Asked only as `typing_extensions`' copy, which is `typing`'s own from
+    3.11, the answer would be the top where that module is loaded and refuse
+    every value where it is not. The suite loads it -- `annotated_types`
+    imports it -- so the bare reading is asked in a process that does not.
+    """
+    program = textwrap.dedent(
+        """
+        import sys
+        import typing
+        from valgebra import Validator, instance_of
+        loaded = "typing_extensions" in sys.modules
+        print(loaded, instance_of(typing.Any) == Validator(typing.Any))
+        """
+    )
+    result = subprocess.run(  # noqa: S603 -- fixed interpreter, in-repo program
+        [sys.executable, "-I", "-c", program],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == ["False", "True"], result.stdout
+    assert instance_of(typing.Any) == Validator(typing.Any)
+
+
 def test_the_class_alone_reads_back_as_itself() -> None:
     names = {"instance_of": instance_of, "_Box": _Box, "_Pair": _Pair}
     for cls in (_Box, _Pair):

@@ -191,9 +191,15 @@ pub(super) fn build_type_object(
     if is_truthy_attr(ty, intern!(py, "_is_protocol"))? {
         return build_protocol(ty, lits, defs);
     }
-    // `typing_extensions.Any` is a class of its own on 3.10, which is the one
-    // release where `Any` is a class there and not in `typing`. Read as one, it
-    // is an instance check nothing passes.
+    // `Any` is a class from 3.11, and `typing_extensions.Any` a class of its
+    // own on 3.10. Read as one, it is an instance check nothing passes.
+    // `read_annotation` answers `typing.Any` before it reaches this, which
+    // `instance_of` does not pass through: asked only as `typing_extensions`'
+    // copy, which is `typing`'s from 3.11, `instance_of(typing.Any)` would be
+    // the top where that module is loaded and refuse every value where not.
+    if ty.is(forms.any.bind(py)) {
+        return Ok(Schema::ANY);
+    }
     if is_extension(ty.as_any(), |held| &held.any)? {
         return Ok(Schema::ANY);
     }

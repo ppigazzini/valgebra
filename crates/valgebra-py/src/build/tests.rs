@@ -525,6 +525,18 @@ fn instance_of_reads_the_class_alone() {
             crate::instance_of(&int).expect("a class").schema,
             Schema::Int
         );
+        // `Any` is a class from 3.11, and its class alone is the top whether or
+        // not `typing_extensions`, whose copy it is, has been loaded.
+        let any = py
+            .import("typing")
+            .and_then(|typing| typing.getattr("Any"))
+            .expect("typing has Any");
+        if any.is_instance_of::<PyType>() {
+            assert_eq!(
+                crate::instance_of(&any).expect("a class").schema,
+                Schema::ANY
+            );
+        }
 
         for (name, says) in [("Record", "is a TypedDict"), ("HasA", "is a Protocol")] {
             let Err(error) = crate::instance_of(&class(name)) else {

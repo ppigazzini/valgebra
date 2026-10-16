@@ -25,6 +25,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a dict literal refuses a TypedDict presence qualifier on a field
 - fix: a type alias of an Annotated alias in metadata is refused
 - fix: a possessive quantifier and a spaced count are refused in a pattern
+- fix: instance_of(typing.Any) is the top whatever is imported
 
 -->
 
@@ -109,6 +110,10 @@ answer of its own, or a repair to a change not yet released.
   this engine reads `a{1, 3}`, whitespace in its braces, as a count, where
   `re` reads it as the text `"a{1, 3}"`. Both raise a `ValueError` naming the
   reading, as the class-set operators do.
+- **`instance_of(typing.Any)` is the top whatever is imported.** It was the
+  top in a process that had loaded `typing_extensions`, which importing
+  `annotated_types` does, and refused every value in one that had not. It is
+  what `Validator(typing.Any)` is, on every release where `Any` is a class.
 
 ## [0.0.18] - 2026-10-12
 
