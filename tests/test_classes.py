@@ -1504,6 +1504,58 @@ def test_a_final_field_holds_the_type_it_wraps(
     assert not schema.is_valid(outsider)
 
 
+def test_a_final_field_under_annotated_holds_the_annotated_type() -> None:
+    """`Annotated[Final[int], m]` is a final field holding `Annotated[int, m]`.
+
+    The typing spec lets `Annotated` wrap an annotation expression without
+    changing what it means, and `dataclasses` makes the name a field. Read
+    through the subscripted-form dispatch alone, it would refuse the class as
+    an unsupported `typing.Final`.
+    """
+
+    @dataclasses.dataclass
+    class Wrapped:
+        a: Annotated[typing.Final[int], at.Ge(0), at.Lt(9)] = 0
+
+    schema = Validator(Wrapped)
+    assert schema.is_valid(Wrapped(1))
+    assert not schema.is_valid(Wrapped(-1))
+    assert not schema.is_valid(Wrapped(9))
+    assert not schema.is_valid(_holding(Wrapped, "x"))
+
+
+def test_a_class_variable_under_annotated_is_refused_by_name() -> None:
+    """The spec and `dataclasses` disagree about whether it is a field.
+
+    `Annotated[ClassVar[int], m]` is a class variable to the typing spec, and
+    `dataclasses` reads only an outermost `ClassVar`, so it is a field there.
+    The refusal names both spellings that mean one thing each.
+    """
+
+    @dataclasses.dataclass
+    class Shared:
+        a: Annotated[typing.ClassVar[int], at.Ge(0)] = 0
+
+    assert [field.name for field in dataclasses.fields(Shared)] == ["a"]
+    spelled = r"ClassVar\[Annotated\[T, \.\.\.\]\]"
+    with pytest.raises(NotImplementedError, match=spelled):
+        Validator(Shared)
+
+
+def test_a_protocol_member_qualified_under_annotated_is_refused() -> None:
+    """A member's qualifier is a qualifier with metadata on it, too."""
+
+    class Shared(typing.Protocol):
+        a: Annotated[typing.ClassVar[int], at.Ge(0)]
+
+    class Fixed(typing.Protocol):
+        a: Annotated[typing.Final[int], at.Ge(0)]
+
+    for protocol in (Shared, Fixed):
+        with pytest.raises(NotImplementedError, match="declared ClassVar or Final"):
+            Validator(protocol)
+
+
 def test_a_final_field_without_a_type_is_refused() -> None:
     """A bare `Final` names no type: a checker infers one from the default."""
 

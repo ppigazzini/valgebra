@@ -318,7 +318,11 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    left unread (`build_instances` in `build/classes.rs`): the class's atom for
    these two, and for every other class the node this step builds. A field
    hint `Final[T]` is read as `T` (`field_hint`): the typing spec makes it a
-   dataclass field holding a `T`, and `Final` says the name is not rebound. A dataclass's fields are an attribute record; a
+   dataclass field holding a `T`, and `Final` says the name is not rebound.
+   `Annotated[Final[T], m]` is read as `Annotated[T, m]`, since `Annotated`
+   wraps a qualifier without changing what it says, and
+   `Annotated[ClassVar[T], m]` is refused: a class variable to the spec and a
+   field to `dataclasses`, which reads only an outermost `ClassVar`. A dataclass's fields are an attribute record; a
    named tuple's are the fixed tuple shape of its positions instead
    (`named_tuple_positions` in `build/classes.rs`), which carries the arity as
    well as the types. A field the hints do not carry — a `collections`
@@ -354,8 +358,8 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    `typing.Protocol` itself, the base a protocol is declared from, which
    declares nothing; a generic `Protocol[T]`, which names one set per type
    argument and has no reading of its parameters yet; and a member declared
-   `ClassVar` or `Final`, whose qualifier says where the value lives rather
-   than what it is. A protocol naming itself in a member is refused by the
+   `ClassVar` or `Final`, bare, parametrized or under `Annotated`, whose
+   qualifier says where the value lives rather than what it is. A protocol naming itself in a member is refused by the
    depth guard, with `recursive(...)` named, as a dataclass is.
 8. **Any other class** names its instances: the remaining builtins, the
    `collections.abc` ABCs, and every user class, uniformly.

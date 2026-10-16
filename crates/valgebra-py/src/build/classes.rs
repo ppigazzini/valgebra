@@ -354,7 +354,9 @@ fn getter_return<'py>(property: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py
         })
 }
 
-/// Whether a member's hint is `ClassVar` or `Final`, bare or parametrized.
+/// Whether a member's hint is `ClassVar` or `Final`, bare or parametrized,
+/// and under `Annotated`, which wraps a qualifier without changing what it
+/// says.
 ///
 /// A class `type` made is neither, and `typing.get_origin` answers one with
 /// `None`, or with `Generic` for `Generic` itself, so the answer is read off it
@@ -365,6 +367,11 @@ fn is_qualified_member(hint: &Bound<'_, PyAny>) -> PyResult<bool> {
         return Ok(false);
     }
     let forms = forms(py)?;
+    let hint = if hint.get_type().is(forms.annotated_alias.bind(py)) {
+        &hint.getattr(intern!(py, "__origin__"))?
+    } else {
+        hint
+    };
     let origin = forms.get_origin.bind(py).call1((hint,))?;
     Ok([&forms.class_var, &forms.final_qualifier]
         .iter()
@@ -1154,7 +1161,7 @@ pub(super) fn build_object(
         let hint = if hint.is_instance_of::<PyType>() {
             hint
         } else {
-            field_hint(hint)?
+            field_hint(hint, &name)?
         };
         fields.push(Field {
             name: field_name(&name.str()?)?.into(),
@@ -1179,16 +1186,57 @@ pub(super) fn build_object(
 /// the dispatch, which refuses it. The alias's own `__origin__` is read rather
 /// than calling `typing.get_origin`, so a field pays no Python call for it.
 ///
+/// `Annotated` wraps an annotation expression without changing what it means,
+/// in the spec's words, so `Annotated[Final[int], m]` is a final field holding
+/// `Annotated[int, m]`, and `dataclasses` makes it a field too: it is read as
+/// that. `Annotated[ClassVar[int], m]` is a class variable to the spec and a
+/// field to `dataclasses`, which reads only an outermost `ClassVar`, so the
+/// two disagree about whether there is a field at all, and the class is
+/// refused naming the spelling each reading has.
+///
 /// A class is never a `Final`, and the caller answers one without calling
 /// this: looking a missing `__origin__` up on `int` walks its whole `__mro__`,
 /// and a fifty-field dataclass paid 7% of its build for it, and the call
 /// itself, made for every field, cost another half percent.
-fn field_hint(hint: Bound<'_, PyAny>) -> PyResult<Bound<'_, PyAny>> {
+fn field_hint<'py>(
+    hint: Bound<'py, PyAny>,
+    name: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
     let py = hint.py();
-    if let Some(origin) = hint.getattr_opt(intern!(py, "__origin__"))?
-        && origin.is(forms(py)?.final_qualifier.bind(py))
-    {
+    let forms = forms(py)?;
+    let Some(origin) = hint.getattr_opt(intern!(py, "__origin__"))? else {
+        return Ok(hint);
+    };
+    if origin.is(forms.final_qualifier.bind(py)) {
         return hint.getattr(intern!(py, "__args__"))?.get_item(0);
+    }
+    if !hint.get_type().is(forms.annotated_alias.bind(py)) {
+        return Ok(hint);
+    }
+    // An `Annotated` over a class qualifies nothing, and a class asked for an
+    // `__origin__` it lacks walks its `__mro__`.
+    if origin.is_instance_of::<PyType>() {
+        return Ok(hint);
+    }
+    let Some(qualifier) = origin.getattr_opt(intern!(py, "__origin__"))? else {
+        return Ok(hint);
+    };
+    if qualifier.is(forms.final_qualifier.bind(py)) {
+        let mut parts = vec![origin.getattr(intern!(py, "__args__"))?.get_item(0)?];
+        for item in hint.getattr(intern!(py, "__metadata__"))?.try_iter()? {
+            parts.push(item?);
+        }
+        return forms.annotated.bind(py).get_item(PyTuple::new(py, parts)?);
+    }
+    if qualifier.is(forms.class_var.bind(py)) {
+        return Err(not_implemented(format!(
+            "field {} is annotated {}, a class variable to the typing spec and \
+             a field to dataclasses, which reads only an outermost ClassVar: \
+             write ClassVar[Annotated[T, ...]] for a class variable, or \
+             Annotated[T, ...] for a field",
+            summarize(name)?,
+            summarize(&hint)?
+        )));
     }
     Ok(hint)
 }

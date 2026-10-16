@@ -819,8 +819,12 @@ attribute of an instance and neither is checked; a field declared
 `init=False` is on the instance and is. A field declared `Final[int]` is a field
 holding an `int`, as the typing spec says of a dataclass: `Final` says the
 attribute is not assigned to after `__init__`, which is not a question about
-the value. A bare `Final` names no type -- a checker infers one from the
-default -- and the class is refused.
+the value. `Annotated` wraps the qualifier without changing it, so
+`Annotated[Final[int], Ge(0)]` is a field holding `Annotated[int, Ge(0)]`. A
+bare `Final` names no type -- a checker infers one from the default -- and the
+class is refused. So is a field declared `Annotated[ClassVar[int], ...]`: it is
+a class variable to the typing spec and a field to `dataclasses`, which reads
+only an outermost `ClassVar`, and the message names the spelling of each.
 
 That last one has an edge, and it is the check-only semantics showing through:
 a field with `init=False` and **no default** is not set by the constructor, so

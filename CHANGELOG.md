@@ -26,6 +26,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a type alias of an Annotated alias in metadata is refused
 - fix: a possessive quantifier and a spaced count are refused in a pattern
 - fix: instance_of(typing.Any) is the top whatever is imported
+- fix: a dataclass field reads Final under Annotated
 
 -->
 
@@ -114,6 +115,13 @@ answer of its own, or a repair to a change not yet released.
   top in a process that had loaded `typing_extensions`, which importing
   `annotated_types` does, and refused every value in one that had not. It is
   what `Validator(typing.Any)` is, on every release where `Any` is a class.
+- **A dataclass field declared `Annotated[Final[int], m]` is read.** The
+  typing spec lets `Annotated` wrap a qualifier without changing it, and the
+  field holds `Annotated[int, m]`; the class was refused as an unsupported
+  `typing.Final`. `Annotated[ClassVar[int], m]` is still refused, in words
+  that say why: it is a class variable to the typing spec and a field to
+  `dataclasses`. A `Protocol` member declared either way is refused as one
+  declared `ClassVar` or `Final` is.
 
 ## [0.0.18] - 2026-10-12
 

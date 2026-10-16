@@ -76,6 +76,13 @@ class _Shared(Protocol):
     count: ClassVar[int]
 
 
+@dataclasses.dataclass
+class _SharedField:
+    """A field the typing spec reads as a class variable and `dataclasses` not."""
+
+    count: Annotated[ClassVar[int], at.Ge(0)] = 0
+
+
 #: Each row: what the refusal is about, the annotation that provokes it, the
 #: exception it raises, and a phrase from the message that is about *this*
 #: refusal rather than about refusals in general.
@@ -269,6 +276,12 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
         _Shared,
         NotImplementedError,
         "declared ClassVar or Final",
+    ),
+    (
+        "a dataclass field declared ClassVar under Annotated",
+        _SharedField,
+        NotImplementedError,
+        "a class variable to the typing spec and a field to dataclasses",
     ),
     # `Validator[int]` annotates a validator for a checker; the subscript is a
     # generic alias of the class, which no schema reads.
