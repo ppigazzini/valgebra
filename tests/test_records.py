@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import Annotated, TypedDict
 
 import pytest
 
@@ -27,6 +27,42 @@ def test_record_required_key_must_be_present() -> None:
         user.validate({"name": "Ada"})
     assert info.value.code == "missing_key"
     assert info.value.path == ("age",)
+
+
+def test_a_presence_qualifier_on_a_literal_field_is_refused() -> None:
+    """The `?` on the key is the literal's one optionality marker.
+
+    A qualifier is otherwise unwrapped to the type it qualifies, so `{"a":
+    NotRequired[int]}` would build a record that *requires* `a`. Reading the
+    qualifier instead would make two markers for one fact, which can disagree.
+    """
+    extensions = pytest.importorskip("typing_extensions")
+    for spec in (
+        {"a": extensions.NotRequired[int]},
+        {"a?": extensions.Required[int]},
+        {"a": extensions.Annotated[extensions.NotRequired[int], "meta"]},
+        {"a": extensions.ReadOnly[extensions.NotRequired[int]]},
+    ):
+        with pytest.raises(NotImplementedError, match='write the key "a\\?"'):
+            Validator(spec)
+    # `ReadOnly` says nothing about presence and is read as before, and a
+    # clause's value has no presence to contradict.
+    assert Validator({"a": extensions.ReadOnly[int]}) == Validator({"a": int})
+    assert Validator({str: extensions.NotRequired[int]}) == Validator({str: int})
+
+
+# BOUND: MAX_QUALIFIER_DEPTH
+def test_a_field_wrapping_itself_is_refused_by_depth() -> None:
+    """Reading through a field's wrappers for a qualifier ends.
+
+    An `Annotated` alias whose `__origin__` names itself wraps itself forever,
+    so the reading stops at `MAX_QUALIFIER_DEPTH` and the build's depth guard
+    refuses it.
+    """
+    looped = Annotated[int, "meta"]
+    looped.__origin__ = looped  # ty: ignore[invalid-assignment]
+    with pytest.raises(NotImplementedError, match="nesting is too deep"):
+        Validator({"a": looped})
 
 
 def test_record_is_closed_by_default() -> None:

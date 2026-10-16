@@ -375,7 +375,10 @@ A qualifier is the exception that is read rather than refused:
 `Required[X]`, `NotRequired[X]` and `ReadOnly[X]` survive hint resolution
 because field metadata is kept, so the frontend unwraps them and compiles the
 type they qualify. Written outside a record they are unwrapped just the same,
-which makes `Validator(Required[int])` the same schema as `Validator(int)`.
+which makes `Validator(Required[int])` the same schema as `Validator(int)`. A
+dict literal's field is the one place `Required` and `NotRequired` are refused,
+because the literal says whether a key is required by its `?` alone and the
+qualifier would say it a second time ([records](#a-field-is-required-by-its-key)).
 
 ## Unions and `Optional`
 
@@ -442,6 +445,8 @@ assert Validator({"page??": int}).is_valid({"page?": 1})
 assert Validator({"page??": int}).is_valid({})  # still optional
 ```
 
+### A field is required by its key
+
 A field is named once. `{"a": int, "a?": str}` is two dict keys and one field
 name, which asks the key to be required and optional at once, so it is refused
 rather than built into a record admitting nothing:
@@ -455,6 +460,12 @@ try:
 except ValueError as error:
     assert "declared twice" in str(error)
 ```
+
+The `?` is the literal's one marker for it. A `TypedDict` qualifier on a field
+-- `{"a": NotRequired[int]}`, or `Required` on a key with a `?` -- is refused,
+naming the key's spelling, because unwrapped to its type it would build a
+record that requires `a` where the qualifier says the opposite. `ReadOnly`
+says nothing about presence and is read as the type it wraps.
 
 A **required** key ending in `?` has no dict-literal spelling: every trailing
 `?` is the marker, so there is no string that reads back as one. Write it as a

@@ -271,13 +271,29 @@ pub(super) fn is_literal_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// about use, not about which values belong. None of the three narrows the
 /// field's *set*, so each is unwrapped to the type it qualifies.
 pub(super) fn is_field_qualifier(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
+    Ok(field_qualifier(origin)?.is_some())
+}
+
+/// Which of the three `TypedDict` key qualifiers `origin` is, if any.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Qualifier {
+    Required,
+    NotRequired,
+    ReadOnly,
+}
+
+fn field_qualifier(origin: &Bound<'_, PyAny>) -> PyResult<Option<Qualifier>> {
     let py = origin.py();
     let forms = forms(py)?;
-    for marker in [&forms.required, &forms.not_required, &forms.read_only] {
+    for (marker, qualifier) in [
+        (&forms.required, Qualifier::Required),
+        (&forms.not_required, Qualifier::NotRequired),
+        (&forms.read_only, Qualifier::ReadOnly),
+    ] {
         if let Some(marker) = marker
             && origin.is(marker.bind(py))
         {
-            return Ok(true);
+            return Ok(Some(qualifier));
         }
     }
     // The same three from `typing_extensions`, which is where a release older
@@ -285,12 +301,86 @@ pub(super) fn is_field_qualifier(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
     // a form and never a class, and the origin of every other annotated field
     // is one, so a class is answered without asking.
     if origin.is_instance_of::<PyType>() {
-        return Ok(false);
+        return Ok(None);
     }
-    Ok(is_extension(origin, |held| &held.required)?
-        || is_extension(origin, |held| &held.not_required)?
-        || is_extension(origin, |held| &held.read_only)?)
+    Ok(if is_extension(origin, |held| &held.required)? {
+        Some(Qualifier::Required)
+    } else if is_extension(origin, |held| &held.not_required)? {
+        Some(Qualifier::NotRequired)
+    } else if is_extension(origin, |held| &held.read_only)? {
+        Some(Qualifier::ReadOnly)
+    } else {
+        None
+    })
 }
+
+/// Refuse `Required` or `NotRequired` on a field of a dict literal.
+///
+/// The literal's one optionality marker is the `?` on its key, and a qualifier
+/// is otherwise unwrapped to the type it qualifies -- which here is the one
+/// place it reads as nothing where it says the opposite: `{"a":
+/// NotRequired[int]}` is a record that *requires* `a`, which a reader coming
+/// from `TypedDict` does not expect. Reading the qualifier instead would make
+/// two markers for one fact, which can disagree, so the field is refused and
+/// the key's spelling named. `ReadOnly` says nothing about presence and is
+/// read through, as `Annotated` is, to the qualifier under it.
+///
+/// A class is no qualifier, and most fields are one, so they are answered by
+/// the caller before this asks anything.
+fn refuse_a_presence_qualifier(key: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = value.py();
+    let forms = forms(py)?;
+    let mut value = value.clone();
+    // Each turn unwraps one `Annotated` or one `ReadOnly`, which a finite form
+    // nests finitely; the bound is what makes that a loop that ends whatever
+    // the form's `__origin__` claims. A class, a builtin alias such as
+    // `list[int]` and an `X | Y` are never a qualifier, and are told by their
+    // exact type rather than by the `get_origin` call each qualifier needs:
+    // with the call per field, a fifty-field literal of `list[int]` builds 15%
+    // slower.
+    for _ in 0..MAX_QUALIFIER_DEPTH {
+        if value.is_instance_of::<PyType>() {
+            return Ok(());
+        }
+        let ty = value.get_type();
+        if ty.is(forms.generic_alias.bind(py)) {
+            return Ok(());
+        }
+        if ty.is(forms.union_type.bind(py)) {
+            return Ok(());
+        }
+        if ty.is(forms.annotated_alias.bind(py)) {
+            value = value.getattr(intern!(py, "__origin__"))?;
+            continue;
+        }
+        let origin = forms.get_origin.bind(py).call1((&value,))?;
+        match field_qualifier(&origin)? {
+            Some(Qualifier::ReadOnly) => {
+                let args = forms.get_args.bind(py).call1((&value,))?;
+                value = single_arg(args.cast::<PyTuple>()?, &value, QUALIFIER_INSTEAD)?;
+            }
+            Some(_) => {
+                let name = key.strip_suffix('?').unwrap_or(key);
+                let optional = format!("{name}?");
+                return Err(not_implemented(format!(
+                    "{} on the field {name:?} of a dict literal is a TypedDict \
+                     qualifier, and the literal says whether a key is required by \
+                     its spelling alone: write the key {optional:?} for an \
+                     optional field and {name:?} for a required one, with the \
+                     type alone",
+                    summarize(&value)?,
+                )));
+            }
+            None => return Ok(()),
+        }
+    }
+    Ok(())
+}
+
+/// How many `Annotated` and `ReadOnly` wrappers [`refuse_a_presence_qualifier`]
+/// reads through: more than any spelling nests, since `Annotated` flattens
+/// itself and a qualifier qualifies once.
+const MAX_QUALIFIER_DEPTH: usize = 8;
 
 /// Compile a *type argument* of a typing form.
 ///
@@ -646,6 +736,9 @@ pub(super) fn build_dict(
             let raw = field_name(name)?;
             // The suffix is where the flag is raised, because stripping one is
             // the only thing that makes two dict keys one field name.
+            if !value.is_instance_of::<PyType>() {
+                refuse_a_presence_qualifier(raw, &value)?;
+            }
             let (name, required) = match raw.strip_suffix('?') {
                 Some(stripped) => {
                     optional_seen = true;

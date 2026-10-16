@@ -520,7 +520,13 @@ transposed is `dict[V, K]`, which typechecks and validates real values.
 The two **native literals** are read here too, because they answer the same
 question: `[A, B]` is the fixed-length list, which `typing` cannot spell, and a
 `dict` literal is a record — string keys are named fields, with `"key?"` for an
-optional one, and any other key is a schema governing the rest. A tuple literal
+optional one, and any other key is a schema governing the rest. The `?` is the
+literal's one presence marker, so a `Required` or `NotRequired` on a field,
+read through `Annotated` and `ReadOnly`, is refused naming the key's spelling
+(`refuse_a_presence_qualifier`): unwrapped as a qualifier is everywhere else,
+`{"a": NotRequired[int]}` would require `a`. A class, a builtin alias and an
+`X | Y` are no qualifier, and are told by their exact type before the
+`get_origin` call a qualifier needs. A tuple literal
 and a set literal are refused rather than accepted, since `tuple[A, B]` and
 `set[T]` already spell them and two spellings for one set is a fork. The frozen
 siblings are refused for the same reason and need arms of their own: a
@@ -763,6 +769,13 @@ list of types or a signature rather than for one type, and the schema language
 has no form an argument list for one becomes: `Callable` checks callability
 alone. An alias declaring one is refused by name:
 `test_a_parameter_that_is_no_type_variable_is_refused`.
+
+**Reading `NotRequired` on a dict-literal field as the key's optionality.**
+It is what a reader coming from `TypedDict` means, and it makes two markers for
+one fact, the `?` and the qualifier, which can disagree: `{"a?":
+Required[int]}` says both. The field is refused instead, naming the spelling
+the literal has, and `test_a_presence_qualifier_on_a_literal_field_is_refused`
+in `tests/test_records.py` holds both directions.
 
 **A node for the class alone, or for the class with its fields.** Neither
 passes the admission test of [01-schema-ir.md](01-schema-ir.md): the first is

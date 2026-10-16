@@ -22,6 +22,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: pickling an error leaves the error untouched
 - fix: an integer key past the digit limit reaches the path as an integer
 - fix: a tuple reads what an unpacked tuple splices as its own arguments
+- fix: a dict literal refuses a TypedDict presence qualifier on a field
 
 -->
 
@@ -88,6 +89,12 @@ answer of its own, or a repair to a change not yet released.
   tuple's own. A `...` after a splice, `tuple[*tuple[int, str], ...]`, which
   repeated the `str`, is refused, and so is an unpacked tuple outside a
   tuple's arguments: `list[*tuple[int]]` was a list of one-element tuples.
+- **A dict literal refuses `Required` and `NotRequired` on a field.** A
+  qualifier is read as the type it qualifies, so `{"a": NotRequired[int]}`
+  built a record that requires `a`, and `{"a?": Required[int]}` one where `a`
+  is optional, in silence. The literal says whether a key is required by its
+  `?` alone, so either qualifier on a field is refused, naming the key's
+  spelling. `ReadOnly` is read as before.
 
 ## [0.0.18] - 2026-10-12
 
