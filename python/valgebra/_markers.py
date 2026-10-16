@@ -27,6 +27,10 @@ class Regex:
     annotated without `typing`, because this module is on the import path of
     every program that imports the package and both cost it modules --
     `tests/test_version.py` holds the count.
+
+    A pattern that is not a `str` is refused when the marker is made, which is
+    where the mistake is written. The marker pickles and copies as the pattern
+    it holds, so a schema carrying one can be sent where a validator cannot.
     """
 
     __slots__ = ("pattern",)
@@ -34,7 +38,19 @@ class Regex:
     pattern: str
 
     def __init__(self, pattern: str) -> None:
+        if not isinstance(pattern, str):
+            msg = (
+                f"Regex takes its pattern as a str, not {type(pattern).__name__}: "
+                "a pattern is matched against text, and a compiled re.Pattern "
+                "is metadata on its own, without Regex"
+            )
+            raise TypeError(msg)
         object.__setattr__(self, "pattern", pattern)
+
+    def __reduce__(self) -> tuple[type[Regex], tuple[str]]:
+        # Restoring a slot by `setattr` is the default, and `__setattr__`
+        # refuses every name, so the marker is rebuilt by its constructor.
+        return (type(self), (self.pattern,))
 
     def __setattr__(self, name: str, value: object) -> None:
         raise AttributeError(self._immutable())
@@ -49,7 +65,9 @@ class Regex:
         return f"Regex({self.pattern!r})"
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, Regex) and other.pattern == self.pattern
+        if not isinstance(other, Regex):
+            return NotImplemented
+        return other.pattern == self.pattern
 
     def __hash__(self) -> int:
         return hash((Regex, self.pattern))

@@ -6,7 +6,9 @@ parity with `re.fullmatch`, the build-time validation of a bad pattern, and that
 it composes and reaches the JSON path like any other refinement.
 """
 
+import copy
 import json
+import pickle
 import re
 from typing import Annotated
 
@@ -124,6 +126,45 @@ def test_regex_marker_repr_eq_and_hash() -> None:
     assert marker != Regex(r"[a-z]+")
     assert marker != "not a marker"
     assert hash(marker) == hash(Regex(r"[0-9]+"))
+
+
+def test_a_regex_marker_compares_as_a_marker_and_defers_otherwise() -> None:
+    """Equality with anything else is the other operand's to answer."""
+    marker = Regex(r"[0-9]+")
+    assert marker.__eq__("not a marker") is NotImplemented
+    assert marker != 1
+
+
+@pytest.mark.parametrize("pattern", [123, b"x", re.compile("x")], ids=type)
+def test_a_regex_marker_takes_its_pattern_as_text(pattern: object) -> None:
+    """A pattern that is not a `str` is refused where the marker is made.
+
+    Kept, it would be refused only when a schema is built from it, a line
+    away from where it is written, and a compiled pattern is metadata on its
+    own.
+    """
+    with pytest.raises(TypeError, match="takes its pattern as a str"):
+        Regex(pattern)  # ty: ignore[invalid-argument-type]
+
+
+def test_a_regex_marker_pickles_and_copies_as_its_pattern() -> None:
+    """A schema holding one can be sent where a validator cannot be.
+
+    Unpickling restores a slot by `setattr`, which the marker refuses, so it
+    neither pickled nor copied, and a schema carrying one could not take the
+    road `Validator`'s pickle refusal names.
+    """
+    marker = Regex(r"[0-9]+")
+    for restored in (
+        pickle.loads(pickle.dumps(marker)),  # noqa: S301 - a round trip of our own bytes
+        copy.copy(marker),
+        copy.deepcopy(marker),
+    ):
+        assert restored == marker
+        assert hash(restored) == hash(marker)
+    schema = Annotated[str, marker]
+    sent = pickle.loads(pickle.dumps(schema))  # noqa: S301 - a round trip of our own bytes
+    assert Validator(sent) == Validator(schema)
 
 
 def test_a_regex_marker_refuses_to_change() -> None:

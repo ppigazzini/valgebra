@@ -28,6 +28,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: instance_of(typing.Any) is the top whatever is imported
 - fix: a dataclass field reads Final under Annotated
 - fix: a protocol's cached property holds its return type
+- fix: a Regex marker pickles and refuses a pattern that is not text
 
 -->
 
@@ -128,6 +129,14 @@ answer of its own, or a repair to a change not yet released.
   `@cached_property def size(self) -> int` admitted an object whose `size` is
   a string. It is read as a property is, through its function's return
   annotation.
+- **A `Regex` marker pickles and copies.** Unpickling restored its slot by
+  `setattr`, which the immutable marker refuses, so neither `pickle` nor
+  `copy` worked, and a schema holding one could not be sent to another process
+  as a validator's own pickle refusal says to send it. It reduces to its
+  pattern. A pattern that is not a `str`, such as `Regex(123)` or
+  `Regex(re.compile("x"))`, raises `TypeError` when the marker is made, rather
+  than at the build, and comparing a marker with anything but a marker returns
+  `NotImplemented`, so the other operand's `__eq__` is asked.
 
 ## [0.0.18] - 2026-10-12
 

@@ -70,6 +70,17 @@ class _Generic(Protocol[_T]):
     item: _T
 
 
+def _holding(pattern: object) -> vg.Regex:
+    """Make a `Regex` holding what its constructor refuses.
+
+    A subclass with a constructor of its own can make one, and the frontend
+    reads the marker it is handed, so the build refuses it too.
+    """
+    marker = object.__new__(vg.Regex)
+    object.__setattr__(marker, "pattern", pattern)
+    return marker
+
+
 class _Shared(Protocol):
     """A protocol whose member says where its value lives, not what it is."""
 
@@ -224,7 +235,7 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
     ),
     (
         "a pattern that is not a pattern",
-        Annotated[str, vg.Regex(123)],  # ty: ignore[invalid-argument-type]
+        Annotated[str, _holding(123)],
         NotImplementedError,
         "cannot constrain a schema",
     ),

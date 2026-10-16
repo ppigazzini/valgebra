@@ -302,9 +302,16 @@ def test_an_annotation_python_cannot_evaluate_raises_what_evaluating_it_raises()
 
 
 def test_a_pattern_that_is_not_text_says_what_it_is() -> None:
-    """A refusal names the marker it read, not a kind it guessed."""
-    with pytest.raises((TypeError, ValueError, NotImplementedError)) as caught:
-        Validator(Annotated[str, Regex(123)])  # ty: ignore[invalid-argument-type]
+    """A refusal names the marker it read, not a kind it guessed.
+
+    The constructor refuses such a pattern, so the marker is made past it, as
+    a subclass with a constructor of its own can make one.
+    """
+    marker = object.__new__(Regex)
+    object.__setattr__(marker, "pattern", 123)
+    with pytest.raises(NotImplementedError) as caught:
+        Validator(Annotated[str, marker])
+    assert "the pattern 123" in str(caught.value)
     assert "bytes" not in str(caught.value)
 
 

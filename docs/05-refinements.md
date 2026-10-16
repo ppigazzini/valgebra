@@ -252,7 +252,11 @@ A pattern is matched against text, so a `bytes` pattern is refused. So are
 class means in ways this engine spells differently (see the dialect section
 below), and the third asks the other engine to report on itself.
 `re.IGNORECASE`, `re.MULTILINE`, `re.DOTALL` and `re.VERBOSE` are written into
-the pattern, which is how this engine spells them.
+the pattern, which is how this engine spells them. `Regex` itself takes its
+pattern as a `str` and raises `TypeError` for anything else when it is made.
+It pickles and copies as the pattern it holds, so a schema carrying one can be
+sent to another process and built there, as
+[a validator cannot be](17-boundaries.md#a-validator-does-not-pickle).
 
 ### The dialect is Rust's, not `re`'s
 
