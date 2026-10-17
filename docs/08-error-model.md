@@ -237,6 +237,17 @@ stopped with, where a decided match fails with `unexpected_match`. A union
 beside it that admits the value admits it, and a complement above it fails
 with the same code.
 
+The inner walk counts as stopped only where nothing in it decided. Its
+answer is read in Kleene's strong logic, where a stop is the third value: a
+part that refuses the value refuses a list, a record or a meet whatever a
+part beside it stopped on, and a branch that admits it admits a union whatever
+another branch stopped on. So `complement(list[lists])` admits `[deep, "x"]`
+and `["x", deep]` alike, `"x"` deciding both, and the answer is the same
+whatever order a dict's keys were inserted in or a record's fields are named.
+A value that moved is the exception: the scan that meets the move ends there,
+and the complement refuses the value with `mutated_during_validation` whatever
+the rest decided.
+
 ```python
 from valgebra import ValidationError, complement, recursive, union
 

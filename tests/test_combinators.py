@@ -253,6 +253,88 @@ def test_a_stopped_branch_does_not_block_a_branch_that_decides() -> None:
     assert caught.value.code == "recursion_limit"
 
 
+def _orders() -> list[tuple[str, object, object, object]]:
+    """Give a schema and two orders of one value: a stop beside a refusal.
+
+    Each value holds a part the walk stops on and a part the schema refuses,
+    in one order and then the other -- elements, a dict's insertion order, a
+    record's two field names. The depth is the reference trail's bound, one
+    list a level, which a document reaches inside the parser's nesting bound.
+    """
+    lists = recursive(lambda t: union(int, [t]))
+    depth = next(d for d in range(1, 1000) if _stops(lists, _nested(d)))
+    deep = _nested(depth)
+    record = {"a": lists, "b": lists}
+    return [
+        ("a list", [lists, ...], [deep, "x"], ["x", deep]),
+        ("a dict", {str: lists}, {"a": deep, "b": "x"}, {"b": "x", "a": deep}),
+        ("a record", record, {"a": deep, "b": "x"}, {"a": "x", "b": deep}),
+    ]
+
+
+@pytest.mark.parametrize("case", _orders(), ids=lambda case: case[0])
+def test_a_stop_beside_a_refusal_is_refused_in_either_order(
+    case: tuple[str, object, object, object],
+) -> None:
+    """A complement reads its inner walk in Kleene's strong logic.
+
+    A part the schema refuses refuses the whole, whatever a part beside it
+    stopped on, so the complement admits the value. The fast walk stops a
+    conjunction at its first refusal, and the stop counted as one: whichever
+    part came first was the answer, so the two orders answered apart and a
+    dict's answer moved with how it was built.
+    """
+    _, schema, first, second = case
+    outside = complement(schema)
+    for value in (first, second):
+        assert outside.is_valid(value)
+        outside.validate(value)
+        assert outside.is_valid_json(json.dumps(value))
+
+
+def test_a_stop_beside_a_branch_that_admits_is_dropped() -> None:
+    """A union a branch admits is admitted, and the stop beside it said nothing.
+
+    `U` stops on `deep` in its first branch and admits it as a list in its
+    second, so `~U` refuses it, `list[~U]` refuses `[deep]`, and `~list[~U]`
+    admits `[deep]`. The stop from the first branch stayed in the walk's cell,
+    and the outer complement read it as its own.
+    """
+    deep = _nested(1000)
+    lists = recursive(lambda t: union(int, [t]))
+    stops_then_admits = union([lists, ...], Annotated[list, at.MinLen(1)])
+    assert stops_then_admits.is_valid(deep)
+    assert complement([complement(stops_then_admits), ...]).is_valid([deep])
+
+
+def test_a_raising_predicate_refuses_nothing_a_part_beside_it_decides() -> None:
+    """A predicate that raises stops; a refusal beside it decides the list."""
+    checked = [Annotated[int, at.Predicate(_raises)], ...]
+    assert complement(checked).is_valid([1, "x"])
+    assert complement(checked).is_valid(["x", 1])
+    assert not complement(checked).is_valid([1, 2])
+
+
+def test_a_value_that_moves_is_refused_beside_a_refusal() -> None:
+    """A move is no answer, whatever the rest of the walk decided.
+
+    The scan that meets it ends there, as at a refusal, and the complement
+    refuses the value with the move's code rather than reading the end of the
+    scan as the inner schema's refusal.
+    """
+    grown: list[object] = []
+
+    def append(_: object) -> bool:
+        grown.append(3)
+        return True
+
+    sequence = Validator([union(Annotated[int, at.Predicate(append)], str), ...])
+    grown = [1, "x", 2.5]
+    with pytest.raises(ValidationError) as caught:
+        complement(sequence).validate(grown)
+    assert caught.value.code == "mutated_during_validation"
+
+
 def test_a_meet_proved_empty_admits_no_value_past_the_bound() -> None:
     """`[T] & ~T` is empty, and the walk admits nothing into it.
 

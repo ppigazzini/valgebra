@@ -6655,6 +6655,13 @@ fn eval<'py>(py: Python<'py>, code: &str) -> Bound<'py, PyAny> {
 }
 
 /// A predicate refinement of `int` that calls the pooled callable at `slot`.
+/// A two-element list of the two values, in the order given.
+fn pair<'py>(first: &Bound<'py, PyAny>, second: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
+    PyList::new(first.py(), [first, second])
+        .expect("a list")
+        .into_any()
+}
+
 fn checked_by(slot: usize) -> Schema {
     Schema::Refine {
         base: Arc::new(Schema::Int),
@@ -6779,6 +6786,107 @@ fn a_complement_refuses_a_value_that_moved_while_read() {
                 Some("mutated_during_validation")
             );
         }
+    });
+}
+
+/// A complement reads its inner walk in Kleene's strong logic, where a stop
+/// is the third value: a part that decides decides, whatever order the parts
+/// are read in, and a stop beside a member or a refusal is dropped.
+///
+/// The fast scans stop at a conjunction's first refusal, so a stop met first
+/// was the answer and a refusal met first was too: `~list[R]` refused `[deep,
+/// 'x']` and admitted `['x', deep]`. A union branch that stopped beside one
+/// that admitted left its stop for the complement above to read. And a
+/// refusal the memo kept with a stop is no refusal for a walk that reads past
+/// stops, so it is walked again.
+#[test]
+fn a_complement_reads_its_inner_walk_in_kleenes_strong_logic() {
+    Python::attach(|py| {
+        let reference = Schema::Ref(DefIx::new(0));
+        let list_of = |element: Schema| Schema::list(SeqShape::homogeneous(element));
+        let not = |inner: Schema| Schema::Complement(Arc::new(inner));
+        // One list a level, so the reference trail stops the walk.
+        let defs = vec![Schema::Union(
+            vec![Schema::Int, list_of(reference.clone())].into(),
+        )];
+        let deep = eval(
+            py,
+            "__import__('functools').reduce(lambda x, _: [x], range(1000), 0)",
+        );
+        let word = PyString::new(py, "x").into_any();
+        let answers = |schema: &Schema, value: &Bound<'_, PyAny>| {
+            let fast = holds(py, schema, value, &[], &defs);
+            let (explained, report) = explain(py, schema, value, &[], &defs);
+            assert_eq!(fast, explained, "{schema:?}: the two walks disagree");
+            (fast, report.first().map(|violation| violation.code))
+        };
+
+        // A refusal beside a stop decides the list, in either order, and the
+        // complement admits it; two stops decide nothing.
+        let not_lists = not(list_of(reference.clone()));
+        assert_eq!(answers(&not_lists, &pair(&deep, &word)), (true, None));
+        assert_eq!(answers(&not_lists, &pair(&word, &deep)), (true, None));
+        assert_eq!(
+            answers(&not_lists, &pair(&deep, &deep)),
+            (false, Some("recursion_limit"))
+        );
+        // Every stop answers so: a value inside itself, and a predicate that
+        // raises, which refuses nothing a list beside it decides.
+        let cyclic = eval(py, "(lambda x: (x.append(x), x)[1])([])");
+        assert_eq!(
+            answers(&not_lists, &cyclic),
+            (false, Some("recursion_loop"))
+        );
+        let module = helpers(
+            py,
+            "def raises(x):\n\
+             \x20   raise ValueError('a predicate with a bug')\n",
+            "kleene_under_a_complement",
+        );
+        let pool: Vec<Py<PyAny>> = vec![module.getattr("raises").expect("raises").unbind()];
+        let not_checked = not(list_of(checked_by(0)));
+        let one_then = |second: Bound<'_, PyAny>| {
+            let value = pair(&PyInt::new(py, 1i64).into_any(), &second);
+            let fast = holds(py, &not_checked, &value, &pool, &[]);
+            let (explained, report) = explain(py, &not_checked, &value, &pool, &[]);
+            assert_eq!(fast, explained, "the two walks disagree");
+            (fast, report.first().map(|violation| violation.code))
+        };
+        assert_eq!(one_then(word.clone()), (true, None));
+        assert_eq!(
+            one_then(PyInt::new(py, 2i64).into_any()),
+            (false, Some("predicate_error"))
+        );
+
+        // A union a later branch admits is admitted, the stop beside it
+        // dropped: `~list[~U]` admits `[deep]`, which `U` admits as a list.
+        let stops_then_admits =
+            Schema::Union(vec![list_of(reference.clone()), list_of(Schema::ANYTHING)].into());
+        let one = PyList::new(py, [&deep]).expect("a list").into_any();
+        assert_eq!(
+            answers(&not(list_of(not(stops_then_admits.clone()))), &one),
+            (true, None)
+        );
+        assert_eq!(
+            answers(&not(stops_then_admits), &deep),
+            (false, Some("unexpected_match"))
+        );
+
+        // The second member keeps a refusal with the stop it met at `deep`,
+        // and the complement's walk meets it again: walked again, it stops,
+        // and the meet refuses the list `list[R]` holds.
+        let lists_or_anything = list_of(Schema::Union(
+            vec![reference.clone(), Schema::ANYTHING].into(),
+        ));
+        let meet = Schema::Intersection(
+            vec![
+                lists_or_anything.clone(),
+                lists_or_anything,
+                not(list_of(reference.clone())),
+            ]
+            .into(),
+        );
+        assert_eq!(answers(&meet, &one), (false, Some("recursion_limit")));
     });
 }
 

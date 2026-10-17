@@ -124,17 +124,39 @@ set: the depth bound (`member`'s level, and the reference trail in
 `check_ref`), a value inside itself (`check_ref`), a value that moved while it
 was read (`mutated`, and the record's deciding pass where it answers a move
 before the explaining pass names it), and a predicate that raised. Each
-answers `false`, as a non-member does, and each also records its code in a
-second cell beside the fatal one (`record_stop`), in every mode. Unlike a fatal
-signal a stop does not unwind the walk: a union branch beside it may still
-decide the value.
+answers `false` outside a complement, as a non-member does, and each also
+records its code in a second cell beside the fatal one (`record_stop`), in
+every mode. Unlike a fatal signal a stop does not unwind the walk: a union
+branch beside it may still decide the value.
 
-`check_complement` is the one arm that reads the cell. It clears the cell for
-its inner walk and finds out from it whether that walk stopped; a `false` that
-stopped is no answer, so the complement refuses the value with the stop's code
-instead of admitting it, and puts the stop back so a complement above it reads
-it too. A union admits a value a branch decides whatever another branch did,
-and a meet refuses on either, so neither needs the cell.
+`check_complement` reads its inner walk in Kleene's strong logic, where a stop
+is the third value. The inner walk runs in `WalkMode::Settle`, the fast mode
+under another name, and in it a stop answers `true` (`stopped`) with its code in
+the cell. A conjunction then reads past a stop under the short circuit it
+already takes on a refusal, so a part that refuses decides it whatever order
+the parts are read in, and one that holds only stops answers `true` with a
+code: the third value. A union reads each branch with the cell cleared
+(`settled_union`): the first branch that admits with no stop answers and the
+stops beside it are dropped, and with none the branches' stop is the answer.
+The complement admits on its inner walk's refusal, refuses on a member, and
+refuses with the code on a stop, which it puts back so a complement above
+reads it too. A settling walk takes an answer from the memo and never a stop:
+a refusal kept with a stop was met by a walk that ended its scan there.
+
+**Every stop answers through `stopped`.** One that answered `false` in a
+settling walk would read as a decided refusal, and the complement over it would
+admit the value; `a_complement_reads_its_inner_walk_in_kleenes_strong_logic`
+in the corpus holds each site. A move is the one stop that ends its scan as a
+refusal does: `record_move` counts it, and the complement refuses whatever the
+rest decided, since the value it read is not the one it holds.
+
+Two clauses of a map reading one entry are read by the first that answers, a
+stop included, rather than as a union. Their order is the schema's canonical
+order, not the value's, so the answer stays a function of the value, and a stop
+there refuses a value a later clause would admit cleanly: a refusal, never an
+admission. Read as the union is, the clause check would no longer inline
+into the scan that reads every entry through it, and a map of one clause,
+every `dict[K, V]`, would pay a call an entry for a case it never meets.
 
 **Both modes stop at the same level.** A shortcut that answers for a level the
 walk would open asks whether the level is free first (`room_to_descend`), so a

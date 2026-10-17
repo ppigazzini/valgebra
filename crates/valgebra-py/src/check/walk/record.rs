@@ -24,14 +24,12 @@ use super::scalar::{admitted_quietly, scalar_member};
 use super::{Base, held_dict, reads_its_length, reads_its_values};
 use super::{
     Frame, Scan, Unwritten, again, fast, fold, is_fatal, member, mutated, record_fatal,
-    record_if_fatal, record_stop, stop,
+    record_if_fatal, record_move, stop,
 };
 use crate::check::ctx::{Ctx, WalkState};
 use crate::check::index::{RecordPlan, decided_by_its_value};
 use crate::check::violation::{at_key, key_segment, located, summarize_value, type_mismatch};
-use crate::codes::{
-    DICT_TYPE, EXTRA_FORBIDDEN, MISSING_ATTRIBUTE, MISSING_KEY, MUTATED_DURING_VALIDATION,
-};
+use crate::codes::{DICT_TYPE, EXTRA_FORBIDDEN, MISSING_ATTRIBUTE, MISSING_KEY};
 use crate::input::Value;
 
 /// Visit a dict's entries, refusing rather than panicking when the dict changes
@@ -611,7 +609,7 @@ fn keyed_map_asks_for_its_keys(
             // The value changed while it was being read, so there is no reading
             // to answer from: not a member, exactly as the scan answers it, and
             // the explain pass names the mutation.
-            record_stop(MUTATED_DURING_VALIDATION, ctx);
+            record_move(ctx);
             return Some(false);
         }
         // Every key the value carries is one of the declared ones exactly when
@@ -788,7 +786,7 @@ fn read_whole(scan: &Scan, ctx: Ctx<'_>) -> bool {
         Scan::Complete => true,
         Scan::Stopped => false,
         Scan::Unreadable => {
-            record_stop(MUTATED_DURING_VALIDATION, ctx);
+            record_move(ctx);
             false
         }
     }

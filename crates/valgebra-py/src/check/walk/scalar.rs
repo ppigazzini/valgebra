@@ -24,7 +24,7 @@ use valgebra_core::{
 use super::record::distinct_keys;
 use super::{
     Base, Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at,
-    reads_its_length, record_fatal, record_if_fatal, record_stop, stop,
+    reads_its_length, record_fatal, record_if_fatal, record_stop, stop, stopped,
 };
 use crate::check::ctx::Ctx;
 use crate::check::index::compile_pattern;
@@ -831,7 +831,7 @@ fn check_predicate(index: PredIx, value: &Bound<'_, PyAny>, frame: &mut Frame<'_
         Err(err) => match predicate_raised(err, py, ctx) {
             Some(expected) => {
                 record_stop(PREDICATE_ERROR, ctx);
-                (false, PREDICATE_ERROR, expected)
+                (stopped(ctx.mode), PREDICATE_ERROR, expected)
             }
             None => return false,
         },

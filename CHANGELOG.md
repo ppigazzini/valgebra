@@ -44,6 +44,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a union of map atoms holds each atom once -- internal
 - fix: a conjunct refutes beside one the rules decline
 - fix: a complement admits no member at the walk's bound
+- fix: a complement reads its inner walk in Kleene's strong logic
 
 -->
 
@@ -277,6 +278,20 @@ answer of its own, or a repair to a change not yet released.
   in 0.0.16 through 0.0.18. A scalar branch at the bound stops, as a scalar
   does anywhere else, and the complement refuses the value with
   `recursion_limit`.
+- **A complement's answer no longer depends on the order a value's parts are
+  read in.** A walk inside a complement that stopped -- at the depth bound, at
+  a value holding itself, at a predicate that raised -- answered by whichever
+  part it met first: `complement(list[R])` refused `[deep, "x"]` and admitted
+  `["x", deep]`, two equal dicts built in two orders answered apart, renaming
+  a record's fields flipped the answer, and `is_valid_json` answered by key
+  order. A stop in one branch of a union that another branch admitted was read
+  by a complement above it as its own. The inner walk is read in Kleene's strong
+  logic: a part that refuses refuses whatever a part beside it stopped on, a
+  branch that admits admits whatever another stopped on, and only a walk where
+  nothing decided is a stop, refused with its code. The change admits values
+  under a complement and admits no value the complement's inner schema holds.
+  A value that moved while it was read is refused with
+  `mutated_during_validation` whatever the rest decided.
 
 ## [0.0.18] - 2026-10-12
 
