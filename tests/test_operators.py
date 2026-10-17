@@ -169,10 +169,15 @@ def test_a_validator_refuses_to_pickle_and_says_what_to_do() -> None:
     A validator holds the classes and callables its schema names, so pickling
     one would have to pickle those. The message says to send the schema instead,
     because the default message -- "cannot pickle 'valgebra.Validator' object" --
-    leaves a reader to guess.
+    leaves a reader to guess. It sends a reader to the API reference for what
+    `repr` cannot spell, rather than naming two of the forms and implying the
+    rest rebuild: two that read back as a different schema are on that list.
     """
-    with pytest.raises(TypeError, match="cannot be pickled"):
+    with pytest.raises(TypeError, match="cannot be pickled") as refused:
         pickle.dumps(Validator({"a": int}))
+    message = str(refused.value)
+    assert "the API reference lists the forms it cannot spell" in message
+    assert "every form but" not in message
     # Copying is a different question and still works: it shares the pool.
     assert copy.copy(Validator(int)) == Validator(int)
     assert copy.deepcopy(Validator({"a": int})) == Validator({"a": int})

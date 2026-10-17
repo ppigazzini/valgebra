@@ -261,12 +261,14 @@ record from its Python spelling is one of the shapes
 `scripts/perf_gate.py --binding-build` holds to an instruction count, and
 `scripts/perf_budget.json` owns the figure. `repr(validator)` gives an
 expression that rebuilds the schema, except for the forms
-[the API reference](16-api.md#operators-on-a-validator) lists. One of them
-rebuilds quietly: a **required record key whose name ends in `?`**, which the
-dict literal cannot spell because every trailing `?` there marks the key
-optional ([schema language](03-schema-language.md)), so it rebuilds into the
-optional key, and a schema carrying one is a schema to send as itself rather
-than as its `repr`.
+[the API reference](16-api.md#operators-on-a-validator) lists, and the
+refusal says so. Two of them rebuild quietly: a **required record key whose
+name ends in `?`**, which the dict literal cannot spell because every trailing
+`?` there marks the key optional ([schema language](03-schema-language.md)), so
+it rebuilds into the optional key; and a **class met with a declaration it did
+not make**, which prints as the class's name and rebuilds as the class with its
+own. A schema carrying either is a schema to send as itself rather than as its
+`repr`.
 
 ```python
 import pickle

@@ -790,8 +790,10 @@ impl Validator {
             "a Validator cannot be pickled: it holds the classes and callables \
              its schema names, and those are what would have to travel. Send the \
              schema instead and rebuild with Validator(...) on the other side; \
-             compiling is cheap, and `repr(validator)` gives an expression that \
-             rebuilds every form but a class or a predicate.",
+             compiling is cheap. `repr(validator)` gives an expression that \
+             rebuilds most schemas, but not all: the API reference lists the \
+             forms it cannot spell, and the two that read back as a different \
+             schema.",
         ))
     }
 

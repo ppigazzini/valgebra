@@ -36,6 +36,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a constant prints whole in a repr
 - fix: a literal that would read back as a builtin's is refused in a repr
 - fix: a recursive repr binds a name its body does not print
+- fix: the pickle refusal sends a reader to the forms repr cannot spell
 
 -->
 
@@ -202,6 +203,11 @@ answer of its own, or a repair to a change not yet released.
   spelling of its letter, `X`, `X_1`, `X_2` and on, that no word of the render
   spells: a class's name, a constant's `repr`, or a name the interpreter reads
   as that spelling under NFKC normalisation, such as a fullwidth `Ｘ`.
+- **A validator's pickle refusal sends a reader to the forms `repr` cannot
+  spell.** It said `repr` rebuilds every form but a class or a predicate, and
+  the API reference lists seven, two of which read back as a different schema;
+  it names that list now. The boundaries page counts the two quiet forms where
+  it counted one.
 
 ## [0.0.18] - 2026-10-12
 
