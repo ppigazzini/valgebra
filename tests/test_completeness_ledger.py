@@ -288,6 +288,14 @@ _DECIDED = [
     pytest.param("subtype", int, union(int, str), id="int<=int|str"),
     pytest.param("subtype", list[bool], list[int], id="list[bool]<=list[int]"),
     pytest.param("subtype", {"x": int}, {"x": int, "y?": str}, id="{x}<={x,y?}"),
+    # Two clauses of the supertype cover one of the subject's together: the
+    # rule reads them one at a time and declines, and the sets decide.
+    pytest.param(
+        "subtype",
+        dict[int | str, int],
+        {int: int, str: int},
+        id="{int|str:int}<={int,str}",
+    ),
     pytest.param(
         "subtype", [bool, int, ...], [int, int, ...], id="[bool,int,...]<=[int,int,...]"
     ),

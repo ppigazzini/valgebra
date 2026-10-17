@@ -171,11 +171,13 @@ answers `"undecided"`.
   dozen branches that each fix its first position.
 - **Sets and frozensets.** By element inclusion.
 - **Records and mappings.** Closed-record width, depth, and required-ness; pure
-  mappings with several key-pattern clauses (each subtype clause subsumed by a
-  supertype clause); and a record mixed with a catch-all when the subtype carries
-  at least the supertype's fields, or when a field the subtype lacks is optional
-  in the supertype and the subtype's catch-all covers its value type (each extra
-  or optional field covered by a catch-all over all string keys). A closed record
+  mappings with several key-pattern clauses, each subtype clause subsumed by a
+  supertype clause or covered by several together over whole kinds, which the
+  set representation decides: `dict[int | str, int]` is below `{int: int, str:
+  int}`; and a record mixed with a catch-all when the subtype carries at least
+  the supertype's fields, or when a field the subtype lacks is optional in the
+  supertype and the subtype's catch-all covers its value type (each extra or
+  optional field covered by a catch-all over all string keys). A closed record
   is compared against a catch-all mapping by the same rule, so `{"x": int}` is
   decided below `dict[str, int]`. A key the supertype **requires** and the
   subtype does not declare refutes the inclusion however open the subtype is: a
