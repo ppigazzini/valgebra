@@ -109,21 +109,26 @@ pub(super) fn keyed_map_meet_verdict(members: &[Schema], cx: &mut Cx<'_>) -> Ver
 }
 
 /// Whether keyed-map `a` (fields `fa`, default clauses `da`) is a subtype of
-/// keyed-map `b`. Sound everywhere; complete on three shapes, conservative
-/// (returns `false`) outside them:
+/// keyed-map `b`, read piece by piece. Sound everywhere, and complete on no
+/// syntactic shape: it proves where one piece of `b` covers each piece of `a`,
+/// refutes on a value it names, and declines where pieces of `b` cover one of
+/// `a` only together. `dict[int | str, int]` is below `{int: int, str: int}`,
+/// each key kind under a clause of its own, and no one clause covers the
+/// first's: ICFP 2023 Lemma 4.7 needs the clauses read jointly, which is the
+/// set representation's to decide, and it does. The pieces it reads:
 ///
-/// 1. **Closed record ≤ anything** (`da` empty): holds by width and depth (each
-///    field of `a` maps into a like-named field of `b` with a subtype schema) and
-///    by required-ness (every field `b` requires is required in `a`).
-/// 2. **Pure mapping ≤ pure mapping** (`fa` and `fb` empty): every clause of `a`
-///    is subsumed by a clause of `b` with both key and value narrower.
-/// 3. **Mixed record-and-catch-all ≤ mixed** (general): each shared field narrows
-///    and respects required-ness; each field `a` declares that `b` does not is
+/// 1. **A closed record** (`da` empty): width and depth (each field of `a` maps
+///    into a like-named field of `b` with a subtype schema) and required-ness
+///    (every field `b` requires is required in `a`).
+/// 2. **A pure mapping** (`fa` and `fb` empty): every clause of `a` subsumed by
+///    one clause of `b` narrower in both key and value.
+/// 3. **A record beside a catch-all** (general): each shared field narrows and
+///    respects required-ness; each field `a` declares that `b` does not is
 ///    covered by `b`'s catch-all; each field `b` requires that `a` lacks is
-///    governed by `a`'s catch-all — decidable when it is **optional** and every
+///    governed by `a`'s catch-all — proved when it is **optional** and every
 ///    catch-all value of `a` fits it, and *refuted* when `a` carries no
 ///    catch-all at all, since a closed record admits no value with a key it does
-///    not declare; and every catch-all clause of `a` is subsumed by one of `b`.
+///    not declare; and every catch-all clause of `a` subsumed by one of `b`.
 ///
 /// A catch-all clause of `a` that no clause of `b` subsumes is asked for a key
 /// it admits that `b` reads one way only ([`clause_escapes`]): a refutation

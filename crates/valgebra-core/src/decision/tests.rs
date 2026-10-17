@@ -676,6 +676,41 @@ fn a_product_splits_across_a_union_without_the_descriptor() {
     ));
 }
 
+/// The keyed-map rule declines where clauses of the supertype cover a clause
+/// of the subject only together, and the set representation decides it.
+///
+/// `dict[int | str, int]` is below `{int: int, str: int}`: an `int` key falls
+/// under the first clause and a `str` key under the second, and no one clause
+/// holds both. The rule reads one clause of `b` per clause of `a`, which is
+/// sound and complete on no shape; the doc says so rather than claiming the
+/// pure-mapping case whole.
+#[test]
+fn a_mapping_covered_by_clauses_together_is_the_sets_to_decide() {
+    let clause = |key: Schema, value: Schema| MapClause { key, value };
+    let joined = Schema::mapping(clause(
+        Schema::union([Schema::Int, Schema::Str]),
+        Schema::Int,
+    ));
+    let apart = Schema::keyed_map(
+        Vec::new(),
+        vec![
+            clause(Schema::Int, Schema::Int),
+            clause(Schema::Str, Schema::Int),
+        ],
+    );
+    let budget = Budget::new(DECISION_BUDGET);
+    assert_eq!(
+        joined.subtype_relation(&apart, &NoLeafRelations, &[], &budget),
+        Relation::Unknown,
+        "the rule reads one clause of the supertype per clause"
+    );
+    assert_eq!(
+        joined.subtype_relation_under(&apart, &NoLeafRelations, &[]),
+        Relation::Holds,
+        "and the sets read them together"
+    );
+}
+
 /// A conjunct that refutes on a value of its own refutes beside one the rules
 /// decline.
 ///
