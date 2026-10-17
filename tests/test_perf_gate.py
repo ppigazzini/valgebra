@@ -218,6 +218,20 @@ def test_a_mismatched_checksum_fails() -> None:
     assert gate.check_checksum(133_999, 134_000, "core workload") == 1
 
 
+def test_a_binding_run_that_computed_nothing_a_pass_is_refused() -> None:
+    """The scale a binding run is held to is at least one per iteration.
+
+    Read off the run, a walk refusing every value would set a scale of nought
+    and meet it on both runs; one refusing half of them rounds down to the
+    same.
+    """
+    assert gate.per_iteration(20_000, 20_000, "binding record walk") == 1
+    assert gate.per_iteration(204_000, 4_000, "binding record build") == 51
+    assert gate.per_iteration(0, 20_000, "binding record walk") is None
+    assert gate.per_iteration(10_000, 20_000, "binding record walk") is None
+    assert gate.per_iteration(5, 0, "binding record walk") is None
+
+
 def test_an_unreadable_instruction_count_is_not_a_pass() -> None:
     with pytest.raises(SystemExit) as excinfo:
         gate.parse_measurement("checksum=1\n", "cachegrind died before its banner")
