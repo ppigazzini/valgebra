@@ -322,8 +322,10 @@ which `Schema::shifted` does — one shift per index space, and they are distinc
 types so a caller cannot transpose them.
 
 `Schema::reindexed` is the same operation where the second pool is *interned*
-into the first rather than appended, so identity-shared constants collapse to one
-slot. It is the one the binding actually calls; `shifted` is reached from the
+into the first rather than appended, so a constant the first pool already holds
+-- by value for an exact `bool`, `int`, `float`, `str` or `bytes`, by identity
+for anything else -- keeps the slot it has there. It is the one the binding
+actually calls; `shifted` is reached from the
 tests, `crates/valgebra-core/benches/core.rs` and
 `crates/valgebra-core/examples/perf_workload.rs`.
 
@@ -449,13 +451,18 @@ no such shape reaches it.
 That assumption is why a transform that *descends* must refold. Opening the
 records in `{a: int} | ~{a: int}` maps both sides to one schema beside its own
 complement: a shape construction promises never survives it, so
-`records_opened` refolds what it rebuilt. The other rewrites stay raw, sorting
-and deduplicating a member list they rebuild and neither flattening nor folding
-it. Reindexing, resolving a self-reference and renumbering definitions relabel
-a pool slot or a reference, and a relabelling that changed the shape would not
-be one. Unfolding a reference does change it -- a definition's union can land
-inside a union -- and its one reader is the lowering to the set representation,
-which takes a shape as it comes.
+`records_opened` refolds what it rebuilt. The other rewrites neither flatten
+nor fold. Reindexing, resolving a self-reference and renumbering definitions
+relabel a pool slot or a reference, and what a relabelling can move is order:
+a member list, a refinement's constraints and a map's clauses are sets sorted
+by a key that reads the slot, so each is sorted and deduplicated again where it
+is rebuilt. Sorting is all a relabelling needs, because interning is one-to-one
+-- a pool holds one slot per constant -- so two members are equal after it
+exactly when they were before, and no complement law gains a pair to fold.
+`a_renumbered_set_is_canonical` in `crates/valgebra-core/src/index_laws.rs`
+holds the order. Unfolding a reference does change the shape -- a definition's
+union can land inside a union -- and its one reader is the lowering to the set
+representation, which takes a shape as it comes.
 
 The cost is that `repr`, `==` and the reported error follow the schema as
 *built*, not as written: `intersection(int, complement(int))` is `nothing` and
