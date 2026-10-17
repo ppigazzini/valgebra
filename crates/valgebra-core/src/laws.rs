@@ -5270,14 +5270,14 @@ proptest! {
     }
 
     /// The clauses admitting every value close as the one clause they are,
-    /// however they were split.
+    /// however they are split.
     ///
     /// Two clauses each admitting every value at their own keys are one
     /// clause over the union of the keys, ICFP 2023's wildcard written as the
-    /// union its footnote 15 reads one as. Read one at a time, each was tested
-    /// against the complement of the others' keys, and whether that folded
-    /// decided the answer: `{int: any, ~int: any, ~str: any}` kept every
-    /// clause where `{int | ~int | ~str: any}` closed to `{}`.
+    /// union its footnote 15 reads one as. Read one at a time, each would be
+    /// tested against the complement of the others' keys, and whether that
+    /// folds would decide the answer: `{int: any, ~int: any, ~str: any}` would
+    /// keep every clause where `{int | ~int | ~str: any}` closes to `{}`.
     #[test]
     fn the_clauses_admitting_every_value_close_as_one(
         tops in prop::collection::vec(top_clause_key(), 1..4),

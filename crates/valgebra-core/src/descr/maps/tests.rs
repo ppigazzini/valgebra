@@ -1231,9 +1231,9 @@ fn a_meet_wants_a_key_once_whatever_its_type_spells() {
 /// its complement is read into.
 ///
 /// The partition is where Definition 4.6 gives a default, so a want indexed
-/// past it is no element of the model. Read as the empty set it was a proof,
-/// where the search over the same miss declines; and the complement dropped
-/// it, which widened the atoms built from it in silence.
+/// past it is no element of the model. Read as the empty set it would be a
+/// proof, where the search over the same miss declines; and a complement that
+/// dropped it would widen the atoms built from it in silence.
 #[test]
 fn a_want_past_the_partition_proves_nothing() {
     let mut broken = MapAtom::<IntSet>::top();
