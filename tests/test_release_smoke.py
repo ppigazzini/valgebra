@@ -12,10 +12,11 @@ Held here, both ways: every build row has a smoke row for its artifact, and
 every smoke row names an artifact a build row uploads -- the musllinux sets in
 Alpine containers, the only place a musl wheel loads. Within a set, every
 release a build row names is loaded by its smoke row: the product suite on the
-ends, an import and one check on the releases between. A set whose build row
-names no interpreter, the musllinux image building every one it carries, is
-read off its artifact by the smoke itself, which fails on a wheel no container
-loaded unless `UNLOADABLE` names its tag. Each wheel is a build of
+ends, an import, one check and the bounds file on the releases between, which
+holds each profile-guided wheel's deepest walk to a 1 MiB thread. A set whose
+build row names no interpreter, the musllinux image building every one it
+carries, is read off its artifact by the smoke itself, which fails on a wheel no
+container loaded unless `UNLOADABLE` names its tag. Each wheel is a build of
 its own, profiled on its own interpreter, and 0.0.15 shipped 36 of its 62
 without loading any of them -- every cp311, cp312, cp313 and GIL cp314 wheel,
 and every musllinux one. A smoke is the product suite rather than an import, for the
@@ -190,6 +191,40 @@ def test_every_smoke_import_fails_on_a_warning(job: str) -> None:
     assert imports, f"{job} imports nothing"
     silent = [run for run in imports if "-W error" not in run]
     assert not silent, f"{job} imports with warnings left as warnings"
+
+
+#: The file that runs the deepest walks and relations on a 1 MiB thread.
+_BOUNDS_FILE = "test_adversarial_bounds.py"
+
+#: A loop over the releases between, up to the `done` that closes it.
+_BETWEEN_LOOP = re.compile(r"for py in \$IMPORTS; do\n(.*?)\n\s*done", re.DOTALL)
+
+
+@pytest.mark.parametrize("job", SMOKE_JOBS)
+def test_every_release_between_runs_the_bounds_file(job: str) -> None:
+    """A wheel the suite skips still runs the deepest walks on a 1 MiB thread.
+
+    The limits page tells a caller 1 MiB is enough on every wheel the release
+    loads, and that figure is a reading of each wheel: each is profiled and
+    laid out on its own interpreter, so the 3.12 wheel's stack says nothing of
+    the 3.13 one's. The releases between the ends are imported and nothing
+    more unless the step that runs the suite runs this file on them too, over
+    every release the row names and under no condition.
+    """
+    steps: list[dict] = [
+        step for step in _steps(job) if _BOUNDS_FILE in str(step.get("run", ""))
+    ]
+    assert len(steps) == 1, f"{job} has {len(steps)} steps running {_BOUNDS_FILE}"
+    step = steps[0]
+    assert "if" not in step, f"{job} runs {_BOUNDS_FILE} only where a row says so"
+    assert step.get("env", {}).get("IMPORTS") == "${{ matrix.wheel.imports }}", (
+        f"{job} loops over something other than the row's releases between"
+    )
+    loops = _BETWEEN_LOOP.findall(str(step["run"]))
+    assert len(loops) == 1, f"{job} has {len(loops)} loops over $IMPORTS"
+    assert _BOUNDS_FILE in loops[0], (
+        f"{job} loops over the releases between without running {_BOUNDS_FILE}"
+    )
 
 
 #: The step a set built from what its image carries is read off its artifact by.

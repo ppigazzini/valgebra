@@ -383,7 +383,8 @@ def test_a_recursive_meet_of_records_is_decided_rather_than_overflowing() -> Non
 
 #: The stack a thread validating deep values needs, as the limits page states
 #: it: 1 MiB, the least any thread CPython creates has. The release smoke runs
-#: this file on every wheel it ships, which is where the figure is held. An
+#: this file on every wheel it loads, the releases between the suite's ends
+#: included, which is where the figure is held. An
 #: unoptimized build spends several times a release build's stack a level --
 #: its explaining walk of a refused value at the bound needs 2 MiB -- and no
 #: wheel is one.

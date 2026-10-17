@@ -3078,6 +3078,33 @@ PLANTS = (
         trips=("test_every_smoke_import_fails_on_a_warning",),
     ),
     Plant(
+        # The releases between imported and not walked: a profile-guided wheel
+        # whose deepest walk outruns 1 MiB ships on the page's word.
+        "tests/test_release_smoke.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            '"$bin/python" -m pytest -q -m "not repository" '
+            "tree/tests/test_adversarial_bounds.py",
+            '"$bin/python" -c "import valgebra"',
+        ),
+        trips=("test_every_release_between_runs_the_bounds_file",),
+    ),
+    Plant(
+        # The musl bounds run moved onto the ends, which run it in the suite
+        # already, and off the releases between.
+        "tests/test_release_smoke.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            "for py in $IMPORTS; do\n            docker run",
+            "for py in $PYTHONS; do\n            docker run",
+        ),
+        trips=("test_every_release_between_runs_the_bounds_file",),
+    ),
+    Plant(
         # A classified release dropped from a platform's row: every installer
         # there builds from source.
         "tests/test_release_matrix.py",

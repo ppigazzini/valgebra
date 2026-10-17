@@ -304,9 +304,9 @@ thread.** The profile-guided build inlines a walk's arms into frames several
 times a plain release build's, so a depth bound is set from the profile-guided
 wheel's frames against 1 MiB, the least stack any thread CPython creates has,
 and `tests/test_adversarial_bounds.py` runs the deepest walks and relations on a
-thread of that size, which the release smoke runs on every wheel. A plain or
-unoptimised build fits another figure and is a build nothing ships; a thread a
-host starts smaller can overflow before the bound refuses, which
+thread of that size, which the release smoke runs on every wheel it loads. A
+plain or unoptimised build fits another figure and is a build nothing ships; a
+thread a host starts smaller can overflow before the bound refuses, which
 `docs/10-limits.md` tells a caller.
 
 A row kinded **not a bound** is possible. The scan that holds this table to the
@@ -330,7 +330,7 @@ table's length is outside the scan: it is the table's size, in one place.
 | `crates/valgebra-py/src/build/refine.rs` | `MAX_GROUPING_DEPTH` | `8` | shape | a marker that stands for the constraints it yields answering with itself, so following it runs off the stack | `tests/test_frontend_forms.py` |
 | `crates/valgebra-py/src/render.rs` | `MAX_RENDER_DEPTH` | `200` | shape | `repr` overflowing the stack on a chain of definitions | `tests/test_adversarial_bounds.py`, and `tests/test_repr.py` at the step across it |
 | `crates/valgebra-py/src/check/walk.rs` | `MAX_LABEL_UNFOLDS` | `4` | shape | a union's branch label following a chain of references, where a definition naming another names one forever | `tests/test_union_messages.py` |
-| `crates/valgebra-py/src/check/ctx.rs` | `MAX_WALK_DEPTH` | `3 * MAX_RECURSION_DEPTH` | shape | a walk overflowing a 1 MiB thread stack on the profile-guided wheel; three levels an unfolding, so the smallest recursive body is walked to the unfolding bound | its own tests, and `tests/test_adversarial_bounds.py` on a 1 MiB thread, which the release smoke runs on every wheel |
+| `crates/valgebra-py/src/check/ctx.rs` | `MAX_WALK_DEPTH` | `3 * MAX_RECURSION_DEPTH` | shape | a walk overflowing a 1 MiB thread stack on the profile-guided wheel; three levels an unfolding, so the smallest recursive body is walked to the unfolding bound | its own tests, and `tests/test_adversarial_bounds.py` on a 1 MiB thread, which the release smoke runs on every wheel it loads |
 | `crates/valgebra-py/src/check/ctx.rs` | `MAX_RECURSION_DEPTH` | `128` | shape | a pathologically deep *value* overflowing the stack | its own tests, and `tests/test_adversarial_bounds.py` |
 | `crates/valgebra-py/src/check/ctx.rs` | `FIRST_TRAIL` | `16` | not a bound | nothing: the pairs the recursion trail reserves on its first level, so a value nested that deep asks the allocator once rather than once per doubling | `the_first_level_reserves_the_levels_after_it` in `crates/valgebra-py/src/check/ctx/descent_tests.rs`, and `--binding-recursive` |
 | `crates/valgebra-py/src/check/memo.rs` | `PLANNED_DEFINITIONS` | `u128::BITS as usize` | not a bound | nothing: the definitions the memo's plan names, one bit each; the validator's `MAX_DEFINITIONS` sits inside it, which a compile-time assertion beside it holds | the assertion, and `crates/valgebra-py/src/check/walk/memo_tests.rs` |
