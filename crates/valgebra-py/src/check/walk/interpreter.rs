@@ -4053,6 +4053,119 @@ fn a_record_resolves_a_key_the_way_the_dict_does() {
     });
 }
 
+/// A key that reaches a declared name is that field, in every reading of the
+/// record, whatever its type or its text.
+///
+/// A dict reaches an entry by hash and then by equality, so an object equal to
+/// `"a"` and a `str` that spells `b` and compares as `a` are field `a` to it.
+/// The scan, the reading by keys, the reading a `TypedDict`'s clause takes and
+/// the scan with no plan to lean on are each asked, and `case` holds the
+/// explaining walk to the same answer: a reading that disagreed made the
+/// explaining walk, which asks the dict, report a mutation of a value nothing
+/// moved.
+#[test]
+fn a_key_reaching_a_name_is_that_field_in_every_reading() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new(
+                "class Equal:\n\
+                 \x20   __slots__ = ()\n\
+                 \x20   def __hash__(self):\n\
+                 \x20       return hash('a')\n\
+                 \x20   def __eq__(self, other):\n\
+                 \x20       return other == 'a' or isinstance(other, Equal)\n\
+                 class Elsewhere(str):\n\
+                 \x20   __slots__ = ()\n\
+                 \x20   def __hash__(self):\n\
+                 \x20       return hash('a')\n\
+                 \x20   def __eq__(self, other):\n\
+                 \x20       return other == 'a'\n",
+            )
+            .expect("no interior nul")
+            .as_c_str(),
+            std::ffi::CString::new("reaching_keys.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("reaching_keys")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+        let record = Schema::keyed_map(
+            vec![field("a", Schema::Int, false)],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Str,
+            }],
+        );
+        // A key that reaches the name is the field, of whatever type and text,
+        // and the field takes the integer the clause refuses.
+        let reaching = |name: &str, extra: bool| {
+            let class = module.getattr(name).expect("the class");
+            // `Elsewhere` is a string, and spells `b`.
+            let key = if name == "Elsewhere" {
+                class.call1(("b",))
+            } else {
+                class.call0()
+            }
+            .expect("the key builds");
+            let value = PyDict::new(py);
+            value
+                .set_item(key, PyInt::new(py, 1i64))
+                .expect("a fresh dict takes a key");
+            if extra {
+                value.set_item("b", "x").expect("and a string key");
+            }
+            value.into_any()
+        };
+        let closed = Schema::record(vec![field("a", Schema::Int, true)], Openness::Closed);
+        let typed = Schema::keyed_map(
+            vec![field("a", Schema::Int, true)],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::ANYTHING,
+            }],
+        );
+        for class in ["Equal", "Elsewhere"] {
+            case(py, &record, &reaching(class, false), true);
+            case(py, &closed, &reaching(class, false), true);
+            case(py, &typed, &reaching(class, true), true);
+            // A closed record refuses the undeclared string beside it, and the
+            // explaining walk names that key rather than a mutation.
+            let (held, violations) = explain(py, &closed, &reaching(class, true), &[], &[]);
+            assert!(!held, "{class}");
+            let codes: Vec<&str> = violations.iter().map(|v| v.code).collect();
+            assert_eq!(codes, ["extra_forbidden"], "{class}");
+        }
+
+        // Without a plan the scan builds the names it compares a key against,
+        // and answers as it does with one, in both modes.
+        let empty = ValidatorIndex::default();
+        for class in ["Equal", "Elsewhere"] {
+            let value = reaching(class, false);
+            for mode in [WalkMode::Fast, WalkMode::Explain] {
+                let state = WalkState::new();
+                let ctx = Ctx {
+                    pool: &[],
+                    defs: &[],
+                    index: &empty,
+                    state: &state,
+                    mode,
+                };
+                let mut out = Vec::new();
+                let held = member(
+                    &record,
+                    &Value::Py(&value),
+                    &mut Frame::new(&mut Vec::new(), &mut out, ctx),
+                );
+                assert!(held && out.is_empty(), "{class} in {mode:?}: {out:?}");
+            }
+        }
+        assert!(empty.records.is_empty());
+    });
+}
+
 /// The scalar shortcut is for a shape whose every element is the same scalar.
 ///
 /// A prefix fixes what its positions hold, so a shape carrying one is not that

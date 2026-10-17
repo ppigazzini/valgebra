@@ -306,3 +306,94 @@ def test_a_record_resolves_a_key_the_way_the_dict_does() -> None:
         with pytest.raises(ValidationError):
             user.validate({key: "Ada"})
     assert {_PlainName("name"): "Ada"} in user
+
+
+class _EqualToA:
+    """A key of no string type that hashes and compares as `"a"`."""
+
+    __slots__ = ()
+
+    def __hash__(self) -> int:
+        return hash("a")
+
+    def __eq__(self, other: object) -> bool:
+        return other == "a" or isinstance(other, _EqualToA)
+
+
+class _ReachesA(str):
+    """A `str` that spells `b` and hashes and compares as `"a"`."""
+
+    __slots__ = ()
+
+    def __hash__(self) -> int:
+        return hash("a")
+
+    def __eq__(self, other: object) -> bool:
+        return other == "a"
+
+
+def test_every_reading_of_a_record_finds_the_key_the_dict_finds() -> None:
+    """A key reaching a declared name is that field, however the record reads.
+
+    A dict finds `d["a"]` under any key whose hash and `==` reach `"a"`: an
+    object of another type, or a `str` whose own text is `b`. A record is read
+    by asking for its declared keys where its clauses allow, and by scanning
+    its entries where a clause reads each key with its value, and the two
+    resolve a key alike, so every record below admits the value and refuses it
+    for the same reason. A reading that took such a key for an undeclared one
+    would refuse `{"a": int, str: int}`, and the explaining walk, which asks
+    the dict, would find nothing to report and name a mutation of a dict
+    nothing moved.
+    """
+
+    class Typed(TypedDict):
+        a: int
+
+    records = [
+        Validator({"a": int}),
+        Validator({"a": int, str: int}),
+        Validator(Typed),
+        Validator({"a": int}).open(),
+    ]
+    for key in (_EqualToA(), _ReachesA("b")):
+        for record in records:
+            assert record.is_valid({key: 1}), (key, record)
+            record.validate({key: 1})
+            with pytest.raises(ValidationError) as info:
+                record.validate({key: "x"})
+            reported = [(item["code"], item["path"]) for item in info.value.errors]
+            assert reported == [("int_type", ("a",))], (key, record)
+        # Beside a key of its own the record is read through its clause, which
+        # the closed one does not have.
+        beside = {key: 1, "b": 2}
+        assert [record.is_valid(beside) for record in records] == [
+            False,
+            True,
+            True,
+            True,
+        ]
+    assert Validator({"a": int}).is_subtype_of({"a": int, str: int})
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "the walk resolves a record's keys as the dict does, and the relations "
+        "read a field's key as a `str`, so a record decided below a mapping "
+        "keyed by `str` admits a key of another type equal to a name"
+    ),
+)
+# TRUST: A key equal to a declared name is a string.
+def test_a_record_below_a_mapping_keyed_by_str_admits_no_key_of_another_type() -> None:
+    """The known-unsound case of resolving a key the way the dict does.
+
+    `_EqualToA()` is no string, and `d["a"]` finds it, so a record reads it as
+    field `a`; a mapping keyed by `str` refuses it for its type. The relation
+    between the two is decided over keys that are strings.
+    """
+    record, mapping = Validator({"a": int}), Validator(dict[str, int])
+    value = {_EqualToA(): 1}
+
+    assert record.is_valid(value), "the walk finds the field where the dict does"
+    assert not mapping.is_valid(value), "and the mapping's key is a `str`"
+    assert record.relation_to(mapping) != "subset"

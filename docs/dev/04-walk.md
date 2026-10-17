@@ -338,8 +338,10 @@ schema does not declare is covered by. A keyed map is read one of three ways.
 through the record's `RecordPlan` in the index, and a count of the entries
 found against the entries the value holds -- a value holding exactly its
 declared keys has no undeclared key for any clause to govern. **By a scan**
-(`keyed_map_scan`): every entry of the value, each key resolved by name and
-each undeclared key read against the clause that covers it. **Explaining**
+(`keyed_map_scan`): every entry of the value, each key resolved as the dict
+resolves it -- an exact `str` by its text, any other key as the declared name
+its hash and `==` reach (`declared_position`) -- and each undeclared key read
+against the clause that covers it. **Explaining**
 (`keyed_map_explain`): the scan that reports every violation rather than the
 first. Which of the first two a record takes is `Undeclared::of` reading the
 record's clauses: an undeclared key is *refused* (no clause), *admitted* (the
@@ -348,8 +350,12 @@ top clause), *admitted when it is a string* (`str: anything`, which is what a
 the by-keys path sound is that it never probes an undeclared key, so it may
 take a record only where the clause's verdict on such a key is stated without
 the key's value: the three readings above say it -- refused is `False`,
-admitted is `True`, a string clause is `isinstance(key, str)` over every key
-alike -- and a clause that reads a key together with its value keeps the scan.
+admitted is `True`, a string clause is `isinstance(key, str)` over every key,
+with a key of another type asked whether it reaches a declared name -- and a
+clause that reads a key together with its value keeps the scan. All three
+readings, and the explaining one, resolve a key alike, or the explaining walk,
+which asks the dict, finds nothing to report against a value a scan refused
+and names a mutation of a value nothing moved.
 The JSON reading takes the plan for an open record too, since a document's
 keys are strings by the grammar. `walk/sequence.rs` reads one as a run of
 **elements** -- a list, a tuple, a parsed array, a set, a frozenset -- which

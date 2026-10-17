@@ -208,6 +208,17 @@ The soundness is relative to a small, explicit trust base:
   would refuse every proxy and mock, which no reference does, and declining
   the layout proofs would give up the disjointness every decided union of
   dataclasses stands on; the case is pinned as a known-unsound test instead.
+- **A key equal to a declared name is a string.** The walk reads a record's
+  keys the way the dict resolves them, in every one of its readings: an object
+  of another type that hashes and compares as `"a"` is field `a` wherever
+  `d["a"]` finds it. The relations read a field's key as a `str`, as the
+  typing spec writes a `TypedDict`'s keys, which is what puts a record below a
+  mapping keyed by `str`: `{"a": int}` is decided below `dict[str, int]`, and a
+  dict whose one key is such an object is in the first and not the second.
+  Reading the key as an undeclared one instead would need the key a probe
+  matched, and a dict lookup hands back only the value, so every record would
+  be scanned rather than asked for its keys. The case is pinned as a
+  known-unsound test.
 - **An enumeration's instances are made through it.** `Colour` is decided to be
   the union of its members because the class makes no other instance.
   `object.__new__(Colour)` makes one past it: the walk admits it to `Colour`,

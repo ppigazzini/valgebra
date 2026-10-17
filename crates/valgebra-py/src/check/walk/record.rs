@@ -16,7 +16,7 @@ use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyDict, PyString};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use valgebra_core::{Field, MapClause, PathSegment, Schema};
 
 use super::scalar::{admitted_quietly, scalar_member};
@@ -357,37 +357,87 @@ fn covered(
         .any(|clause| again(node, entered, sub.ctx, || holds(clause, sub)))
 }
 
-/// The field name a key resolves to, read the way the dict resolves one.
+/// A record's declared names, the two ways [`declared_position`] reads them:
+/// by text, and as the interned keys the record's plan holds, where it holds
+/// them.
+struct Names<'a, F> {
+    by_text: F,
+    interned: Option<&'a [Py<PyString>]>,
+}
+
+/// The declared field a key resolves to, read the way the dict resolves one.
 ///
-/// A key of a `str` subclass carries the text of a field name without being
-/// that field: `__hash__` and `__eq__` are the subclass's, and a dict finds a
-/// key only where both agree with the name's. Decoding the bytes and matching
-/// those would read a required field as present under a key the dict cannot
-/// find, and the two readings of one record would answer differently for the
-/// same value -- which of them runs is decided by whether a catch-all clause
-/// sits beside the field.
+/// An exact `str` is every key a caller writes, and its text is the name,
+/// looked up through `by_name`. Any other key is the field a dict would find
+/// it under: the declared name whose hash equals the key's and which the key
+/// equals, the two questions a lookup asks, the key's `__eq__` first as a dict
+/// asks it of the key it holds. That reads a `str` subclass with a `__hash__`
+/// or `__eq__` of its own, and an object of another type equal to a name, as
+/// the field they reach. Read any other way, the scan and the reading by keys
+/// answer differently for one value -- which of them runs is decided by
+/// whether a clause reads the undeclared keys -- and the explaining walk, which
+/// asks the dict, finds nothing to report and names a mutation.
 ///
-/// The exact `str` is every key a caller writes and costs nothing extra; the
-/// subclass pays one temporary name and the two questions the dict asks, which
-/// run its own code: an error from either reads as no field name, and a fatal
+/// The relations read a field's key as a `str`, so a key of another type that
+/// reaches a name is outside them, which `docs/14-soundness.md` states.
+///
+/// The names come from the plan's interned keys where it holds them, which
+/// carry their hashes, and are built from the field otherwise. The questions
+/// run the key's own code: an error reads as not that field, and a fatal
 /// signal is recorded.
-fn as_field_name<'a>(key: &'a Bound<'_, PyAny>, ctx: Ctx<'_>) -> Option<&'a str> {
-    let text = key.cast::<PyString>().ok()?;
-    let name = match text.to_str() {
-        Ok(name) => name,
+fn declared_position(
+    key: &Bound<'_, PyAny>,
+    fields: &[Field],
+    names: &Names<'_, impl Fn(&str) -> Option<usize>>,
+    ctx: Ctx<'_>,
+) -> Option<usize> {
+    let py = key.py();
+    if let Ok(text) = key.cast::<PyString>()
+        && text.is_exact_instance_of::<PyString>()
+    {
+        return match text.to_str() {
+            Ok(name) => (names.by_text)(name),
+            Err(err) => {
+                record_if_fatal(err, py, ctx);
+                None
+            }
+        };
+    }
+    reached_by(key, fields, names.interned, ctx)
+}
+
+/// [`declared_position`] for a key that is not an exact `str`: the declared
+/// name its hash and `==` reach.
+///
+/// Out of line, because records rarely hold such a key and every scan reads
+/// its entries through the caller: inlined, the search made the loop over a
+/// `dict[str, int]`, which resolves no key at all, 2.6% dearer by count.
+#[cold]
+#[inline(never)]
+fn reached_by(
+    key: &Bound<'_, PyAny>,
+    fields: &[Field],
+    interned: Option<&[Py<PyString>]>,
+    ctx: Ctx<'_>,
+) -> Option<usize> {
+    let py = key.py();
+    let own = match key.hash() {
+        Ok(own) => own,
         Err(err) => {
-            record_if_fatal(err, key.py(), ctx);
+            record_if_fatal(err, py, ctx);
             return None;
         }
     };
-    if text.is_exact_instance_of::<PyString>() {
-        return Some(name);
-    }
-    let plain = PyString::new(key.py(), name);
-    let resolves = text
-        .hash()
-        .and_then(|own| Ok(own == plain.hash()? && text.as_any().eq(&plain)?));
-    fold(resolves, key.py(), ctx).then_some(name)
+    fields.iter().enumerate().position(|(position, field)| {
+        let name = interned.and_then(|keys| keys.get(position)).map_or_else(
+            || PyString::new(py, &field.name),
+            |key| key.bind(py).clone(),
+        );
+        let reached = name
+            .hash()
+            .and_then(|theirs| Ok(theirs == own && key.eq(&name)?));
+        fold(reached, py, ctx)
+    })
 }
 
 /// What a record's clauses say about a key it does not declare, where that can
@@ -400,8 +450,9 @@ enum Undeclared {
     Admitted,
     /// `str: anything` -- the clause a `TypedDict` carries, since its keys are
     /// strings by the typing spec -- admits a key exactly when the key is a
-    /// `str`, whatever its value. Every declared key is a `str` too, so the
-    /// question is asked of every key alike and no key need be resolved.
+    /// `str`, whatever its value. Every declared name is a `str` too, so a
+    /// `str` key needs no resolving; a key of another type can still reach a
+    /// declared name, as a dict resolves keys, and is asked whether it does.
     AnyStr,
     /// A clause that reads the key or the value: each undeclared key is asked of
     /// it, which is the scan.
@@ -572,9 +623,12 @@ fn keyed_map_asks_for_its_keys(
         match undeclared {
             Undeclared::Refused => Some(false),
             Undeclared::Admitted => Some(true),
-            // A `str` key is admitted whatever it names, so the keys are read for
-            // their type and nothing else -- no name is resolved, no value is
-            // walked -- and the first key of another type refuses the record.
+            // A `str` key is admitted whatever it names, so it is read for its
+            // type and nothing else, and no value is walked. A key of another
+            // type is a declared field where it reaches one, as the probes above
+            // found it, and the first that reaches none refuses the record: the
+            // scan stops at the first such key, and [`other_keys_reach_names`]
+            // reads the entries again.
             Undeclared::AnyStr => {
                 let keys = scan_dict(dict, ctx.state, |key, _| {
                     if key.is_instance_of::<PyString>() {
@@ -583,13 +637,47 @@ fn keyed_map_asks_for_its_keys(
                         ControlFlow::Break(())
                     }
                 });
-                Some(read_whole(&keys, ctx))
+                match keys {
+                    Scan::Stopped => Some(other_keys_reach_names(dict, fields, plan, &sub.ctx)),
+                    _ => Some(read_whole(&keys, ctx)),
+                }
             }
             // Kept out by the guard above; were it not, the scan still decides,
             // at the cost of the reading just done.
             Undeclared::Read => None,
         }
     })
+}
+
+/// Whether every key of `dict` that is not a `str` reaches a declared name, for
+/// a record whose clause admits any `str` key ([`Undeclared::AnyStr`]).
+///
+/// The second reading of a record whose first stopped at such a key, which
+/// records rarely hold. Out of line, and handed the frame's context, which
+/// already lives in memory, rather than `member`'s: the first reading then
+/// stays a visitor that captures nothing, where one carrying the context and
+/// the record's names to the scan cost a list of records 2.5% on the profiled
+/// wheel by count, and one holding a copy of them 3% where the records carry an
+/// undeclared key.
+#[cold]
+#[inline(never)]
+fn other_keys_reach_names(
+    dict: &Bound<'_, PyDict>,
+    fields: &[Field],
+    plan: &RecordPlan,
+    ctx: &Ctx<'_>,
+) -> bool {
+    let ctx = *ctx;
+    let keys = scan_dict(dict, ctx.state, |key, _| {
+        if key.is_instance_of::<PyString>()
+            || reached_by(key, fields, Some(&plan.keys), ctx).is_some()
+        {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    read_whole(&keys, ctx)
 }
 
 /// The keyed-map fast path over a Python dict. A string key naming a declared
@@ -630,7 +718,10 @@ fn keyed_map_matches_py(
             ctx,
             plan.required,
             decided,
-            |name| plan.by_name.get(name).copied(),
+            &Names {
+                by_text: |name: &str| plan.by_name.get(name).copied(),
+                interned: Some(&plan.keys),
+            },
         )
     } else {
         let declared: FxHashMap<&str, usize> = fields
@@ -639,9 +730,18 @@ fn keyed_map_matches_py(
             .map(|(i, f)| (&*f.name, i))
             .collect();
         let required = fields.iter().filter(|f| f.required).count();
-        keyed_map_scan(fields, defaults, dict, ctx, required, decided, |name| {
-            declared.get(name).copied()
-        })
+        keyed_map_scan(
+            fields,
+            defaults,
+            dict,
+            ctx,
+            required,
+            decided,
+            &Names {
+                by_text: |name: &str| declared.get(name).copied(),
+                interned: None,
+            },
+        )
     }
 }
 
@@ -659,7 +759,7 @@ fn keyed_map_scan(
     ctx: Ctx<'_>,
     mut required_remaining: usize,
     decided: Option<&mut Decided>,
-    lookup: impl Fn(&str) -> Option<usize>,
+    names: &Names<'_, impl Fn(&str) -> Option<usize>>,
 ) -> bool {
     // Scratch buffers for the whole record, not one pair per field: a fast walk
     // writes to neither, and a fifty-field record was building and dropping a
@@ -670,16 +770,16 @@ fn keyed_map_scan(
     let mut admitted = 0usize;
     let mut inside = false;
     let scan = scan_dict(dict, ctx.state, |key, val| {
-        // A non-string key, or a string carrying a lone surrogate (which cannot
-        // equal a field name, since names are valid UTF-8 by build-time check),
-        // resolves to no field and must instead be covered by a default clause.
-        // A mapping declares no field, so no key resolves to one, and its keys
-        // are not read as names: decoding each and asking its type was a fifth
-        // of reading a `dict[str, int]`.
+        // A key no declared name is reached by -- among them a string carrying
+        // a lone surrogate, which cannot equal a name, since names are valid
+        // UTF-8 by build-time check -- must instead be covered by a default
+        // clause. A mapping declares no field, so no key resolves to one, and
+        // its keys are not read as names: decoding each and asking its type was
+        // a fifth of reading a `dict[str, int]`.
         let index = if fields.is_empty() {
             None
         } else {
-            as_field_name(key, ctx).and_then(&lookup)
+            declared_position(key, fields, names, ctx)
         };
         match index.and_then(|i| fields.get(i)) {
             Some(field) => {
@@ -1100,15 +1200,25 @@ fn undeclared_explained(
     let ctx = frame.ctx;
     // Built here rather than in the caller, because the scan is the only reader
     // and a record that answers by count never reaches it.
-    let declared: FxHashSet<&str> = fields.iter().map(|field| &*field.name).collect();
+    let declared: FxHashMap<&str, usize> = fields
+        .iter()
+        .enumerate()
+        .map(|(position, field)| (&*field.name, position))
+        .collect();
+    let names = Names {
+        by_text: |name: &str| declared.get(name).copied(),
+        interned: ctx
+            .index
+            .records
+            .get(&(fields.as_ptr() as usize))
+            .map(|plan| &plan.keys[..]),
+    };
     // Whether a clause covers a key is asked in a fast walk, whose frame is
     // held for the scan rather than built per key.
     let mut unwritten = Unwritten::default();
     let mut deciding = unwritten.frame(ctx);
     let scan = scan_dict(dict, ctx.state, |key, val| {
-        if let Some(name) = as_field_name(key, ctx)
-            && declared.contains(name)
-        {
+        if declared_position(key, fields, &names, ctx).is_some() {
             return ControlFlow::Continue(());
         }
         if covered(defaults, &Value::Py(key), &Value::Py(val), &mut deciding) {
