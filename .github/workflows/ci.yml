@@ -506,8 +506,16 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-26.04' && matrix.python-version == env.FLOOR }}
         with:
           tool: cargo-mutants@27.1.0
+      # Each step the forgiven leg runs is bounded, at least twice its slowest
+      # reading over 286 legs of thirty pushes (0.2, 1.5 and 5.1 minutes), so a
+      # hang fails the step, which the leg forgives, rather than reaching the
+      # job's thirty minutes: a job killed by its own limit is cancelled, and
+      # `ci` reads a cancelled job as red. The bounds sum to 24 with the
+      # corpora's five, which leaves the setup steps their time.
+      # `tests/test_python_lifecycle.py` holds both halves.
       - name: Install dev dependencies
         continue-on-error: ${{ matrix.python-version == '3.16' }}
+        timeout-minutes: 2
         run: uv sync --locked --no-install-project
       # A Windows row optimizes the dev profile one level, and keeps its debug
       # assertions. Its main thread's stack is what `python.exe` reserves --
@@ -521,6 +529,7 @@ jobs:
       # main thread 8 MiB, and the value 0 is the dev profile's own.
       - name: Build the extension into the venv
         continue-on-error: ${{ matrix.python-version == '3.16' }}
+        timeout-minutes: 5
         env:
           CARGO_PROFILE_DEV_OPT_LEVEL: ${{ matrix.os == 'windows-2025-vs2026' && '1' || '0' }}
         run: uv run --no-sync maturin develop --uv
@@ -567,6 +576,7 @@ jobs:
       # read off a log rather than believed.
       - name: pytest
         continue-on-error: ${{ matrix.python-version == '3.16' }}
+        timeout-minutes: 12
         env:
           HYPOTHESIS_PROFILE: ci
         run: >-
