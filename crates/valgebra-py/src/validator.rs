@@ -464,6 +464,9 @@ impl Validator {
     /// Raises:
     ///     ValidationError: If `obj` is not a member; its `errors` lists each
     ///         failure with a code and a path.
+    ///     BaseException: If a comparison the walk performs, or a `repr` its
+    ///         message names, raises a fatal interpreter signal; it propagates
+    ///         rather than being read as a non-member.
     #[pyo3(signature = (obj, /, *, fail_fast = false))]
     fn validate(&self, obj: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
         let state = WalkState::new();
@@ -531,6 +534,9 @@ impl Validator {
     ///
     /// Raises:
     ///     ValidationError: If `obj` is not a member of the schema's set.
+    ///     BaseException: If a comparison the walk performs, or a `repr` its
+    ///         message names, raises a fatal interpreter signal; it propagates
+    ///         rather than being read as a non-member.
     #[pyo3(signature = (obj, /))]
     fn ensure<'py>(&self, obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         self.validate(obj, false)?;
@@ -555,6 +561,9 @@ impl Validator {
     ///     ValidationError: If the document is malformed or undecodable JSON
     ///         (code `json_invalid`) or is not a member of the schema's set.
     ///     TypeError: If `data` is not `str` or `bytes`.
+    ///     BaseException: If a comparison the walk performs, or a `repr` its
+    ///         message names, raises a fatal interpreter signal; it propagates
+    ///         rather than being read as a non-member.
     #[pyo3(signature = (data, /, *, fail_fast = false))]
     fn validate_json(&self, data: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
         let parsed = parse_json(data)?;
@@ -579,6 +588,9 @@ impl Validator {
     ///     ValidationError: If the document is malformed or undecodable JSON
     ///         (code `json_invalid`) or is not a member of the schema's set.
     ///     TypeError: If `data` is not `str` or `bytes`.
+    ///     BaseException: If a comparison the walk performs, or a `repr` its
+    ///         message names, raises a fatal interpreter signal; it propagates
+    ///         rather than being read as a non-member.
     #[pyo3(signature = (data, /, *, fail_fast = false))]
     fn load<'py>(&self, data: &Bound<'py, PyAny>, fail_fast: bool) -> PyResult<Bound<'py, PyAny>> {
         let parsed = parse_json(data)?;
@@ -645,6 +657,11 @@ impl Validator {
     ///
     /// Returns:
     ///     `True` if the schema denotes the empty set, else `False`.
+    ///
+    /// Raises:
+    ///     BaseException: If a comparison of the bounds raises a fatal
+    ///         interpreter signal; it propagates rather than being read as an
+    ///         answer.
     fn is_empty(&self, py: Python<'_>) -> PyResult<bool> {
         let oracle = PoolRelations::new(py, &self.literals, &self.definitions);
         let empty = self.schema.is_empty_with(&oracle, &self.definitions);
@@ -674,6 +691,15 @@ impl Validator {
     ///
     /// Returns:
     ///     `True` if this schema is a subtype of `other`, else `False`.
+    ///
+    /// Raises:
+    ///     NotImplementedError: If `other` uses an unsupported form, or is a
+    ///         callable that is not a class.
+    ///     ValueError: If a marker in `other` denotes no set, a `recursive`
+    ///         body in it is not contractive, or it crosses a size bound.
+    ///     BaseException: If a predicate, a comparison or a class read the
+    ///         decision runs raises a fatal interpreter signal; it propagates
+    ///         rather than being read as an answer.
     #[pyo3(signature = (other, /))]
     fn is_subtype_of(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         let mut literals = self.relation_pool(py, other);
@@ -719,6 +745,15 @@ impl Validator {
     ///
     /// Returns:
     ///     One of `"subset"`, `"not_subset"` or `"undecided"`.
+    ///
+    /// Raises:
+    ///     NotImplementedError: If `other` uses an unsupported form, or is a
+    ///         callable that is not a class.
+    ///     ValueError: If a marker in `other` denotes no set, a `recursive`
+    ///         body in it is not contractive, or it crosses a size bound.
+    ///     BaseException: If a predicate, a comparison or a class read the
+    ///         decision runs raises a fatal interpreter signal; it propagates
+    ///         rather than being read as an answer.
     #[pyo3(signature = (other, /))]
     fn relation_to(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<&'static str> {
         let mut literals = self.relation_pool(py, other);
@@ -752,6 +787,15 @@ impl Validator {
     ///
     /// Returns:
     ///     `True` if the two schemas are equivalent, else `False`.
+    ///
+    /// Raises:
+    ///     NotImplementedError: If `other` uses an unsupported form, or is a
+    ///         callable that is not a class.
+    ///     ValueError: If a marker in `other` denotes no set, a `recursive`
+    ///         body in it is not contractive, or it crosses a size bound.
+    ///     BaseException: If a predicate, a comparison or a class read the
+    ///         decision runs raises a fatal interpreter signal; it propagates
+    ///         rather than being read as an answer.
     #[pyo3(signature = (other, /))]
     fn is_equivalent(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         let mut literals = self.relation_pool(py, other);

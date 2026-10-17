@@ -348,9 +348,12 @@ def test_a_fatal_signal_in_a_relation_query_propagates(
 
     probe = Validator(Literal[5])
     refined = Annotated[int, at.Predicate(interrupted)]
-    for query in (probe.relation_to, probe.is_subtype_of, probe.is_equivalent):
-        with pytest.raises(signal):
-            query(refined)
+    with pytest.raises(signal):
+        probe.relation_to(refined)
+    with pytest.raises(signal):
+        probe.is_subtype_of(refined)
+    with pytest.raises(signal):
+        probe.is_equivalent(refined)
 
     loud = type("Loud", (_LoudBound,), {"signal": signal})
     with pytest.raises(signal):
