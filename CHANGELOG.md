@@ -37,6 +37,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a literal that would read back as a builtin's is refused in a repr
 - fix: a recursive repr binds a name its body does not print
 - fix: the pickle refusal sends a reader to the forms repr cannot spell
+- fix: every reading of a record resolves a key as the dict does
 
 -->
 
@@ -208,6 +209,18 @@ answer of its own, or a repair to a change not yet released.
   the API reference lists seven, two of which read back as a different schema;
   it names that list now. The boundaries page counts the two quiet forms where
   it counted one.
+- **A key that reaches a record's field name is that field in every
+  reading.** A record read by scanning its entries, which is one beside a
+  clause that reads its keys such as `{"a": int, str: int}`, took a key that
+  is not an exact `str` for a field only where the key's own text named it,
+  while the reading that asks the dict for the declared keys took it wherever
+  `d["a"]` finds it. A key of another type that hashes and compares as `"a"`,
+  or a `str` that spells `b` and compares as `a`, was field `a` to `{"a": int}`
+  and an undeclared key to `{"a": int, str: int}`, and `validate` against the
+  second reported `mutated_during_validation` for a dict nothing had changed.
+  Every reading resolves a key as the dict does. The soundness page adds the
+  assumption the relations take for such a key: a key equal to a declared
+  name is a string.
 
 ## [0.0.18] - 2026-10-12
 

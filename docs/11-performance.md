@@ -726,8 +726,9 @@ program that builds validators per request, and to no validation call.
   when each key it holds matches its field and it holds nothing else, which the
   dict's own length says, since a dict cannot repeat a key. A declared key is
   interned with the validator and carries its hash, so each probe is the probe
-  alone, and a key is resolved the way Python resolves one -- a `str` subclass
-  carrying a field's text is found exactly where indexing the dict finds it.
+  alone, and a key is resolved the way Python resolves one -- a `str` subclass,
+  or a key of another type, is the field exactly where indexing the dict finds
+  it, in this reading and in the scan beside it.
 - **The probe is the floor for this shape.** Profiled under callgrind on CPython
   3.12, fifty probes of a fifty-field record are about 143 instructions each and
   64% of the accepting call. Iterating the dict once and resolving each key by
