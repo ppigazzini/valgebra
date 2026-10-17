@@ -188,7 +188,12 @@ answers `"undecided"`.
     which is the same shape one kind over from the fixed sequence above:
     `{"a": int | str, "b": int | str}` is below the four records that fix both
     keys. No single branch contains it, so the rules decline and the sets
-    answer, by emptiness of the difference.
+    answer, by emptiness of the difference. Its reach is narrower than the
+    sequence's, because no rule splits a record and the difference runs under
+    the set representation's build bounds: three keys are decided against
+    their eight corners, and four decline against their sixteen, where six
+    tuple components are decided against sixty-four ([where that
+    bites](#sound-but-conservative)).
 
 - **A difference written as one complemented union.** `a ∧ ¬(b ∨ c)` and
   `a ∧ ¬b ∧ ¬c` are one set, and both are decided where either is: no spelling
