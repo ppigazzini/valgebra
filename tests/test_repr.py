@@ -429,7 +429,8 @@ def test_repr_of_class_and_recursive_forms() -> None:
     # alone renders as `instance_of`, since its name would read back as the
     # class met with its fields; a record standing alone renders in the
     # `object(...)` form, which names the attributes it requires and is a
-    # rendering rather than a rebuild.
+    # rendering rather than a rebuild. Each run of one kind prints in the order
+    # its renderings sort in, whichever class was named first.
 
     @dataclasses.dataclass
     class Labelled:
@@ -438,7 +439,7 @@ def test_repr_of_class_and_recursive_forms() -> None:
 
     assert (
         repr(Validator(intersection(Point, Labelled)))
-        == "intersection(instance_of(Point), instance_of(Labelled), "
+        == "intersection(instance_of(Labelled), instance_of(Point), "
         "object(x=int), object(x=int, y=str))"
     )
     assert (

@@ -40,6 +40,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: every reading of a record resolves a key as the dict does
 - fix: a set reports its failures in the order everything they say fixes
 - fix: two spellings of one schema fold to one when composed
+- fix: one schema prints one way, whatever order its sets were written in
 
 -->
 
@@ -242,6 +243,17 @@ answer of its own, or a repair to a change not yet released.
   send two of them past each other, and a refinement's constraints and a map's
   clauses kept the order they held. Each set a composition renumbers is put
   back in the order construction gives it.
+- **One schema prints one way, whatever order its sets were written in.** A
+  union's literals printed in one order however they were written, and every
+  other set printed in the order its constants or classes were first named:
+  `A | B` and `B | A`, `Annotated[int, Ge(3), Ge(5)]` and the bounds the other
+  way round, a map's literal keys and a meet's members were one schema to `==`
+  and `hash` and two to `repr`. Within a set -- a union's or a meet's members, a
+  refinement's markers, a map's clauses -- the members of one kind print in the
+  order their renderings sort in, as a union's literals did, so a union of
+  classes written `Dog | Cat` prints `Cat | Dog`. The members of different
+  kinds keep the order they had, and every rendering reads back as the schema
+  it came from.
 
 ## [0.0.18] - 2026-10-12
 

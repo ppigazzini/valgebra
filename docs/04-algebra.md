@@ -260,9 +260,20 @@ assert len({Validator(Literal[1, 2]), Validator(Literal[2, 1])}) == 1
 # `hash` reads the constant a slot names, as `==` does.
 assert len({Validator(Literal[n]) for n in range(100)}) == 100
 
-# And one schema prints one way: a union's literals are ordered by what they
-# are, not by the slot construction happened to give them.
+# Two validators spelled in two orders compose the same way: their union is
+# one member.
+assert union(
+    Validator(Annotated[int, at.Ge(5), at.Ge(3)]),
+    Validator(Annotated[int, at.Ge(3), at.Ge(5)]),
+) == Validator(Annotated[int, at.Ge(3), at.Ge(5)])
+
+# And one schema prints one way: within a set, the members of one kind print in
+# the order their renderings sort in, not by the slot construction happened to
+# give a constant or a class.
 assert repr(Validator(Literal[2, 1])) == repr(Validator(Literal[1, 2]))
+assert repr(Validator(Annotated[int, at.Ge(5), at.Ge(3)])) == (
+    "Annotated[int, Ge(3), Ge(5)]"
+)
 ```
 
 **`==` is not `is_equivalent`.** Equality is what the constructors settle:
