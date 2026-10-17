@@ -16,9 +16,10 @@
 use std::sync::Arc;
 
 use super::{
-    Clauses, Constraint, Constraints, DefIx, DefShift, Fields, MapClause, Members, Openness,
-    OperandIx, PoolShift, Remap, Schema, SeqShape, already_said, canonical_clauses, clauses_over,
-    share_clauses, share_fields, share_members, share_node, with_field_buffer, with_member_buffer,
+    Attribute, Clauses, Constraint, Constraints, DefIx, DefShift, Fields, MapClause, Members,
+    Openness, OperandIx, PoolShift, Remap, Schema, SeqShape, already_said, canonical_clauses,
+    clauses_over, share_attributes, share_clauses, share_fields, share_members, share_node,
+    with_field_buffer, with_member_buffer,
 };
 
 /// Move a constraint list's indices, rebuilding it only where one moves -- and
@@ -165,6 +166,30 @@ fn mapped_fields(fields: &Fields, f: &impl Fn(&Schema) -> Option<Schema>) -> Opt
         }
         changed.then(|| share_fields(buffer))
     })
+}
+
+/// Map an attribute list, rebuilding it only where `f` changed an attribute's
+/// schema, asked once per attribute for the reason [`mapped_fields`] gives.
+fn mapped_attributes(
+    attributes: &Arc<[Attribute]>,
+    f: &impl Fn(&Schema) -> Option<Schema>,
+) -> Option<Arc<[Attribute]>> {
+    let mut rebuilt: Option<Vec<Attribute>> = None;
+    for (at, attribute) in attributes.iter().enumerate() {
+        match f(&attribute.schema) {
+            None => {
+                if let Some(buffer) = rebuilt.as_mut() {
+                    buffer.push(attribute.clone());
+                }
+            }
+            Some(schema) => {
+                let buffer = rebuilt
+                    .get_or_insert_with(|| attributes.iter().take(at).cloned().collect::<Vec<_>>());
+                buffer.push(attribute.with_schema(schema));
+            }
+        }
+    }
+    rebuilt.map(|mut buffer| share_attributes(&mut buffer))
 }
 
 /// Map a clause list, rebuilding it only where `f` changed a key or a value --
@@ -385,7 +410,7 @@ impl Schema {
                 })
             }
             Schema::AttrRecord { fields } => {
-                mapped_fields(fields, f).map(|fields| Schema::AttrRecord { fields })
+                mapped_attributes(fields, f).map(|fields| Schema::AttrRecord { fields })
             }
             Schema::Refine { base, constraints } => f(base).map(|base| Schema::Refine {
                 base: share_node(base),

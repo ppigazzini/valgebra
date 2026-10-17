@@ -329,7 +329,7 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    namedtuple's — takes `anything` at its position, which checks the arity
    without the types.
 7. **A `Protocol`** is the record of the members it declares: an
-   `AttrRecord` with one required field per member and no class beside it, so
+   `AttrRecord` with one attribute per member and no class beside it, so
    it denotes every value whose attribute, read by `getattr`, holds what the
    member declares. The members are the names `typing` lists --
    `__protocol_attrs__`, which every protocol carries from 3.12 and a

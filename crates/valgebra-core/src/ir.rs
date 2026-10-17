@@ -654,6 +654,11 @@ fn share_fields(fields: &mut Vec<Field>) -> Fields {
     }
 }
 
+/// An attribute list, shared by the same rule as [`share_fields`].
+fn share_attributes(attributes: &mut Vec<Attribute>) -> Arc<[Attribute]> {
+    intern::attributes(attributes)
+}
+
 /// A clause list, shared when it is one the whole tree already holds.
 fn share_clauses(defaults: &mut Vec<MapClause>) -> Clauses {
     if defaults.is_empty() {
@@ -899,9 +904,17 @@ pub enum Schema {
     /// Denotes instances of a class, by `isinstance`. The class is held in the
     /// validator's object pool; the payload is its index.
     Instance(ClassIx),
-    /// Denotes every value whose attributes satisfy the given fields: each
-    /// required field's attribute must be present on the value and belong to the
-    /// field's set.
+    /// Denotes every value whose attributes satisfy the given ones: each named
+    /// attribute must be present on the value and belong to its set.
+    ///
+    /// Every attribute is required, and the type says so: an [`Attribute`]
+    /// carries no presence flag. An optional one would denote `AttrRecord{x: S}
+    /// | ~AttrRecord{x: anything}`, which the other nodes reach, so it is no
+    /// generator and no normal form names it. No frontend path would build one
+    /// -- a protocol member and a dataclass field are both present on an
+    /// instance -- and a state only a test can build is one the walk, the
+    /// lowering and the rules can read three ways unseen
+    /// (`docs/dev/01-schema-ir.md`).
     ///
     /// The record carries **no class**. A class is a separate narrowing, and a
     /// dataclass is the meet of the two: `build_object` emits
@@ -910,8 +923,8 @@ pub enum Schema {
     /// neither relate a class to a record nor complement one without the other;
     /// split, each half is a set the rules already know.
     AttrRecord {
-        /// Per-attribute field schemas.
-        fields: Fields,
+        /// The attributes, by name.
+        fields: Arc<[Attribute]>,
     },
     /// Denotes the subset of the base set satisfying every constraint
     /// (`{ x in [[base]] | all constraints hold }`). The base is checked first.
@@ -1274,13 +1287,13 @@ impl Schema {
     /// An object node: the attributes an instance must carry, in canonical order.
     ///
     /// The record half of a class schema, met with the `Instance` atom that
-    /// names the class. Named fields, like a dict record's, so the same
-    /// canonical order applies for the same reason.
+    /// names the class. Named attributes, ordered by name as a dict record's
+    /// fields are, so one record written in two orders is one schema.
     #[must_use]
-    pub fn attr_record(mut fields: Vec<Field>) -> Schema {
-        canonical_fields(&mut fields);
+    pub fn attr_record(mut fields: Vec<Attribute>) -> Schema {
+        fields.sort_by(|a, b| a.name.cmp(&b.name));
         Schema::AttrRecord {
-            fields: share_fields(&mut fields),
+            fields: share_attributes(&mut fields),
         }
     }
 
@@ -1459,7 +1472,28 @@ fn already_said(field: &Field, defaults: &[MapClause]) -> bool {
     }
 }
 
-/// A named field of a [`Schema::KeyedMap`] or [`Schema::AttrRecord`].
+/// A named attribute of a [`Schema::AttrRecord`]: present on the value, and in
+/// its set. There is no optional attribute, so there is no flag for one.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Attribute {
+    /// The attribute's name, shared for the reason a field's is
+    /// ([`Field::name`]).
+    pub name: Arc<str>,
+    /// The set the attribute's value must belong to.
+    pub schema: Schema,
+}
+
+impl Attribute {
+    /// The same attribute with its schema replaced, the name carried across.
+    pub(crate) fn with_schema(&self, schema: Schema) -> Attribute {
+        Attribute {
+            name: Arc::clone(&self.name),
+            schema,
+        }
+    }
+}
+
+/// A named field of a [`Schema::KeyedMap`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Field {
     /// The key name, shared rather than owned outright.

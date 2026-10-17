@@ -8,7 +8,9 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyComplex, PyFloat, PyInt, PyString, PyType};
 use pyo3::{PyTypeCheck, PyTypeInfo};
 use rustc_hash::{FxHashMap, FxHashSet};
-use valgebra_core::{CollKind, Constraint, DefIx, Field, MapClause, Schema, SeqKind, Spelling};
+use valgebra_core::{
+    Attribute, CollKind, Constraint, DefIx, Field, MapClause, Schema, SeqKind, Spelling,
+};
 
 use crate::build::declares_fields;
 use crate::errors::{UNREPRESENTABLE, class_label, stored, unless_fatal};
@@ -416,14 +418,13 @@ fn render_meet(
 
 /// Render an attribute record on its own: `object(x=int)`.
 ///
-/// No annotation builds a record without a class beside it, and no combinator
-/// takes one apart, so nothing a caller can write reaches this today. It is here
-/// because `render` is total over the IR and the node is in it: the day a
-/// spelling arrives, the form is readable rather than re-parsable, like the
-/// `{...}` open-record marker.
+/// A `Protocol` is the record with no class beside it, and a meet of two
+/// classes with attributes holds records the render does not pair with their
+/// classes. The form is readable rather than re-parsable, like the `{...}`
+/// open-record marker.
 fn render_attr_record(
     py: Python<'_>,
-    fields: &[Field],
+    fields: &[Attribute],
     pool: &[Py<PyAny>],
     defs: &[Schema],
     active: &Binders,
@@ -432,9 +433,8 @@ fn render_attr_record(
     let entries: Vec<String> = fields
         .iter()
         .map(|field| {
-            let suffix = if field.required { "" } else { "?" };
             let schema = render_at(py, &field.schema, pool, defs, active, depth + 1)?;
-            Ok(format!("{}{}={}", field.name, suffix, schema))
+            Ok(format!("{}={}", field.name, schema))
         })
         .collect::<PyResult<_>>()?;
     Ok(format!("object({})", entries.join(", ")))

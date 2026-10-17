@@ -945,10 +945,9 @@ fn a_record_a_class_cannot_carry_is_not_refuted_against_a_kind() {
             let met = |class: usize| {
                 Schema::meet([
                     Schema::Instance(ClassIx::new(class)),
-                    Schema::attr_record(vec![valgebra_core::Field {
+                    Schema::attr_record(vec![valgebra_core::Attribute {
                         name: "x".into(),
                         schema: Schema::Int,
-                        required: true,
                     }]),
                 ])
             };

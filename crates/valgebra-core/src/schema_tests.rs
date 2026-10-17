@@ -18,6 +18,10 @@ fn every_variant() -> Vec<Schema> {
         schema: Schema::Int,
         required: true,
     };
+    let attribute = |name: &str| Attribute {
+        name: name.into(),
+        schema: Schema::Int,
+    };
     vec![
         Schema::ANYTHING,
         Schema::Nothing,
@@ -46,7 +50,7 @@ fn every_variant() -> Vec<Schema> {
             value: Schema::Int,
         }),
         Schema::AttrRecord {
-            fields: vec![field("a")].into(),
+            fields: vec![attribute("a")].into(),
         },
         Schema::Refine {
             base: Arc::new(Schema::Int),
@@ -135,15 +139,13 @@ fn node_count_totals_every_arm() {
     assert_eq!(
         Schema::AttrRecord {
             fields: vec![
-                Field {
+                Attribute {
                     name: "a".into(),
                     schema: Schema::Int,
-                    required: true
                 },
-                Field {
+                Attribute {
                     name: "b".into(),
                     schema: Schema::Str,
-                    required: true
                 },
             ]
             .into(),
@@ -203,10 +205,9 @@ fn depth_descends_every_container_arm() {
     );
     assert_eq!(
         Schema::AttrRecord {
-            fields: vec![Field {
+            fields: vec![Attribute {
                 name: "a".into(),
                 schema: Schema::Int,
-                required: true
             }]
             .into(),
         }
@@ -270,10 +271,9 @@ fn shifted_remaps_pooled_constraint_operands_only() {
     );
     // An attribute record has no index of its own; its fields carry theirs.
     let record = Schema::AttrRecord {
-        fields: vec![Field {
+        fields: vec![Attribute {
             name: "a".into(),
             schema: Schema::Literal(ConstIx::new(2)),
-            required: true,
         }]
         .into(),
     };
@@ -1626,6 +1626,10 @@ fn a_reference_is_found_under_every_child_holding_variant() {
         schema,
         required: true,
     };
+    let attribute = |schema: Schema| Attribute {
+        name: "a".into(),
+        schema,
+    };
     let holders = [
         Schema::Union(vec![Schema::Int, reference.clone()].into()),
         Schema::Intersection(vec![Schema::Int, reference.clone()].into()),
@@ -1643,7 +1647,7 @@ fn a_reference_is_found_under_every_child_holding_variant() {
             value: reference.clone(),
         }),
         Schema::AttrRecord {
-            fields: vec![field(reference.clone())].into(),
+            fields: vec![attribute(reference.clone())].into(),
         },
         Schema::Refine {
             base: Arc::new(reference.clone()),
@@ -1716,9 +1720,19 @@ fn a_record_and_a_map_are_one_term_however_their_parts_are_written() {
             Openness::Closed
         )
     );
+    let attribute = |name: &str, schema: Schema| Attribute {
+        name: name.into(),
+        schema,
+    };
     assert_eq!(
-        Schema::attr_record(vec![field("b", Schema::Str), field("a", Schema::Int)]),
-        Schema::attr_record(vec![field("a", Schema::Int), field("b", Schema::Str)])
+        Schema::attr_record(vec![
+            attribute("b", Schema::Str),
+            attribute("a", Schema::Int)
+        ]),
+        Schema::attr_record(vec![
+            attribute("a", Schema::Int),
+            attribute("b", Schema::Str)
+        ])
     );
 
     let clause = |key: Schema, value: Schema| MapClause { key, value };

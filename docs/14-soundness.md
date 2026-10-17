@@ -56,9 +56,9 @@ KeyedMap(f, d)   fields present-and-match, and   (named fields ∩ keyed
                  every other key matches a       default clauses)
                  default clause
 Instance(C)      isinstance(x, C)               (class extension)
-AttrRecord(f)    every required field's          (attribute record; no
-                 attribute is present on x       carrier, so a dataclass is
-                 and matches                     `Instance(C) ∧ AttrRecord`)
+AttrRecord(f)    every field's attribute is      (attribute record; no
+                 present on x and matches        carrier, so a dataclass is
+                                                 `Instance(C) ∧ AttrRecord`)
 ```
 
 `Any` admits every value, exactly as the top does, and it *is* the top: one

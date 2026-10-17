@@ -32,7 +32,7 @@ LEDGER: every schema variant is a generator, a representative, or a marker
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Protocol
 
 import annotated_types as at
 import pytest
@@ -53,6 +53,29 @@ _NONE = None
 
 class _Class:
     """A class no fold knows, so a union over it keeps its spelling."""
+
+
+class _IntX(Protocol):
+    """The attribute record `{x: int}`: a protocol has no class beside it."""
+
+    x: int
+
+
+class _AnyX(Protocol):
+    """The attribute record `{x: anything}`, every value carrying an `x`."""
+
+    x: object
+
+
+class _Bare:
+    """A value carrying no `x`."""
+
+
+class _Carrying:
+    """A value carrying the `x` it is given."""
+
+    def __init__(self, x: object) -> None:
+        self.x = x
 
 
 # A set no combination of the others reaches. Adding one extends the algebra,
@@ -177,3 +200,19 @@ def test_a_generator_is_not_reachable_by_the_obvious_derivation() -> None:
     # The top is not any one kind, and the classes are not the scalars.
     assert _apart(anything, int)
     assert _apart(int, str)
+
+
+def test_an_optional_attribute_is_reached_without_a_flag() -> None:
+    """`AttrRecord{x?: int}` is `AttrRecord{x: int} | ~AttrRecord{x: anything}`.
+
+    An optional attribute admits every value carrying no `x`, beside every value
+    whose `x` is an `int`, and the union and the complement already reach that
+    set. A presence flag would make it a representative, and nothing folds to
+    one, so an attribute record has no optional attribute.
+    """
+    optional = union(_IntX, complement(_AnyX))
+    assert optional.is_valid(_Bare())
+    assert optional.is_valid(_Carrying(1))
+    assert not optional.is_valid(_Carrying("one"))
+    assert Validator(_IntX).relation_to(optional) == "subset"
+    assert optional.relation_to(_IntX) == "not_subset"

@@ -17,7 +17,7 @@ use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyNone, PySet, PyString, PyTuple,
     PyType,
 };
-use valgebra_core::{Field, MapClause, Schema, SeqShape};
+use valgebra_core::{Attribute, Field, MapClause, Schema, SeqShape};
 
 use super::generics::is_field_qualifier;
 use super::{
@@ -441,10 +441,9 @@ pub(super) fn build_protocol(
             ProtocolMember::Method => build_schema(forms.callable.bind(py), lits, defs)?,
             ProtocolMember::Property(None) | ProtocolMember::Value => Schema::ANYTHING,
         };
-        fields.push(Field {
+        fields.push(Attribute {
             name: field_name(&name)?.into(),
             schema,
-            required: true,
         });
     }
     Ok(Schema::attr_record(fields))
@@ -1187,10 +1186,9 @@ pub(super) fn build_object(
         } else {
             field_hint(hint, &name)?
         };
-        fields.push(Field {
+        fields.push(Attribute {
             name: field_name(&name.str()?)?.into(),
             schema: build_schema(&hint, lits, defs)?,
-            required: true,
         });
     }
     if fields.is_empty() {

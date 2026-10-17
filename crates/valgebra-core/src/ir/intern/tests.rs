@@ -11,6 +11,13 @@ fn field(name: &str, schema: Schema) -> Field {
     }
 }
 
+fn attribute(name: &str, schema: Schema) -> Attribute {
+    Attribute {
+        name: name.into(),
+        schema,
+    }
+}
+
 fn clause(key: Schema, value: Schema) -> MapClause {
     MapClause { key, value }
 }
@@ -154,7 +161,7 @@ fn families() -> Vec<(&'static str, Box<dyn Fn(usize) -> Schema>, Endless)> {
         (
             "attribute record",
             Box::new(move |i| Schema::AttrRecord {
-                fields: fields(&mut vec![field("k", base(i))]),
+                fields: attributes(&mut vec![attribute("k", base(i))]),
             }),
             Endless::Yes,
         ),
@@ -245,8 +252,8 @@ fn a_list_built_twice_is_one_list_holding_what_was_built() {
     assert_eq!(one[1].schema, Schema::Str);
 }
 
-/// The same of the other three kinds of handle, each of which has its own
-/// table and its own sameness test.
+/// The same of the other kinds of handle, each of which has its own table and
+/// its own sameness test.
 #[test]
 fn every_kind_of_handle_is_shared_by_a_second_build() {
     let members_one = members(&[Schema::Int, Schema::Str]);
@@ -256,6 +263,10 @@ fn every_kind_of_handle_is_shared_by_a_second_build() {
     let clauses_one = clauses(&mut vec![clause(Schema::Str, Schema::Int)]);
     let clauses_two = clauses(&mut vec![clause(Schema::Str, Schema::Int)]);
     assert!(Arc::ptr_eq(&clauses_one, &clauses_two));
+
+    let attributes_one = attributes(&mut vec![attribute("a", Schema::Int)]);
+    let attributes_two = attributes(&mut vec![attribute("a", Schema::Int)]);
+    assert!(Arc::ptr_eq(&attributes_one, &attributes_two));
 
     let (node_one, node_two) = nesting_built_twice(&|inner| Schema::Complement(inner));
     assert!(Arc::ptr_eq(&node_one, &node_two));
@@ -295,6 +306,12 @@ fn a_handle_is_found_again_after_another_is_built() {
     let read = members(&[Schema::Int]);
     assert!(!Arc::ptr_eq(&held, &beside));
     assert!(Arc::ptr_eq(&held, &read));
+
+    let named = attributes(&mut vec![attribute("a", Schema::Int)]);
+    let renamed = attributes(&mut vec![attribute("b", Schema::Str)]);
+    let found = attributes(&mut vec![attribute("a", Schema::Int)]);
+    assert!(!Arc::ptr_eq(&named, &renamed));
+    assert!(Arc::ptr_eq(&named, &found));
 }
 
 /// Two nodes that land in one slot are two nodes, for every family.
@@ -471,6 +488,30 @@ fn two_field_lists_alike_only_where_the_hash_reads_are_two_lists() {
     assert_eq!(&*by_name[SUMMARY].name, "other");
     assert!(by_schema[SUMMARY].required);
     assert!(!by_requirement[SUMMARY].required);
+}
+
+/// The same for an attribute list, which differs in two: a name and a schema.
+/// Each is asked of the list the slot holds, the one built just before it.
+#[test]
+fn two_attribute_lists_alike_only_where_the_hash_reads_are_two_lists() {
+    let prefix = || {
+        (0..SUMMARY)
+            .map(|i| attribute("same", Schema::Literal(ConstIx::new(i))))
+            .collect::<Vec<_>>()
+    };
+    let with = |last: Attribute| {
+        let mut list = prefix();
+        list.push(last);
+        list
+    };
+    let held = attributes(&mut with(attribute("last", Schema::Int)));
+    let by_name = attributes(&mut with(attribute("other", Schema::Int)));
+    assert!(!Arc::ptr_eq(&held, &by_name));
+    assert_eq!(&*by_name[SUMMARY].name, "other");
+    let again = attributes(&mut with(attribute("last", Schema::Int)));
+    let by_schema = attributes(&mut with(attribute("last", Schema::Str)));
+    assert!(!Arc::ptr_eq(&again, &by_schema));
+    assert_eq!(by_schema[SUMMARY].schema, Schema::Str);
 }
 
 /// And for a clause list, whose two halves are both schemas: a key that

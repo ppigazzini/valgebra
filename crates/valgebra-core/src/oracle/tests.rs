@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use super::*;
 use crate::descr::lower::Constants;
-use crate::ir::{DefIx, Field, MapClause, PredIx, SeqShape};
+use crate::ir::{Attribute, DefIx, Field, MapClause, PredIx, SeqShape};
 
 /// A callback hides behind every container, and the walk that looks for one
 /// must enter each.
@@ -26,6 +26,10 @@ fn a_callback_is_found_through_every_container() {
         name: "x".into(),
         schema,
         required: true,
+    };
+    let attribute = |schema: Schema| Attribute {
+        name: "x".into(),
+        schema,
     };
     let wrappers: [Schema; 11] = [
         predicate.clone(),
@@ -56,7 +60,7 @@ fn a_callback_is_found_through_every_container() {
             .into(),
         },
         Schema::AttrRecord {
-            fields: vec![field(predicate.clone())].into(),
+            fields: vec![attribute(predicate.clone())].into(),
         },
     ];
     for wrapper in wrappers {

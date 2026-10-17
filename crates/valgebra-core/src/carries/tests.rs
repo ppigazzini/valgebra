@@ -9,7 +9,7 @@ use super::{
     Carries, OrderGroup, carries_division, carries_length, carries_order, carries_pattern,
     carries_through,
 };
-use crate::ir::{ClassIx, ConstIx, Constraint, DefIx, Field, MapClause, Schema, SeqShape};
+use crate::ir::{Attribute, ClassIx, ConstIx, Constraint, DefIx, MapClause, Schema, SeqShape};
 use std::sync::Arc;
 
 /// The variant a node is, by the name the enum gives it.
@@ -41,12 +41,11 @@ fn variant(schema: &Schema) -> &'static str {
     }
 }
 
-/// A field, for the two nodes that carry one.
-fn field(name: &str) -> Field {
-    Field {
+/// An attribute, for the record that carries one.
+fn attribute(name: &str) -> Attribute {
+    Attribute {
         name: name.into(),
         schema: Schema::Int,
-        required: true,
     }
 }
 
@@ -149,7 +148,7 @@ fn table() -> Vec<(Schema, Carries, Carries, Carries, Carries)> {
             Maybe,
         ),
         (
-            Schema::attr_record(vec![field("a")]),
+            Schema::attr_record(vec![attribute("a")]),
             Maybe,
             Maybe,
             Maybe,

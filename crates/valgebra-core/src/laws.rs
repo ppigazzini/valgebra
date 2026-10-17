@@ -196,29 +196,27 @@ fn shaped_schema() -> impl Strategy<Value = Schema> {
     })
 }
 
-/// What a direct instance of corpus class `class` can hold under `name`, as
-/// `(may be missing, may hold any value)`, written from the class's description
-/// on [`CorpusOracle`] rather than read through [`Attributes`]: the second
-/// opinion a refutation about a class and its record is checked against.
-fn corpus_carries(class: usize, name: &str) -> (bool, bool) {
+/// Whether a direct instance of corpus class `class` can hold any value under
+/// `name`, written from the class's description on [`CorpusOracle`] rather
+/// than read through [`Attributes`]: the second opinion a refutation about a
+/// class and its record is checked against.
+fn corpus_carries(class: usize, name: &str) -> bool {
     match (class, name) {
-        // A slot is missing until it is assigned.
-        (3, "f0") => (true, true),
         // A value fixed on the class, with no dictionary to replace it, and a
         // property: what either holds is not a thing to stand a value on.
-        (3 | 4, "f1") => (false, false),
-        // No dictionary, nothing defined: never there.
-        (3, _) => (true, false),
-        // Defined on the class: replaced through the dictionary, never removed.
-        (4, "f0") => (false, true),
-        _ => (true, true),
+        (3 | 4, "f1") => false,
+        // No dictionary: a slot holds what is assigned to it, and a name
+        // nothing defines is never there.
+        (3, name) => name == "f0",
+        // A dictionary, which replaces a value defined on the class.
+        _ => true,
     }
 }
 
 /// A corpus class met with a record over some of the names `f0` to `f2`: the
 /// shape a dataclass lowers to, and the one a record meets a class in.
-fn class_with_record() -> impl Strategy<Value = (usize, Vec<Field>)> {
-    let field = prop_oneof![
+fn class_with_record() -> impl Strategy<Value = (usize, Vec<Attribute>)> {
+    let schema = prop_oneof![
         Just(Schema::Int),
         Just(Schema::Str),
         Just(Schema::ANYTHING),
@@ -226,17 +224,16 @@ fn class_with_record() -> impl Strategy<Value = (usize, Vec<Field>)> {
     ];
     (
         0usize..5,
-        proptest::collection::vec(proptest::option::of((field, proptest::bool::ANY)), 3),
+        proptest::collection::vec(proptest::option::of(schema), 3),
     )
         .prop_map(|(class, drawn)| {
             let fields = drawn
                 .into_iter()
                 .enumerate()
-                .filter_map(|(i, field)| {
-                    field.map(|(schema, required)| Field {
+                .filter_map(|(i, schema)| {
+                    schema.map(|schema| Attribute {
                         name: format!("f{i}").into(),
                         schema,
-                        required,
                     })
                 })
                 .collect();
@@ -2903,17 +2900,16 @@ fn emptiness_decides_a_deep_intersection_in_linear_time() {
     worker.join().expect("deep emptiness worker panicked");
 }
 
-/// An attribute record with an uninhabited required attribute is empty: no
-/// value can carry that attribute, so the dataclass-style schema denotes
+/// An attribute record with an uninhabited attribute is empty: no value can
+/// carry that attribute, so the dataclass-style schema denotes
 /// nothing. The symmetric keyed-map rule already held; this closes the
 /// asymmetry.
 #[test]
-fn an_uninhabited_required_attribute_empties_the_schema() {
+fn an_uninhabited_attribute_empties_the_schema() {
     let record = |schema| Schema::AttrRecord {
-        fields: vec![Field {
+        fields: vec![Attribute {
             name: "x".into(),
             schema,
-            required: true,
         }]
         .into(),
     };
@@ -2932,18 +2928,16 @@ fn an_uninhabited_required_attribute_empties_the_schema() {
 #[test]
 fn an_object_meet_knows_which_class_it_is() {
     let record = Schema::AttrRecord {
-        fields: vec![Field {
+        fields: vec![Attribute {
             name: "x".into(),
             schema: Schema::Int,
-            required: true,
         }]
         .into(),
     };
     let other_record = Schema::AttrRecord {
-        fields: vec![Field {
+        fields: vec![Attribute {
             name: "y".into(),
             schema: Schema::Str,
-            required: true,
         }]
         .into(),
     };
@@ -2984,51 +2978,26 @@ fn an_object_meet_knows_which_class_it_is() {
 fn attribute_records_subtype_by_width_and_depth() {
     let narrow = Schema::AttrRecord {
         fields: vec![
-            Field {
+            Attribute {
                 name: "x".into(),
                 schema: Schema::Bool,
-                required: true,
             },
-            Field {
+            Attribute {
                 name: "y".into(),
                 schema: Schema::Str,
-                required: true,
             },
         ]
         .into(),
     };
     let wide = Schema::AttrRecord {
-        fields: vec![Field {
+        fields: vec![Attribute {
             name: "x".into(),
             schema: Schema::Int, // bool ⊆ int, and x is narrower; y is extra
-            required: true,
         }]
         .into(),
     };
     assert!(narrow.is_subtype_of(&wide));
     assert!(!wide.is_subtype_of(&narrow)); // wide lacks y
-    // Required-ness is part of the relation: a supertype that demands the
-    // attribute is not satisfied by a subtype that only may carry it, and
-    // the values with it missing are what separate them.
-    let maybe_x = Schema::AttrRecord {
-        fields: vec![Field {
-            name: "x".into(),
-            schema: Schema::Bool,
-            required: false,
-        }]
-        .into(),
-    };
-    assert!(!maybe_x.is_subtype_of(&wide));
-    assert!(
-        narrow.is_subtype_of(&Schema::AttrRecord {
-            fields: vec![Field {
-                name: "x".into(),
-                schema: Schema::Int,
-                required: false,
-            }]
-            .into(),
-        })
-    );
     let object = |class, record: &Schema| Schema::meet([Schema::Instance(class), record.clone()]);
     // Same records, different classes: conservative, and the record half is
     // what the meet rule reaches for on the way there.
@@ -6039,11 +6008,10 @@ proptest! {
     /// Every supertype here is one a direct instance of the class is outside
     /// of -- a kind, another class, a union of kinds -- so a refutation is a
     /// claim that the meet holds a direct instance, which is the value the class
-    /// assumption licenses. The instance has to carry the record: each field
-    /// either missing, where the field may be and the class lets it be, or
-    /// holding a value, where the field admits one and the class lets the
-    /// instance hold any. Both deciders are asked, because both read what the
-    /// class carries and either could stop reading it.
+    /// assumption licenses. The instance has to carry the record: each
+    /// attribute holding a value, where the attribute admits one and the class
+    /// lets the instance hold any. Both deciders are asked, because both read
+    /// what the class carries and either could stop reading it.
     #[test]
     fn a_refutation_about_a_class_and_its_record_stands_on_an_instance_it_permits(
         (class, fields) in class_with_record(),
@@ -6064,9 +6032,7 @@ proptest! {
             ("sets", subject.descriptor_contained_in(&other, &CorpusOracle, &[])),
         ];
         let permitted = fields.iter().all(|field| {
-            let (may_be_missing, may_hold_any) = corpus_carries(class, &field.name);
-            (may_be_missing && !field.required)
-                || (may_hold_any && !matches!(field.schema, Schema::Nothing))
+            corpus_carries(class, &field.name) && !matches!(field.schema, Schema::Nothing)
         });
         for (decider, answer) in answers {
             prop_assert!(
