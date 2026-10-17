@@ -34,7 +34,9 @@ LEDGER: every binding file is swept or excluded by name
 
 from __future__ import annotations
 
+import functools
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -105,6 +107,7 @@ def _excluded_regexes() -> list[str]:
     return patterns
 
 
+@functools.cache
 def _every_mutant() -> list[str]:
     """List every mutant in the workspace, with the exclusions turned off."""
     cargo = shutil.which("cargo")
@@ -213,18 +216,26 @@ def test_every_binding_file_is_swept_or_excluded_by_name() -> None:
 
 
 def test_an_integration_target_is_not_a_subject() -> None:
-    """The universe is the code that ships, and `tests/` is not it.
+    """The sweep mutates the code that ships, and `tests/` is not it.
 
-    Asserted rather than left to the glob, because the exclusion list is the
-    other way to keep a harness out of the sweep -- and an exclusion carries a
-    reason a reader must maintain, for a file that was never a subject.
+    Asked of `cargo mutants --list` itself rather than of the universe above,
+    which leaves `tests/` out by construction and so could not say otherwise:
+    a library module that names a file there through `#[path]` puts that file's
+    mutants in the listing, under a path through `src/..`. Asserted rather than
+    left to the glob, because the exclusion list is the other way to keep a
+    harness out of the sweep -- and an exclusion carries a reason a reader must
+    maintain, for a file that was never a subject.
     """
     targets = _integration_targets()
     assert targets, "the binding has no integration target; the wrapper has moved"
-    sources = _binding_sources()
-    assert not (targets & sources), (
-        f"integration targets read as subjects: {sorted(targets & sources)}"
+    offered = {
+        os.path.normpath(line.split(":", 1)[0]).replace("\\", "/")
+        for line in _every_mutant()
+    }
+    assert not (targets & offered), (
+        f"integration targets the sweep mutates: {sorted(targets & offered)}"
     )
+    sources = _binding_sources()
     # The other direction: dropping `tests/` must not have taken the crate's own
     # sources with it, which would leave every claim below passing over nothing.
     assert {path for path in sources if path.startswith("crates/valgebra-py/src/")}, (
