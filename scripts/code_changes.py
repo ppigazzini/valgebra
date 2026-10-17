@@ -12,11 +12,18 @@ included, which document an item and compile to nothing a mutant reads. A
 line inside a block comment counts as code, which sweeps a file more often
 than it needs to and never less.
 
+The diff is asked for in one shape whatever git is configured to print. A
+rename is an added file, so a file moved into sweep scope is swept, where git
+would print the move and none of its lines; the paths carry `a/` and `b/`,
+which `diff.noprefix` and `diff.mnemonicPrefix` would take away or change; and
+no external diff driver runs. A path that still arrives in another shape is
+not read as no change: the script exits 2.
+
 Usage:
     python scripts/code_changes.py BASE
 
 Exit 0 with the files on stdout, deleted files left out; 2 when git cannot
-answer.
+answer, or answers in a shape the script cannot read.
 """
 
 from __future__ import annotations
@@ -37,8 +44,17 @@ def is_code(line: str) -> bool:
     return bool(stripped) and not stripped.startswith("//")
 
 
+class UnreadableDiffError(ValueError):
+    """A diff whose paths are not in the shape the script asked git for."""
+
+
 def code_changes(diff: str) -> list[str]:
-    """Name each file of a `git diff -U0` whose added or removed lines hold code."""
+    """Name each file of a `git diff -U0` whose added or removed lines hold code.
+
+    A `+++` line naming neither `b/<path>` nor `/dev/null` raises
+    `UnreadableDiffError`: the shape was asked for, so a path in another one is a
+    diff this cannot read, not a file with nothing in it.
+    """
     found: list[str] = []
     current: str | None = None
     for line in diff.splitlines():
@@ -46,6 +62,9 @@ def code_changes(diff: str) -> list[str]:
             current = None
         elif line.startswith("+++ "):
             path = line[4:]
+            if path != "/dev/null" and not path.startswith("b/"):
+                message = f"a path in a shape this does not read: {line!r}"
+                raise UnreadableDiffError(message)
             current = path[2:] if path.startswith("b/") else None
         elif line.startswith("--- "):
             continue
@@ -67,6 +86,10 @@ def main(argv: list[str]) -> int:
         "diff",
         "-U0",
         "--no-color",
+        "--no-ext-diff",
+        "--no-renames",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
         "--diff-filter=d",
         f"{args.base}...HEAD",
         "--",
@@ -76,7 +99,12 @@ def main(argv: list[str]) -> int:
     if diff is None:
         print(f"code_changes: git cannot diff from {args.base}", file=sys.stderr)
         return EXIT_CANNOT_RUN
-    for path in code_changes(diff):
+    try:
+        changed = code_changes(diff)
+    except UnreadableDiffError as error:
+        print(f"code_changes: {error}", file=sys.stderr)
+        return EXIT_CANNOT_RUN
+    for path in changed:
         print(path)
     return EXIT_OK
 

@@ -92,6 +92,75 @@ def test_a_file_whose_diff_is_comments_alone_is_left_out(tmp_path: Path) -> None
     assert sorted(named.stdout.split()) == ["both.rs", "code.rs"]
 
 
+def _history(tree: Path) -> str:
+    """Lay down a history of one commit holding two files, and name its tip."""
+    _git(tree, "init", "--quiet", "--initial-branch=main")
+    for name in ("kept.rs", "moved.rs"):
+        (tree / name).write_text("fn f() -> u8 {\n    1\n}\n", encoding="utf-8")
+    _git(tree, "add", ".")
+    _git(tree, "commit", "--quiet", "-m", "base")
+    return _git(tree, "rev-parse", "HEAD")
+
+
+def _named(tree: Path, base: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        [sys.executable, str(SCRIPT), base],
+        cwd=tree,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_a_renamed_file_is_named_under_its_new_path(tmp_path: Path) -> None:
+    """A move changes no line, and still puts the file where a sweep reads it.
+
+    Git prints a rename as the move alone, with no `+++` line and none of the
+    file's lines, so a file moved into sweep scope -- out of a test module's
+    declaration, say -- read as no change.
+    """
+    base = _history(tmp_path)
+    _git(tmp_path, "mv", "moved.rs", "renamed.rs")
+    _git(tmp_path, "commit", "--quiet", "-m", "move")
+    named = _named(tmp_path, base)
+    assert named.returncode == script.EXIT_OK, named.stderr
+    assert named.stdout.split() == ["renamed.rs"]
+
+
+@pytest.mark.parametrize(
+    "setting",
+    [("diff.noprefix", "true"), ("diff.mnemonicPrefix", "true")],
+    ids=["noprefix", "mnemonic"],
+)
+def test_the_diff_reads_alike_whatever_git_prints(
+    tmp_path: Path, setting: tuple[str, str]
+) -> None:
+    """A configuration that changes the paths git prints changes nothing here.
+
+    Under `diff.noprefix` every path lost its `b/`, and the script named no file
+    and exited 0: a sweep of nothing that read as a clean one.
+    """
+    base = _history(tmp_path)
+    _git(tmp_path, "config", *setting)
+    (tmp_path / "kept.rs").write_text("fn f() -> u8 {\n    2\n}\n", encoding="utf-8")
+    _git(tmp_path, "commit", "--quiet", "-am", "change")
+    named = _named(tmp_path, base)
+    assert named.returncode == script.EXIT_OK, named.stderr
+    assert named.stdout.split() == ["kept.rs"]
+
+
+def test_a_path_in_another_shape_is_unreadable_rather_than_unchanged() -> None:
+    """A `+++` line without the prefix asked for is not read as no file."""
+    diff = "diff --git kept.rs kept.rs\n--- kept.rs\n+++ kept.rs\n@@ -2 +2 @@\n+    2\n"
+    with pytest.raises(script.UnreadableDiffError):
+        script.code_changes(diff)
+    added = (
+        "diff --git a/n.rs b/n.rs\n--- /dev/null\n+++ b/n.rs\n"
+        "@@ -0,0 +1 @@\n+fn f() {}\n"
+    )
+    assert script.code_changes(added) == ["n.rs"]
+
+
 def test_a_base_git_cannot_read_is_not_an_empty_sweep(tmp_path: Path) -> None:
     """A diff that fails exits 2: a sweep of nothing would read as a clean one."""
     _git(tmp_path, "init", "--quiet", "--initial-branch=main")
