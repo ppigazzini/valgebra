@@ -46,7 +46,8 @@ assert raised
 
 What sets valgebra apart starts when you treat schemas *as the sets they denote*.
 Because membership is Boolean, `union`, `intersection`, and `complement` are
-exactly *or*, *and*, and *not*, and they compose any schema into a lattice:
+exactly *or*, *and*, and *not* on every value the walk finishes, and they compose
+any schema into a lattice:
 
 ```python
 from valgebra import Validator, complement, intersection
@@ -67,7 +68,10 @@ assert intersection(int, complement(int)).is_empty()  # provably no value
   `intersection`, and `complement` into a lattice with `anything` as top and
   `nothing` as bottom. Every Boolean law — associativity, idempotence, absorption,
   distributivity, De Morgan, double negation — is *property-tested against the
-  membership relation*, not asserted.
+  membership relation*, not asserted. A walk that stops — at the depth bound,
+  on a value holding itself, at a predicate that raised — decides nothing, and
+  a schema and its complement both refuse the value it stopped on ([the
+  laws](docs/04-algebra.md#the-laws-hold)).
 - **Minimal: a derived pattern does not ship.** valgebra bundles no
   `conditional`, no `at_least_one`, no `one_of`. Those are **derived** by
   composition (see [below](#everything-else-is-derived)). A named wrapper for a

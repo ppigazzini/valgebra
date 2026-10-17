@@ -97,6 +97,18 @@ On the inhabitants — the finite values — the guarded unfolding accepts exact
 the members, which is why a coinductive *comparison* at the greatest fixpoint
 never contradicts a membership answer (see [recursion](06-recursion.md)).
 
+**A stop is not a verdict.** Each guard ends the walk without deciding
+membership, as a predicate that raises (`predicate_error`) and a container
+changed under the walk (`mutated_during_validation`) do, and the walk reports
+the stop as a refusal. That is sound in the direction that matters, since no
+stop admits a value, and it is where the walk is not exact: a list nested past
+the bound is a member of a recursive `S` and refused by it. `complement(S)`
+refuses it too, because the `Complement` row above reads *the walk of `A`
+finished and refused*, and a stopped walk did not. So the walk computes
+`x ∈ ⟦S⟧` on every value it finishes, and a value it stops on is refused by a
+schema and its complement alike ([the error
+model](08-error-model.md#unions-report-the-closest-branch)).
+
 ## Why construction preserves meaning
 
 Every fold a constructor applies is a law of the Boolean algebra of sets —
