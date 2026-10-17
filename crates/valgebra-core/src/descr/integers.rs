@@ -53,8 +53,12 @@ use super::interval::IntervalSet;
 /// What would settle both at once is a canonical spelling, and the module
 /// header says why there is none to have. So the two disagree, on exactly one
 /// thing: two spellings of one set are one set to equality and two positions to
-/// the order. The cost is a `dedup` that follows a sort keeping a pair that a
-/// scan for equality folds -- a row in a table of guards, never an answer.
+/// the order. That is why a union of summands holding guards keeps each once by
+/// a scan for equality rather than by a sort (`Summand::compacted` in
+/// `descr/polar.rs`). What the split still costs is a list read position by
+/// position: two summands whose lists hold one set's two spellings beside a
+/// third guard can sort those lists apart and compare as two -- a summand of
+/// width, never an answer.
 #[derive(Debug, Clone)]
 pub struct IntSet {
     /// The period. At least one; a modulus of one is a set with no step, whose

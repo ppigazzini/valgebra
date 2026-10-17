@@ -472,10 +472,16 @@ impl<G: Guard> MapAtom<G> {
         for (mine, theirs) in self.defaults.iter().zip(&other.defaults) {
             defaults.push(mine.meet(theirs)?);
         }
+        // `S ∪ S′`, each constraint once by equality: a type's equality can be
+        // coarser than its order, so a sort need not put two equal
+        // constraints side by side.
         let mut wanted = self.wanted.clone();
-        wanted.extend(other.wanted.iter().cloned());
+        for want in &other.wanted {
+            if !wanted.contains(want) {
+                wanted.push(want.clone());
+            }
+        }
         wanted.sort();
-        wanted.dedup();
         Some(MapAtom {
             labels,
             defaults: defaults.try_into().ok()?,
@@ -636,15 +642,23 @@ impl<G: Guard> Summand for MapAtom<G> {
     }
 
     /// Each atom with the labels its defaults already say absorbed, without
-    /// the ones holding no dict, in order, and each once.
+    /// the ones holding no dict, each once, and in order.
+    ///
+    /// Once by equality, for the reason the record atoms give: a guard's
+    /// equality can be coarser than its order -- an integer set compares two
+    /// spellings of one set equal and sorts them apart -- so two equal atoms
+    /// need not be neighbours once sorted. A repeat kept is a summand of
+    /// width toward [`MAX_ATOMS`] and a factor in every complement of the
+    /// union.
     fn compacted(atoms: Vec<MapAtom<G>>) -> Option<Vec<MapAtom<G>>> {
-        let mut kept: Vec<MapAtom<G>> = atoms
-            .into_iter()
-            .map(MapAtom::absorbed)
-            .filter(|atom| atom.emptiness() != Verdict::Empty)
-            .collect();
+        let mut kept: Vec<MapAtom<G>> = Vec::with_capacity(atoms.len());
+        for atom in atoms {
+            let atom = atom.absorbed();
+            if atom.emptiness() != Verdict::Empty && !kept.contains(&atom) {
+                kept.push(atom);
+            }
+        }
         kept.sort();
-        kept.dedup();
         Some(kept)
     }
 }

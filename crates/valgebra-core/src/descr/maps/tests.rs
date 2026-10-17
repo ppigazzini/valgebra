@@ -1172,3 +1172,57 @@ fn a_meet_is_bounded_by_the_width_of_its_union_and_not_by_its_pairs() {
     );
     assert!(same(&met, &wide), "a meet with itself holds what it held");
 }
+
+/// The even integers at their own period and at twice it: one set, which
+/// [`IntSet`]'s equality calls one and its order puts in two places, and a
+/// set the order puts between them.
+fn evens_twice_and_a_set_between() -> (IntSet, IntSet, IntSet) {
+    let evens = IntSet::multiple_of(2).expect("a small step");
+    let fours = IntSet::multiple_of(4).expect("a small step");
+    let at_four = fours
+        .union(&evens.intersect(&fours.complement()).expect("a small meet"))
+        .expect("a small union");
+    let threes = IntSet::multiple_of(3).expect("a small step");
+    assert_eq!(evens, at_four, "the two spellings hold the same integers");
+    assert!(
+        evens < threes && threes < at_four,
+        "and the third sorts between them"
+    );
+    (evens, at_four, threes)
+}
+
+/// A union of map atoms holds an atom once, however its guard is spelled.
+///
+/// Two atoms equal as sets of dicts sorted apart, with a third between them,
+/// were both kept by a dedup of neighbours: a summand of width toward
+/// [`MAX_ATOMS`] that holds no dict the other does not.
+#[test]
+fn a_union_holds_an_atom_once_whatever_its_guard_spells() {
+    let (evens, at_four, threes) = evens_twice_and_a_set_between();
+    let label = |values: IntSet| MapLattice::label(Label::str("a"), values, false);
+    let union = label(evens)
+        .union(&label(threes))
+        .and_then(|held| held.union(&label(at_four)))
+        .expect("three small atoms");
+    assert_eq!(union.atoms().len(), 2, "{union:?}");
+}
+
+/// A meet's wanted keys hold a constraint once, however its type is spelled.
+#[test]
+fn a_meet_wants_a_key_once_whatever_its_type_spells() {
+    let (evens, at_four, threes) = evens_twice_and_a_set_between();
+    let wanting = |values: IntSet| {
+        let mut atom = MapAtom::<IntSet>::top();
+        atom.wanted.push(Wanted {
+            slot: key_slot(Some(Kind::Str)).expect("a key kind"),
+            ty: Values::Only(values),
+            besides: BTreeSet::new(),
+        });
+        atom
+    };
+    let met = wanting(evens)
+        .meet(&wanting(threes))
+        .and_then(|held| held.meet(&wanting(at_four)))
+        .expect("a meet of three tops");
+    assert_eq!(met.wanted.len(), 2, "{:?}", met.wanted);
+}
