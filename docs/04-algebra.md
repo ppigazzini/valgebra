@@ -62,6 +62,18 @@ holds universally. That reduction is property-tested in both Rust and Python ove
 generated schemas and values, exercising each law against the membership relation
 rather than asserting it.
 
+The verdict is Boolean on every value the walk finishes. A walk can stop
+instead: past the depth bound (`recursion_limit`), on a value that contains
+itself (`recursion_loop`), at a predicate that raised (`predicate_error`), or on
+a container changed under it (`mutated_during_validation`). A stop is no verdict,
+and a value the walk of `S` stops on is refused by `S` and by `complement(S)`
+alike, since a complement admits only what its inner walk decided is outside
+([the error model](08-error-model.md#unions-report-the-closest-branch)). The laws
+hold of the sets, and of the walk on every value it finishes. On a stopped value
+the spelling shows: for a recursive `S`, `union(S, complement(S))` folds to
+`anything` and admits a list nested past the bound, while the same union written
+with a second spelling of `S` refuses it.
+
 The model — schemas as value-sets, subtyping as set inclusion, full union,
 intersection, and complement — is *semantic subtyping*. The
 [foundations](13-foundations.md) page records the theory and its references, and
