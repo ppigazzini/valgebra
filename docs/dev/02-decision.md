@@ -199,7 +199,11 @@ inner leaves -- the part for a key of no listed kind among them, so
 part of a kind -- a narrower tuple, a class, the complement of a literal --
 refuses, because the default is a function on the parts and such a key splits
 one; [15-decidability.md](../15-decidability.md) lists what that leaves to the
-rules.
+rules. A want indexed past the partition -- no lowering builds one, so it is an
+invariant broken -- is no element of the model, and an atom carrying it is
+proved nothing: its emptiness declines, and its complement keeps the want, so
+every reading built from it declines too
+(`a_want_past_the_partition_proves_nothing`).
 
 **A pattern is a set of strings, whatever its base.** `refine` in
 `descr/lower.rs` meets the base with the set each constraint denotes, and a
