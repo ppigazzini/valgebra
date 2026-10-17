@@ -281,9 +281,10 @@ jobs:
           # `pythons` are the interpreters each wheel set runs the product suite
           # on: the floor, the newest release and the free-threaded builds, where
           # the set carries a wheel for them. `imports` are the releases between,
-          # whose wheels are installed, imported and checked: each is a build of
-          # its own, profiled on its own interpreter, and a release with none of
-          # its wheels loaded ships a build nothing ran.
+          # whose wheels are installed, imported, checked and run through the
+          # bounds file: each is a build of its own, profiled on its own
+          # interpreter, and a release with none of its wheels loaded ships a
+          # build nothing ran.
           - { name: linux-x86_64, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
           - { name: linux-aarch64, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-arm-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
           # Each PyPy wheel is smoked on the PyPy it is built for, named by the
@@ -355,6 +356,7 @@ jobs:
         shell: bash
         env:
           PYTHONS: ${{ matrix.wheel.pythons }}
+          IMPORTS: ${{ matrix.wheel.imports }}
           HYPOTHESIS_PROFILE: ci
         run: |
           # The `test` group at the versions the lock holds, as the PyPy lane
@@ -367,17 +369,25 @@ jobs:
             bin=".venv-$py/bin"; [ -d "$bin" ] || bin=".venv-$py/Scripts"
             "$bin/python" -m pytest -q -m "not repository" tree/tests
           done
+          # The releases between run the bounds file: each wheel is profiled on
+          # its own interpreter and lays out frames of its own, so the stack
+          # the deepest walk takes on one wheel is no reading of another's.
+          for py in $IMPORTS; do
+            uv pip install --python ".venv-$py" -r suite.txt
+            bin=".venv-$py/bin"; [ -d "$bin" ] || bin=".venv-$py/Scripts"
+            "$bin/python" -m pytest -q -m "not repository" tree/tests/test_adversarial_bounds.py
+          done
 
   smoke-musl:
     name: smoke ${{ matrix.wheel.name }}
     needs: [wheels]
     # The musllinux wheels, each on the musl CPython of its release in the
     # Alpine image the Docker library publishes as `python:<release>-alpine`:
-    # the product suite on the floor and the newest release, an import and the
-    # one check on the releases between, as the glibc rows do. The aarch64
-    # set, cross-built on an x86_64 runner, runs on an arm64 one. No Alpine
-    # image carries a free-threaded CPython or a PyPy, so the cp314t and pp311
-    # musllinux wheels are built and not loaded. The build row names no
+    # the product suite on the floor and the newest release, an import, the one
+    # check and the bounds file on the releases between, as the glibc rows do.
+    # The aarch64 set, cross-built on an x86_64 runner, runs on an arm64 one. No
+    # Alpine image carries a free-threaded CPython or a PyPy, so the cp314t and
+    # pp311 musllinux wheels are built and not loaded. The build row names no
     # interpreter -- the image builds every one it carries -- so the set is read
     # off the artifact, and a wheel no container loaded and no reason names
     # fails the smoke; `tests/test_release_smoke.py` holds the reasons.
@@ -454,6 +464,7 @@ jobs:
         shell: bash
         env:
           PYTHONS: ${{ matrix.wheel.pythons }}
+          IMPORTS: ${{ matrix.wheel.imports }}
         run: |
           # The `test` group at the versions the lock holds, as the glibc smoke
           # installs it, exported here and read by each container's pip.
@@ -462,10 +473,18 @@ jobs:
           cat > suite.sh <<'SH'
           pip install -q --disable-pip-version-check --root-user-action=ignore --no-index --find-links /dist valgebra
           pip install -q --disable-pip-version-check --root-user-action=ignore -r /suite.txt
-          python -m pytest -q -p no:cacheprovider -m "not repository" /tree/tests
+          python -m pytest -q -p no:cacheprovider -m "not repository" "$SUITE"
           SH
+          # The suite on the ends, and the bounds file on the releases between,
+          # for the reason the glibc smoke gives.
           for py in $PYTHONS; do
-            docker run --rm -e HYPOTHESIS_PROFILE=ci -w /tmp \
+            docker run --rm -e HYPOTHESIS_PROFILE=ci -e SUITE=/tree/tests -w /tmp \
+              -v "$PWD/dist:/dist:ro" -v "$PWD/tree:/tree:ro" -v "$PWD/suite.sh:/suite.sh:ro" \
+              -v "$PWD/suite.txt:/suite.txt:ro" \
+              "python:$py-alpine" sh -e /suite.sh
+          done
+          for py in $IMPORTS; do
+            docker run --rm -e HYPOTHESIS_PROFILE=ci -e SUITE=/tree/tests/test_adversarial_bounds.py -w /tmp \
               -v "$PWD/dist:/dist:ro" -v "$PWD/tree:/tree:ro" -v "$PWD/suite.sh:/suite.sh:ro" \
               -v "$PWD/suite.txt:/suite.txt:ro" \
               "python:$py-alpine" sh -e /suite.sh

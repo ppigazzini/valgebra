@@ -85,11 +85,13 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   value refused at the bound, needs between 828 and 844 KiB on the CPython 3.12
   wheel; the musllinux, Windows arm64 and PyPy wheels are plain builds,
   without the profile's inlining. The release smoke runs the deepest walks on
-  a 1 MiB thread on every wheel it ships. A thread given less can run out
-  before the bound does, and the process ends with it; a thread an embedding
-  host starts at the 512 KiB pthread default on macOS is one. Give a
-  thread that validates deep values 1 MiB or more. This holds on both the object path and the JSON path; an
-  over-deep JSON document is rejected by the parser as `json_invalid`.
+  a 1 MiB thread on every wheel it loads, which is every wheel it ships but the
+  free-threaded and PyPy musllinux ones, which no Alpine image carries. A
+  thread given less can run out before the bound does, and the process ends
+  with it; a thread an embedding host starts at the 512 KiB pthread default on
+  macOS is one. Give a thread that validates deep values 1 MiB or more. This
+  holds on both the object path and the JSON path; an over-deep JSON document is
+  rejected by the parser as `json_invalid`.
 
     The parser has a bound of its own — a couple of hundred levels of arrays and
     objects — and it sits **between** the two: wider than the unfolding bound and
