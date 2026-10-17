@@ -353,6 +353,46 @@ def test_a_deep_body_reaches_the_walk_bound_rather_than_the_stack() -> None:
     assert info.value.code == "recursion_limit"
 
 
+# Each body puts a union of scalars one level under the record that recurses,
+# so some depth of the value sets that union at the walk's bound.
+_UNION_AT_THE_BOUND = {
+    "a field": (
+        recursive(lambda t: {"a?": {"x": {"y": t}}, "b": int | str}),
+        lambda leaf: leaf,
+    ),
+    "a mapping's value": (
+        recursive(lambda t: {"a?": {"x": {"y": t}}, "b": {str: int | str}}),
+        lambda leaf: {"k": leaf},
+    ),
+}
+
+
+@pytest.mark.parametrize("where", sorted(_UNION_AT_THE_BOUND))
+def test_a_complement_admits_no_member_at_any_depth(where: str) -> None:
+    """A union of scalars at the walk's bound stops, as a scalar there does.
+
+    The union's fast path asked each scalar branch its type test, and answered
+    `false` where no level was left: a decided refusal, which a complement
+    reads as the value being outside, and admits it. So a value the schema
+    admits at the top was admitted by its complement too, one level deeper,
+    and every value nested past the bound was admitted by the complement
+    though the schema's walk stopped on it. Every depth across the bound is
+    asked, since where the union lands is a property of the body: a level of
+    nesting is four of the walk's, so a hundred and forty pass both the walk's
+    bound and the unfolding bound.
+    """
+    schema, spell = _UNION_AT_THE_BOUND[where]
+    outside = complement(schema)
+    admitted = []
+    for depth in range(140):
+        value: object = {"b": spell(1)}
+        for _ in range(depth):
+            value = {"a": {"x": {"y": value}}, "b": spell(1)}
+        if outside.is_valid(value):
+            admitted.append(depth)
+    assert not admitted, f"the complement admitted a member at depths {admitted[:5]}"
+
+
 def test_a_recursive_meet_of_records_is_decided_rather_than_overflowing() -> None:
     # The key both records require names the fixpoint, so deciding the meet
     # asks the meet of the key's types, and that unfolds the fixpoint into the

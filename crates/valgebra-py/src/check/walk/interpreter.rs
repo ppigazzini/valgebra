@@ -4855,7 +4855,9 @@ fn a_scalar_is_answered_as_the_walk_answers_it() {
                     &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
                 );
                 assert_eq!(scalar_member(schema, &value, ctx, true), Some(walked));
-                assert_eq!(scalar_member(schema, &value, ctx, false), Some(false));
+                // Without a level it declines, so the walk refuses at the bound
+                // as a stop a complement reads, not as a decided refusal.
+                assert_eq!(scalar_member(schema, &value, ctx, false), None);
             }
         }
         let seven = Value::Py(&values[2]);

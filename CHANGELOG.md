@@ -43,6 +43,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: one schema prints one way, whatever order its sets were written in
 - fix: a union of map atoms holds each atom once -- internal
 - fix: a conjunct refutes beside one the rules decline
+- fix: a complement admits no member at the walk's bound
 
 -->
 
@@ -267,6 +268,15 @@ answer of its own, or a repair to a change not yet released.
   the three answer `not_subset`. A prefix no rule proves to hold a value, such
   as `[X, int, ...]`, names no sequence for the repeated element to stand on,
   and stays `undecided`.
+- **A complement admits no member at the walk's bound.** A union of scalars
+  that sat at the walk's depth bound, as a record's field or a mapping's value,
+  answered its scalar branches `false` without saying the walk had stopped, and
+  a complement over the schema read that as the value being outside it:
+  `complement(recursive(lambda t: {"a?": {"x": {"y": t}}, "b": int | str}))`
+  admitted a value the schema admits, and every value nested past the bound,
+  in 0.0.16 through 0.0.18. A scalar branch at the bound stops, as a scalar
+  does anywhere else, and the complement refuses the value with
+  `recursion_limit`.
 
 ## [0.0.18] - 2026-10-12
 
