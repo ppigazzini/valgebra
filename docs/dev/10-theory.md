@@ -107,6 +107,13 @@ treats completeness as a measured, growing property rather than a promise.
 compromises stated. **[GUIDING: a-peer-implementation]** — the closest thing to a peer
 implementation.
 
+**Castagna & Duboc, "Guard Analysis and Safe Erasure Gradual Typing: a Type
+System for Elixir" (2024).** The same system formalised, with its implementation
+in §7.1: a descriptor per kind of atom, a type of tuples kept as a union of
+tuple atoms by distributing a negated tuple over its components "and likewise
+for larger arities", and a gradual type as two static descriptors. The two
+citations below as "Castagna & Duboc §7.1" are this section.
+
 ## Sequences as a regular language
 
 **Hosoya, Vouillon & Pierce, "Regular Expression Types for XML" (TOPLAS 2005).**
@@ -148,7 +155,7 @@ to the `regex` matcher the walk runs.
 **The rule that splits a fixed-length sequence across a union** is the product
 decomposition — Frisch, Castagna & Benzaken Lemma 6.5 for pairs, in the
 backtrack-free form Castagna gives as `Φ`, and generalised to a fixed component
-count the way Castagna & Duboc state the tuple rule for larger arities.
+count the way Castagna & Duboc §7.1 state the tuple rule for larger arities.
 **[LOAD-BEARING: a-sequence-splits-across-a-union]** — `product_subtype` in `decision/products.rs`. It applies in subtyping
 and nowhere else: emptiness's rules do not decompose a product, so the same
 relation asked as a meet with a complement is left to the set representation,
@@ -538,8 +545,8 @@ example is that `-1 ≤ sin(x) ≤ 1` is necessary and is not an MR. Cite the re
 for the criterion.
 
 The review also bounds what `docs/14-soundness.md` may rest on these suites: MRs
-are *necessary* properties, so even a complete set of them is not a test oracle.
-That page's trust base records it.
+are *necessary* properties, so even a complete set of them "might still not be
+equivalent to a test oracle". That page's trust base records it.
 
 ## The results, row by row, and what holds each
 
@@ -939,9 +946,13 @@ HELD-BY: the_lattice_laws_hold_of_the_lines, the_complement_laws_hold_of_the_lin
 **No result here is implemented whole.** What is implemented is named per
 entry, and the shape of every gap is the same: a construction the paper gives
 over its own type language, carried out here over the fragment this IR can
-spell. The word component *is* Hosoya-Vouillon-Pierce's automaton construction,
-on the regular languages a `str` refinement denotes; the tree-automata inclusion
-their paper decides is not built, and neither is the tree-logic engine above. The
+spell. The word component is the classical construction, a complement by subset
+construction, a product and an emptiness test, on the regular languages a `str`
+refinement denotes. Hosoya-Vouillon-Pierce §4.1 describe it and set it aside:
+an early XDuce used it, and it realised every exponential blow-up the types
+held, so their paper decides inclusion top-down instead. Neither that algorithm
+nor the tree-automata inclusion it decides is built, and neither is the
+tree-logic engine above. The
 structural procedure is sound and budget-bounded and exact on a published
 fragment, not a decision procedure for the whole relation. And the interning that
 shares a name with hash consing is a table of nodes, not a decision procedure.
