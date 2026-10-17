@@ -362,11 +362,12 @@ pub(super) fn keyed_map_subtype(
 /// **Two clauses reading one kind decline**, as two covering one field do
 /// above: each refutes on a value of its own, and the union of their values
 /// is a term neither side spelled, outside the closure of subterms the
-/// budget's argument counts goals in. **A kind is read whole or not at all**:
-/// a key of `tuple[list[int]]` or of a class whose instances are unhashable
-/// holds no key at all, and a key reading by values rather than kinds would
-/// refute `{U: int} <= {str: int}`, which holds because `{U: int}` admits only
-/// `{}`.
+/// budget's argument counts goals in. **A kind is read whole or not at all**,
+/// because a whole kind holds the plain key the rule names and a part of one
+/// need not: `tuple[list[int]]` and a class whose own instances are unhashable
+/// each hold a key only through a subclass that hashes. `{U: int} <= {str:
+/// int}` is refuted by `{U2(): 1}` for such a subclass and by no plain value,
+/// so the pair declines.
 ///
 /// The finite kinds need nothing of their own. Lemma 4.7's proof assumes
 /// every key type is infinite, and `NoneType` and `bool` are not; but the rule
