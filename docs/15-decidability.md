@@ -155,7 +155,10 @@ answers `"undecided"`.
   with the container as part of the type (a list is never a tuple). Every sequence
   schema valgebra builds takes this linear shape, so inclusion *between two
   sequence schemas* is decided completely — a bare `list` among them, since it is
-  the sequence node its kind's top spells (above). A
+  the sequence node its kind's top spells (above). A repeated element outside
+  the supertype's repeated element refutes whatever the prefix decides, where
+  the subtype is proved to hold a value: `[int, int, ...]` is decided not below
+  `[Y, str, ...]` on `[1, 2]`, for a `Y` no rule can read. A
   **fixed-length** sequence is also decided against a union of
   fixed-length ones it splits across, where no single branch contains it:
   `tuple[int | str, int]` is below `tuple[int, int] | tuple[str, int]`. The rule
@@ -178,7 +181,9 @@ answers `"undecided"`.
   subtype does not declare refutes the inclusion however open the subtype is: a
   clause governs the keys a value carries and requires none, so the subtype
   holds a value without that key, and `dict[str, int]` is decided *not* below a
-  record that requires one. A **meet** of two of them is empty when some key
+  record that requires one. A key the subtype declares optional refutes the same
+  way, whatever the field's types decide of each other: `{"a?": int}` is decided
+  not below `{"a": Y}` on `{}`. A **meet** of two of them is empty when some key
   one side requires cannot hold: because the types the two give it share no value,
   or because the other side is closed and does not declare it. Only a required key
   can do this — a meet of two mappings, or of two optional fields, always contains
