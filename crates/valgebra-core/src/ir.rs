@@ -536,7 +536,9 @@ fn claimed_beside_the_region(
 /// bottom -- the clause that frees it goes -- and opening sends it to the top,
 /// which is one clause admitting every value at every key the others do not
 /// claim. The claimed regions are untouched either way, so the paper's own
-/// closed `{|"a" = Int, String => Bool|}` keeps its `String => Bool`.
+/// closed `{|"a" = Int, String => Bool|}` keeps its `String => Bool`. The
+/// clauses admitting every value are read as the one clause they are first
+/// ([`tops_merged`]), so the region does not turn on how they were split.
 fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
     // A node with no clauses claims no key, so the unclaimed region is the
     // whole key space and the answer is the shared list either way: the top
@@ -545,6 +547,18 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
     if defaults.is_empty() {
         return clauses_for(open);
     }
+    let merged;
+    let defaults = if defaults
+        .iter()
+        .filter(|clause| clause.value == Schema::ANYTHING)
+        .nth(1)
+        .is_some()
+    {
+        merged = tops_merged(defaults);
+        &merged[..]
+    } else {
+        defaults
+    };
     let mut kept: Vec<MapClause> = defaults
         .iter()
         .enumerate()
@@ -567,6 +581,39 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
     // opened map is equal to its own clauses written out again.
     canonical_clauses(&mut kept);
     share_clauses(&mut kept)
+}
+
+/// The clauses admitting every value, read as one clause over the union of
+/// their keys, the others as they stand.
+///
+/// Two clauses each admitting every value at their own keys are one rectangle
+/// over the join of the keys, and the region `open` frees is such a clause, so
+/// which of them is the region is not a question the pair can answer apart:
+/// `{str: anything, complement(str): anything}` is the top clause written
+/// twice, ICFP 2023's wildcard (l.1509-1511) spelled as the union footnote 15
+/// reads one as. Read one at a time, each was tested against the complement
+/// of the others' keys, and the answer turned on whether that complement
+/// folded: the pair closed to `{}` as the top does, and the same pair beside a
+/// `bytes: int` clause, or split over `complement(int)` and
+/// `complement(str)`, kept every clause and admitted every dict. Merged, the
+/// clause is read as the top is -- the part over the keys the others claim
+/// stays, and the rest is the region -- however it was split.
+fn tops_merged(defaults: &[MapClause]) -> Vec<MapClause> {
+    let mut merged: Vec<MapClause> = Vec::with_capacity(defaults.len());
+    let mut top: Option<usize> = None;
+    for clause in defaults {
+        if clause.value != Schema::ANYTHING {
+            merged.push(clause.clone());
+            continue;
+        }
+        if let Some(kept) = top.and_then(|at| merged.get_mut(at)) {
+            kept.key = Schema::union([kept.key.clone(), clause.key.clone()]);
+        } else {
+            top = Some(merged.len());
+            merged.push(clause.clone());
+        }
+    }
+    merged
 }
 
 /// Fold clauses carrying one value into one clause over the union of their keys.

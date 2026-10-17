@@ -732,9 +732,13 @@ HELD-BY: test_the_two_deciders_are_measured_against_each_other, test_decision_de
 **`open` and `close` read the region no clause claims, and nothing else.**
 Openness is the default of the key-type region the clauses leave over: `open`
 frees that region and `close` refuses it, and neither touches a region a clause
-claims. So a mapping opened keeps what a `str` key maps to and admits an `int`
-key with any value, and one clause is read the same whether or not a field is
-declared beside it. Every record is rewritten, the one a clause maps a key to
+claims. A clause short of every value claims its keys; the clauses admitting
+every value are one clause over the union of their keys, ICFP 2023's wildcard
+(l.1509-1511) written as the union its footnote 15 reads one as, of which the
+part over keys another clause claims stays and the rest is the region. So a
+mapping opened keeps what a `str` key maps to and admits an `int` key with any
+value, one clause is read the same whether or not a field is declared beside
+it, and the top split over `str` and `complement(str)` closes as the top does. Every record is rewritten, the one a clause maps a key to
 included. What the laws hold of the sets is narrower than "a function of the
 set": closing commutes with absorption, and applying either operator twice
 gives the set applying it once gave, though not always the same term.
