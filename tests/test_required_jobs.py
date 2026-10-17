@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import ast
 import functools
-import itertools
 import os
 import re
 import shutil
@@ -29,6 +28,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from _expressions import evaluate, legs
 from _toml import load
 from _tree import ROOT, WORKFLOWS, read_workflow
 
@@ -86,83 +86,6 @@ def test_every_job_is_required_by_the_gate() -> None:
     )
 
 
-def _python(expression: str) -> str:
-    """Spell a workflow expression in Python's grammar, without changing its sense.
-
-    The operators become Python's, and a job named with a hyphen is read by
-    index, since `needs.rust-lint` is a subtraction to Python.
-    """
-    text = expression.strip().removeprefix("${{").removesuffix("}}")
-    text = re.sub(r"\bneeds\.([\w-]+)", r"needs['\1']", text)
-    text = text.replace("&&", " and ").replace("||", " or ")
-    return " ".join(re.sub(r"!(?!=)", " not ", text).split())
-
-
-#: The status functions, as they answer on a run nobody cancelled.
-STATUS = {"always": True, "cancelled": False}
-
-
-def _leaf(node: ast.expr, context: dict, expression: str) -> object:
-    """Read a value: a string, a property of the context, or a status function."""
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    if isinstance(node, ast.Name):
-        return context.get(node.id, "")
-    if isinstance(node, (ast.Attribute, ast.Subscript)):
-        owner = _leaf(node.value, context, expression)
-        key = (
-            node.attr
-            if isinstance(node, ast.Attribute)
-            else _leaf(node.slice, context, expression)
-        )
-        return owner.get(key, "") if isinstance(owner, dict) else ""
-    if (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id in STATUS
-    ):
-        return STATUS[node.func.id]
-    message = f"the ledger cannot read {ast.unparse(node)!r} in {expression!r}"
-    raise AssertionError(message)
-
-
-def _evaluate(expression: str, context: dict) -> object:
-    """Evaluate a workflow expression as the runner does, on a run not cancelled.
-
-    A property nothing set reads as the empty string, which is what an output a
-    step never wrote reads as, and a skipped job's outputs. A form this does not
-    read fails here rather than reading as true.
-    """
-
-    def value(node: ast.expr) -> object:
-        if isinstance(node, ast.BoolOp):
-            conjunction = isinstance(node.op, ast.And)
-            result: object = conjunction
-            for operand in node.values:
-                result = value(operand)
-                if bool(result) != conjunction:
-                    break
-            return result
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-            return not value(node.operand)
-        if (
-            isinstance(node, ast.Compare)
-            and len(node.ops) == 1
-            and isinstance(node.ops[0], (ast.Eq, ast.NotEq))
-        ):
-            same = value(node.left) == value(node.comparators[0])
-            return same == isinstance(node.ops[0], ast.Eq)
-        return _leaf(node, context, expression)
-
-    return value(_tree(expression))
-
-
-@functools.cache
-def _tree(expression: str) -> ast.expr:
-    """Parse an expression once: the gate's is read a few hundred times a row."""
-    return ast.parse(_python(expression), mode="eval").body
-
-
 #: The runs a workflow sees, as the event and what the dispatcher answered: a
 #: push; a dispatch; a night handed to the development branch, with `main`'s
 #: tip beside it and on it; and a night with no branch to hand it to.
@@ -209,7 +132,7 @@ def _results(run: str, **planted: str) -> dict[str, dict]:
         needs = {need: done[need] for need in _needs(jobs[name])}
         condition = str(jobs[name].get("if", ""))
         context = {"github": {"event_name": event}, "needs": needs, "inputs": {}}
-        runs = bool(_evaluate(condition, context)) if condition else True
+        runs = bool(evaluate(condition, context)) if condition else True
         if not re.search(r"\b(always|cancelled|success|failure)\(", condition):
             runs = runs and all(need["result"] == "success" for need in needs.values())
         result = planted.get(name, "success") if runs else "skipped"
@@ -228,7 +151,7 @@ def _gate_fails(results: dict[str, dict], event: str) -> bool:
     """Answer whether the aggregator's failing step runs on these results."""
     gate = _jobs()[GATE]
     context = {"github": {"event_name": event}, "needs": results}
-    return bool(_evaluate(str(gate["steps"][0]["if"]), context))
+    return bool(evaluate(str(gate["steps"][0]["if"]), context))
 
 
 def test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may() -> None:
@@ -304,13 +227,13 @@ def test_the_gate_and_a_condition_are_read_as_the_runner_reads_them() -> None:
         "github": {"event_name": "push"},
         "needs": {"rust-lint": {"result": "skipped", "outputs": {}}},
     }
-    assert _evaluate("needs.rust-lint.result != 'success'", context)
-    assert _evaluate("needs['rust-lint'].outputs.dispatched != 'true'", context)
-    assert not _evaluate("needs['rust-lint'].outputs.dispatched == 'false'", context)
-    assert _evaluate("!cancelled() && github.event_name != 'schedule'", context)
-    assert not _evaluate("${{ github.event_name == 'schedule' }}", context)
+    assert evaluate("needs.rust-lint.result != 'success'", context)
+    assert evaluate("needs['rust-lint'].outputs.dispatched != 'true'", context)
+    assert not evaluate("needs['rust-lint'].outputs.dispatched == 'false'", context)
+    assert evaluate("!cancelled() && github.event_name != 'schedule'", context)
+    assert not evaluate("${{ github.event_name == 'schedule' }}", context)
     with pytest.raises(AssertionError, match="cannot read"):
-        _evaluate("contains(github.event_name, 'push')", context)
+        evaluate("contains(github.event_name, 'push')", context)
 
 
 def test_every_need_is_read_by_the_condition() -> None:
@@ -871,35 +794,6 @@ def _selects(expression: str, marks: dict[str, bool]) -> bool:
     return not expression or value(ast.parse(expression, mode="eval").body)
 
 
-def _legs(job: dict) -> list[dict[str, str]]:
-    """Give each leg of a job as the `matrix.*` values its expressions read.
-
-    Expanded as the runner expands a matrix: an `include` row widens every
-    combination of the lists whose values it agrees with, and is a leg of its
-    own where it agrees with none.
-    """
-    matrix = (job.get("strategy") or {}).get("matrix") or {}
-    axes = {key: value for key, value in matrix.items() if key != "include"}
-    legs = [
-        {f"matrix.{key}": str(value) for key, value in zip(axes, values, strict=True)}
-        for values in itertools.product(*axes.values())
-    ]
-    combinations = list(legs)
-    listed = {f"matrix.{key}" for key in axes}
-    for row in matrix.get("include", []):
-        named = {f"matrix.{key}": str(value) for key, value in row.items()}
-        widened = [
-            leg
-            for leg in combinations
-            if all(leg[key] == named[key] for key in listed & named.keys())
-        ]
-        for leg in widened:
-            leg.update(named)
-        if not widened:
-            legs.append(named)
-    return legs
-
-
 def _holds(condition: str, leg: dict[str, str], variables: dict) -> bool:
     """Answer whether a step's `if:` holds on a leg; a step with none always runs.
 
@@ -925,7 +819,7 @@ def _reads(workflow: dict) -> dict[tuple[str, str], dict[str, int]]:
     counts = {}
     for name in SUITES:
         job = workflow["jobs"][name]
-        for leg in _legs(job) or [{}]:
+        for leg in legs(job) or [{}]:
             selections = [
                 "".join(found.groups(""))
                 if (found := _MARKERS.search(str(step["run"])))
@@ -1010,7 +904,7 @@ def test_a_selection_and_a_condition_are_read_as_the_runner_reads_them() -> None
             }
         }
     }
-    assert [" ".join(leg.values()) for leg in _legs(job)] == [
+    assert [" ".join(leg.values()) for leg in legs(job)] == [
         "ubuntu-26.04 3.10 True",
         "ubuntu-26.04 3.11",
         "macos-26 3.14",
