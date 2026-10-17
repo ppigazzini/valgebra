@@ -145,4 +145,6 @@ not to reconstruct it.
 compiles to the schema, not the one the user wrote: a schema built through the
 combinators may have no annotation spelling, and one that does may differ in
 member order from the spelling it was written in, because the constructors order
-a union's members when they build it.
+a union's members when they build it and the render prints each run of one kind
+in a set in the order its renderings sort in (`in_reading_order` in `render.rs`),
+so that two schemas `==` calls one print alike.

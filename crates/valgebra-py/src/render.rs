@@ -1,6 +1,7 @@
 //! Render a compiled schema back to a readable annotation/combinator string.
 
 use std::cell::{Cell, RefCell};
+use std::mem::{Discriminant, discriminant};
 
 use pyo3::intern;
 use pyo3::prelude::*;
@@ -168,10 +169,18 @@ fn render_at(
         Schema::Instance(i) => render_instance(py, pool, i.get())?,
         Schema::AttrRecord { fields } => render_attr_record(py, fields, pool, defs, active, depth)?,
         Schema::Refine { base, constraints } => {
+            let mut markers = constraints
+                .iter()
+                .map(|constraint| {
+                    Ok((
+                        discriminant(constraint),
+                        render_constraint(py, constraint, pool)?,
+                    ))
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            in_reading_order(&mut markers);
             let mut parts = vec![r(base)?];
-            for constraint in constraints.iter() {
-                parts.push(render_constraint(py, constraint, pool)?);
-            }
+            parts.extend(markers.into_iter().map(|(_, text)| text));
             format!("Annotated[{}]", parts.join(", "))
         }
         Schema::Ref(id) => {
@@ -290,21 +299,32 @@ fn unprinted(name: String, taken: &FxHashSet<&str>) -> String {
         .unwrap_or(name)
 }
 
-/// Render a union's members, ordering the literals among them by what they are.
+/// Put each run of one kind of item in the order its renderings sort in.
 ///
-/// Construction sorts a union's members with the IR's own `Ord`, and a
-/// `Literal` sorts there by its **pool slot** -- which is the order the
-/// constants were first seen, not a property of the schema. So `Literal[1, 2]`
-/// and `Literal[2, 1]` are one schema by `==` and by `hash`, and printed as
-/// `Literal[1] | Literal[2]` and `Literal[2] | Literal[1]`, which are two
-/// spellings of one schema. `docs/04-algebra.md` says "`repr` shows it and `==`
-/// compares it", so the two have to be one rendering.
+/// Construction sorts a set the IR holds as a list -- a union's or a meet's
+/// members, a refinement's constraints, a map's clauses -- with the node's own
+/// `Ord`, which compares the variant first and then the payload. A payload that
+/// names a constant or a class names it by its **pool slot**, which is the
+/// order the constants were first seen, not a property of the schema. So
+/// `Literal[1, 2]` and `Literal[2, 1]`, `A | B` and `B | A`, and `Annotated[int,
+/// Ge(3), Ge(5)]` and `Annotated[int, Ge(5), Ge(3)]` are each one schema by `==`
+/// and by `hash`, and printed in the slot order they would be two.
+/// `docs/04-algebra.md` says "`repr` shows it and `==` compares it", so each
+/// pair has to be one rendering.
 ///
-/// The sort puts every `Literal` in one contiguous run -- the IR's `Ord` orders
-/// by variant first -- so ordering that run by the constant's own rendering
-/// leaves every other member exactly where it was. The rendering is the sort
-/// key because it is what the reader sees: two members that print the same
-/// print the same wherever they sit.
+/// The variant order is the slot-free part of the sort, so the runs keep it --
+/// `int | str` prints in the order every scalar union prints in -- and within a
+/// run the rendering is the key, because it is what the reader sees: two items
+/// that print the same print the same wherever they sit. A set's order is not
+/// part of what it names, so any order reads back as the same schema.
+fn in_reading_order<K: PartialEq>(rendered: &mut [(K, String)]) {
+    for run in rendered.chunk_by_mut(|a, b| a.0 == b.0) {
+        run.sort_by(|a, b| a.1.cmp(&b.1));
+    }
+}
+
+/// Render a union's members, each run of one kind in the order
+/// [`in_reading_order`] gives it.
 ///
 /// A member printed as a display -- a record `{...}` or a fixed list `[...]` --
 /// is not a type, and `|` between it and the next member is Python's own
@@ -316,20 +336,8 @@ fn render_union(
     members: &[Schema],
     render: &impl Fn(&Schema) -> PyResult<String>,
 ) -> PyResult<String> {
-    let mut rendered: Vec<(bool, String)> = members
-        .iter()
-        .map(|member| Ok((matches!(member, Schema::Literal(_)), render(member)?)))
-        .collect::<PyResult<_>>()?;
-    if let Some(start) = rendered.iter().position(|(literal, _)| *literal) {
-        let end = rendered
-            .iter()
-            .skip(start)
-            .position(|(literal, _)| !*literal)
-            .map_or(rendered.len(), |offset| start + offset);
-        if let Some(run) = rendered.get_mut(start..end) {
-            run.sort_by(|a, b| a.1.cmp(&b.1));
-        }
-    }
+    let mut rendered = rendered_members(members, render)?;
+    in_reading_order(&mut rendered);
     let displayed = rendered
         .iter()
         .any(|(_, text)| text.starts_with('{') || text.starts_with('['));
@@ -352,6 +360,17 @@ fn render_union(
 /// names the class. Without this the annotation `Pt` would print as
 /// `intersection(Pt, object(x=int))` -- the algebra's spelling of a thing the
 /// user spelled with one name.
+/// Each member beside its variant, the key [`in_reading_order`] groups by.
+fn rendered_members<'a>(
+    members: impl IntoIterator<Item = &'a Schema>,
+    render: &impl Fn(&Schema) -> PyResult<String>,
+) -> PyResult<Vec<(Discriminant<Schema>, String)>> {
+    members
+        .into_iter()
+        .map(|member| Ok((discriminant(member), render(member)?)))
+        .collect()
+}
+
 fn render_meet(
     py: Python<'_>,
     schema: &Schema,
@@ -363,15 +382,12 @@ fn render_meet(
 ) -> PyResult<String> {
     let r = |s: &Schema| render_at(py, s, pool, defs, active, depth + 1);
     let Some(class) = schema.object_class() else {
-        let kids = members
-            .iter()
-            .map(r)
-            .collect::<PyResult<Vec<_>>>()?
-            .join(", ");
-        return Ok(format!("intersection({kids})"));
+        let mut kids = rendered_members(members, &r)?;
+        in_reading_order(&mut kids);
+        let kids: Vec<String> = kids.into_iter().map(|(_, text)| text).collect();
+        return Ok(format!("intersection({})", kids.join(", ")));
     };
     let name = pool_class_name(py, pool, class.get())?;
-    let mut parts = vec![name];
     // The atom, and the deep check of what the class declares: both are what
     // the name already says. The declaration is named where the fields have
     // names and positional where they do not, and `object_class` answers only
@@ -379,17 +395,21 @@ fn render_meet(
     // exactly the member it read the class out of. Keeping the positional one
     // printed a `NamedTuple` as `intersection(Point, tuple[int, str])` beside a
     // dataclass printing as `DC`.
-    for member in members {
-        if !matches!(
-            member,
-            Schema::Instance(_) | Schema::AttrRecord { .. } | Schema::Seq { .. }
-        ) {
-            parts.push(r(member)?);
-        }
-    }
-    Ok(if parts.len() == 1 {
-        parts.remove(0)
+    let mut rest = rendered_members(
+        members.iter().filter(|member| {
+            !matches!(
+                member,
+                Schema::Instance(_) | Schema::AttrRecord { .. } | Schema::Seq { .. }
+            )
+        }),
+        &r,
+    )?;
+    in_reading_order(&mut rest);
+    Ok(if rest.is_empty() {
+        name
     } else {
+        let mut parts = vec![name];
+        parts.extend(rest.into_iter().map(|(_, text)| text));
         format!("intersection({})", parts.join(", "))
     })
 }
@@ -448,14 +468,23 @@ fn render_keyed_map(
             Ok(format!("{name}: {}", r(&field.schema)?))
         })
         .collect::<PyResult<_>>()?;
-    for clause in defaults {
-        // Every clause renders as the key-to-value entry it is, the catch-all
-        // included. `{'a': int, ...}` read better and rebuilt a *different*
-        // schema: `...` is a dict key like any other, so the frontend reads it
-        // back as `Literal[Ellipsis]` and the record is closed with an odd
-        // field rather than open.
-        entries.push(format!("{}: {}", r(&clause.key)?, r(&clause.value)?));
-    }
+    // Every clause renders as the key-to-value entry it is, the catch-all
+    // included. `{'a': int, ...}` read better and rebuilt a *different* schema:
+    // `...` is a dict key like any other, so the frontend reads it back as
+    // `Literal[Ellipsis]` and the record is closed with an odd field rather
+    // than open. The clauses are a set, ordered by a key that reads a literal
+    // key's pool slot, so they print in reading order.
+    let mut clauses = defaults
+        .iter()
+        .map(|clause| {
+            Ok((
+                discriminant(&clause.key),
+                format!("{}: {}", r(&clause.key)?, r(&clause.value)?),
+            ))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    in_reading_order(&mut clauses);
+    entries.extend(clauses.into_iter().map(|(_, text)| text));
     Ok(format!("{{{}}}", entries.join(", ")))
 }
 

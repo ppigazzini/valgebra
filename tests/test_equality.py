@@ -24,6 +24,7 @@ that asserts it stays separate is the one that says so.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from typing import TYPE_CHECKING, Annotated, Literal
 
@@ -38,11 +39,27 @@ from valgebra import (
     Validator,
     anything,
     complement,
+    instance_of,
     intersection,
     nothing,
     recursive,
     union,
 )
+
+
+class _Left:
+    """One plain class, for the rows that name two classes in two orders."""
+
+
+class _Right:
+    """The other plain class."""
+
+
+@dataclasses.dataclass
+class _Point:
+    """A class that declares a field, which a meet prints by the class's name."""
+
+    x: int
 
 
 def _is_even(value: int) -> bool:
@@ -96,6 +113,34 @@ SAME = [
         "records inside a list",
         [{"a": int, "b": int}, ...],
         [{"b": int, "a": int}, ...],
+    ),
+    # Each spelling numbers its constants in the order it reads them, so the
+    # pairs below put one constant in two pool slots.
+    (
+        "bounds of one kind",
+        Annotated[int, at.Ge(3), at.Ge(5)],
+        Annotated[int, at.Ge(5), at.Ge(3)],
+    ),
+    (
+        "literal keys",
+        {Literal["x"]: int, Literal["y"]: str},
+        {Literal["y"]: str, Literal["x"]: int},
+    ),
+    ("classes in a union", _Left | _Right, _Right | _Left),
+    (
+        "classes in a meet",
+        intersection(instance_of(_Left), instance_of(_Right)),
+        intersection(instance_of(_Right), instance_of(_Left)),
+    ),
+    (
+        "complemented literals in a meet",
+        intersection(int, complement(Literal[1]), complement(Literal[2])),
+        intersection(int, complement(Literal[2]), complement(Literal[1])),
+    ),
+    (
+        "complemented literals beside a declared class",
+        intersection(_Point, complement(Literal[1]), complement(Literal[2])),
+        intersection(_Point, complement(Literal[2]), complement(Literal[1])),
     ),
 ]
 
@@ -357,11 +402,12 @@ def test_equal_validators_still_hash_alike_when_the_constant_is_read() -> None:
 def test_one_schema_prints_one_way(name: str, left: object, right: object) -> None:
     """`docs/04` says `repr` shows the schema and `==` compares it.
 
-    Construction sorts a union's members with the IR's own order, and a literal
-    sorts there by its **pool slot** -- the order the constants were first seen.
-    So `Literal[1, 2]` and `Literal[2, 1]` were one schema by `==` and by `hash`
-    and printed two ways, which made `repr` show something that was not the
-    schema. Every pair the suite calls equal must print alike.
+    Construction sorts a set with the IR's own order, and a literal, a class or
+    a bound's operand sorts there by its **pool slot** -- the order the
+    constants were first seen. So `Literal[1, 2]` and `Literal[2, 1]`, or `A |
+    B` and `B | A`, are one schema by `==` and by `hash`, and a render in slot
+    order would show something that is not the schema. Every pair the suite
+    calls equal must print alike.
     """
     assert repr(Validator(left)) == repr(Validator(right)), name
 
@@ -372,8 +418,8 @@ def test_a_union_of_literals_prints_in_one_order_however_it_is_built() -> None:
     assert repr(Validator(Literal[3, 1, 2])) == repr(Validator(Literal[1, 2, 3]))
     combined = union(_integer_literal(3), _integer_literal(1), _integer_literal(2))
     assert repr(combined) == repr(Validator(Literal[1, 2, 3]))
-    # Members that are not literals keep the place the normal form gives them,
-    # so only the run this reorders moves.
+    # The runs of one kind keep the order the normal form gives them, so a
+    # member of another kind stays where it was.
     assert repr(Validator(str | Literal[2, 1])) == "str | Literal[1] | Literal[2]"
 
 
@@ -384,6 +430,7 @@ def test_the_rendered_order_still_rebuilds_the_schema() -> None:
         "Literal": Literal,
         "Annotated": Annotated,
         "Regex": Regex,
+        "Ge": at.Ge,
         "at": at,
         "anything": anything,
         "nothing": nothing,
@@ -392,7 +439,14 @@ def test_the_rendered_order_still_rebuilds_the_schema() -> None:
         "complement": complement,
         "recursive": recursive,
     }
-    for spelling in (Literal[3, 1, 2], str | Literal[2, 1], {"k": Literal["b", "a"]}):
+    for spelling in (
+        Literal[3, 1, 2],
+        str | Literal[2, 1],
+        {"k": Literal["b", "a"]},
+        Annotated[int, at.Ge(5), at.Ge(3)],
+        {Literal["y"]: str, Literal["x"]: int},
+        intersection(int, complement(Literal[2]), complement(Literal[1])),
+    ):
         validator = Validator(spelling)
         assert Validator(eval(repr(validator), environment)) == validator  # noqa: S307
 
