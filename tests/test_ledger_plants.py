@@ -4277,6 +4277,43 @@ PLANTS = (
         trips=("test_a_forgiven_leg_turns_no_commit_red",),
     ),
     Plant(
+        # The musl smoke without the step that reads its set off the artifact:
+        # whatever the image builds ships, loaded or not.
+        "tests/test_release_smoke.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            "      - name: Every wheel the set holds is loaded or named unloadable\n",
+            "      - name: Every wheel the set holds\n",
+        ),
+        trips=("test_a_set_its_image_chooses_is_read_off_its_artifact",),
+    ),
+    Plant(
+        # A tag accepted unloaded with no reason given for it.
+        "tests/test_release_smoke.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            "UNLOADABLE: cp314t pypy311_pp73",
+            "UNLOADABLE: cp314t cp315 pypy311_pp73",
+        ),
+        trips=("test_a_set_its_image_chooses_is_read_off_its_artifact",),
+    ),
+    Plant(
+        # The step that reads the set and refuses nothing.
+        "tests/test_release_smoke.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            'is built and loaded by no container"\n              status=1',
+            'is built and loaded by no container"\n              status=0',
+        ),
+        trips=("test_the_artifact_step_refuses_a_wheel_no_container_loads",),
+    ),
+    Plant(
         # The job's flag turned round: it names the release in development and
         # forgives every other leg, which a reading of the text calls the same
         # flag.

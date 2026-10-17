@@ -377,8 +377,10 @@ jobs:
     # one check on the releases between, as the glibc rows do. The aarch64
     # set, cross-built on an x86_64 runner, runs on an arm64 one. No Alpine
     # image carries a free-threaded CPython or a PyPy, so the cp314t and pp311
-    # musllinux wheels are built and not loaded; `tests/test_release_smoke.py`
-    # names them.
+    # musllinux wheels are built and not loaded. The build row names no
+    # interpreter -- the image builds every one it carries -- so the set is read
+    # off the artifact, and a wheel no container loaded and no reason names
+    # fails the smoke; `tests/test_release_smoke.py` holds the reasons.
     strategy:
       fail-fast: false
       matrix:
@@ -421,6 +423,33 @@ jobs:
             docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/import.sh:/import.sh:ro" \
               "python:$py-alpine" sh -e /import.sh
           done
+      # Each wheel's ABI tag is a release a container above loaded, or one no
+      # Alpine image can load. A wheel the image starts building -- a new
+      # release, a new build of one -- fails here until a row loads it or a
+      # reason names it.
+      - name: Every wheel the set holds is loaded or named unloadable
+        shell: bash
+        env:
+          LOADED: ${{ matrix.wheel.pythons }} ${{ matrix.wheel.imports }}
+          # No Alpine image carries a free-threaded CPython or a PyPy.
+          UNLOADABLE: cp314t pypy311_pp73
+        run: |
+          status=0
+          for wheel in dist/*.whl; do
+            abi=$(basename "$wheel" .whl | cut -d- -f4)
+            accounted=no
+            for release in $LOADED; do
+              if [ "$abi" = "cp${release/./}" ]; then accounted=yes; fi
+            done
+            for tag in $UNLOADABLE; do
+              if [ "$abi" = "$tag" ]; then accounted=yes; fi
+            done
+            if [ "$accounted" = no ]; then
+              echo "::error::$(basename "$wheel") is built and loaded by no container"
+              status=1
+            fi
+          done
+          exit "$status"
       - name: Run the product suite on the musl wheel in its container
         shell: bash
         env:
