@@ -45,6 +45,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a conjunct refutes beside one the rules decline
 - fix: a complement admits no member at the walk's bound
 - fix: a complement reads its inner walk in Kleene's strong logic
+- fix: a map atom wanting a key past the partition proves nothing -- internal
 
 -->
 

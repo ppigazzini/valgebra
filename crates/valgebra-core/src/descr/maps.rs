@@ -414,8 +414,12 @@ impl<G: Guard> MapAtom<G> {
         }
         let mut pinned = Vec::new();
         for want in &self.wanted {
+            // A want past the key partition is no element of the model -- ICFP
+            // Definition 4.6 gives a default on the partition and nowhere else
+            // -- so an atom carrying one is proved nothing, as the search's
+            // own reading of the same miss declines.
             let Some(default) = self.defaults.get(want.slot) else {
-                return Verdict::Empty;
+                return Verdict::Unknown;
             };
             let finite = finite_keys(want.slot);
             let fresh = if finite.is_some() {
@@ -542,8 +546,12 @@ impl<G: Guard> MapAtom<G> {
                 ty: want.ty.complement(),
                 absent: true,
             };
-            if let Some(default) = atom.defaults.get_mut(want.slot) {
-                *default = outside.clone();
+            match atom.defaults.get_mut(want.slot) {
+                Some(default) => *default = outside.clone(),
+                // Past the partition the want is kept as it stands, so every
+                // reading built from this atom declines on it as the atom it
+                // came from does, rather than widening in silence.
+                None => atom.wanted.push(want.clone()),
             }
             // A default governs the keys the atom does not name, so tightening
             // one reaches every key of the part -- the exclusion set included,

@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use super::{
-    Entry, KEY_KINDS, Label, MAX_ASSIGNMENTS, MAX_ATOMS, MapAtom, MapLattice, Pinned, Search,
-    Wanted, key_slot, tidy, unordered_pairs,
+    Entry, KEY_KINDS, Label, MAX_ASSIGNMENTS, MAX_ATOMS, MapAtom, MapLattice, PARTS, Pinned,
+    Search, Wanted, key_slot, tidy, unordered_pairs,
 };
 use crate::descr::budget;
 use crate::descr::integers::IntSet;
@@ -1225,4 +1225,32 @@ fn a_meet_wants_a_key_once_whatever_its_type_spells() {
         .and_then(|held| held.meet(&wanting(at_four)))
         .expect("a meet of three tops");
     assert_eq!(met.wanted.len(), 2, "{:?}", met.wanted);
+}
+
+/// A want past the key partition proves nothing, of its atom or of the atoms
+/// its complement is read into.
+///
+/// The partition is where Definition 4.6 gives a default, so a want indexed
+/// past it is no element of the model. Read as the empty set it was a proof,
+/// where the search over the same miss declines; and the complement dropped
+/// it, which widened the atoms built from it in silence.
+#[test]
+fn a_want_past_the_partition_proves_nothing() {
+    let mut broken = MapAtom::<IntSet>::top();
+    broken.wanted.push(Wanted {
+        slot: PARTS,
+        ty: Values::Only(IntSet::just(1)),
+        besides: BTreeSet::new(),
+    });
+    assert_eq!(broken.emptiness(), Verdict::Unknown);
+
+    let complement = broken.complement();
+    let carried: Vec<&MapAtom<IntSet>> = complement
+        .iter()
+        .filter(|atom| atom.wanted.iter().any(|want| want.slot == PARTS))
+        .collect();
+    assert!(!carried.is_empty(), "the want is kept: {complement:?}");
+    for atom in carried {
+        assert_eq!(atom.emptiness(), Verdict::Unknown);
+    }
 }
