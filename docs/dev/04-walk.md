@@ -142,7 +142,12 @@ deciding walk and an explaining one refuse at one depth. The literal-union
 table is such a shortcut, in `check_union` and in `literal_list_matches`
 alike, so a value whose union of literals sits one level past the bound is
 refused by `is_valid` and `validate` alike, though the union's table would ask
-nothing.
+nothing. A shortcut that cannot open the level declines to the walk rather
+than refusing: `scalar_member`, the type test a union's scalar branch and a
+record's scalar field are asked, answers nothing where no level is free, so
+`member` refuses there and records the stop. Refused as `false`, the scalar
+would read as a decided refusal, and a complement over it would admit the
+value.
 
 ## The union reports the closest branch
 

@@ -96,7 +96,7 @@ pub(super) fn scalar_admits(kind: Scalar, value: &Value<'_, '_>) -> bool {
 }
 
 /// What [`member`] answers for a scalar schema in a fast walk, or `None` for a
-/// schema that is not one.
+/// schema that is not one, or where no level is free.
 ///
 /// A scalar is one type test, and `member` spends a dispatch around it: the
 /// fatal-signal flag, a level of descent, the match. The answer is the same
@@ -105,6 +105,14 @@ pub(super) fn scalar_admits(kind: Scalar, value: &Value<'_, '_>) -> bool {
 /// because a branch asked before this one may have run Python. Only a walk
 /// that records nothing may ask: an explaining one reports where a scalar
 /// failed.
+///
+/// **Without a level this declines rather than refusing.** `member` refuses a
+/// scalar at the walk's bound as a *stop*, which a complement reads as no
+/// answer; a plain `false` here would be a decided refusal, and a complement
+/// over it would admit the value -- `complement(recursive(lambda t: {"a?":
+/// {"x": {"y": t}}, "b": int | str}))` a value the schema admits, once its
+/// union of scalars sits at the bound. Declined, the caller walks the scalar,
+/// and `member` refuses at the bound and records why.
 #[inline]
 pub(super) fn scalar_member(
     schema: &Schema,
@@ -113,7 +121,7 @@ pub(super) fn scalar_member(
     room: bool,
 ) -> Option<bool> {
     let kind = scalar_of(schema)?;
-    Some(room && !ctx.state.signals.fatal_seen.get() && scalar_admits(kind, value))
+    room.then(|| !ctx.state.signals.fatal_seen.get() && scalar_admits(kind, value))
 }
 
 /// The scalar kind every position of a sequence takes, with the schema it is
