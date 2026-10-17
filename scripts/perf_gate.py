@@ -390,6 +390,25 @@ def check_checksum(measured: int, expected: int, subject: str) -> int:
     return 0
 
 
+def per_iteration(checksum: int, iterations: int, subject: str) -> int | None:
+    """Read what a binding run computes per iteration, or refuse a run of none.
+
+    The scale is read off the run itself, because the build shape folds a node
+    count where the others fold one, and both runs are then held to it. A walk
+    that answers every value wrong, or half of them, computes less than one per
+    iteration: read as a scale of nought, it would hold both runs to a checksum
+    of nought, which such a walk meets, and its count -- cheap, as wrong answers
+    are -- would read as an improvement.
+    """
+    scale = checksum // iterations if iterations else 0
+    if scale < 1:
+        print(f"RIG FAULT: {subject} checksum {checksum} over {iterations:,}")
+        print("iterations: the workload computed less than one a pass, so the")
+        print("count is not of the work it is for.")
+        return None
+    return scale
+
+
 def check_against_budget(measured: int, recorded: int, tolerance: float) -> int:
     """Hold a count inside a two-sided band around the recorded one."""
     ceiling = int(recorded * (1 + tolerance))
@@ -592,7 +611,9 @@ def measure_mode(
     # checksum is a multiple of the count rather than the count. The rig check is
     # that both runs agree on that multiple, which a run ignoring its argument
     # cannot do: it would report the same checksum twice.
-    scale = high.checksum // hi if hi else 0
+    scale = per_iteration(high.checksum, hi, subject)
+    if scale is None:
+        raise SystemExit(EXIT_FAIL)
     for result, iters in ((high, hi), (low, lo)):
         if check_checksum(result.checksum, iters * scale, f"{subject} x{iters:,}"):
             raise SystemExit(EXIT_FAIL)
