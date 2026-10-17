@@ -179,11 +179,15 @@ which fragment each part settles:
   what is decided and what stays conservative.
 - **Conservative.** A predicate refinement is opaque, and a narrow decidable tail
   and the runtime-undecidable constructs remain (the boundary records them). An
-  answer is sound over values that answer comparisons as their builtin does:
-  `is_empty` does not report a non-empty schema as empty, and a subtype is not
-  claimed unless it provably holds. A bound conjunction is the exception, decided
-  by comparing bounds, so an `int` subclass whose comparisons lie can be a member
-  of a schema decided empty; the [soundness page](14-soundness.md) pins it.
+  answer is sound relative to the [trust
+  base](14-soundness.md#what-this-argument-assumes): over values that answer
+  Python's questions as a function of themselves, whose `__class__` is their
+  type, and, for an enumeration's instance, that the enumeration made, among
+  the rest it lists. `is_empty` does not report a non-empty schema as empty,
+  and a subtype is not claimed unless it provably holds. A bound conjunction is
+  one of the cases it names: decided by comparing bounds, so an `int` subclass
+  whose comparisons lie can be a member of a schema decided empty, and the
+  soundness page pins it.
 
 The relation is *defined* by the set-theoretic emptiness test (`s <: t` iff
 `[[s ∧ ¬t]]` is empty), and it is decided two ways. **Structural rules** recurse

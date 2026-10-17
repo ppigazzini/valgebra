@@ -11,9 +11,12 @@ to an emptiness test (see [foundations](13-foundations.md)).
 
 Every answer is **sound** relative to the [trust base](14-soundness.md#what-this-argument-assumes).
 A `True` from `is_subtype_of`/`is_equivalent`, or a `True` from `is_empty`, is
-correct for every value that answers Python's questions as a function of itself. Where valgebra cannot yet prove a relation it
-answers conservatively — `False`, or "not empty" — never a wrong `True`. So a
-positive answer is a guarantee, and a negative answer is "no, or not proven".
+correct for every value inside it: one that answers Python's questions as a
+function of itself, whose `__class__` is its type, and, for an enumeration's
+instance, that the enumeration made, among the rest the trust base lists. Where
+valgebra cannot yet prove a relation it answers conservatively — `False`, or
+"not empty" — never a wrong `True`. So a positive answer is a guarantee, and a
+negative answer is "no, or not proven".
 
 This page states which queries valgebra decides completely, which stay
 conservative, and which are undecidable at runtime and so are rejected or treated
