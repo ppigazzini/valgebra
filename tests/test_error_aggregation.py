@@ -91,6 +91,27 @@ def test_a_set_reports_the_same_first_failure_under_fail_fast() -> None:
     assert [item["value"] for item in info.value.errors] == ["'a'"]
 
 
+def test_elements_failing_alike_at_different_places_report_in_one_order() -> None:
+    """A tie on the value and the code is broken by the rest of the report.
+
+    `(1.5, 2)` and `(2, 1.5)` each name `1.5` as an `int_type`, at the first
+    position of the pair and at the second. Ordered by the value and the code
+    alone they tie, and a tie keeps the order the elements are handed over,
+    which two equal frozensets built in a different order do not share.
+    """
+    schema = Validator(frozenset[tuple[int, int]])
+    sets = (frozenset({(1.5, 2), (2, 1.5)}), frozenset({(2, 1.5), (1.5, 2)}))
+    assert sets[0] == sets[1]
+    assert list(sets[0]) != list(sets[1])
+    for value in sets:
+        with pytest.raises(ValidationError) as info:
+            schema.validate(value)
+        assert [item["path"] for item in info.value.errors] == [(0,), (1,)]
+        with pytest.raises(ValidationError) as first:
+            schema.validate(value, fail_fast=True)
+        assert [item["path"] for item in first.value.errors] == [(0,)]
+
+
 def test_the_report_does_not_move_with_the_hash_seed() -> None:
     # The property above holds in one process; this drives two interpreters whose
     # string hashing differs, which is what the seed changes.
@@ -102,6 +123,15 @@ def test_the_report_does_not_move_with_the_hash_seed() -> None:
             Validator(set[int]).validate({"d", "b", "a", "c"})
         except ValidationError as error:
             print([item["value"] for item in error.errors])
+        # Two elements whose first violations tie on the value and the code,
+        # handed over in an order the string hash decides.
+        for fail_fast in (False, True):
+            try:
+                Validator(frozenset[tuple[int, int]]).validate(
+                    frozenset({("x", 1), (1, "x")}), fail_fast=fail_fast
+                )
+            except ValidationError as error:
+                print([item["path"] for item in error.errors])
         """
     )
     runs = {

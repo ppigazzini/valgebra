@@ -38,6 +38,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a recursive repr binds a name its body does not print
 - fix: the pickle refusal sends a reader to the forms repr cannot spell
 - fix: every reading of a record resolves a key as the dict does
+- fix: a set reports its failures in the order everything they say fixes
 
 -->
 
@@ -221,6 +222,14 @@ answer of its own, or a repair to a change not yet released.
   Every reading resolves a key as the dict does. The soundness page adds the
   assumption the relations take for such a key: a key equal to a declared
   name is a string.
+- **A set's failing elements are reported in an order the value fixes.** They
+  were ordered by the first failure's value and code alone, so two elements
+  failing alike at different places, `(1.5, 2)` and `(2, 1.5)` against
+  `frozenset[tuple[int, int]]`, kept the order the interpreter handed them
+  over: two equal frozensets reported in opposite orders and `fail_fast` kept
+  different errors, and with string elements the order moved with
+  `PYTHONHASHSEED`. They are ordered by everything each failure says: the
+  value, the code, the path inside the element, and what it expected.
 
 ## [0.0.18] - 2026-10-12
 

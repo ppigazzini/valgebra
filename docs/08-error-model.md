@@ -428,9 +428,10 @@ document member by member with that code.
 
 For a given schema and value the error model is deterministic: the same codes,
 paths, and order across runs and platforms. Tools can diff it. A set has no
-positions, so its failing elements are reported in the order of what they say
-rather than the order the interpreter hands them over, which moves with the hash
-seed; `fail_fast` keeps the first of that order. The exact output
+positions, so its failing elements are reported in the order of everything they
+say -- the value each names, its code, its path inside the element, what it
+expected -- rather than the order the interpreter hands them over, which moves
+with the hash seed; `fail_fast` keeps the first of that order. The exact output
 is locked by snapshot tests (the message format on the Rust side, the structured
 `errors` on the Python side), so any change to it is reviewed, never silent.
 
