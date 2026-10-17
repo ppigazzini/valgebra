@@ -316,9 +316,10 @@ depth bound.
   The rules read a key schema by whole kinds -- one that holds every value of
   a kind, or none -- and refute where the supertype reads such a kind through
   one clause or none: an entry under a plain key of that kind is in the
-  subject and outside the supertype. A key type with no hashable value, such
-  as `tuple[list[int]]` or a class whose instances are unhashable, admits only
-  `{}` and is never refuted, and two clauses reading one kind decline. A nested
+  subject and outside the supertype. A key type whose plain values are
+  unhashable, such as `list`, `tuple[list[int]]` or a class whose instances
+  are unhashable, holds a key only through a subclass that hashes, and is
+  never refuted; two clauses reading one kind decline. A nested
   `dict[str, ...]` is refuted at any depth, where five levels deep answered
   `undecided`.
 - **A map keyed by a complement of kinds is decided.** A relation about a map

@@ -381,24 +381,40 @@ class _UnhashableInt(int):
     __hash__ = None  # type: ignore[assignment]
 
 
+class _HashableAgain(_UnhashableInt):
+    """An instance of `_UnhashableInt` that is a dict key after all."""
+
+    __hash__ = int.__hash__
+
+
+class _HashableList(list):
+    """A `list` that is a dict key."""
+
+    __hash__ = object.__hash__  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+
+
 @pytest.mark.parametrize(
-    "key",
+    ("key", "subclassed"),
     [
-        pytest.param(_UnhashableInt, id="int-subclass-without-hash"),
-        pytest.param(tuple[list[int]], id="tuple-of-a-list"),
-        pytest.param(list, id="list"),
+        pytest.param(_UnhashableInt, _HashableAgain(5), id="int-subclass-without-hash"),
+        pytest.param(tuple[list[int]], (_HashableList([1]),), id="tuple-of-a-list"),
+        pytest.param(list, _HashableList(), id="list"),
     ],
 )
-def test_a_key_type_with_no_hashable_value_is_never_refuted(key: object) -> None:
-    """A map keyed by a type no value of which is hashable admits `{}` alone.
+def test_a_key_type_whose_plain_values_are_unhashable_is_never_refuted(
+    key: object, subclassed: object
+) -> None:
+    """A map keyed by such a type holds a key only through a subclass that hashes.
 
-    So it is below every map, and a rule that reads its key as the kind the
-    type is built on -- `int`, `tuple` -- names a key that is not one. The
-    clause rules read a key by whole kinds for that reason, and these are the
-    pairs a reading by values would refute.
+    So it is not below `{str: int}`, and a rule that reads its key as the kind
+    the type is built on -- `int`, `tuple`, `list` -- names a plain key that is
+    not a member or not a key: `7` is no `_UnhashableInt`, and `[]` does not
+    hash. The clause rules read a key by whole kinds for that reason, and the
+    subclass is a value no plain key names, so the pair declines.
     """
     subject = Validator({key: int})
     assert subject.is_valid({})
+    assert subject.is_valid({subclassed: 1})
     assert subject.relation_to({str: int}) != "not_subset"
 
 

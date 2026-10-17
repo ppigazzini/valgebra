@@ -612,9 +612,11 @@ These are the readings that refute, each with the value it stands on:
   all, with a value outside the one clause that reads it, or any value where
   none does: ICFP Lemma 4.7, one key kind at a time (`holds_every_value_of`,
   `holds_no_value_of`). Kinds are read whole on purpose, because the plain key
-  is then hashable: a class or a tuple shape may hold no key at all, and `{U:
-  int}` for a class whose instances are unhashable admits `{}` alone, below
-  every map. Two clauses reading one key decline, for the reason `{"f": int |
+  is then hashable: `list`, `tuple[list[int]]` and a class whose own instances
+  are unhashable each hold a key only through a subclass that hashes, which
+  no plain value names. `{U: int}` admits `{U2(): 1}` for such a subclass
+  `U2`, so it is not below `{str: int}`, and the rule has no key to refute it
+  with: the pair declines. Two clauses reading one key decline, for the reason `{"f": int |
   str}` against `{str: int, Any: str}` does: each refutes on a value of its
   own, and the union of their values is a term neither side spelled, outside
   the closure of subterms the budget's argument counts goals in.

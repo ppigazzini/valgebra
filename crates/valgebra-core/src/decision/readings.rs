@@ -177,8 +177,9 @@ impl Schema {
     /// hashable whatever the kind's other values are: a class with `__hash__`
     /// set to `None` may subclass `int`, but `7` is not one of its instances.
     /// That is why the reading goes by whole kinds and never through a class,
-    /// a literal or a shape: `tuple[list[int]]` is a set of tuples none of
-    /// which is a key, and `tuple[Any, ...]` holds `()`, which is one.
+    /// a literal or a shape: `tuple[list[int]]` holds a key only through a
+    /// `list` subclass that hashes, which no plain value is, and
+    /// `tuple[Any, ...]` holds `()`, which is one.
     ///
     /// Sound and incomplete. `false` is "not seen", never "a value of the kind
     /// is missing": a refinement may exclude any value, and a union is read
