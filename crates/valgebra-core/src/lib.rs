@@ -41,8 +41,8 @@ mod verdict;
 mod violation;
 
 pub use carries::{
-    Carries, OrderGroup, carries_division, carries_length, carries_order, carries_pattern,
-    carries_through,
+    Carries, OrderGroup, StepGroup, carries_division, carries_length, carries_order,
+    carries_pattern, carries_through,
 };
 pub use decision::{LeafRelations, NoLeafRelations};
 pub use ir::{

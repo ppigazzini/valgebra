@@ -455,6 +455,8 @@ A bound against `nan` is rejected with a `ValueError`, and so is
 `MultipleOf(nan)`: every comparison with `nan` is false, so such a bound admits
 no value at all. That is the empty set written as a bound, which no caller
 means, and dropping the marker instead would admit every value of the base. A
+complex bound is rejected for the same reason, whatever its imaginary part:
+Python orders no value against a complex number, and `1 >= 0j` raises. A
 bound that is empty because the *order* says so — `Gt(inf)` on a float — is kept,
 because emptiness is then an answer rather than the absence of one.
 
@@ -465,8 +467,17 @@ is `value % n == 0`, and a remainder that is not a number equals no zero —
 `timedelta(6) % timedelta(2)` is `timedelta(0)`, which is not the integer `0` —
 so such a step names a schema no value belongs to. Both are rejected with a
 `ValueError` when the validator is built, rather than rejecting every value at
-check time. `int`, `float`, `Decimal` and `Fraction` steps all divide as they
-read.
+check time, and so is a complex step, since Python takes no remainder against a
+complex number. `int`, `float` and `Fraction` steps divide every number as they
+read. A `Decimal` step divides an integer and not a float, because `%` refuses
+to mix a float and a `Decimal`: `Annotated[float, MultipleOf(Decimal("0.5"))]`
+is rejected with a `NotImplementedError`, and over `int | float` the step
+narrows the integers.
+
+`typing` caches `Annotated` by equality, and `MultipleOf(2 + 0j)` equals
+`MultipleOf(2)` as `MultipleOf(Decimal("0.5"))` equals `MultipleOf(0.5)`. In a
+process that built the complex or `Decimal` spelling first, the real one arrives
+as it and is rejected with it; the message says so.
 
 **A float step is exact.** `value % n == 0` is Python's own `%`, with no
 tolerance added, and a binary float holds no `0.1`: `0.3 % 0.1` is

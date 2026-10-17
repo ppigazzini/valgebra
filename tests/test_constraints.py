@@ -412,6 +412,89 @@ def test_a_multiple_of_nan_is_refused() -> None:
         Validator(Annotated[float, at.MultipleOf(float("nan"))])
 
 
+@pytest.mark.parametrize("bound", NAN_BOUNDS)
+def test_an_order_bound_against_a_complex_number_is_refused(bound: str) -> None:
+    """A complex number orders nothing either: `1 >= 1j` raises, as `1 >= 0j` does.
+
+    So the bound is the empty set written as a bound, whatever the base: the
+    `nan` case by another road, refused the same way.
+    """
+    marker = getattr(at, {"ge": "Ge", "gt": "Gt", "le": "Le", "lt": "Lt"}[bound])
+    with pytest.raises(ValueError, match="orders no value against a complex one"):
+        Validator(Annotated[float, marker(1j)])
+    with pytest.raises(ValueError, match="orders no value against a complex one"):
+        Validator(Annotated[object, marker(1j)])
+
+
+def test_a_complex_step_is_refused() -> None:
+    """Python takes no remainder against a complex number: `4 % 2j` raises."""
+    with pytest.raises(ValueError, match="no remainder against a complex number"):
+        Validator(Annotated[int, at.MultipleOf(2j)])  # ty: ignore[invalid-argument-type]
+    with pytest.raises(ValueError, match="no remainder against a complex number"):
+        Validator(Annotated[object, at.MultipleOf(2j)])  # ty: ignore[invalid-argument-type]
+
+
+def test_a_decimal_step_divides_integers_and_no_float() -> None:
+    """`3 % Decimal("0.1")` is `Decimal("0.0")`, and `1.5 % Decimal("0.1")` raises.
+
+    A float and a `Decimal` are the one pair of numbers `%` refuses to mix, so
+    the step over a float base is the empty set; over an integer it divides,
+    and over a union holding an integer it narrows, as every constraint one
+    member answers does.
+    """
+    with pytest.raises(
+        NotImplementedError, match="refuses to mix a float and a `Decimal`"
+    ):
+        Validator(Annotated[float, at.MultipleOf(Decimal("0.1"))])
+    tenths = Validator(Annotated[int, at.MultipleOf(Decimal("0.1"))])
+    assert tenths.is_valid(3)
+    both = Validator(Annotated[int | float, at.MultipleOf(Decimal("0.1"))])
+    assert both.is_valid(3)
+    assert not both.is_valid(0.5)
+
+
+def test_a_marker_equal_to_a_real_one_is_refused_wherever_it_arrives() -> None:
+    """A refusal of a complex or `Decimal` marker also meets the real one it equals.
+
+    `MultipleOf(2 + 0j)` equals `MultipleOf(2)`, and `MultipleOf(Decimal("0.5"))`
+    equals `MultipleOf(0.5)`, so `typing` caches one `Annotated` for both and
+    hands it to whichever spelling comes second. A truth value in a length marker
+    is read rather than refused for that reason
+    (`test_a_truth_value_is_read_as_the_length_it_equals`), because the value it
+    holds reads as the length it equals. These do not: Python's `%` and `>=`
+    raise on them, so the schema the second spelling meets admits nothing either
+    way. Refused, the caller who wrote the real marker is told so, and the
+    message says how the other one arrived.
+    """
+    collisions = [
+        (
+            lambda: Annotated[int, at.MultipleOf(2 + 0j)],  # ty: ignore[invalid-argument-type]
+            lambda: Annotated[int, at.MultipleOf(2)],
+            ValueError,
+        ),
+        (
+            lambda: Annotated[float, at.MultipleOf(Decimal("0.5"))],
+            lambda: Annotated[float, at.MultipleOf(0.5)],
+            NotImplementedError,
+        ),
+        (
+            lambda: Annotated[float, at.Ge(3 + 0j)],  # ty: ignore[invalid-argument-type]
+            lambda: Annotated[float, at.Ge(3)],
+            ValueError,
+        ),
+    ]
+    try:
+        for written, real, raises in collisions:
+            with pytest.raises(raises, match="caches `Annotated` by equality"):
+                _fresh(written)
+            assert real() is written()
+            with pytest.raises(raises, match="caches `Annotated` by equality"):
+                Validator(real())
+    finally:
+        for cleanup in getattr(typing, "_cleanups", ()):
+            cleanup()
+
+
 def test_a_bound_that_is_empty_because_the_order_says_so_is_kept() -> None:
     """The refusal is about `nan`, not about emptiness.
 

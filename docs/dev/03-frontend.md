@@ -598,8 +598,19 @@ literal. Interning it would produce a schema that admits only objects equal to
 the TypeVar, which is almost nothing, and the user would see a validation failure
 instead of a compile error.
 
-**A zero divisor.** `MultipleOf(0)` is unsatisfiable and checking it would divide
-by zero at validation time, so the error is raised where the schema is built.
+**A zero divisor, and a bound or step Python cannot apply.** `MultipleOf(0)` is
+unsatisfiable and checking it would divide by zero at validation time, so the
+error is raised where the schema is built. A complex bound or step, and a
+`Decimal` step over a float base, name the empty set the same way: Python raises
+on `1 >= 0j`, `4 % 2j` and `1.5 % Decimal("0.5")`, and the walk reads a raise as
+a refusal. The complex ones are refused whatever the base, as `nan` is
+(`refuse_unordered_bound`, `refuse_complex_step`); the `Decimal` one by the
+step group `carries_division` reads beside the base. A marker equal to a real
+one -- `MultipleOf(2 + 0j)`, `MultipleOf(Decimal("0.5"))` -- is the one `typing`
+hands a later equal spelling, so its refusal says how that marker arrived. A
+truth value in a length marker is read instead (`MinLen(True)`), because the
+value it holds reads as the length it equals; these hold no value Python divides
+or orders by.
 
 **A map key narrowed by a constraint.** A clause's key says which keys it
 governs, and a map reads that as whole *kinds* of key or as the constants a
