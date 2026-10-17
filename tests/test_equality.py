@@ -13,7 +13,9 @@ map's clauses and a refinement's constraints in a canonical order, so the term
 itself stops carrying the spelling. And `==` reads *through* a pool slot to the
 constant it names, matching a union's members and a refinement's constraints as
 the sets they are -- because a slot is construction order and cannot be sorted
-away.
+away. Composing two validators renumbers one side's slots, and every set it
+renumbers is put back in the order construction gives it, so a union of two
+spellings compares the terms it would have built from one.
 
 What this is not is a decision. `int | ~int` and `anything` denote one set and
 are not equal here; `is_equivalent` is the question for that, and the pair below
@@ -139,6 +141,53 @@ def test_one_set_written_two_ways_is_one_schema(
 )
 def test_two_sets_stay_two_schemas(name: str, left: object, right: object) -> None:
     assert Validator(left) != Validator(right), name
+
+
+# Pairs whose two spellings give one constant two pool slots. Composing them
+# interns the second pool into the first, which sends the slots past each other.
+SWAPPED_SLOTS = [
+    (
+        "bounds of one kind",
+        Annotated[int, at.Ge(3), at.Ge(5)],
+        Annotated[int, at.Ge(5), at.Ge(3)],
+    ),
+    (
+        "steps",
+        Annotated[int, at.MultipleOf(2), at.MultipleOf(3)],
+        Annotated[int, at.MultipleOf(3), at.MultipleOf(2)],
+    ),
+    (
+        "literal keys",
+        {Literal["x"]: int, Literal["y"]: str},
+        {Literal["y"]: str, Literal["x"]: int},
+    ),
+    (
+        "bounds inside a list",
+        list[Annotated[int, at.Le(9), at.Le(7)]],
+        list[Annotated[int, at.Le(7), at.Le(9)]],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "left", "right"), SWAPPED_SLOTS, ids=[row[0] for row in SWAPPED_SLOTS]
+)
+def test_a_composition_folds_what_construction_folds(
+    name: str, left: object, right: object
+) -> None:
+    """A union of two spellings is one member, and the complement laws fold it.
+
+    `==` reads through the slots and calls each pair one schema; the fold that
+    drops a repeat and the one that cancels a schema against its complement
+    compare terms. With the renumbered side left in the order it held, the two
+    readings disagreed: the union kept both members, and `a | ~b` stood
+    unfolded beside an `a` equal to `b`.
+    """
+    first, second = Validator(left), Validator(right)
+    assert first == second, name
+    assert union(first, second) == first, name
+    assert union(first, complement(second)) == Validator(anything), name
+    assert intersection(first, complement(second)) == Validator(nothing), name
 
 
 def test_a_validator_equals_itself_over_a_value_that_equals_nothing() -> None:

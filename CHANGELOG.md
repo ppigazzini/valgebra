@@ -39,6 +39,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the pickle refusal sends a reader to the forms repr cannot spell
 - fix: every reading of a record resolves a key as the dict does
 - fix: a set reports its failures in the order everything they say fixes
+- fix: two spellings of one schema fold to one when composed
 
 -->
 
@@ -230,6 +231,17 @@ answer of its own, or a repair to a change not yet released.
   different errors, and with string elements the order moved with
   `PYTHONHASHSEED`. They are ordered by everything each failure says: the
   value, the code, the path inside the element, and what it expected.
+- **Two spellings of one schema fold to one when composed.**
+  `Annotated[int, Ge(3), Ge(5)]` and `Annotated[int, Ge(5), Ge(3)]` are one
+  schema to `==`, yet a union of the two validators kept both members, and
+  `union(a, complement(b))` stood unfolded for an `a` equal to `b`, where the
+  same pair written as one annotation folds. The same held of two steps, of a
+  map's literal keys, `{Literal["x"]: int, Literal["y"]: str}` against the
+  keys written the other way round, and of either inside another schema.
+  Composing interns one validator's constants into the other's pool, which can
+  send two of them past each other, and a refinement's constraints and a map's
+  clauses kept the order they held. Each set a composition renumbers is put
+  back in the order construction gives it.
 
 ## [0.0.18] - 2026-10-12
 

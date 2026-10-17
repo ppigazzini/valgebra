@@ -77,7 +77,9 @@ fn indexed_schema() -> impl Strategy<Value = Schema> {
 /// The same leaves under constructors that leave a set **canonical**, which is
 /// what the law below is about: a join or a meet built by hand may hold its
 /// members in any order, and only one built by `union` or `meet` promises the
-/// order a reader may search.
+/// order a reader may search. A refinement's constraints and a map's clauses
+/// are sets ordered by a key that reads a pool slot too, so they are drawn
+/// through `refine` and `keyed_map`.
 fn canonical_indexed_schema() -> impl Strategy<Value = Schema> {
     let leaf = prop_oneof![
         Just(Schema::Str),
@@ -94,7 +96,24 @@ fn canonical_indexed_schema() -> impl Strategy<Value = Schema> {
             inner
                 .clone()
                 .prop_map(|s| Schema::list(SeqShape::homogeneous(s))),
-            inner.prop_map(|s| Schema::record(vec![field(s)], Openness::Closed)),
+            inner
+                .clone()
+                .prop_map(|s| Schema::record(vec![field(s)], Openness::Closed)),
+            inner.clone().prop_map(|s| Schema::refine(
+                s,
+                vec![
+                    Constraint::Ge(OperandIx::new(0)),
+                    Constraint::Ge(OperandIx::new(2)),
+                    Constraint::MultipleOf(OperandIx::new(3)),
+                ],
+            )),
+            (inner.clone(), inner).prop_map(|(first, second)| Schema::keyed_map(
+                Vec::new(),
+                vec![
+                    MapClause::of(Schema::Literal(ConstIx::new(0)), first),
+                    MapClause::of(Schema::Literal(ConstIx::new(3)), second),
+                ],
+            )),
         ]
     })
 }
@@ -108,16 +127,19 @@ fn reversing_table(n: usize) -> Vec<usize> {
     (0..n).rev().collect()
 }
 
-/// Whether every join and meet under `schema` holds its members sorted and
-/// distinct -- the order the constructors leave and a search may rely on.
-fn member_sets_are_canonical(schema: &Schema) -> bool {
+/// Whether every set under `schema` -- a join's or a meet's members, a
+/// refinement's constraints, a map's clauses -- is sorted and distinct, the
+/// order the constructors leave and a search may rely on.
+fn sets_are_canonical(schema: &Schema) -> bool {
     let this = match schema {
         Schema::Union(members) | Schema::Intersection(members) => {
             members.windows(2).all(|pair| pair[0] < pair[1])
         }
+        Schema::Refine { constraints, .. } => constraints.windows(2).all(|pair| pair[0] < pair[1]),
+        Schema::KeyedMap { defaults, .. } => defaults.windows(2).all(|pair| pair[0] < pair[1]),
         _ => true,
     };
-    this && schema.children().all(member_sets_are_canonical)
+    this && schema.children().all(sets_are_canonical)
 }
 
 /// The pool and definition indices under `schema`, each as a **set**: sorted
@@ -292,23 +314,24 @@ proptest! {
         prop_assert_eq!(defs_after, image(&defs_before, |slot| slot + defs_by));
     }
 
-    /// A member set is canonical after it is renumbered.
+    /// Every set is canonical after it is renumbered.
     ///
-    /// The constructors sort and deduplicate a join's and a meet's members,
-    /// and a reader is entitled to that: a table of literals is decided as the
-    /// set it denotes by *searching* its list, and a search over an unordered
-    /// list answers by where a member happens to sit. Renumbering through a
-    /// table that reverses the pool is the operation that puts a canonical
-    /// list out of order, so the transform that renumbers is the one that has
-    /// to put it back. A sequence's prefix is a list and not a set, and this
-    /// law does not read it.
+    /// The constructors sort and deduplicate a join's and a meet's members, a
+    /// refinement's constraints and a map's clauses, and a reader is entitled
+    /// to that: a table of literals is decided as the set it denotes by
+    /// *searching* its list, and a union keeps a member once by comparing
+    /// terms, so a list in another order is a second spelling it keeps.
+    /// Renumbering through a table that reverses the pool is the operation
+    /// that puts a canonical list out of order, so the transform that
+    /// renumbers is the one that has to put it back. A sequence's prefix is a
+    /// list and not a set, and this law does not read it.
     #[test]
-    fn a_renumbered_member_set_is_canonical(schema in canonical_indexed_schema()) {
-        prop_assume!(member_sets_are_canonical(&schema));
+    fn a_renumbered_set_is_canonical(schema in canonical_indexed_schema()) {
+        prop_assume!(sets_are_canonical(&schema));
         let reversed = schema.reindexed(&reversing_table(4), DefShift::new(0));
         prop_assert!(
-            member_sets_are_canonical(&reversed),
-            "renumbering left a member set out of order: {reversed:?}"
+            sets_are_canonical(&reversed),
+            "renumbering left a set out of order: {reversed:?}"
         );
     }
 

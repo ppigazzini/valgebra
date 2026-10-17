@@ -524,6 +524,33 @@ def test_construction_folds_a_union_or_a_meet_and_its_complement(
     assert intersection(met, complement(met)) == nothing
 
 
+_MARKER = st.sampled_from([at.Ge, at.Gt, at.Le, at.Lt, at.MultipleOf])
+
+
+@given(
+    st.lists(
+        st.builds(lambda marker, n: marker(n), _MARKER, st.integers(1, 9)),
+        min_size=1,
+        max_size=5,
+    ).flatmap(lambda markers: st.tuples(st.just(markers), st.permutations(markers)))
+)
+def test_two_spellings_of_one_refinement_compose_as_one(
+    spellings: tuple[list[object], list[object]],
+) -> None:
+    """A composition folds what one annotation folds, whatever the markers' order.
+
+    Each spelling numbers its constants in the order it reads them, so two
+    orders of one refinement give its bounds two pool orders, and composing the
+    validators renumbers one side. The union is one member and the complement
+    law cancels it, as for the two written as one annotation.
+    """
+    written, permuted = spellings
+    first = Validator(Annotated[(int, *written)])
+    second = Validator(Annotated[(int, *permuted)])
+    assert union(first, second) == first
+    assert union(first, complement(second)) == anything
+
+
 def test_a_union_holding_a_class_declines_the_fold_and_is_decided() -> None:
     """A class may answer `isinstance` by a hook, so construction reads none as a set.
 

@@ -17,11 +17,20 @@ use std::sync::Arc;
 
 use super::{
     Clauses, Constraint, Constraints, DefIx, DefShift, Fields, MapClause, Members, Openness,
-    OperandIx, PoolShift, Remap, Schema, SeqShape, already_said, clauses_over, share_clauses,
-    share_fields, share_members, share_node, with_field_buffer, with_member_buffer,
+    OperandIx, PoolShift, Remap, Schema, SeqShape, already_said, canonical_clauses, clauses_over,
+    share_clauses, share_fields, share_members, share_node, with_field_buffer, with_member_buffer,
 };
 
-/// Move a constraint list's indices, rebuilding it only where one moves.
+/// Move a constraint list's indices, rebuilding it only where one moves -- and
+/// rebuilding it in the order [`Schema::refine`] gives it.
+///
+/// A refinement's constraints are a set, sorted by a key that reads the pool
+/// slot, so `Ge(3), Ge(5)` and `Ge(5), Ge(3)` are one list once each is built
+/// in its own pool. Interning one pool into another can send two slots past
+/// each other, and a list left in the order it held is then a second spelling
+/// of the refinement: `==` reads through the slots and calls the two equal,
+/// while a union compares terms and keeps both. Sorted again here, as
+/// [`mapped_member_set`] sorts a member set.
 fn remapped_constraints(constraints: &Constraints, remap: Remap<'_>) -> Option<Constraints> {
     let mut rebuilt: Option<Vec<Constraint>> = None;
     for (at, constraint) in constraints.iter().enumerate() {
@@ -39,7 +48,11 @@ fn remapped_constraints(constraints: &Constraints, remap: Remap<'_>) -> Option<C
             }
         }
     }
-    rebuilt.map(|buffer| Constraints::from(&buffer[..]))
+    rebuilt.map(|mut buffer| {
+        buffer.sort();
+        buffer.dedup();
+        Constraints::from(&buffer[..])
+    })
 }
 
 /// Map a member list, rebuilding it only where `f` changed a member.
@@ -99,9 +112,16 @@ fn fill_mapped(
 /// is the one operation that puts a canonical list out of order: two
 /// validators' pools are interned into one, each constant takes the position
 /// it already has there or is given on arrival, and a table written the other
-/// way round arrives with its indices descending. Two constants can also land
-/// on one index, which is a duplicate. So a list this rebuilt is sorted and
-/// deduplicated again, where the order it held is what `f` moved.
+/// way round arrives with its indices descending. So a list this rebuilt is
+/// sorted and deduplicated again, where the order it held is what `f` moved.
+///
+/// **Order is all a renumbering moves.** The table interning builds is
+/// one-to-one, because a pool holds one slot per constant, so two members are
+/// equal after it exactly when they were before, and a member stands beside
+/// its own complement after it exactly when it did before. No law construction
+/// settles has a new pair to fold, and putting each list back in order -- this
+/// one, a refinement's constraints and a map's clauses -- leaves the term the
+/// constructors would have built.
 ///
 /// [`mapped_members`] is the positional half, for a sequence's prefix, where
 /// order *is* the shape and may not be touched.
@@ -147,10 +167,13 @@ fn mapped_fields(fields: &Fields, f: &impl Fn(&Schema) -> Option<Schema>) -> Opt
     })
 }
 
-/// Map a clause list, rebuilding it only where `f` changed a key or a value.
+/// Map a clause list, rebuilding it only where `f` changed a key or a value --
+/// and rebuilding it canonical.
 ///
 /// Asked once per key and once per value, for the same reason as
-/// [`mapped_fields`].
+/// [`mapped_fields`]. A map's clauses are a set ordered by their schemas, a
+/// `Literal` key by its pool slot, so a rebuilt list is sorted and
+/// deduplicated again for the reason [`mapped_member_set`] gives.
 fn mapped_clauses(clauses: &Clauses, f: &impl Fn(&Schema) -> Option<Schema>) -> Option<Clauses> {
     let mut rebuilt: Option<Vec<MapClause>> = None;
     for (at, clause) in clauses.iter().enumerate() {
@@ -169,7 +192,10 @@ fn mapped_clauses(clauses: &Clauses, f: &impl Fn(&Schema) -> Option<Schema>) -> 
             value.unwrap_or_else(|| clause.value.clone()),
         ));
     }
-    rebuilt.map(|mut buffer| share_clauses(&mut buffer))
+    rebuilt.map(|mut buffer| {
+        canonical_clauses(&mut buffer);
+        share_clauses(&mut buffer)
+    })
 }
 
 impl SeqShape {

@@ -222,9 +222,9 @@ fn depth_descends_every_container_arm() {
 /// must not move.
 #[test]
 fn shifted_remaps_pooled_constraint_operands_only() {
-    let refined = Schema::Refine {
-        base: Arc::new(Schema::Int),
-        constraints: vec![
+    let refined = Schema::refine(
+        Schema::Int,
+        vec![
             Constraint::Ge(OperandIx::new(1)),
             Constraint::Gt(OperandIx::new(2)),
             Constraint::Le(OperandIx::new(3)),
@@ -233,13 +233,13 @@ fn shifted_remaps_pooled_constraint_operands_only() {
             Constraint::Predicate(PredIx::new(8)),
             Constraint::MinLen(6),
             Constraint::MaxLen(7),
-        ]
-        .into(),
-    };
+        ],
+    );
     let Schema::Refine { constraints, .. } = refined.shifted(PoolShift::new(10), DefShift::new(0))
     else {
         panic!("shifted a Refine into a non-Refine");
     };
+    // In the order `Schema::refine` gives, which a shift keeps.
     assert_eq!(
         constraints.to_vec(),
         vec![
@@ -247,12 +247,12 @@ fn shifted_remaps_pooled_constraint_operands_only() {
             Constraint::Gt(OperandIx::new(12)),
             Constraint::Le(OperandIx::new(13)),
             Constraint::Lt(OperandIx::new(14)),
-            Constraint::MultipleOf(OperandIx::new(15)),
-            // A pooled predicate operand shifts like the numeric bounds.
-            Constraint::Predicate(PredIx::new(18)),
             // Length bounds are counts, not pool indices: unmoved.
             Constraint::MinLen(6),
             Constraint::MaxLen(7),
+            Constraint::MultipleOf(OperandIx::new(15)),
+            // A pooled predicate operand shifts like the numeric bounds.
+            Constraint::Predicate(PredIx::new(18)),
         ]
     );
     // Pooled leaves shift by the pool; definition refs shift by defs.
@@ -1192,6 +1192,41 @@ fn reindexed_maps_pool_indices_through_the_table() {
             ]
             .into()
         )
+    );
+}
+
+/// A table that sends two slots past each other leaves a refinement's
+/// constraints and a map's clauses in the order construction gives them.
+///
+/// `Ge(3), Ge(5)` built in its own pool is `Ge(0), Ge(1)`, and `Ge(5), Ge(3)`
+/// built in another is the same list over the other order of the two values.
+/// Interning the second beside the first swaps its slots, and the list it held
+/// is then the first one backwards: one refinement to `==`, which reads through
+/// the slots, and two to a union, which compares terms and keeps both.
+#[test]
+fn a_remap_that_swaps_two_slots_leaves_each_set_in_order() {
+    let swap = [1, 0];
+    let bounds = Schema::refine(
+        Schema::Int,
+        vec![
+            Constraint::Ge(OperandIx::new(0)),
+            Constraint::Ge(OperandIx::new(1)),
+        ],
+    );
+    assert_eq!(bounds.reindexed(&swap, DefShift::new(0)), bounds);
+
+    let keyed = |first: Schema, second: Schema| {
+        Schema::keyed_map(
+            Vec::new(),
+            vec![
+                MapClause::of(Schema::Literal(ConstIx::new(0)), first),
+                MapClause::of(Schema::Literal(ConstIx::new(1)), second),
+            ],
+        )
+    };
+    assert_eq!(
+        keyed(Schema::Int, Schema::Str).reindexed(&swap, DefShift::new(0)),
+        keyed(Schema::Str, Schema::Int)
     );
 }
 

@@ -1162,10 +1162,10 @@ pub(crate) fn is_builtin_scalar(obj: &Bound<'_, PyAny>) -> bool {
 }
 
 /// An already-compiled validator, composed into the schema being built: its
-/// pooled constants interned (so a constant shared by identity with one already
-/// present collapses to a single index, which keeps structurally-equal schemas
-/// equal across a merge), its definitions appended, and its schema's indices
-/// remapped.
+/// pooled constants interned (so a constant one already present matches, by
+/// value for an exact builtin scalar and by identity otherwise, keeps that
+/// index, which keeps structurally-equal schemas equal across a merge), its
+/// definitions appended, and its schema's indices remapped.
 fn compose(py: Python<'_>, inner: &Validator, lits: &mut Pool, defs: &mut Vec<Schema>) -> Schema {
     // Keys a relation already read for this validator are read again from the
     // cache rather than from the interpreter; composing validators reads them
