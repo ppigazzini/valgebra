@@ -577,14 +577,13 @@ _RESPELLINGS = [
 
 # The complement laws hold of the *set*, not of the spelling.
 #
-# This was a ledger entry, and the reason it gave is the reason it is one no
-# longer. The rules cancel a complement and collapse a join by structural
-# equality, so `A | ~A` covered the universe and `A | ~B` did not -- for a `B`
-# the procedure itself decides equivalent to `A`. What it asked for was the
-# operands compared as sets where the rules read equality, which is what a
-# representation closed under the Boolean operations gives, and the descriptor
-# is that representation: it holds each kind as a set, so a respelling and the
-# thing it respells build the same one.
+# The rules cancel a complement and collapse a join by structural equality, so
+# by the rules alone `A | ~A` covers the universe and `A | ~B` does not, for a
+# `B` the procedure itself decides equivalent to `A`. The operands are compared
+# as sets where the rules read equality, which is what a representation closed
+# under the Boolean operations gives, and the descriptor is that
+# representation: it holds each kind as a set, so a respelling and the thing it
+# respells build the same one.
 @pytest.mark.parametrize(
     ("name", "respell"), _RESPELLINGS, ids=[name for name, _ in _RESPELLINGS]
 )
