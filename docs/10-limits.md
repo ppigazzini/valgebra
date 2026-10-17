@@ -7,12 +7,15 @@ description: Resource limits and the bounds the validator enforces.
 A validator runs against untrusted values, so every recursive descent and every
 error-reporting probe is bounded. A pathological input meets a gated limit and is
 rejected cleanly; on a thread with the stack its platform gives one, it never
-overflows the native stack or raises a Python `RecursionError`. The bounds cap
-sizes, not time: [what the bounds do not bound](#what-the-bounds-do-not-bound)
-names the inputs whose cost grows inside them. The limits bound work driven by
-the *value* — the
-untrusted part. A schema's own size (the width of a union, the number of declared
-fields) is written by the developer and is trusted.
+overflows the native stack, and a Python `RecursionError` comes only from the
+value's own code: a `__repr__`, an `__eq__` or a predicate that recurses past
+the interpreter's limit raises one, and it propagates as every fatal signal does
+([when a comparison raises](08-error-model.md#when-a-comparison-raises)). The
+bounds cap sizes, not time: [what the bounds do not
+bound](#what-the-bounds-do-not-bound) names the inputs whose cost grows inside
+them. The limits bound work driven by the *value* — the untrusted part. A
+schema's own size (the width of a union, the number of declared fields) is
+written by the developer and is trusted.
 
 ## The bounds
 
