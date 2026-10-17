@@ -676,6 +676,61 @@ fn a_product_splits_across_a_union_without_the_descriptor() {
     ));
 }
 
+/// A conjunct that refutes on a value of its own refutes beside one the rules
+/// decline.
+///
+/// A record's required-ness is a conjunct beside each field's depth, not a
+/// step after it: the value leaving the key out carries no entry for the
+/// depth to judge. A sequence's tail is one beside its prefix: the value
+/// repeating a bad element once past the prefix needs the prefix to hold a
+/// value, not to align. Read as steps, a depth or a prefix the rules decline
+/// hid the refutation beside it.
+#[test]
+fn a_conjunct_refutes_beside_one_the_rules_decline() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Budget::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let opaque = |slot: usize| Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Predicate(PredIx::new(slot))].into(),
+    };
+    assert_eq!(
+        relation(&Schema::Int, &opaque(1)),
+        Relation::Unknown,
+        "the depth declines on its own"
+    );
+
+    let record = |schema: Schema, required: bool| closed(vec![field("a", schema, required)]);
+    assert_eq!(
+        relation(&record(opaque(0), false), &record(opaque(1), true)),
+        Relation::Fails
+    );
+    assert_eq!(
+        relation(&record(Schema::Int, false), &record(opaque(1), true)),
+        Relation::Fails
+    );
+
+    let repeating =
+        |first: Schema, tail: Schema| Schema::list(SeqShape::prefix_tail([first], tail));
+    assert_eq!(
+        relation(
+            &repeating(Schema::Int, Schema::Int),
+            &repeating(opaque(1), Schema::Str)
+        ),
+        Relation::Fails
+    );
+    // A prefix the rules cannot prove has a value names no value for the tail
+    // to stand on, so that one stays declined.
+    assert_eq!(
+        relation(
+            &repeating(opaque(0), Schema::Int),
+            &repeating(opaque(1), Schema::Str)
+        ),
+        Relation::Unknown
+    );
+}
+
 /// The structural region rules decide without the descriptor, and stay
 /// pinned where it would otherwise answer for them.
 ///

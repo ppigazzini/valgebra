@@ -42,6 +42,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: two spellings of one schema fold to one when composed
 - fix: one schema prints one way, whatever order its sets were written in
 - fix: a union of map atoms holds each atom once -- internal
+- fix: a conjunct refutes beside one the rules decline
 
 -->
 
@@ -255,6 +256,17 @@ answer of its own, or a repair to a change not yet released.
   classes written `Dog | Cat` prints `Cat | Dog`. The members of different
   kinds keep the order they had, and every rendering reads back as the schema
   it came from.
+- **A required key or a repeated element refutes beside a field the rules
+  cannot read.** `{"a?": X} <= {"a": Y}` answered `undecided` wherever the
+  field's types were ones no rule reads, such as two predicate refinements,
+  though `{}` is in the first and not the second; so did `{"a?": int}` against
+  the same `{"a": Y}`, and `[int, int, ...]` against `[Y, str, ...]`, which
+  `[1, 2]` refutes. Required-ness was read only after the field's types were
+  proved related, and a sequence's repeated element only after its prefix,
+  though neither refutation rests on the other. Each is read beside it, and
+  the three answer `not_subset`. A prefix no rule proves to hold a value, such
+  as `[X, int, ...]`, names no sequence for the repeated element to stand on,
+  and stays `undecided`.
 
 ## [0.0.18] - 2026-10-12
 

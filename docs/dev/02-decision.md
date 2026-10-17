@@ -616,10 +616,28 @@ These are the readings that refute, each with the value it stands on:
   are unhashable each hold a key only through a subclass that hashes, which
   no plain value names. `{U: int}` admits `{U2(): 1}` for such a subclass
   `U2`, so it is not below `{str: int}`, and the rule has no key to refute it
-  with: the pair declines. Two clauses reading one key decline, for the reason `{"f": int |
-  str}` against `{str: int, Any: str}` does: each refutes on a value of its
-  own, and the union of their values is a term neither side spelled, outside
-  the closure of subterms the budget's argument counts goals in.
+  with: the pair declines. Two clauses reading one key decline, for the reason
+  `{"f": int | str}` against `{str: int, Any: str}` does: each refutes on a
+  value of its own, and the union of their values is a term neither side
+  spelled, outside the closure of subterms the budget's argument counts goals
+  in.
+
+**A conjunct refutes beside a decline.** A rule folds the conjuncts of one claim
+about one pair with `Relation::all`, Kleene's strong conjunction: a refutation
+from any conjunct names a value whatever the others answer, and a decline ends
+nothing. `Relation::and` chains *steps*, where a later question means something
+only once the earlier one holds, and reports the earlier decline. A record's
+required-ness beside each field's depth, and a sequence's repeated element
+beside its prefix, are conjuncts: the value leaving a key out carries no entry
+for the depth to judge, and the value repeating a bad element once past the
+prefix needs the prefix to hold a value, which the witness guard reads, and not
+to align. Read as steps, `{"a?": X} <= {"a": Y}` and `[int, int, ...] <= [Y,
+str, ...]` would decline beside a depth the rules cannot read, though each
+subject holds a value the supertype refuses. `and` is left to
+the chains a caller reads for a proof alone, a refinement's base before its
+constraints and equivalence's second inclusion after its first, where the two
+folds agree on every proof; `a_conjunct_refutes_beside_one_the_rules_decline`
+in `decision/tests.rs` holds both sites.
 
 **They run in a cost order, and the order is free to choose.** `unstructured`
 asks the four any pair can take -- `shorter_than`, `spills_past`,

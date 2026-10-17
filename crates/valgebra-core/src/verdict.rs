@@ -85,11 +85,18 @@ impl Relation {
     /// The first answer that is not a proof is the answer, which is not what
     /// [`Relation::all`] does with a list of conjuncts. The two differ because
     /// the operands do: `all` folds conjuncts of one claim about one pair, so
-    /// any one of them refutes it; this chains *steps*, and the second is often
-    /// a question the first has to have answered before it means anything --
-    /// a repeated element against a tail, once the prefix is known to align.
-    /// A refutation from a step whose premise is unproven is not a value.
-    /// Reporting the weaker of the two is the safe direction.
+    /// any one of them refutes it; this chains *steps*, where the second is a
+    /// question the first has to have answered before it means anything. A
+    /// refutation from a step whose premise is unproven is not a value, and
+    /// reporting the weaker of the two is the safe direction.
+    ///
+    /// Two conjuncts that each refute on a value of their own are not steps,
+    /// and joined here a decline in the first hides a refutation in the
+    /// second: a record's required-ness and a sequence's tail are conjuncts,
+    /// and read through `all`. The readers left chain steps whose answers a
+    /// caller reads for a proof alone -- a refinement's base before its
+    /// constraints, and equivalence's second inclusion after its first -- and
+    /// there the two folds agree on every proof.
     #[must_use]
     #[inline]
     pub(crate) fn and(self, other: impl FnOnce() -> Relation) -> Relation {

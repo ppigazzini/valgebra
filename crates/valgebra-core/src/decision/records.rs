@@ -180,25 +180,26 @@ pub(super) fn keyed_map_subtype(
         let mut last: Option<(&Schema, &Schema, Relation)> = None;
         let fields_ok = Relation::all(fb.iter().map(|b_field| {
             match a_by_name.named(&b_field.name) {
-                // Shared field: it must narrow in depth, and a field `b` requires
-                // must be required in `a` too. A key the supertype requires and
-                // the subtype does not is a value of the subtype -- the one
-                // leaving that key out -- that the supertype rejects.
-                Some(a_field) => {
-                    let depth = match last {
-                        Some((sub, sup, answer))
-                            if sub == &a_field.schema && sup == &b_field.schema =>
-                        {
-                            answer
-                        }
-                        _ => {
-                            let answer = a_field.schema.is_subtype_rec(&b_field.schema, cx);
-                            last = Some((&a_field.schema, &b_field.schema, answer));
-                            answer
-                        }
-                    };
-                    depth.and(|| Relation::decided(!b_field.required || a_field.required))
-                }
+                // A field `b` requires must be required in `a` too. A key the
+                // supertype requires and the subtype does not is a value of the
+                // subtype -- the one leaving that key out -- that the supertype
+                // rejects, whatever the field's types say of each other: the
+                // value carries no entry for them to judge. So the refutation
+                // stands beside a depth the rules decline.
+                Some(a_field) if b_field.required && !a_field.required => Relation::Fails,
+                // Shared field: it must narrow in depth.
+                Some(a_field) => match last {
+                    Some((sub, sup, answer))
+                        if sub == &a_field.schema && sup == &b_field.schema =>
+                    {
+                        answer
+                    }
+                    _ => {
+                        let answer = a_field.schema.is_subtype_rec(&b_field.schema, cx);
+                        last = Some((&a_field.schema, &b_field.schema, answer));
+                        answer
+                    }
+                },
                 // A field `b` requires that `a` does not declare. A clause
                 // governs the keys a value carries and never requires one, so
                 // `a` admits a value without this key whatever its clauses say:

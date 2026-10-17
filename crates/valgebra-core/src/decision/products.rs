@@ -261,7 +261,16 @@ pub(super) fn linear_subtype(
         // element they cannot tell is also not proven empty, or the tail would
         // have been dropped above, so `Holds` is not an answer this arm gives.
         (Some(_), None) => Relation::of_mismatch(repeats),
-        // A's repeated element must also land in B's repeated tail.
-        (Some(a), Some(tail)) => aligns(cx).and(|| a.is_subtype_rec(tail, cx)),
+        // A's repeated element must also land in B's repeated tail, and the
+        // two are conjuncts of one claim: a prefix element outside B refutes
+        // on a value with no repeat, and a tail element outside B's tail on a
+        // value that repeats it once past A's prefix, which needs that prefix
+        // to hold a value -- the subject's reading around the query -- and
+        // not to align. So the tail's refutation stands beside a prefix the
+        // rules decline, and a prefix that refutes is the answer without it.
+        (Some(a), Some(tail)) => match aligns(cx) {
+            Relation::Fails => Relation::Fails,
+            prefix => Relation::all([prefix, a.is_subtype_rec(tail, cx)]),
+        },
     }
 }

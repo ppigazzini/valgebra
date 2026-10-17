@@ -95,6 +95,11 @@ class _Colour(enum.Enum):
 # what makes a meet with a seventh decidable once the body is unfolded.
 _JSON = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
 
+# Two refinements the rules cannot read, since each runs a predicate: a depth
+# into either declines, from `int` or from the other.
+_POSITIVE = Annotated[int, at.Predicate(lambda value: value > 0)]
+_SMALL = Annotated[int, at.Predicate(lambda value: value < 5)]
+
 
 class _Pair(NamedTuple):
     """A named tuple, whose instances are two-tuples of ints."""
@@ -263,6 +268,19 @@ def _chain(width: int) -> object:
 
 _DECIDED = [
     pytest.param("subtype", bool, int, id="bool<=int"),
+    # A key the supertype requires and the subject leaves optional refutes on
+    # `{}`, whatever the field's types say of each other, so a depth the rules
+    # decline beside it hides nothing.
+    pytest.param("refutes", {"a?": _POSITIVE}, {"a": _SMALL}, id="{a?:P}!<={a:Q}"),
+    pytest.param("refutes", {"a?": int}, {"a": _SMALL}, id="{a?:int}!<={a:Q}"),
+    # A tail outside the supertype's tail refutes beside a prefix that declines:
+    # `[1, 2]` is in the subject and outside the supertype.
+    pytest.param(
+        "refutes",
+        [int, int, ...],
+        [_SMALL, str, ...],
+        id="[int,int,...]!<=[Q,str,...]",
+    ),
     # The product rule's width: six components against their sixty-four
     # corners is decided, which is the number the decidability page gives.
     pytest.param("subtype", *_split(6), id="tuple:six-components<=its-corners"),
