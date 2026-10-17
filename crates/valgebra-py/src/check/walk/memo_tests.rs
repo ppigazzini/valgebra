@@ -236,7 +236,12 @@ fn the_memo_changes_no_answer_and_no_report() {
                         .expect("a list")
                         .into_any();
                     for value in [chain, wrap(twice)] {
-                        for mode in [WalkMode::Fast, WalkMode::Explain, WalkMode::ExplainFailFast] {
+                        for mode in [
+                            WalkMode::Fast,
+                            WalkMode::Explain,
+                            WalkMode::ExplainFailFast,
+                            WalkMode::Settle,
+                        ] {
                             let at = (&[][..], &defs[..]);
                             let kept = walk(py, &reference(), &value, at, mode, true);
                             let plain = walk(py, &reference(), &value, at, mode, false);
@@ -270,7 +275,12 @@ fn assert_linear_in_the_depth(py: Python<'_>) {
     let zero = 0i64.into_pyobject(py).expect("an int").into_any();
     for (name, defs, wrap) in shapes(py) {
         for leaf in [&none, &zero] {
-            for mode in [WalkMode::Fast, WalkMode::Explain, WalkMode::ExplainFailFast] {
+            for mode in [
+                WalkMode::Fast,
+                WalkMode::Explain,
+                WalkMode::ExplainFailFast,
+                WalkMode::Settle,
+            ] {
                 // A meet's full report holds each member's failures, and both
                 // members' hold the element's: the report itself doubles with
                 // each level, which no memo can shrink.
@@ -369,6 +379,57 @@ fn a_value_one_branch_admits_where_another_stops_is_admitted() {
     });
 }
 
+/// A settling walk reads a stop as a third answer, and the memo keeps it so:
+/// a walk that met a stop and admitted no other way is kept as the refusal it
+/// is to every other walk, and a settling walk takes an answer it finds and
+/// never a stop. With the memo or without, a settling walk admits alike and
+/// meets the same stop, at a loop and at the unfolding bound.
+#[test]
+fn a_settling_walk_meets_the_stop_the_walk_without_the_memo_meets() {
+    Python::attach(|py| {
+        let defs = two_lists();
+        let at = (&[][..], &defs[..]);
+        let looped = PyList::empty(py);
+        looped.append(&looped).expect("append");
+        for depth in 0..=6 {
+            let value = nested(looped.clone().into_any(), depth, in_a_list);
+            let kept = walk(py, &reference(), &value, at, WalkMode::Settle, true);
+            let plain = walk(py, &reference(), &value, at, WalkMode::Settle, false);
+            let case = format!("a loop {depth} deep");
+            assert_eq!(plain.stopped, Some(RECURSION_LOOP), "{case}");
+            assert_eq!(kept.admitted, plain.admitted, "{case}");
+            assert_eq!(kept.stopped, plain.stopped, "{case}");
+        }
+        let defs = through_an_alias();
+        let at = (&[][..], &defs[..]);
+        for depth in [6, 9] {
+            let value = nested(PyDict::new(py).into_any(), depth, under_a_key);
+            let walked = |remember| {
+                let state = WalkState::new();
+                // Pairs no walk enters: no definition has that index.
+                for open in 0..MAX_RECURSION_DEPTH - 9 {
+                    let opened = state.guard.borrow_mut().enter((open, usize::MAX));
+                    assert!(matches!(opened, Entered::Open));
+                }
+                walk_in(
+                    py,
+                    &state,
+                    &reference(),
+                    &value,
+                    at,
+                    WalkMode::Settle,
+                    remember,
+                )
+            };
+            let (kept, plain) = (walked(true), walked(false));
+            let case = format!("a dict {depth} deep");
+            assert_eq!(plain.stopped, Some(RECURSION_LIMIT), "{case}");
+            assert_eq!(kept.admitted, plain.admitted, "{case}");
+            assert_eq!(kept.stopped, plain.stopped, "{case}");
+        }
+    });
+}
+
 /// A room is two counts, and a walk with more of either can admit what one
 /// with less refused: the levels open, and the definitions unfolded.
 ///
@@ -406,6 +467,51 @@ fn a_value_one_path_admits_with_definitions_to_spare_is_admitted() {
     });
 }
 
+/// A walk that admits beside a stop is kept as the member it is, and answers a
+/// later walk of the same pair with less room: kept as the stop it met beside
+/// the member, it would refuse a walk that admits on its own.
+///
+/// `T = {~int: U, str: T | bytes}` with `U = T`, the trail nine definitions
+/// short of its bound, and a dict nested six deep: the first clause's walk
+/// stops and the second admits. With one definition less to spare the second
+/// clause still admits, which the walk without the memo shows.
+#[test]
+fn a_member_kept_beside_a_stop_answers_a_walk_with_less_room() {
+    Python::attach(|py| {
+        let defs = through_an_alias();
+        let at = (&[][..], &defs[..]);
+        let value = nested(PyDict::new(py).into_any(), 6, under_a_key);
+        let short = |state: &WalkState, by: usize| {
+            for open in 0..MAX_RECURSION_DEPTH - by {
+                let opened = state.guard.borrow_mut().enter((open, usize::MAX));
+                assert!(matches!(opened, Entered::Open));
+            }
+        };
+        for mode in [WalkMode::Fast, WalkMode::Explain] {
+            let plain = WalkState::new();
+            short(&plain, 8);
+            assert!(walk_in(py, &plain, &reference(), &value, at, mode, false).admitted);
+
+            let state = WalkState::new();
+            short(&state, 9);
+            let first = state
+                .memo
+                .armed(|| walk_in(py, &state, &reference(), &value, at, mode, true));
+            assert!(first.admitted, "{mode:?}");
+            assert_eq!(first.stopped, Some(RECURSION_LIMIT), "{mode:?}");
+            let opened = state
+                .guard
+                .borrow_mut()
+                .enter((MAX_RECURSION_DEPTH - 9, usize::MAX));
+            assert!(matches!(opened, Entered::Open));
+            let second = state
+                .memo
+                .armed(|| walk_in(py, &state, &reference(), &value, at, mode, true));
+            assert!(second.admitted, "{mode:?}");
+        }
+    });
+}
+
 /// A node whose members reach no definition in common arms nothing, though a
 /// member before the one walked entered a definition and a node elsewhere in
 /// the schema does share one: what one member kept no other could find.
@@ -439,7 +545,12 @@ fn a_union_whose_branches_share_no_definition_arms_nothing() {
         assert!(!index.memo.shares(members.as_ptr() as usize));
         let tree = nested(py.None().into_bound(py), 3, under_a_key);
         let value = PyList::new(py, [tree]).expect("a list").into_any();
-        for mode in [WalkMode::Fast, WalkMode::Explain, WalkMode::ExplainFailFast] {
+        for mode in [
+            WalkMode::Fast,
+            WalkMode::Explain,
+            WalkMode::ExplainFailFast,
+            WalkMode::Settle,
+        ] {
             let walked = walk(py, &root, &value, (&[], &defs), mode, true);
             assert!(walked.admitted, "{mode:?}");
             assert!(
@@ -730,7 +841,12 @@ fn a_branch_refused_by_its_kind_arms_nothing() {
         assert!(index.memo.shares(members.as_ptr() as usize));
         let value = nested(py.None().into_bound(py), 20, under_a_key);
         let at = (&[][..], &defs[..]);
-        for mode in [WalkMode::Fast, WalkMode::Explain, WalkMode::ExplainFailFast] {
+        for mode in [
+            WalkMode::Fast,
+            WalkMode::Explain,
+            WalkMode::ExplainFailFast,
+            WalkMode::Settle,
+        ] {
             let walked = walk(py, &reference(), &value, at, mode, true);
             assert!(walked.admitted, "{mode:?}");
             assert!(

@@ -219,6 +219,13 @@ struct Rare {
     fatal: Option<PyErr>,
     /// What the walk keeps of a definition it walked at a value.
     kept: Kept,
+    /// How many times a container moved under the walk. A move ends the scan
+    /// that met it as a refusal does, and is no answer, so a complement whose
+    /// inner walk saw one refuses the value whatever the rest decided: it
+    /// reads the count before and after. Here rather than among the signals,
+    /// because a move is as rare as a fatal signal and a walk that meets none
+    /// should not write it.
+    moves: u32,
 }
 
 impl WalkState {
@@ -277,6 +284,18 @@ impl WalkState {
     pub(crate) fn keep(&self, write: impl FnOnce(&mut Kept)) {
         let mut rare = self.rare.0.borrow_mut();
         write(&mut rare.get_or_insert_with(Box::default).kept);
+    }
+
+    /// Count a container that moved under the walk ([`Rare`]'s `moves`).
+    pub(crate) fn note_move(&self) {
+        let mut rare = self.rare.0.borrow_mut();
+        let rare = rare.get_or_insert_with(Box::default);
+        rare.moves = rare.moves.saturating_add(1);
+    }
+
+    /// How many containers have moved under the walk so far.
+    pub(crate) fn moves(&self) -> u32 {
+        self.rare.0.borrow().as_ref().map_or(0, |rare| rare.moves)
     }
 }
 
@@ -365,10 +384,10 @@ impl<'a> Ctx<'a> {
 
 /// What a membership walk is being run for.
 ///
-/// Three modes, and the type says three: the pair of independent booleans this
-/// replaces admitted a fourth combination — fail-fast without explaining — that
-/// no caller produced and the walk read as plain [`Fast`](WalkMode::Fast). A
-/// state with no meaning is better unnameable than merely unused.
+/// Four modes, and the type says four: the pair of independent booleans the
+/// first three replace admitted a combination — fail-fast without explaining —
+/// that no caller produced and the walk read as plain [`Fast`](WalkMode::Fast).
+/// A state with no meaning is better unnameable than merely unused.
 /// The discriminants are ordered so both predicates below are one comparison
 /// rather than a two-way test: explaining is "at most `ExplainFailFast`",
 /// stopping at the first failure is "at least `ExplainFailFast`". The order is
@@ -386,6 +405,18 @@ pub(crate) enum WalkMode {
     /// Membership only. No violation is built, `out` is never touched, no path is
     /// built, and every composite short-circuits as soon as the answer is fixed.
     Fast = 2,
+    /// [`Fast`](WalkMode::Fast) for a complement's inner walk, which reads its
+    /// answer in Kleene's strong logic: a stop is the third value, so a
+    /// conjunction a later part refuses is refused and a union a later branch
+    /// admits is admitted, whatever order the parts are read in.
+    ///
+    /// A stop answers `true` in this mode, with its code in the stop cell, so
+    /// the scans read past it to a part that decides under the short circuit
+    /// they take on a refusal, and only the readers that tell the three values
+    /// apart -- a union, a complement, the memo -- ask the cell. Last, so both
+    /// predicates read it as the fast mode: it explains nothing and stops at a
+    /// refusal.
+    Settle = 3,
 }
 
 impl WalkMode {

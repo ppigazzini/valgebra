@@ -393,6 +393,29 @@ pub(super) fn record_stop(code: Code, ctx: Ctx<'_>) {
     }
 }
 
+/// Record that a container moved under the walk: the stop a complement reads,
+/// and the move it refuses on whatever the rest decided. Apart from
+/// [`record_stop`], which sits inline on the walk's descent, where a test of
+/// the code it carries costs every level.
+#[cold]
+#[inline(never)]
+pub(super) fn record_move(ctx: Ctx<'_>) {
+    ctx.state.note_move();
+    record_stop(MUTATED_DURING_VALIDATION, ctx);
+}
+
+/// What a walk that stopped answers: a refusal, or `true` in a complement's
+/// inner walk, where a stop is the third value and the scans read past it
+/// ([`WalkMode::Settle`]). Its code is in the stop cell either way, which is
+/// what tells the third value from a member.
+///
+/// The mode alone, which the walk holds in a register: the whole context
+/// passed to a call kept every node's walk holding the frame it is read from.
+#[inline]
+pub(super) fn stopped(mode: WalkMode) -> bool {
+    mode == WalkMode::Settle
+}
+
 /// Record `err` if it is a fatal signal, for the walk to unwind and the entry
 /// point to re-raise. An ordinary error needs nothing recorded: the site that
 /// caught it answers for it.
@@ -498,7 +521,7 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
                 value_summary: summarize_value(value, ctx),
             });
         }
-        return false;
+        return stopped(ctx.mode);
     };
     match schema {
         Schema::Anything(_) => true,
@@ -600,7 +623,7 @@ const MUTATED_EXPECTED: &str = "a value that does not change while it is checked
 /// Record that a container changed under the walk, and report a non-member.
 fn mutated(value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
-    record_stop(MUTATED_CODE, ctx);
+    record_move(ctx);
     if ctx.mode.explains() {
         frame.out.push(Violation {
             code: MUTATED_CODE.as_str(),
@@ -788,8 +811,10 @@ fn walk_declined(code: &str) -> bool {
 
 fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
-    if ctx.mode.explains() {
-        return explain_union(members, value, frame);
+    // One comparison and one call for the two walks that are not the plain
+    // fast one, so the fast walk's scan below pays nothing for either.
+    if ctx.mode != WalkMode::Fast {
+        return union_by_mode(members, value, frame);
     }
     // Fast path for an all-literal union: an exact int or str value is decided by
     // a single set lookup. Only the membership decision uses it; the explain walk
@@ -830,6 +855,65 @@ fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, 
             None if ctx.state.memo.entered() == entered => member(m, value, frame),
             None => member_again(members.as_ptr() as usize, m, value, frame),
         })
+}
+
+/// [`check_union`] in a walk that explains, or that settles a complement's
+/// inner walk: out of line, so the fast walk's scan is the whole of the union
+/// it inlines.
+#[inline(never)]
+fn union_by_mode(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    if frame.ctx.mode.explains() {
+        explain_union(members, value, frame)
+    } else {
+        settled_union(members, value, frame)
+    }
+}
+
+/// [`check_union`]'s scan in [`WalkMode::Settle`], read in Kleene's strong
+/// logic: a branch that admits decides the union, whatever another branch
+/// answered; a refusal beside one that stopped stops; and only refusals
+/// refuse.
+///
+/// A stop answers `true` in this mode, with its code in the stop cell, so each
+/// branch is read with the cell cleared, to tell a member from a stop: the
+/// first member answers, and the stops beside it are dropped; a stop is kept
+/// and the branches after it are read; a refusal's own stops are dropped with
+/// it, since something inside it decided. With no member, the branches' stop
+/// is the answer, or a refusal where none stopped. Out of line, so the scan
+/// every other walk takes keeps its own size.
+#[cold]
+#[inline(never)]
+fn settled_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
+    let room = ctx.room_to_descend();
+    let unread = usize::MAX;
+    let mut entered = unread;
+    let cell = &ctx.state.signals.stopped;
+    let earlier = cell.take();
+    let mut stop = None;
+    for m in members {
+        let admitted = match scalar_member(m, value, ctx, room) {
+            Some(admitted) => admitted,
+            None if entered == unread => {
+                entered = ctx.state.memo.entered();
+                member(m, value, frame)
+            }
+            None if ctx.state.memo.entered() == entered => member(m, value, frame),
+            None => member_again(members.as_ptr() as usize, m, value, frame),
+        };
+        let met = cell.take();
+        if admitted {
+            match met {
+                None => {
+                    cell.set(earlier);
+                    return true;
+                }
+                Some(code) => stop = stop.or(Some(code)),
+            }
+        }
+    }
+    cell.set(earlier.or(stop));
+    stop.is_some()
 }
 
 /// Run `walk`, one more member's walk of a node that reads one value by
@@ -1279,15 +1363,31 @@ fn check_complement(inner: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_,
     // negation says nothing either, so the complement refuses the value with
     // the stop's code. The cell is cleared for the inner walk and keeps any
     // earlier stop after it, so a complement above this one reads both.
-    let before = ctx.state.signals.stopped.take();
-    let matched = member(inner, value, &mut Unwritten::default().frame(ctx));
-    let stopped = ctx.state.signals.stopped.get();
-    ctx.state.signals.stopped.set(before.or(stopped));
-    let code = match (matched, stopped) {
-        (false, None) => return true,
-        (true, _) => UNEXPECTED_MATCH,
-        (false, Some(code)) => code,
+    let signals = &ctx.state.signals;
+    let outer = ctx.mode == WalkMode::Settle;
+    let before = signals.stopped.take();
+    let moves_before = ctx.state.moves();
+    let settling = Ctx {
+        mode: WalkMode::Settle,
+        ..ctx
     };
+    let matched = member(inner, value, &mut Unwritten::default().frame(settling));
+    let met = signals.stopped.get();
+    let moved = ctx.state.moves() != moves_before;
+    // The inner walk is read in Kleene's strong logic, where a stop answers
+    // `true` with its code in the cell: a refusal is the inner schema's, and a
+    // member or a stop is told apart by the cell. A move is no answer whatever
+    // the rest decided, since the value it read is not the one it holds.
+    let stop = if moved {
+        Some(MUTATED_CODE)
+    } else if matched {
+        met
+    } else {
+        signals.stopped.set(before);
+        return true;
+    };
+    signals.stopped.set(before.or(stop));
+    let code = stop.unwrap_or(UNEXPECTED_MATCH);
     if ctx.mode.explains() {
         frame.out.push(Violation {
             code: code.as_str(),
@@ -1296,7 +1396,7 @@ fn check_complement(inner: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_,
             value_summary: summarize_value(value, ctx),
         });
     }
-    false
+    stop.is_some() && outer
 }
 
 fn check_instance(index: ClassIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
@@ -1377,8 +1477,14 @@ fn remembered_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -
     } else {
         ctx.state.recall(|kept| kept.decided(key, room))
     };
-    if let Some(found) = found {
-        if let Some(code) = found.stop() {
+    // A settling walk takes an answer and never a stop: a refusal kept with a
+    // stop was met by a walk that ended its scan there, and reading past it
+    // may find a part that decides.
+    let settling = ctx.mode == WalkMode::Settle;
+    if let Some(found) = found.filter(|found| !(settling && found.stop().is_some())) {
+        if !found.admitted
+            && let Some(code) = found.stop()
+        {
             record_stop(code, ctx);
         }
         return found.admitted;
@@ -1389,12 +1495,26 @@ fn remembered_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -
     let earlier = ctx.state.signals.stopped.take();
     let start = frame.out.len();
     let admitted = check_ref(id, value, frame);
-    let stopped = ctx.state.signals.stopped.get();
-    ctx.state.signals.stopped.set(earlier.or(stopped));
+    let met = ctx.state.signals.stopped.get();
+    ctx.state.signals.stopped.set(earlier.or(met));
     if !ctx.state.signals.fatal_seen.get() {
-        let answer = Answer {
-            admitted,
-            stopped: stopped.map(|code| (code, room)),
+        // Kept as a walk that refuses on a stop reads it: a member keeps no
+        // stop, a refusal keeps the one it met, and a settling walk's `true`
+        // with a stop is that refusal, while its plain refusal decided and
+        // keeps none.
+        let answer = match (admitted, met) {
+            (true, Some(code)) if settling => Answer {
+                admitted: false,
+                stopped: Some((code, room)),
+            },
+            (true, _) => Answer {
+                admitted: true,
+                stopped: None,
+            },
+            (false, met) => Answer {
+                admitted: false,
+                stopped: met.filter(|_| !settling).map(|code| (code, room)),
+            },
         };
         if ctx.mode.explains() {
             let reported = frame.out.get(start..).unwrap_or_default();
@@ -1437,6 +1557,40 @@ fn stopped_again(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) ->
         .recall(|kept| kept.explained_refusal(key, path, out))
 }
 
+/// What a reference refused on the trail answers: a value met inside itself,
+/// or one past the trail's bound. The stop is recorded for a complement above
+/// and reported where the walk explains. Out of line, so the reference's walk
+/// carries one call for both rather than what they build.
+#[cold]
+#[inline(never)]
+fn refused_on_the_trail(
+    entered: &Entered,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let ctx = frame.ctx;
+    let cycle = matches!(entered, Entered::Cycle);
+    let code = if cycle {
+        RECURSION_LOOP
+    } else {
+        RECURSION_LIMIT
+    };
+    record_stop(code, ctx);
+    if ctx.mode.explains() {
+        frame.out.push(Violation {
+            code: code.as_str(),
+            path: frame.path.clone(),
+            expected: if cycle {
+                "a finite (non-cyclic) value".to_owned()
+            } else {
+                format!("a value at most {MAX_RECURSION_DEPTH} recursive levels deep")
+            },
+            value_summary: summarize_value(value, ctx),
+        });
+    }
+    stopped(ctx.mode)
+}
+
 /// Whether this value is a member of the definition the reference names.
 ///
 /// The reference is entered on the trail for the length of the definition's
@@ -1447,34 +1601,9 @@ fn stopped_again(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) ->
 fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
     let key = (value.id(), id.get());
-    match ctx.state.guard.borrow_mut().enter(key) {
-        Entered::Open => {}
-        Entered::Cycle => {
-            record_stop(RECURSION_LOOP, ctx);
-            if ctx.mode.explains() {
-                frame.out.push(Violation {
-                    code: RECURSION_LOOP.as_str(),
-                    path: frame.path.clone(),
-                    expected: "a finite (non-cyclic) value".to_owned(),
-                    value_summary: summarize_value(value, ctx),
-                });
-            }
-            return false;
-        }
-        Entered::Full => {
-            record_stop(RECURSION_LIMIT, ctx);
-            if ctx.mode.explains() {
-                frame.out.push(Violation {
-                    code: RECURSION_LIMIT.as_str(),
-                    path: frame.path.clone(),
-                    expected: format!(
-                        "a value at most {MAX_RECURSION_DEPTH} recursive levels deep"
-                    ),
-                    value_summary: summarize_value(value, ctx),
-                });
-            }
-            return false;
-        }
+    let entered = ctx.state.guard.borrow_mut().enter(key);
+    if !matches!(entered, Entered::Open) {
+        return refused_on_the_trail(&entered, value, frame);
     }
     let Some(def) = ctx.defs.get(id.get()) else {
         // A reference past the definitions table is an internal invariant break,
@@ -1491,9 +1620,11 @@ fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> boo
 
 /// A copy of `ctx` switched to the membership fast path (no explanation), for the
 /// speculative sub-checks of union, complement, and the record fast walk.
+/// `ctx` in a mode that writes nothing: the fast one, or the settling one a
+/// complement's inner walk is in, which a walk inside it keeps.
 fn fast(ctx: Ctx<'_>) -> Ctx<'_> {
     Ctx {
-        mode: WalkMode::Fast,
+        mode: ctx.mode.max(WalkMode::Fast),
         ..ctx
     }
 }
