@@ -233,9 +233,10 @@ answer of its own, or a repair to a change not yet released.
 
 ## [0.0.18] - 2026-10-12
 
-A release with one break, announced: `Validator.simplify` is removed after
-warning through eight releases. Two additions, one change, one removal and
-seven fixes.
+A release with two breaks. `Validator.simplify` is removed, after warning
+through eight releases, and a callable where a schema goes is refused, where it
+was read as the constant it is. Two additions, one change, one removal and six
+fixes.
 
 A schema is built in the lattice normal form, so `repr` and `==` read the
 reduction `simplify` promised, and the relations decide what it folded beyond
@@ -246,10 +247,10 @@ recursive reference, decided. Relations between maps decide where they
 answered `undecided`: one is refuted on a key the other reads one way, and a
 key written as a complement of kinds is read as the other kinds. The frontend
 refuses an annotation at the node bound as it reads, in milliseconds where a
-shared part built for over a minute; a named tuple is read once; a validator
-built inside another build counts only itself; `deprecated` and
-`annotated_types.Unit` in metadata are ignored; and a product split across a
-wide union is held to the relation's depth bound.
+shared part built for over a minute; a validator built inside another build
+counts only itself; `deprecated` and `annotated_types.Unit` in metadata are
+ignored; and a product split across a wide union is held to the relation's
+depth bound.
 
 ### Added
 
@@ -303,9 +304,9 @@ wide union is held to the relation's depth bound.
 - **A validator built inside another build is measured on its own.** An
   annotation the frontend evaluates can construct a `Validator` -- a predicate
   built in a field's `Annotated` metadata -- and that build started from the
-  depth and the node count of the build around it, so a schema within the
-  bounds was refused as nested too deep. Each build begun from the API counts
-  only itself. The refusal past the depth bound names the bound it passed.
+  depth of the build around it, so a schema within the bounds was refused as
+  nested too deep. Each build begun from the API counts only itself. The
+  refusal past the depth bound names the bound it passed.
 - **A map is refuted on a key the other reads one way.** A relation between two
   maps was left undecided wherever a refutation needed a key the subject's
   clause admits: `{str: int}.open()` against `{str: int}`, `dict` and `{str:
@@ -364,14 +365,6 @@ wide union is held to the relation's depth bound.
   thread, so a goal asked at the bottom of the chain could open its whole depth
   on top of them. Each branch is a level of that bound, and past it the
   relation answers `"undecided"`.
-
-- **A named tuple is read once, as the positions it lays out.** Its fields
-  were built twice -- as a record of its attributes and as the tuple of its
-  positions -- and the record dropped, and the node bound counted both. A
-  schema of named tuples inside the bound was refused for a size it does not
-  have: `tuple[(Wide,) * 60]` over a thousand-field `Wide` spans about sixty
-  thousand nodes and was refused as counting past a hundred thousand. It
-  builds, and each class reads its fields once.
 
 ## [0.0.17] - 2026-10-06
 
