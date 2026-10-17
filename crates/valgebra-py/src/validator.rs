@@ -891,10 +891,15 @@ impl Validator {
         self.union_with(other, Operand::Left)
     }
 
-    /// Structural equality: two validators are equal when their schema trees,
-    /// recursive definitions, and pooled constants all match. This is *syntactic*
-    /// — `union(int, str)` and `union(str, int)` are not equal — whereas
-    /// `is_equivalent` compares the sets two schemas denote regardless of shape.
+    /// Equality of the normal form: two validators are equal when their schema
+    /// trees, recursive definitions, and pooled constants all match, after the
+    /// lattice laws construction settles. So `union(int, str)` equals
+    /// `union(str, int)`, and `union(int, complement(int))` equals `anything`.
+    /// Past the laws it is *syntactic*: `union(bool, int)` is not `int`, since a
+    /// containment rewrites one into the other and no law does, and a union of
+    /// two `recursive` schemas carries their definitions in the order it was
+    /// written. `is_equivalent` compares the sets two schemas denote, whatever
+    /// their shape.
     ///
     /// A pooled constant is compared the way a literal reads one: same type and
     /// equal. Python's `==` runs across types, so equality alone makes

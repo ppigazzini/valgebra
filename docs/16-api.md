@@ -61,7 +61,7 @@ the dunder behind a type slot and that is what introspection would show.
 | --- | --- | --- |
 | `obj in validator` | `__contains__` | Membership: the operator form of `is_valid`, so a check reads as the set test it is. |
 | `a \| b` | `__or__`, `__ror__` | The union of the two schemas. `\|` is the operator typing already uses for a union; intersection and complement have no typing operator and stay named calls. The reflected form is what makes `None \| validator` work. |
-| `a == b` | `__eq__` | Equality of the **normal form**: the schema trees, recursive definitions, and pooled constants all match, after the lattice laws construction settles — so a difference of member order, of a repeat, or of an identity is not one. Ask `is_equivalent` for the semantic question — whether two schemas denote the same set, which needs a containment rather than a law. |
+| `a == b` | `__eq__` | Equality of the **normal form**: the schema trees, recursive definitions, and pooled constants all match, after the lattice laws construction settles — so a difference of member order, of a repeat, or of an identity is not one, except the order a union adds `recursive` definitions in: `union(r1, r2)` and `union(r2, r1)` are two schemas ([the algebra page](04-algebra.md#subtyping-equivalence-and-emptiness)). Ask `is_equivalent` for the semantic question — whether two schemas denote the same set, which needs a containment rather than a law. |
 | `hash(validator)` | `__hash__` | Consistent with `==`, so a validator is a dict key or a set member. It digests the schema shape, the definitions and each pooled constant's own hash, so `Literal[1]` and `Literal[2]` hash apart; a constant with no hash contributes nothing, so an unhashable constant cannot break it. Computed once and kept, as a `frozenset` keeps its hash. |
 | `repr(validator)` | `__repr__` | A rendering of the schema as an expression that builds it. |
 
@@ -175,7 +175,7 @@ checking](18-static-checking.md)).
 | `NotImplementedError` | The spec names a form with no decidable runtime membership. | `Sequence[int]`, `Mapping[str, int]`, a `TypeVar`, `Final`, `ClassVar` |
 | `NotImplementedError` | A callable that is not a class, or the annotation `Validator[T]`, stands where a schema goes. The message names the spelling that was meant: `Annotated[T, fn]` or `Literal[fn]` for a callable, the schema or a compiled validator for `Validator[T]`. | `Validator(fn)`, `intersection(Record, fn)`, `list[fn]`, `Validator(Validator[int])` |
 | `NotImplementedError` | Compiling descends one level past the construction depth bound without reaching a leaf. | a self-referential class, whose field type names the class |
-| `ValueError` | A constructed schema crosses a size bound: depth, definitions, or nodes. | growing a schema in a loop with `\|`, `union`, `intersection`, `open` |
+| `ValueError` | A constructed schema crosses a size bound: depth, definitions, or nodes. | growing a schema in a loop with `\|`, `union` or `intersection`; opening one near the node bound |
 | `ValueError` | A marker's value cannot denote a set. | `MultipleOf(0)` |
 | `ValueError` | A `recursive` body is not contractive — its back edge is not under a structural constructor. | `recursive(lambda s: s)` |
 | `TypeError` | An argument is the wrong Python type for the call. | `validate_json(123)`, `load(123)` |
