@@ -14,7 +14,7 @@ use pyo3::prelude::*;
 use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyFrozenSet, PyIterator, PyList, PySet, PyTuple};
 use valgebra_core::{
-    ClassIx, Constraint, Field, PathSegment, Schema, SeqKind, SeqShape, Violation,
+    Attribute, ClassIx, Constraint, PathSegment, Schema, SeqKind, SeqShape, Violation,
 };
 
 #[cfg(PyPy)]
@@ -900,7 +900,7 @@ pub(super) fn class_record_list_matches(
     prefix: &[Schema],
     element: &Schema,
     index: ClassIx,
-    fields: &[Field],
+    fields: &[Attribute],
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {

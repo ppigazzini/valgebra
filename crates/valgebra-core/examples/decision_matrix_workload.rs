@@ -42,7 +42,8 @@
 use std::sync::Arc;
 
 use valgebra_core::{
-    ClassIx, Constraint, DefIx, Field, Kind, LeafRelations, OperandIx, Relation, Schema, SeqShape,
+    Attribute, ClassIx, Constraint, DefIx, Field, Kind, LeafRelations, OperandIx, Relation, Schema,
+    SeqShape,
 };
 
 /// Two classes that lay down no builtin layout, answered as the bindings answer
@@ -120,10 +121,9 @@ fn refined(base: Schema, constraint: Constraint) -> Schema {
 /// lowers to, and the meet whose witness is a *direct* instance.
 fn dataclass(class: ClassIx, width: usize) -> Schema {
     let fields = (0..width)
-        .map(|i| Field {
+        .map(|i| Attribute {
             name: format!("f{i}").into(),
             schema: Schema::Int,
-            required: true,
         })
         .collect::<Vec<_>>();
     Schema::meet([

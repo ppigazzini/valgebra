@@ -18,7 +18,7 @@ use std::cell::RefCell;
 
 use crate::descr::classes::Reach;
 use crate::descr::lower::{Constants, an_empty_reading_stands, lower_unfolded};
-use crate::ir::{ClassIx, Constraint, Constraints, Field, Polarity, Schema};
+use crate::ir::{Attribute, ClassIx, Constraint, Constraints, Polarity, Schema};
 use crate::kind::{Kind, Region, Regions};
 use crate::oracle::denotes_a_set_within;
 use crate::verdict::Verdict;
@@ -262,18 +262,18 @@ impl Schema {
                 let verdict = Verdict::every(required.map(|field| field.schema.verdict_rec(cx)));
                 (verdict, Regions::Unknown)
             }
-            // An attribute record carries no class, so its fields decide it in
-            // both directions -- the same rule as a keyed map, and for the same
-            // reason. A required field admitting nothing empties it, because no
-            // value can carry that attribute; required fields that are all
-            // *proven* inhabited make it inhabited, because an object carrying
-            // one witness per attribute is a value of the record. That second
-            // half is what a class in the same node would take away: an
-            // `isinstance` atom is opaque, so a node holding both can never be
-            // more than unknown.
+            // An attribute record carries no class, so its attributes decide it
+            // in both directions -- the same rule as a keyed map's required
+            // fields, and for the same reason. An attribute admitting nothing
+            // empties it, because no value can carry that attribute; attributes
+            // that are all *proven* inhabited make it inhabited, because an
+            // object carrying one witness per attribute is a value of the
+            // record. That second half is what a class in the same node would
+            // take away: an `isinstance` atom is opaque, so a node holding both
+            // can never be more than unknown.
             Schema::AttrRecord { fields } => {
-                let required = fields.iter().filter(|field| field.required);
-                let verdict = Verdict::every(required.map(|field| field.schema.verdict_rec(cx)));
+                let verdict =
+                    Verdict::every(fields.iter().map(|field| field.schema.verdict_rec(cx)));
                 (verdict, Regions::Unknown)
             }
             // A union is empty when every member is and inhabited when any member
@@ -664,20 +664,16 @@ impl Drop for OpenMeet {
 /// atom rule reads the same [`Reach`] off the same snapshot, and the two
 /// deciders keep one answer.
 ///
-/// Asked only of a meet whose members are inhabited, so a required field is
-/// already known to admit a value; an optional one is asked here where only a
-/// value can meet it.
-fn a_direct_instance_carries(class: ClassIx, fields: &[Field], cx: &mut Cx<'_>) -> bool {
-    fields.iter().all(
-        |field| match cx.oracle.attribute_reach(class, &field.name) {
-            Some(Reach::Anything) => true,
-            Some(Reach::AnyValue) => {
-                field.required || field.schema.verdict_rec(cx) == Verdict::Inhabited
-            }
-            Some(Reach::Missing) => !field.required,
-            Some(Reach::Unread) | None => false,
-        },
-    )
+/// Asked only of a meet whose members are inhabited, so every attribute is
+/// already known to admit a value, and the class answers only whether a direct
+/// instance carries each name.
+fn a_direct_instance_carries(class: ClassIx, fields: &[Attribute], cx: &Cx<'_>) -> bool {
+    fields.iter().all(|field| {
+        matches!(
+            cx.oracle.attribute_reach(class, &field.name),
+            Some(Reach::Anything | Reach::AnyValue)
+        )
+    })
 }
 
 /// Whether this meet is one class together with the attributes its instances
@@ -702,7 +698,7 @@ fn a_direct_instance_carries(class: ClassIx, fields: &[Field], cx: &mut Cx<'_>) 
 /// reading asks whether the class carries the fields. A guard that returned a
 /// `bool` made each search for what the match had already found -- a search
 /// that could not fail, and whose failure arm no input reached.
-pub(super) fn class_with_attributes(members: &[Schema]) -> Option<(ClassIx, &[Field])> {
+pub(super) fn class_with_attributes(members: &[Schema]) -> Option<(ClassIx, &[Attribute])> {
     match members {
         [Schema::Instance(class), Schema::AttrRecord { fields }]
         | [Schema::AttrRecord { fields }, Schema::Instance(class)] => Some((*class, fields)),

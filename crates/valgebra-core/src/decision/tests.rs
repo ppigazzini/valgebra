@@ -4,7 +4,7 @@ use super::records::keyed_map_meet_verdict;
 use super::*;
 use crate::descr::classes::{Class, Reach};
 use crate::descr::lower::Operand;
-use crate::ir::{CollKind, Field, MapClause, OperandIx, SeqKind};
+use crate::ir::{Attribute, CollKind, Field, MapClause, OperandIx, SeqKind};
 use crate::ir::{DefIx, Openness};
 use crate::kind::Kind;
 use crate::oracle::tests::Pure;
@@ -244,33 +244,24 @@ fn an_attribute_record_relates_to_every_other_node() {
         let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
-    let attrs = |fields: Vec<(&str, Schema, bool)>| {
+    let attrs = |fields: Vec<(&str, Schema)>| {
         Schema::attr_record(
             fields
                 .into_iter()
-                .map(|(name, schema, required)| Field {
-                    name: name.into(),
-                    schema,
-                    required,
-                })
+                .map(|(name, schema)| attribute(name, schema))
                 .collect(),
         )
     };
     let empty = attrs(vec![]);
-    let x_int = attrs(vec![("x", Schema::Int, true)]);
-    let x_bool = attrs(vec![("x", Schema::Bool, true)]);
-    let x_int_y_str = attrs(vec![("x", Schema::Int, true), ("y", Schema::Str, true)]);
-    let x_optional = attrs(vec![("x", Schema::Int, false)]);
+    let x_int = attrs(vec![("x", Schema::Int)]);
+    let x_bool = attrs(vec![("x", Schema::Bool)]);
+    let x_int_y_str = attrs(vec![("x", Schema::Int), ("y", Schema::Str)]);
 
     // Widening by the record's own order: more attributes is a smaller set, and
     // an attribute narrowed is narrower. Both are proofs the arm must give.
     assert_eq!(relation(&x_int_y_str, &x_int), Relation::Holds);
     assert_eq!(relation(&x_int, &empty), Relation::Holds);
     assert_eq!(relation(&x_bool, &x_int), Relation::Holds, "bool is an int");
-    // A required attribute is below the same attribute made optional, and not
-    // the other way: the optional one admits an object carrying no `x`.
-    assert_eq!(relation(&x_int, &x_optional), Relation::Holds);
-    assert_eq!(relation(&x_optional, &x_int), Relation::Fails);
     // And the reverse of each widening is refuted rather than declined.
     assert_eq!(relation(&x_int, &x_int_y_str), Relation::Fails);
     assert_eq!(relation(&empty, &x_int), Relation::Fails);
@@ -280,9 +271,9 @@ fn an_attribute_record_relates_to_every_other_node() {
     assert_eq!(relation(&x_int, &Schema::ANYTHING), Relation::Holds);
     assert_eq!(relation(&Schema::Nothing, &x_int), Relation::Holds);
     assert_eq!(relation(&x_int, &Schema::Nothing), Relation::Fails);
-    // A record with an uninhabited required attribute is the empty set, so it
-    // is below everything -- decided by emptiness rather than by the shape.
-    let impossible = attrs(vec![("x", Schema::Nothing, true)]);
+    // A record with an uninhabited attribute is the empty set, so it is below
+    // everything -- decided by emptiness rather than by the shape.
+    let impossible = attrs(vec![("x", Schema::Nothing)]);
     assert_eq!(relation(&impossible, &Schema::Str), Relation::Holds);
 
     // And against every other kind of node it **declines**, in both
@@ -1020,6 +1011,14 @@ fn field(name: &str, schema: Schema, required: bool) -> Field {
         name: name.into(),
         schema,
         required,
+    }
+}
+
+/// An attribute, spelled once for the same reason.
+fn attribute(name: &str, schema: Schema) -> Attribute {
+    Attribute {
+        name: name.into(),
+        schema,
     }
 }
 
@@ -2357,12 +2356,7 @@ fn both_meets_ask_the_same_question_of_their_base() {
 #[test]
 fn each_half_of_an_attribute_schema_is_reachable_through_the_meet() {
     let record = |schema| Schema::AttrRecord {
-        fields: vec![Field {
-            name: "a".into(),
-            schema,
-            required: true,
-        }]
-        .into(),
+        fields: vec![attribute("a", schema)].into(),
     };
     let object = Schema::meet([Schema::Instance(ClassIx::new(0)), record(Schema::Bool)]);
     assert!(object.is_subtype_of(&Schema::Instance(ClassIx::new(0))));
@@ -2389,12 +2383,7 @@ fn a_collection_is_inhabited_by_its_empty_value() {
         assert_eq!(coll.verdict(), Verdict::Inhabited, "{coll:?}");
     }
     let record = Schema::AttrRecord {
-        fields: vec![Field {
-            name: "a".into(),
-            schema: Schema::set(opaque),
-            required: true,
-        }]
-        .into(),
+        fields: vec![attribute("a", Schema::set(opaque))].into(),
     };
     assert_eq!(record.verdict(), Verdict::Inhabited);
 }
@@ -2406,26 +2395,10 @@ fn a_collection_is_inhabited_by_its_empty_value() {
 #[test]
 fn an_attribute_record_is_inhabited_by_its_fields() {
     let record = |schema| Schema::AttrRecord {
-        fields: vec![Field {
-            name: "a".into(),
-            schema,
-            required: true,
-        }]
-        .into(),
+        fields: vec![attribute("a", schema)].into(),
     };
     assert_eq!(record(Schema::Int).verdict(), Verdict::Inhabited);
     assert_eq!(record(Schema::Nothing).verdict(), Verdict::Empty);
-    // An optional field admitting nothing does not empty it: a value that
-    // does not carry the attribute is still a value of the record.
-    let optional = Schema::AttrRecord {
-        fields: vec![Field {
-            name: "a".into(),
-            schema: Schema::Nothing,
-            required: false,
-        }]
-        .into(),
-    };
-    assert_eq!(optional.verdict(), Verdict::Inhabited);
     // Meeting it with a class is unknown in the other direction only: the
     // class may have no instances, and that is what the core cannot read.
     let object = Schema::meet([Schema::Instance(ClassIx::new(0)), record(Schema::Int)]);
@@ -3640,13 +3613,8 @@ fn the_rules_refute_prove_and_decline_these() {
         let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
     };
-    let attr = |name: &str, schema: Schema, required: bool| Schema::AttrRecord {
-        fields: vec![Field {
-            name: name.into(),
-            schema,
-            required,
-        }]
-        .into(),
+    let attr = |name: &str, schema: Schema| Schema::AttrRecord {
+        fields: vec![attribute(name, schema)].into(),
     };
 
     // Proven: the region partition, the lattice bounds, reflexivity.
@@ -3655,8 +3623,7 @@ fn the_rules_refute_prove_and_decline_these() {
     assert_eq!(relation(&Schema::Str, &Schema::ANYTHING), Relation::Holds);
 
     // Refuted: two scalars whose regions are disjoint, an arity that cannot
-    // match, an attribute the subject does not carry, and one it carries only
-    // sometimes.
+    // match, and an attribute the subject does not carry.
     assert_eq!(relation(&Schema::Str, &Schema::Int), Relation::Fails);
     assert_eq!(
         relation(
@@ -3666,14 +3633,7 @@ fn the_rules_refute_prove_and_decline_these() {
         Relation::Fails
     );
     assert_eq!(
-        relation(&attr("a", Schema::Int, true), &attr("b", Schema::Int, true),),
-        Relation::Fails
-    );
-    assert_eq!(
-        relation(
-            &attr("a", Schema::Int, false),
-            &attr("a", Schema::Int, true),
-        ),
+        relation(&attr("a", Schema::Int), &attr("b", Schema::Int)),
         Relation::Fails
     );
 
@@ -4635,18 +4595,18 @@ impl LeafRelations for Classes {
 /// read and a second leaves the answer to the regions.
 #[test]
 fn a_class_met_with_its_attributes_has_a_value_when_its_fields_do() {
-    let attributes = |fields: Vec<Field>| Schema::AttrRecord {
+    let attributes = |fields: Vec<Attribute>| Schema::AttrRecord {
         fields: fields.into(),
     };
-    let dataclass = |class: ClassIx, fields: Vec<Field>| {
+    let dataclass = |class: ClassIx, fields: Vec<Attribute>| {
         Schema::meet([Schema::Instance(class), attributes(fields)])
     };
 
-    let plain = dataclass(Classes::PLAIN, vec![field("x", Schema::Int, true)]);
+    let plain = dataclass(Classes::PLAIN, vec![attribute("x", Schema::Int)]);
     assert_eq!(plain.verdict_under(&Classes), Verdict::Inhabited);
 
-    // A required field with no value empties it, as it does for the record.
-    let barren = dataclass(Classes::PLAIN, vec![field("x", Schema::Nothing, true)]);
+    // An attribute with no value empties it, as it does for the record.
+    let barren = dataclass(Classes::PLAIN, vec![attribute("x", Schema::Nothing)]);
     assert_eq!(barren.verdict_under(&Classes), Verdict::Empty);
 
     // Two classes need one deriving from both, which is the open world the
@@ -4654,7 +4614,7 @@ fn a_class_met_with_its_attributes_has_a_value_when_its_fields_do() {
     let two = Schema::meet([
         Schema::Instance(Classes::PLAIN),
         Schema::Instance(Classes::STRINGY),
-        attributes(vec![field("x", Schema::Int, true)]),
+        attributes(vec![attribute("x", Schema::Int)]),
     ]);
     assert_eq!(two.verdict_under(&Classes), Verdict::Unknown);
 }
@@ -4670,7 +4630,7 @@ fn a_class_met_with_its_attributes_is_outside_what_its_class_is() {
         Schema::meet([
             Schema::Instance(class),
             Schema::AttrRecord {
-                fields: vec![field("x", Schema::Int, true)].into(),
+                fields: vec![attribute("x", Schema::Int)].into(),
             },
         ])
     };
@@ -4772,18 +4732,17 @@ impl LeafRelations for Carrying {
 /// carries the record, and only where the class leaves room for one.
 ///
 /// The value every reading of the meet stands on is a direct instance with a
-/// witness in each field. Where the class rules it out -- no dictionary to
-/// hold the field, a definition that cannot be removed, a property -- the meet
-/// is unknown, and the witness guard turns the kind refutation the rule makes
-/// into a decline. Where the class allows the witness, the reading is the one
-/// the plain class gets.
+/// witness in each attribute. Where the class rules it out -- no dictionary to
+/// hold the attribute, or code answering for it -- the meet is unknown, and the
+/// witness guard turns the kind refutation the rule makes into a decline. Where
+/// the class allows the witness, the reading is the one the plain class gets.
 #[test]
 fn a_class_that_leaves_no_room_for_a_field_is_not_read_as_carrying_it() {
-    let met = |field: Field| {
+    let met = |schema: Schema| {
         Schema::meet([
             Schema::Instance(Classes::PLAIN),
             Schema::AttrRecord {
-                fields: vec![field].into(),
+                fields: vec![attribute("x", schema)].into(),
             },
         ])
     };
@@ -4791,36 +4750,31 @@ fn a_class_that_leaves_no_room_for_a_field_is_not_read_as_carrying_it() {
         let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(&Schema::Str, oracle, &[], &budget)
     };
-    let holds_an_int = met(field("x", Schema::Int, true));
-    let may_hold_an_int = met(field("x", Schema::Int, false));
-    let missing = met(field("x", Schema::Nothing, false));
+    let holds_an_int = met(Schema::Int);
 
-    // Never there: only a field that may be missing is carried.
+    // Never there: a direct instance cannot carry the attribute.
     let never = Carrying(Reach::Missing);
     assert_eq!(holds_an_int.verdict_under(&never), Verdict::Unknown);
     assert_eq!(relation(&holds_an_int, &never), Relation::Unknown);
-    assert_eq!(may_hold_an_int.verdict_under(&never), Verdict::Inhabited);
-    assert_eq!(relation(&may_hold_an_int, &never), Relation::Fails);
 
     // Defined on the class: any value, and never missing.
     let defined = Carrying(Reach::AnyValue);
     assert_eq!(holds_an_int.verdict_under(&defined), Verdict::Inhabited);
-    assert_eq!(may_hold_an_int.verdict_under(&defined), Verdict::Inhabited);
-    assert_eq!(missing.verdict_under(&defined), Verdict::Unknown);
-    assert_eq!(relation(&missing, &defined), Relation::Unknown);
+    assert_eq!(relation(&holds_an_int, &defined), Relation::Fails);
 
     // Code's answer: nothing is assumed of the direct instance.
     let unread = Carrying(Reach::Unread);
-    assert_eq!(may_hold_an_int.verdict_under(&unread), Verdict::Unknown);
+    assert_eq!(holds_an_int.verdict_under(&unread), Verdict::Unknown);
     assert_eq!(relation(&holds_an_int, &unread), Relation::Unknown);
 
     // Free: the reading the plain class gets, refutation included.
     let free = Carrying(Reach::Anything);
-    assert_eq!(missing.verdict_under(&free), Verdict::Inhabited);
+    assert_eq!(holds_an_int.verdict_under(&free), Verdict::Inhabited);
     assert_eq!(relation(&holds_an_int, &free), Relation::Fails);
 
-    // And a field nothing satisfies empties the meet whatever the class says.
-    let barren = met(field("x", Schema::Nothing, true));
+    // And an attribute nothing satisfies empties the meet whatever the class
+    // says.
+    let barren = met(Schema::Nothing);
     assert_eq!(barren.verdict_under(&never), Verdict::Empty);
 }
 
@@ -4835,7 +4789,7 @@ fn a_meet_whose_class_the_oracle_declines_is_not_refuted() {
     let plain = Schema::meet([
         Schema::Instance(ClassIx::new(0)),
         Schema::AttrRecord {
-            fields: vec![field("x", Schema::Int, true)].into(),
+            fields: vec![attribute("x", Schema::Int)].into(),
         },
     ]);
     // `Pure` answers that the class denotes a set -- so the meet has a value
@@ -5683,7 +5637,7 @@ fn a_meet_is_read_against_what_a_reference_names() {
     let dataclass = Schema::meet([
         Schema::Instance(Classes::PLAIN),
         Schema::AttrRecord {
-            fields: vec![field("x", Schema::Int, true)].into(),
+            fields: vec![attribute("x", Schema::Int)].into(),
         },
     ]);
     let record = Schema::KeyedMap {
@@ -6064,11 +6018,7 @@ fn a_self_reference_is_declined_by_every_decider() {
 /// builtin defines is not something the core holds.
 #[test]
 fn an_attribute_record_relates_through_the_objects_that_carry_it() {
-    let attrs = Schema::attr_record(vec![Field {
-        name: "x".into(),
-        schema: Schema::Int,
-        required: true,
-    }]);
+    let attrs = Schema::attr_record(vec![attribute("x", Schema::Int)]);
     // Refuted: an object carrying an `x` need not be an integer, a string or a
     // list, and a value of each kind is the witness.
     for other in [
@@ -6090,8 +6040,7 @@ fn an_attribute_record_relates_through_the_objects_that_carry_it() {
         Schema::Int.subtype_relation_under(&attrs, &NoLeafRelations, &[]),
         Relation::Unknown
     );
-    // Proven: itself, the top above it, the bottom below it, and a record
-    // asking for less than this one declares.
+    // Proven: itself, the top above it, and the bottom below it.
     assert_eq!(
         attrs.subtype_relation_under(&attrs, &NoLeafRelations, &[]),
         Relation::Holds
@@ -6104,29 +6053,11 @@ fn an_attribute_record_relates_through_the_objects_that_carry_it() {
         Schema::Nothing.subtype_relation_under(&attrs, &NoLeafRelations, &[]),
         Relation::Holds
     );
-    let optional = Schema::attr_record(vec![Field {
-        name: "x".into(),
-        schema: Schema::Int,
-        required: false,
-    }]);
-    assert_eq!(
-        attrs.subtype_relation_under(&optional, &NoLeafRelations, &[]),
-        Relation::Holds,
-        "a required attribute is one way of having an optional one"
-    );
     // A wider attribute record asks for more, so the narrower one is not below
     // it: an object with only an `x` is the witness.
     let wider = Schema::attr_record(vec![
-        Field {
-            name: "x".into(),
-            schema: Schema::Int,
-            required: true,
-        },
-        Field {
-            name: "y".into(),
-            schema: Schema::Int,
-            required: true,
-        },
+        attribute("x", Schema::Int),
+        attribute("y", Schema::Int),
     ]);
     assert_eq!(
         wider.subtype_relation_under(&attrs, &NoLeafRelations, &[]),

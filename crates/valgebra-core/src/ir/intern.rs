@@ -1,12 +1,12 @@
 //! One node built twice is one node.
 //!
-//! A schema's payloads are shared handles -- a member list, a field list, a
-//! clause list, a child node -- and two structurally equal schemas built apart
-//! hold two of them. Nothing is wrong with that: the two denote the same set
-//! and answer every question alike. What it costs is paid twice over. The
-//! second handle is a second allocation, and every later question that reaches
-//! both walks them as two trees, because equality between separate nodes is
-//! structural and structural equality is a walk.
+//! A schema's payloads are shared handles -- a member list, a field list, an
+//! attribute list, a clause list, a child node -- and two structurally equal
+//! schemas built apart hold two of them. Nothing is wrong with that: the two
+//! denote the same set and answer every question alike. What it costs is paid
+//! twice over. The second handle is a second allocation, and every later
+//! question that reaches both walks them as two trees, because equality between
+//! separate nodes is structural and structural equality is a walk.
 //!
 //! This is the table the four bounds name. `DECISION_BUDGET` and the
 //! descriptor's `BUDGET`, `DEPTH` and `WORK` each say in their own doc comment
@@ -74,7 +74,7 @@ use std::sync::{Arc, Weak};
 
 use rustc_hash::FxHasher;
 
-use super::{Clauses, Field, Fields, MapClause, Members, Schema, SeqShape, Spelling};
+use super::{Attribute, Clauses, Field, Fields, MapClause, Members, Schema, SeqShape, Spelling};
 
 /// Entries per table, one table per kind of handle.
 ///
@@ -300,6 +300,18 @@ fn hash_field(field: &Field, into: &mut FxHasher) {
     hash_node(&field.schema, into);
 }
 
+/// Whether two attributes are the same attribute, by the rule [`same_field`]
+/// reads a field by.
+fn same_attribute(one: &Attribute, two: &Attribute) -> bool {
+    one.name == two.name && same_node(&one.schema, &two.schema)
+}
+
+/// Hash an attribute by what [`same_attribute`] compares.
+fn hash_attribute(attribute: &Attribute, into: &mut FxHasher) {
+    into.write(attribute.name.as_bytes());
+    hash_node(&attribute.schema, into);
+}
+
 /// Whether two clauses are the same clause.
 fn same_clause(one: &MapClause, two: &MapClause) -> bool {
     same_node(&one.key, &two.key) && same_node(&one.value, &two.value)
@@ -346,21 +358,22 @@ impl<T: ?Sized> Table<T> {
     }
 }
 
-// The four tables, one per shape of shared payload.
+// The five tables, one per shape of shared payload.
 //
 // **Nothing called while a table is borrowed may reach back into one.** Each of
-// the four functions below probes and stores under a single borrow -- the probe
+// the five functions below probes and stores under a single borrow -- the probe
 // and the store are one question, and splitting them paid two thread-local
 // lookups and two borrow pairs on the miss path, which is every call in a pass
 // that builds new nodes. What that costs is the rule above: the rejected
 // payload is built and dropped inside the borrow, so a `Drop` on `Schema`,
-// `Field` or `MapClause` that interned anything would panic on a borrow already
-// held. None does today; each drops handles and nothing else, and any that
-// stops being true has to split its table's access again.
+// `Field`, `Attribute` or `MapClause` that interned anything would panic on a
+// borrow already held. None does today; each drops handles and nothing else,
+// and any that stops being true has to split its table's access again.
 thread_local! {
     static NODES: RefCell<Table<Schema>> = RefCell::new(Table::new());
     static MEMBERS: RefCell<Table<[Schema]>> = RefCell::new(Table::new());
     static FIELDS: RefCell<Table<[Field]>> = RefCell::new(Table::new());
+    static ATTRIBUTES: RefCell<Table<[Attribute]>> = RefCell::new(Table::new());
     static CLAUSES: RefCell<Table<[MapClause]>> = RefCell::new(Table::new());
 }
 
@@ -425,6 +438,31 @@ pub(super) fn fields(items: &mut Vec<Field>) -> Fields {
             return held;
         }
         let made = Fields::from_iter(items.drain(..));
+        table.put(hash, &made);
+        made
+    })
+}
+
+/// The shared handle for an attribute list, by the same rule as [`fields`].
+pub(super) fn attributes(items: &mut Vec<Attribute>) -> Arc<[Attribute]> {
+    let mut state = FxHasher::default();
+    state.write_usize(items.len());
+    for item in items.iter().take(SUMMARY) {
+        hash_attribute(item, &mut state);
+    }
+    let hash = state.finish();
+    ATTRIBUTES.with_borrow_mut(|table| {
+        let held = table.hit(hash, |held: &[Attribute]| {
+            held.len() == items.len()
+                && held
+                    .iter()
+                    .zip(items.iter())
+                    .all(|(one, two)| same_attribute(one, two))
+        });
+        if let Some(held) = held {
+            return held;
+        }
+        let made = Arc::<[Attribute]>::from_iter(items.drain(..));
         table.put(hash, &made);
         made
     })

@@ -120,8 +120,8 @@ pub(crate) mod goals {
 }
 
 use crate::{
-    ClassIx, Constraint, DefIx, Field, Kind, LeafRelations, Openness, OperandIx, Relation, Schema,
-    SeqShape,
+    Attribute, ClassIx, Constraint, DefIx, Field, Kind, LeafRelations, Openness, OperandIx,
+    Relation, Schema, SeqShape,
 };
 use goals::Counts;
 
@@ -224,10 +224,9 @@ fn refined(base: Schema, constraint: Constraint) -> Schema {
 /// A class met with the attributes its instances carry.
 fn dataclass(class: ClassIx, width: usize) -> Schema {
     let fields = (0..width)
-        .map(|i| Field {
+        .map(|i| Attribute {
             name: format!("f{i}").into(),
             schema: Schema::Int,
-            required: true,
         })
         .collect::<Vec<_>>();
     Schema::meet([

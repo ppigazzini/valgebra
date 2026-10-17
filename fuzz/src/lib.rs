@@ -20,8 +20,8 @@ use std::sync::Arc;
 
 use arbitrary::{Arbitrary, Result, Unstructured};
 use valgebra_core::{
-    ClassIx, ConstIx, Constraint, DefIx, Field, MapClause, NoLeafRelations, OperandIx, PredIx,
-    Relation, Schema, SeqKind, SeqShape,
+    Attribute, ClassIx, ConstIx, Constraint, DefIx, Field, MapClause, NoLeafRelations, OperandIx,
+    PredIx, Relation, Schema, SeqKind, SeqShape,
 };
 
 mod world;
@@ -208,18 +208,16 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
             // each half is a set the rules know -- and a half only ever seen
             // beside the other is a half nothing tests.
             let n = count(u, 3)?;
-            let mut fields: Vec<Field> = Vec::with_capacity(n);
+            let mut fields: Vec<Attribute> = Vec::with_capacity(n);
             for _ in 0..n {
                 let name = NAMES[usize::from(u.arbitrary::<u8>()?) % NAMES.len()];
                 let schema = build_schema(u, depth - 1)?;
-                let required = u.arbitrary()?;
                 if fields.iter().any(|f| &*f.name == name) {
                     continue;
                 }
-                fields.push(Field {
+                fields.push(Attribute {
                     name: name.into(),
                     schema,
-                    required,
                 });
             }
             Schema::AttrRecord {
@@ -408,21 +406,22 @@ mod tests {
         // invariant is about fields. An attribute record is the half of a
         // class that holds them, and a walk reading only the keyed map lets
         // the generator emit a duplicate there and call the invariant held.
-        fn unique(fields: &[Field], schema: &Schema) {
+        fn unique<'f>(fields: impl Iterator<Item = (&'f str, &'f Schema)>, schema: &Schema) {
             let mut seen = std::collections::HashSet::new();
-            for field in fields {
+            for (name, held) in fields {
                 assert!(
-                    seen.insert(&*field.name),
-                    "duplicate field name {:?} in {schema:?}",
-                    field.name
+                    seen.insert(name),
+                    "duplicate field name {name:?} in {schema:?}"
                 );
-                assert_unique_field_names(&field.schema);
+                assert_unique_field_names(held);
             }
         }
         match schema {
-            Schema::AttrRecord { fields } => unique(fields, schema),
+            Schema::AttrRecord { fields } => {
+                unique(fields.iter().map(|f| (&*f.name, &f.schema)), schema);
+            }
             Schema::KeyedMap { fields, defaults } => {
-                unique(fields, schema);
+                unique(fields.iter().map(|f| (&*f.name, &f.schema)), schema);
                 for clause in defaults.iter() {
                     assert_unique_field_names(&clause.key);
                     assert_unique_field_names(&clause.value);

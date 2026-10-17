@@ -17,7 +17,7 @@ use std::cell::Cell;
 use rustc_hash::FxHashMap;
 
 use crate::descr::maps::KEY_KINDS;
-use crate::ir::{Field, MapClause, Schema};
+use crate::ir::{Attribute, Field, MapClause, Schema};
 use crate::kind::Kind;
 use crate::verdict::{Relation, Verdict};
 
@@ -451,26 +451,44 @@ fn clause_escapes<'b>(
 /// The rule is set inclusion read off the denotation: an attribute the supertype
 /// does not name constrains nothing, and one it names constrains every value of
 /// the subtype exactly when the subtype names it too, at least as narrowly.
-pub(super) fn attr_record_subtype(fa: &[Field], fb: &[Field], cx: &mut Cx<'_>) -> Relation {
+pub(super) fn attr_record_subtype(fa: &[Attribute], fb: &[Attribute], cx: &mut Cx<'_>) -> Relation {
     let order = Cell::new(None);
     let mut a_by_name = FieldCursor::over(fa, fb, &order);
     Relation::all(fb.iter().map(|b| {
         match a_by_name.named(&b.name) {
             // An attribute the supertype names and the subtype does not: the
             // subtype holds values without it, and those are outside the
-            // supertype. So is a supertype attribute the subtype only *may*
-            // carry.
+            // supertype.
             None => Relation::Fails,
-            Some(a) if b.required && !a.required => Relation::Fails,
             Some(a) => a.schema.is_subtype_rec(&b.schema, cx),
         }
     }))
 }
 
+/// What a cursor finds by name: a record's field, or an attribute record's
+/// attribute. The two lists are kept in name order alike and looked up alike;
+/// what differs is what the caller reads off the entry it found.
+pub(super) trait Named {
+    /// The entry's name.
+    fn name(&self) -> &str;
+}
+
+impl Named for Field {
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl Named for Attribute {
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
 /// Whether a field list is in name order, which is what lets a cursor over it
 /// move forward only.
-pub(super) fn sorted_by_name(list: &[Field]) -> bool {
-    list.is_sorted_by(|one, two| one.name <= two.name)
+pub(super) fn sorted_by_name<T: Named>(list: &[T]) -> bool {
+    list.is_sorted_by(|one, two| one.name() <= two.name())
 }
 
 /// One walk over a field list, finding each name of another list as it passes.
@@ -486,12 +504,12 @@ pub(super) fn sorted_by_name(list: &[Field]) -> bool {
 /// consume the answer would decide on a field the other shadows. The frontend
 /// refuses a duplicate; the `debug_assert` names the dependency and catches a
 /// malformed IR in debug rather than deciding on the wrong field.
-pub(super) struct FieldCursor<'a, 'o> {
-    fields: &'a [Field],
-    rest: &'a [Field],
+pub(super) struct FieldCursor<'a, 'o, T> {
+    fields: &'a [T],
+    rest: &'a [T],
     /// The list this cursor is asked the names of, kept so the order can be
     /// read later rather than now.
-    queries: &'a [Field],
+    queries: &'a [T],
     /// Whether both lists are in name order, once that has been asked --
     /// shared with the sibling cursor over the same pair, which asks the
     /// identical question. `None` until a lookup misses, because until then
@@ -499,7 +517,7 @@ pub(super) struct FieldCursor<'a, 'o> {
     order: &'o Cell<Option<bool>>,
 }
 
-impl<'a, 'o> FieldCursor<'a, 'o> {
+impl<'a, 'o, T: Named> FieldCursor<'a, 'o, T> {
     /// A cursor over `fields`, to be asked for the names of `queries` in turn.
     ///
     /// Neither list is read for order here. The cursor never moves back, so a
@@ -512,16 +530,16 @@ impl<'a, 'o> FieldCursor<'a, 'o> {
     /// through a cell the sibling cursor over the same pair shares -- each of
     /// the two needs *both* lists sorted, which is one question.
     fn over(
-        fields: &'a [Field],
-        queries: &'a [Field],
+        fields: &'a [T],
+        queries: &'a [T],
         order: &'o Cell<Option<bool>>,
-    ) -> FieldCursor<'a, 'o> {
+    ) -> FieldCursor<'a, 'o, T> {
         debug_assert!(
             !sorted_by_name(fields)
                 || fields
                     .windows(2)
                     .filter_map(|pair| Some((pair.first()?, pair.get(1)?)))
-                    .all(|(one, two)| one.name != two.name),
+                    .all(|(one, two)| one.name() != two.name()),
             "record has duplicate field names; the frontend must reject them"
         );
         FieldCursor {
@@ -539,12 +557,12 @@ impl<'a, 'o> FieldCursor<'a, 'o> {
     /// stopped on is the one wanted are the same question asked once, where a
     /// `take_while` on `<` followed by a `filter` on `==` asks the stopping
     /// field twice. Each of those is a string compare, which is a call.
-    fn named(&mut self, name: &str) -> Option<&'a Field> {
+    fn named(&mut self, name: &str) -> Option<&'a T> {
         if self.order.get() == Some(false) {
-            return self.fields.iter().find(|field| &*field.name == name);
+            return self.fields.iter().find(|field| field.name() == name);
         }
         while let Some((first, rest)) = self.rest.split_first() {
-            match (*first.name).cmp(name) {
+            match first.name().cmp(name) {
                 core::cmp::Ordering::Less => self.rest = rest,
                 core::cmp::Ordering::Equal => return Some(first),
                 core::cmp::Ordering::Greater => break,
@@ -559,7 +577,7 @@ impl<'a, 'o> FieldCursor<'a, 'o> {
     /// order is read here and nowhere else. Read once: both lists in order
     /// makes every later miss a real one, and either out of order puts this
     /// cursor and its sibling on the scan for the rest of the comparison.
-    fn missed(&mut self, name: &str) -> Option<&'a Field> {
+    fn missed(&mut self, name: &str) -> Option<&'a T> {
         if self.order.get().is_some() {
             return None;
         }
@@ -569,6 +587,6 @@ impl<'a, 'o> FieldCursor<'a, 'o> {
             return None;
         }
         self.rest = self.fields;
-        self.fields.iter().find(|field| &*field.name == name)
+        self.fields.iter().find(|field| field.name() == name)
     }
 }

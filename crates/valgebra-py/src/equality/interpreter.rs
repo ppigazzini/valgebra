@@ -299,10 +299,9 @@ fn a_record_and_a_definition_are_read_through_the_pool_too() {
             other => panic!("a two-member Literal built {other:?}"),
         };
         let field = |schema: Schema| {
-            Schema::attr_record(vec![Field {
+            Schema::attr_record(vec![Attribute {
                 name: "x".into(),
                 schema,
-                required: true,
             }])
         };
         assert!(schemas_equal(
@@ -317,6 +316,33 @@ fn a_record_and_a_definition_are_read_through_the_pool_too() {
                 definitions: &[],
                 pool: &right_pool
             },
+        ));
+        // An attribute compares its name and its schema, each: one record of a
+        // single attribute is not one naming another, or holding another set.
+        let bare = Side {
+            definitions: &[],
+            pool: &[],
+        };
+        let named = |name: &str, schema: Schema| {
+            Schema::attr_record(vec![Attribute {
+                name: name.into(),
+                schema,
+            }])
+        };
+        let x_int = named("x", Schema::Int);
+        assert!(!schemas_equal(
+            py,
+            &x_int,
+            &bare,
+            &named("y", Schema::Int),
+            &bare
+        ));
+        assert!(!schemas_equal(
+            py,
+            &x_int,
+            &bare,
+            &named("x", Schema::Str),
+            &bare
         ));
         let reference = Schema::Ref(valgebra_core::DefIx::new(0));
         assert!(schemas_equal(
@@ -402,13 +428,12 @@ fn the_hash_is_blind_to_the_slot_and_to_the_order() {
             digest(&Schema::Ref(valgebra_core::DefIx::new(0)), &[]),
             digest(&Schema::Ref(valgebra_core::DefIx::new(1)), &[])
         );
-        // An attribute record's fields are its shape. No annotation builds one
-        // without a class, so it is built here.
+        // An attribute record's attributes are its shape: a name and a schema
+        // each.
         let attributes = |name: &str, schema: Schema| {
-            Schema::attr_record(vec![Field {
+            Schema::attr_record(vec![Attribute {
                 name: name.into(),
                 schema,
-                required: true,
             }])
         };
         assert_ne!(

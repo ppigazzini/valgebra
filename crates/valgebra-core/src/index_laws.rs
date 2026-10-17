@@ -21,6 +21,13 @@ fn field(schema: Schema) -> Field {
     }
 }
 
+fn attribute(schema: Schema) -> Attribute {
+    Attribute {
+        name: "f".into(),
+        schema,
+    }
+}
+
 /// Every index-carrying node, under every structural node that has to pass a
 /// remap to its children.
 fn indexed_schema() -> impl Strategy<Value = Schema> {
@@ -56,7 +63,7 @@ fn indexed_schema() -> impl Strategy<Value = Schema> {
                 .clone()
                 .prop_map(|s| Schema::record(vec![field(s)], Openness::Closed)),
             inner.clone().prop_map(|s| Schema::AttrRecord {
-                fields: vec![field(s)].into(),
+                fields: vec![attribute(s)].into(),
             }),
             inner.prop_map(|s| Schema::Refine {
                 base: Arc::new(s),

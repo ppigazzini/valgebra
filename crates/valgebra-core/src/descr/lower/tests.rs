@@ -899,13 +899,12 @@ fn the_forms_with_nowhere_to_land_refuse() {
 fn an_attribute_record_lowers_to_the_values_carrying_it() {
     const CARRIED: &[(&str, Value)] = &[("a", Value::integer(1))];
     let pool = empty_pool();
-    let field = |name: &str, schema, required| crate::ir::Field {
+    let attribute = |name: &str, schema| crate::ir::Attribute {
         name: name.into(),
         schema,
-        required,
     };
     let record = Schema::AttrRecord {
-        fields: vec![field("a", Schema::Int, true)].into(),
+        fields: vec![attribute("a", Schema::Int)].into(),
     };
     let lowered = lower(&record, &pool).expect("an attribute record lowers");
     assert!(lowered.admits(Value::object(CARRIED)));
@@ -913,9 +912,9 @@ fn an_attribute_record_lowers_to_the_values_carrying_it() {
     // of holding the record on a line rather than beside the kinds.
     assert!(lowered.admits(Value::integer(7).carrying(CARRIED)));
     assert!(!lowered.admits(Value::integer(7)));
-    // A field whose type admits nothing empties the record.
+    // An attribute whose type admits nothing empties the record.
     let empty = Schema::AttrRecord {
-        fields: vec![field("a", Schema::Nothing, true)].into(),
+        fields: vec![attribute("a", Schema::Nothing)].into(),
     };
     assert!(lower(&empty, &pool).expect("it lowers").is_empty());
 }

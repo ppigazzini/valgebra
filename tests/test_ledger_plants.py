@@ -3927,6 +3927,19 @@ PLANTS = (
         trips=("test_a_representative_denotes_what_it_stands_for",),
     ),
     Plant(
+        # A derivation that stopped being the optional attribute's: beside the
+        # complement of `{x: int}`, the union admits an `x` of any type.
+        "tests/test_closure_ledger.py",
+        ("tests/test_closure_ledger.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_closure_ledger.py",
+            "optional = union(_IntX, complement(_AnyX))",
+            "optional = union(_IntX, complement(_IntX))",
+        ),
+        trips=("test_an_optional_attribute_is_reached_without_a_flag",),
+    ),
+    Plant(
         # A checker whose output changed shape: the reader keys on a form the
         # checker no longer prints, reads nothing, and a clean page and a
         # broken parser read alike.

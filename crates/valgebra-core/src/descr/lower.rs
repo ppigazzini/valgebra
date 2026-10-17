@@ -345,14 +345,14 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>, depth: u32
         }
         Schema::Complement(inner) => Some(descend(inner, pool, budget, depth)?.complement()),
         Schema::Refine { base, constraints } => refine(base, constraints, pool, budget, depth),
-        // Every field narrows the same value, so the record is their meet. Each
-        // field's type is a descriptor in its own right, which is what makes the
-        // attribute half recursive; a field the schema does not require admits
-        // the values that do not carry it at all.
+        // Every attribute narrows the same value, so the record is their meet.
+        // Each attribute's type is a descriptor in its own right, which is what
+        // makes the attribute half recursive, and each is required: the value
+        // carries it.
         Schema::AttrRecord { fields } => {
             fields.iter().try_fold(Descr::anything(), |whole, field| {
                 let ty = descend(&field.schema, pool, budget, depth)?;
-                whole.intersect(&Descr::attribute(&field.name, &ty, !field.required))
+                whole.intersect(&Descr::attribute(&field.name, &ty, false))
             })
         }
         Schema::KeyedMap { fields, defaults } => map(fields, defaults, pool, budget, depth),

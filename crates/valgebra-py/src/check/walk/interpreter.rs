@@ -13,7 +13,7 @@ use std::ops::ControlFlow;
 use jiter::JsonValue;
 use pyo3::types::{PyFrozenSet, PySet};
 use valgebra_core::SeqShape;
-use valgebra_core::{Constraint, DefIx, Field, MapClause, Openness, PathSegment};
+use valgebra_core::{Attribute, Constraint, DefIx, Field, MapClause, Openness, PathSegment};
 
 /// Decide membership of a Python value against a schema, through the real
 /// walk, in the mode a validator's `is_valid` uses.
@@ -376,7 +376,7 @@ fn a_meet_stops_at_the_member_that_rejects_the_value() {
         let object = Schema::meet([
             Schema::Instance(ClassIx::new(0)),
             Schema::AttrRecord {
-                fields: vec![field("x", Schema::Int, true)].into(),
+                fields: vec![attribute("x", Schema::Int)].into(),
             },
         ]);
 
@@ -433,12 +433,7 @@ fn a_union_names_a_class_branch_by_its_class() {
         let object = Schema::meet([
             Schema::Instance(ClassIx::new(0)),
             Schema::AttrRecord {
-                fields: vec![Field {
-                    name: "x".into(),
-                    schema: Schema::Int,
-                    required: true,
-                }]
-                .into(),
+                fields: vec![attribute("x", Schema::Int)].into(),
             },
         ]);
         let schema = Schema::Union(
@@ -606,7 +601,7 @@ fn a_record_or_class_branch_builds_no_report_for_a_value_the_union_admits() {
             Schema::meet([
                 instance(slot),
                 Schema::AttrRecord {
-                    fields: vec![field("x", Schema::Int, true)].into(),
+                    fields: vec![attribute("x", Schema::Int)].into(),
                 },
             ])
         };
@@ -722,7 +717,7 @@ fn a_class_with_its_own_instance_test_is_asked_once_through_a_union() {
         let met = Schema::meet([
             alone.clone(),
             Schema::AttrRecord {
-                fields: vec![field("x", Schema::Int, true)].into(),
+                fields: vec![attribute("x", Schema::Int)].into(),
             },
         ]);
         for branch in [alone, met] {
@@ -1736,11 +1731,6 @@ fn an_attribute_record_checks_the_class_then_every_attribute() {
         let other_class = module.getattr("Other").expect("Other");
         let bare_class = module.getattr("NoAttrs").expect("NoAttrs");
         let pool = vec![point_class.clone().unbind(), bare_class.clone().unbind()];
-        let field = |name: &str, schema| Field {
-            name: name.into(),
-            schema,
-            required: true,
-        };
         let object = |class, fields| {
             Schema::meet([
                 Schema::Instance(ClassIx::new(class)),
@@ -1749,11 +1739,30 @@ fn an_attribute_record_checks_the_class_then_every_attribute() {
         };
         let schema = object(
             0,
-            vec![field("x", Schema::Int), field("y", Schema::Int)].into(),
+            vec![attribute("x", Schema::Int), attribute("y", Schema::Int)].into(),
         );
 
         let good = point_class.call1((1i64, 2i64)).expect("Point(1, 2)");
         assert!(decide(py, &schema, &good, &pool, &[]));
+
+        // An attribute no scalar test answers is walked, and one that holds
+        // leaves the record to the attributes after it.
+        let listed = object(
+            0,
+            vec![
+                attribute("x", Schema::list(SeqShape::homogeneous(Schema::Int))),
+                attribute("y", Schema::Int),
+            ]
+            .into(),
+        );
+        let holding = point_class
+            .call1((vec![1i64, 2], 3i64))
+            .expect("Point([1, 2], 3)");
+        assert!(decide(py, &listed, &holding, &pool, &[]));
+        let after = point_class
+            .call1((vec![1i64, 2], "3"))
+            .expect("Point([1, 2], \"3\")");
+        assert!(!decide(py, &listed, &after, &pool, &[]));
 
         // Every attribute must match: one wrong value rejects the whole.
         let text = PyString::new(py, "x").into_any();
@@ -1768,7 +1777,7 @@ fn an_attribute_record_checks_the_class_then_every_attribute() {
         assert!(!decide(py, &schema, &impostor, &pool, &[]));
 
         // A missing attribute is a rejection, not a raise.
-        let missing = object(1, vec![field("absent", Schema::Int)].into());
+        let missing = object(1, vec![attribute("absent", Schema::Int)].into());
         let bare = bare_class.call0().expect("NoAttrs()");
         assert!(!decide(py, &missing, &bare, &pool, &[]));
 
@@ -1776,23 +1785,6 @@ fn an_attribute_record_checks_the_class_then_every_attribute() {
         let nominal = Schema::Instance(ClassIx::new(0));
         assert!(decide(py, &nominal, &good, &pool, &[]));
         assert!(!decide(py, &nominal, &impostor, &pool, &[]));
-
-        // An optional attribute is satisfied by its absence, and still
-        // checked when the value carries it. No annotation builds one -- a
-        // declared attribute is one an instance has -- so the record's own
-        // denotation is what holds the walk to it.
-        let optional = Schema::AttrRecord {
-            fields: vec![Field {
-                name: "absent".into(),
-                schema: Schema::Int,
-                required: false,
-            }]
-            .into(),
-        };
-        assert!(decide(py, &optional, &bare, &pool, &[]));
-        bare.setattr("absent", "not an int")
-            .expect("setattr absent");
-        assert!(!decide(py, &optional, &bare, &pool, &[]));
     });
 }
 
@@ -1876,6 +1868,13 @@ fn json_object<'a>(pairs: Vec<(&'a str, JsonValue<'a>)>) -> JsonValue<'a> {
             .map(|(k, v)| (Cow::Borrowed(k), v))
             .collect(),
     ))
+}
+
+fn attribute(name: &str, schema: Schema) -> Attribute {
+    Attribute {
+        name: name.into(),
+        schema,
+    }
 }
 
 fn field(name: &str, schema: Schema, required: bool) -> Field {
@@ -2816,7 +2815,7 @@ fn a_fatal_signal_propagates_from_an_attribute_and_from_a_predicate() {
         let attrs = Schema::meet([
             Schema::Instance(ClassIx::new(0)),
             Schema::AttrRecord {
-                fields: vec![field("missing", Schema::Int, true)].into(),
+                fields: vec![attribute("missing", Schema::Int)].into(),
             },
         ]);
         let pool = vec![base.clone().unbind()];
@@ -6300,11 +6299,7 @@ fn a_list_of_named_tuples_is_read_by_a_test_of_each_element() {
         assert_eq!(read("[P]", &[Schema::Int], &element, fast), (None, 0));
         let record = Schema::meet([
             Schema::Instance(ClassIx::new(0)),
-            Schema::attr_record(vec![Field {
-                name: "x".into(),
-                schema: Schema::Int,
-                required: true,
-            }]),
+            Schema::attr_record(vec![attribute("x", Schema::Int)]),
         ]);
         assert_eq!(read("[P]", &[], &record, fast), (None, 0));
         let tailed = Schema::meet([
@@ -6478,16 +6473,8 @@ fn class_record_schema() -> Schema {
     Schema::meet([
         Schema::Instance(ClassIx::new(0)),
         Schema::attr_record(vec![
-            Field {
-                name: "x".into(),
-                schema: Schema::Int,
-                required: true,
-            },
-            Field {
-                name: "y".into(),
-                schema: Schema::Str,
-                required: true,
-            },
+            attribute("x", Schema::Int),
+            attribute("y", Schema::Str),
         ]),
     ])
 }
@@ -7279,7 +7266,7 @@ fn a_refused_union_summarizes_the_value_once() {
                 Schema::meet([
                     Schema::Instance(ClassIx::new(2)),
                     Schema::AttrRecord {
-                        fields: vec![field("x", Schema::Int, true)].into(),
+                        fields: vec![attribute("x", Schema::Int)].into(),
                     },
                 ]),
             ]

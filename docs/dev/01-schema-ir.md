@@ -212,6 +212,18 @@ from two classes is one interned handle, so the IR carries no record of which
 class a record came from, by design, and the renderer would have to ask the
 frontend. The rendering is a limit, stated on the API page.
 
+**An optional attribute on an attribute record.** Refused. `AttrRecord{x?: S}`
+would admit every value carrying no `x`, beside every value whose `x` is in
+`S`: that is `AttrRecord{x: S} | ~AttrRecord{x: anything}`, which the union and
+the complement already reach, so it is no generator. Nothing folds to it, so it
+is no representative either. No annotation asks for one: a dataclass field is
+on every instance, and a protocol member is on every value of the protocol
+(PEP 544). An `Attribute` therefore has no presence flag. A flag no frontend
+builds is a state only a test can produce, and the walk, the lowering and the
+subtype rule could disagree over it without any caller seeing.
+`test_an_optional_attribute_is_reached_without_a_flag` in
+`tests/test_closure_ledger.py` holds the derivation the flag fails on.
+
 **Records keyed by a non-string.** Refused. A record's fields are named by
 strings, and arbitrary keys are a different labelling than the record model
 assumes.

@@ -17,7 +17,7 @@ use pyo3::prelude::*;
 use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyDict, PyString};
 use rustc_hash::FxHashMap;
-use valgebra_core::{Field, MapClause, PathSegment, Schema};
+use valgebra_core::{Attribute, Field, MapClause, PathSegment, Schema};
 
 use super::scalar::{admitted_quietly, scalar_member};
 #[cfg(PyPy)]
@@ -1230,7 +1230,7 @@ fn undeclared_explained(
 }
 
 pub(super) fn check_attr_record(
-    fields: &[Field],
+    fields: &[Attribute],
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
@@ -1290,10 +1290,12 @@ pub(super) fn check_attr_record(
                     frame.path.pop();
                 }
             }
-            Err(err) => match attribute_missing(err, field, value.py(), frame) {
-                Some(holds) => ok &= holds,
-                None => return false,
-            },
+            Err(err) => {
+                if attribute_missing(err, field, value.py(), frame).is_break() {
+                    return false;
+                }
+                ok = false;
+            }
         }
         if !ok && stop(ctx) {
             return false;
@@ -1302,11 +1304,10 @@ pub(super) fn check_attr_record(
     ok
 }
 
-/// Whether a record holds without the attribute `field` names, whose reading
-/// raised `err`: a field the schema does not require is satisfied by its
-/// absence, and a required one is missing, which an explaining walk records.
-/// `None` where `err` is a fatal signal -- the interpreter unwinding, not a
-/// missing attribute -- recorded for the walk to stop on.
+/// The attribute `field` names is missing, its reading having raised `err`,
+/// and an explaining walk records it. A break where `err` is a fatal signal --
+/// the interpreter unwinding, not a missing attribute -- recorded for the walk
+/// to stop on.
 ///
 /// Out of line and cold. Dropping an error reads a thread-local, whether the
 /// thread is attached to the interpreter, and inlined into
@@ -1317,17 +1318,14 @@ pub(super) fn check_attr_record(
 #[inline(never)]
 fn attribute_missing(
     err: PyErr,
-    field: &Field,
+    field: &Attribute,
     py: Python<'_>,
     frame: &mut Frame<'_, '_>,
-) -> Option<bool> {
+) -> ControlFlow<()> {
     let ctx = frame.ctx;
     if is_fatal(&err, py) {
         record_fatal(err, ctx);
-        return None;
-    }
-    if !field.required {
-        return Some(true);
+        return ControlFlow::Break(());
     }
     if ctx.mode.explains() {
         frame.out.push(located(
@@ -1338,5 +1336,5 @@ fn attribute_missing(
             "missing".to_owned(),
         ));
     }
-    Some(false)
+    ControlFlow::Continue(())
 }

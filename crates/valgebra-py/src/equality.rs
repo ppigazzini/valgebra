@@ -23,7 +23,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use pyo3::prelude::*;
-use valgebra_core::{Constraint, Field, MapClause, Schema};
+use valgebra_core::{Attribute, Constraint, Field, MapClause, Schema};
 
 use crate::errors::unless_fatal;
 
@@ -152,6 +152,20 @@ fn fields_equal(
         })?)
 }
 
+fn attributes_equal(
+    py: Python<'_>,
+    a: &[Attribute],
+    left: &Side<'_>,
+    b: &[Attribute],
+    right: &Side<'_>,
+) -> PyResult<bool> {
+    // Ordered, for the reason a record's fields are.
+    Ok(a.len() == b.len()
+        && every(a.iter().zip(b), |(x, y)| {
+            Ok(x.name == y.name && equal(py, &x.schema, left, &y.schema, right)?)
+        })?)
+}
+
 fn clause_equal(
     py: Python<'_>,
     a: &MapClause,
@@ -255,7 +269,7 @@ fn equal(
                 })?
         }
         (Schema::AttrRecord { fields: a }, Schema::AttrRecord { fields: b }) => {
-            fields_equal(py, a, left, b, right)?
+            attributes_equal(py, a, left, b, right)?
         }
         (
             Schema::Refine {
@@ -388,7 +402,7 @@ pub(crate) fn hash_shape<H: Hasher>(
                 hash_shape(py, &clause.value, pool, one)
             })?;
         }
-        Schema::AttrRecord { fields } => hash_fields(py, fields, pool, hasher)?,
+        Schema::AttrRecord { fields } => hash_attributes(py, fields, pool, hasher)?,
         Schema::Refine { base, constraints } => {
             hash_shape(py, base, pool, hasher)?;
             constraints.len().hash(hasher);
@@ -444,6 +458,21 @@ fn hash_fields<H: Hasher>(
         field.name.hash(hasher);
         field.required.hash(hasher);
         hash_shape(py, &field.schema, pool, hasher)?;
+    }
+    Ok(())
+}
+
+fn hash_attributes<H: Hasher>(
+    py: Python<'_>,
+    attributes: &[Attribute],
+    pool: &[Py<PyAny>],
+    hasher: &mut H,
+) -> PyResult<()> {
+    // Ordered, for the reason a record's fields are.
+    attributes.len().hash(hasher);
+    for attribute in attributes {
+        attribute.name.hash(hasher);
+        hash_shape(py, &attribute.schema, pool, hasher)?;
     }
     Ok(())
 }
