@@ -5085,8 +5085,13 @@ def tree(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
     )
     for name in _working_files():
         source = ROOT / name
+        if not source.exists():
+            # Removed from the working tree since the index was written: the
+            # audited tree does not hold it, so neither does the copy.
+            (copy / name).unlink(missing_ok=True)
+            continue
         if not source.is_file():
-            continue  # a submodule or a path removed since the index was written
+            continue  # a submodule, which the copy holds as the clone left it
         target = copy / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
@@ -5114,6 +5119,54 @@ def _repair(tree: Path, plant: Plant) -> None:
         else:
             target.unlink(missing_ok=True)
     _plant_git(tree, "reset", "--quiet", "--soft", _audited_head())
+
+
+def _status_paths(root: Path) -> set[str]:
+    """Name every path git reads as changed or new in `root`, ignored ones aside."""
+    listing = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        [  # noqa: S607 - git is on the path of every machine that clones this
+            "git",
+            "-C",
+            str(root),
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--no-renames",
+            "--untracked-files=all",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    return {entry[3:] for entry in listing.split("\0") if entry}
+
+
+def _left_behind(tree: Path) -> list[str]:
+    """Name each file whose content in the copy is not the audited tree's.
+
+    Every file the copy and the audited tree could differ in is one git reads
+    as changed in either, so the paths compared are those; a file absent on one
+    side and present on the other differs too.
+    """
+
+    def content(path: Path) -> bytes | None:
+        return path.read_bytes() if path.is_file() else None
+
+    candidates = _status_paths(tree) | _status_paths(ROOT)
+    return sorted(
+        name for name in candidates if content(tree / name) != content(ROOT / name)
+    )
+
+
+def _restore(tree: Path, names: list[str]) -> None:
+    """Put each named file back as the audited tree holds it."""
+    for name in names:
+        source, target = ROOT / name, tree / name
+        if source.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+        else:
+            target.unlink(missing_ok=True)
 
 
 def _judged_nothing(output: str) -> bool:
@@ -5184,8 +5237,10 @@ def test_a_ledger_fails_on_the_defect_it_exists_to_catch(
     plant: Plant, tree: Path
 ) -> None:
     assert plant.trips, f"a plant for {plant.ledger} names no test it must fail"
-    plant.apply(tree)
     try:
+        # Inside the `try`: a plant that fails half-way has written some of what
+        # it writes, and the repair is what keeps that out of the next row.
+        plant.apply(tree)
         result = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
             [
                 sys.executable,
@@ -5208,6 +5263,14 @@ def test_a_ledger_fails_on_the_defect_it_exists_to_catch(
         )
     finally:
         _repair(tree, plant)
+        # A file the plant wrote and does not name survives the repair, and
+        # every later row runs on it: put it back, and say which plant wrote it.
+        left = _left_behind(tree)
+        _restore(tree, left)
+    assert not left, (
+        f"the plant for {plant.ledger} left {left} behind its repair: name each "
+        "file it writes in `touches`"
+    )
     if _judged_nothing(result.stdout):
         pytest.skip(
             f"{plant.ledger} skips the tests the plant names in this clone, so "
@@ -5218,6 +5281,36 @@ def test_a_ledger_fails_on_the_defect_it_exists_to_catch(
         f"{plant.ledger} passed {missed} on a tree that breaks their claim. A "
         f"test that cannot fail is not evidence.\n{result.stdout[-2000:]}"
     )
+
+
+def test_the_readers_of_a_plants_run_read_what_pytest_prints() -> None:
+    """Both readers, on output of each shape a run of named tests prints.
+
+    Misread, every plant would be judged by a reader rather than by its ledger:
+    a summary taken for a skip makes every row a skip and the audit green, and
+    a failure line missed makes every row a miss.
+    """
+    assert _judged_nothing("1 skipped in 0.01s\n")
+    assert _judged_nothing("s\n2 skipped in 0.02s")
+    assert not _judged_nothing("1 passed, 1 skipped in 0.02s")
+    assert not _judged_nothing("1 failed, 1 skipped in 0.02s")
+    assert not _judged_nothing("1 skipped, 1 error in 0.02s")
+    assert not _judged_nothing("")
+    printed = (
+        "FAILED tests/test_x.py::test_a - AssertionError: no\n"
+        "ERROR tests/test_x.py::test_b - RuntimeError\n"
+        "FAILED tests/test_x.py::test_c[one] - AssertionError\n"
+        "FAILED tests/test_y.py::test_d - AssertionError\n"
+        "ERROR tests/test_x.py - ImportError: a collection error names no test\n"
+        "FAILED tests/test_x.py::test_e\n"
+    )
+    assert _failed(printed, "tests/test_x.py") == {
+        "test_a",
+        "test_b",
+        "test_c",
+        "test_e",
+    }
+    assert _failed(printed, "tests/test_z.py") == set()
 
 
 def test_every_ledger_carries_a_plant() -> None:
