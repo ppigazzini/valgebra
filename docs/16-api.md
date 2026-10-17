@@ -72,9 +72,9 @@ is immutable, so the copy shares the pool rather than duplicating it.
 expression that builds the same schema — a recursive schema as the `recursive`
 call it is, an open record as the catch-all entry it carries, the nullary product
 as `tuple[()]`, a union holding a record or a list display as the `union(...)`
-call, since `|` between two dicts is Python's merge, and a key by Python's own
-`repr` — so it can be pasted into a session that holds the names it prints and
-read back. A refinement marker prints by its bare name, `Ge(0)` rather than
+call, since `|` between two dicts is Python's merge, and a key and a constant by
+Python's own `repr`, whole — so it can be pasted into a session that holds the
+names it prints and read back. A refinement marker prints by its bare name, `Ge(0)` rather than
 `at.Ge(0)`, so that session imports each marker by name, as
 `from annotated_types import Ge` does, rather than through the
 `import annotated_types as at` these pages write. Seven things it cannot render
@@ -83,8 +83,10 @@ as an expression, and two of them read back quietly: a
 as `instance_of(Name)` where it stands alone and its name would read back as
 the class met with the fields it declares; a
 **predicate**, which is a function and appears as `Predicate(...)`, and which
-the frontend refuses where it is built; a **constant too long to print**, which
-is cut mid-string and is a syntax error where it is parsed; a **meet of two
+the frontend refuses where it is built; a **constant whose `repr` is not an
+expression of it**, which is a syntax error where it is parsed -- an enum
+member's own `<Color.RED: 1>`, and an `int` past the interpreter's digit limit
+printed as `<unrepresentable>`; a **meet of two
 classes that each declare attributes**, which flattens to the two classes
 alone, printed as `instance_of(...)`, and their two attribute records, and a
 record standing apart from its class prints

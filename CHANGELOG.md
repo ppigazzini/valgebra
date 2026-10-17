@@ -33,6 +33,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: close after open takes out only the region open freed
 - fix: the contractivity check enters each definition once
 - fix: a complement is below the complement of an empty refinement
+- fix: a constant prints whole in a repr
 
 -->
 
@@ -175,6 +176,13 @@ answer of its own, or a repair to a change not yet released.
   the set representation, the one reader of a pattern's shortest match. The
   rule asks it where the inner sets' relation declines, as the rule for a
   single complement does.
+- **A constant prints whole in a `repr`.** A constant past eighty
+  characters was cut where an error message cuts a value, so
+  `Literal["x" * 100]`, `Literal[10**100]` and `Annotated[int, Ge(10**90)]`
+  printed a syntax error where they could have read back. A constant prints
+  its own `repr` in full, as a pattern and a field name already do; an `int`
+  past the interpreter's digit limit, whose `repr` raises, prints
+  `<unrepresentable>`.
 
 ## [0.0.18] - 2026-10-12
 

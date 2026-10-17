@@ -191,21 +191,25 @@ def test_a_top_keeps_the_spelling_of_the_operand_on_its_left() -> None:
 
 
 def test_a_render_that_is_not_an_expression_refuses_rather_than_rebuilding() -> None:
-    """The three renders that cannot be read back are each refused, not quiet.
+    """The renders that cannot be read back are each refused, not quiet.
 
     Everything else `repr` gives back is an expression that builds the same
     schema, so a form that is *not* one has to fail where it is read rather than
-    build something else. The pages list these three beside the class name --
-    which is not an expression either, and is the one that names its subject
-    rather than failing.
+    build something else. The pages list these beside the class name -- which
+    is not an expression either, and is the one that names its subject rather
+    than failing.
 
-    Each fails in its own place: a cut constant and a given-up render are syntax
-    errors where they are parsed, and a predicate parses to a call the frontend
-    refuses where the schema is built.
+    Each fails in its own place: a constant whose `repr` is not an expression
+    and a given-up render are syntax errors where they are parsed, and a
+    predicate parses to a call the frontend refuses where the schema is built.
     """
-    long_constant = Validator(Literal["x" * 500])  # ty: ignore[invalid-type-form]
+
+    class Level(enum.Enum):
+        LOW = 1
+
+    member = Validator(Level.LOW)
     with pytest.raises(SyntaxError):
-        eval(repr(long_constant), dict(_ROUNDTRIP_NS))  # noqa: S307
+        eval(repr(member), dict(_ROUNDTRIP_NS) | {"Level": Level})  # noqa: S307
 
     shape = "a sequence in a union"
     given_up = Validator(_chain(shape, _CHAIN_SHAPES[shape][1]))
@@ -217,6 +221,24 @@ def test_a_render_that_is_not_an_expression_refuses_rather_than_rebuilding() -> 
     parsed = eval(repr(predicate), namespace)  # noqa: S307
     with pytest.raises(NotImplementedError):
         Validator(parsed)
+
+
+def test_a_constant_prints_whole_and_reads_back() -> None:
+    """A constant is part of the schema, and prints as much of itself as it is.
+
+    An error message keeps eighty characters of a value, and a render that kept
+    them printed a long constant as a syntax error: a string cut before its
+    closing quote, a number before its last digit. Printed whole, each reads
+    back as the schema it came from.
+    """
+    for schema in (
+        Literal["x" * 500],  # ty: ignore[invalid-type-form]
+        Literal[10**100],  # ty: ignore[invalid-type-form]
+        Annotated[int, at.Ge(10**90)],
+    ):
+        original = Validator(schema)
+        rebuilt = Validator(eval(repr(original), dict(_ROUNDTRIP_NS)))  # noqa: S307
+        assert rebuilt == original, repr(original)
 
 
 def test_a_pattern_prints_as_python_spells_it() -> None:

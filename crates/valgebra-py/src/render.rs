@@ -8,7 +8,7 @@ use rustc_hash::FxHashMap;
 use valgebra_core::{CollKind, Constraint, DefIx, Field, MapClause, Schema, SeqKind, Spelling};
 
 use crate::build::declares_fields;
-use crate::errors::{class_label, summarize};
+use crate::errors::{UNREPRESENTABLE, class_label, stored, unless_fatal};
 
 /// The deepest render recursion before the walk stops and gives up. A cycle
 /// guard already bounds a single recursive definition, but a chain of *distinct*
@@ -28,21 +28,24 @@ const MAX_RENDER_DEPTH: usize = 200;
 /// [`MAX_RENDER_DEPTH`], for a `Ref` naming no definition, and for the
 /// transient self-reference a compiled validator never holds.
 ///
-/// Not an ellipsis. Every other render re-parses to the schema it came from,
-/// and `...` is valid Python inside a subscript, so a truncated one parsed and
-/// built a *different* validator with nothing to say it had been truncated.
-/// This form is a syntax error wherever it lands, which is what makes a lossy
-/// render announce itself. `tuple[T, ...]` is unrelated: that ellipsis is the
-/// annotation's own spelling and rebuilds exactly.
+/// Not an ellipsis. A render either re-parses to the schema it came from or
+/// names what it cannot spell -- a class by its name, a predicate as
+/// `Predicate(...)`, a constant in angle brackets where its `repr` is not an
+/// expression of it -- and `...` is valid Python inside a subscript, so a
+/// truncated one would parse and build a *different* validator with nothing to
+/// say it had been truncated. This form is a syntax error wherever it lands,
+/// which is what makes a lossy render announce itself. `tuple[T, ...]` is
+/// unrelated: that ellipsis is the annotation's own spelling and rebuilds
+/// exactly.
 const GAVE_UP: &str = "<...>";
 
 /// Render a schema back to the annotation/combinator expression that produces
 /// it. A recursive `Ref` renders as the `recursive` call that builds it, with
 /// the back edge as the lambda's own parameter, so the printed form is finite
 /// *and* rebuilds the schema. `depth` is the current recursion level; past
-/// [`MAX_RENDER_DEPTH`] the walk prints [`GAVE_UP`], which is the one form that
-/// does not rebuild -- a chain of definitions would otherwise overflow the
-/// native stack, and a truncated render says so by being unreadable as Python.
+/// [`MAX_RENDER_DEPTH`] the walk prints [`GAVE_UP`] -- a chain of definitions
+/// would otherwise overflow the native stack, and a truncated render says so by
+/// being unreadable as Python.
 ///
 /// The bound is reachable. A single annotation cannot be written deep enough --
 /// the frontend refuses past `MAX_SCHEMA_DEPTH`, which is lower -- but a chain
@@ -147,8 +150,8 @@ pub(crate) fn render(
         }
         // The transient marker `recursive` uses while its own body is being
         // built. A compiled validator holds no such node, so nothing a caller
-        // can print reaches this; it renders as an ellipsis because there is no
-        // definition to name yet.
+        // can print reaches this; it renders as the mark of a render that gave
+        // up, because there is no definition to name yet.
         Schema::SelfRef(_) => GAVE_UP.to_owned(),
     })
 }
@@ -373,14 +376,25 @@ fn python_repr(py: Python<'_>, text: &str) -> String {
         .map_or_else(|_| format!("{text:?}"), |repr| repr.to_string())
 }
 
-// Bounds-check the pool rather than indexing directly: a corrupt pool index
-// degrades to a placeholder in the rendered string instead of panicking across
-// the FFI boundary, matching the defensive `.get` posture in the walk. The index
-// is pool-valid by construction, so the miss is an invariant break — loud in
-// debug, a recognisable placeholder in release.
+/// A pooled constant, spelled by its own `repr` in full.
+///
+/// Whole, because a cut constant does not read back: an error message keeps
+/// eighty characters of a value, and a render that kept them printed
+/// `Literal[10**100]` as a syntax error. A render is as long as its schema, a
+/// pattern and a field name already print whole, and a constant is part of the
+/// schema as they are. A `repr` raising an ordinary exception -- an `int` past
+/// the interpreter's digit limit -- prints [`UNREPRESENTABLE`], a syntax error
+/// where it is read; a fatal signal propagates.
+///
+/// Bounds-checked rather than indexed: a corrupt pool index degrades to a
+/// placeholder in the rendered string instead of panicking across the FFI
+/// boundary, matching the defensive `.get` posture in the walk. The index is
+/// pool-valid by construction, so the miss is an invariant break -- loud in
+/// debug, a recognisable placeholder in release.
 fn pool_repr(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<String> {
     if let Some(constant) = pool.get(index) {
-        summarize(constant.bind(py))
+        let text = constant.bind(py).repr().map(|text| stored(&text));
+        unless_fatal(text, py, UNREPRESENTABLE.to_owned())
     } else {
         debug_assert!(false, "pool index {index} out of range");
         Ok("<unknown>".to_owned())
