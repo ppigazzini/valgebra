@@ -44,6 +44,7 @@ from pathlib import Path
 
 import pytest
 
+from _expressions import forgives, legs
 from _tree import ROOT, read_workflow
 
 # A repository check: it reads the tree's own sources and the workflow, neither
@@ -125,7 +126,7 @@ def _rust_gates() -> dict[int, list[str]]:
 _VARIABLE = re.compile(r"\$\{\{\s*env\.(\w+)\s*\}\}")
 
 
-def _legs(job: dict) -> list[str]:
+def _versions(job: dict) -> list[str]:
     """Give every interpreter a job's matrix runs, its `include` rows among them."""
     matrix = (job.get("strategy") or {}).get("matrix") or {}
     versions = [str(value) for value in matrix.get("python-version", [])]
@@ -141,14 +142,14 @@ def _lanes() -> dict[str, bool]:
     """Give every interpreter the workflow installs, and whether it is enforced.
 
     A leg the workflow forgives is one whose red is not a merge gate, so the
-    value is what the lane's `continue-on-error` says about that version rather
-    than whether the lane exists.
+    value is what the lane's `continue-on-error` says on that leg, evaluated
+    there, rather than whether the lane exists.
     """
     workflow = read_workflow()
     variables = workflow.get("env") or {}
     lanes: dict[str, bool] = {}
     for job in (workflow.get("jobs") or {}).values():
-        versions = _legs(job)
+        installed = []
         for step in job.get("steps") or []:
             with_ = step.get("with") if isinstance(step, dict) else None
             if isinstance(with_, dict) and "python-version" in with_:
@@ -156,26 +157,29 @@ def _lanes() -> dict[str, bool]:
                 if found := _VARIABLE.fullmatch(named):
                     named = str(variables[found.group(1)])
                 if named and "matrix." not in named:
-                    versions.append(named)
+                    installed.append(named)
         forgiven = job.get("continue-on-error", False)
-        for version in versions:
-            lanes[version] = lanes.get(version, False) or _enforced(forgiven, version)
+        for leg in legs(job) or [{}]:
+            enforced = not forgives(forgiven, leg)
+            versions = (
+                [leg["matrix.python-version"]]
+                if leg.get("matrix.python-version")
+                else []
+            )
+            for version in versions + installed:
+                lanes[version] = lanes.get(version, False) or enforced
     return lanes
 
 
 def _enforced(forgiven: object, version: str) -> bool:
     """Whether a job's `continue-on-error` leaves this interpreter's red a gate.
 
-    Two shapes, and reading only the first gets the second backwards. A job may
-    forgive *one* leg with an expression naming its version, which is how a
-    prerelease runs; it may also forgive itself outright with a literal, and a
-    check looking for the version inside that literal finds nothing and calls
-    the lane enforced -- the answer that hides a whole job nobody's merge waits
-    on.
+    Evaluated on the leg that runs the interpreter, as the runner evaluates it.
+    Read as text instead, a check looking for the version answers the wrong
+    way twice: a literal `true` names no version and forgives the whole job,
+    and `!= '3.16'` names the version it does not forgive.
     """
-    if forgiven is True or str(forgiven).strip().lower() == "true":
-        return False
-    return f"'{version}'" not in str(forgiven)
+    return not forgives(forgiven, {"matrix.python-version": version})
 
 
 def _minor(version: str) -> int | None:
@@ -276,7 +280,7 @@ def _off_the_matrix(workflow: dict) -> list[str]:
     return [
         f"{name}: {release or 'nothing'} in {text!r}"
         for name, release, text in _compared(workflow)
-        if release not in _legs(jobs[name])
+        if release not in _versions(jobs[name])
     ]
 
 
@@ -375,7 +379,7 @@ def test_the_helper_is_the_one_place_the_comparison_is_read_from() -> None:
 
 
 def test_a_job_that_forgives_itself_outright_enforces_no_interpreter() -> None:
-    """The two shapes of `continue-on-error`, read apart."""
+    """The shapes of `continue-on-error`, each evaluated on its leg."""
     assert _enforced(False, "3.14")
     assert _enforced("", "3.14")
     # One leg named, which is how a prerelease leg is forgiven.
@@ -384,3 +388,7 @@ def test_a_job_that_forgives_itself_outright_enforces_no_interpreter() -> None:
     # And the whole job, which names no version to look for.
     assert not _enforced(True, "3.14")
     assert not _enforced("true", "3.14")
+    # An expression naming a version forgives where it holds, not where it names.
+    assert _enforced("${{ matrix.python-version != '3.15' }}", "3.15")
+    assert not _enforced("${{ matrix.python-version != '3.15' }}", "3.14")
+    assert not _enforced("${{ matrix.python-version == '3.15' || true }}", "3.14")

@@ -39,6 +39,7 @@ from typing import NamedTuple
 
 import pytest
 
+from _expressions import evaluate, forgives, legs
 from _toml import load
 from _tree import ROOT, read_workflow, runs
 
@@ -136,19 +137,17 @@ def _one(pattern: str, text: str, where: str) -> int:
 def _matrix() -> dict[int, bool]:
     """Give each release the `python` job runs, and whether its red blocks.
 
-    A leg is forgiven by a `continue-on-error` expression naming its version,
-    which is how a prerelease runs, or by the literal `true`, which forgives
-    the whole job; `tests/test_version_gates.py` reads the same two shapes.
+    A leg is forgiven where the job's `continue-on-error` holds on it, evaluated
+    as the runner evaluates it: an expression forgives the legs it is true on,
+    whatever version it spells, and `tests/test_version_gates.py` reads it the
+    same way.
     """
     job = read_workflow()["jobs"]["python"]
-    matrix = job["strategy"]["matrix"]
-    versions = [str(version) for version in matrix["python-version"]]
-    versions += [str(row["python-version"]) for row in matrix.get("include", [])]
-    forgiven = str(job.get("continue-on-error", False)).strip().lower()
     lanes: dict[int, bool] = {}
-    for version in versions:
-        blocks = forgiven != "true" and f"'{version}'" not in forgiven
-        lanes[_minor(version)] = lanes.get(_minor(version), False) or blocks
+    for leg in legs(job):
+        minor = _minor(leg["matrix.python-version"])
+        blocks = not forgives(job.get("continue-on-error"), leg)
+        lanes[minor] = lanes.get(minor, False) or blocks
     return lanes
 
 
@@ -253,45 +252,76 @@ def test_a_release_in_development_runs_forgiven() -> None:
         )
 
 
-#: A release a `continue-on-error` expression names: `'3.16'`, `'3.14t'`.
-_NAMED_RELEASE = re.compile(r"'(3\.\d+t?)'")
-
-
-def _forgives(flag: object) -> set[str]:
-    """Read the releases a `continue-on-error` names, and `*` for a literal `true`."""
-    text = str(False if flag is None else flag).strip().lower()
-    if text == "true":
-        return {"*"}
-    return set(_NAMED_RELEASE.findall(text))
-
-
 def test_a_forgiven_leg_turns_no_commit_red() -> None:
     """Each step a forgiven leg runs forgives it too, and no step forgives more.
 
     The job's `continue-on-error` keeps the workflow's result green, and with it
     the `ci` gate, but not the job's own check: a failed step leaves that red,
     and GitHub marks the commit with a red cross for any red check. A step's own
-    `continue-on-error` is what ends the job green, so every `run:` step the leg
-    reaches names the releases the job names. A step that runs on the floor
-    alone reaches no forgiven leg and forgives nothing, and no step names a
-    release the job holds: a forgiveness the job does not share turns a
-    supported release's failure green.
+    `continue-on-error` is what ends the job green, so on every leg a step runs,
+    the step forgives exactly where the job does. A step that runs on the floor
+    alone reaches no forgiven leg and forgives nothing, and no step forgives a
+    leg the job holds: a forgiveness the job does not share turns a supported
+    release's failure green. Both values are evaluated on each leg, so a flag
+    that spells the right version and holds on the wrong legs is read as what
+    it does.
     """
-    job = read_workflow()["jobs"]["python"]
-    forgiven = _forgives(job.get("continue-on-error"))
-    for step in job["steps"]:
-        if "run" not in step:
-            continue
-        name = step.get("name", str(step["run"]).splitlines()[0])
-        floor_only = "env.FLOOR" in str(step.get("if", ""))
-        expected = set() if floor_only else forgiven
-        named = _forgives(step.get("continue-on-error"))
-        assert named == expected, (
-            f"the python job's step {name!r} forgives {sorted(named) or 'nothing'} "
-            f"where the job forgives {sorted(expected) or 'nothing'} on the legs "
-            "the step runs: give each step a forgiven leg runs the job's own "
-            "continue-on-error, and no step another"
-        )
+    workflow = read_workflow()
+    job = workflow["jobs"]["python"]
+    variables = {
+        name: str(value) for name, value in (workflow.get("env") or {}).items()
+    }
+    for leg in legs(job):
+        forgiven = forgives(job.get("continue-on-error"), leg)
+        matrix = {key.removeprefix("matrix."): value for key, value in leg.items()}
+        for step in job["steps"]:
+            if "run" not in step:
+                continue
+            condition = str(step.get("if", "")).strip()
+            context = {"matrix": matrix, "env": variables}
+            if condition and not evaluate(condition, context):
+                continue
+            name = step.get("name", str(step["run"]).splitlines()[0])
+            held = forgives(step.get("continue-on-error"), leg)
+            assert held == forgiven, (
+                f"on {' '.join(leg.values())}, the python job's step {name!r} "
+                f"{'forgives' if held else 'forgives nothing'} where the job "
+                f"{'forgives' if forgiven else 'forgives nothing'}: give each step "
+                "a forgiven leg runs the job's own continue-on-error, and no step "
+                "another"
+            )
+
+
+#: The steps a merge-gate job may forgive apart from the release in
+#: development's, each with what makes its failure no finding.
+FORGIVEN_ELSEWHERE = {
+    ("nightly-libfuzzer", "Minimize the corpus"): (
+        "shrinks the corpus the soak before it already read: a failure here "
+        "reports nothing about the code, and the soak's own step carries any "
+        "finding"
+    ),
+}
+
+
+def test_only_the_release_in_development_is_forgiven() -> None:
+    """No job but the python one forgives itself, and no step outside it does.
+
+    The `ci` gate waits on every job, so a `continue-on-error` anywhere else is
+    a check the merge does not wait on, written where nobody reads it as one.
+    The python job's is the release in development's, held above; any other
+    step names the reason its failure is no finding.
+    """
+    jobs = read_workflow()["jobs"]
+    forgiving = sorted(name for name, job in jobs.items() if "continue-on-error" in job)
+    assert forgiving == ["python"], forgiving
+    stepped = {
+        (name, str(step.get("name")))
+        for name, job in jobs.items()
+        if name != "python"
+        for step in job.get("steps") or []
+        if "continue-on-error" in step
+    }
+    assert stepped == set(FORGIVEN_ELSEWHERE), sorted(stepped ^ set(FORGIVEN_ELSEWHERE))
 
 
 def test_the_classifiers_name_the_supported_releases() -> None:

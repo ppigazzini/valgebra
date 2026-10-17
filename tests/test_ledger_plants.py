@@ -4257,6 +4257,49 @@ PLANTS = (
         trips=("test_a_forgiven_leg_turns_no_commit_red",),
     ),
     Plant(
+        # The job's flag turned round: it names the release in development and
+        # forgives every other leg, which a reading of the text calls the same
+        # flag.
+        "tests/test_python_lifecycle.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "    continue-on-error: ${{ matrix.python-version == '3.16' }}\n    steps:",
+            "    continue-on-error: ${{ matrix.python-version != '3.16' }}\n    steps:",
+        ),
+        trips=("test_the_matrix_blocks_on_every_supported_release_and_no_other",),
+    ),
+    Plant(
+        # A step's flag that names the release and holds on every leg.
+        "tests/test_python_lifecycle.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "        continue-on-error: ${{ matrix.python-version == '3.16' }}\n"
+            "        env:\n          HYPOTHESIS_PROFILE",
+            "        continue-on-error: "
+            "${{ matrix.python-version == '3.16' || true }}\n"
+            "        env:\n          HYPOTHESIS_PROFILE",
+        ),
+        trips=("test_a_forgiven_leg_turns_no_commit_red",),
+    ),
+    Plant(
+        # A step of another merge-gate job forgiven, which the gate then waits
+        # on without reading.
+        "tests/test_python_lifecycle.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "      - name: Sweep the core files the change touches\n",
+            "      - name: Sweep the core files the change touches\n"
+            "        continue-on-error: true\n",
+        ),
+        trips=("test_only_the_release_in_development_is_forgiven",),
+    ),
+    Plant(
         # A year past the newest row with no row added for the next release.
         "tests/test_python_lifecycle.py",
         (_LIFECYCLE,),
