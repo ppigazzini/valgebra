@@ -26,8 +26,12 @@ validator (`Validator.open`/`close`), documented above.
 
 What `open` and `close` move is the **key-type region no clause claims**:
 opening frees it and closing refuses it, and neither touches a region a clause
-already claims. A closed record claims none, which is why opening one admits
-every key its fields do not name. A `dict[str, int]` claims the `str` region, so
+already claims. A clause short of every value claims its keys; the clauses
+admitting every value are read as one clause over the union of their keys, of
+which the part over keys another clause claims stays and the rest is the
+region, so `{str: anything, complement(str): anything}` closes to `{}` as
+`dict[anything, anything]` does. A closed record claims none, which is why
+opening one admits every key its fields do not name. A `dict[str, int]` claims the `str` region, so
 opening it keeps `str` keys mapping to integers and frees the rest, and an open
 `TypedDict` claims it too, through the `str: anything` clause its reading
 carries.

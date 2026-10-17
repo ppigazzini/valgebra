@@ -499,7 +499,10 @@ assert closed.open().is_valid({"name": "Ada", "extra": 1})
 
 **Openness is the default of the keys no clause claims.** A clause names a
 region of the key space — `str: int` claims the `str` keys — and the two
-transforms decide the keys the clauses leave over and nothing else. A record
+transforms decide the keys the clauses leave over and nothing else. The clauses
+admitting every value are one clause over the union of their keys, however they
+are written, so `{str: anything, complement(str): anything}` closes to `{}` as
+the top does, and beside `bytes: int` it closes to the `bytes` keys alone. A record
 claims no region, which is why opening one frees every key and closing one
 refuses every key; that is the common case, not the general rule. A *mapping*
 claims one, so opening `dict[str, int]` keeps what a `str` key maps to and frees

@@ -4797,6 +4797,20 @@ fn mixed_clauses() -> impl Strategy<Value = Vec<MapClause>> {
     )
 }
 
+/// A key a clause admitting every value may carry: a kind, or the complement
+/// of one, which is what `open` writes and what splits the top into parts.
+fn top_clause_key() -> impl Strategy<Value = Schema> {
+    prop_oneof![
+        Just(Schema::Int),
+        Just(Schema::Str),
+        Just(Schema::Bytes),
+        Just(Schema::NoneType),
+        Just(Schema::Int.complement()),
+        Just(Schema::Str.complement()),
+        Just(Schema::Literal(ConstIx::new(0))),
+    ]
+}
+
 fn positive_schema() -> impl Strategy<Value = Schema> {
     schema_fragment(Negation::Absent, Producer::Any)
 }
@@ -5284,6 +5298,41 @@ proptest! {
         if carrying(&map).len() == 1 && standing && distinct {
             prop_assert_eq!(round_trip, closed);
         }
+    }
+
+    /// The clauses admitting every value close as the one clause they are,
+    /// however they were split.
+    ///
+    /// Two clauses each admitting every value at their own keys are one
+    /// clause over the union of the keys, ICFP 2023's wildcard written as the
+    /// union its footnote 15 reads one as. Read one at a time, each was tested
+    /// against the complement of the others' keys, and whether that folded
+    /// decided the answer: `{int: any, ~int: any, ~str: any}` kept every
+    /// clause where `{int | ~int | ~str: any}` closed to `{}`.
+    #[test]
+    fn the_clauses_admitting_every_value_close_as_one(
+        tops in prop::collection::vec(top_clause_key(), 1..4),
+        rest in mixed_clauses(),
+    ) {
+        let rest: Vec<MapClause> = rest
+            .into_iter()
+            .filter(|clause| clause.value != Schema::ANYTHING)
+            .collect();
+        let split: Vec<MapClause> = tops
+            .iter()
+            .map(|key| MapClause { key: key.clone(), value: Schema::ANYTHING })
+            .chain(rest.iter().cloned())
+            .collect();
+        let merged: Vec<MapClause> = std::iter::once(MapClause {
+            key: Schema::union(tops.iter().cloned()),
+            value: Schema::ANYTHING,
+        })
+        .chain(rest.iter().cloned())
+        .collect();
+        let close = |clauses: Vec<MapClause>| {
+            Schema::keyed_map(Vec::new(), clauses).with_records_open(Openness::Closed)
+        };
+        prop_assert_eq!(close(split), close(merged));
     }
 
     // THEORY: open-and-close-read-the-region

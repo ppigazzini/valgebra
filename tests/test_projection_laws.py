@@ -23,7 +23,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import Validator, anything, intersection, union
+from valgebra import Validator, anything, complement, intersection, union
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -170,6 +170,44 @@ def test_one_term_closes_one_way_whichever_reading_wrote_it() -> None:
     # And the set they close to is the one that admits the empty dict alone.
     assert every_dict.close().is_valid({}) is True
     assert every_dict.close().is_valid({"b": "x"}) is False
+
+
+# The clauses admitting every value, split three ways, each beside what else the
+# map declares. Each closes as the one clause over the union of their keys does.
+_SPLIT_TOPS: list[tuple[str, dict[object, object]]] = [
+    ("str and its complement", {str: anything, complement(str): anything}),
+    (
+        "beside a clause of another value",
+        {str: anything, complement(str): anything, bytes: int},
+    ),
+    (
+        "over a kind, its complement and another's",
+        {int: anything, complement(int): anything, complement(str): anything},
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "split"), _SPLIT_TOPS, ids=[name for name, _ in _SPLIT_TOPS]
+)
+def test_the_clauses_admitting_every_value_close_as_one(
+    name: str, split: dict[object, object]
+) -> None:
+    """Two clauses admitting every value are one clause, however they are split.
+
+    ICFP 2023 reads the wildcard as sugar for the clauses it covers, and a
+    union of key types as the clauses it joins, so `{str: anything,
+    complement(str): anything}` is the top clause written twice and closes to
+    `{}` as the top does. Read one clause at a time, the answer turned on
+    whether the others' keys folded: the same pair beside `bytes: int`, or the
+    top split over two complements, kept every clause and admitted every dict.
+    """
+    closed = Validator(split).close()
+    assert closed.is_valid({}), name
+    assert not closed.is_valid({"x": 1}), name
+    assert not closed.is_valid({None: 1}), name
+    others = {key: value for key, value in split.items() if value is not anything}
+    assert closed.is_equivalent(Validator({anything: anything, **others}).close()), name
 
 
 def test_the_relations_are_functions_of_the_set() -> None:

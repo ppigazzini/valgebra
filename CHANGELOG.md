@@ -46,6 +46,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a complement admits no member at the walk's bound
 - fix: a complement reads its inner walk in Kleene's strong logic
 - fix: a map atom wanting a key past the partition proves nothing -- internal
+- fix: the clauses admitting every value close as one clause
 
 -->
 
@@ -293,6 +294,16 @@ answer of its own, or a repair to a change not yet released.
   under a complement and admits no value the complement's inner schema holds.
   A value that moved while it was read is refused with
   `mutated_during_validation` whatever the rest decided.
+- **The clauses admitting every value close as one clause.** `close` read each
+  clause carrying `anything` on its own, as the region it frees where its keys
+  were the complement of the others'. So `{str: anything, complement(str):
+  anything}` closed to `{}`, as `dict[anything, anything]` does, while the same
+  pair beside `bytes: int`, or the top split over `int`, `complement(int)` and
+  `complement(str)`, kept every clause and admitted every dict. Those clauses
+  are one clause over the union of their keys: the part over keys another
+  clause claims stays, and the rest is the region `close` refuses. The first
+  shape closes as it did, the second to its `bytes` keys and the third to
+  `{}`.
 
 ## [0.0.18] - 2026-10-12
 
