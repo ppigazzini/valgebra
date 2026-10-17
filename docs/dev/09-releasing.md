@@ -247,13 +247,16 @@ release after the next one's first candidate supports it.
 a leg of the `python` job with a `continue-on-error` that holds on that leg
 alone, so a break shows while there is time to fix it and blocks no merge. Each
 step the leg runs forgives it as well: the job's flag keeps the gate green but
-not the job's own check, and a red check marks the commit with a red cross, so
-a failure is forgiven at the step that fails and reads as that step's
-annotation in the run. The ledgers evaluate each flag on every leg, as the
-runner does, rather than looking for the version in its text: `!= '3.16'`
-spells the version and forgives every other leg. No other job forgives itself,
-and no other step but the fuzz lane's corpus minimisation, whose failure
-reports nothing about the code. PyO3 builds for
+not the job's own check, and a red check marks the commit with a red cross, so a
+failure is forgiven at the step that fails and reads as that step's annotation
+in the run. Each step it runs is bounded, and the bounds together fit inside the
+job's limit, so a hang fails the step, which the leg forgives, rather than
+running the job out: a job its own limit stops is cancelled, and `ci` reads a
+cancelled job as red. The ledgers evaluate each flag on every leg, as the runner
+does, rather than looking for the version in its text: `!= '3.16'` spells the
+version and forgives every other leg. No other job forgives itself, and no other
+step but the fuzz lane's corpus minimisation, whose failure reports nothing
+about the code. PyO3 builds for
 the release after the newest it supports with a warning that the artifact must
 not be distributed, which is what a forgiven leg is; it refuses the release
 after that unless `UNSAFE_PYO3_SKIP_VERSION_CHECK=1` is set.

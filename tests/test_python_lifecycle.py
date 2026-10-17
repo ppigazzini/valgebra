@@ -292,6 +292,52 @@ def test_a_forgiven_leg_turns_no_commit_red() -> None:
             )
 
 
+#: A step's own bound, where its command carries one: `timeout 300 cargo ...`.
+_COMMAND_BOUND = re.compile(r"\btimeout (\d+)\b")
+
+
+def test_a_hang_on_the_forgiven_leg_is_a_forgiven_failure() -> None:
+    """Each step the forgiven leg runs is bounded, and together under the job's.
+
+    A job that reaches its own `timeout-minutes` ends cancelled, not failed,
+    and the `ci` gate reads a cancelled job as red, so a step that hangs on the
+    release in development reddens the merge whatever its `continue-on-error`
+    says. A step bounded below the job fails where it hangs, which the leg
+    forgives. The bounds together stay under the job's, so whichever step hangs
+    is stopped by its own before the job's runs out.
+    """
+    workflow = read_workflow()
+    job = workflow["jobs"]["python"]
+    variables = {
+        name: str(value) for name, value in (workflow.get("env") or {}).items()
+    }
+    limit = int(job["timeout-minutes"])
+    forgiven = [leg for leg in legs(job) if forgives(job.get("continue-on-error"), leg)]
+    assert forgiven, "the python job forgives no leg"
+    for leg in forgiven:
+        matrix = {key.removeprefix("matrix."): value for key, value in leg.items()}
+        context = {"matrix": matrix, "env": variables}
+        bounds = {}
+        for step in job["steps"]:
+            condition = str(step.get("if", "")).strip()
+            if "run" not in step or (condition and not evaluate(condition, context)):
+                continue
+            name = step.get("name", str(step["run"]).splitlines()[0])
+            if "timeout-minutes" in step:
+                bounds[name] = int(step["timeout-minutes"])
+            elif found := _COMMAND_BOUND.search(str(step["run"])):
+                bounds[name] = -(-int(found.group(1)) // 60)
+            else:
+                pytest.fail(
+                    f"the python job's step {name!r} runs on {' '.join(leg.values())} "
+                    "with no bound: a hang there is cancelled with the job, and red"
+                )
+        assert sum(bounds.values()) < limit, (
+            f"the steps of {' '.join(leg.values())} are bounded at {bounds}, "
+            f"{sum(bounds.values())} minutes against the job's {limit}"
+        )
+
+
 #: The steps a merge-gate job may forgive apart from the release in
 #: development's, each with what makes its failure no finding.
 FORGIVEN_ELSEWHERE = {

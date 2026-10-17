@@ -4278,10 +4278,10 @@ PLANTS = (
             tree,
             ".github/workflows/ci.yml",
             "        continue-on-error: ${{ matrix.python-version == '3.16' }}\n"
-            "        env:\n          HYPOTHESIS_PROFILE",
+            "        timeout-minutes: 12\n",
             "        continue-on-error: "
             "${{ matrix.python-version == '3.16' || true }}\n"
-            "        env:\n          HYPOTHESIS_PROFILE",
+            "        timeout-minutes: 12\n",
         ),
         trips=("test_a_forgiven_leg_turns_no_commit_red",),
     ),
@@ -4298,6 +4298,32 @@ PLANTS = (
             "        continue-on-error: true\n",
         ),
         trips=("test_only_the_release_in_development_is_forgiven",),
+    ),
+    Plant(
+        # A step of the forgiven leg left unbounded: a hang there runs the job
+        # out, and a job its own limit stops is cancelled, which is red.
+        "tests/test_python_lifecycle.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "        timeout-minutes: 12\n        env:\n          HYPOTHESIS_PROFILE",
+            "        env:\n          HYPOTHESIS_PROFILE",
+        ),
+        trips=("test_a_hang_on_the_forgiven_leg_is_a_forgiven_failure",),
+    ),
+    Plant(
+        # Every step bounded, and the bounds together past the job's: a hang in
+        # the last step outlives the job.
+        "tests/test_python_lifecycle.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "        timeout-minutes: 12\n        env:\n          HYPOTHESIS_PROFILE",
+            "        timeout-minutes: 25\n        env:\n          HYPOTHESIS_PROFILE",
+        ),
+        trips=("test_a_hang_on_the_forgiven_leg_is_a_forgiven_failure",),
     ),
     Plant(
         # A year past the newest row with no row added for the next release.
