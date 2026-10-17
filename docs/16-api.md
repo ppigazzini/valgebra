@@ -70,11 +70,13 @@ is immutable, so the copy shares the pool rather than duplicating it.
 
 `repr` is a **rendering**, not a serialization. What it gives back is an
 expression that builds the same schema — a recursive schema as the `recursive`
-call it is, an open record as the catch-all entry it carries, the nullary product
-as `tuple[()]`, a union holding a record or a list display as the `union(...)`
-call, since `|` between two dicts is Python's merge, and a key and a constant by
-Python's own `repr`, whole — so it can be pasted into a session that holds the
-names it prints and read back. A refinement marker prints by its bare name, `Ge(0)` rather than
+call it is, its back edge bound to a name the rest of the render does not print,
+so a class named `X` in the body is not read back as the back edge; an open
+record as the catch-all entry it carries, the nullary product as `tuple[()]`, a
+union holding a record or a list display as the `union(...)` call, since `|`
+between two dicts is Python's merge, and a key and a constant by Python's own
+`repr`, whole — so it can be pasted into a session that holds the names it
+prints and read back. A refinement marker prints by its bare name, `Ge(0)` rather than
 `at.Ge(0)`, so that session imports each marker by name, as
 `from annotated_types import Ge` does, rather than through the
 `import annotated_types as at` these pages write. Seven things it cannot render

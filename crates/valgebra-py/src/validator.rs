@@ -15,7 +15,6 @@ use pyo3::prelude::*;
 use pyo3::sync::{OnceLockExt, PyOnceLock};
 use pyo3::types::PyBool;
 use pyo3::{PyTraverseError, PyVisit};
-use rustc_hash::FxHashMap;
 use valgebra_core::{Measure, Openness, Relation, Schema};
 
 use crate::build::{Pool, PoolKeys, build_root};
@@ -768,15 +767,7 @@ impl Validator {
     /// Render the compiled schema back as the annotation expression that
     /// produces it.
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let active = RefCell::new(FxHashMap::default());
-        render(
-            py,
-            &self.schema,
-            &self.literals,
-            &self.definitions,
-            &active,
-            0,
-        )
+        render(py, &self.schema, &self.literals, &self.definitions)
     }
 
     /// Refuse to pickle, and say what to do instead.

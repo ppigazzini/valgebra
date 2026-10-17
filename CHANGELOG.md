@@ -35,6 +35,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a complement is below the complement of an empty refinement
 - fix: a constant prints whole in a repr
 - fix: a literal that would read back as a builtin's is refused in a repr
+- fix: a recursive repr binds a name its body does not print
 
 -->
 
@@ -192,6 +193,15 @@ answer of its own, or a repair to a change not yet released.
   and `bytes`. Where the constant's `repr` is the builtin's spelling of it,
   the literal prints as `Literal[<S: 'a'>]`, a syntax error where it is read;
   a subclass whose `repr` spells it some other way prints by that `repr`.
+- **A recursive schema's `repr` binds a name its body does not print.** The
+  back edge was bound to `X`, then `Y`, `Z` and `T3`, whatever the body
+  printed, so `recursive(lambda t: union(None, {"c": X, "n": t}))` over a class
+  `X` printed `recursive(lambda X: union(None, {'c': X, 'n': X}))`, which reads
+  the class back as the back edge and rebuilds a schema refusing
+  `{"c": X(), "n": None}`, in 0.0.17 and 0.0.18. Each binder is the first
+  spelling of its letter, `X`, `X_1`, `X_2` and on, that no word of the render
+  spells: a class's name, a constant's `repr`, or a name the interpreter reads
+  as that spelling under NFKC normalisation, such as a fullwidth `Ｘ`.
 
 ## [0.0.18] - 2026-10-12
 

@@ -1,12 +1,12 @@
 //! Render a compiled schema back to a readable annotation/combinator string.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyComplex, PyFloat, PyInt, PyString, PyType};
 use pyo3::{PyTypeCheck, PyTypeInfo};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use valgebra_core::{CollKind, Constraint, DefIx, Field, MapClause, Schema, SeqKind, Spelling};
 
 use crate::build::declares_fields;
@@ -41,13 +41,21 @@ const MAX_RENDER_DEPTH: usize = 200;
 /// exactly.
 const GAVE_UP: &str = "<...>";
 
+/// The two characters around a binder's mark while a render is built, with the
+/// number of definitions open around the back edge between them.
+///
+/// Control characters, because a printed name or repr is the one place either
+/// can come from, and both are what [`name_binders`] reads before it replaces a
+/// mark.
+const MARK_OPEN: char = '\u{1}';
+const MARK_CLOSE: char = '\u{2}';
+
 /// Render a schema back to the annotation/combinator expression that produces
 /// it. A recursive `Ref` renders as the `recursive` call that builds it, with
 /// the back edge as the lambda's own parameter, so the printed form is finite
-/// *and* rebuilds the schema. `depth` is the current recursion level; past
-/// [`MAX_RENDER_DEPTH`] the walk prints [`GAVE_UP`] -- a chain of definitions
-/// would otherwise overflow the native stack, and a truncated render says so by
-/// being unreadable as Python.
+/// *and* rebuilds the schema. Past [`MAX_RENDER_DEPTH`] the walk prints
+/// [`GAVE_UP`] -- a chain of definitions would otherwise overflow the native
+/// stack, and a truncated render says so by being unreadable as Python.
 ///
 /// The bound is reachable. A single annotation cannot be written deep enough --
 /// the frontend refuses past `MAX_SCHEMA_DEPTH`, which is lower -- but a chain
@@ -62,13 +70,42 @@ pub(crate) fn render(
     schema: &Schema,
     pool: &[Py<PyAny>],
     defs: &[Schema],
-    active: &RefCell<FxHashMap<DefIx, String>>,
+) -> PyResult<String> {
+    let binders = Binders::default();
+    let text = render_at(py, schema, pool, defs, &binders, 0)?;
+    name_binders(py, text, binders.printed.get())
+}
+
+/// The definitions open while a render descends, by how many enclose each, and
+/// how many binder marks it has printed.
+#[derive(Default)]
+struct Binders {
+    open: RefCell<FxHashMap<DefIx, usize>>,
+    printed: Cell<usize>,
+}
+
+impl Binders {
+    /// The mark for the binder of a definition with `level` others open around
+    /// it.
+    fn mark(&self, level: usize) -> String {
+        self.printed.set(self.printed.get() + 1);
+        format!("{MARK_OPEN}{level}{MARK_CLOSE}")
+    }
+}
+
+/// [`render`] at a recursion level, `depth`, printing each binder as its mark.
+fn render_at(
+    py: Python<'_>,
+    schema: &Schema,
+    pool: &[Py<PyAny>],
+    defs: &[Schema],
+    active: &Binders,
     depth: usize,
 ) -> PyResult<String> {
     if depth > MAX_RENDER_DEPTH {
         return Ok(GAVE_UP.to_owned());
     }
-    let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
+    let r = |s: &Schema| render_at(py, s, pool, defs, active, depth + 1);
     Ok(match schema {
         // The one place the spelling is read: `typing.Any` and `anything` are
         // the same set and the same node, and this gives back what was written.
@@ -141,14 +178,15 @@ pub(crate) fn render(
             // A back edge into a definition already being rendered is the
             // lambda's parameter, which is what makes the form finite without
             // an ellipsis nothing can rebuild.
-            if let Some(name) = active.borrow().get(id) {
-                return Ok(name.clone());
+            let open = active.open.borrow().get(id).copied();
+            if let Some(level) = open {
+                return Ok(active.mark(level));
             }
-            let name = binder(active.borrow().len());
-            active.borrow_mut().insert(*id, name.clone());
+            let level = active.open.borrow().len();
+            active.open.borrow_mut().insert(*id, level);
             let body = defs.get(id.get()).map_or_else(|| Ok(GAVE_UP.to_owned()), r);
-            active.borrow_mut().remove(id);
-            format!("recursive(lambda {name}: {})", body?)
+            active.open.borrow_mut().remove(id);
+            format!("recursive(lambda {}: {})", active.mark(level), body?)
         }
         // The transient marker `recursive` uses while its own body is being
         // built. A compiled validator holds no such node, so nothing a caller
@@ -172,6 +210,84 @@ fn binder(open: usize) -> String {
         2 => "Z".to_owned(),
         n => format!("T{n}"),
     }
+}
+
+/// The finished render, each binder mark replaced by a name it prints nowhere
+/// else.
+///
+/// A binder is a name in the scope of everything its body prints, so one equal
+/// to a name the body prints captures it: a class named `X` in the body of a
+/// `lambda X:` reads back as the back edge, and the render rebuilds another
+/// set. Every name a render prints comes from a class's name or a constant's
+/// repr, which are known only once printed, so the binders are named last, each
+/// the first of its level's names that no word of the render spells. A word is
+/// a run of characters no ASCII punctuation or space breaks, read after the
+/// interpreter's NFKC normalisation, which reads `Ｘ` as `X`. That is wider
+/// than Python's identifiers -- a word inside a quoted string is one too -- and
+/// the cost of the width is a suffixed name where a plain one would have read
+/// back as well.
+///
+/// The names of different levels never meet: a level's names are its own
+/// letter, alone or with a numbered suffix after an underscore, and no letter
+/// has an underscore, so two nested definitions stay apart as [`binder`]
+/// keeps them.
+///
+/// A printed name or repr holding the mark's character is not rewritten, which
+/// would edit what was written: the render keeps its marks, and their control
+/// characters make it a syntax error wherever it is parsed.
+fn name_binders(py: Python<'_>, text: String, printed: usize) -> PyResult<String> {
+    if printed == 0 || text.matches(MARK_OPEN).count() != printed {
+        return Ok(text);
+    }
+    let normalized;
+    let read = if text.is_ascii() {
+        text.as_str()
+    } else {
+        normalized = py
+            .import(intern!(py, "unicodedata"))?
+            .call_method1(intern!(py, "normalize"), (intern!(py, "NFKC"), &text))?
+            .extract::<String>()?;
+        normalized.as_str()
+    };
+    let taken: FxHashSet<&str> = read
+        .split(|c: char| c.is_ascii() && !c.is_ascii_alphanumeric() && c != '_')
+        .collect();
+    let mut by_level: Vec<String> = Vec::new();
+    let mut named = String::with_capacity(text.len());
+    let mut rest = text.as_str();
+    while let Some((before, after)) = rest.split_once(MARK_OPEN) {
+        let Some((level, after)) = after.split_once(MARK_CLOSE) else {
+            return Ok(text);
+        };
+        let Ok(level) = level.parse::<usize>() else {
+            return Ok(text);
+        };
+        while by_level.len() <= level {
+            by_level.push(unprinted(binder(by_level.len()), &taken));
+        }
+        named.push_str(before);
+        named.push_str(by_level.get(level).map_or("", String::as_str));
+        rest = after;
+    }
+    named.push_str(rest);
+    Ok(named)
+}
+
+/// `name`, or the first of its numbered spellings no word of the render takes.
+///
+/// One more spelling than there are words is always enough, and the bound keeps
+/// the search finite whatever it is asked.
+fn unprinted(name: String, taken: &FxHashSet<&str>) -> String {
+    (0..=taken.len())
+        .map(|n| {
+            if n == 0 {
+                name.clone()
+            } else {
+                format!("{name}_{n}")
+            }
+        })
+        .find(|spelling| !taken.contains(spelling.as_str()))
+        .unwrap_or(name)
 }
 
 /// Render a union's members, ordering the literals among them by what they are.
@@ -242,10 +358,10 @@ fn render_meet(
     members: &[Schema],
     pool: &[Py<PyAny>],
     defs: &[Schema],
-    active: &RefCell<FxHashMap<DefIx, String>>,
+    active: &Binders,
     depth: usize,
 ) -> PyResult<String> {
-    let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
+    let r = |s: &Schema| render_at(py, s, pool, defs, active, depth + 1);
     let Some(class) = schema.object_class() else {
         let kids = members
             .iter()
@@ -290,14 +406,14 @@ fn render_attr_record(
     fields: &[Field],
     pool: &[Py<PyAny>],
     defs: &[Schema],
-    active: &RefCell<FxHashMap<DefIx, String>>,
+    active: &Binders,
     depth: usize,
 ) -> PyResult<String> {
     let entries: Vec<String> = fields
         .iter()
         .map(|field| {
             let suffix = if field.required { "" } else { "?" };
-            let schema = render(py, &field.schema, pool, defs, active, depth + 1)?;
+            let schema = render_at(py, &field.schema, pool, defs, active, depth + 1)?;
             Ok(format!("{}{}={}", field.name, suffix, schema))
         })
         .collect::<PyResult<_>>()?;
@@ -310,10 +426,10 @@ fn render_keyed_map(
     defaults: &[MapClause],
     pool: &[Py<PyAny>],
     defs: &[Schema],
-    active: &RefCell<FxHashMap<DefIx, String>>,
+    active: &Binders,
     depth: usize,
 ) -> PyResult<String> {
-    let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
+    let r = |s: &Schema| render_at(py, s, pool, defs, active, depth + 1);
     // A pure mapping — no named fields, one clause — is dict[K, V].
     if fields.is_empty()
         && let [clause] = defaults

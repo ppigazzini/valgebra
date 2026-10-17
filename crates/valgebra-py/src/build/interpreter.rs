@@ -5,8 +5,6 @@ use super::refine::*;
 use super::*;
 use crate::render::render;
 use pyo3::exceptions::PyKeyboardInterrupt;
-use rustc_hash::FxHashMap;
-use std::cell::RefCell;
 use std::ffi::CString;
 use valgebra_core::{
     Carries, Constraint, MapClause, SeqShape, carries_division, carries_length, carries_pattern,
@@ -148,8 +146,7 @@ fn built(py: Python<'_>, expression: &str) -> PyResult<String> {
     let mut pool = Pool::default();
     let mut defs = Vec::new();
     let schema = build_schema(&annotation, &mut pool, &mut defs)?;
-    let active = RefCell::new(FxHashMap::default());
-    render(py, &schema, pool.items(), &defs, &active, 0)
+    render(py, &schema, pool.items(), &defs)
 }
 
 /// Every spelling the frontend dispatches on, and the schema it must reach.
@@ -509,7 +506,7 @@ fn a_typing_form_in_metadata_is_not_a_predicate() {
             let mut pool = Pool::default();
             let mut defs = Vec::new();
             let schema = build_schema(&annotation, &mut pool, &mut defs)?;
-            render(py, &schema, pool.items(), &defs, &RefCell::default(), 0)
+            render(py, &schema, pool.items(), &defs)
         };
         for (expression, wanted) in [
             // A `types.GenericAlias`, a form whose class is `typing`'s or
@@ -1828,9 +1825,8 @@ fn a_final_field_under_annotated_holds_the_annotated_type() {
             else {
                 panic!("{spelling} built no record");
             };
-            let active = RefCell::new(FxHashMap::default());
-            let field = render(py, &fields[0].schema, pool.items(), &defs, &active, 0)
-                .expect("the field renders");
+            let field =
+                render(py, &fields[0].schema, pool.items(), &defs).expect("the field renders");
             let wanted = if spelling.contains("Le(9)") {
                 "Annotated[int, Ge(0), Le(9)]"
             } else {
@@ -2075,8 +2071,7 @@ fn a_protocol_is_the_record_of_its_members_whatever_its_decorator() {
             let mut defs = Vec::new();
             let schema = build_schema(&annotation, &mut pool, &mut defs)
                 .unwrap_or_else(|refusal| panic!("{name} was refused: {refusal}"));
-            let active = RefCell::new(FxHashMap::default());
-            render(py, &schema, pool.items(), &defs, &active, 0).expect("the record renders")
+            render(py, &schema, pool.items(), &defs).expect("the record renders")
         };
         assert_eq!(rendered("Sized"), "object(__len__=Callable)");
         assert_eq!(rendered("Quiet"), rendered("Sized"));
@@ -2186,9 +2181,8 @@ fn a_validator_in_the_metadata_is_met_with_the_base() {
             let mut defs = Vec::new();
             let schema = build_schema(&annotation, &mut pool, &mut defs)
                 .unwrap_or_else(|error| panic!("{expression} did not build: {error}"));
-            let active = RefCell::new(FxHashMap::default());
             assert_eq!(
-                render(py, &schema, pool.items(), &defs, &active, 0).expect("it renders"),
+                render(py, &schema, pool.items(), &defs).expect("it renders"),
                 wanted,
                 "{expression}"
             );
@@ -2277,9 +2271,8 @@ fn a_typed_dict_says_which_other_keys_it_admits() {
             let mut defs = Vec::new();
             let schema = build_schema(&annotation, &mut pool, &mut defs)
                 .unwrap_or_else(|error| panic!("{name} did not build: {error}"));
-            let active = RefCell::new(FxHashMap::default());
             assert_eq!(
-                render(py, &schema, pool.items(), &defs, &active, 0).expect("it renders"),
+                render(py, &schema, pool.items(), &defs).expect("it renders"),
                 wanted,
                 "{name}"
             );
@@ -2343,9 +2336,8 @@ fn a_typed_dict_is_read_against_the_sentinel_its_own_implementation_wrote() {
             let mut defs = Vec::new();
             let schema = build_schema(&annotation, &mut pool, &mut defs)
                 .unwrap_or_else(|error| panic!("{name} did not build: {error}"));
-            let active = RefCell::new(FxHashMap::default());
             assert_eq!(
-                render(py, &schema, pool.items(), &defs, &active, 0).expect("it renders"),
+                render(py, &schema, pool.items(), &defs).expect("it renders"),
                 wanted,
                 "{name}"
             );
@@ -2402,9 +2394,8 @@ fn a_typed_dict_inherits_the_tail_its_base_states() {
             let mut defs = Vec::new();
             let schema = build_schema(&annotation, &mut pool, &mut defs)
                 .unwrap_or_else(|error| panic!("{name} did not build: {error}"));
-            let active = RefCell::new(FxHashMap::default());
             assert_eq!(
-                render(py, &schema, pool.items(), &defs, &active, 0).expect("it renders"),
+                render(py, &schema, pool.items(), &defs).expect("it renders"),
                 wanted,
                 "{name}"
             );
@@ -2468,9 +2459,8 @@ fn a_class_is_read_through_what_it_declares() {
             let mut defs = Vec::new();
             let schema = build_schema(&annotation, &mut pool, &mut defs)
                 .unwrap_or_else(|error| panic!("{name} did not build: {error}"));
-            let active = RefCell::new(FxHashMap::default());
             assert_eq!(
-                render(py, &schema, pool.items(), &defs, &active, 0).expect("it renders"),
+                render(py, &schema, pool.items(), &defs).expect("it renders"),
                 wanted,
                 "{name}"
             );

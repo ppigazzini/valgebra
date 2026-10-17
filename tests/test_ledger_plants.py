@@ -1290,10 +1290,10 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "crates/valgebra-py/src/render.rs",
-            "use std::cell::RefCell;",
+            "use pyo3::prelude::*;",
             '#[cfg(feature = "interpreter-tests")]\n'
             "pub fn planted() {}\n\n"
-            "use std::cell::RefCell;",
+            "use pyo3::prelude::*;",
         ),
         trips=("test_every_feature_site_is_test_only_or_named",),
     ),

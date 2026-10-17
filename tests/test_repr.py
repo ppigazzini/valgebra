@@ -318,6 +318,79 @@ def test_a_literal_of_a_builtins_subclass_is_marked_rather_than_misread() -> Non
     assert Validator(eval(repr(bounded), dict(_ROUNDTRIP_NS))) == bounded  # noqa: S307
 
 
+@dataclasses.dataclass(frozen=True)
+class X:
+    """A class named as a binder would be, whose instances' `repr` names it."""
+
+    a: int
+
+
+def _holding(named: object) -> Validator:
+    """`recursive(lambda t: union(None, {"c": named, "n": t}))`."""
+    return recursive(lambda t: union(None, {"c": named, "n": t}))
+
+
+def test_a_binder_is_a_name_the_body_does_not_print() -> None:
+    """A recursive schema's back edge is bound to a name nothing else prints.
+
+    The lambda's parameter is in scope over the whole body, so a class the body
+    names by the same name reads back as the back edge: a record holding an
+    instance of a class `X` would rebuild as one holding the record again. The
+    binder skips every word the render spells -- a class's name, a constant's
+    repr, a name the interpreter reads as `X` under NFKC normalisation -- and
+    takes the next spelling of its own letter. A word glued to a letter past
+    ASCII is a longer name and takes nothing.
+    """
+    namespace = dict(_ROUNDTRIP_NS) | {"X": X}
+    assert repr(_holding(X)) == "recursive(lambda X_1: union(None, {'c': X, 'n': X_1}))"
+    constant = recursive(lambda t: union(Literal[X(1)], {"n": t}))  # ty: ignore[invalid-type-form]
+    assert repr(constant) == "recursive(lambda X_1: union(Literal[X(a=1)], {'n': X_1}))"
+    for schema in (_holding(X), constant):
+        assert Validator(eval(repr(schema), namespace)) == schema  # noqa: S307
+    for name, binder in (
+        ("Leaf", "X"),
+        ("X_1 X", "X_2"),
+        ("X.Y", "X_1"),
+        ("\uff38", "X_1"),
+        ("X\u00e9", "X"),
+    ):
+        body = f"union(None, {{'c': {name}, 'n': {binder}}})"
+        rendered = repr(_holding(type(name, (), {})))
+        assert rendered == f"recursive(lambda {binder}: {body})", name
+
+
+def test_a_name_holding_the_binder_mark_leaves_the_render_unreadable() -> None:
+    """A render whose printed names carry the mark it names binders with refuses.
+
+    Replacing the marks there would edit a class's name -- one spelling a whole
+    mark would print as the binder and read back as the back edge -- so the
+    render keeps them, and their control characters are a syntax error where it
+    is read.
+    """
+    for name in ("A\x01B", "\x010\x02"):
+        rendered = repr(_holding(type(name, (), {})))
+        assert rendered.count("\x01") == 3, rendered
+        assert f"'c': {name}," in rendered, rendered
+        with pytest.raises(SyntaxError):
+            eval(rendered, dict(_ROUNDTRIP_NS))  # noqa: S307
+
+
+def test_nested_binders_stay_apart_and_move_one_level_at_a_time() -> None:
+    """A name the body prints moves only the binder of the level it would meet."""
+
+    def nested(named: object) -> Validator:
+        return recursive(
+            lambda t: {"n": t, "v": recursive(lambda u: {"c": named, "n": u, "o": t})}
+        )
+
+    for name, inner in (("Leaf", "Y"), ("Y", "Y_1")):
+        wanted = (
+            f"recursive(lambda X: {{'n': X, 'v': recursive(lambda {inner}: "
+            f"{{'c': {name}, 'n': {inner}, 'o': X}})}})"
+        )
+        assert repr(nested(type(name, (), {}))) == wanted, name
+
+
 def test_a_pattern_prints_as_python_spells_it() -> None:
     r"""The rendered marker is the marker's own repr, character for character.
 
