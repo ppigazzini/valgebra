@@ -290,6 +290,33 @@ def test_a_callable_is_refused_where_a_schema_is_read() -> None:
     assert not refined.is_valid({"kind": "z"})
 
 
+def test_a_relation_builds_its_other_schema_as_the_constructor_does() -> None:
+    """`other` is a schema spec, so it is refused where `Validator(other)` is.
+
+    A callable there is the refusal above, and a marker that denotes no set is
+    the constructor's `ValueError`, rather than an answer about a set nobody
+    wrote.
+    """
+
+    def kind_is_known(value: object) -> bool:
+        return value == "a"
+
+    subject = Validator(str)
+    with pytest.raises(NotImplementedError, match="a callable is not a schema"):
+        subject.is_subtype_of(kind_is_known)
+    with pytest.raises(NotImplementedError, match="a callable is not a schema"):
+        subject.relation_to(kind_is_known)
+    with pytest.raises(NotImplementedError, match="a callable is not a schema"):
+        subject.is_equivalent(kind_is_known)
+    nowhere = Annotated[int, at.MultipleOf(0)]
+    with pytest.raises(ValueError, match="no value is a multiple of zero"):
+        subject.is_subtype_of(nowhere)
+    with pytest.raises(ValueError, match="no value is a multiple of zero"):
+        subject.relation_to(nowhere)
+    with pytest.raises(ValueError, match="no value is a multiple of zero"):
+        subject.is_equivalent(nowhere)
+
+
 def test_a_literal_names_a_callable_as_the_object_it_is() -> None:
     """`Literal[fn]` is the constant spelling the refusal points to."""
 

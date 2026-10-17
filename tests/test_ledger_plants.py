@@ -4626,11 +4626,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "crates/valgebra-py/src/validator.rs",
-            "    ///     `True` if the schema denotes the empty set, else `False`.\n"
-            "    fn is_empty(",
-            "    ///     `True` if the schema denotes the empty set, else `False`.\n"
-            "    ///\n"
-            "    /// Raises:\n"
+            "    ///         answer.\n    fn is_empty(",
+            "    ///         answer.\n"
             "    ///     OverflowError: If the decision outruns its budget.\n"
             "    fn is_empty(",
         ),
