@@ -1369,9 +1369,11 @@ jobs:
           # lines the change touches, and the miss that matters is the other
           # direction: an edit that stops an EXISTING test from killing a mutant
           # somewhere else in the same file. That mutant is not in the diff, and
-          # sweeping the file finds it. Every such mutant lives in a file the
-          # change touched, because a Rust test and the code it covers are swept
-          # together here.
+          # sweeping the file finds it. A change to a test module sweeps the
+          # code it holds -- the file declaring it and the files beneath that
+          # module -- since cargo-mutants mutates no test file; a crate-wide
+          # suite (`laws.rs`, `index_laws.rs`, `schema_tests.rs`) holds the
+          # whole crate, and the nightly sweep alone judges it.
           # A file whose diff is comments and blank lines alone compiles as it
           # did, so its mutants answer as they did, and it is left out.
           python3 scripts/code_changes.py "$base" > changed.txt
@@ -1513,9 +1515,11 @@ jobs:
           # lines the change touches, and the miss that matters is the other
           # direction: an edit that stops an EXISTING test from killing a mutant
           # somewhere else in the same file. That mutant is not in the diff, and
-          # sweeping the file finds it. Every such mutant lives in a file the
-          # change touched, because a Rust test and the code it covers are swept
-          # together here.
+          # sweeping the file finds it. A change to a test module sweeps the
+          # code it holds -- the file declaring it and the files beneath that
+          # module -- since cargo-mutants mutates no test file; a crate-wide
+          # suite (`laws.rs`, `index_laws.rs`, `schema_tests.rs`) holds the
+          # whole crate, and the nightly sweep alone judges it.
           # A file whose diff is comments and blank lines alone compiles as it
           # did, so its mutants answer as they did, and it is left out.
           python3 scripts/code_changes.py "$base" > changed.txt

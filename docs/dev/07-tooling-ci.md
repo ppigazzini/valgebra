@@ -1150,7 +1150,14 @@ mutant is not in the diff. **A file whose diff is comments and blank lines
 alone is not swept:** it compiles to what it compiled to before, so each of its
 mutants answers as it did, and a doc edit to a large file would otherwise put
 the whole file's mutants on the push. `scripts/code_changes.py` names the files
-whose code changed, for both sweeps.
+whose code changed, for both sweeps. **A test module gives way to the code it
+holds:** cargo-mutants mutates no `#[cfg(test)]` file, so a change to a long
+`tests.rs` or an `interpreter.rs` corpus -- one that stops it killing a mutant
+-- sweeps the file declaring it and the files beneath that module instead. The
+crate-wide suites, `laws.rs`, `index_laws.rs` and `schema_tests.rs`, hold the
+whole crate, which no push sweeps: the nightly sweep alone judges a change to
+one of them. The diff is read in one shape whatever git is configured to print,
+a rename as an added file among them.
 
 **A change starts where its commits leave the history they replace.** The
 bench gate's `rev` and the sweeps' file list come from one base, which
