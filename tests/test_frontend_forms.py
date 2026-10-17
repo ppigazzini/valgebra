@@ -625,12 +625,12 @@ def test_a_literal_of_an_int_subclass_denotes_the_value_it_was_given() -> None:
     """`Literal[Sub(1)]` is the subclass instance, not the integer beside it.
 
     The two are different sets -- neither admits the other's value -- and the
-    repr is Python's repr of the constant. A subclass that does not override
-    `__repr__` therefore renders `Literal[1]`, which reads back as the integer:
-    the rendering is faithful to the object and does not round-trip. That is
-    the general rule for a literal of an object whose repr is not its
-    constructor, and it is pinned here rather than left for a reader to
-    discover.
+    repr is Python's repr of the constant, except where that repr is the
+    integer's own: a subclass that does not override `__repr__` would render
+    `Literal[1]`, which reads back as the integer, a different set with nothing
+    to say so. It renders the subclass's name beside the value in angle
+    brackets instead, a syntax error where it is read, as a render that cannot
+    rebuild is.
     """
 
     class Plain(int):
@@ -644,9 +644,9 @@ def test_a_literal_of_an_int_subclass_denotes_the_value_it_was_given() -> None:
     assert plain.is_valid(Plain(1))
     assert not plain.is_valid(1)
     assert not integer.is_valid(Plain(1))
-    # The repr of the subclass with no `__repr__` of its own reads back as the
-    # integer, which is a different set.
-    assert repr(plain) == "Literal[1]"
+    # The repr of the subclass with no `__repr__` of its own would read back as
+    # the integer, which is a different set, so it is marked.
+    assert repr(plain) == "Literal[<Plain: 1>]"
     assert repr(integer) == "Literal[1]"
     # One that spells itself renders so, and reads back as what it is.
     assert repr(Validator(Literal[Shown(1)])) == "Literal[Shown(1)]"  # ty: ignore[invalid-type-form]

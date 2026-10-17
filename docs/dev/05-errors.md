@@ -124,9 +124,12 @@ in the meet's turn, so the report carries the elements' violations beside it.
   drifts each time it is built again.
 - **It rebuilds or refuses, never another schema.** A constant prints by its
   own `repr` whole, since one cut where an error message cuts does not read
-  back. Every refusal is a syntax error or a call the frontend refuses, and
-  `docs/16-api.md` lists them. `tests/test_repr.py` holds each, and the pytest
-  mutation sweep, which owns `render.rs`, reads them there.
+  back, and a literal's constant whose `repr` is a builtin's spelling of a
+  subclass's value prints in angle brackets, since it would read back as the
+  builtin (`literal_repr`). Every refusal is a syntax error or a call the
+  frontend refuses, and `docs/16-api.md` lists them. `tests/test_repr.py`
+  holds each, and the pytest mutation sweep, which owns `render.rs`, reads
+  them there.
 
 ## The limit
 

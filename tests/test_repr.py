@@ -190,6 +190,12 @@ def test_a_top_keeps_the_spelling_of_the_operand_on_its_left() -> None:
     assert written_any | object == object | written_any
 
 
+class _Text(str):
+    """A `str` subclass whose `repr` is `str`'s, which reads back as the `str`."""
+
+    __slots__ = ()
+
+
 def test_a_render_that_is_not_an_expression_refuses_rather_than_rebuilding() -> None:
     """The renders that cannot be read back are each refused, not quiet.
 
@@ -239,6 +245,77 @@ def test_a_constant_prints_whole_and_reads_back() -> None:
         original = Validator(schema)
         rebuilt = Validator(eval(repr(original), dict(_ROUNDTRIP_NS)))  # noqa: S307
         assert rebuilt == original, repr(original)
+
+
+class _Mimic(str):
+    """A `str` subclass whose own `repr` is `str`'s spelling of it."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return str.__repr__(self)
+
+
+class _Shown(int):
+    """An `int` subclass whose `repr` spells it as the call that builds it."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return f"_Shown({int(self)})"
+
+
+class _Huge(int):
+    """An `int` subclass with a `repr` of its own, past the digit limit."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "_Huge()"
+
+
+class _Level(enum.IntEnum):
+    LOW = 1
+
+
+class _F(float):
+    __slots__ = ()
+
+
+class _C(complex):
+    __slots__ = ()
+
+
+class _B(bytes):
+    __slots__ = ()
+
+
+def test_a_literal_of_a_builtins_subclass_is_marked_rather_than_misread() -> None:
+    """A literal whose constant's `repr` reads back as another value refuses.
+
+    A literal admits its constant's own type, so a literal of `_Text("a")`
+    refuses the `str` `"a"`, and the `repr` the subclass inherits is `'a'`,
+    which reads back as the `str`. Printed as that, the schema would rebuild as
+    one admitting what it refuses. It prints the subclass's name beside the
+    value in angle brackets, a syntax error where it is read. A constant whose
+    `repr` is not the builtin's spelling of it prints by that `repr` -- `True`,
+    an enum member, a subclass that spells itself, and one whose builtin
+    spelling would raise -- and a bound is read as Python's comparison, so a
+    bound of the subclass rebuilds as one schema with the bound of the builtin
+    and prints as the builtin's.
+    """
+    assert not Validator(_Text("a")).is_valid("a")
+    for constant in (_Text("a"), _Mimic("a"), _F(1.5), _C(2j), _B(b"a")):
+        wanted = f"Literal[<{type(constant).__name__}: {constant!r}>]"
+        assert repr(Validator(constant)) == wanted
+        with pytest.raises(SyntaxError):
+            eval(wanted, dict(_ROUNDTRIP_NS))  # noqa: S307
+    kept = (3, 1.5, 2j, "a", b"a", True, _Level.LOW, _Shown(1), _Huge(10**5000))
+    for constant in kept:
+        assert repr(Validator(constant)) == f"Literal[{constant!r}]", constant
+    bounded = Validator(Annotated[str, at.Ge(_Text("a"))])
+    assert repr(bounded) == "Annotated[str, Ge('a')]"
+    assert Validator(eval(repr(bounded), dict(_ROUNDTRIP_NS))) == bounded  # noqa: S307
 
 
 def test_a_pattern_prints_as_python_spells_it() -> None:

@@ -2,8 +2,10 @@
 
 use std::cell::RefCell;
 
+use pyo3::intern;
 use pyo3::prelude::*;
-use pyo3::types::{PyString, PyType};
+use pyo3::types::{PyBool, PyBytes, PyComplex, PyFloat, PyInt, PyString, PyType};
+use pyo3::{PyTypeCheck, PyTypeInfo};
 use rustc_hash::FxHashMap;
 use valgebra_core::{CollKind, Constraint, DefIx, Field, MapClause, Schema, SeqKind, Spelling};
 
@@ -79,7 +81,7 @@ pub(crate) fn render(
         Schema::Float => "float".to_owned(),
         Schema::Str => "str".to_owned(),
         Schema::Bytes => "bytes".to_owned(),
-        Schema::Literal(i) => format!("Literal[{}]", pool_repr(py, pool, i.get())?),
+        Schema::Literal(i) => format!("Literal[{}]", literal_repr(py, pool, i.get())?),
         Schema::Seq { container, shape } => {
             let list = matches!(container, SeqKind::List);
             match (&shape.prefix[..], shape.tail.as_deref()) {
@@ -399,6 +401,70 @@ fn pool_repr(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<Strin
         debug_assert!(false, "pool index {index} out of range");
         Ok("<unknown>".to_owned())
     }
+}
+
+/// A literal's constant, marked where its `repr` reads back as another value.
+///
+/// A literal admits the values of its constant's own type, so a literal of
+/// `S("a")`, `S` a subclass of `str`, refuses the `str` `"a"`. A subclass that
+/// writes no `repr` of its own prints `'a'`, which reads back as the `str`: the
+/// render would rebuild a schema admitting what this one refuses. So a
+/// constant of a subclass of a builtin whose values are written as literals --
+/// `int`, `float`, `complex`, `str`, `bytes` -- whose `repr` is the builtin's
+/// spelling of it prints as `<S: 'a'>`, a syntax error where it is read, which
+/// says what it holds and refuses to stand for anything else. A subclass whose
+/// `repr` spells it some other way is printed by that `repr`, as every other
+/// constant is: an enum member's `<Level.LOW: 1>`, and a `Shown(1)` that reads
+/// back as itself. A bound is not marked: it is read as Python's comparison,
+/// and the schema a bound of `S(3)` and one of `3` give is one schema.
+fn literal_repr(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<String> {
+    let text = pool_repr(py, pool, index)?;
+    let Some(constant) = pool.get(index).map(|constant| constant.bind(py)) else {
+        return Ok(text);
+    };
+    let Some(builtin) = derived_builtin(constant) else {
+        return Ok(text);
+    };
+    // The builtin's own `repr` of the value, which runs no user code; one that
+    // raises, `int`'s past the digit limit, spells nothing the text can equal.
+    let spelled = builtin
+        .call_method1(intern!(py, "__repr__"), (constant,))
+        .map(|spelled| spelled.str().map(|spelled| stored(&spelled)).ok());
+    if unless_fatal(spelled, py, None)?.as_deref() != Some(text.as_str()) {
+        return Ok(text);
+    }
+    let kind = class_label(constant.get_type().as_any())?;
+    Ok(format!("<{kind}: {text}>"))
+}
+
+/// The builtin with a literal spelling `constant`'s type strictly derives from.
+///
+/// `bool` is such a builtin itself, though it derives from `int`: `True`
+/// reads back as the `bool`, and no class derives from `bool`. Read through
+/// `int`, it would be marked wherever `int`'s `repr` spells it `True`, as it
+/// does on `PyPy`.
+fn derived_builtin<'py>(constant: &Bound<'py, PyAny>) -> Option<Bound<'py, PyType>> {
+    let py = constant.py();
+    if constant.is_exact_instance_of::<PyBool>() {
+        None
+    } else if derives_from::<PyInt>(constant) {
+        Some(PyInt::type_object(py))
+    } else if derives_from::<PyFloat>(constant) {
+        Some(PyFloat::type_object(py))
+    } else if derives_from::<PyComplex>(constant) {
+        Some(PyComplex::type_object(py))
+    } else if derives_from::<PyString>(constant) {
+        Some(PyString::type_object(py))
+    } else if derives_from::<PyBytes>(constant) {
+        Some(PyBytes::type_object(py))
+    } else {
+        None
+    }
+}
+
+/// Whether `constant` is an instance of a strict subclass of `T`.
+fn derives_from<T: PyTypeCheck + PyTypeInfo>(constant: &Bound<'_, PyAny>) -> bool {
+    constant.is_instance_of::<T>() && !constant.is_exact_instance_of::<T>()
 }
 
 /// Render a class atom: the class's name, or `instance_of(Name)` where the name

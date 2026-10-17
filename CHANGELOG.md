@@ -34,6 +34,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the contractivity check enters each definition once
 - fix: a complement is below the complement of an empty refinement
 - fix: a constant prints whole in a repr
+- fix: a literal that would read back as a builtin's is refused in a repr
 
 -->
 
@@ -183,6 +184,14 @@ answer of its own, or a repair to a change not yet released.
   its own `repr` in full, as a pattern and a field name already do; an `int`
   past the interpreter's digit limit, whose `repr` raises, prints
   `<unrepresentable>`.
+- **A literal of a builtin's subclass is not printed as the builtin's
+  literal.** A literal admits its constant's own type, so `Validator(S("a"))`,
+  with `S` a subclass of `str` that writes no `repr`, refuses the `str` `"a"`,
+  yet it printed `Literal['a']`, which reads back as a schema admitting it, in
+  0.0.17 and 0.0.18; the same held for a subclass of `int`, `float`, `complex`
+  and `bytes`. Where the constant's `repr` is the builtin's spelling of it,
+  the literal prints as `Literal[<S: 'a'>]`, a syntax error where it is read;
+  a subclass whose `repr` spells it some other way prints by that `repr`.
 
 ## [0.0.18] - 2026-10-12
 

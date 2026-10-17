@@ -85,8 +85,10 @@ the class met with the fields it declares; a
 **predicate**, which is a function and appears as `Predicate(...)`, and which
 the frontend refuses where it is built; a **constant whose `repr` is not an
 expression of it**, which is a syntax error where it is parsed -- an enum
-member's own `<Color.RED: 1>`, and an `int` past the interpreter's digit limit
-printed as `<unrepresentable>`; a **meet of two
+member's own `<Color.RED: 1>`, an `int` past the interpreter's digit limit
+printed as `<unrepresentable>`, and a value of a subclass of `int`, `float`,
+`complex`, `str` or `bytes` whose `repr` is the builtin's spelling of it, which
+would read back as the builtin and prints as `<MyStr: 'a'>` instead; a **meet of two
 classes that each declare attributes**, which flattens to the two classes
 alone, printed as `instance_of(...)`, and their two attribute records, and a
 record standing apart from its class prints
