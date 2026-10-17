@@ -487,6 +487,18 @@ _PYTEST_FORGIVEN = re.compile(
 )
 
 
+def _declare_a_target_as_a_module(tree: Path) -> None:
+    """Name a new file in the binding's `tests/` as a library module."""
+    source = "pub fn planted() -> u8 {\n    1\n}\n"
+    _write(tree, "crates/valgebra-py/tests/planted.rs", source)
+    library = tree / "crates" / "valgebra-py" / "src" / "lib.rs"
+    library.write_text(
+        library.read_text(encoding="utf-8")
+        + '\n#[path = "../tests/planted.rs"]\nmod planted;\n',
+        encoding="utf-8",
+    )
+
+
 def _unforgive_a_step(tree: Path) -> None:
     """Drop the pytest step's forgiveness and keep the job's."""
     path = tree / ".github" / "workflows" / "ci.yml"
@@ -2396,6 +2408,14 @@ PLANTS = (
         "tests/test_mutation_scope.py",
         ("crates/valgebra-py/tests/pytest_sweep.rs",),
         lambda tree: _delete(tree, "crates/valgebra-py/tests/pytest_sweep.rs"),
+        trips=("test_an_integration_target_is_not_a_subject",),
+    ),
+    Plant(
+        # A file under `tests/` named as a library module through `#[path]`,
+        # which puts its mutants in the listing the sweep reads.
+        "tests/test_mutation_scope.py",
+        ("crates/valgebra-py/src/lib.rs", "crates/valgebra-py/tests/planted.rs"),
+        _declare_a_target_as_a_module,
         trips=("test_an_integration_target_is_not_a_subject",),
     ),
     Plant(
