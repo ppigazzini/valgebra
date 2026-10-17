@@ -6,6 +6,7 @@
 //! repeated tail, a count taken once and compared again, and the snapshot a
 //! list is read through where one test settles every element.
 
+use std::cmp::Ordering;
 use std::ops::ControlFlow;
 
 use jiter::JsonValue;
@@ -1781,8 +1782,9 @@ fn elements_admitted(
 /// interpreter's and moves with the hash seed, so following it means the same
 /// schema and the same value report differently between runs — which the error
 /// model promises they do not. Every element is walked and the failures are
-/// ordered by what they report; fail-fast then keeps the first of *that* order,
-/// which costs a full scan of a set that is already failing. An element the
+/// ordered by everything they report ([`reported_order`]); fail-fast then keeps
+/// the first of *that* order, which costs a full scan of a set that is already
+/// failing. An element the
 /// walk would admit reports nothing, so one `admits` answers is passed without
 /// a probe of its own: [`admitted_quietly`] for any element schema, and for a
 /// scalar kind with a level free under the set the kind's own test, chosen
@@ -1799,7 +1801,7 @@ fn explain_elements(
 ) -> bool {
     let ctx = frame.ctx;
     let where_it_is = &mut *frame.path;
-    let mut failures: Vec<(String, Vec<Violation>)> = Vec::new();
+    let mut failures: Vec<Vec<Violation>> = Vec::new();
     let scan = scan_set(container, ctx, |item| {
         if admits(&Value::Py(item)) {
             return ControlFlow::Continue(());
@@ -1810,11 +1812,7 @@ fn explain_elements(
             member(element, &Value::Py(item), &mut probe)
         };
         if !held {
-            let key = reported
-                .first()
-                .map(|violation| format!("{} {}", violation.value_summary, violation.code))
-                .unwrap_or_default();
-            failures.push((key, reported));
+            failures.push(reported);
         }
         ControlFlow::Continue(())
     });
@@ -1828,21 +1826,39 @@ fn explain_elements(
 ///
 /// Apart from the scan, which takes a test of its own per kind, so the one
 /// sort and report serve them all.
-fn elements_reported(
-    mut failures: Vec<(String, Vec<Violation>)>,
-    frame: &mut Frame<'_, '_>,
-) -> bool {
+fn elements_reported(mut failures: Vec<Vec<Violation>>, frame: &mut Frame<'_, '_>) -> bool {
     let ok = failures.is_empty();
-    failures.sort_by(|left, right| left.0.cmp(&right.0));
+    failures.sort_by(|left, right| reported_order(left, right));
     let reported = if frame.ctx.mode.stops_at_first() {
         1
     } else {
         failures.len()
     };
-    for (_, group) in failures.into_iter().take(reported) {
+    for group in failures.into_iter().take(reported) {
         frame.out.extend(group);
     }
     ok
+}
+
+/// The order of two elements' reports: what each violation says, in turn, the
+/// value it names first, then its code, its path inside the element and the
+/// set it expected.
+///
+/// Every part is read, because the first violation's value and code alone tie
+/// wherever two elements fail alike at different places -- `(1.5, 2)` and
+/// `(2, 1.5)` against a pair of `int`s each name `1.5` as an `int_type` -- and
+/// a tie keeps the order the interpreter handed the elements over. Two reports
+/// that tie on every part are the same report, so their order is not visible.
+fn reported_order(left: &[Violation], right: &[Violation]) -> Ordering {
+    fn says(violation: &Violation) -> (&str, &str, &[PathSegment], &str) {
+        (
+            &violation.value_summary,
+            violation.code,
+            &violation.path,
+            &violation.expected,
+        )
+    }
+    left.iter().map(says).cmp(right.iter().map(says))
 }
 
 /// The narrowest list a snapshot pays for, and the widest.

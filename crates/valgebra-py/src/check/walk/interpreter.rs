@@ -2262,6 +2262,52 @@ fn a_composite_stops_at_its_first_failing_child_only_when_asked_to() {
     });
 }
 
+/// A set's failing elements report in one order however the set iterates.
+///
+/// `(1.5, 2)` and `(2, 1.5)` each name `1.5` as an `int_type` against a pair of
+/// `int`s, at the first position and at the second: ordered by the value and
+/// the code alone the two tie, and a tie keeps the order the elements are
+/// handed over, which two equal frozensets built in a different order do not
+/// share. Both report the first position first, and fail-fast keeps it.
+#[test]
+fn a_sets_report_breaks_a_tie_by_the_rest_of_what_it_says() {
+    Python::attach(|py| {
+        let schema = Schema::frozen_set(Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Int])));
+        let built = |source: &str| {
+            py.eval(
+                &std::ffi::CString::new(source).expect("no interior nul"),
+                None,
+                None,
+            )
+            .expect("the frozenset builds")
+        };
+        let sources = [
+            "frozenset({(1.5, 2), (2, 1.5)})",
+            "frozenset({(2, 1.5), (1.5, 2)})",
+        ];
+        let paths = |violations: &[Violation]| -> Vec<Vec<PathSegment>> {
+            violations.iter().map(|v| v.path.clone()).collect()
+        };
+        let mut handed_over = Vec::new();
+        for source in sources {
+            let value = built(source);
+            handed_over.push(value.str().expect("a str").to_string());
+            let (held, violations) = explain(py, &schema, &value, &[], &[]);
+            assert!(!held, "{source}");
+            assert_eq!(
+                paths(&violations),
+                [vec![PathSegment::Index(0)], vec![PathSegment::Index(1)]],
+                "{source}"
+            );
+            let (_, first) = explain_in(py, &schema, &value, &[], &[], WalkMode::ExplainFailFast);
+            assert_eq!(paths(&first), [vec![PathSegment::Index(0)]], "{source}");
+        }
+        // The two are handed over in different orders, so one order for both
+        // is the report's own.
+        assert_ne!(handed_over[0], handed_over[1]);
+    });
+}
+
 #[test]
 fn a_raising_comparison_folds_and_a_fatal_signal_does_not() {
     Python::attach(|py| {

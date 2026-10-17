@@ -371,8 +371,10 @@ impl Guarded {
 /// A single step in the location of a value inside a composite structure.
 ///
 /// Scalar schemas never produce a path; structural schemas (records, sequences,
-/// tuples, sets, mappings) push a segment per level as they descend.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// tuples, sets, mappings) push a segment per level as they descend. Ordered,
+/// so a report can be put in an order that is a property of what it says: a
+/// set's failing elements carry no position of their own.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PathSegment {
     /// A mapping or record key that is a string.
     ///
