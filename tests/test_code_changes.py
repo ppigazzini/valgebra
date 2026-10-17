@@ -161,6 +161,83 @@ def test_a_path_in_another_shape_is_unreadable_rather_than_unchanged() -> None:
     assert script.code_changes(added) == ["n.rs"]
 
 
+#: A crate laid out as this tree lays its own: a suite the root declares, a
+#: module with a test module and a corpus beside a file of code beneath it.
+CRATE = {
+    "crates/c/src/lib.rs": "mod m;\n#[cfg(test)]\nmod laws;\n",
+    "crates/c/src/laws.rs": "fn law() {}\n",
+    "crates/c/src/m.rs": (
+        "mod inner;\n"
+        "#[cfg(test)]\n"
+        "mod tests;\n"
+        "// Needs a live interpreter.\n"
+        '#[cfg(all(test, feature = "interpreter-tests"))]\n'
+        "mod interpreter;\n"
+        "fn f() -> u8 {\n    1\n}\n"
+    ),
+    "crates/c/src/m/inner.rs": "fn g() -> u8 {\n    2\n}\n",
+    "crates/c/src/m/tests.rs": "fn t() {}\n",
+    "crates/c/src/m/interpreter.rs": "fn i() {}\n",
+}
+
+
+@pytest.mark.parametrize(
+    ("changed", "named"),
+    [
+        ("crates/c/src/m/tests.rs", ["crates/c/src/m.rs", "crates/c/src/m/inner.rs"]),
+        (
+            "crates/c/src/m/interpreter.rs",
+            ["crates/c/src/m.rs", "crates/c/src/m/inner.rs"],
+        ),
+        ("crates/c/src/laws.rs", []),
+        ("crates/c/src/m/inner.rs", ["crates/c/src/m/inner.rs"]),
+    ],
+    ids=["a test module", "a corpus", "a crate-wide suite", "code"],
+)
+def test_a_test_module_gives_way_to_the_code_it_holds(
+    tmp_path: Path, changed: str, named: list[str]
+) -> None:
+    """A changed test module is swept as the code it holds, which it can move.
+
+    cargo-mutants mutates no `#[cfg(test)]` file, so a change confined to one
+    swept nothing, and an edit that stops it killing a mutant in the code it
+    holds pushed green. A suite the crate root declares holds the whole crate,
+    which no push sweeps, so it names nothing.
+    """
+    _git(tmp_path, "init", "--quiet", "--initial-branch=main")
+    for name, text in CRATE.items():
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text(text, encoding="utf-8")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "--quiet", "-m", "base")
+    base = _git(tmp_path, "rev-parse", "HEAD")
+    path = tmp_path / changed
+    path.write_text(
+        path.read_text(encoding="utf-8") + "fn more() {}\n", encoding="utf-8"
+    )
+    _git(tmp_path, "commit", "--quiet", "-am", "change")
+    run = _named(tmp_path, base)
+    assert run.returncode == script.EXIT_OK, run.stderr
+    assert run.stdout.split() == named
+
+
+def test_the_tree_s_test_modules_are_read_as_test_modules() -> None:
+    """The reading finds this tree's test modules, every shape of declaration."""
+    for name in (
+        "crates/valgebra-core/src/decision/tests.rs",
+        "crates/valgebra-core/src/descr/lattice_tests.rs",
+        "crates/valgebra-py/src/check/walk/interpreter.rs",
+        "crates/valgebra-core/src/laws.rs",
+    ):
+        assert script.is_test_module(ROOT / name), name
+    for name in (
+        "crates/valgebra-core/src/decision/emptiness.rs",
+        "crates/valgebra-py/src/check/walk/record.rs",
+        "crates/valgebra-core/src/ir.rs",
+    ):
+        assert not script.is_test_module(ROOT / name), name
+
+
 def test_a_base_git_cannot_read_is_not_an_empty_sweep(tmp_path: Path) -> None:
     """A diff that fails exits 2: a sweep of nothing would read as a clean one."""
     _git(tmp_path, "init", "--quiet", "--initial-branch=main")
