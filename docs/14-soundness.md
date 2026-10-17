@@ -333,7 +333,7 @@ The soundness is relative to a small, explicit trust base:
   value as it was.
 - **The suites check necessary properties, which is weaker than an oracle.** A
   property-based or metamorphic check fails when the implementation is wrong;
-  passing does not entail it is right, however many such properties are added. So
+  passing need not entail it is right, however many such properties are added. So
   the layers above raise the cost of a defect surviving without bounding it.
 
 Within that base, an accept is a claim that `x ∈ ⟦S⟧`, justified node by node

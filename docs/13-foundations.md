@@ -143,11 +143,16 @@ from him. That is the language valgebra's fragment sits closest to. Gesbert,
 Genevès & Layaïda establish `2^O(n)` for a **larger** language — the
 Castagna & Xu relation, with function types and type variables — which is the
 bound no other proof existed for. It covers the **structural** fragment here —
-products, records and the Boolean connectives over atoms whose own emptiness is
-decided — because a superset's upper bound bounds a sublanguage. It says nothing
-of the atoms that language lacks: a pattern's inclusion is regular-language
-inclusion, a bound conjunction is integer arithmetic, and a predicate or a
-hooked class answers by running code. Neither bound is paid either way: the
+products and the Boolean connectives over atoms whose own emptiness is decided —
+because a superset's upper bound bounds a sublanguage. That language has no
+record. A closed record whose keys are all required reads as a product over its
+keys, tagged by the key set, and falls under the bound; one with `k` optional
+keys reads as a union of `2^k` such products, so the bound is in the size of
+that union; and a clause over a key type, which a mapping is, has no reading
+there at all: Castagna (ICFP 2023) decides the relation over it and states no
+complexity bound. The bound says nothing of the atoms that language lacks: a
+pattern's inclusion is regular-language inclusion, a bound conjunction is integer
+arithmetic, and a predicate or a hooked class answers by running code. Neither bound is paid either way: the
 procedure runs under a budget of decision steps and declines past it.
 
 valgebra does not need that decision to validate: membership is answered
