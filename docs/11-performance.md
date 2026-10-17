@@ -404,8 +404,10 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
 - The margins against pydantic come with the caveat that the two tools do
   different work: pydantic constructs output, valgebra only checks membership.
   The ratios answer "how fast is each tool's validation step," not "how much
-  faster is membership than construction." Deep nesting is the widest gap; the
-  array and record margins are narrower but consistent.
+  faster is membership than construction." The record's margin is the
+  narrowest on every interpreter measured, and which of the other two is the
+  widest moves with the interpreter: they tie on CPython 3.14, nesting leads on
+  3.12, and the array on the free-threaded build.
 - **The ratios are not the whole argument for using valgebra.** They are real,
   and they are also a regression gate. But the reasons to reach for a membership
   check over a parser are additionally semantic — an already-held object is

@@ -17,8 +17,9 @@ full text, including the API reference) per the [llmstxt.org](https://llmstxt.or
 convention.
 
 > [!WARNING]
-> **Pre-alpha.** Published to PyPI; the API works today but may change before a
-> stable `0.1.0` release.
+> **Pre-alpha.** Published to PyPI; the API works today, and every `0.0.x`
+> release may break it, saying where in its notes
+> ([versioning](docs/12-changelog.md#versioning-and-what-counts-as-a-break)).
 
 ## Schemas are sets; the operators are *or*, *and*, *not*
 
