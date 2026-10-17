@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::carries::{Carries, OrderGroup, carries_division, carries_length, carries_order};
+use crate::carries::{
+    Carries, OrderGroup, StepGroup, carries_division, carries_length, carries_order,
+};
 use crate::decision::{DECISION_BUDGET, LeafRelations, NoLeafRelations};
 use crate::descr::classes::{Attributes, Class, Hook, Member};
 use crate::descr::lower::{Constants, Operand, lower};
@@ -4823,7 +4825,7 @@ fn frontend_builds(base: &Schema, constraint: &Constraint) -> bool {
         Constraint::Ge(_) | Constraint::Gt(_) | Constraint::Le(_) | Constraint::Lt(_) => {
             carries_order(base, Some(OrderGroup::Number))
         }
-        Constraint::MultipleOf(_) => carries_division(base),
+        Constraint::MultipleOf(_) => carries_division(base, StepGroup::Number),
         Constraint::MinLen(_) | Constraint::MaxLen(_) => carries_length(base),
         Constraint::Predicate(_) | Constraint::Regex(_) => return false,
     };

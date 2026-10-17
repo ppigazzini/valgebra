@@ -70,6 +70,21 @@ pub enum OrderGroup {
     Set,
 }
 
+/// The group a step divides within: which numbers Python takes a remainder of
+/// against it.
+///
+/// Every number takes a remainder against a real one but for one pair: a
+/// `float` and a `Decimal` refuse to mix, so `1.5 % Decimal("0.5")` raises
+/// where `3 % Decimal("0.5")` is `Decimal("0.0")`. A complex step divides no
+/// value at all, and the frontend refuses it before any base is asked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StepGroup {
+    /// Any number but a `Decimal`: an `int`, a `float`, a `Fraction`.
+    Number,
+    /// A `decimal.Decimal`.
+    Decimal,
+}
+
 /// Fold `answer` over the members of a union, and stand aside elsewhere.
 ///
 /// An intersection or a complement narrows a set this check does not compute,
@@ -123,13 +138,16 @@ pub fn carries_pattern(base: &Schema) -> Carries {
     }
 }
 
-/// Whether the base's values are numbers, which is what a divisor needs.
+/// Whether the base's values take a remainder against a step of `step`'s
+/// group: the numbers do, but a float takes none against a `Decimal`.
 #[must_use]
-pub fn carries_division(base: &Schema) -> Carries {
-    if let Some(answer) = carries_through(base, &carries_division) {
+pub fn carries_division(base: &Schema, step: StepGroup) -> Carries {
+    let by_step = |base: &Schema| carries_division(base, step);
+    if let Some(answer) = carries_through(base, &by_step) {
         return answer;
     }
     match base {
+        Schema::Float if step == StepGroup::Decimal => Carries::No,
         Schema::Bool | Schema::Int | Schema::Float => Carries::Yes,
         Schema::NoneType
         | Schema::Str

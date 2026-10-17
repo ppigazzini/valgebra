@@ -12,11 +12,12 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
-    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
+    PyBool, PyBytes, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString,
+    PyTuple, PyType,
 };
 use valgebra_core::{
-    Carries, Constraint, Kind, OperandIx, OrderGroup, Schema, carries_division, carries_length,
-    carries_pattern,
+    Carries, Constraint, Kind, OperandIx, OrderGroup, Schema, StepGroup, carries_division,
+    carries_length, carries_pattern,
 };
 
 use super::{Pool, build_schema, not_implemented};
@@ -26,20 +27,26 @@ use crate::validator::Validator;
 /// both follow, resolved once per process.
 static NUMBER: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 
-/// Whether `operand` is in [`NUMBER`]'s register, asked of the register only
-/// where the operand's type does not already say.
+/// Whether `operand` is exactly an `int`, a `float` or a `bool`, whose type
+/// says what every register asked here would answer of it.
 ///
 /// `numbers` registers `int` and `float`, `bool` derives from `int`, and an ABC
-/// keeps what it registers, so a value of exactly one of those types is a
-/// number. Asking the ABC costs a call to `ABCMeta.__instancecheck__`, a Python
-/// function, which is about a sixth of compiling `Annotated[int, Ge(0)]`. The
-/// types are exact because the ABC also reads a value's `__class__`, which a
-/// subclass may answer with code of its own.
-fn is_a_number(operand: &Bound<'_, PyAny>) -> PyResult<bool> {
-    if operand.is_exact_instance_of::<PyInt>()
+/// keeps what it registers, so a value of exactly one of those types is a real
+/// number and no `Decimal`. Asking an ABC costs a call to
+/// `ABCMeta.__instancecheck__`, a Python function, which is about a sixth of
+/// compiling `Annotated[int, Ge(0)]`. The types are exact because the ABC also
+/// reads a value's `__class__`, which a subclass may answer with code of its
+/// own.
+fn is_a_builtin_number(operand: &Bound<'_, PyAny>) -> bool {
+    operand.is_exact_instance_of::<PyInt>()
         || operand.is_exact_instance_of::<PyFloat>()
         || operand.is_exact_instance_of::<PyBool>()
-    {
+}
+
+/// Whether `operand` is in [`NUMBER`]'s register, asked of the register only
+/// where the operand's type does not already say ([`is_a_builtin_number`]).
+fn is_a_number(operand: &Bound<'_, PyAny>) -> PyResult<bool> {
+    if is_a_builtin_number(operand) {
         return Ok(true);
     }
     let number = NUMBER.import(operand.py(), "numbers", "Number")?;
@@ -48,18 +55,77 @@ fn is_a_number(operand: &Bound<'_, PyAny>) -> PyResult<bool> {
 use crate::errors::{is_fatal, summarize, unless_fatal};
 use crate::oracle::kind_of;
 
-/// Refuse an order bound against `nan`, which orders nothing.
+/// `numbers.Complex` and `numbers.Real`, the two registers that tell a complex
+/// number from a real one, resolved once per process.
+static COMPLEX: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+static REAL: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+
+/// `decimal.Decimal`, the one number a float takes no remainder against,
+/// resolved once per process.
+static DECIMAL: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+
+/// Whether `operand` is a complex number and not a real one, which Python
+/// neither orders nor takes a remainder against: `1 >= 0j` and `4 % 2j` both
+/// raise, whatever the imaginary part is.
+///
+/// Asked only of an operand [`is_a_builtin_number`] does not place, which its
+/// callers test inline: called for every bound, it costs sixteen instructions
+/// a `Ge(0)`.
+fn is_complex(operand: &Bound<'_, PyAny>) -> PyResult<bool> {
+    if operand.is_exact_instance_of::<PyComplex>() {
+        return Ok(true);
+    }
+    let py = operand.py();
+    if !operand.is_instance(COMPLEX.import(py, "numbers", "Complex")?)? {
+        return Ok(false);
+    }
+    Ok(!operand.is_instance(REAL.import(py, "numbers", "Real")?)?)
+}
+
+/// What a refusal of `operand` adds where a real number of another type equals
+/// it: `typing` caches `Annotated` by equality, so a marker written with that
+/// real number elsewhere arrives as this one wherever this one is built first.
+///
+/// `MultipleOf(2 + 0j)` equals `MultipleOf(2)`, and
+/// `MultipleOf(Decimal("0.5"))` equals `MultipleOf(0.5)`, each hashing alike.
+/// The refusal is right for the marker as written, and is read by a caller who
+/// wrote the real one; the sentence says how that marker came to be the one
+/// refused.
+fn equal_to_a_real(
+    operand: &Bound<'_, PyAny>,
+    real: PyResult<Bound<'_, PyAny>>,
+) -> PyResult<String> {
+    let py = operand.py();
+    let Some(real) = unless_fatal(real.map(Some), py, None)? else {
+        return Ok(String::new());
+    };
+    Ok(if unless_fatal(operand.eq(&real), py, false)? {
+        format!(
+            ". `typing` caches `Annotated` by equality and this marker equals one \
+             written with {}, so where that one is written, this one arrives if it \
+             is built first in the process",
+            summarize(&real)?
+        )
+    } else {
+        String::new()
+    })
+}
+
+/// Refuse an order bound that orders nothing: `nan`, and a complex number.
 ///
 /// Every comparison with `nan` is false, so `Annotated[float, Ge(nan)]` admits
 /// **no value at all** -- and it is the empty set written as a bound, which no
 /// caller means and neither decider proves empty. Dropping the bound would
-/// admit every float instead; refusing says which mistake was made.
+/// admit every float instead; refusing says which mistake was made. A complex
+/// bound is the same set by another road: Python raises on `1 >= 0j`, and the
+/// walk reads a raise as a refusal.
 ///
-/// Only `nan` is refused, not every empty bound: `Gt(inf)` is also empty, but it
-/// is empty because the order says so, which is an answer. `nan` is the absence
-/// of an order.
+/// Only those two are refused, not every empty bound: `Gt(inf)` is also empty,
+/// but it is empty because the order says so, which is an answer. `nan` and a
+/// complex number are the absence of an order.
 pub(super) fn refuse_unordered_bound(attr: &str, bound: &Bound<'_, PyAny>) -> PyResult<()> {
-    let unordered = unless_fatal(bound.extract::<f64>().map(f64::is_nan), bound.py(), false)?;
+    let py = bound.py();
+    let unordered = unless_fatal(bound.extract::<f64>().map(f64::is_nan), py, false)?;
     if unordered {
         return Err(PyValueError::new_err(format!(
             "{attr} cannot be nan: every comparison with nan is false, so the \
@@ -67,7 +133,24 @@ pub(super) fn refuse_unordered_bound(attr: &str, bound: &Bound<'_, PyAny>) -> Py
              for the empty set"
         )));
     }
+    if !is_a_builtin_number(bound) && unless_fatal(is_complex(bound), py, false)? {
+        return Err(complex_bound(attr, bound)?);
+    }
     Ok(())
+}
+
+/// The refusal of a complex bound, out of line so that the path every real
+/// bound takes keeps its size.
+#[cold]
+#[inline(never)]
+fn complex_bound(attr: &str, bound: &Bound<'_, PyAny>) -> PyResult<PyErr> {
+    let note = equal_to_a_real(bound, bound.getattr(intern!(bound.py(), "real")))?;
+    Ok(PyValueError::new_err(format!(
+        "{attr} cannot be the complex number {}: Python orders no value against a \
+         complex one, so the bound admits no value at all. Write the bound as a \
+         real number{note}",
+        summarize(bound)?
+    )))
 }
 
 /// Build the schema an `Annotated` base and its metadata markers denote.
@@ -210,7 +293,7 @@ pub(super) fn check_constraint_fits(
         Constraint::MinLen(_) | Constraint::MaxLen(_) => (carries_length(base), "length"),
         Constraint::Regex(_) => (carries_pattern(base), "text for a pattern to match"),
         Constraint::MultipleOf(index) => match operand(*index) {
-            Some(_) => (carries_division(base), "number for a divisor"),
+            Some(step) => step_fits(base, step)?,
             None => (Carries::Maybe, ""),
         },
         Constraint::Ge(index)
@@ -233,6 +316,43 @@ pub(super) fn check_constraint_fits(
         )));
     }
     Ok(())
+}
+
+/// Whether the base's values take a remainder against `step`, for
+/// [`check_constraint_fits`] to read; refused here, with a message of its own,
+/// where the step is a `Decimal` the base's values would divide were it any
+/// other number.
+///
+/// Out of line: inlined into [`build_refine`] with the rest of
+/// [`check_constraint_fits`], the step's reading costs every refined field
+/// about thirty instructions, a field holding only a bound included.
+#[inline(never)]
+fn step_fits(base: &Schema, step: &Py<PyAny>) -> PyResult<(Carries, &'static str)> {
+    Python::attach(|py| step_fits_within(base, step.bind(py)))
+}
+
+/// [`step_fits`], with the interpreter in hand.
+fn step_fits_within(base: &Schema, step: &Bound<'_, PyAny>) -> PyResult<(Carries, &'static str)> {
+    let group = step_group(step)?;
+    let answer = carries_division(base, group);
+    if group == StepGroup::Decimal
+        && answer == Carries::No
+        && carries_division(base, StepGroup::Number) != Carries::No
+    {
+        let py = step.py();
+        let real = step
+            .extract::<f64>()
+            .map(|real| PyFloat::new(py, real).into_any());
+        let note = equal_to_a_real(step, real)?;
+        return Err(not_implemented(format!(
+            "{} values take no remainder against the `Decimal` step {}: Python \
+             refuses to mix a float and a `Decimal`, so this constraint admits none \
+             of them. Write the step as a float or a `Fraction`{note}",
+            base.expected(),
+            summarize(step)?
+        )));
+    }
+    Ok((answer, "number for a divisor"))
 }
 
 /// The compilation flags a `re.Pattern` carries, folded into the pattern itself.
@@ -812,6 +932,40 @@ fn refuse_unnumbered_step(operand: &Bound<'_, PyAny>) -> PyResult<()> {
     )))
 }
 
+/// Refuse a complex `MultipleOf` operand, which divides no value.
+///
+/// Python takes no remainder against a complex number -- `4 % 2j` raises, and
+/// so does `4 % (2 + 0j)` -- so the step names the empty set, as a step that is
+/// not a number does.
+fn refuse_complex_step(operand: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = operand.py();
+    if is_a_builtin_number(operand) || !unless_fatal(is_complex(operand), py, false)? {
+        return Ok(());
+    }
+    let note = equal_to_a_real(operand, operand.getattr(intern!(py, "real")))?;
+    Err(PyValueError::new_err(format!(
+        "MultipleOf({}) is not a valid constraint: Python takes no remainder against \
+         a complex number, so no value would belong. Write the step as a real \
+         number{note}",
+        summarize(operand)?
+    )))
+}
+
+/// The group a step divides within, which [`carries_division`] reads beside
+/// the base: a `Decimal`, which a float takes no remainder against, or any
+/// other number.
+fn step_group(operand: &Bound<'_, PyAny>) -> PyResult<StepGroup> {
+    if is_a_builtin_number(operand) {
+        return Ok(StepGroup::Number);
+    }
+    let decimal = DECIMAL.import(operand.py(), "decimal", "Decimal")?;
+    Ok(if operand.is_instance(decimal)? {
+        StepGroup::Decimal
+    } else {
+        StepGroup::Number
+    })
+}
+
 pub(super) fn parse_constraint<'py>(
     marker: &Bound<'py, PyAny>,
     out: &mut Vec<Constraint>,
@@ -1071,6 +1225,7 @@ fn read_vocabulary<'py>(
             ));
         }
         refuse_unnumbered_step(&multiple)?;
+        refuse_complex_step(&multiple)?;
         out.push(Constraint::MultipleOf(lits.intern_operand(&multiple)));
     }
     Ok(())

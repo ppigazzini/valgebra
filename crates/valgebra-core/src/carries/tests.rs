@@ -6,10 +6,12 @@
 //! until it has a row.
 
 use super::{
-    Carries, OrderGroup, carries_division, carries_length, carries_order, carries_pattern,
-    carries_through,
+    Carries, OrderGroup, StepGroup, carries_division, carries_length, carries_order,
+    carries_pattern, carries_through,
 };
-use crate::ir::{Attribute, ClassIx, ConstIx, Constraint, DefIx, MapClause, Schema, SeqShape};
+use crate::ir::{
+    Attribute, ClassIx, ConstIx, Constraint, DefIx, MapClause, OperandIx, Schema, SeqShape,
+};
 use std::sync::Arc;
 
 /// The variant a node is, by the name the enum gives it.
@@ -206,7 +208,11 @@ fn each_base_answers_the_constraints_its_values_can() {
     for (base, length, pattern, division, order) in table() {
         assert_eq!(carries_length(&base), length, "length of {base:?}");
         assert_eq!(carries_pattern(&base), pattern, "pattern on {base:?}");
-        assert_eq!(carries_division(&base), division, "divisor on {base:?}");
+        assert_eq!(
+            carries_division(&base, StepGroup::Number),
+            division,
+            "divisor on {base:?}"
+        );
         assert_eq!(
             carries_order(&base, Some(OrderGroup::Number)),
             order,
@@ -317,13 +323,42 @@ fn an_order_bound_asks_about_the_pair() {
     );
 }
 
+/// A float takes no remainder against a `Decimal`, and an integer does: the
+/// one pair of numbers Python refuses to mix under `%`. A union holding an
+/// integer is narrowed by the step, as a union is by every constraint one of
+/// its members answers.
+#[test]
+fn a_float_takes_no_remainder_against_a_decimal() {
+    let refined_float = Schema::refine(Schema::Float, vec![Constraint::Ge(OperandIx::new(0))]);
+    for (base, answer) in [
+        (Schema::Float, Carries::No),
+        (refined_float, Carries::No),
+        (Schema::Int, Carries::Yes),
+        (Schema::Bool, Carries::Yes),
+        (Schema::union([Schema::Int, Schema::Float]), Carries::Yes),
+        (Schema::Str, Carries::No),
+        (Schema::Instance(ClassIx::new(0)), Carries::Maybe),
+    ] {
+        assert_eq!(
+            carries_division(&base, StepGroup::Decimal),
+            answer,
+            "a decimal step on {base:?}"
+        );
+    }
+    assert_eq!(
+        carries_division(&Schema::Float, StepGroup::Number),
+        Carries::Yes
+    );
+}
+
 #[test]
 fn a_union_answers_for_its_members_and_a_plain_base_for_itself() {
     // A plain base has no children to fold, so the fold stands aside and the
     // caller's own table answers. This is what makes `carries_through` a
     // pre-pass rather than the rule.
     assert_eq!(carries_through(&Schema::Str, &carries_length), None);
-    assert_eq!(carries_through(&Schema::Int, &carries_division), None);
+    let by_number = |base: &Schema| carries_division(base, StepGroup::Number);
+    assert_eq!(carries_through(&Schema::Int, &by_number), None);
 
     // The fold is `or` and not `and`: one member that can answer makes the
     // constraint a narrowing.

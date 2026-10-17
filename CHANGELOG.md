@@ -47,6 +47,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a complement reads its inner walk in Kleene's strong logic
 - fix: a map atom wanting a key past the partition proves nothing -- internal
 - fix: the clauses admitting every value close as one clause
+- fix: a bound or a step Python cannot apply is refused
 
 -->
 
@@ -304,6 +305,17 @@ answer of its own, or a repair to a change not yet released.
   clause claims stays, and the rest is the region `close` refuses. The first
   shape closes as it did, the second to its `bytes` keys and the third to
   `{}`.
+- **A bound or a step Python cannot apply is refused.** `Annotated[int,
+  Ge(1j)]`, `Annotated[int, MultipleOf(1j)]` and `Annotated[float,
+  MultipleOf(Decimal("0.5"))]` built validators that admitted nothing, and
+  `relation_to(nothing)` answered `undecided`: Python raises on `1 >= 1j`, on
+  `4 % 1j` and on `1.5 % Decimal("0.5")`. A complex bound is refused with a
+  `ValueError`, as a bound against `nan` is, and so is a complex step; a
+  `Decimal` step over a float base is refused with a `NotImplementedError`, as
+  a step over a base with no number is, and over `int | float` it narrows the
+  integers. Because `typing` caches `Annotated` by equality, `MultipleOf(2)`
+  built after `MultipleOf(2 + 0j)` arrives as it and is refused with it, where
+  it admitted nothing before; the message says so.
 
 ## [0.0.18] - 2026-10-12
 

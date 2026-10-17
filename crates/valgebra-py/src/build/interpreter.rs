@@ -7,8 +7,8 @@ use crate::render::render;
 use pyo3::exceptions::PyKeyboardInterrupt;
 use std::ffi::CString;
 use valgebra_core::{
-    Carries, Constraint, MapClause, SeqShape, carries_division, carries_length, carries_pattern,
-    carries_through,
+    Carries, Constraint, MapClause, SeqShape, StepGroup, carries_division, carries_length,
+    carries_pattern, carries_through,
 };
 
 /// The release a corpus row needs, as `3.n`.
@@ -709,6 +709,92 @@ fn a_typing_form_is_refused_where_a_constant_or_a_type_argument_is_read() {
     });
 }
 
+/// A bound or a step Python cannot apply is refused, and one it can builds.
+///
+/// A complex bound and a complex step name the empty set whatever the base:
+/// `1 >= 1j` and `4 % 2j` raise. A `Decimal` step names it over a float, which
+/// `%` refuses to mix with one, and divides an integer. A marker equal to a
+/// real one says how a later equal spelling can arrive as it; the stand-in
+/// markers here are unhashable, so `typing` caches none of them and no row
+/// reaches another.
+#[test]
+fn a_bound_or_a_step_python_cannot_apply_is_refused() {
+    Python::attach(|py| {
+        let refused = |expression: &str| match built(py, expression) {
+            Err(error) => error.to_string(),
+            Ok(schema) => panic!("{expression} built {schema} instead of refusing"),
+        };
+        let decimal = |text: &str| format!("__import__('decimal').Decimal('{text}')");
+        for (expression, wanted) in [
+            (
+                "typing.Annotated[int, at.Ge(1j)]".to_owned(),
+                "orders no value against a complex one",
+            ),
+            (
+                "typing.Annotated[object, at.Le(1j)]".to_owned(),
+                "orders no value against a complex one",
+            ),
+            (
+                "typing.Annotated[int, at.MultipleOf(2j)]".to_owned(),
+                "no remainder against a complex number",
+            ),
+            (
+                "typing.Annotated[object, at.MultipleOf(2j)]".to_owned(),
+                "no remainder against a complex number",
+            ),
+            (
+                format!("typing.Annotated[float, at.MultipleOf({})]", decimal("0.1")),
+                "refuses to mix a float and a `Decimal`",
+            ),
+            // A base with no number keeps the refusal every step meets there.
+            (
+                format!("typing.Annotated[str, at.MultipleOf({})]", decimal("0.1")),
+                "str values have no number for a divisor",
+            ),
+        ] {
+            let error = refused(&expression);
+            assert!(error.contains(wanted), "{expression} refused with {error}");
+            assert!(
+                !error.contains("caches"),
+                "{expression} equals no real marker"
+            );
+        }
+        for (expression, real) in [
+            (
+                "typing.Annotated[float, at.Ge(7.25 + 0j)]".to_owned(),
+                "7.25",
+            ),
+            (
+                "typing.Annotated[int, at.MultipleOf(3 + 0j)]".to_owned(),
+                "3.0",
+            ),
+            (
+                format!(
+                    "typing.Annotated[float, at.MultipleOf({})]",
+                    decimal("0.375")
+                ),
+                "0.375",
+            ),
+        ] {
+            let error = refused(&expression);
+            let note = format!("equals one written with {real}");
+            assert!(error.contains(&note), "{expression} refused with {error}");
+        }
+        for expression in [
+            format!("typing.Annotated[int, at.MultipleOf({})]", decimal("0.1")),
+            format!(
+                "typing.Annotated[int | float, at.MultipleOf({})]",
+                decimal("0.1")
+            ),
+            format!("typing.Annotated[float, at.Ge({})]", decimal("0.1")),
+            "typing.Annotated[float, at.MultipleOf(__import__('fractions').Fraction(1, 10))]"
+                .to_owned(),
+        ] {
+            built(py, &expression).unwrap_or_else(|error| panic!("{expression}: {error}"));
+        }
+    });
+}
+
 /// The forms the frontend refuses, and the message each refusal carries.
 ///
 /// A refusal is a decision about the algebra -- a construct that names no
@@ -1211,7 +1297,23 @@ fn each_base_answers_the_constraints_its_values_can() {
             (map.clone(), Carries::No),
             (Schema::ANY, Carries::Maybe),
         ] {
-            assert!(carries_division(&base) == answer, "divisor on {base:?}");
+            assert!(
+                carries_division(&base, StepGroup::Number) == answer,
+                "divisor on {base:?}"
+            );
+        }
+        // A `Decimal` step divides the integers and not the floats: Python
+        // refuses `1.5 % Decimal("0.5")`.
+        for (base, answer) in [
+            (Schema::Int, Carries::Yes),
+            (Schema::Bool, Carries::Yes),
+            (Schema::Float, Carries::No),
+            (Schema::ANY, Carries::Maybe),
+        ] {
+            assert!(
+                carries_division(&base, StepGroup::Decimal) == answer,
+                "a decimal step on {base:?}"
+            );
         }
         // order: the operand's group has to be the base's, because Python
         // raises across the groups rather than ordering them. This is the one
@@ -1653,10 +1755,11 @@ fn a_build_begun_inside_a_build_counts_from_nought_and_gives_the_counts_back() {
     });
 }
 
-/// A bound of exactly `int`, `float` or `bool` is placed in `numbers.Number`'s
-/// register without asking the ABC, whose question is a Python function called
-/// once a bound; a bound of any other type is asked. The count is of this
-/// thread's questions, so a test running beside it asks nothing it reads.
+/// A bound or a step of exactly `int`, `float` or `bool` is placed in the
+/// `numbers` registers without asking an ABC, whose question is a Python
+/// function called once a bound; a bound or a step of any other type is asked,
+/// once a register. The count is of this thread's questions, so a test running
+/// beside it asks nothing it reads.
 #[test]
 fn a_builtin_number_bound_is_placed_without_asking_the_abc() {
     Python::attach(|py| {
@@ -1666,22 +1769,28 @@ fn a_builtin_number_bound_is_placed_without_asking_the_abc() {
               asked = []\n\
               armed = [None]\n\
               _original = abc.ABCMeta.__instancecheck__\n\
+              REGISTERS = (numbers.Number, numbers.Complex, numbers.Real)\n\
               def _counting(cls, instance):\n\
-              \x20   if cls is numbers.Number and armed[0] == threading.get_ident():\n\
-              \x20       asked.append(type(instance).__name__)\n\
+              \x20   if cls in REGISTERS and armed[0] == threading.get_ident():\n\
+              \x20       asked.append(f'{cls.__name__}:{type(instance).__name__}')\n\
               \x20   return _original(cls, instance)\n\
               abc.ABCMeta.__instancecheck__ = _counting\n\
               class Ge:\n\
               \x20   def __init__(self, ge):\n\
               \x20       self.ge = ge\n\
               Ge.__module__ = 'annotated_types'\n\
+              class MultipleOf:\n\
+              \x20   def __init__(self, multiple_of):\n\
+              \x20       self.multiple_of = multiple_of\n\
+              MultipleOf.__module__ = 'annotated_types'\n\
               def arm():\n\
               \x20   asked.clear()\n\
               \x20   armed[0] = threading.get_ident()\n\
               def disarm():\n\
               \x20   armed[0] = None\n\
               \x20   return list(asked)\n\
-              BOUNDS = [0, 1.5, True, decimal.Decimal(2)]\n",
+              BOUNDS = [Ge(0), Ge(1.5), Ge(True), Ge(decimal.Decimal(2))]\n\
+              STEPS = [MultipleOf(3), MultipleOf(0.5), MultipleOf(decimal.Decimal(2))]\n",
             c"numbers_asked.py",
             c"numbers_asked",
         )
@@ -1690,20 +1799,24 @@ fn a_builtin_number_bound_is_placed_without_asking_the_abc() {
             .import("typing")
             .and_then(|typing| typing.getattr("Annotated"))
             .expect("typing has Annotated");
-        let marker = module.getattr("Ge").expect("the marker is defined");
-        let bounds = module.getattr("BOUNDS").expect("the bounds are defined");
-        for (bound, wanted) in bounds.try_iter().expect("a list").zip([
+        let markers = module
+            .getattr("BOUNDS")
+            .and_then(|bounds| bounds.add(module.getattr("STEPS")?))
+            .expect("the markers are defined");
+        let decimal_bound = vec!["Complex:Decimal".to_owned(), "Number:Decimal".to_owned()];
+        let decimal_step = vec!["Number:Decimal".to_owned(), "Complex:Decimal".to_owned()];
+        for (marker, wanted) in markers.try_iter().expect("a list").zip([
             vec![],
             vec![],
             vec![],
-            vec!["Decimal".to_owned()],
+            decimal_bound,
+            vec![],
+            vec![],
+            decimal_step,
         ]) {
-            let bound = bound.expect("a bound");
+            let marker = marker.expect("a marker");
             let spelling = annotated
-                .get_item((
-                    py.get_type::<PyInt>(),
-                    marker.call1((&bound,)).expect("a marker"),
-                ))
+                .get_item((py.get_type::<PyInt>(), &marker))
                 .expect("the annotation builds");
             module
                 .getattr("arm")
@@ -1715,8 +1828,8 @@ fn a_builtin_number_bound_is_placed_without_asking_the_abc() {
                 .and_then(|disarm| disarm.call0())
                 .and_then(|asked| asked.extract())
                 .expect("disarmed");
-            built.expect("an ordered bound builds");
-            assert_eq!(asked, wanted, "the ABC asked of {bound}");
+            built.expect("a bound or a step over an int builds");
+            assert_eq!(asked, wanted, "the ABCs asked of {marker:?}");
         }
     });
 }
