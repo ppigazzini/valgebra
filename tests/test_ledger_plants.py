@@ -4077,9 +4077,25 @@ PLANTS = (
         "tests/test_fuzz_lane.py",
         (".github/workflows/ci.yml",),
         lambda tree: _edit(
-            tree, ".github/workflows/ci.yml", "          set -o pipefail\n", ""
+            tree,
+            ".github/workflows/ci.yml",
+            "          set -o pipefail\n          for target in decision",
+            "          for target in decision",
         ),
         trips=("test_the_step_ends_as_the_soak_does",),
+    ),
+    Plant(
+        # The comparison's refusal hidden behind `tee`: the step keeps the pipe
+        # and loses the option that reads its first command's status.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "step passes.\n          set -o pipefail\n",
+            "step passes.\n",
+        ),
+        trips=("test_a_step_that_tees_a_command_ends_as_the_command_does",),
     ),
     Plant(
         # A target the workspace declares and the soak leaves out.

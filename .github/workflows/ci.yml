@@ -1093,6 +1093,9 @@ jobs:
             --record profiled.json --label pgo
       - name: Say what the profile buys, per shape
         run: |
+          # A pipe ends as its last command does, so without this the
+          # comparison's refusal ends in `tee`'s success and the step passes.
+          set -o pipefail
           uv run --no-sync --group bench python scripts/pgo_compare.py \
             --compare plain.json profiled.json | tee -- "$GITHUB_STEP_SUMMARY"
       # The lane cannot commit, so the readings leave as an artifact and a human

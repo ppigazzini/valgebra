@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from _toml import load
-from _tree import ROOT, read_workflow
+from _tree import ROOT, WORKFLOWS, read_workflow
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -1015,3 +1015,32 @@ def test_a_selection_and_a_condition_are_read_as_the_runner_reads_them() -> None
         "ubuntu-26.04 3.11",
         "macos-26 3.14",
     ]
+
+
+#: A command piped into `tee`, the shape that hands the pipe's status to `tee`.
+_TEED = re.compile(r"(?<!\|)\|\s*tee\b")
+
+
+def test_a_step_that_tees_a_command_ends_as_the_command_does() -> None:
+    """Every step piping a command into `tee` sets `-o pipefail` first.
+
+    A step with no shell named runs as `bash -e`, which reads only a pipe's
+    last status: a script's refusal ends in `tee`'s success, and the step
+    passes on a measurement that refused to be one.
+    """
+    teed = []
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        for name, job in (read_workflow(path).get("jobs") or {}).items():
+            for step in job.get("steps") or []:
+                run = str(step.get("run", ""))
+                lines = run.splitlines()
+                kept = [line for line in lines if not line.strip().startswith("#")]
+                code = "\n".join(kept)
+                if not _TEED.search(code):
+                    continue
+                label = f"{path.name}: {name}: {step.get('name', lines[0])!r}"
+                teed.append(label)
+                assert re.search(r"set -[a-z]*o pipefail", code) or (
+                    step.get("shell") == "bash"
+                ), f"{label} pipes into tee"
+    assert len(teed) >= 2, teed
