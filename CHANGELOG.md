@@ -41,6 +41,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a set reports its failures in the order everything they say fixes
 - fix: two spellings of one schema fold to one when composed
 - fix: one schema prints one way, whatever order its sets were written in
+- fix: a union of map atoms holds each atom once -- internal
 
 -->
 
