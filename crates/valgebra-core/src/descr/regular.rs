@@ -45,10 +45,17 @@ use super::automaton::{Reached, canonical_order, reaches};
 ///
 /// [`MAX_STATES`] bounds the automaton this module keeps; this bounds the one
 /// the builder makes on the way to it, which is a different quantity and the
-/// larger of the two. A dense table is a row of 256 byte-classes per state, so
-/// four thousand states is a few megabytes and eight is generous headroom --
-/// while a pattern whose determinisation is exponential passes right through
-/// `MAX_STATES` because it never reaches the check.
+/// larger of the two. A dense table's row holds four-byte state identifiers,
+/// one per byte class plus one for the end of input, rounded up to a power of
+/// two: 512 at the widest, where eight megabytes is `MAX_STATES` states
+/// exactly. A pattern of few classes has narrow rows, so this bounds the
+/// memory a build spends rather than its states: `(a|b)*a(a|b){k}` has eight a
+/// row (the bytes below `a`, `a`, `b`, the bytes above, the end of input), and
+/// at `k = 15` the builder makes a table of 65,536 states, sixteen times
+/// `MAX_STATES`, which `Dfa::from_automaton` then refuses; at 16 the subset
+/// construction's scratch passes the limit first. Without it, a pattern whose
+/// determinisation is exponential passes right through `MAX_STATES` because
+/// it never reaches the check.
 ///
 /// Both limits are set: `determinize_size_limit` bounds the scratch space the
 /// subset construction uses, and `dfa_size_limit` the table it produces. A
