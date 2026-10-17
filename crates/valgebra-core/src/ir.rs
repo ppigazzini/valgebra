@@ -538,7 +538,7 @@ fn claimed_beside_the_region(
 /// claim. The claimed regions are untouched either way, so the paper's own
 /// closed `{|"a" = Int, String => Bool|}` keeps its `String => Bool`. The
 /// clauses admitting every value are read as the one clause they are first
-/// ([`tops_merged`]), so the region does not turn on how they were split.
+/// ([`tops_merged`]), so the region does not turn on how they are split.
 fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
     // A node with no clauses claims no key, so the unclaimed region is the
     // whole key space and the answer is the shared list either way: the top
@@ -591,13 +591,13 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
 /// which of them is the region is not a question the pair can answer apart:
 /// `{str: anything, complement(str): anything}` is the top clause written
 /// twice, ICFP 2023's wildcard (l.1509-1511) spelled as the union footnote 15
-/// reads one as. Read one at a time, each was tested against the complement
-/// of the others' keys, and the answer turned on whether that complement
-/// folded: the pair closed to `{}` as the top does, and the same pair beside a
-/// `bytes: int` clause, or split over `complement(int)` and
-/// `complement(str)`, kept every clause and admitted every dict. Merged, the
-/// clause is read as the top is -- the part over the keys the others claim
-/// stays, and the rest is the region -- however it was split.
+/// reads one as. Read one at a time, each would be tested against the
+/// complement of the others' keys, and the answer would turn on whether that
+/// complement folds: the pair alone closes to `{}` as the top does, and beside
+/// a `bytes: int` clause, or split over `complement(int)` and
+/// `complement(str)`, it would keep every clause and admit every dict. Merged,
+/// the clause is read as the top is -- the part over the keys the others claim
+/// stays, and the rest is the region -- however it is split.
 fn tops_merged(defaults: &[MapClause]) -> Vec<MapClause> {
     let mut merged: Vec<MapClause> = Vec::with_capacity(defaults.len());
     let mut top: Option<usize> = None;
