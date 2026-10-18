@@ -677,6 +677,16 @@ impl BranchLabels {
         }
     }
 
+    /// Whether the list holds as many labels as it names. A branch reached past
+    /// that point marks it short and renders nothing, since what it rendered
+    /// would be dropped, and a literal's label is the `repr` of a constant,
+    /// which is code a caller wrote.
+    fn is_full(&mut self) -> bool {
+        let full = self.rendered.len() >= UNION_LABEL_LIMIT;
+        self.truncated |= full;
+        full
+    }
+
     fn render(&self) -> String {
         let joined = self.rendered.join(", ");
         if self.truncated {
@@ -717,6 +727,9 @@ fn push_branch_label_within(
     out: &mut BranchLabels,
     unfolded: u32,
 ) {
+    if out.is_full() {
+        return;
+    }
     match schema {
         Schema::Union(members) => {
             for member in members.iter() {

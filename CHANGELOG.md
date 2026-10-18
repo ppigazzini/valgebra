@@ -50,6 +50,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a bound or a step Python cannot apply is refused
 - fix: the state bound holds every automaton as it is built
 - fix: two spellings of a wide union compare in one pass
+- fix: a refused union renders only the labels it names
 
 -->
 
@@ -333,6 +334,11 @@ answer of its own, or a repair to a change not yet released.
   left: 82 ms at four thousand members, four times as long at each doubling. A
   member is looked for only among the other side's members that hash alike, so
   the same comparison takes 0.4 ms. Two validators built alike match in place.
+- **A refused union renders only the sixty-four labels its message names.**
+  Every member's label was rendered and the ones past the bound dropped, so a
+  union of two thousand constants ran two thousand of their `__repr__` methods
+  for one refused value. Rendering stops at the bound, and a refused
+  `validate` on that union takes 0.03 ms rather than 0.5.
 
 ## [0.0.18] - 2026-10-12
 

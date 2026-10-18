@@ -68,6 +68,37 @@ def test_a_wide_union_does_not_produce_an_unbounded_message() -> None:
     assert expected.endswith("...")
 
 
+def test_a_wide_union_renders_only_the_labels_it_names() -> None:
+    """A label past the bound is not rendered, so a constant's code is not run.
+
+    A literal's label is its constant's `repr`, which is code a caller wrote,
+    and a refused union names sixty-four labels. Rendered for every member and
+    dropped past the bound, five hundred members would run five hundred of them
+    for a message that keeps sixty-four.
+    """
+    rendered: list[int] = []
+
+    class Code:
+        def __init__(self, index: int) -> None:
+            self.index = index
+
+        def __eq__(self, other: object) -> bool:
+            return isinstance(other, Code) and other.index == self.index
+
+        def __hash__(self) -> int:
+            return self.index
+
+        def __repr__(self) -> str:
+            rendered.append(self.index)
+            return f"Code({self.index})"
+
+    wide = union(*[Validator(Code(index)) for index in range(500)])
+    rendered.clear()
+    expected = _expected(wide, "absent")
+    assert expected.endswith("...")
+    assert len(rendered) == expected.count("Code(") == 64
+
+
 def test_the_label_bound_is_not_the_branch_bound() -> None:
     """A branch that is itself a union contributes many labels, not one.
 

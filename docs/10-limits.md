@@ -121,7 +121,8 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
 - **Union error reporting.** When a value misses a wide union, the error report
   is bounded in two independent ways: it searches only a bounded number of
   branches for the closest match, and `expected` names only a bounded number of
-  **labels** before truncating with `...`. The two counts differ — a branch that
+  **labels** before truncating with `...`, and renders none past them, so a
+  constant's `repr` runs for the labels named and no others. The two counts differ — a branch that
   is itself a union, such as a wide `Literal[...]`, contributes one branch and
   many labels — so each carries its own bound. With `fail_fast` the explanation
   costs a deciding walk of each branch and a fail-fast walk of each branch it

@@ -36,3 +36,22 @@ fn the_branch_list_stops_at_its_limit_and_marks_that_it_did() {
     // renderer returning a fixed string would also do for every other case.
     assert_eq!(BranchLabels::new().render(), "one of: ");
 }
+
+/// A full list says so when a branch is reached past it, which is what keeps
+/// that branch from rendering a label only to drop it: a literal's label is
+/// the `repr` of its constant, code a caller wrote.
+#[test]
+fn a_full_list_is_marked_short_when_a_branch_is_reached_past_it() {
+    let mut labels = BranchLabels::new();
+    for i in 0..UNION_LABEL_LIMIT - 1 {
+        labels.push(format!("b{i}"));
+    }
+    assert!(
+        !labels.is_full(),
+        "one short of the limit takes another label"
+    );
+    assert!(!labels.render().ends_with(", ..."));
+    labels.push("last".to_owned());
+    assert!(labels.is_full(), "at the limit the list takes no more");
+    assert!(labels.render().ends_with(", ..."), "and says it is short");
+}
