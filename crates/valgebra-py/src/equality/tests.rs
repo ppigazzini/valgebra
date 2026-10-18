@@ -12,9 +12,15 @@ pub(super) fn scanned() {
     SCANNED.with(|count| count.set(count.get() + 1));
 }
 
-/// [`same_multiset`] under `==`, which cannot raise over integers.
+/// [`same_multiset`] under `==`, which cannot raise over integers, with one
+/// bucket and with a bucket per value.
 fn matched(items: &[u8], others: &[u8]) -> bool {
-    same_multiset(items, others, |a, b| Ok(a == b)).expect("an integer comparison does not raise")
+    let value = |n: &u8| Ok(u64::from(*n));
+    let searched = same_multiset(items, others, |a, b| Ok(a == b));
+    let bucketed = same_multiset_by(items, others, |a, b| Ok(a == b), value, value);
+    let answer = searched.expect("an integer comparison does not raise");
+    assert_eq!(bucketed.expect("nor does reading its value"), answer);
+    answer
 }
 
 #[test]
@@ -104,6 +110,22 @@ fn the_search_asks_what_a_search_from_the_front_asks() {
 fn lists_that_match_in_place_are_one_pass() {
     let items: Vec<u32> = (0..50).collect();
     SCANNED.with(|count| count.set(0));
-    assert!(same_multiset(&items, &items, |a, b| Ok(a == b)).expect("nothing raises"));
+    let matched = same_multiset(&items, &items, |a, b| Ok(a == b));
+    assert!(matched.expect("nothing raises"));
+    assert_eq!(SCANNED.with(Cell::get), items.len());
+}
+
+/// A digest that separates the members makes two orders of one set one pass
+/// too: each member looks at its own bucket alone. A search from the front
+/// over the reversed list looks at the whole untaken rest for every member,
+/// which is quadratic in the width.
+#[test]
+fn a_permutation_is_one_pass_under_a_digest_that_separates_the_members() {
+    let items: Vec<u32> = (0..500).collect();
+    let reversed: Vec<u32> = items.iter().rev().copied().collect();
+    let value = |n: &u32| Ok(u64::from(*n));
+    SCANNED.with(|count| count.set(0));
+    let matched = same_multiset_by(&items, &reversed, |a, b| Ok(a == b), value, value);
+    assert!(matched.expect("nothing raises"));
     assert_eq!(SCANNED.with(Cell::get), items.len());
 }

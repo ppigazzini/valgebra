@@ -23,6 +23,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use pyo3::prelude::*;
+use rustc_hash::FxHashMap;
 use valgebra_core::{Attribute, Constraint, Field, MapClause, Schema};
 
 use crate::errors::unless_fatal;
@@ -93,32 +94,38 @@ fn objects_equal(
 /// The lists are a union's members, a map's clauses or a refinement's
 /// constraints: each is a *set* written as a list, and construction sorts them
 /// by a key that reads a pool slot, so equal sets can be written in different
-/// orders. Quadratic in the member count where the two are written in
-/// different orders, and one pass where they are written alike, which two
-/// validators built the same way are; paid only by `==`, which is not on any
-/// hot path, and the long lists -- a wide `Literal` -- are the case this exists
-/// for.
-fn same_multiset<T>(
+/// orders. Each member is looked for among the other list's members of its
+/// digest, in the order they are written, and takes the first that equals it.
+///
+/// A digest consistent with equality -- a member and its match hash alike,
+/// which [`hash_shape`] promises -- leaves the buckets as narrow as the members
+/// are distinct, so two spellings of a wide `Literal` match with one comparison
+/// a member whatever their orders, where a scan is quadratic in the width. A
+/// digest answering one figure for every member leaves one bucket, which is the
+/// search from the front, and the right cost for the short lists.
+fn same_multiset_by<T>(
     items: &[T],
     others: &[T],
     mut equal_item: impl FnMut(&T, &T) -> PyResult<bool>,
+    mut digest_item: impl FnMut(&T) -> PyResult<u64>,
+    mut digest_other: impl FnMut(&T) -> PyResult<u64>,
 ) -> PyResult<bool> {
     if items.len() != others.len() {
         return Ok(false);
     }
-    let mut taken = vec![false; others.len()];
-    // Where the untaken members begin. Every member before it is taken, and a
-    // taken member is never compared, so starting there asks the same
-    // questions in the same order as starting at the front -- and two lists
-    // built alike, whose members match in place, are one pass rather than a
-    // walk over the taken prefix per member.
-    let mut untaken = 0;
+    let mut buckets: FxHashMap<u64, Vec<&T>> = FxHashMap::default();
+    for other in others {
+        buckets.entry(digest_other(other)?).or_default().push(other);
+    }
     for item in items {
+        let Some(bucket) = buckets.get_mut(&digest_item(item)?) else {
+            return Ok(false);
+        };
         let mut found = None;
-        for (at, other) in others.iter().enumerate().skip(untaken) {
+        for (at, other) in bucket.iter().enumerate() {
             #[cfg(test)]
             tests::scanned();
-            if !taken.get(at).copied().unwrap_or(true) && equal_item(item, other)? {
+            if equal_item(item, other)? {
                 found = Some(at);
                 break;
             }
@@ -126,12 +133,58 @@ fn same_multiset<T>(
         let Some(at) = found else {
             return Ok(false);
         };
-        if let Some(slot) = taken.get_mut(at) {
-            *slot = true;
-        }
-        untaken += taken.iter().skip(untaken).take_while(|&&done| done).count();
+        // In order, so the members left are searched as they are written.
+        bucket.remove(at);
     }
     Ok(true)
+}
+
+/// [`same_multiset_by`] with one bucket: the search from the front, for a
+/// map's clauses and a refinement's constraints, lists short enough that it is
+/// their cost.
+fn same_multiset<T>(
+    items: &[T],
+    others: &[T],
+    equal_item: impl FnMut(&T, &T) -> PyResult<bool>,
+) -> PyResult<bool> {
+    same_multiset_by(items, others, equal_item, |_| Ok(0), |_| Ok(0))
+}
+
+/// [`same_multiset_by`] over a union's or a meet's members, each digested
+/// through its own side's pool: the list a wide `Literal` makes long.
+///
+/// Two validators built the same way hold their members in one order, which
+/// is the common case and needs no digest: the members are matched in place
+/// first, and only those past the first one out of place are digested.
+fn same_members(
+    py: Python<'_>,
+    members: &[Schema],
+    left: &Side<'_>,
+    others: &[Schema],
+    right: &Side<'_>,
+) -> PyResult<bool> {
+    if members.len() != others.len() {
+        return Ok(false);
+    }
+    let mut alike = members.len();
+    for (at, (member, other)) in members.iter().zip(others).enumerate() {
+        if !equal(py, member, left, other, right)? {
+            alike = at;
+            break;
+        }
+    }
+    let digest = |member: &Schema, side: &Side<'_>| {
+        let mut hasher = DefaultHasher::new();
+        hash_shape(py, member, side.pool, &mut hasher)?;
+        Ok(hasher.finish())
+    };
+    same_multiset_by(
+        members.get(alike..).unwrap_or_default(),
+        others.get(alike..).unwrap_or_default(),
+        |a, b| equal(py, a, left, b, right),
+        |member| digest(member, left),
+        |member| digest(member, right),
+    )
 }
 
 fn fields_equal(
@@ -221,7 +274,9 @@ fn equal(
         }
         // The set-shaped lists: matched rather than zipped.
         (Schema::Union(a), Schema::Union(b))
-        | (Schema::Intersection(a), Schema::Intersection(b)) => same_multiset(a, b, recur)?,
+        | (Schema::Intersection(a), Schema::Intersection(b)) => {
+            same_members(py, a, left, b, right)?
+        }
         (Schema::Complement(a), Schema::Complement(b)) => recur(a, b)?,
         (
             Schema::Coll {

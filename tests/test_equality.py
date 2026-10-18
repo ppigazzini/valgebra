@@ -495,3 +495,28 @@ def test_validators_built_alike_ask_each_constant_once() -> None:
     asked.clear()
     assert left == right
     assert len(asked) == 200
+
+
+def test_two_orders_of_a_table_are_matched_in_one_pass() -> None:
+    """Two orders of one table match by digest, member for member.
+
+    A member is looked for only among the other side's members that hash
+    alike, so a table written backwards asks each constant's `__eq__` once,
+    beside the first pair, which the match in place asks before it finds the
+    orders differ. A search from the front asks it of every member left:
+    twenty thousand questions for two hundred members, quadratic in the width.
+    """
+    asked: list[int] = []
+
+    class Counted(int):
+        def __eq__(self, other: object) -> bool:
+            asked.append(1)
+            return int.__eq__(self, other)
+
+        __hash__ = int.__hash__
+
+    left = union(*[Validator(Counted(i)) for i in range(200)])
+    right = union(*[Validator(Counted(i)) for i in reversed(range(200))])
+    asked.clear()
+    assert left == right
+    assert len(asked) == 200 + 1

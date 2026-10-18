@@ -49,6 +49,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the clauses admitting every value close as one clause
 - fix: a bound or a step Python cannot apply is refused
 - fix: the state bound holds every automaton as it is built
+- fix: two spellings of a wide union compare in one pass
 
 -->
 
@@ -326,6 +327,12 @@ answer of its own, or a repair to a change not yet released.
   the same relation takes a tenth of a millisecond. So is a length bound over
   a list or a tuple past 4,094 elements, which built its automaton past the
   bound at 4,095 and 4,096. No answer moves.
+- **`==` reads a wide union in one pass, whatever order it was written in.**
+  Equality matches a union's members as a set, and two spellings of one
+  `Literal` written in different orders compared each member with every member
+  left: 82 ms at four thousand members, four times as long at each doubling. A
+  member is looked for only among the other side's members that hash alike, so
+  the same comparison takes 0.4 ms. Two validators built alike match in place.
 
 ## [0.0.18] - 2026-10-12
 

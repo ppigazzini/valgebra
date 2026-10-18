@@ -119,6 +119,8 @@ fn reading_through_the_pool_does_not_make_everything_equal() {
             // Different constants at the same slot.
             ("typing.Literal[1]", "typing.Literal[2]"),
             ("typing.Literal[1, 2]", "typing.Literal[1, 3]"),
+            // Different from the first member on, so nothing matches in place.
+            ("typing.Literal[1, 2]", "typing.Literal[3, 4]"),
             // A literal is typed: `1 == True` in Python and these are two
             // singletons.
             ("typing.Literal[1]", "typing.Literal[True]"),
