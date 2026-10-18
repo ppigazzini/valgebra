@@ -43,9 +43,11 @@ def _run(  # noqa: PLR0913 - a fixture per file the gate reads, named at each ca
     if timed_out is not None:
         (out / "timeout.txt").write_text("".join(line + "\n" for line in timed_out))
     lay_script("mutation_gate", work)
-    recorded: dict[str, object] = {"survivors": baseline}
-    if accepted is not None:
-        recorded["_accepted"] = accepted
+    # Every accepted survivor carries its argument unless a row says otherwise:
+    # the gate refuses one with none, which is not what most rows are about.
+    if accepted is None:
+        accepted = dict.fromkeys(baseline, "equivalent: it cannot change an answer")
+    recorded: dict[str, object] = {"survivors": baseline, "_accepted": accepted}
     (work / "scripts" / "mutation_baseline.json").write_text(
         json.dumps(recorded) + "\n"
     )
@@ -87,6 +89,39 @@ def test_an_accepted_note_matching_a_survivor_passes(tmp_path: Path) -> None:
     )
     assert result.returncode == 0
     assert "no new survivors" in result.stdout
+
+
+def test_an_accepted_survivor_without_a_note_fails(tmp_path: Path) -> None:
+    """A survivor in the set is accepted on an argument, and one with none is not.
+
+    `--update` writes the set a sweep measured, so a new survivor arrives in
+    it with no note, and the set would pass carrying it on nothing.
+    """
+    survivor = "crates/x/src/a.rs: replace + with - in f"
+    result = _run(
+        tmp_path,
+        missed=["crates/x/src/a.rs:10:5: replace + with - in f"],
+        baseline=[survivor],
+        accepted={},
+    )
+    assert result.returncode == 1
+    assert f"SURVIVOR WITHOUT A NOTE: {survivor}" in result.stdout
+
+
+def test_a_partial_sweep_cannot_re_record_the_baseline(tmp_path: Path) -> None:
+    """A shard's survivors are not the set, so the two modes refuse together.
+
+    Re-recorded from a partial sweep, the baseline would be that shard's
+    survivors alone, and every survivor the sweep never reached would leave it
+    with its note.
+    """
+    survivor = "crates/x/src/a.rs: replace + with - in f"
+    result = _run(
+        tmp_path, missed=[], baseline=[survivor], extra=["--update", "--new-only"]
+    )
+    assert result.returncode == 2
+    recorded = json.loads((tmp_path / "scripts" / "mutation_baseline.json").read_text())
+    assert recorded["survivors"] == [survivor], "the baseline is left as it was"
 
 
 def test_a_new_survivor_fails_the_gate(tmp_path: Path) -> None:

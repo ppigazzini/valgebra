@@ -166,6 +166,18 @@ def test_a_report_it_cannot_read_cannot_run(
     assert _verdict(monkeypatch, report) == gate.EXIT_CANNOT_RUN
 
 
+@pytest.mark.parametrize("flag", ["--lines", "--regions"])
+def test_the_floor_is_the_scopes_alone(tmp_path: Path, flag: str) -> None:
+    # A floor given on the command line would replace the scope's, which is how
+    # a lane lowers its floor without a line in this file saying so.
+    report = _report(tmp_path / "cov.json", _files(5, LOW))
+    try:
+        verdict = gate.main(["--json", str(report), flag, "0"])
+    except SystemExit as stop:
+        verdict = int(stop.code or 0)
+    assert verdict == gate.EXIT_CANNOT_RUN
+
+
 def test_the_exit_code_is_the_verdict(tmp_path: Path) -> None:
     # The lane reads the process's exit code, so the wiring from `main` to it
     # is held once end to end: a scope the gate does not know cannot run.

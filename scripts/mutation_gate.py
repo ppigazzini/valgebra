@@ -207,11 +207,15 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     that could not run, so each exits 2 -- `argparse`'s own code for them.
     """
     parser = arguments(__doc__)
-    parser.add_argument("--update", action="store_true", help="re-record the baseline")
-    parser.add_argument("--baseline", choices=sorted(BASELINES), default="core")
-    parser.add_argument(
+    # A partial sweep generated part of the baseline, so a re-record from one
+    # would write that part as the whole set and drop every survivor the sweep
+    # never reached, with its note.
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--update", action="store_true", help="re-record the baseline")
+    mode.add_argument(
         "--new-only", action="store_true", help="gate a partial sweep's new survivors"
     )
+    parser.add_argument("--baseline", choices=sorted(BASELINES), default="core")
     parser.add_argument("--out", default="mutants.out", help="the sweep's output")
     parser.add_argument(
         "--all",
@@ -223,14 +227,36 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
 
 
 def _stale_entries(recorded: dict, baseline: set[str]) -> bool:
-    """Report both ways an entry can outlive what it records.
+    """Report every way an entry can stand without what it records.
 
     Not short-circuited: a move that also orphans a note should say both, since
     a reader fixing one would otherwise be told about the other on the next run.
     """
     absent = _keys_for_absent_files(baseline)
     orphans = _orphan_notes(recorded, baseline)
-    return absent or orphans
+    unargued = _survivors_without_a_note(recorded, baseline)
+    return absent or orphans or unargued
+
+
+def _survivors_without_a_note(recorded: dict, baseline: set[str]) -> bool:
+    """Report accepted survivors no note argues for, and whether any were found.
+
+    The other direction of `_orphan_notes`. A survivor is accepted on the
+    argument that no test can kill it, and a survivor in the set with no note
+    is accepted on nothing: `--update` writes the set a sweep measured, and a
+    new survivor arrives in it without the argument a reader would need.
+    """
+    notes = recorded.get("_accepted", {})
+    unargued = sorted(survivor for survivor in baseline if survivor not in notes)
+    for survivor in unargued:
+        print(f"SURVIVOR WITHOUT A NOTE: {survivor}")
+    if unargued:
+        print(
+            f"\nmutation_gate: {len(unargued)} accepted survivor(s) carry no "
+            "note. Kill each with a test, or write under `_accepted` the "
+            "argument for why no test can."
+        )
+    return bool(unargued)
 
 
 def _keys_for_absent_files(baseline: set[str]) -> bool:
@@ -340,6 +366,12 @@ def main(argv: Sequence[str] = ()) -> int:
             + "\n"
         )
         print(f"mutation_gate: baseline updated to {len(measured)} survivor(s)")
+        unargued = sorted(set(measured) - set(notes.get("_accepted", {})))
+        if unargued:
+            print(
+                f"mutation_gate: {len(unargued)} of them carry no note, and the "
+                "gate fails until each has one under `_accepted`"
+            )
         return EXIT_OK
 
     if not baseline_file.exists():

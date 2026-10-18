@@ -839,7 +839,10 @@ python scripts/mutation_gate.py --baseline core --new-only --out sweep/mutants.o
 
 The target is never zero. Equivalent mutants exist and are undecidable in
 general, so an accepted survivor carries the argument for why no test can kill
-it, in the baseline beside it.
+it, in the baseline beside it. The gate holds both directions: a survivor with
+no argument fails it, and so does an argument naming no survivor. `--update`
+and `--new-only` refuse together, since a partial sweep's survivors are not the
+set.
 
 **A push sweep draws one seed, and a nightly a new one each night.** A
 property law kills some mutants on some draws and not on others, so a sweep

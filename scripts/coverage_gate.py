@@ -112,8 +112,6 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser = arguments(__doc__)
     parser.add_argument("--json", type=Path, default=Path("coverage.json"))
     parser.add_argument("--scope", choices=sorted(FLOORS), default="core")
-    parser.add_argument("--lines", type=float, help="the line floor, in percent")
-    parser.add_argument("--regions", type=float, help="the region floor, in percent")
     return parser.parse_args(argv)
 
 
@@ -195,9 +193,7 @@ def main(argv: Sequence[str] = ()) -> int:
     report, scope = args.json, args.scope
     if scope not in BELOW_THE_FLOOR:
         _cannot_run(f"--scope {scope} has no table of excuses")
-    lines, regions = FLOORS[scope]
-    floor_lines = lines if args.lines is None else args.lines
-    floor_regions = regions if args.regions is None else args.regions
+    floor_lines, floor_regions = FLOORS[scope]
     excused = BELOW_THE_FLOOR[scope]
 
     measured = read_report(report)
