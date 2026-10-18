@@ -256,6 +256,13 @@ pub(super) fn product<S: Summand>(left: &[S], right: &[S]) -> Option<Vec<S>> {
                 // [`tidy`]'s: asked once, so a union as wide as the bound
                 // builds whichever order its factors were multiplied in, and
                 // one wider than it refuses whichever order they took.
+                //
+                // A union standing at the bound compacts again at every pair.
+                // Compacting only when the raw list doubles reads flat on every
+                // decision shape the instruction gate holds, since none stands
+                // there, and lets the list grow to twice the bound, where
+                // `a_product_holds_no_more_pairs_than_its_bound` holds it at
+                // the bound.
                 summands = tidy(summands)?;
             }
             summands.push(mine.meet(theirs)?);
