@@ -1361,6 +1361,20 @@ PLANTS = (
         trips=("test_every_declared_name_is_put_through_assert_type",),
     ),
     Plant(
+        "tests/test_typed_consumer.py",
+        ("tests/typing/consumer.py",),
+        # A dunder the stub declares and no row calls by name: `copy.copy` is
+        # typed by its argument, so the copy row above it reads no stub at all,
+        # and a scan that drops dunders never saw the method missing.
+        lambda tree: _edit(
+            tree,
+            "tests/typing/consumer.py",
+            "    assert_type(schema.__copy__(), Validator[int])\n",
+            "",
+        ),
+        trips=("test_every_declared_name_is_put_through_assert_type",),
+    ),
+    Plant(
         "tests/test_checker_readings.py",
         ("python/valgebra/_valgebra.pyi",),
         # The failure the ledger is for: a reading that moves and nobody

@@ -116,6 +116,7 @@ def build() -> Validator[object]:
     # A class on the right reads through the validator's own `__or__`, the order
     # all three read alike; on the left, see `readings/class_or_validator.py`.
     assert_type(scalars | str, Validator[object])
+    assert_type(scalars.__or__(Validator(str)), Validator[int | str])
     assert_type(shapes.__ror__(refined), Validator[object])
     assert_type(anything, Validator[object])
     assert_type(nothing, Validator[Never])
@@ -203,6 +204,10 @@ def reshape(schema: Validator[int]) -> Validator[object]:
     assert_type(schema.close(), Validator[int])
     assert_type(copy.copy(schema), Validator[int])
     assert_type(copy.deepcopy(schema), Validator[int])
+    # `copy` types its result by the argument's type, and never reads the two
+    # methods; called by name, a checker reads what the stub declares for them.
+    assert_type(schema.__copy__(), Validator[int])
+    assert_type(schema.__deepcopy__({}), Validator[int])
     return schema.open().close()
 
 
@@ -241,8 +246,7 @@ def refine() -> Validator:
     pattern refinement reads this stub rather than a third party's -- which is
     the case the rest of this file does not reach.
     """
-    pattern = Regex(r"[a-z]+")
-    assert_type(pattern, Regex)
+    pattern = assert_type(Regex(r"[a-z]+"), Regex)
     assert_type(pattern.pattern, str)
     return Validator(Annotated[str, pattern])
 

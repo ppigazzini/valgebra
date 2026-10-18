@@ -1,15 +1,20 @@
 """Every name the stub declares is one a caller's checker agrees the type of.
 
-`tests/typing/consumer.py` is a caller's code, run through `mypy --strict` on
-the floor and on the current interpreter. It binds each result to an annotated
-variable, which asks the checker whether the result is *assignable* to that
-type -- and `Any` is assignable to everything. A stub signature that degraded to
-`Any`, or a method the extension stopped declaring, passes that reading in
-silence, which is the failure the file exists to catch.
+`tests/typing/consumer.py` is a caller's code, run through `mypy --strict` and
+`pyright` on the floor and on the current interpreter. Binding a result to an
+annotated variable would ask the checker only whether the result is
+*assignable* to that type -- and `Any` is assignable to everything, so a stub
+signature that degraded to `Any`, or a method the extension stopped declaring,
+would pass in silence, which is the failure the file exists to catch.
 
 `assert_type` asks the other question: whether the checker's own view of the
 expression is that type exactly. It fails on `Any`. So each name is exercised
-through one, and this ledger holds the set of names to the stub:
+through one, and this ledger holds the set of names to the surface: every name
+the stub declares, a dunder as much as a method, since the runtime calls it and
+an explicit call reads its declaration; and every name the package exports in
+`__all__`, which reaches `Regex`, declared in Python beside the stub. A name with
+one leading underscore is private by the convention every checker keeps, and
+is outside what a caller types against.
 
 * a name the stub declares and the consumer does not put through `assert_type`
   fails here, so a method added to the surface arrives with a caller using it;
@@ -35,6 +40,7 @@ from _tree import ROOT
 pytestmark = pytest.mark.repository
 
 STUB = ROOT / "python" / "valgebra" / "_valgebra.pyi"
+PACKAGE = ROOT / "python" / "valgebra" / "__init__.py"
 CONSUMER = ROOT / "tests" / "typing" / "consumer.py"
 
 #: Names the consumer reaches without an `assert_type`, each with the reason.
@@ -65,24 +71,51 @@ ACCEPTED: dict[str, str] = {
         "`in` is checked by the row that writes it, and the data model makes "
         "the expression `bool` whatever the method declares"
     ),
+    "ValidationError": (
+        "a caller reaches the class as what a call raises, and `except "
+        "ValidationError as error` types `error` by the class itself; the rows on "
+        "`error` assert every attribute the stub declares on it"
+    ),
+    "__class_getitem__": (
+        "a checker reads `Validator[int]` as a generic alias through the class's "
+        "type parameter, never through this method, which the runtime calls; a "
+        "row calling it would assert typeshed's `GenericAlias`"
+    ),
 }
 
 
+def _exported() -> set[str]:
+    """Give the names the package's `__all__` lists."""
+    tree = ast.parse(PACKAGE.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "__all__"
+            for target in node.targets
+        ):
+            return set(ast.literal_eval(node.value))
+    pytest.fail("the package lists no __all__")
+
+
+def _private(name: str) -> bool:
+    """Answer whether one leading underscore makes the name private."""
+    return name.startswith("_") and not (name.startswith("__") and name.endswith("__"))
+
+
 def _declared() -> set[str]:
-    """Give every public name the stub declares.
+    """Give every public name the stub declares or the package exports.
 
     Methods by their own name rather than by `Class.method`: the consumer calls
     them on a receiver whose type the checker knows, and two classes do not
     share a method name here.
     """
     tree = ast.parse(STUB.read_text(encoding="utf-8"))
-    names: set[str] = set()
+    names = _exported()
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef):
             names.add(node.name)
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             names.add(node.target.id)
-    return {name for name in names if not name.startswith("_") or name in ACCEPTED}
+    return {name for name in names if not _private(name)}
 
 
 def _asserted() -> set[str]:
@@ -114,6 +147,10 @@ def test_the_stub_declares_a_surface_to_check() -> None:
     assert len(declared) >= 25, sorted(declared)
     for name in ("is_valid", "relation_to", "union", "MAX_SCHEMA_DEPTH"):
         assert name in declared, sorted(declared)
+    # A dunder is read and a private name is not, and `__all__` reaches past
+    # the stub.
+    assert {"__or__", "__copy__", "Regex"} <= declared, sorted(declared)
+    assert "_debug_build" not in declared, sorted(declared)
 
 
 def test_the_consumer_uses_assert_type_rather_than_assignment_alone() -> None:
