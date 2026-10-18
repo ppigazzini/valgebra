@@ -116,17 +116,29 @@ def _validators_in_typing_forms(tree: ast.Module) -> list[str]:
 
 
 def _is_marked(tree: ast.Module, marker: str = "repository") -> bool:
-    """Answer whether the module's `pytestmark` carries the marker."""
+    """Answer whether the module's `pytestmark` carries `pytest.mark.<marker>`.
+
+    The last assignment is read, because it is the one pytest reads, and the
+    marker as an attribute of `pytest.mark`, because the word appearing in the
+    value is not a mark: a `skipif` whose reason says "needs no repository"
+    marks nothing.
+    """
+    value = None
     for node in tree.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        if not any(
+        if isinstance(node, ast.Assign) and any(
             isinstance(target, ast.Name) and target.id == "pytestmark"
             for target in node.targets
         ):
-            continue
-        return marker in ast.dump(node.value)
-    return False
+            value = node.value
+    return value is not None and any(
+        isinstance(node, ast.Attribute)
+        and node.attr == marker
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "mark"
+        and isinstance(node.value.value, ast.Name)
+        and node.value.value.id == "pytest"
+        for node in ast.walk(value)
+    )
 
 
 def _modules() -> dict[str, tuple[bool, bool]]:
@@ -364,6 +376,19 @@ def test_a_reading_of_the_interpreter_is_read_from_the_syntax() -> None:
     assert _unmarked_readers(ast.parse(said)) == []
     product = "def test_x(): sys.stdlib_module_names\n"
     assert _unmarked_readers(ast.parse(product)) == []
+
+
+def test_the_mark_is_read_from_pytest_mark_in_the_last_assignment() -> None:
+    # The three readings the marker check turns on.
+    head = "import pytest\n"
+    named = head + 'pytestmark = pytest.mark.skipif(True, reason="no repository")\n'
+    assert not _is_marked(ast.parse(named))
+    listed = head + "pytestmark = [pytest.mark.slow, pytest.mark.repository]\n"
+    assert _is_marked(ast.parse(listed))
+    replaced = (
+        head + "pytestmark = pytest.mark.repository\npytestmark = pytest.mark.slow\n"
+    )
+    assert not _is_marked(ast.parse(replaced))
 
 
 def test_an_import_is_read_from_the_syntax_and_not_the_text() -> None:

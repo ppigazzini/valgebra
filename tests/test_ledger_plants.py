@@ -5062,6 +5062,7 @@ UNPLANTED: dict[str, str] = {
         "test_a_module_naming_itself_is_not_one_finding_the_tree",
         "test_a_reading_of_the_interpreter_is_read_from_the_syntax",
         "test_an_import_is_read_from_the_syntax_and_not_the_text",
+        "test_the_mark_is_read_from_pytest_mark_in_the_last_assignment",
         "test_the_validator_head_is_read_and_a_nested_one_is_not",
     ),
     **_excuse(
