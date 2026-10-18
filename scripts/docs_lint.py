@@ -764,6 +764,39 @@ def test_module_files(sources: list[Path]) -> set[str]:
     return declared
 
 
+def chosen_constants() -> dict[tuple[str, str], str]:
+    """Every file-scope integer constant a crate's source chooses, with its value.
+
+    Keyed by the file, spelled from the root, and the name. This is the universe
+    the bounds table is held to here, and the one `tests/test_bound_ledger.py`
+    holds to a driving test, so the two read one scan.
+    """
+    sources = [
+        source
+        for source in tracked_files("*.rs")
+        # A bench, a fuzz target and a build script hold no bound.
+        if "/src/" in source.relative_to(ROOT).as_posix()
+    ]
+    test_only = test_module_files(sources)
+    tree: dict[tuple[str, str], str] = {}
+    for source in sources:
+        # Spelled the way the page spells it. A `Path` prints with the host's
+        # separator, and on Windows that is a backslash the table never carries,
+        # so every row read as naming no constant there.
+        where = source.relative_to(ROOT).as_posix()
+        if where in test_only:
+            continue  # a test module's constants are fixtures, not bounds
+        text = before_the_test_module(source.read_text(encoding="utf-8"))
+        for name, value in BOUND.findall(text):
+            if DERIVED_WIDTH.search(value):
+                # A width read off a table's length is not a number somebody
+                # chose: it moves when the table does, and a row for it would
+                # record the table's size in a second place.
+                continue
+            tree[where, name] = value.strip()
+    return tree
+
+
 def check_bounds_ledger() -> list[str]:
     """Hold the table of bounds to the constants, in both directions and by value.
 
@@ -793,29 +826,7 @@ def check_bounds_ledger() -> list[str]:
     page = ROOT / "docs" / "dev" / "00-architecture.md"
     if not page.exists():
         return []
-    sources = [
-        source
-        for source in tracked_files("*.rs")
-        # A bench, a fuzz target and a build script hold no bound.
-        if "/src/" in source.relative_to(ROOT).as_posix()
-    ]
-    test_only = test_module_files(sources)
-    tree: dict[tuple[str, str], str] = {}
-    for source in sources:
-        # Spelled the way the page spells it. A `Path` prints with the host's
-        # separator, and on Windows that is a backslash the table never carries,
-        # so every row read as naming no constant there.
-        where = source.relative_to(ROOT).as_posix()
-        if where in test_only:
-            continue  # a test module's constants are fixtures, not bounds
-        text = before_the_test_module(source.read_text(encoding="utf-8"))
-        for name, value in BOUND.findall(text):
-            if DERIVED_WIDTH.search(value):
-                # A width read off a table's length is not a number somebody
-                # chose: it moves when the table does, and a row for it would
-                # record the table's size in a second place.
-                continue
-            tree[where, name] = value.strip()
+    tree = chosen_constants()
     listed = {
         (where, name): value
         for where, name, value in BOUND_ROW.findall(page.read_text(encoding="utf-8"))

@@ -331,6 +331,8 @@ SNAPSHOT_BAND = (16, 262_144)
     ],
     ids=["under", "at the floor", "under the ceiling", "at it", "over it"],
 )
+# BOUND: SNAPSHOT_MIN_ELEMENTS
+# BOUND: SNAPSHOT_MAX_ELEMENTS
 def test_a_list_of_scalars_decides_the_same_at_every_width(width: int) -> None:
     """Both readings of a list answer alike, at each edge of the band.
 

@@ -252,6 +252,7 @@ def test_an_ordinary_exception_from_a_repr_is_folded_into_the_summary() -> None:
     assert errors[0]["value"] == "<unrepresentable>"
 
 
+# BOUND: SUMMARY_CHARS
 def test_a_long_value_is_cut_at_the_summary_bound_and_says_it_was() -> None:
     """A summary is bounded, and the cut is visible in what comes back.
 

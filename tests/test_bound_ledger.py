@@ -7,14 +7,17 @@ promise a test does not drive to its edge is one the tree can stop keeping
 without a gate noticing, since a bound that moves changes no answer on any
 input short of it.
 
-So the universe is read out of the source: every integer `pub const` in the
-core and the binding whose name says it is a bound, and the three the stub
-exports. A bound is covered when a test names it -- a Rust test by the
-identifier, since the crate's tests reach its constants; a Python test by a
-`# BOUND: <name>` marker on the test that drives it, since the binding's
-constants are not exported to Python. A bound no test drives is accepted with
-the reason it is out of reach, and a reason for a bound a test does drive
-fails, so an excuse cannot outlive the gap it excuses.
+So the universe is read out of the source, by the scan the architecture page's
+bounds table is held to (`scripts/docs_lint.py`): every file-scope integer
+constant a crate chooses, less the rows that table kinds "not a bound" -- a
+capacity, such as how much a buffer reserves first -- and with the three the
+stub exports. A name is no test of whether a constant bounds anything, and a
+scan by name read 27 of the 35 the table declares. A bound is covered when a
+test names it -- a Rust test by the identifier, since the crate's tests reach
+its constants; a Python test by a `# BOUND: <name>` marker on the test that
+drives it, since the binding's constants are not exported to Python. A bound no
+test drives is accepted with the reason it is out of reach, and a reason for a
+bound a test does drive fails, so an excuse cannot outlive the gap it excuses.
 
 LEDGER: every declared bound is driven by a test, or accepted with a reason
 
@@ -29,7 +32,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from _reason import is_a_reason
-from _tree import ROOT
+from _tree import ROOT, load_script
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -38,15 +41,13 @@ pytestmark = pytest.mark.repository
 
 CRATES = ROOT / "crates"
 STUB = ROOT / "python" / "valgebra" / "_valgebra.pyi"
+PAGE = ROOT / "docs" / "dev" / "00-architecture.md"
 
-#: A bound, by name: a public integer constant whose name says what it limits.
-#: Module-level, at any visibility: a bound the binding keeps to itself is a
-#: promise on the limits page all the same.
-_BOUND = re.compile(
-    r"^(?:pub(?:\(crate\))? )?const "
-    r"((?:MAX_|MIN_)[A-Z_]+|[A-Z_]*_LIMIT|[A-Z_]*BUDGET|UNFOLDS): "
-    r"(?:u8|u16|u32|u64|usize|i64) = ",
-    re.MULTILINE,
+#: A row of the bounds table kinded as no bound: a capacity the scan reads
+#: because it is a figure somebody chose, which bounds nothing a test could
+#: drive to an edge.
+_NOT_A_BOUND = re.compile(
+    r"^\| `[^`]+` \| `([^`]+)` \| `[^`]+` \| not a bound \|", re.MULTILINE
 )
 _STUB_BOUND = re.compile(r"^(MAX_[A-Z_]+): int$", re.MULTILINE)
 _MARKER = re.compile(r"#\s*BOUND:\s*([A-Z_]+)")
@@ -64,17 +65,6 @@ ACCEPTED: dict[str, str] = {
 }
 
 
-def _source_files() -> list[Path]:
-    """Give every Rust source file that is not a test module."""
-    return [
-        path
-        for path in sorted(CRATES.rglob("*.rs"))
-        if not path.name.endswith("tests.rs")
-        and path.name not in {"laws.rs", "index_laws.rs"}
-        and "interpreter" not in path.name
-    ]
-
-
 def _test_files() -> list[Path]:
     """Give every file a bound may be named in: the Rust and Python tests."""
     rust = [
@@ -89,14 +79,18 @@ def _test_files() -> list[Path]:
 
 def _declared() -> dict[str, str]:
     """Give every bound the tree declares, with the file that owns it."""
-    found: dict[str, str] = {}
-    for path in _source_files():
-        for match in _BOUND.finditer(path.read_text(encoding="utf-8")):
-            found[match.group(1)] = path.relative_to(ROOT).as_posix()
+    capacities = set(_NOT_A_BOUND.findall(PAGE.read_text(encoding="utf-8")))
+    found = {
+        name: where
+        for where, name in load_script("docs_lint").chosen_constants()
+        if name not in capacities
+    }
     for match in _STUB_BOUND.finditer(STUB.read_text(encoding="utf-8")):
         found[match.group(1)] = STUB.relative_to(ROOT).as_posix()
-    # The scan is the detector: an empty universe would pass having read nothing.
-    assert len(found) >= 12, f"the scan found only {sorted(found)}"
+    # The scan is the detector: an empty universe would pass having read nothing,
+    # and the table's capacities are what keeps it from reading two of them.
+    assert len(found) >= 30, f"the scan found only {sorted(found)}"
+    assert capacities, "the bounds table kinds nothing as not a bound"
     return found
 
 
@@ -110,17 +104,15 @@ def _named() -> set[str]:
     harness, the text of the plant itself.
     """
     stub = set(_STUB_BOUND.findall(STUB.read_text(encoding="utf-8")))
+    declared = re.compile(
+        rf"\b({'|'.join(sorted(_declared(), key=len, reverse=True))})\b"
+    )
     names: set[str] = set()
     for path in _test_files():
         text = path.read_text(encoding="utf-8")
         names.update(_MARKER.findall(text))
         if path.suffix == ".rs":
-            names.update(
-                re.findall(
-                    r"\b((?:MAX_|MIN_)[A-Z_]+|[A-Z_]*_LIMIT|[A-Z_]*BUDGET|UNFOLDS)\b",
-                    text,
-                )
-            )
+            names.update(declared.findall(text))
         else:
             names.update(name for name in stub if re.search(rf"\b{name}\b", text))
     return names

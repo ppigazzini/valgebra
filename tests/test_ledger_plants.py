@@ -2605,6 +2605,19 @@ PLANTS = (
         trips=("test_every_marker_names_a_declared_bound",),
     ),
     Plant(
+        # A bound no name pattern reads, its test's marker dropped: the summary
+        # cut is a constant like any other, and a scan by name never saw it.
+        "tests/test_bound_ledger.py",
+        ("tests/test_error_contract.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_error_contract.py",
+            f"{BOUND_MARKER}: SUMMARY_CHARS\n",
+            "",
+        ),
+        trips=("test_every_declared_bound_is_driven_or_accepted",),
+    ),
+    Plant(
         # A fixture added under `readings/` with no row to read it: a reading
         # held by nothing.
         "tests/test_checker_readings.py",
