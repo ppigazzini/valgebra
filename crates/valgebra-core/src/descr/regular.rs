@@ -523,8 +523,16 @@ impl Dfa {
         let mut ids: FxHashMap<Vec<u32>, Class> = FxHashMap::default();
         let mut classes: Vec<Class> = Vec::with_capacity(256);
         let mut columns: Vec<Class> = Vec::new();
+        // Every byte of an old class steps alike from every state, so a class's
+        // column is read once, at its first byte, and its other bytes take the
+        // class it was given: a column per class rather than per byte.
+        let mut fresh: Vec<Option<Class>> = vec![None; self.class_count];
         for byte in u8::MIN..=u8::MAX {
             let old = self.class_of(byte);
+            if let Some(&Some(id)) = fresh.get(usize::from(old)) {
+                classes.push(id);
+                continue;
+            }
             let column: Vec<u32> = (0..self.state_count())
                 .map(|state| self.step(u32::try_from(state).unwrap_or(0), old))
                 .collect();
@@ -533,6 +541,9 @@ impl Dfa {
                 columns.push(old);
                 count
             });
+            if let Some(slot) = fresh.get_mut(usize::from(old)) {
+                *slot = Some(id);
+            }
             classes.push(id);
         }
         let class_count = columns.len().max(1);
