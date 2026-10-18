@@ -118,6 +118,42 @@ def test_a_declared_key_repeated_keeps_its_last_value() -> None:
     assert not v.is_valid_json('{"b": "s"}')
 
 
+#: Records whose clause reads the keys they do not declare: each undeclared
+#: key's value is asked of `int`. The narrow one is searched field by field and
+#: the wide one, past the width a search pays for, is resolved through its plan.
+_READING = {
+    "narrow": {"a": int, "b?": str, str: int},
+    "wide": {"a": int, **{f"{name}?": str for name in "bcdefghi"}, str: int},
+}
+
+
+@pytest.mark.parametrize("width", sorted(_READING))
+def test_a_record_with_a_reading_clause_keeps_each_keys_last_value(width: str) -> None:
+    """The declared fields and the clause read the entries `json.loads` keeps."""
+    v = Validator(_READING[width])
+    assert v.is_valid_json('{"a": "x", "a": 1}')
+    assert not v.is_valid_json('{"a": 1, "a": "x"}')
+    assert v.is_valid_json('{"a": 1, "x": "y", "x": 2}')
+    assert not v.is_valid_json('{"a": 1, "x": 2, "x": "y"}')
+    assert not v.is_valid_json('{"b": "s", "x": 2}')
+    assert not v.is_valid_json('{"a": 1, "b": 2}')
+
+
+@pytest.mark.parametrize("width", sorted(_READING))
+@given(
+    value=st.dictionaries(
+        st.sampled_from("abcdixyz"),
+        st.one_of(st.integers(-2, 2), st.text(max_size=1)),
+        max_size=5,
+    )
+)
+def test_a_record_with_a_reading_clause_reads_json_as_the_object(
+    width: str, value: dict[str, object]
+) -> None:
+    v = Validator(_READING[width])
+    assert v.is_valid_json(json.dumps(value)) == v.is_valid(value)
+
+
 def test_many_duplicate_json_keys_validate_in_one_pass() -> None:
     # A document with thousands of repeated keys against an open mapping is covered
     # without a per-key tail rescan; this finishes promptly rather than quadratically.

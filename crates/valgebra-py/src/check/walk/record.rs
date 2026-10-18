@@ -441,7 +441,7 @@ fn reached_by(
 /// What a record's clauses say about a key it does not declare, where that can
 /// be said without reading the key and its value together.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Undeclared {
+pub(super) enum Undeclared {
     /// No clause: a closed record, and a key to spare refuses it.
     Refused,
     /// The top clause, `anything: anything`: any key, any value, by definition.
@@ -845,14 +845,18 @@ pub(super) fn keyed_map_matches_json(
     // fifty times -- and the plan already holds the name-to-position map the
     // resolution wants. A closed record refuses an undeclared key; the top
     // clause admits it, and so does `str: anything`, since a JSON key is a
-    // string. A record whose clause reads a key takes the search below.
+    // string. A record whose clause reads a key asks it of each undeclared key
+    // once the fields are read, as the search below does, where it is wide
+    // enough to take the plan at all ([`resolves_through_the_plan`]).
     let undeclared = Undeclared::of(defaults);
-    let open = matches!(undeclared, Undeclared::Admitted | Undeclared::AnyStr);
     if let Some(plan) = ctx
         .index
         .records
         .get(&(fields.as_ptr() as usize))
-        .filter(|plan| undeclared != Undeclared::Read && plan.by_name.len() == fields.len())
+        .filter(|plan| {
+            plan.by_name.len() == fields.len()
+                && resolves_through_the_plan(undeclared, fields.len())
+        })
     {
         // The document's value for each declared field, last occurrence winning
         // as `json.loads` does, gathered before any of them is checked: an
@@ -880,8 +884,9 @@ pub(super) fn keyed_map_matches_json(
                     None => return false,
                 },
                 // A closed record has no clause to cover an undeclared key; an
-                // open one's top clause covers it by definition.
-                None if !open => return false,
+                // open one's top clause covers it by definition, and a clause
+                // that reads keys is asked below.
+                None if undeclared == Undeclared::Refused => return false,
                 None => {}
             }
         }
@@ -910,6 +915,16 @@ pub(super) fn keyed_map_matches_json(
                 None if field.required => return false,
                 None => {}
             }
+        }
+        // The context is `sub`'s, which already lives in memory, rather than
+        // `ctx`: a context goes to a call out of line by address, and `member`
+        // inlines this function, so passing `ctx` puts `member`'s own copy in
+        // memory and copies the whole context in at every node -- a nested list
+        // on the profiled wheel reads 2.2% dearer by count.
+        if undeclared == Undeclared::Read {
+            return undeclared_covered(defaults, py, entries, sub.ctx, |name| {
+                plan.by_name.contains_key(name)
+            });
         }
         return true;
     }
@@ -947,6 +962,17 @@ pub(super) fn keyed_map_matches_json(
         return entries.iter().all(|(key, _)| declares(key.as_ref()));
     }
     undeclared_covered(defaults, py, entries, ctx, declares)
+}
+
+/// Whether a parsed object meets a record of `fields` declared fields through
+/// the record's plan, rather than by a search of the object per field.
+///
+/// Every record but one whose clause reads keys, and that one where it declares
+/// more fields than [`SMALL_OBJECT`]: the clause hashes every key a second time
+/// to tell the undeclared ones, and against a few fields the comparisons a
+/// search makes cost less than the hashes.
+pub(super) fn resolves_through_the_plan(undeclared: Undeclared, fields: usize) -> bool {
+    undeclared != Undeclared::Read || fields > SMALL_OBJECT
 }
 
 /// Whether every key of a parsed object that no field declares is covered by a
@@ -1049,7 +1075,12 @@ fn undeclared_covered(
 /// crossover is not the question: an object wider than this is a document's
 /// payload rather than a record's free-form section, and pays for the table it
 /// then uses.
-const SMALL_OBJECT: usize = 8;
+///
+/// The same crossing decides how a parsed object meets a record whose clause
+/// reads keys: a record declaring no more fields than this searches the object
+/// for each, and a wider one resolves the object's keys through its plan
+/// ([`keyed_map_matches_json`]).
+pub(super) const SMALL_OBJECT: usize = 8;
 
 /// How many keys a parsed object holds, counted as the dict `json.loads`
 /// builds from it counts them: a key the document repeats is one key.

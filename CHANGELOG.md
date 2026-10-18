@@ -51,6 +51,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the state bound holds every automaton as it is built
 - fix: two spellings of a wide union compare in one pass
 - fix: a refused union renders only the labels it names
+- fix: a wide record whose clause reads keys reads a JSON object in one pass
 
 -->
 
@@ -339,6 +340,12 @@ answer of its own, or a repair to a change not yet released.
   union of two thousand constants ran two thousand of their `__repr__` methods
   for one refused value. Rendering stops at the bound, and a refused
   `validate` on that union takes 0.03 ms rather than 0.5.
+- **A wide record whose clause reads keys checks a JSON object in one pass.**
+  `is_valid_json` against a record such as `{"f0": int, ..., str: int}`
+  searched the document once per declared field, quadratic in the width: 580
+  ns a field at eight hundred fields against 70 at fifty. A record declaring
+  more than eight fields resolves the document's keys through its plan, as a
+  closed or an open record does, at about 40 ns a field whatever the width.
 
 ## [0.0.18] - 2026-10-12
 

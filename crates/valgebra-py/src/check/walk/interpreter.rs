@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use super::record::{keyed_map_matches_json, scan_dict};
+use super::record::{
+    SMALL_OBJECT, Undeclared, keyed_map_matches_json, resolves_through_the_plan, scan_dict,
+};
 use super::sequence::scan_list;
 use super::*;
 use crate::check::ctx::{MAX_RECURSION_DEPTH, MAX_WALK_DEPTH};
@@ -2947,13 +2949,27 @@ fn recursion_deeper_than_the_bound_is_refused() {
 /// through the ordinary entry points, because the index is always built.
 #[test]
 fn the_json_record_path_agrees_with_and_without_its_plan() {
+    // One declared field, which a record whose clause reads keys searches for,
+    // and nine, past `SMALL_OBJECT`, which it resolves through its plan.
+    for width in [1, 9] {
+        the_json_record_path_agrees_at(width);
+    }
+}
+
+fn the_json_record_path_agrees_at(width: usize) {
     Python::attach(|py| {
+        let mut declared = vec![Field {
+            name: "a".into(),
+            schema: Schema::Int,
+            required: true,
+        }];
+        declared.extend((1..width).map(|at| Field {
+            name: format!("c{at}").into(),
+            schema: Schema::Int,
+            required: false,
+        }));
         let schema = Schema::keyed_map(
-            vec![Field {
-                name: "a".into(),
-                schema: Schema::Int,
-                required: true,
-            }],
+            declared,
             vec![MapClause {
                 key: Schema::Str,
                 value: Schema::Str,
@@ -2994,6 +3010,25 @@ fn the_json_record_path_agrees_with_and_without_its_plan() {
         assert!(built.records.contains_key(&(fields.as_ptr() as usize)));
         assert!(empty.records.is_empty());
     });
+}
+
+/// The crossing a record whose clause reads keys takes the plan at, and every
+/// other record's plan at any width.
+#[test]
+fn a_record_reading_keys_takes_its_plan_past_a_small_object() {
+    assert!(!resolves_through_the_plan(Undeclared::Read, 1));
+    assert!(!resolves_through_the_plan(Undeclared::Read, SMALL_OBJECT));
+    assert!(resolves_through_the_plan(
+        Undeclared::Read,
+        SMALL_OBJECT + 1
+    ));
+    for undeclared in [
+        Undeclared::Refused,
+        Undeclared::Admitted,
+        Undeclared::AnyStr,
+    ] {
+        assert!(resolves_through_the_plan(undeclared, 1));
+    }
 }
 
 #[test]
