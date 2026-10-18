@@ -277,7 +277,7 @@ def shallow_clone(into: Path, source: Path = ROOT) -> Path:
     which is exactly what happened, on eight jobs at once.
     """
     tree = into / "tree"
-    subprocess.run(
+    clone(
         [
             "git",
             "clone",
@@ -288,10 +288,24 @@ def shallow_clone(into: Path, source: Path = ROOT) -> Path:
             f"file://{source}",
             str(tree),
         ],
-        check=True,
+        "the shallow clone",
     )
     subprocess.run(["git", "-C", str(tree), "checkout", "--quiet", "HEAD"], check=False)
     return tree
+
+
+def clone(command: list[str], what: str) -> None:
+    """Run a `git clone`, or end the gate as one that could not run.
+
+    A clone that does not land is no step's failure: nothing the change does
+    was read, so the verdict is the rig's, which is exit code 2 and a sentence
+    saying why rather than a traceback and 1.
+    """
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"gate: {what} did not land, so the gate could not run:")
+        print(result.stderr.rstrip())
+        raise SystemExit(EXIT_CANNOT_RUN)
 
 
 #: The one job in the python matrix that checks out the whole history, and the
@@ -558,9 +572,9 @@ def deep_clone(into: Path) -> Path:
     global and system files are dropped with it, since a runner has neither.
     """
     tree = into / "deep"
-    subprocess.run(
+    clone(
         ["git", "clone", "--quiet", "--no-hardlinks", f"file://{ROOT}", str(tree)],
-        check=True,
+        "the clone with the history",
     )
     return tree
 
@@ -888,16 +902,17 @@ def main() -> int:
         list_plan(spec, jobs, plan, unresolved, floor=floor_runs)
         return EXIT_OK
 
-    if args.here:
-        tree = ROOT
-        holder = None
-        print("gate: running in this working tree (--here)")
-    else:
-        holder = Path(tempfile.mkdtemp(prefix="valgebra-gate-"))
-        tree = shallow_clone(holder)
-        print(f"gate: shallow clone of HEAD, no tags, at {tree}")
-
+    holder = None
     try:
+        if args.here:
+            tree = ROOT
+            print("gate: running in this working tree (--here)")
+        else:
+            # Made inside the `try`, so a clone that does not land still leaves
+            # no directory behind.
+            holder = Path(tempfile.mkdtemp(prefix="valgebra-gate-"))
+            tree = shallow_clone(holder)
+            print(f"gate: shallow clone of HEAD, no tags, at {tree}")
         if not fetched(plan, tree):
             print()
             print("gate: a step's fetch did not land, so the gate could not run.")

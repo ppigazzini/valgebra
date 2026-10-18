@@ -651,6 +651,26 @@ def test_the_profiled_shapes_are_compared_and_never_recorded(
     assert "never" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize(
+    "argv", [["--core", "--update"], ["--core", "--against", "HEAD"]]
+)
+def test_a_change_that_does_not_build_is_could_not_measure(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], argv: list[str]
+) -> None:
+    """A change whose own build stops is no regression: nothing was counted.
+
+    Recorded and compared alike, the command that stopped is named and the
+    code is 2, where a traceback would exit 1, the code a regression reads as.
+    """
+
+    def stopped(*_: object, **__: object) -> None:
+        raise subprocess.CalledProcessError(101, ["cargo", "build"])
+
+    monkeypatch.setattr(gate, "measure_mode", stopped)
+    assert gate.main(argv) == gate.EXIT_CANNOT_RUN
+    assert "could not measure" in capsys.readouterr().out
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="the tree is unpacked by tar")
 def test_a_snapshot_is_the_checkout_as_it_stands(tmp_path: Path) -> None:
     """The change's tree holds what is edited and what is new, not what is ignored.

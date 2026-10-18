@@ -27,7 +27,7 @@ import textwrap
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from _lib import ROOT, arguments
+from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -93,7 +93,11 @@ def main(argv: list[str]) -> int:
         if not run_block(block, doc.name, index):
             failures += 1
     print(f"checked {checked} example(s), {failures} failed")
-    return 1 if failures else 0
+    if not checked:
+        # Reading no example is not every example passing: a page moved or a
+        # fence renamed leaves nothing to run, and the lane would read green.
+        return EXIT_CANNOT_RUN
+    return EXIT_FAIL if failures else EXIT_OK
 
 
 if __name__ == "__main__":

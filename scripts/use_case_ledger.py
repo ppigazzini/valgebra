@@ -36,7 +36,7 @@ import re
 import sys
 from typing import TYPE_CHECKING
 
-from _lib import EXIT_FAIL, EXIT_OK, ROOT, arguments
+from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments
 
 if TYPE_CHECKING:
     import argparse
@@ -494,8 +494,9 @@ def main(argv: list[str]) -> int:
         return EXIT_OK
 
     if not RECORD.exists():
+        # No record is nothing to compare against, not a cell gone missing.
         print(f"use_case_ledger: no {RECORD.name}; create one with --update")
-        return EXIT_FAIL
+        return EXIT_CANNOT_RUN
 
     gained = sorted(set(empty) - set(recorded))
     filled = sorted(set(recorded) - set(empty))

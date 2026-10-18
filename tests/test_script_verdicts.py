@@ -35,7 +35,9 @@ def _load(name: str) -> ModuleType:
 
 @pytest.mark.parametrize(
     ("blocks", "verdict"),
-    [(["assert True\n"], 0), (["assert True\n", "assert False\n"], 1)],
+    # No example at all is not every example passing: a page moved or a fence
+    # renamed leaves nothing to run, which is the runner's "could not run".
+    [(["assert True\n"], 0), (["assert True\n", "assert False\n"], 1), ([], 2)],
 )
 def test_a_failing_example_fails_the_runner(
     monkeypatch: pytest.MonkeyPatch, blocks: list[str], verdict: int
@@ -116,3 +118,24 @@ def test_an_empty_cell_the_record_does_not_carry_fails_the_ledger(
     monkeypatch.setattr(ledger, "accepted", lambda: recorded)
     monkeypatch.setattr(ledger, "report", lambda *_: None)
     assert ledger.main([]) == verdict
+
+
+def test_a_record_that_is_not_there_cannot_run_the_ledger(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """No record is nothing to compare against, not a cell gone missing."""
+    ledger = _load("use_case_ledger")
+    for reader, value in (
+        ("universe", {"a"}),
+        ("markers", set()),
+        ("public_surface", set()),
+        ("error_codes", set()),
+    ):
+        monkeypatch.setattr(ledger, reader, lambda value=value: value)
+    monkeypatch.setattr(ledger, "product_sources", lambda **_: "")
+    monkeypatch.setattr(ledger, "asserted_sources", lambda: "")
+    monkeypatch.setattr(ledger, "names_reached", lambda *_: {"a"})
+    monkeypatch.setattr(ledger, "accepted", dict)
+    monkeypatch.setattr(ledger, "report", lambda *_: None)
+    monkeypatch.setattr(ledger, "RECORD", tmp_path / "absent.json")
+    assert ledger.main([]) == 2

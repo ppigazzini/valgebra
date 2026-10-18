@@ -1350,7 +1350,22 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] = ()) -> int:
-    args = _arguments(argv)
+    """Measure the flagged shapes, or say why they could not be measured.
+
+    A build or a run of this change's own workload that does not finish is no
+    regression and no pass: nothing was counted, so it is exit code 2 with the
+    command that stopped, rather than a traceback and 1. The base's are blamed
+    where they are measured, beside the change's counts.
+    """
+    try:
+        return measure_flagged(_arguments(argv))
+    except subprocess.CalledProcessError as err:
+        print(f"perf_gate: could not measure: {err}")
+        return EXIT_CANNOT_RUN
+
+
+def measure_flagged(args: argparse.Namespace) -> int:
+    """Run what the command line asked for: a comparison, or a re-record."""
     # `--binding` keeps its meaning -- the walk -- so an existing invocation and
     # the count recorded under it still name the same measurement.
     chosen = vars(args)

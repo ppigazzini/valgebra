@@ -5058,6 +5058,7 @@ UNPLANTED: dict[str, str] = {
     **_excuse(
         "test_local_gate.py",
         OWN_PLANT,
+        "test_a_clone_that_does_not_land_is_could_not_run",
         "test_a_forced_colour_variable_does_not_reach_a_step",
         "test_a_step_only_a_runner_can_fill_in_is_unaccounted",
         "test_an_env_expression_the_workflow_defines_is_filled_in",

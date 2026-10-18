@@ -781,3 +781,13 @@ def test_the_instruction_gate_measures_against_an_ancestor(tmp_path: Path) -> No
         f"the gate would measure {behind[:12]} against {base[:12]}, which is not "
         f"in its history: a comparison of two unrelated trees"
     )
+
+
+def test_a_clone_that_does_not_land_is_could_not_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No step read the change, so the verdict is the rig's: 2, and why."""
+    with pytest.raises(SystemExit) as stop:
+        gate.shallow_clone(tmp_path, source=tmp_path / "no-repository-here")
+    assert stop.value.code == gate.EXIT_CANNOT_RUN
+    assert "did not land" in capsys.readouterr().out

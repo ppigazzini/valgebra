@@ -19,10 +19,14 @@ python scripts/perf_gate.py --against HEAD; echo $?    # right
 | **could not run** | **2** | no measurement, no baseline, a missing dependency |
 
 A gate that could not run has proven nothing and must never read as one that
-passed. `scripts/perf_gate.py` exits 2 on cachegrind output it cannot parse,
-`scripts/mutation_gate.py` on a missing sweep result or baseline,
-`scripts/compare_gate.py` without its benchmark dependency,
-`scripts/docs_lint.py` on a tree it cannot read.
+passed. `scripts/perf_gate.py` exits 2 on cachegrind output it cannot parse and
+on a build of the change that does not finish, `scripts/mutation_gate.py` on a
+missing sweep result or baseline, `scripts/use_case_ledger.py` on a missing
+record, `scripts/run_doc_examples.py` on a tree holding no example to run,
+`scripts/gate.py` on a clone that does not land, `scripts/compare_gate.py`
+without its benchmark dependency, `scripts/docs_lint.py` on a tree it cannot
+read. A traceback exits 1, the code a failed property reads as, so each of
+these is caught where it happens and named.
 
 **A command line it cannot read is one it could not run.** Every script reads
 its flags through `argparse` before doing any work: `--help` prints the usage
