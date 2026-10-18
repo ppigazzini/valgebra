@@ -18,12 +18,20 @@ valgebra's load-bearing security property is **soundness of acceptance**: if
 `validate_json`, `ensure` or `load`) reports a value as valid, that value genuinely belongs to the schema's set. Downstream code trusts
 that contract, so a value that is **wrongly accepted** is a vulnerability.
 
+A relation's proof carries the same contract one step removed. The
+[decidability page](docs/15-decidability.md) documents a positive answer as a
+guarantee, so a caller that skips checking a value of `A` against `B` because
+`A` is proved a subtype of `B` accepts that value on the proof's word.
+
 Please report, privately:
 
 - **Unsound acceptance.** A value that is *not* a member of a schema's set is
   accepted — `is_valid` returns `True`, or `validate`, `ensure` or `load` does not
   raise, for a value
   the schema's denotation excludes.
+- **An unsound proof.** `is_subtype_of`, `is_equivalent` or `is_empty` returns
+  `True`, or `relation_to` answers `"subset"`, where the schemas' denotations
+  say otherwise.
 - **A crash or unbounded resource use** on an input that is *within* the
   documented [resource limits](docs/10-limits.md): a native stack overflow, an abort,
   a hang, or memory growth unbounded by the value's size.
@@ -33,9 +41,11 @@ Please report, privately:
 ## What is not a security issue
 
 - **Conservatism of the decision procedure.** `is_subtype_of`, `is_equivalent`,
-  and `is_empty` are deliberately conservative: a `False` (or "not empty") may be
-  a relation valgebra cannot prove. This is documented in the
-  [decidability boundary](docs/15-decidability.md) and is not a vulnerability.
+  and `is_empty` are deliberately conservative: a `False` (or "not empty"), and
+  `relation_to`'s `"undecided"`, may be a relation valgebra cannot prove. This is
+  documented in the [decidability boundary](docs/15-decidability.md) and is not a
+  vulnerability. A wrong `"not_subset"` is a defect to report as an issue: a
+  refutation sends a caller to check a value, never past the check.
 - **Rejecting malformed or hostile input.** A value meeting a documented limit —
   an over-deep nesting, a self-referential value — is *meant* to be rejected;
   that the guard fires is correct behavior.

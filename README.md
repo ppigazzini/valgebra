@@ -379,8 +379,9 @@ uv run --no-sync maturin develop --uv  # build the Rust extension into the venv
   cover the build-health gate and the project's rules;
   [ARCHITECTURE.md](ARCHITECTURE.md) maps the components.
 - **Security**: the load-bearing property is *soundness of acceptance* — an
-  accepted value really belongs to the schema's set. Report issues privately per
-  [SECURITY.md](SECURITY.md). valgebra is pre-alpha and unaudited.
+  accepted value really belongs to the schema's set, and a relation proved
+  holds. Report issues privately per [SECURITY.md](SECURITY.md). valgebra is
+  pre-alpha and unaudited.
 
 ## License
 
