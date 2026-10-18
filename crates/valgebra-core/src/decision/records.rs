@@ -244,6 +244,12 @@ pub(super) fn keyed_map_subtype(
                 })),
             }
         }));
+        // The three conjuncts below are one claim about one pair, so a
+        // refutation from one is the answer whatever the others say, as
+        // `Relation::all` reads them; the ones after it are not asked.
+        if fields_ok == Relation::Fails {
+            return Relation::Fails;
+        }
         // Each field `a` declares that `b` does not is read by `b` through its
         // catch-all, so a clause of `b` whose key holds every string must cover
         // it.
@@ -300,6 +306,9 @@ pub(super) fn keyed_map_subtype(
         );
         // Every catch-all clause of `a` (governing its non-field keys) is subsumed
         // by a clause of `b` with both key and value narrower.
+        if extra_covered == Relation::Fails {
+            return Relation::Fails;
+        }
         let defaults = Relation::all(da.iter().map(|mine| {
             // One clause of `b` subsuming this one settles it. None of them
             // doing so is not yet a refutation -- the clause may be covered by
@@ -331,8 +340,6 @@ pub(super) fn keyed_map_subtype(
                 clause_escapes(mine, db, &mut values_asked, cx)
             }
         }));
-        // Three conjuncts of one claim about one pair, so any one of them
-        // refutes it and the order they are read in decides nothing.
         Relation::all([fields_ok, extra_covered, defaults])
     }
 }

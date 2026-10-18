@@ -699,7 +699,8 @@ impl Schema {
         // branch that contains the subject settles the union, and a branch that
         // *refutes* is the answer the union inherits once the branches beside
         // it are gone. The second is what the narrowing below is for, and it is
-        // why the answers are kept rather than folded to a `bool`.
+        // why each answer is read in its three values rather than as `holds`
+        // alone: whether any branch refuted is what decides to narrow.
         let mut refuted = false;
         for member in members {
             let answer = self.is_subtype_rec(member, cx);
