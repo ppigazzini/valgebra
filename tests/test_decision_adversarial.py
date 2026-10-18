@@ -8,7 +8,8 @@ adversarial — it found the complement-reflexivity and pool-merge bugs.
 """
 
 import json
-from typing import Annotated, Literal
+from collections.abc import Callable
+from typing import Annotated, Any, Literal, Protocol
 
 import annotated_types as at
 import pytest
@@ -286,3 +287,119 @@ def test_a_bound_contradiction_is_not_reported_empty_over_a_lying_subclass() -> 
 
     assert bounded.is_valid(_WeirdInt(5)), "the subclass answers both bounds"
     assert not bounded.is_empty(), "so the set is not empty"
+
+
+class _TwoAnswers:
+    """The answers one method gives on successive calls: yes, then no, in turn."""
+
+    def __init__(self) -> None:
+        self._calls = 0
+
+    def next(self) -> bool:
+        self._calls += 1
+        return self._calls % 2 == 1
+
+
+class _HasX(Protocol):
+    x: int
+
+
+class _AlternatingAttribute:
+    """A value whose `x` is an `int` on one read and a `str` on the next."""
+
+    def __init__(self) -> None:
+        self._answers = _TwoAnswers()
+
+    @property
+    def x(self) -> object:
+        return 1 if self._answers.next() else "one"
+
+
+class _Token:
+    """A constant equal to itself alone, or a value equal to it on every other call."""
+
+    def __init__(self, answers: _TwoAnswers | None = None) -> None:
+        self._answers = answers
+
+    def __eq__(self, other: object) -> bool:
+        return self is other if self._answers is None else self._answers.next()
+
+    def __hash__(self) -> int:
+        return 0
+
+
+_TOKEN = _Token()
+
+
+class _AlternatingOrder(int):
+    """An `int` at least zero on one comparison and not on the next."""
+
+    def __init__(self, _: int) -> None:
+        self._answers = _TwoAnswers()
+
+    def __ge__(self, other: object) -> bool:
+        return self._answers.next()
+
+
+class _AlternatingRemainder(int):
+    """An `int` divisible by two on one remainder and not on the next."""
+
+    def __init__(self, _: int) -> None:
+        self._answers = _TwoAnswers()
+
+    def __mod__(self, other: object) -> int:
+        return 0 if self._answers.next() else 1
+
+
+class _AlternatingLength:
+    """A value one long on one count and empty on the next."""
+
+    def __init__(self) -> None:
+        self._answers = _TwoAnswers()
+
+    def __len__(self) -> int:
+        return 1 if self._answers.next() else 0
+
+
+#: Each atom construction folds with its complement, and a value whose answer to
+#: that atom's question alternates.
+_ALTERNATING: dict[str, tuple[object, Callable[[], object]]] = {
+    "attribute": (_HasX, _AlternatingAttribute),
+    "constant": (_TOKEN, lambda: _Token(_TwoAnswers())),
+    "bound": (Annotated[int, at.Ge(0)], lambda: _AlternatingOrder(5)),
+    "length": (Annotated[Any, at.MinLen(1)], _AlternatingLength),
+    "step": (Annotated[int, at.MultipleOf(2)], lambda: _AlternatingRemainder(4)),
+}
+
+
+@pytest.mark.parametrize("atom", sorted(_ALTERNATING))
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "a set and its complement meet in nothing, which construction folds for "
+        "every atom whose answer Python's rules make a fact about the value; a "
+        "value answering two ways is outside the sets the law is about"
+    ),
+)
+# TRUST: What a value answers is a function of the value.
+def test_a_value_answering_two_ways_is_in_no_meet_of_a_set_and_its_complement(
+    atom: str,
+) -> None:
+    """The fold of ``A & ~A``, over a value both halves admit in turn.
+
+    An attribute, a constant's ``==``, a bound, a length and a step are read as
+    sets because Python's rules ask each for one answer, so construction folds
+    each with its complement. A value whose method answers two calls
+    differently is admitted by ``A`` on one call and by ``~A`` on the next, and
+    a set reading of those two answers puts it in the meet, which construction
+    has made ``nothing``. Each check reads the value once, so neither call is
+    reported as the value moving.
+    """
+    schema, make = _ALTERNATING[atom]
+    value = make()
+
+    assert Validator(schema).is_valid(value), "one call admits it to A"
+    assert Validator(complement(schema)).is_valid(value), "the next admits it to ~A"
+    assert not intersection(schema, complement(schema)).is_empty(), (
+        "so a set holding what A and ~A admit holds it"
+    )

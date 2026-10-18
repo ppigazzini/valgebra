@@ -259,7 +259,10 @@ for a `SelfRef`, for an `Instance` the bindings will not vouch for, and for a
 reference no definition resolves. `Regex` folds, because a pattern is a function
 of the string. The cost is completeness on a schema nobody can decide anyway, and
 `tests/test_combinators.py` pins the witness so the fold cannot be added back by
-someone reading only the law.
+someone reading only the law. An attribute record, a literal, a bound, a length
+and a step fold because Python's rules ask each of them for one answer about a
+value. The trust base assumes it ([14-soundness.md](../14-soundness.md)), and
+five known-unsound tests pin what a value breaking it is answered.
 
 **A method that reduces a schema.** Refused. Construction settles the lattice
 laws -- see "Which laws construction settles" below -- so the schema a caller

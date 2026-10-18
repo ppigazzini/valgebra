@@ -42,6 +42,11 @@ fn schema() -> impl Strategy<Value = Schema> {
 /// the class, whose `isinstance` hook construction cannot see. Drawn rather
 /// than filtered from [`schema`], which a class reaches in about one draw in
 /// six -- past the rejects a run of the nightly's case count allows.
+///
+/// The attribute record, the bound, the length and the step are drawn beside
+/// the literal because the trust base reads each as a set, a value's answer to
+/// it being a fact about the value (`docs/14-soundness.md`), and construction
+/// folds each with its complement on that ground alone.
 fn set_schema() -> impl Strategy<Value = Schema> {
     let atom = prop_oneof![
         Just(Schema::ANYTHING),
@@ -54,6 +59,22 @@ fn set_schema() -> impl Strategy<Value = Schema> {
         Just(Schema::Str),
         Just(Schema::Bytes),
         Just(Schema::Literal(ConstIx::new(0))),
+        Just(Schema::attr_record(vec![Attribute {
+            name: "x".into(),
+            schema: Schema::Int,
+        }])),
+        Just(Schema::refine(
+            Schema::Int,
+            vec![Constraint::Ge(OperandIx::new(0))]
+        )),
+        Just(Schema::refine(
+            Schema::ANYTHING,
+            vec![Constraint::MinLen(1)]
+        )),
+        Just(Schema::refine(
+            Schema::Int,
+            vec![Constraint::MultipleOf(OperandIx::new(0))]
+        )),
     ];
     atom.prop_recursive(4, 24, 3, |inner| {
         prop_oneof![

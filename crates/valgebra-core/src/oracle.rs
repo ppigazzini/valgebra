@@ -326,6 +326,15 @@ pub(crate) fn has_complementary_pair_within(
 /// occurrences of one schema can disagree, and a law that assumes they agree is
 /// not a law about this.
 ///
+/// An atom with no callback is a set **under the trust base**
+/// (`docs/14-soundness.md`): an attribute is a reading of the value, and a
+/// constant's `==`, a bound's comparison, a length and a step's `%` are answers
+/// Python's rules make facts about the value. A value whose method answers two
+/// calls differently is outside the sets a law here is about, and the five
+/// known-unsound tests in `tests/test_decision_adversarial.py` pin what it is
+/// answered. Python asks nothing of a predicate, and correct code answers one
+/// differently on two calls, so it is declined rather than assumed.
+///
 /// A class is referred to the `oracle`: `isinstance` against a metaclass that
 /// overrides `__instancecheck__` is a callback too, and telling a pure class from
 /// a hooked one needs the class object, which only the bindings hold.

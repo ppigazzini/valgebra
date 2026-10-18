@@ -244,22 +244,37 @@ The soundness is relative to a small, explicit trust base:
   answers differently on two calls with the same argument is not describing a
   set, and the walk is built on the assumption that none does.
 
-  **`A & ~A` does not rest on it.** That law is a law about sets, so it is
-  applied only where both sides are one: an atom running a predicate, or a class
-  whose metaclass overrides `__instancecheck__` or `__subclasscheck__`, is
-  declined rather than decided. An `abc.ABC` is declined by the same test, because
-  `ABCMeta` overrides both hooks -- which is how `register` changes the relation
-  after a schema is built. A class whose metaclass leaves the hooks alone is a
-  set, and the decision still reads the law of it: `intersection(C,
-  complement(C)).is_empty()` is `True`. Construction folds the pair for no
-  class, because it holds no class object to ask whether a hook answers
-  `isinstance`, so the meet keeps its spelling.
+  **`A & ~A` rests on it where Python asks for one answer.** That law is a law
+  about sets, and construction applies it to every atom whose answer Python's
+  own rules make a fact about the value: an attribute, which is a reading of
+  the value; a constant's `==`, which a record's key lookup asks too; a bound's
+  comparison; a length; and a step's `%`. The language reference sets rules
+  for comparisons, and the data model has `__len__` return the object's length;
+  not-a-number is the exception those rules name, and it is read as one:
+  `Literal[nan]` is empty and `Ge(nan)` is refused. A value whose method
+  answers two calls differently is outside the sets the law is about: `P`
+  admits it on one call and `complement(P)` on the next, and `intersection(P,
+  complement(P))` is folded to `nothing` all the same. The five atoms are
+  pinned as known-unsound tests.
 
-  **A bound conjunction still rests on it.** A contradiction between two bounds
-  is decided by comparing the *bounds*, which holds only because a value ordered
-  against one is ordered the same way against the other. `Annotated[int, Gt(0),
-  Lt(1)]` is decided empty, and an `int` subclass whose comparisons answer `True`
-  satisfies both -- a `True` no value supports. Deciding it soundly means reading
+  Python asks nothing of a predicate, or of a metaclass's `__instancecheck__` or
+  `__subclasscheck__`, and correct code answers them differently on two calls:
+  a predicate that admits each value once, a class `register` adds to. So an
+  atom running one is declined rather than decided. An `abc.ABC` is declined by
+  the same test, because `ABCMeta` overrides both hooks -- which is how
+  `register` changes the relation after a schema is built. A class whose
+  metaclass leaves the hooks alone is a set, and the decision reads the law of
+  it: `intersection(C, complement(C)).is_empty()` is `True`. Construction folds
+  the pair for no class, because it holds no class object to ask whether a hook
+  answers `isinstance`, so the meet keeps its spelling.
+
+  **A bound conjunction rests on the order besides.** A contradiction between
+  two bounds is decided by comparing the *bounds*, which holds only because a
+  value ordered against one is ordered the same way against the other -- the
+  consistency Python's rules ask of comparisons, which a subclass can break
+  while answering every call alike. `Annotated[int, Gt(0), Lt(1)]` is decided
+  empty, and an `int` subclass whose comparisons answer `True` satisfies both
+  -- a `True` no value supports. Deciding it soundly means reading
   the bounds over the *exact* builtin, which needs a schema to distinguish
   "exactly `int`" from "an `int` or a subclass". The set representation has that
   class for a literal, which is the constant at its exact type, and a bound is

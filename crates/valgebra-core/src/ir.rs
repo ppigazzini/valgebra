@@ -829,6 +829,11 @@ pub enum Schema {
     /// typing spec's distinction between `Literal[1]`, `Literal[True]`, and
     /// `Literal[1.0]`.
     ///
+    /// A set under the trust base, which takes a value's `==` to answer one way
+    /// (`docs/14-soundness.md`): a value whose `==` answers two calls
+    /// differently is outside it, and `Literal[c] & ~Literal[c]` is `Nothing`
+    /// whatever that value answers.
+    ///
     /// The constant itself is not stored here — the core stays free of Python
     /// objects. The payload is an index into a constants pool held alongside the
     /// compiled validator. The same-type test is applied in the bindings, where
@@ -915,6 +920,12 @@ pub enum Schema {
     /// instance -- and a state only a test can build is one the walk, the
     /// lowering and the rules can read three ways unseen
     /// (`docs/dev/01-schema-ir.md`).
+    ///
+    /// An attribute is read as the value's own, so the record is a set under the
+    /// trust base, which takes what a value answers to be a fact about it
+    /// (`docs/14-soundness.md`). Construction folds it with its complement on
+    /// that ground, and a property whose reads alternate is outside the sets
+    /// the fold is about.
     ///
     /// The record carries **no class**. A class is a separate narrowing, and a
     /// dataclass is the meet of the two: `build_object` emits
@@ -1375,6 +1386,15 @@ impl SeqShape {
 ///
 /// Comparison and predicate operands live in the validator's object pool; the
 /// payload is an index. Length bounds carry the length directly.
+///
+/// Every constraint but [`Constraint::Predicate`] is a set under the trust base
+/// (`docs/14-soundness.md`). The comparison, the length and the `%` it reads
+/// are operators Python's rules make facts about the value -- the language
+/// reference's rules for comparisons, the data model's `__len__` -- with
+/// not-a-number the exception they name, read as one. So construction folds a
+/// refinement with its complement, and a value whose operator answers two
+/// calls differently is outside the sets that fold is about. A predicate is
+/// code Python asks nothing of, and `denotes_a_set_within` declines it.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Constraint {
     /// `value >= pool[i]`.
