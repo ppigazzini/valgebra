@@ -866,21 +866,6 @@ proptest! {
     }
 }
 
-/// The unordered pairs of a slice: every distinct pair once, in neither order
-/// twice, and none of an element with itself. Both disjointness laws scan them
-/// -- over members, and over the inners of complements -- so the scan is one
-/// function and the law it serves is decided in one place.
-#[test]
-fn unordered_pairs_yields_each_distinct_pair_once() {
-    let pairs: Vec<(i32, i32)> = unordered_pairs(&[1, 2, 3]).map(|(a, b)| (*a, *b)).collect();
-    assert_eq!(pairs, [(1, 2), (1, 3), (2, 3)]);
-    // The degenerate lengths a member list can reach: no pair to compare.
-    assert_eq!(unordered_pairs::<i32>(&[]).count(), 0);
-    assert_eq!(unordered_pairs(&[1]).count(), 0);
-    // n elements give n*(n-1)/2 pairs, so nothing is visited twice.
-    assert_eq!(unordered_pairs(&[1, 2, 3, 4, 5]).count(), 10);
-}
-
 /// A union fold stops only once a member is known inhabited. The stopping rule
 /// reads the *inhabited* accumulator, not the empty one: a member that is
 /// empty and opaque leaves the verdict open, and breaking there would report a

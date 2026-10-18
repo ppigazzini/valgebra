@@ -21,6 +21,7 @@ use crate::descr::budget;
 use crate::descr::lower::{Constants, WORK, an_empty_reading_stands, lower_unfolded};
 use crate::ir::{Constraint, DefIx, Polarity, Schema, SeqShape};
 use crate::kind::{Region, Regions};
+use crate::unordered_pairs;
 use crate::verdict::{Relation, Verdict};
 
 use crate::oracle::has_complementary_pair;
@@ -1270,20 +1271,6 @@ impl<'a> Cx<'a> {
         self.trail.pop();
         answer
     }
-}
-
-/// Every unordered pair of distinct elements, each once.
-///
-/// The pairwise-disjointness law is asked of a meet's members, and this reads
-/// the tail through `get`, so the law needs no panicking index.
-fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> {
-    items.iter().enumerate().flat_map(|(i, a)| {
-        items
-            .get(i + 1..)
-            .unwrap_or_default()
-            .iter()
-            .map(move |b| (a, b))
-    })
 }
 
 /// Whether some two members are provably disjoint (distinct concrete kinds,

@@ -44,6 +44,7 @@ use super::polar::{PolarUnion, Summand, tidy};
 use super::symbolic::Guard;
 use super::values::{Field, Values};
 use crate::kind::Kind;
+use crate::unordered_pairs;
 use crate::verdict::Verdict;
 
 /// The most atoms a union may carry.
@@ -180,17 +181,6 @@ fn one_key(a: &Label, b: &Label) -> bool {
         }
         _ => false,
     }
-}
-
-/// Every unordered pair of distinct items, each once.
-fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> {
-    items.iter().enumerate().flat_map(|(i, a)| {
-        items
-            .get(i + 1..)
-            .into_iter()
-            .flatten()
-            .map(move |b| (a, b))
-    })
 }
 
 /// The most keys the search for a dict meeting an atom's pinned constraints

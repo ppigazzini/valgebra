@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use super::{
     Entry, KEY_KINDS, Label, MAX_ASSIGNMENTS, MAX_ATOMS, MapAtom, MapLattice, PARTS, Pinned,
-    Search, Wanted, key_slot, tidy, unordered_pairs,
+    Search, Wanted, key_slot, tidy,
 };
 use crate::descr::budget;
 use crate::descr::integers::IntSet;
@@ -555,34 +555,6 @@ fn an_optional_boolean_key_leaves_the_integer_key_alone() {
         Verdict::Inhabited,
         "a dict of the integer key alone lets the boolean one go missing"
     );
-}
-
-/// Every unordered pair of *distinct* items, each once.
-///
-/// The contract the name states, and the one the caller rests on: the scan for
-/// two labels that are one dict key asks the question of two labels, and a pair
-/// of a label with itself is not that question. The helper is small enough to
-/// read and small enough to get wrong -- an off-by-one in the slice it takes
-/// yields each item beside itself, which no dict distinguishes because the
-/// collision test is false on a self-pair, and which the next caller would
-/// inherit.
-#[test]
-fn unordered_pairs_yields_each_distinct_pair_once() {
-    let items = ["a", "b", "c"];
-    let pairs: Vec<(&&str, &&str)> = unordered_pairs(&items).collect();
-    assert_eq!(pairs.len(), 3, "three items make three pairs");
-    assert_eq!(
-        pairs,
-        vec![(&"a", &"b"), (&"a", &"c"), (&"b", &"c")],
-        "each pair once, in order, and never an item with itself"
-    );
-    for (left, right) in &pairs {
-        assert_ne!(left, right, "a pair is of two distinct items");
-    }
-    // The degenerate sizes, where an off-by-one shows first.
-    assert_eq!(unordered_pairs(&items[..1]).count(), 0, "one item, no pair");
-    assert_eq!(unordered_pairs::<&str>(&[]).count(), 0, "no items, no pair");
-    assert_eq!(unordered_pairs(&items[..2]).count(), 1);
 }
 
 // THEORY: the-descriptor

@@ -21,19 +21,25 @@ use super::literals::literal_constants;
 use super::{Cx, LeafRelations, NoLeafRelations};
 
 impl Schema {
-    /// Whether this schema and `other` are *provably* disjoint: no value belongs
-    /// to both. Sound, not complete — it returns true only when the concrete
-    /// types cannot overlap (distinct builtin scalars, distinct container kinds,
-    /// a refinement's base versus another), and false (conservatively) for the
-    /// cases it cannot decide in the core: `Literal` and `Instance` (a class may
-    /// subclass a builtin), `Any`, references, and combinators.
-    #[must_use]
-    pub fn disjoint(&self, other: &Schema) -> bool {
+    /// [`disjoint_with`](Self::disjoint_with) with no oracle: the reading the
+    /// core gives alone, which the tests ask of a pair the bindings would kind.
+    #[cfg(test)]
+    pub(crate) fn disjoint(&self, other: &Schema) -> bool {
         self.disjoint_with(other, &NoLeafRelations)
     }
 
-    /// [`disjoint`](Self::disjoint) with an oracle that can kind a `Literal` and
-    /// settle a pair of them, neither of which the core can read.
+    /// Whether this schema and `other` are *provably* disjoint: no value belongs
+    /// to both. Sound, not complete — it returns true only when the concrete
+    /// types cannot overlap (distinct builtin scalars, distinct container kinds,
+    /// a refinement's base versus another, a union whose every member is), and
+    /// false (conservatively) where it cannot decide: `Any`, a reference, a meet
+    /// and a complement.
+    ///
+    /// A `Literal` and an `Instance` are read through the `oracle`, which holds
+    /// the constants and the classes the core cannot: it kinds a literal,
+    /// settles a pair of them, and says whether a class admits a kind (a class
+    /// may subclass a builtin). With no oracle, neither is disjoint from
+    /// anything but `Nothing`.
     pub(crate) fn disjoint_with(&self, other: &Schema, oracle: &dyn LeafRelations) -> bool {
         if matches!(self, Schema::Nothing) || matches!(other, Schema::Nothing) {
             return true;

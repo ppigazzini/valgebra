@@ -79,6 +79,54 @@ pub fn fresh_self_token() -> u64 {
     NEXT_SELF_TOKEN.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Every unordered pair of distinct items, each once.
+///
+/// Two scans read it: the pairwise-disjointness law over a meet's members, and
+/// a map atom's emptiness over the keys it requires, where `True` and `1` are
+/// one dict key. The tail is read through `get`, so neither needs a panicking
+/// index.
+pub(crate) fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> {
+    items.iter().enumerate().flat_map(|(i, a)| {
+        items
+            .get(i + 1..)
+            .unwrap_or_default()
+            .iter()
+            .map(move |b| (a, b))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unordered_pairs;
+
+    /// Every unordered pair of *distinct* items, each once.
+    ///
+    /// The contract both callers rest on: each asks a question of two items,
+    /// and a pair of an item with itself is not that question -- two labels
+    /// that are one dict key, two members that share no value. An off-by-one
+    /// in the slice taken yields each item beside itself, which neither caller
+    /// distinguishes, since both questions are false on a self-pair.
+    #[test]
+    fn unordered_pairs_yields_each_distinct_pair_once() {
+        let items = ["a", "b", "c"];
+        let pairs: Vec<(&&str, &&str)> = unordered_pairs(&items).collect();
+        assert_eq!(
+            pairs,
+            vec![(&"a", &"b"), (&"a", &"c"), (&"b", &"c")],
+            "each pair once, in order, and never an item with itself"
+        );
+        for (left, right) in &pairs {
+            assert_ne!(left, right, "a pair is of two distinct items");
+        }
+        // The degenerate sizes, where an off-by-one shows first.
+        assert_eq!(unordered_pairs::<&str>(&[]).count(), 0, "no items, no pair");
+        assert_eq!(unordered_pairs(&items[..1]).count(), 0, "one item, no pair");
+        assert_eq!(unordered_pairs(&items[..2]).count(), 1);
+        // n items give n*(n-1)/2 pairs, so nothing is visited twice.
+        assert_eq!(unordered_pairs(&[1, 2, 3, 4, 5]).count(), 10);
+    }
+}
+
 #[cfg(test)]
 mod schema_tests;
 
