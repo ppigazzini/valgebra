@@ -232,6 +232,31 @@ def test_a_binding_run_that_computed_nothing_a_pass_is_refused() -> None:
     assert gate.per_iteration(5, 0, "binding record walk") is None
 
 
+def test_a_binding_shape_is_compared_by_what_one_iteration_folds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The figure compared with the base is the work, not the iteration count.
+
+    Both runs are read for one figure per iteration, and that figure is the
+    measurement's checksum: the iteration count is the gate's own choice and
+    the same on both sides, so a value cut short beside it would read as a
+    saving under the same count.
+    """
+    hi, lo = gate.BINDING_ITERATIONS["binding-set"]
+    folded = 4000877
+
+    def measure(_binary: object, iterations: str, _shape: str) -> object:
+        count = int(iterations)
+        return gate.Measurement(irefs=1000 * count, checksum=folded * count)
+
+    monkeypatch.setattr(gate, "build_binding_workload", lambda *_: None)
+    monkeypatch.setattr(gate, "warm_the_interpreter", lambda *_: None)
+    monkeypatch.setattr(gate, "measure", measure)
+    read = gate.measure_mode("binding-set")
+    assert read.checksum == folded
+    assert read.irefs == 1000 * (hi - lo)
+
+
 def test_an_unreadable_instruction_count_is_not_a_pass() -> None:
     with pytest.raises(SystemExit) as excinfo:
         gate.parse_measurement("checksum=1\n", "cachegrind died before its banner")
@@ -378,13 +403,13 @@ def test_a_workload_that_changed_is_not_a_comparison() -> None:
 def test_a_workload_the_change_re_records_is_held_to_its_record(
     tmp_path: Path,
 ) -> None:
-    """A pure-Rust shape whose recorded checksum moved is a replaced workload.
+    """A shape whose recorded checksum moved, or is new, is a replaced workload.
 
     The commit that changes a workload records the new count and checksum, so
-    the base records another checksum for the shape than the change does. That
-    is no comparison and no failure: the shape is held to its record, as a new
-    one is. A checksum the change did not re-record is a workload that changed,
-    and a binding shape records no checksum to read.
+    the base records another checksum for the shape than the change does, or
+    none. That is no comparison and no failure: the shape is held to its
+    record, as a new one is. A checksum the change did not re-record is a
+    workload that changed.
     """
     record = _record()
     base = tmp_path / "base"
@@ -395,9 +420,15 @@ def test_a_workload_the_change_re_records_is_held_to_its_record(
         json.dumps({**record, "core_workload_checksum": 133000}), encoding="utf-8"
     )
     assert gate.rerecorded_at(base, record, "core")
-    assert not gate.rerecorded_at(base, record, "binding-set")
+    assert not gate.rerecorded_at(base, record, "binding-set"), "no record here"
     carried.write_text(json.dumps(record), encoding="utf-8")
     assert not gate.rerecorded_at(base, record, "core")
+    # A binding shape is read the same way, and a checksum the base never
+    # recorded is one this change records.
+    binding = {**record, "binding_set_workload_checksum": 4000877}
+    assert gate.rerecorded_at(base, binding, "binding-set")
+    carried.write_text(json.dumps(binding), encoding="utf-8")
+    assert not gate.rerecorded_at(base, binding, "binding-set")
     carried.write_text("{", encoding="utf-8")
     assert not gate.rerecorded_at(base, record, "core"), "an unreadable record"
 
@@ -435,6 +466,14 @@ def test_a_re_recorded_workload_is_compared_where_the_base_builds_it(
     source = ROOT / "crates" / "valgebra-core" / "examples" / "perf_workload.rs"
     copied = tmp_path / source.relative_to(ROOT)
     assert copied.read_text(encoding="utf-8") == source.read_text(encoding="utf-8")
+    # A binding shape's example calls the extension's workload module, which is
+    # where its work is written, so that goes with it.
+    module = tmp_path / gate.BINDING_WORKLOAD.relative_to(ROOT)
+    assert not module.exists()
+    gate.transplant_workloads(tmp_path, ["binding-set"])
+    assert module.read_text(encoding="utf-8") == gate.BINDING_WORKLOAD.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_every_mode_names_an_example_the_tree_builds() -> None:
@@ -570,9 +609,8 @@ def test_every_binding_shape_has_iterations_and_a_budget() -> None:
     for mode in gate.MODES:
         key = gate.record_key(mode)
         assert budget.get(key, 0) > 0, f"{mode} has no recorded count under {key}"
-        if mode not in gate.BINDING_SHAPES:
-            checksum = gate.checksum_key(mode)
-            assert budget.get(checksum, 0) > 0, f"{mode} records no {checksum}"
+        checksum = gate.checksum_key(mode)
+        assert budget.get(checksum, 0) > 0, f"{mode} records no {checksum}"
 
 
 def _bench_steps(prefix: str = "--binding") -> list[str]:

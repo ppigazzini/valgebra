@@ -516,17 +516,25 @@ fn relation_walk(py: Python<'_>, iters: usize) -> u64 {
     let (point, other) = related_classes(py);
     let (point, other) = (point.bind(py), other.bind(py));
     let name = PyString::new(py, "relation_to");
+    // The two schemas are what a relation reads, each held by its validator.
+    let nodes = |held: &Bound<'_, PyAny>| {
+        held.cast::<Validator>()
+            .expect("each side is a validator")
+            .borrow()
+            .schema
+            .node_count()
+    };
+    let work = digest(nodes(point), nodes(other));
     settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
         let relation = point
             .call_method1(&name, (std::hint::black_box(other),))
             .expect("relating two dataclasses raises nothing");
-        checksum = checksum.wrapping_add(u64::from(
-            relation
-                .cast::<PyString>()
-                .is_ok_and(|relation| relation == "not_subset"),
-        ));
+        let refuted = relation
+            .cast::<PyString>()
+            .is_ok_and(|relation| relation == "not_subset");
+        checksum = checksum.wrapping_add(u64::from(refuted) + work);
     }
     checksum
 }
@@ -708,6 +716,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             };
             let validator = Validator::new(schema, Vec::new(), Vec::new());
             let obj = value.bind(py).clone();
+            let work = digest(validator.schema.node_count(), shown(&obj));
             settle_the_heap(py);
             let mut checksum: u64 = 0;
             for _ in 0..iters {
@@ -717,7 +726,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
                     &Value::Py(std::hint::black_box(&obj)),
                     &mut Unwritten::default().frame(validator.context(py, &state, WalkMode::Fast)),
                 );
-                checksum = checksum.wrapping_add(u64::from(ok));
+                checksum = checksum.wrapping_add(u64::from(ok) + work);
             }
             checksum
         }
@@ -790,6 +799,7 @@ fn boundary_walk(py: Python<'_>, iters: usize) -> u64 {
         .into_pyobject(py)
         .expect("an i64 always converts")
         .into_any();
+    let work = digest(validator.schema.node_count(), shown(&obj));
     settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
@@ -799,9 +809,33 @@ fn boundary_walk(py: Python<'_>, iters: usize) -> u64 {
             &Value::Py(std::hint::black_box(&obj)),
             &mut Unwritten::default().frame(validator.context(py, &state, WalkMode::Fast)),
         );
-        checksum = checksum.wrapping_add(u64::from(ok));
+        checksum = checksum.wrapping_add(u64::from(ok) + work);
     }
     checksum
+}
+
+/// Two sizes of what one iteration walks, folded into its checksum beside the
+/// answer.
+///
+/// The gate holds a binding shape's counts to one work by comparing the
+/// checksum the change and its base print, and the answer alone cannot say the
+/// work is one: a value cut to half its elements answers as the whole did, and
+/// its count would read as a saving. So the sizes go in beside it, each in
+/// digits of its own -- the schema's node count and the length of the value's
+/// `repr`, or of the document for a JSON shape -- and either moving moves the
+/// checksum. Doubled, so the answer is the lowest bit and a changed answer moves
+/// it too. The figure is the same every iteration, which keeps the checksum a
+/// multiple of the iteration count, as the gate checks.
+fn digest(major: usize, minor: usize) -> u64 {
+    2 * (major as u64 * 1_000_000 + minor as u64)
+}
+
+/// The length of a value's `repr`, the size [`digest`] reads of a value.
+fn shown(value: &Bound<'_, PyAny>) -> usize {
+    value
+        .repr()
+        .and_then(|text| text.len())
+        .expect("a workload's value has a repr")
 }
 
 /// Hand the allocator's free memory back before a shape starts counting.
@@ -871,13 +905,14 @@ fn json_loop(
     document: &[u8],
     expect: Expect,
 ) -> u64 {
+    let work = digest(validator.schema.node_count(), document.len());
     settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
         let ok = validator
             .matches_json(py, std::hint::black_box(document))
             .expect("a well-formed document raises nothing");
-        checksum = checksum.wrapping_add(u64::from(ok == matches!(expect, Expect::Member)));
+        checksum = checksum.wrapping_add(u64::from(ok == matches!(expect, Expect::Member)) + work);
     }
     checksum
 }
@@ -944,6 +979,7 @@ fn spelled_walk(py: Python<'_>, iters: usize, source: &str) -> u64 {
     let validator = Validator::checked(schema, literals.into_items(), definitions)
         .expect("a walk shape's schema is within every limit");
     let value = module.getattr("VALUE").expect("the value is defined");
+    let work = digest(validator.schema.node_count(), shown(&value));
     settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
@@ -953,7 +989,7 @@ fn spelled_walk(py: Python<'_>, iters: usize, source: &str) -> u64 {
             &Value::Py(std::hint::black_box(&value)),
             &mut Unwritten::default().frame(validator.context(py, &state, WalkMode::Fast)),
         );
-        checksum = checksum.wrapping_add(u64::from(ok));
+        checksum = checksum.wrapping_add(u64::from(ok) + work);
     }
     checksum
 }
@@ -985,6 +1021,7 @@ fn recursive_walk(py: Python<'_>, iters: usize) -> u64 {
             .expect("a one-element list always builds")
             .into_any();
     }
+    let work = digest(validator.schema.node_count(), shown(&value));
     settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
@@ -994,7 +1031,7 @@ fn recursive_walk(py: Python<'_>, iters: usize) -> u64 {
             &Value::Py(std::hint::black_box(&value)),
             &mut Unwritten::default().frame(validator.context(py, &state, WalkMode::Fast)),
         );
-        checksum = checksum.wrapping_add(u64::from(ok));
+        checksum = checksum.wrapping_add(u64::from(ok) + work);
     }
     checksum
 }
@@ -1015,6 +1052,7 @@ fn pattern_walk(py: Python<'_>, iters: usize) -> u64 {
     );
     let validator = Validator::new(schema, Vec::new(), Vec::new());
     let obj = PyString::new(py, "ada.lovelace@example.com").into_any();
+    let work = digest(validator.schema.node_count(), shown(&obj));
     settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
@@ -1024,7 +1062,7 @@ fn pattern_walk(py: Python<'_>, iters: usize) -> u64 {
             &Value::Py(std::hint::black_box(&obj)),
             &mut Unwritten::default().frame(validator.context(py, &state, WalkMode::Fast)),
         );
-        checksum = checksum.wrapping_add(u64::from(ok));
+        checksum = checksum.wrapping_add(u64::from(ok) + work);
     }
     checksum
 }
@@ -1053,6 +1091,7 @@ fn explaining_record(py: Python<'_>, iters: usize, wrong: Wrong) -> u64 {
             .set_item("f37", "not an int")
             .expect("replacing one key always succeeds");
     }
+    let work = digest(validator.schema.node_count(), shown(&obj));
     settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
@@ -1068,7 +1107,7 @@ fn explaining_record(py: Python<'_>, iters: usize, wrong: Wrong) -> u64 {
             ),
         );
         checksum = checksum
-            .wrapping_add(u64::from(ok))
+            .wrapping_add(u64::from(ok) + work)
             .wrapping_add(out.len() as u64);
     }
     checksum
@@ -1086,6 +1125,7 @@ fn explaining_list(py: Python<'_>, iters: usize) -> u64 {
     list.set_item(9_999, "not an int")
         .expect("replacing the last element always succeeds");
     let obj = list.into_any();
+    let work = digest(validator.schema.node_count(), shown(&obj));
     settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
@@ -1101,7 +1141,7 @@ fn explaining_list(py: Python<'_>, iters: usize) -> u64 {
             ),
         );
         checksum = checksum
-            .wrapping_add(u64::from(ok))
+            .wrapping_add(u64::from(ok) + work)
             .wrapping_add(out.len() as u64);
     }
     checksum
@@ -1124,6 +1164,7 @@ pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
     let obj = PyList::new(py, items)
         .expect("a fresh list of i64 always builds")
         .into_any();
+    let work = digest(validator.schema.node_count(), shown(&obj));
 
     settle_the_heap(py);
 
@@ -1137,7 +1178,7 @@ pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
             &Value::Py(std::hint::black_box(&obj)),
             &mut Unwritten::default().frame(validator.context(py, &state, WalkMode::Fast)),
         );
-        checksum = checksum.wrapping_add(u64::from(ok));
+        checksum = checksum.wrapping_add(u64::from(ok) + work);
     }
     checksum
 }

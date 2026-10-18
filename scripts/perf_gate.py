@@ -530,6 +530,10 @@ BINDING_ITERATIONS = {
     "binding-set": (150_000, 50_000),
 }
 
+#: Where every binding shape's work is written: the example the gate builds
+#: names a shape, and calls this module to run it.
+BINDING_WORKLOAD = ROOT / "crates" / "valgebra-py" / "src" / "workload.rs"
+
 BINDING_SHAPES = {
     "binding": "walk",
     "binding-boundary": "boundary",
@@ -588,10 +592,12 @@ def measure_mode(
     """Build and measure one workload in one checkout.
 
     The binding workload is the difference of two iteration counts, so what this
-    returns for it is that difference beside the high run's iteration count --
-    which the workload's own checksum must equal, and which is checked here
-    rather than by the caller: a run that ignored its argument is a rig fault
-    wherever it is measured.
+    returns for it is that difference beside what one iteration folds into the
+    checksum: its answer and the size of the work it reads. Both runs must
+    agree on that figure, which is checked here rather than by the caller: a run
+    that ignored its argument is a rig fault wherever it is measured. The figure
+    is the checksum compared with the base's, so a value cut short reads as
+    other work rather than as a saving.
     """
     example, subject = MODES[mode]
     if mode not in BINDING_SHAPES:
@@ -607,17 +613,17 @@ def measure_mode(
     warm_the_interpreter(binary, shape)
     high = measure(binary, str(hi), shape)
     low = measure(binary, str(lo), shape)
-    # The build shape folds a node count per iteration rather than one, so its
-    # checksum is a multiple of the count rather than the count. The rig check is
-    # that both runs agree on that multiple, which a run ignoring its argument
-    # cannot do: it would report the same checksum twice.
+    # Every iteration folds the same figure, so a checksum is a multiple of the
+    # iteration count. The rig check is that both runs agree on that multiple,
+    # which a run ignoring its argument cannot do: it would report the same
+    # checksum twice.
     scale = per_iteration(high.checksum, hi, subject)
     if scale is None:
         raise SystemExit(EXIT_FAIL)
     for result, iters in ((high, hi), (low, lo)):
         if check_checksum(result.checksum, iters * scale, f"{subject} x{iters:,}"):
             raise SystemExit(EXIT_FAIL)
-    return Measurement(high.irefs - low.irefs, hi - lo)
+    return Measurement(high.irefs - low.irefs, scale)
 
 
 def resolve_rev(rev: str) -> str:
@@ -836,15 +842,12 @@ def rerecorded_at(checkout: Path, record: dict, mode: str) -> bool:
 
     A workload that moved between the two commits is no comparison, and the
     commit that moves one re-records its count and checksum in the same change.
-    A pure-Rust shape whose recorded checksum differs from the one the base
-    records is that: a workload replaced on the record, which the base is built
-    with (`transplant_workloads`) and `judge_replaced` judges. A checksum that
-    moved with nothing re-recorded reads as a workload that changed. A binding
-    shape records no checksum, since its checksum is its iteration count, so it
-    is never read as replaced.
+    A shape whose recorded checksum differs from the one the base records, or
+    that the base records none for, is that: a workload replaced on the record,
+    which the base is built with (`transplant_workloads`) and `judge_replaced`
+    judges. A checksum that moved with nothing re-recorded reads as a workload
+    that changed.
     """
-    if mode in BINDING_SHAPES:
-        return False
     key = checksum_key(mode)
     try:
         carried = json.loads(
@@ -852,7 +855,7 @@ def rerecorded_at(checkout: Path, record: dict, mode: str) -> bool:
         )
     except (OSError, ValueError):
         return False
-    return key in carried and key in record and carried[key] != record[key]
+    return key in record and carried.get(key) != record[key]
 
 
 def transplant_workloads(checkout: Path, modes: Sequence[str]) -> None:
@@ -866,11 +869,19 @@ def transplant_workloads(checkout: Path, modes: Sequence[str]) -> None:
     does not have -- the base reading fails, and `judge_replaced` falls back to
     the record.
     """
-    for example in sorted({MODES[mode][0] for mode in modes}):
-        for source in ROOT.glob(f"crates/*/examples/{example}.rs"):
-            target = checkout / source.relative_to(ROOT)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, target)
+    sources = [
+        source
+        for example in sorted({MODES[mode][0] for mode in modes})
+        for source in ROOT.glob(f"crates/*/examples/{example}.rs")
+    ]
+    if any(mode in BINDING_SHAPES for mode in modes):
+        # A binding shape's example only calls the extension's own workload,
+        # which is where what it measures is written.
+        sources.append(BINDING_WORKLOAD)
+    for source in sources:
+        target = checkout / source.relative_to(ROOT)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
 
 
 def judge_replaced(
@@ -1056,16 +1067,16 @@ def record_key(mode: str) -> str:
 
 
 def checksum_key(mode: str) -> str:
-    """Name the key a pure-Rust shape's checksum is recorded under.
+    """Name the key a shape's checksum is recorded under.
 
-    A binding shape has none: its checksum is its iteration count, which
-    `measure_mode` asserts wherever it is measured.
+    For a binding shape it is what one iteration folds, since the count of
+    iterations is the gate's to choose and `measure_mode` asserts it.
     """
     return f"{mode.replace('-', '_')}_workload_checksum"
 
 
 def record_mode(budget: dict, mode: str) -> None:
-    """Measure one shape and write its count, and its checksum where it has one."""
+    """Measure one shape and write its count and its checksum."""
     measured = measure_mode(mode)
     subject = MODES[mode][1]
     if mode in BINDING_SHAPES:
@@ -1073,8 +1084,7 @@ def record_mode(budget: dict, mode: str) -> None:
         print(
             f"{subject} over {hi - lo:,} iterations (difference of {hi:,} and {lo:,})"
         )
-    else:
-        budget[checksum_key(mode)] = measured.checksum
+    budget[checksum_key(mode)] = measured.checksum
     if measured.mispredicts is not None:
         print(
             f"branch mispredicts: {measured.mispredicts:,} "

@@ -461,11 +461,15 @@ verdict:
 - **The workload proves it ran.** Each prints a checksum folded through every
   result, compared **before** any count: with the base's, and for a new shape
   with the recorded one. The core and decision workloads' are constants of
-  their corpus; the binding workload's *is* its iteration count by
-  construction, so a workload that ignored its argument — reporting a difference
-  near zero — fails rather than passing under the ceiling. The decision
-  workload's checksum counts verdicts, so a change that decides *differently*
-  fails on the checksum before its instruction count is read.
+  their corpus. A binding shape folds the same figure every iteration -- its
+  answer beside the size of what it reads, the schema's node count and the
+  length of the value's `repr` or of the document -- so its checksum is a
+  multiple of the iteration count, and a workload that ignored its argument,
+  reporting a difference near zero, fails rather than passing under the
+  ceiling. That figure is what is compared with the base's, so a value cut
+  short reads as other work rather than as a saving. The decision workload's
+  checksum counts verdicts, so a change that decides *differently* fails on the
+  checksum before its instruction count is read.
 - **An unreadable measurement exits 2.**
 - **The interpreter's hash seed is fixed.** A binding shape embeds CPython,
   which draws a string hash seed per process, and a shape that probes a dict of
@@ -558,9 +562,11 @@ comparison.** Two builds of a workload computing the same thing agree on its
 checksum exactly, so a disagreement says the workload moved between the two
 commits and the counts are of different work. That exits 2 -- neither a pass nor
 a regression. The commit that moves a workload re-records its count and checksum
-with `--update`, and a pure-Rust shape whose recorded checksum differs from the
-base's is a workload replaced on the record (`rerecorded_at` in
-`scripts/perf_gate.py`). The base is built with the change's workload source, so
+with `--update`, and a shape whose recorded checksum differs from the base's,
+or that the base records none for, is a workload replaced on the record
+(`rerecorded_at` in `scripts/perf_gate.py`). The base is built with the
+change's workload source -- the example, and for a binding shape the
+extension's workload module it calls -- so
 the two counts are of one work and compared at 2% (`judge_replaced`); where the
 base cannot build that source, or computes other work with it, the shape is held
 to its record, as a new shape is below.
