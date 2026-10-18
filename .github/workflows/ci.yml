@@ -1402,7 +1402,7 @@ jobs:
             --output core-diff-mutants \
             -- -- --skip deep_subtype_into_bottom_terminates \
             --skip subtyping_terminates_on_a_distributed_tower \
-            --skip a_word_of_a_hundred_thousand_bytes_builds
+            --skip a_chain_of_a_hundred_thousand_states_minimises
           status=$?
           set -e
           # A change confined to excluded files generates nothing; that is a clean
@@ -1750,8 +1750,8 @@ jobs:
       # The two SWEEP-SKIP cases that prove the decision budget's bound are
       # skipped for the reason the sweep skips them: each runs until the budget
       # stops it, and a deeper draw makes that proof slower without making it
-      # stronger. The third, a long word's build, draws nothing and runs here.
-      # tests/test_sweep_skips.py holds the list.
+      # stronger. The third, a long chain's minimisation, draws nothing and runs
+      # here. tests/test_sweep_skips.py holds the list.
       - name: The core laws, deep
         run: >
           cargo test --locked -p valgebra-core --
@@ -2139,7 +2139,7 @@ jobs:
             --shard "${{ matrix.shard }}/36" --sharding round-robin \
             -- -- --skip deep_subtype_into_bottom_terminates \
             --skip subtyping_terminates_on_a_distributed_tower \
-            --skip a_word_of_a_hundred_thousand_bytes_builds
+            --skip a_chain_of_a_hundred_thousand_states_minimises
           status=$?
           set -e
 

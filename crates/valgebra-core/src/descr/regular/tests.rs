@@ -1,4 +1,4 @@
-use super::{Alphabet, RegularSet};
+use super::{Alphabet, Dfa, MAX_STATES, RegularSet};
 use crate::descr::lattice_tests::Algebra;
 use proptest::prelude::*;
 
@@ -76,6 +76,11 @@ fn language(pattern: &str) -> RegularSet {
     RegularSet::pattern(pattern, Alphabet::Text).expect("a small pattern builds")
 }
 
+/// A word's language, for a word inside the state bound.
+fn one_word(word: &[u8]) -> RegularSet {
+    RegularSet::word(word).expect("a short word builds")
+}
+
 /// The walk's reading of a pattern: the `regex` matcher, over the whole text.
 fn matcher(pattern: &str) -> regex::Regex {
     regex::Regex::new(&format!(r"\A(?:{pattern})\z")).expect("a drawn pattern compiles")
@@ -128,7 +133,7 @@ fn regular_set() -> impl Strategy<Value = RegularSet> {
         Just(language("ab?")),
         Just(language("[ab]+")),
         Just(language("a*")),
-        Just(RegularSet::word(b"ab")),
+        Just(one_word(b"ab")),
         Just(RegularSet::at_least(1, Alphabet::Text).expect("a small bound")),
         Just(RegularSet::at_most(1, Alphabet::Text).expect("a small bound")),
     ];
@@ -341,7 +346,7 @@ proptest! {
     ) {
         let spelled = RegularSet::pattern(&escaped(&word), Alphabet::Bytes)
             .expect("an escaped word builds");
-        prop_assert_eq!(RegularSet::word(&word), spelled);
+        prop_assert_eq!(RegularSet::word(&word), Some(spelled));
     }
 }
 
@@ -367,7 +372,7 @@ fn a_pattern_holds_every_word_it_matches_whole() {
     // And the inclusion the dropped words would refute is refuted.
     assert!(
         !language("a|ab")
-            .intersect(&RegularSet::word(b"a").complement())
+            .intersect(&one_word(b"a").complement())
             .is_some_and(|set| set.is_empty())
     );
 }
@@ -395,13 +400,13 @@ fn one_pattern_is_decided_inside_another() {
     assert!(wide.holds(b"ab") && !narrow.holds(b"ab"));
 
     // A pattern whose language is one word is that word's literal.
-    assert_eq!(language("a"), RegularSet::word(b"a"));
-    assert_eq!(language("abc"), RegularSet::word(b"abc"));
+    assert_eq!(language("a"), one_word(b"a"));
+    assert_eq!(language("abc"), one_word(b"abc"));
     // Which is what decides `Regex("a") <= Literal["a"]`, in both
     // directions: the two are one set.
     assert!(
         language("a")
-            .intersect(&RegularSet::word(b"a").complement())
+            .intersect(&one_word(b"a").complement())
             .is_some_and(|set| set.is_empty())
     );
 }
@@ -525,7 +530,7 @@ fn an_unbuildable_or_oversized_pattern_is_refused() {
     assert!(RegularSet::pattern(r"(?-u:\xFF)", Alphabet::Text).is_none());
     assert!(RegularSet::pattern(r"(?-u:\xFF)", Alphabet::Bytes).is_some());
     // A length bound past the state bound is refused rather than truncated.
-    assert!(RegularSet::at_least(super::MAX_STATES + 1, Alphabet::Text).is_none());
+    assert!(RegularSet::at_least(MAX_STATES + 1, Alphabet::Text).is_none());
 }
 
 /// The empty and universal languages, and the empty *word*, which is a
@@ -540,7 +545,7 @@ fn the_empty_language_and_the_empty_word_are_different_sets() {
             && RegularSet::all(Alphabet::Bytes).holds(b"anything")
     );
 
-    let just_empty_word = RegularSet::word(b"");
+    let just_empty_word = one_word(b"");
     assert!(!just_empty_word.is_empty());
     assert!(just_empty_word.holds(b""));
     assert!(!just_empty_word.holds(b"a"));
@@ -817,26 +822,44 @@ fn a_cut_moves_the_smaller_part() {
 /// spends a round per state on: four thousand bytes took 0.6 s that way on a
 /// release build and 4.7 s on a debug one, four times as long at each
 /// doubling, so a hundred thousand would take about six minutes there and
-/// fifty here. Cut by halves, the word builds, and holds itself and neither
-/// neighbour.
+/// fifty here. Cut by halves, the chain minimises, and holds its word and
+/// neither neighbour.
+///
+/// `RegularSet::word` refuses a word this long, since the state bound holds
+/// its table before it is built, so the chain is built here past the
+/// constructor: the minimisation's cost is its own, and the bound's own chain
+/// is too short for a quadratic cost to stand out.
 // SWEEP-SKIP: this case exists to prove a bound, so a mutation that relabels
 // the larger part of a cut makes it quadratic, past ten minutes on a debug
 // build. It stays in the test lane and leaves the mutation sweep, where a run
 // that returns no verdict is a rig fault; `a_cut_moves_the_smaller_part`
 // catches that mutation there.
 #[test]
-fn a_word_of_a_hundred_thousand_bytes_builds() {
+fn a_chain_of_a_hundred_thousand_states_minimises() {
     let word: Vec<u8> = b"abc".iter().copied().cycle().take(100_000).collect();
-    let set = RegularSet::word(&word);
-    assert!(set.holds(&word));
-    assert!(!set.holds(&word[..word.len() - 1]));
-    assert!(!set.holds(&[word.as_slice(), b"a"].concat()));
+    let table = Dfa::word(&word);
+    assert_eq!(table.state_count(), word.len() + 2);
+    assert!(table.holds(&word));
+    assert!(!table.holds(&word[..word.len() - 1]));
+    assert!(!table.holds(&[word.as_slice(), b"a"].concat()));
+}
+
+/// A word is held to the state bound before its table is built. Two bytes
+/// short of the bound the table holds the bound exactly, since no two states
+/// of a word's chain merge, and one more byte refuses.
+#[test]
+fn a_word_past_the_state_bound_refuses() {
+    let edge = vec![b'a'; MAX_STATES - 2];
+    let set = RegularSet::word(&edge).expect("a word at the bound");
+    assert_eq!(set.dfa.state_count(), MAX_STATES);
+    assert!(set.holds(&edge));
+    assert!(RegularSet::word(&[edge.as_slice(), b"a"].concat()).is_none());
 }
 
 /// A product that keeps a word's chain is a chain again, minimised again: a
 /// word of four thousand bytes met with a language that holds it is the word.
 #[test]
 fn a_product_keeping_a_long_word_is_the_word() {
-    let set = RegularSet::word(&[b'a'; 4_000]);
+    let set = one_word(&[b'a'; 4_000]);
     assert_eq!(set.intersect(&language("a*")), Some(set.clone()));
 }

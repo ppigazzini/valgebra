@@ -24,7 +24,7 @@
 //! `tuple[A, *tuple[B, ...], C]` is a chain with a loop in the middle, which is
 //! why the three spellings need one constructor rather than three nodes.
 
-use super::automaton::{Reached, canonical_order, reaches, refine};
+use super::automaton::{Reached, canonical_order, chain_fits, reaches, refine};
 use super::budget;
 use crate::verdict::Verdict;
 use rustc_hash::FxHashMap;
@@ -223,7 +223,7 @@ impl<G: Guard> SymbolicDfa<G> {
     }
 
     /// The sequences whose first elements match `prefix` positionally and whose
-    /// remaining elements all match `tail`.
+    /// remaining elements all match `tail`, or `None` past [`MAX_STATES`].
     ///
     /// The one constructor the three spellings need. An empty prefix with a tail
     /// is `list[T]`; a prefix with no tail is `tuple[A, B]`; both together are
@@ -241,16 +241,24 @@ impl<G: Guard> SymbolicDfa<G> {
     /// cannot say, leaves the table to the merge.
     /// `a_chain_of_inhabited_letters_is_minimal_as_built` holds the two
     /// readings to one table.
+    ///
+    /// The bound counts the chain as built, its sink included. A chain whose
+    /// letters all take every value, which is what a length bound builds,
+    /// never reaches its sink, and the numbering walk leaves it out, so that
+    /// table holds one state fewer than the bound counts.
     #[must_use]
-    pub fn shape(prefix: &[G], tail: Option<&G>) -> SymbolicDfa<G> {
+    pub fn shape(prefix: &[G], tail: Option<&G>) -> Option<SymbolicDfa<G>> {
+        if !chain_fits(prefix.len()) {
+            return None;
+        }
         let (table, minimal) = SymbolicDfa::chain(prefix, tail);
         if !minimal {
-            return table.minimal();
+            return Some(table.minimal());
         }
         debug_assert!(table.well_formed(), "a table is minimised as it was built");
         let canonical = table.sorted().renumber();
         debug_assert!(canonical.well_formed(), "renumbering the states kept it");
-        canonical
+        Some(canonical)
     }
 
     /// The table a shape spells, and whether every prefix letter is proved to

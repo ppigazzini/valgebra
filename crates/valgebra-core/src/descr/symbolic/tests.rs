@@ -5,6 +5,12 @@ use crate::descr::lattice_tests::Algebra;
 use crate::verdict::Verdict;
 use proptest::prelude::*;
 
+/// A shape inside the state bound, as every one these tests build is but the
+/// one past it.
+fn shape<G: Guard>(prefix: &[G], tail: Option<&G>) -> SymbolicDfa<G> {
+    SymbolicDfa::shape(prefix, tail).expect("a shape inside the state bound")
+}
+
 /// Integer sets as guards, so the machine is exercised over a letter whose
 /// algebra is already held to its own laws.
 ///
@@ -92,14 +98,12 @@ fn language() -> impl Strategy<Value = SymbolicDfa<IntSet>> {
         Just(SymbolicDfa::empty()),
         Just(SymbolicDfa::all()),
         // `list[T]`.
-        guard
-            .clone()
-            .prop_map(|g| SymbolicDfa::shape(&[], Some(&g))),
+        guard.clone().prop_map(|g| shape(&[], Some(&g))),
         // `tuple[A]` and `tuple[A, B]`.
-        guard.clone().prop_map(|g| SymbolicDfa::shape(&[g], None)),
-        (guard.clone(), guard.clone()).prop_map(|(a, b)| SymbolicDfa::shape(&[a, b], None)),
+        guard.clone().prop_map(|g| shape(&[g], None)),
+        (guard.clone(), guard.clone()).prop_map(|(a, b)| shape(&[a, b], None)),
         // `tuple[A, *tuple[B, ...]]`.
-        (guard.clone(), guard).prop_map(|(a, b)| SymbolicDfa::shape(&[a], Some(&b))),
+        (guard.clone(), guard).prop_map(|(a, b)| shape(&[a], Some(&b))),
     ];
     leaf.prop_recursive(3, 12, 2, |inner| {
         prop_oneof![
@@ -213,7 +217,7 @@ proptest! {
             minimal,
             prefix.iter().all(|guard| guard.emptiness() == Verdict::Inhabited)
         );
-        prop_assert_eq!(SymbolicDfa::shape(&prefix, tail.as_ref()), table.minimal());
+        prop_assert_eq!(shape(&prefix, tail.as_ref()), table.minimal());
     }
 
     /// A side that is the whole language or the empty one is answered by the
@@ -381,8 +385,8 @@ fn the_merge_starts_from_three_distances() {
     assert_eq!(table.seed(), [0, 1, 2, 3, 4, 5, 4]);
 
     for n in [1usize, 4, 9] {
-        let zeros = SymbolicDfa::shape(&[], Some(&IntSet::just(0)));
-        let at_least = SymbolicDfa::shape(&vec![IntSet::just(0); n + 1], Some(&IntSet::just(0)));
+        let zeros = shape(&[], Some(&IntSet::just(0)));
+        let at_least = shape(&vec![IntSet::just(0); n + 1], Some(&IntSet::just(0)));
         let at_most = zeros.intersect(&at_least.complement()).expect("a chain");
         let seed = at_most.seed();
         let mut blocks = seed.clone();
@@ -402,8 +406,8 @@ fn the_merge_starts_from_three_distances() {
 /// of this.
 #[test]
 fn a_product_past_the_allowance_refuses() {
-    let ints = SymbolicDfa::shape(&[IntSet::just(1), IntSet::just(2)], None);
-    let others = SymbolicDfa::shape(&[IntSet::just(1)], Some(&IntSet::all()));
+    let ints = shape(&[IntSet::just(1), IntSet::just(2)], None);
+    let others = shape(&[IntSet::just(1)], Some(&IntSet::all()));
 
     assert!(crate::descr::budget::under(1, || ints.intersect(&others)).is_none());
     assert!(crate::descr::budget::under(4096, || ints.intersect(&others)).is_some());
@@ -417,18 +421,18 @@ fn one_constructor_covers_the_three_sequence_spellings() {
     let one = IntSet::just(1);
 
     // `list[0]`: any number of zeros, the empty list included.
-    let homogeneous = SymbolicDfa::shape(&[], Some(&zero));
+    let homogeneous = shape(&[], Some(&zero));
     assert!(homogeneous.holds(&[]));
     assert!(homogeneous.holds(&[0, 0, 0]));
     assert!(!homogeneous.holds(&[0, 1]));
 
     // `tuple[0, 1]`: exactly two elements, positionally.
-    let fixed = SymbolicDfa::shape(&[zero.clone(), one.clone()], None);
+    let fixed = shape(&[zero.clone(), one.clone()], None);
     assert!(fixed.holds(&[0, 1]));
     assert!(!fixed.holds(&[0]) && !fixed.holds(&[0, 1, 1]) && !fixed.holds(&[1, 0]));
 
     // `tuple[0, *tuple[1, ...]]`: one element, then any number.
-    let prefixed = SymbolicDfa::shape(&[zero], Some(&one));
+    let prefixed = shape(&[zero], Some(&one));
     assert!(prefixed.holds(&[0]) && prefixed.holds(&[0, 1, 1]));
     assert!(!prefixed.holds(&[]) && !prefixed.holds(&[1]) && !prefixed.holds(&[0, 0]));
 
@@ -449,8 +453,8 @@ fn one_constructor_covers_the_three_sequence_spellings() {
 fn a_union_of_fixed_sequences_joins_their_element_sets() {
     let zero = IntSet::just(0);
     let one = IntSet::just(1);
-    let joined = SymbolicDfa::shape(std::slice::from_ref(&zero), None)
-        .union(&SymbolicDfa::shape(std::slice::from_ref(&one), None))
+    let joined = shape(std::slice::from_ref(&zero), None)
+        .union(&shape(std::slice::from_ref(&one), None))
         .expect("a small union");
 
     assert!(joined.holds(&[0]) && joined.holds(&[1]));
@@ -458,7 +462,7 @@ fn a_union_of_fixed_sequences_joins_their_element_sets() {
     assert!(!joined.holds(&[]) && !joined.holds(&[0, 1]));
     assert!(agree_on_sequences(
         &joined,
-        &SymbolicDfa::shape(&[zero.union(&one).expect("a period of one")], None)
+        &shape(&[zero.union(&one).expect("a period of one")], None)
     ));
 }
 
@@ -496,7 +500,7 @@ fn two_letters_into_one_block_join_in_the_signature() {
     };
     let minimal = table.minimal();
     assert_eq!(minimal.state_count(), 2, "{minimal:?}");
-    assert_eq!(minimal, SymbolicDfa::shape(&[], Some(&zero_or_one)));
+    assert_eq!(minimal, shape(&[], Some(&zero_or_one)));
 }
 
 /// A guard that leaves nothing leaves no else edge to write down.
@@ -508,11 +512,11 @@ fn two_letters_into_one_block_join_in_the_signature() {
 /// has not finished.
 #[test]
 fn a_guard_that_takes_everything_leaves_no_else_edge() {
-    let looped = SymbolicDfa::shape(&[], Some(&IntSet::all()));
+    let looped = shape(&[], Some(&IntSet::all()));
     assert_eq!(looped, SymbolicDfa::all(), "a loop on every value");
 
     // The prefix form too: one letter, any value, and nothing after it.
-    let one = SymbolicDfa::shape(&[IntSet::all()], None);
+    let one = shape(&[IntSet::all()], None);
     assert!(one.holds(&[0]) && !one.holds(&[]) && !one.holds(&[0, 0]));
 }
 
@@ -606,9 +610,7 @@ fn a_product_past_the_edge_bound_refuses() {
 /// `[5, 1, 9]`, which no branch spells.
 #[test]
 fn two_states_reaching_one_block_through_separate_targets_stay_apart() {
-    let triple = |a: i64, b: i64| {
-        SymbolicDfa::shape(&[IntSet::just(a), IntSet::just(b), IntSet::just(9)], None)
-    };
+    let triple = |a: i64, b: i64| shape(&[IntSet::just(a), IntSet::just(b), IntSet::just(9)], None);
     let language = triple(0, 0)
         .union(&triple(0, 1))
         .and_then(|left| left.union(&triple(5, 0)))
@@ -633,7 +635,7 @@ fn two_states_reaching_one_block_through_separate_targets_stay_apart() {
 /// which no spelling put in it.
 #[test]
 fn two_states_reaching_one_block_by_different_letters_stay_apart() {
-    let pair = |a: i64, b: i64| SymbolicDfa::shape(&[IntSet::just(a), IntSet::just(b)], None);
+    let pair = |a: i64, b: i64| shape(&[IntSet::just(a), IntSet::just(b)], None);
     let language = pair(0, 0)
         .union(&pair(0, 1))
         .and_then(|left| left.union(&pair(1, 0)))
@@ -659,22 +661,22 @@ fn the_declined_sequence_relations_are_decided() {
     // A meet of two element-disjoint lists is the empty list alone, which
     // the structural procedure cannot see because it does not intersect a
     // container componentwise.
-    let met = SymbolicDfa::shape(&[], Some(&ints))
-        .intersect(&SymbolicDfa::shape(&[], Some(&strs)))
+    let met = shape(&[], Some(&ints))
+        .intersect(&shape(&[], Some(&strs)))
         .expect("a small meet");
     assert!(met.holds(&[]), "the empty list is in both");
     assert!(!met.holds(&[0]) && !met.holds(&[-1]));
     assert_eq!(
         met,
-        SymbolicDfa::shape(&[], Some(&IntSet::empty())),
+        shape(&[], Some(&IntSet::empty())),
         "a list of nothing is the empty list alone"
     );
 
     // A fixed sequence is inside the complement of one that differs
     // positionally, which is `A <= ~B` -- and that is `A & B` being empty,
     // not `A & ~~B`.
-    let left = SymbolicDfa::shape(&[ints.clone(), strs.clone()], None);
-    let right = SymbolicDfa::shape(&[strs, ints.clone()], None);
+    let left = shape(&[ints.clone(), strs.clone()], None);
+    let right = shape(&[strs, ints.clone()], None);
     assert!(
         left.intersect(&right).is_some_and(|met| met.is_empty()),
         "the two orders share no sequence"
@@ -686,10 +688,10 @@ fn the_declined_sequence_relations_are_decided() {
 
     // And a meet with a complement is the componentwise difference:
     // `tuple[int] & ~tuple[bool]` is `tuple[int & ~bool]`.
-    let difference = SymbolicDfa::shape(std::slice::from_ref(&ints), None)
-        .intersect(&SymbolicDfa::shape(std::slice::from_ref(&bools), None).complement())
+    let difference = shape(std::slice::from_ref(&ints), None)
+        .intersect(&shape(std::slice::from_ref(&bools), None).complement())
         .expect("a small meet");
-    let narrowed = SymbolicDfa::shape(
+    let narrowed = shape(
         &[ints
             .intersect(&bools.complement())
             .expect("a period of one")],
@@ -735,6 +737,20 @@ fn a_product_past_the_state_bound_refuses() {
         cycle(31).intersect(&cycle(37)).is_some(),
         "31 * 37 is inside it"
     );
+}
+
+/// A shape is a chain, held to the state bound before it is built.
+///
+/// With no tail every chain reaches its sink, so the table two letters short
+/// of the bound holds the bound exactly, and one more letter refuses. Built,
+/// the longer chain would be a table no product could take.
+#[test]
+fn a_shape_past_the_state_bound_refuses() {
+    let letters = vec![IntSet::all(); MAX_STATES - 2];
+    let edge = SymbolicDfa::shape(&letters, None).expect("a shape at the bound");
+    assert_eq!(edge.state_count(), MAX_STATES);
+    let longer = vec![IntSet::all(); MAX_STATES - 1];
+    assert!(SymbolicDfa::shape(&longer, None).is_none());
 }
 
 /// A letter that can decline, which is the third answer a guard may give.
@@ -918,7 +934,7 @@ fn a_chain_with_an_undecided_letter_is_left_to_the_merge() {
     ] {
         let (table, minimal) = SymbolicDfa::chain(&prefix, Some(&held));
         assert!(!minimal, "{prefix:?}");
-        assert_eq!(SymbolicDfa::shape(&prefix, Some(&held)), table.minimal());
+        assert_eq!(shape(&prefix, Some(&held)), table.minimal());
     }
     assert!(SymbolicDfa::chain(&[held.clone(), held.clone()], None).1);
 }

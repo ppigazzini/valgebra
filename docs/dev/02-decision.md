@@ -191,6 +191,14 @@ representation, and it is the sentence to read rather than this table. Every
 listed kind has a representation that separates its values; `Coarse` survives
 only where it is exact.
 
+**Both automata hold the state bound as they are built** (`MAX_STATES` in
+`descr/automaton.rs`). A product and a compiled pattern are numbered by a walk
+that refuses the state past it. A literal word and a sequence shape are built
+as chains, and `chain_fits` asks before the chain is built, so a literal of a
+million characters declines for one comparison rather than after a table of a
+million states. A leaf past the bound buys no answer, since the first product
+it meets refuses.
+
 **A map's key lands in the parts of the key partition it holds whole**
 (`key_cover` in `descr/lower.rs`): a kind, a `tuple` or `frozenset` of
 anything, a union of those, and a complement of one, which opens the parts its

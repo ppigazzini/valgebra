@@ -3,7 +3,7 @@ use crate::descr::budget;
 use crate::descr::lattice_tests::Algebra;
 use crate::descr::lines;
 use crate::descr::records::RecordLattice;
-use crate::descr::symbolic::{Edge, Guard};
+use crate::descr::symbolic::{Edge, Guard, MAX_STATES};
 use crate::kind::Kind;
 use core::mem::size_of;
 use proptest::prelude::*;
@@ -1742,11 +1742,16 @@ fn a_length_bound_over_a_sequence_kind_counts_its_elements() {
     // Inside the kind: a tuple of one is not a list of one.
     assert!(!at_most_one.admits(Value::sequence(ONE, Kind::Tuple)));
 
-    // The bound is inclusive and refuses one past it -- checked with a bound
-    // small enough to build, since the real one is an automaton of 4,096 states.
-    assert!(Descr::sequences_at_least_within(3, 3, Kind::List).is_some());
-    assert!(Descr::sequences_at_least_within(4, 3, Kind::List).is_none());
-    assert!(Descr::sequences_at_least_within(0, 0, Kind::List).is_some());
+    // The state bound counts the chain as built, its sink included, so two
+    // elements short of it builds and one more refuses. A bound no allocation
+    // could hold refuses as well, because it is refused before the letters are
+    // made.
+    let edge = MAX_STATES - 2;
+    assert!(Descr::sequences_at_least(edge, Kind::List).is_some());
+    assert!(Descr::sequences_at_least(edge + 1, Kind::List).is_none());
+    assert!(Descr::sequences_at_least(usize::MAX, Kind::List).is_none());
+    assert!(Descr::sequences_at_most(edge - 1, Kind::List).is_some());
+    assert!(Descr::sequences_at_most(edge, Kind::List).is_none());
 }
 
 /// The kinds a set lies within, read off the components rather than built.

@@ -547,12 +547,13 @@ impl Descr {
         Some(descr)
     }
 
-    /// The one-word set, for a word kind. A `str` is its UTF-8 bytes.
+    /// The one-word set, for a word kind, or `None` past the state bound. A
+    /// `str` is its UTF-8 bytes.
     #[must_use]
     pub fn word(word: &[u8], kind: Kind) -> Option<Descr> {
         alphabet_of(kind)?;
         let mut descr = Descr::nothing();
-        descr.put(kind, Component::Words(RegularSet::word(word)));
+        descr.put(kind, Component::Words(RegularSet::word(word)?));
         Some(descr)
     }
 
@@ -564,7 +565,7 @@ impl Descr {
     /// prefix, a tail and a prefix, which is the same chain with a loop in it.
     ///
     /// `None` where the kind's values are not sequences, which is a caller error
-    /// rather than a set.
+    /// rather than a set, and past the state bound.
     #[must_use]
     pub fn sequence(prefix: &[Descr], tail: Option<&Descr>, kind: Kind) -> Option<Descr> {
         if !is_sequence(kind) {
@@ -583,8 +584,9 @@ impl Descr {
         if !is_sequence(kind) {
             return None;
         }
+        let sequences = SymbolicDfa::shape(prefix, tail)?;
         let mut descr = Descr::nothing();
-        descr.put(kind, Component::Sequences(SymbolicDfa::shape(prefix, tail)));
+        descr.put(kind, Component::Sequences(sequences));
         Some(descr)
     }
 
@@ -610,14 +612,10 @@ impl Descr {
     /// `a_length_bound_costs_three_units_an_element` holds the figures.
     #[must_use]
     pub fn sequences_at_least(least: usize, kind: Kind) -> Option<Descr> {
-        Descr::sequences_at_least_within(least, symbolic::MAX_STATES, kind)
-    }
-
-    /// [`sequences_at_least`](Self::sequences_at_least) with the bound named,
-    /// so the edge can be tested without building an automaton the size of
-    /// the real one.
-    fn sequences_at_least_within(least: usize, bound: usize, kind: Kind) -> Option<Descr> {
-        if least > bound {
+        // Asked before the shape asks it, because the letters come first: one
+        // handle an element, and a bound of a trillion is eight terabytes of
+        // them.
+        if !automaton::chain_fits(least) {
             return None;
         }
         // One handle at every position: the letter is one set throughout, and

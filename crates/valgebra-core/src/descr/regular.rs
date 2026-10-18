@@ -39,7 +39,7 @@ use rustc_hash::FxHashMap;
 use std::sync::{Arc, OnceLock};
 
 pub use super::automaton::MAX_STATES;
-use super::automaton::{Reached, canonical_order, reaches};
+use super::automaton::{Reached, canonical_order, chain_fits, reaches};
 
 /// What `regex-automata` may spend building one pattern's table, in bytes.
 ///
@@ -196,11 +196,11 @@ impl Dfa {
     /// so a universe without them makes the difference between `str` and a
     /// catch-all pattern empty -- proving an inclusion `"\u{d800}"` refutes.
     ///
-    /// Written out rather than compiled from a pattern, for the reason
-    /// [`RegularSet::word`] is: it is asked for wherever a complement is taken,
-    /// and a constructor that can refuse would leave a caller choosing between a
-    /// wrong set and a panic. Thirteen byte classes, which is the standard
-    /// decoder read as an acceptor:
+    /// Written out rather than compiled from a pattern, as a word's chain is,
+    /// and for a reason of its own: it is asked for wherever a complement is
+    /// taken, and a constructor that can refuse would leave a caller choosing
+    /// between a wrong set and a panic. Thirteen byte classes, which is the
+    /// standard decoder read as an acceptor:
     ///
     /// * `0x00..=0x7F` stands alone;
     /// * `0xC2..=0xDF` takes one continuation, `0xE0..=0xEF` two and
@@ -297,6 +297,46 @@ impl Dfa {
         Dfa {
             classes,
             class_count: CLASSES,
+            transitions,
+            accepting,
+        }
+        .minimal()
+    }
+
+    /// The one-word automaton, at any length. [`RegularSet::word`] holds it to
+    /// the bound; a test reads a chain longer than the bound through this.
+    fn word(word: &[u8]) -> Dfa {
+        // Built as a chain rather than through the pattern parser: a literal is
+        // not a pattern, and escaping one into a pattern is a second place the
+        // two spellings could disagree.
+        let states = word.len() + 1;
+        let mut classes: Vec<Class> = vec![0; 256];
+        let mut seen: FxHashMap<u8, Class> = FxHashMap::default();
+        for byte in word {
+            let count = Class::try_from(seen.len()).unwrap_or(0);
+            seen.entry(*byte).or_insert(count + 1);
+        }
+        for (byte, class) in &seen {
+            if let Some(slot) = classes.get_mut(usize::from(*byte)) {
+                *slot = *class;
+            }
+        }
+        let class_count = seen.len() + 1;
+        // One extra state is the sink every wrong byte leads to.
+        let mut transitions = vec![u32::try_from(states).unwrap_or(0); (states + 1) * class_count];
+        for (position, byte) in word.iter().enumerate() {
+            let class = classes.get(usize::from(*byte)).copied().unwrap_or(0);
+            if let Some(slot) = transitions.get_mut(position * class_count + usize::from(class)) {
+                *slot = u32::try_from(position + 1).unwrap_or(0);
+            }
+        }
+        let mut accepting = vec![false; states + 1];
+        if let Some(flag) = accepting.get_mut(word.len()) {
+            *flag = true;
+        }
+        Dfa {
+            classes,
+            class_count,
             transitions,
             accepting,
         }
@@ -882,48 +922,19 @@ impl RegularSet {
         })
     }
 
-    /// The one-word language.
+    /// The one-word language, or `None` past [`MAX_STATES`].
+    ///
+    /// A word of `n` bytes is a chain of `n + 2` states, and no two of them
+    /// merge: the state after `i` bytes is `n - i` bytes from acceptance and
+    /// the sink is never, so the table holds what `chain_fits` counts.
     #[must_use]
-    pub fn word(word: &[u8]) -> RegularSet {
-        // Built as a chain rather than through the pattern parser: a literal is
-        // not a pattern, and escaping one into a pattern is a second place the
-        // two spellings could disagree.
-        let states = word.len() + 1;
-        let mut classes: Vec<Class> = vec![0; 256];
-        let mut seen: FxHashMap<u8, Class> = FxHashMap::default();
-        for byte in word {
-            let count = Class::try_from(seen.len()).unwrap_or(0);
-            seen.entry(*byte).or_insert(count + 1);
+    pub fn word(word: &[u8]) -> Option<RegularSet> {
+        if !chain_fits(word.len()) {
+            return None;
         }
-        for (byte, class) in &seen {
-            if let Some(slot) = classes.get_mut(usize::from(*byte)) {
-                *slot = *class;
-            }
-        }
-        let class_count = seen.len() + 1;
-        // One extra state is the sink every wrong byte leads to.
-        let mut transitions = vec![u32::try_from(states).unwrap_or(0); (states + 1) * class_count];
-        for (position, byte) in word.iter().enumerate() {
-            let class = classes.get(usize::from(*byte)).copied().unwrap_or(0);
-            if let Some(slot) = transitions.get_mut(position * class_count + usize::from(class)) {
-                *slot = u32::try_from(position + 1).unwrap_or(0);
-            }
-        }
-        let mut accepting = vec![false; states + 1];
-        if let Some(flag) = accepting.get_mut(word.len()) {
-            *flag = true;
-        }
-        RegularSet {
-            dfa: Arc::new(
-                Dfa {
-                    classes,
-                    class_count,
-                    transitions,
-                    accepting,
-                }
-                .minimal(),
-            ),
-        }
+        Some(RegularSet {
+            dfa: Arc::new(Dfa::word(word)),
+        })
     }
 
     /// The words of at least `length` symbols -- code points for

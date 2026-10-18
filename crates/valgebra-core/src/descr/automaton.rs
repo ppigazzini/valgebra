@@ -35,7 +35,23 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// answering. Past it the set is not representable, and the operation says so
 /// rather than returning an automaton for a different language. One bound for
 /// both automata, since both multiply the same way.
+///
+/// It holds every table as it is built, before minimisation: a table reached
+/// by a walk through `Reached`, and a table built as a chain -- a literal word,
+/// a sequence shape -- through `chain_fits`.
 pub const MAX_STATES: usize = 4096;
+
+/// Whether a chain of `letters` fits [`MAX_STATES`] as it is built: a state for
+/// each letter, the state after the last, and the sink a wrong letter leads to.
+///
+/// A leaf built as a chain is never walked, so [`Reached`] does not see it, and
+/// past the bound its table buys no answer, since the first product it enters
+/// refuses. Asked before anything is built, the refusal costs one comparison:
+/// built, a word of a million bytes is a table of a million states minimised
+/// before that product refuses it.
+pub(super) const fn chain_fits(letters: usize) -> bool {
+    letters <= MAX_STATES - 2
+}
 
 /// Whether a walk from state zero reaches a state `accepts` holds, following
 /// the targets `follow` pushes for each state it visits.

@@ -3778,7 +3778,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "CONTRIBUTING.md",
-            " --skip a_word_of_a_hundred_thousand_bytes_builds` |",
+            " --skip a_chain_of_a_hundred_thousand_states_minimises` |",
             "` |",
         ),
         trips=("test_the_documented_rerun_command_carries_the_same_skips",),

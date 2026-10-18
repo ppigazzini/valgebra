@@ -48,6 +48,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a map atom wanting a key past the partition proves nothing -- internal
 - fix: the clauses admitting every value close as one clause
 - fix: a bound or a step Python cannot apply is refused
+- fix: the state bound holds every automaton as it is built
 
 -->
 
@@ -316,6 +317,15 @@ answer of its own, or a repair to a change not yet released.
   integers. Because `typing` caches `Annotated` by equality, `MultipleOf(2)`
   built after `MultipleOf(2 + 0j)` arrives as it and is refused with it, where
   it admitted nothing before; the message says so.
+- **A relation over a long `Literal` string or bytes answers at once.** The set
+  representation built a literal's automaton a state per byte and minimised it
+  before the first product refused it as past the state bound, so
+  `Validator(Annotated[str, Regex("a*")]).relation_to(complement(Literal["a" *
+  1_000_000]))` took a second to answer `undecided`. A literal past 4,094
+  bytes, a `str` counted in UTF-8, is refused before anything is built, and
+  the same relation takes a tenth of a millisecond. So is a length bound over
+  a list or a tuple past 4,094 elements, which built its automaton past the
+  bound at 4,095 and 4,096. No answer moves.
 
 ## [0.0.18] - 2026-10-12
 
