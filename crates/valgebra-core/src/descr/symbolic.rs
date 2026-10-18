@@ -591,7 +591,9 @@ impl<G: Guard> SymbolicDfa<G> {
             }
             edges.push(row);
         }
-        Some(SymbolicDfa { edges, accepting }.merge_targets().minimal())
+        // `minimal` merges each state's targets before anything else, so the
+        // table goes to it as built.
+        Some(SymbolicDfa { edges, accepting }.minimal())
     }
 
     /// Join the guards of edges that share a target, so a state's edge list has
