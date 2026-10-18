@@ -662,7 +662,7 @@ stands on a value, and a decline is reported as itself rather than as either.
 
 SOURCE: §14.1 "The decision's return type destroys the contract's only observable"
 
-HELD-BY: test_the_three_answers_agree_with_the_two, an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_negated_set_the_allowance_cannot_expand_declines, a_union_narrowed_to_one_branch_refutes_where_that_branch_does, test_every_predicate_is_the_proof_answer_of_a_relation
+HELD-BY: test_the_three_answers_agree_with_the_two, the_relation_folds_are_kleenes_strong_connectives, the_verdict_folds_are_the_relation_folds_read_as_inhabitation, an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_negated_set_the_allowance_cannot_expand_declines, a_union_narrowed_to_one_branch_refutes_where_that_branch_does, test_every_predicate_is_the_proof_answer_of_a_relation
 
 **The budget declines; it never refutes.** Exhausting the work budget answers
 neither, on every path a subtyping query can take: through a product, through

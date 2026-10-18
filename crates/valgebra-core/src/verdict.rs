@@ -147,14 +147,14 @@ impl Relation {
     /// never take included. So the mismatch is read against the subject: proved
     /// inhabited it refutes, proved empty it establishes the opposite, and
     /// undecided it decides nothing.
+    ///
+    /// That is [`of_difference`](Self::of_difference) of the subject, and it is
+    /// spelled as one: a mismatch puts every value of the subject outside the
+    /// supertype, so the difference the descriptor would build *is* the subject.
     #[must_use]
     #[inline]
     pub(crate) const fn of_mismatch(subject: Verdict) -> Relation {
-        match subject {
-            Verdict::Inhabited => Relation::Fails,
-            Verdict::Empty => Relation::Holds,
-            Verdict::Unknown => Relation::Unknown,
-        }
+        Relation::of_difference(subject)
     }
 
     /// The second decider, asked only where the first declines.
@@ -325,3 +325,6 @@ impl Verdict {
         verdict
     }
 }
+
+#[cfg(test)]
+mod tests;

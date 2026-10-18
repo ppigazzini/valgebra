@@ -637,7 +637,9 @@ These are the readings that refute, each with the value it stands on:
 **A conjunct refutes beside a decline.** A rule folds the conjuncts of one claim
 about one pair with `Relation::all`, Kleene's strong conjunction: a refutation
 from any conjunct names a value whatever the others answer, and a decline ends
-nothing. `Relation::and` chains *steps*, where a later question means something
+nothing. It is the least answer in the order refutation, decline, proof, and
+`any` the greatest, so neither reads the order its items came in;
+`verdict/tests.rs` checks that over every list of five answers or fewer. `Relation::and` chains *steps*, where a later question means something
 only once the earlier one holds, and reports the earlier decline. A record's
 required-ness beside each field's depth, and a sequence's repeated element
 beside its prefix, are conjuncts: the value leaving a key out carries no entry
