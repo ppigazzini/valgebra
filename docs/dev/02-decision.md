@@ -538,7 +538,7 @@ each be `True` with a value refuting it.
 
 A class failing any condition is the `isinstance` atom any other class is. That
 costs completeness and nothing else: membership is unaffected, and the relations
-simply stay undecided. `tests/test_enums.py` holds each refused kind to the value
+stay undecided. `tests/test_enums.py` holds each refused kind to the value
 that would refute the union reading, so a kind read as its members again fails
 there.
 

@@ -58,8 +58,8 @@ work. Read the ratios with that in mind:
 - **pydantic** (`TypeAdapter.validate_python`, strict mode) validates *and
   constructs* a value. Strict mode disables coercion, but it still builds and
   returns output, so it does strictly more work than a membership check. It is
-  the relevant point of comparison because it is the fast, Rust-cored validator
-  most users reach for.
+  the relevant point of comparison because it is the Rust-cored validator most
+  users reach for.
 
 The record shape compares valgebra's closed record against a pydantic
 `TypedDict` and a jsonschema object with `additionalProperties: false`, so all
@@ -1172,7 +1172,7 @@ ratio crosses its ceiling, or drifts past its recorded ratio where one is armed
 Re-record the counts after an intentional change with:
 
 ```bash
-python scripts/perf_gate.py --update            # the core count; --decision, --binding-record, ... for the others
-python scripts/compare_gate.py --update         # one run's ratios, a reading for a window
-python scripts/compare_gate.py --record-window WINDOW.json  # arms the ratchet from the lane's window
+uv run --no-sync python scripts/perf_gate.py --update  # the core count; --decision, --binding-record, ... for the others
+uv run --no-sync --group bench python scripts/compare_gate.py --update  # one run's ratios, a reading for a window
+uv run --no-sync python scripts/compare_gate.py --record-window WINDOW.json  # arms the ratchet from the lane's window
 ```

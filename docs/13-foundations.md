@@ -100,8 +100,8 @@ rest of these pages use is the two names.
 
 The **rules** read the two schemas' shapes and apply inclusion rules to them: a
 list against a list compares elements, a record against a record compares
-fields. They are fast, they answer the shapes a caller writes, and where no rule
-matches a pair they say so rather than guessing.
+fields. They answer the shapes a caller writes, and where no rule matches a pair
+they say so rather than guessing.
 
 The **sets** are the other reading. Each kind of value has a representation
 closed under union, intersection and complement — the integers as interval

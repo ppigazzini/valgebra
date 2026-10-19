@@ -430,11 +430,13 @@ through cargo rather than through maturin, which builds the extension module
 the release lane ships:
 
 ```bash
-export PYO3_PYTHON="$(uv python find 3.14)"          # the interpreter the bench lane pins
+# The venv's interpreter, on the 3.14 the bench lane pins: the one valgebra is installed in.
+export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
 cargo build --profile profiling -p valgebra-py --features pyo3/extension-module
-pkg="$(python -c 'import valgebra, pathlib; print(pathlib.Path(valgebra.__file__).parent)')"
-cp target/profiling/lib_valgebra.so "$pkg/_valgebra.cpython-314-x86_64-linux-gnu.so"
-PYTHONHASHSEED=0 valgrind --tool=callgrind --callgrind-out-file=out.callgrind python probe.py
+pkg="$("$PYO3_PYTHON" -c 'import valgebra, pathlib; print(pathlib.Path(valgebra.__file__).parent)')"
+suffix="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("EXT_SUFFIX"))')"
+cp target/profiling/lib_valgebra.so "$pkg/_valgebra$suffix"
+PYTHONHASHSEED=0 valgrind --tool=callgrind --callgrind-out-file=out.callgrind "$PYO3_PYTHON" probe.py
 callgrind_annotate --inclusive=yes out.callgrind
 ```
 

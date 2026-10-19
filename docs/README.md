@@ -43,7 +43,7 @@ inspectable contract — cheaply enough to run on every request or every agent
 turn.
 
 For ingesting untrusted input into typed models with coercion and defaults, use
-**pydantic**; for the fastest deserialization into structs, use **msgspec**.
+**pydantic**; for decoding bytes into structs, use **msgspec**.
 Neither answers the membership question: both check while *building* a value,
 and by default hand back one they are given without re-examining it. valgebra
 occupies the niche neither covers: a closed, lawful **algebra** of schemas

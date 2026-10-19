@@ -257,8 +257,8 @@ That makes it different from the tools you might already use:
 - **pydantic** parses untrusted input into typed models *with coercion and
   defaults*, and guarantees the type of what it *returns*. Use it for ingestion;
   use valgebra to check a value you already hold — including one pydantic built.
-- **msgspec** is the fastest path for *deserializing* bytes into structs, and
-  it checks on that path only. A `Struct` constructor validates nothing, and
+- **msgspec** *deserializes* bytes into structs, and it checks on that path
+  only. A `Struct` constructor validates nothing, and
   `convert` hands back a `Struct` you already hold without re-examining it —
   there is no membership call to ask instead. Use it to decode; use valgebra
   to check what you decoded.
