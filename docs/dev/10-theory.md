@@ -740,13 +740,15 @@ mapping opened keeps what a `str` key maps to and admits an `int` key with any
 value, one clause is read the same whether or not a field is declared beside
 it, and the top split over `str` and `complement(str)` closes as the top does. Every record is rewritten, the one a clause maps a key to
 included. What the laws hold of the sets is narrower than "a function of the
-set": closing commutes with absorption, and applying either operator twice
-gives the set applying it once gave, though not always the same term.
+set": closing commutes with absorption, applying either operator twice
+gives the set applying it once gave, though not always the same term, and a
+name saying what its record says of every key it does not name moves no set
+either operator gives.
 **[OBLIGATION: open-and-close-read-the-region]**
 
 SOURCE: §14.6 "Operators belong on the representation built for them"
 
-HELD-BY: test_opening_a_mapping_frees_the_keys_no_clause_claims, test_a_clause_is_read_the_same_with_or_without_a_field_beside_it, test_one_term_closes_one_way_whichever_reading_wrote_it, test_closing_commutes_with_absorption, closing_commutes_with_absorption, opening_or_closing_twice_gives_the_set_once_did, with_records_open_reaches_the_record_a_clause_maps_to, test_opening_reaches_the_record_a_mapping_maps_to, opening_widens_closing_narrows_and_the_round_trip_is_at_most_closing, closing_an_opened_mapping_takes_out_the_region_opening_freed, test_closing_an_opened_mapping_takes_out_only_the_region_opening_freed, opening_under_a_complement_narrows_and_closing_widens, closing_an_opened_record_is_not_closing_the_record, test_closing_an_opened_schema_is_not_closing_it
+HELD-BY: test_opening_a_mapping_frees_the_keys_no_clause_claims, test_a_clause_is_read_the_same_with_or_without_a_field_beside_it, test_one_term_closes_one_way_whichever_reading_wrote_it, test_closing_commutes_with_absorption, closing_commutes_with_absorption, opening_or_closing_twice_gives_the_set_once_did, with_records_open_reaches_the_record_a_clause_maps_to, test_opening_reaches_the_record_a_mapping_maps_to, opening_widens_closing_narrows_and_the_round_trip_is_at_most_closing, closing_an_opened_mapping_takes_out_the_region_opening_freed, test_closing_an_opened_mapping_takes_out_only_the_region_opening_freed, opening_under_a_complement_narrows_and_closing_widens, closing_an_opened_record_is_not_closing_the_record, test_closing_an_opened_schema_is_not_closing_it, a_name_the_record_already_says_moves_no_set_either_operator_gives
 
 **`open` and `close` are term rewrites, and the cost is a spelling.** They read
 the clauses a term *writes* rather than the set it denotes, so two terms the

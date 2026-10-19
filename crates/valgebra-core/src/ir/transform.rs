@@ -580,17 +580,6 @@ impl Schema {
             // what a clause claims is a region, and the operator is about the
             // rest.
             Schema::KeyedMap { fields, defaults } => {
-                // Sized from the field list rather than collected into a
-                // vector that grows. A filter cannot say in advance how many
-                // elements survive it, so `collect` starts a record's fields at
-                // capacity zero and reallocates its way up, copying every field
-                // it has built so far each time; a wide record pays that on
-                // every pass over it. Dropping a field here is the rare case --
-                // it happens only when a name says exactly what the catch-all
-                // already says -- so the field list's own length is the right
-                // guess, and over-reserving by the one or two it drops costs a
-                // few unused slots and no allocation.
-                //
                 // The clauses are part of the tree as well: a mapping's value may
                 // be a record, `dict[str, {"b": int}]`, and that record is opened
                 // with the rest. Read first, because the region the clauses leave
@@ -598,8 +587,14 @@ impl Schema {
                 let inner = mapped_clauses(defaults, &|schema| schema.records_opened(open));
                 let current = inner.as_ref().unwrap_or(defaults);
                 let wanted = clauses_over(current, open);
-                let dropping = fields.iter().any(|field| already_said(field, current));
                 let opened = mapped_fields(fields, &|schema| schema.records_opened(open));
+                let updated = opened.as_ref().unwrap_or(fields);
+                // A name is judged as it stands afterwards too, against those
+                // clauses, and this one test decides both whether the node is
+                // rebuilt and which names the rebuilt node keeps. So whether a
+                // name survives turns on what that name says alone, never on
+                // another name beside it.
+                let dropping = updated.iter().any(|field| already_said(field, current));
                 if !dropping && opened.is_none() && *defaults == wanted {
                     return None;
                 }
@@ -619,7 +614,7 @@ impl Schema {
                     kept.extend(
                         updated
                             .iter()
-                            .filter(|field| !already_said(field, defaults))
+                            .filter(|field| !already_said(field, current))
                             .cloned(),
                     );
                     Schema::keyed_map_from(kept, wanted)

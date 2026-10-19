@@ -5194,6 +5194,59 @@ proptest! {
     }
 
     // THEORY: open-and-close-read-the-region
+    /// A name the record already says changes no set either operator gives.
+    ///
+    /// `"b"?: nothing` beside a closed record's fields, or `"b"?: anything`
+    /// beside an open one's, says what the record says of every key it does
+    /// not name, so the record is one set with the name or without it, and
+    /// `open` and `close` give each one set for both. The field beside it is
+    /// what the operator reaches into, so it is drawn three ways: as drawn, and
+    /// as every value and as no value, each spelled through an open and a closed
+    /// record of the draw that one operator makes the same record. Those two
+    /// are the fields whose saying turns on the records inside them, and the
+    /// generator alone reaches neither.
+    #[test]
+    fn a_name_the_record_already_says_moves_no_set_either_operator_gives(
+        drawn in decidable_schema(),
+        spelling in 0..3usize,
+        written in prop_oneof![Just(Openness::Open), Just(Openness::Closed)],
+    ) {
+        let pool = const_pool();
+        let optional = |name: &str, schema: Schema| Field {
+            name: name.into(),
+            schema,
+            required: false,
+        };
+        // Keys the universe writes dicts with, so a value tells the records
+        // apart by them.
+        let free = Schema::record(vec![optional("c", drawn.clone())], Openness::Open);
+        let shut = Schema::record(vec![optional("c", drawn.clone())], Openness::Closed);
+        let inner = match spelling {
+            0 => drawn,
+            1 => Schema::union([free, shut.complement()]),
+            _ => Schema::meet([shut, free.complement()]),
+        };
+        let said = match written {
+            Openness::Open => Schema::ANYTHING,
+            Openness::Closed => Schema::Nothing,
+        };
+        let lone = Schema::record(vec![optional("a", inner.clone())], written);
+        let beside = Schema::record(vec![optional("a", inner), optional("b", said)], written);
+        for openness in [Openness::Open, Openness::Closed] {
+            let alone = lone.with_records_open(openness);
+            let with_it = beside.with_records_open(openness);
+            for value in &boundary_values(&[&lone, &alone, &with_it]) {
+                prop_assert_eq!(
+                    member_full(&alone, value, &pool),
+                    member_full(&with_it, value, &pool),
+                    "{:?} parted the record from itself with a said name, at {:?}",
+                    openness, value
+                );
+            }
+        }
+    }
+
+    // THEORY: open-and-close-read-the-region
     /// `open` only widens, `close` only narrows, and closing an opened term is
     /// **at most** closing the term.
     ///

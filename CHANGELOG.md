@@ -53,6 +53,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a refused union renders only the labels it names
 - fix: a wide record whose clause reads keys reads a JSON object in one pass
 - fix: a complement names the set it excludes
+- fix: a record's name survives open or close by what it says alone
 
 -->
 
@@ -352,6 +353,17 @@ answer of its own, or a repair to a change not yet released.
   literal` and `complement(int | str)` said `not union`, alone and as a union's
   branch. It reads `not the literal 'admin'` and `not (int or str)`, naming its
   inner schema as a union names a branch.
+- **Whether `open` or `close` keeps a field turns on that field alone.** A
+  field saying what its record already says of every key it does not name is
+  dropped, and the field was read as written to decide whether to drop any
+  and as opened to decide which. So with `V` the union `dict[anything,
+  anything] | complement({})`, `{"b?": V, anything: anything}` closed to
+  `{"b?": anything}`, and with `"c?": anything` beside it to `{}`, though the
+  two admit the same dicts; and `{"b?": intersection({}, complement(
+  dict[anything, anything]))}`, which admits what `{}` admits, opened to a
+  record refusing the key `b`. A field is read once, as it stands with its
+  own records opened: the first pair closes to `{}`, and the second opens to
+  `dict[anything, anything]`.
 
 ## [0.0.18] - 2026-10-12
 

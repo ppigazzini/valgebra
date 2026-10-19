@@ -619,8 +619,8 @@ fn closing_an_opened_record_is_not_closing_the_record() {
 }
 
 // THEORY: no-negative-clause-component
-/// Opening reads the labels on the semantic `dom`, which is what makes it a
-/// function on sets.
+/// Opening reads the labels on the semantic `dom`, which is what keeps two
+/// spellings of one record from opening apart.
 ///
 /// A field that gives its key exactly what the record already gives every key
 /// it does not name adds nothing, so two records differing only in such a
@@ -689,6 +689,60 @@ fn opening_drops_a_field_the_record_already_said() {
     assert_ne!(
         demanded.with_records_open(Openness::Open),
         empty_closed.with_records_open(Openness::Open)
+    );
+}
+
+/// Whether a name survives `open` or `close` turns on that name alone.
+///
+/// The name and the clauses are both read as they stand once their own
+/// records are opened, and one test decides whether the node is rebuilt and
+/// which names it keeps. Each shape below is a pair of records admitting the
+/// same dicts that the operator parted while the two decisions read different
+/// lists: a name beside another the record already says, a field only its own
+/// records' opening empties, and a catch-all only its records' closing frees.
+#[test]
+fn a_name_survives_opening_by_what_it_says_alone() {
+    let every_dict = Schema::record(Vec::new(), Openness::Open);
+    let empty_dict = Schema::record(Vec::new(), Openness::Closed);
+    // Every value and no value, each spelled so that only moving the records
+    // inside it folds it to the atom it denotes.
+    let every_value = Schema::union([every_dict.clone(), empty_dict.clone().complement()]);
+    let no_value = Schema::meet([empty_dict.clone(), every_dict.complement()]);
+    let optional = |name: &str, schema: &Schema| Field {
+        name: name.into(),
+        schema: schema.clone(),
+        required: false,
+    };
+
+    let lone = Schema::record(vec![optional("b", &every_value)], Openness::Open);
+    let beside = Schema::record(
+        vec![
+            optional("b", &every_value),
+            optional("c", &Schema::ANYTHING),
+        ],
+        Openness::Open,
+    );
+    assert_eq!(lone.with_records_open(Openness::Closed), empty_dict);
+    assert_eq!(beside.with_records_open(Openness::Closed), empty_dict);
+
+    let emptied = Schema::record(vec![optional("b", &no_value)], Openness::Closed);
+    assert_eq!(
+        emptied.with_records_open(Openness::Open),
+        empty_dict.with_records_open(Openness::Open)
+    );
+
+    let freed = |fields: Vec<Field>| {
+        Schema::keyed_map(
+            fields,
+            vec![MapClause {
+                key: Schema::ANYTHING,
+                value: every_value.clone(),
+            }],
+        )
+    };
+    assert_eq!(
+        freed(vec![optional("b", &Schema::ANYTHING)]).with_records_open(Openness::Closed),
+        freed(Vec::new()).with_records_open(Openness::Closed)
     );
 }
 
