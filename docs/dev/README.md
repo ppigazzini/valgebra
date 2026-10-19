@@ -8,15 +8,17 @@ This set is not published. The site under [../](../README.md) is the user guide 
 what valgebra does, for someone using it. These pages are what it is made of.
 
 Read in order. Each page owns a zone of the source and is the live claim about
-it.
+it. Which page a source file belongs to is the zone table in
+[00-architecture.md](00-architecture.md), which `scripts/docs_lint.py` holds to
+the tree; this table says what each page is about.
 
 | Page | Owns |
 |---|---|
-| [00-architecture.md](00-architecture.md) | the zones and the direction their dependencies run, how a value and a pair of schemas flow, the invariants every zone keeps, every bound, and the designs refused for the shape of the whole |
-| [01-schema-ir.md](01-schema-ir.md) | `crates/valgebra-core/src/ir.rs` — the node set and what each node denotes |
-| [02-decision.md](02-decision.md) | `crates/valgebra-core/src/decision.rs` and `descr/` — what is decided and what stays conservative |
-| [03-frontend.md](03-frontend.md) | `crates/valgebra-py/src/build.rs` and `build/` — typing annotations into the IR |
-| [04-walk.md](04-walk.md) | `crates/valgebra-py/src/check/` — the membership walk, both input paths, three modes |
+| [00-architecture.md](00-architecture.md) | the zones and the page each source file belongs to, the direction their dependencies run, how a value and a pair of schemas flow, the invariants every zone keeps, every bound, and the designs refused for the shape of the whole |
+| [01-schema-ir.md](01-schema-ir.md) | the node set and what each node denotes |
+| [02-decision.md](02-decision.md) | what is decided and what stays conservative |
+| [03-frontend.md](03-frontend.md) | typing annotations into the IR |
+| [04-walk.md](04-walk.md) | the membership walk, both input paths, and its modes |
 | [05-errors.md](05-errors.md) | the violation model, the error codes, the annotation render |
 | [06-type-design.md](06-type-design.md) | the value domain: what each type denotes, why it has that shape, what it does not promise |
 | [07-tooling-ci.md](07-tooling-ci.md) | the gates, the lanes, the exit codes, and each instrument's blind spots |

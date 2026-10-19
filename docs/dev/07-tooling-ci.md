@@ -541,9 +541,11 @@ verdict:
 
 **The merge gate is relative.** `--against <rev>` builds and measures the same
 workload twice in one job -- once at `HEAD`, once at `rev` in a throwaway
-worktree with its own target directory -- and holds the difference to 2%. The
-toolchain, the flags, the machine and the cachegrind version are one and the
-same across the pair, so what is left is the change.
+worktree with its own target directory -- and holds the difference to the
+gate's ceiling, `RELATIVE_TOLERANCE` in `scripts/perf_gate.py` (2%), whose
+comment says why that width. The toolchain, the flags, the machine and the
+cachegrind version are one and the same across the pair, so what is left is the
+change.
 
 The recorded numbers in `scripts/perf_budget.json` are a **record of one
 environment**, and no lane holds a change to them. The reason is measured: the
@@ -566,25 +568,25 @@ with `--update`, and a shape whose recorded checksum differs from the base's,
 or that the base records none for, is a workload replaced on the record
 (`rerecorded_at` in `scripts/perf_gate.py`). The base is built with the
 change's workload source -- the example, and for a binding shape the
-extension's workload module it calls -- so
-the two counts are of one work and compared at 2% (`judge_replaced`); where the
-base cannot build that source, or computes other work with it, the shape is held
-to its record, as a new shape is below.
+extension's workload module it calls -- so the two counts are of one work and
+compared at the gate's ceiling (`judge_replaced`); where the base cannot build
+that source, or computes other work with it, the shape is held to its record,
+as a new shape is below.
 
 **A step the budget argues is crossed once.** Where a change trades
 instructions for time -- reading a list through a snapshot executes more and
 spends less -- the commit records the step in `scripts/perf_budget.json`
 (`steps`), named by its shape and the base count it steps from, and the
 comparison that crosses that commit is excused for it; the next change is held
-to the 2% ceiling again (`recorded_step` in `scripts/perf_gate.py`). The
+to the gate's ceiling again (`recorded_step` in `scripts/perf_gate.py`). The
 profiled shapes record no steps.
 
 **A shape the base does not carry is a new shape**, not a comparison and not a
 pass: it is held to its recorded count in the same run, inside the band the
 record carries for a change of machine (`judge_new` in `scripts/perf_gate.py`).
 A new shape and a re-recorded workload the base cannot build are where the
-record is read, and the band is wide enough for both, since the next change has this one as its base and
-is compared with it at 2%.
+record is read, and the band is wide enough for both, since the next change
+has this one as its base and is compared with it at the gate's ceiling.
 The gate reads this
 from the base's *source* before it builds anything -- the example the mode
 names, and for a binding shape the arm that names the shape (`absent_at` in
@@ -613,8 +615,8 @@ interpreter. The interpreter is the one that moves a shape far: on a single box
 a schema nested twenty-five deep reads 0.13 to 0.14 under CPython 3.12 and 3.14
 and 0.26 under the free-threaded build, where every read of an element out of a
 mutable container takes that container's lock. This gate is the coarse tripwire
-for ceding ground, with `perf_gate.py --against` doing the fine-grained work at
-2%. Changing a ceiling is an edit with an argument in its commit message.
+for ceding ground, with `perf_gate.py --against` doing the fine-grained work.
+Changing a ceiling is an edit with an argument in its commit message.
 
 It is also the one gate that times the wheel the release ships, and
 `perf_gate.py --profiled` counts its shapes there. The rest of `perf_gate.py`
@@ -670,12 +672,11 @@ A tolerance is the shape's own spread across the lane's runs, measured per
 shape rather than assumed, so `--update` leaves it alone -- one run cannot see a
 spread, and a recording that narrowed it silently would fire on noise. A shape
 whose spread is too wide to ratchet at all carries a written reason instead of
-an absent number: `error_report` spread a third of its own value on one PGO
-CPython 3.12 build (0.86 to 1.19 over five runs) and a sixteenth on another
-(0.43 to 0.46 over twelve, the reading `docs/11-performance.md` gives), being
-the one shape timing a path that raises and formats a Python exception, so the
-spread belongs to the build as much as to the shape; and a row holds every
-shape to a tolerance or an argument in both directions.
+an absent number, under `unratcheted` in `scripts/perf_compare.json` with the
+readings it stands on: `error_report` is the one shape timing a path that raises
+and formats a Python exception, and its spread belongs to the build as much as
+to the shape. A row holds every shape to a tolerance or an argument in both
+directions.
 
 **A recording is taken on the lane, and read before anything is committed.**
 A ratio belongs to the environment it was taken in (the interpreter's minor

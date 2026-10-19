@@ -91,19 +91,16 @@ tried Z" is out of date the day after it is written. The before-and-after belong
 in the commit message, which is the durable per-task record. A page states what
 is true **now**.
 
-`scripts/docs_lint.py` holds a narrow list of those words -- `previously`,
-`formerly`, `historically`, `originally`, `used to`, `at one point`, `in the
-past`, `back then`, `before this change`, `this was fixed in`, `the old
-behaviour`, `we had` -- over every tracked page, every line comment in the
-sources `COMMENTED_SOURCES` names, and the comment fields of the baselines
-`COMMENTED_BASELINES` names, both in `scripts/docs_lint.py`. A
-comment ages exactly as a page does and is read by fewer people, which is why it
-is in the sweep. The list stops there on purpose: `no longer` states a rule a
-reader applies to a run -- a baseline entry that is no longer a survivor fails --
-and a sweep refusing it would be one nobody could keep. The changelog is a record
-of releases and is exempt, as are the files that spell the words to forbid
-them: this page, the lint and its test, which `HISTORY_EXEMPT` in
-`scripts/docs_lint.py` names.
+`scripts/docs_lint.py` holds a narrow list of those words, `HISTORY`, over
+every tracked page, every line comment in the sources `COMMENTED_SOURCES`
+names, and the comment fields of the baselines `COMMENTED_BASELINES` names, all
+three in that script. A comment ages exactly as a page does and is read by
+fewer people, which is why it is in the sweep. The list is narrow on purpose:
+`no longer` states a rule a reader applies to a run -- a baseline entry that is
+no longer a survivor fails -- and a sweep refusing it would be one nobody could
+keep. The changelog is a record of releases and is exempt, as are the files
+that spell the words to forbid them: this page, the lint and its test, which
+`HISTORY_EXEMPT` in `scripts/docs_lint.py` names.
 
 A measurement is the exception, and only as a rule: where a number explains why
 the code has its shape — the walk mode's discriminant order in

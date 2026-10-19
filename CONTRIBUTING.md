@@ -141,9 +141,9 @@ file that owns the contract and the single command that reproduces its verdict.
 | doc examples run | `docs/` | `uv run --no-sync python scripts/run_doc_examples.py` |
 | doc examples read clean under ty, mypy, pyright and ruff, or say why | `scripts/check_doc_examples.py` | `uv run --no-sync python scripts/check_doc_examples.py` |
 | the rendered site builds | `mkdocs.yml` | `uv run --no-sync --group docs mkdocs build --strict` |
-| a change costs the core and decision workloads at most 2% more instructions than its base, past a step the budget file argues | the workloads in `crates/valgebra-core/examples/`, built at the change and at its base | `uv run --no-sync python scripts/perf_gate.py --against HEAD~1 --core --decision --decision-refute --decision-repeat --decision-matrix --decision-rules --decision-sets --decision-lengths` |
-| a change costs a binding shape at most 2% more instructions than its base, past a step the budget file argues | the shapes in `crates/valgebra-py/src/workload.rs`, built at the change and at its base | `uv run --no-sync python scripts/perf_gate.py --against HEAD~1 --binding` |
-| a change, to the code or to the training, costs a comparison shape at most 2% more instructions on the profile-guided wheel | the comparison gate's shapes, on the wheel built at the change and at its base in one directory | `uv run --no-sync python scripts/perf_gate.py --against HEAD~1 --profiled` |
+| a change costs the core and decision workloads no more instructions than its base, within the instruction gate's ceiling and past a step the budget file argues | the workloads in `crates/valgebra-core/examples/`, built at the change and at its base | `uv run --no-sync python scripts/perf_gate.py --against HEAD~1 --core --decision --decision-refute --decision-repeat --decision-matrix --decision-rules --decision-sets --decision-lengths` |
+| a change costs a binding shape no more instructions than its base, within the instruction gate's ceiling and past a step the budget file argues | the shapes in `crates/valgebra-py/src/workload.rs`, built at the change and at its base | `uv run --no-sync python scripts/perf_gate.py --against HEAD~1 --binding` |
+| a change, to the code or to the training, costs a comparison shape no more instructions on the profile-guided wheel than at its base, within the instruction gate's ceiling | the comparison gate's shapes, on the wheel built at the change and at its base in one directory | `uv run --no-sync python scripts/perf_gate.py --against HEAD~1 --profiled` |
 | competitive ratio | `scripts/perf_compare.json` | `uv run --no-sync --group bench python scripts/compare_gate.py` |
 | what a profile buys, per shape | the two wheels a run builds | `uv run --no-sync --group bench python scripts/pgo_compare.py --record plain.json` |
 | membership held and decisions only widened | `scripts/metamorphic_reference.json` | `uv run --no-sync python scripts/metamorphic_gate.py` |
@@ -292,18 +292,11 @@ collide with an unrelated sense used nearby. Say which one you mean:
 list of the ones that collide, and a second copy here would drift from it.
 
 Every gate script reports one of **three** outcomes, and the exit code says
-which, so a caller can dispatch on it rather than parse the output:
-
-| exit | meaning |
-| --- | --- |
-| **0** | the gate ran and the property holds |
-| **1** | the gate ran and the property does not hold |
-| **2** | the gate **could not run** — no measurement, no baseline, a missing dependency |
-
-A gate that could not run has proven nothing, and must never read as one that
-passed. `perf_gate.py` exits 2 on cachegrind output it cannot parse,
-`mutation_gate.py` on a missing sweep result or baseline, and `compare_gate.py`
-without its benchmark dependency.
+which -- 0 the property holds, 1 it does not, 2 the gate **could not run** -- so
+a caller can dispatch on it rather than parse the output. A gate that could not
+run has proven nothing, and must never read as one that passed.
+[docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md) owns the three codes and
+what makes each script exit 2.
 
 ## Working on changes
 

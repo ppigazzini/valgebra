@@ -34,7 +34,7 @@ argues for.
 So this gate is the coarse tripwire: it catches ceding ground to pydantic,
 on any machine, with no re-recording. The fine-grained work is
 ``scripts/perf_gate.py --against``, which compares a change to its own merge
-base under cachegrind at 2%.
+base under cachegrind, within its ``RELATIVE_TOLERANCE``.
 
 **A ceiling a shape passes by a wide margin stops measuring it.** The JSON
 document sits under a ceiling of 1.00 and clears it by a third, so its ratio
