@@ -153,8 +153,9 @@ impl Schema {
     /// answers `false` for it exactly as it does for `Inhabited`. What it is for
     /// is telling those two apart from outside -- an exhausted budget is
     /// `Unknown`, and a test can say so.
+    #[cfg(test)]
     #[must_use]
-    pub fn verdict(&self) -> Verdict {
+    pub(crate) fn verdict(&self) -> Verdict {
         self.verdict_rec(&mut Cx::new(
             &NoLeafRelations,
             &[],

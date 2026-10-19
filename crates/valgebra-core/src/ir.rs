@@ -40,7 +40,8 @@ use crate::oracle::{Connective, NoLeafRelations, has_complementary_pair_within};
 mod intern;
 mod transform;
 
-pub use transform::{Polarity, pruned};
+pub(crate) use transform::Polarity;
+pub use transform::pruned;
 
 /// Remap a pool index through the map built when two validators merge.
 ///
@@ -325,19 +326,6 @@ pub enum Openness {
     Open,
 }
 
-impl Openness {
-    /// The openness a boolean flag denotes, for a caller that has one in hand
-    /// (the Python surface takes `open=True`/`False`).
-    #[must_use]
-    pub const fn from_flag(open: bool) -> Self {
-        if open {
-            Openness::Open
-        } else {
-            Openness::Closed
-        }
-    }
-}
-
 /// Whether a structural constructor has been crossed on the way to a recursive
 /// reference.
 ///
@@ -363,7 +351,7 @@ impl Guarded {
     /// occurrence -- and this is the one place it is stated, rather than in
     /// every structural arm.
     #[must_use]
-    pub const fn join(self, other: Guarded) -> Guarded {
+    pub(crate) const fn join(self, other: Guarded) -> Guarded {
         match (self, other) {
             (Guarded::No, Guarded::No) => Guarded::No,
             _ => Guarded::Yes,
@@ -767,10 +755,10 @@ pub type Constraints = Arc<[Constraint]>;
 /// - core: the two statements of a node's children, `mapped_children` for a
 ///   walk that rebuilds and `push_children` for one that only reads, which
 ///   every structural walk goes through (`map_children`, [`Schema::depth`],
-///   [`Schema::node_count`], [`Schema::has_reference`] among them);
+///   [`Schema::node_count`], `has_reference` among them);
 ///   `remapped_where_moved`, which moves the pooled and definitions indices;
 ///   [`Schema::expected`], [`Schema::error_code`] and `guards_children`, which
-///   [`Schema::occurs_unguarded`] reads; the interner's `hash_node` and `tag`;
+///   [`Schema::occurs_unguarded_under`] reads; the interner's `hash_node` and `tag`;
 ///   and `descend`, the lowering to the set representation;
 /// - bindings (`valgebra-py`): the `member` membership walk, which decides
 ///   membership and in explain mode aggregates the violation, and `render`.
@@ -1274,7 +1262,7 @@ impl Schema {
     /// it wants passes the shared one rather than building a list for this node
     /// alone.
     #[must_use]
-    pub fn keyed_map_within(mut fields: Vec<Field>, defaults: Clauses) -> Schema {
+    pub(crate) fn keyed_map_within(mut fields: Vec<Field>, defaults: Clauses) -> Schema {
         canonical_fields(&mut fields);
         Schema::KeyedMap {
             fields: share_fields(&mut fields),
@@ -1689,7 +1677,7 @@ impl Schema {
     /// schemas [`unfolded`](Self::unfolded) would rebuild from the ones it would
     /// hand straight back.
     #[must_use]
-    pub fn has_reference(&self) -> bool {
+    pub(crate) fn has_reference(&self) -> bool {
         let mut pending = vec![self];
         while let Some(node) = pending.pop() {
             if matches!(node, Schema::Ref(_) | Schema::SelfRef(_)) {
@@ -1884,7 +1872,17 @@ impl Schema {
         }
     }
 
-    /// Whether `Ref(target)` occurs without a structural guard above it.
+    /// [`occurs_unguarded_under`](Self::occurs_unguarded_under) over the term
+    /// alone, with no definitions to follow.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn occurs_unguarded(&self, target: DefIx, guarded: Guarded) -> bool {
+        self.occurs_unguarded_under(target, guarded, &[])
+    }
+
+    /// Whether `Ref(target)` occurs without a structural guard above it,
+    /// following `Ref` edges through `defs`, so an occurrence one definition
+    /// away is reached.
     ///
     /// A `recursive` definition is contractive (productive) only when every
     /// occurrence of its self-reference sits under a structural constructor;
@@ -1895,22 +1893,15 @@ impl Schema {
     /// [`Guarded::Yes`] absorbs, nothing below a structural constructor is ever
     /// reported unguarded however deeply it nests -- which is the whole of the
     /// check, rather than an arm per constructor stating it again.
-    #[must_use]
-    pub fn occurs_unguarded(&self, target: DefIx, guarded: Guarded) -> bool {
-        self.occurs_unguarded_under(target, guarded, &[])
-    }
-
-    /// [`occurs_unguarded`](Self::occurs_unguarded) following `Ref` edges through
-    /// `defs`, so an occurrence one definition away is reached.
     ///
     /// A body that names only itself is answered by the term: every path from it
     /// to the reference is spelled out in the term. A body that names *another*
     /// definition is not — an inner fixpoint whose own body mentions this one
     /// puts the occurrence behind a `Ref`, where a term walk sees a leaf. The
     /// contractivity condition is about the whole system of definitions, so the
-    /// check reads the whole system; with no definitions the two questions are
-    /// the same one, which is why the term entry point is this with an empty
-    /// graph rather than a second traversal.
+    /// check reads the whole system. With no definitions the two questions are
+    /// the same one, so the term's question is this one over an empty graph
+    /// rather than a second traversal.
     ///
     /// **A definition is entered once per check, not once per path.** Its body
     /// is always read from an unguarded root -- a guarded reference is answered

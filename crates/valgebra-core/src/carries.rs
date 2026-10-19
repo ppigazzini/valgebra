@@ -39,7 +39,7 @@ impl Carries {
     /// rather than an emptying of it: `Annotated[int | str, MinLen(1)]` is the
     /// non-empty strings, which is a set a reader can mean.
     #[must_use]
-    pub fn or(self, other: Carries) -> Carries {
+    pub(crate) fn or(self, other: Carries) -> Carries {
         match (self, other) {
             (Carries::Yes, _) | (_, Carries::Yes) => Carries::Yes,
             (Carries::Maybe, _) | (_, Carries::Maybe) => Carries::Maybe,

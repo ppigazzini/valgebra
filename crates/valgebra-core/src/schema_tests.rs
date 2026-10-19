@@ -1906,26 +1906,6 @@ fn every_variant_names_itself_and_the_code_a_report_carries() {
     assert_ne!(set.error_code(), frozen.error_code());
 }
 
-/// Openness reads a flag the same way round the two constructors do.
-///
-/// One line of arithmetic, and the one place a record's openness is built from
-/// a boolean rather than named: a flag read backwards would open every closed
-/// record and close every open one, which every other test would then agree
-/// about because they all read it through the same call.
-#[test]
-fn openness_from_a_flag_is_the_openness_the_flag_names() {
-    assert_eq!(Openness::from_flag(true), Openness::Open);
-    assert_eq!(Openness::from_flag(false), Openness::Closed);
-    // And the record built from each is the record the named constructor gives.
-    let named = |open| Schema::record(Vec::new(), open);
-    assert_eq!(
-        named(Openness::from_flag(true)),
-        named(Openness::Open),
-        "a flag and the name it stands for build one term"
-    );
-    assert_eq!(named(Openness::from_flag(false)), named(Openness::Closed));
-}
-
 /// Contractivity is a property of the whole definition table, not of one body.
 ///
 /// A reference inside a *definition* the body names puts the occurrence behind

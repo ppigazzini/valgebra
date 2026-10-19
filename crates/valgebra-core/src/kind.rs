@@ -222,7 +222,7 @@ impl Kind {
     /// so every boolean is an integer and the two kinds share values. Two kinds
     /// that share none are disjoint sets, which is the reading a kind is for.
     #[must_use]
-    pub fn shares_values_with(self, other: Kind) -> bool {
+    pub(crate) fn shares_values_with(self, other: Kind) -> bool {
         self == other
             || matches!(
                 (self, other),
@@ -256,7 +256,7 @@ impl Kind {
     /// a miss read as the first place is a slot of another kind.
     /// `every_kind_sits_at_its_own_position` holds the two orders together.
     #[must_use]
-    pub const fn position(self) -> usize {
+    pub(crate) const fn position(self) -> usize {
         self as usize
     }
 }

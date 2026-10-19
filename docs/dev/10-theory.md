@@ -257,8 +257,8 @@ where the inductive set is that least fixpoint. Both are
 
 **Nakano, "A Modality for Recursion" (2000).** The guardedness modality: a
 recursion variable under a guard is productive. **[LOAD-BEARING: guarded-recursion]** for the
-*discipline* — `occurs_unguarded` is that condition, and it is what makes the
-induction above well founded.
+*discipline* — `occurs_unguarded_under` is that condition, and it is what makes
+the induction above well founded.
 
 SOURCE: §13.0 "Contractivity buys **well-definedness of the fixpoint**; regularity buys"; §13.4 "**Guarded recursion.** Nakano's modality"; §4 "for the *discipline* (`occurs_unguarded`)"; §4 "recursion is sound when the variable sits under a guard"; §4 "`Schema::occurs_unguarded` (the contractivity check)"
 

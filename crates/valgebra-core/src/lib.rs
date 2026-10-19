@@ -48,7 +48,7 @@ pub use decision::{LeafRelations, NoLeafRelations};
 pub use ir::{
     Attribute, ClassIx, Clauses, CollKind, ConstIx, Constraint, Constraints, DefIx, DefShift,
     Field, Fields, Guarded, MapClause, Measure, Members, Openness, OperandIx, PathSegment,
-    Polarity, PoolShift, PredIx, Schema, SeqKind, SeqShape, Spelling, pruned,
+    PoolShift, PredIx, Schema, SeqKind, SeqShape, Spelling, pruned,
 };
 pub use kind::Kind;
 pub use verdict::{Relation, Verdict};

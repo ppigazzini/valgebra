@@ -249,7 +249,7 @@ impl SeqShape {
 /// `bool`, because the two members are what the soundness of a difference turns
 /// on and a call site reading `true` says nothing about which side that is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Polarity {
+pub(crate) enum Polarity {
     /// The subject's side: a cut reference becomes the top, so the lowered set
     /// is at least the one the schema denotes.
     Widen,
@@ -261,7 +261,7 @@ pub enum Polarity {
 impl Polarity {
     /// The side a complement puts the schema under it on.
     #[must_use]
-    pub fn flipped(self) -> Polarity {
+    pub(crate) fn flipped(self) -> Polarity {
         match self {
             Polarity::Widen => Polarity::Narrow,
             Polarity::Narrow => Polarity::Widen,
@@ -297,7 +297,12 @@ impl Schema {
     /// A schema with no reference is returned as it stands, so the caller pays
     /// nothing for the common case.
     #[must_use]
-    pub fn unfolded(&self, definitions: &[Schema], unfolds: u32, polarity: Polarity) -> Schema {
+    pub(crate) fn unfolded(
+        &self,
+        definitions: &[Schema],
+        unfolds: u32,
+        polarity: Polarity,
+    ) -> Schema {
         let cut = || match polarity {
             Polarity::Widen => Schema::ANYTHING,
             Polarity::Narrow => Schema::Nothing,
