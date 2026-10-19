@@ -60,32 +60,6 @@ answer of its own, or a repair to a change not yet released.
 
 ### Fixed
 
-- **A pattern over a base holding `bytes` is a set of strings in the
-  relations.** The set representation read `Annotated[str | bytes,
-  Regex("a*")]` as the pattern's language over `bytes` as well, while the walk
-  refuses every byte string. So `Annotated[bytes, MaxLen(0)]` was answered
-  `subset` of it, though `b""` is in the first and not the second;
-  `intersection(Literal[b"a"], complement(it))` was answered empty, though it
-  admits `b"a"`; and its relation to `str`, and to `Annotated[str,
-  Regex("a*")]`, which it equals, was `not_subset`. The answers were wrong in
-  0.0.15 through 0.0.18. A pattern is read as its language over `str` and
-  nothing else, as the walk reads it, and a base holding no string meets it in
-  nothing. A pattern over a base wider than the word kinds, such as `str |
-  int`, and a pattern no string matches, such as `[^\s\S]`, are decided where
-  they answered `undecided`.
-- **A value is walked once per definition where two branches read it as one.**
-  `recursive(lambda t: union(int, [t], [union(t, str)]))` reads a list's
-  element as `t` under both list branches, and each level of the value walked
-  the level below once per branch: `validate_json` took two seconds to refuse a
-  document of 44 bytes on 0.0.17, and each further two levels multiplied it by
-  four, on every entry point and for a value admitted by the second branch as
-  well. The same held of a meet's members and of a map's clauses. A walk keeps
-  what it answered for a definition at a value for the rest of the call, so the
-  walk is linear in the value. A definition reaching a predicate, or a class
-  whose metaclass is not `type`, is walked at each occurrence as before, since
-  that code is called at each one; [the limits
-  page](https://ppigazzini.github.io/valgebra/10-limits/#what-the-bounds-do-not-bound)
-  says so.
 - **A signal raised while a predicate's error is named propagates.** The
   error's text was read through its formatter, which drops a signal its
   `__str__` raises: `validate` reported a `predicate_error` reading
@@ -113,32 +87,12 @@ answer of its own, or a repair to a change not yet released.
   `'<unrepresentable>'`, a string that indexes nothing. It is carried in
   hexadecimal, which the limit does not bind: `path` holds the key, and the
   message writes it `[0x...]`.
-- **A tuple reads what an unpacked tuple splices into it as written there.**
-  `tuple[int, *tuple[str, *tuple[bool, ...]]]` was read as `tuple[int, str,
-  tuple[bool, ...]]`, whose third element is a tuple, where both static
-  checkers read `tuple[int, str, *tuple[bool, ...]]`, and a `...` inside a
-  splice was the literal `Ellipsis`. The spliced arguments are read as the
-  tuple's own. A `...` after a splice, `tuple[*tuple[int, str], ...]`, which
-  repeated the `str`, is refused, and so is an unpacked tuple outside a
-  tuple's arguments: `list[*tuple[int]]` was a list of one-element tuples.
 - **A dict literal refuses `Required` and `NotRequired` on a field.** A
   qualifier is read as the type it qualifies, so `{"a": NotRequired[int]}`
   built a record that requires `a`, and `{"a?": Required[int]}` one where `a`
   is optional, in silence. The literal says whether a key is required by its
   `?` alone, so either qualifier on a field is refused, naming the key's
   spelling. `ReadOnly` is read as before.
-- **A `type` alias of an `Annotated` alias in metadata is refused as the alias
-  is.** `Annotated[int, Pos]` with `Pos = Annotated[int, Gt(0)]` is refused,
-  since in metadata the alias annotates nothing, but the same alias written
-  `type Pos = Annotated[int, Gt(0)]`, or with `TypeAliasType`, was ignored and
-  admitted `-1`, in 0.0.17 and 0.0.18. An alias in metadata is read through to
-  what it names, applied to arguments or not, and refused the same way.
-- **A pattern `re` reads as a different set is refused in two more forms.** A
-  `+` after a quantifier is possessive to `re` from 3.11 and a second
-  repetition here, so `a?+` admitted `"aa"`, which `re.fullmatch` refuses; and
-  this engine reads `a{1, 3}`, whitespace in its braces, as a count, where
-  `re` reads it as the text `"a{1, 3}"`. Both raise a `ValueError` naming the
-  reading, as the class-set operators do.
 - **`instance_of(typing.Any)` is the top whatever is imported.** It was the
   top in a process that had loaded `typing_extensions`, which importing
   `annotated_types` does, and refused every value in one that had not. It is
@@ -150,11 +104,6 @@ answer of its own, or a repair to a change not yet released.
   that say why: it is a class variable to the typing spec and a field to
   `dataclasses`. A `Protocol` member declared either way is refused as one
   declared `ClassVar` or `Final` is.
-- **A `Protocol` member declared with `functools.cached_property` holds what
-  its function returns.** It was read as a value, holding anything, so
-  `@cached_property def size(self) -> int` admitted an object whose `size` is
-  a string. It is read as a property is, through its function's return
-  annotation.
 - **A `Regex` marker pickles and copies.** Unpickling restored its slot by
   `setattr`, which the immutable marker refuses, so neither `pickle` nor
   `copy` worked, and a schema holding one could not be sent to another process
@@ -171,32 +120,21 @@ answer of its own, or a repair to a change not yet released.
   reads the flattened members, so `==`, `hash` and `repr` give the bounds. A
   join of many complements is folded in time near-linear in its width, where
   the pair check was quadratic.
-- **`close` after `open` refuses again what `open` freed, and no more.**
-  Opening folds the freed region into a clause admitting every value, and
-  closing kept that clause whole wherever its key was not exactly the region:
-  `dict[C, Any]` over a class, `{int: Any, str: int}`, and
-  `dict[int | str, Any]` each round-tripped to a schema admitting every key,
-  in 0.0.17 and 0.0.18, where the guide says the round trip is at most
-  `close`. Closing takes out the region and keeps the keys the clause claims,
-  so the first two round-trip exactly; where the complement law folds the
-  opened key to every key, the round trip is a smaller schema than `close`.
-  And `dict[Any, Any]` relates to `dict[Literal["a", "b"], Any]` opened as
-  `subset`, where it answered `undecided`.
 - **A chain of recursive definitions is checked in time linear in its
   length.** The contractivity check walked a definition once per path to it,
   so a chain whose every link names the one before it twice took 0.27 s at
   eighteen definitions and doubled per link; the 128 a validator may hold
   never finished. It enters each definition once.
 - **A complement is below the complement of an empty refinement.**
-  `complement(Annotated[str, Regex("x"), MaxLen(0)])` is the universe, since
-  no string both matches `x` and has no characters, yet
-  `complement(Annotated[str, MaxLen(0), str.isdigit])` and the complement of a
-  union of forty patterns answered `undecided` below it in 0.0.18. Two
-  complements relate as their inner sets do the other way round, and there
-  the empty refinement is the subject, whose emptiness the rule read without
-  the set representation, the one reader of a pattern's shortest match. The
-  rule asks it where the inner sets' relation declines, as the rule for a
-  single complement does.
+  `complement(Annotated[str, Regex("x"), MaxLen(0)])` is the universe, since no
+  string both matches `x` and has no characters, yet `complement(Annotated[str,
+  MaxLen(0), str.isdigit])` and the complement of a union of forty patterns
+  were not proved below it in any release through 0.0.18. Two complements
+  relate as their inner sets do the other way round, and there the empty
+  refinement is the subject, whose emptiness the rule read without the set
+  representation, the one reader of a pattern's shortest match. The rule asks
+  it where the inner sets' relation declines, as the rule for a single
+  complement does.
 - **A constant prints whole in a `repr`.** A constant past eighty
   characters was cut where an error message cuts a value, so
   `Literal["x" * 100]`, `Literal[10**100]` and `Annotated[int, Ge(10**90)]`
@@ -279,15 +217,6 @@ answer of its own, or a repair to a change not yet released.
   the three answer `not_subset`. A prefix no rule proves to hold a value, such
   as `[X, int, ...]`, names no sequence for the repeated element to stand on,
   and stays `undecided`.
-- **A complement admits no member at the walk's bound.** A union of scalars
-  that sat at the walk's depth bound, as a record's field or a mapping's value,
-  answered its scalar branches `false` without saying the walk had stopped, and
-  a complement over the schema read that as the value being outside it:
-  `complement(recursive(lambda t: {"a?": {"x": {"y": t}}, "b": int | str}))`
-  admitted a value the schema admits, and every value nested past the bound,
-  in 0.0.16 through 0.0.18. A scalar branch at the bound stops, as a scalar
-  does anywhere else, and the complement refuses the value with
-  `recursion_limit`.
 - **A complement's answer no longer depends on the order a value's parts are
   read in.** A walk inside a complement that stopped -- at the depth bound, at
   a value holding itself, at a predicate that raised -- answered by whichever
@@ -370,6 +299,85 @@ answer of its own, or a repair to a change not yet released.
   read `required key "\u{7f}"` beside the path `['\x7f']`, and every such
   label was quoted unlike the path and the other labels. It reads
   `required key 'a'` and `attribute 'x'`, as the path quotes the name.
+
+### Security
+
+- **A pattern over a base holding `bytes` is a set of strings in the
+  relations.** The set representation read `Annotated[str | bytes,
+  Regex("a*")]` as the pattern's language over `bytes` as well, while the walk
+  refuses every byte string. So `Annotated[bytes, MaxLen(0)]` was answered
+  `subset` of it, though `b""` is in the first and not the second;
+  `intersection(Literal[b"a"], complement(it))` was answered empty, though it
+  admits `b"a"`; and its relation to `str`, and to `Annotated[str,
+  Regex("a*")]`, which it equals, was `not_subset`. The answers were wrong in
+  0.0.10 through 0.0.18. A pattern is read as its language over `str` and
+  nothing else, as the walk reads it, and a base holding no string meets it in
+  nothing. A pattern over a base wider than the word kinds, such as `str |
+  int`, and a pattern no string matches, such as `[^\s\S]`, are decided where
+  they answered `undecided`.
+- **A value is walked once per definition where two branches read it as one.**
+  `recursive(lambda t: union(int, [t], [union(t, str)]))` reads a list's
+  element as `t` under both list branches, and each level of the value walked
+  the level below once per branch, in every release through 0.0.18:
+  `validate_json` took two seconds to refuse a document of 44 bytes on 0.0.17,
+  and each further two levels multiplied it by four, on every entry point and
+  for a value admitted by the second branch as well. The same held of a meet's
+  members and of a map's clauses. A walk keeps what it answered for a
+  definition at a value for the rest of the call, so the walk is linear in the
+  value. A definition reaching a predicate, or a class whose metaclass is not
+  `type`, is walked at each occurrence as before, since that code is called at
+  each one; [the limits
+  page](https://ppigazzini.github.io/valgebra/10-limits/#what-the-bounds-do-not-bound)
+  says so.
+- **A tuple reads what an unpacked tuple splices into it as written there.**
+  `tuple[int, *tuple[str, *tuple[bool, ...]]]` was read as `tuple[int, str,
+  tuple[bool, ...]]`, whose third element is a tuple, where both static
+  checkers read `tuple[int, str, *tuple[bool, ...]]`, so `(1, "a", (True,))`
+  was admitted and `(1, "a")` refused, in 0.0.10 through 0.0.18; and a `...`
+  inside a splice was the literal `Ellipsis`. The spliced arguments are read as
+  the tuple's own. A `...` after a splice, `tuple[*tuple[int, str], ...]`,
+  which repeated the `str`, is refused, and so is an unpacked tuple outside a
+  tuple's arguments: `list[*tuple[int]]` was a list of one-element tuples.
+- **A `type` alias of an `Annotated` alias in metadata is refused as the alias
+  is.** `Annotated[int, Pos]` with `Pos = Annotated[int, Gt(0)]` is refused,
+  since in metadata the alias annotates nothing, but the same alias written
+  `type Pos = Annotated[int, Gt(0)]`, or with `TypeAliasType`, was ignored and
+  admitted `-1` in 0.0.17 and 0.0.18, whose refinements page refuses such an
+  alias. An alias in metadata is read through to what it names, applied to
+  arguments or not, and refused the same way.
+- **A pattern `re` reads as a different set is refused in two more forms.** A
+  `+` after a quantifier is possessive to `re` from 3.11 and a second
+  repetition here, so `a?+` admitted `"aa"`, which `re.fullmatch` refuses; and
+  this engine reads `a{1, 3}`, whitespace in its braces, as a count, where `re`
+  reads it as the text `"a{1, 3}"`, so it admitted `"a"`. Every release through
+  0.0.18 read both forms so. Both raise a `ValueError` naming the reading, as
+  the class-set operators do.
+- **A `Protocol` member declared with `functools.cached_property` holds what
+  its function returns.** It was read as a value, holding anything, so
+  `@cached_property def size(self) -> int` admitted an object whose `size` is a
+  string, in 0.0.16 through 0.0.18; before 0.0.16 a protocol was the values
+  `isinstance` admits, as its guide said. It is read as a property is, through
+  its function's return annotation.
+- **`close` after `open` refuses again what `open` freed, and no more.**
+  Opening folds the freed region into a clause admitting every value, and
+  closing kept that clause whole wherever its key was not exactly the region:
+  `dict[C, Any]` over a class, `{int: Any, str: int}`, and `dict[int | str,
+  Any]` each round-tripped to a schema admitting every key, in 0.0.12 through
+  0.0.18, where the guide says the round trip is at most `close`. Closing takes
+  out the region and keeps the keys the clause claims, so the first two
+  round-trip exactly; where the complement law folds the opened key to every
+  key, the round trip is a smaller schema than `close`. And `dict[Any, Any]`
+  relates to `dict[Literal["a", "b"], Any]` opened as `subset`, where it
+  answered `undecided`.
+- **A complement admits no member at the walk's bound.** A union of scalars
+  that sat at the walk's depth bound, as a record's field or a mapping's value,
+  answered its scalar branches `false` without saying the walk had stopped, and
+  a complement over the schema read that as the value being outside it:
+  `complement(recursive(lambda t: {"a?": {"x": {"y": t}}, "b": int | str}))`
+  admitted every value nested past the bound, in every release through 0.0.18,
+  and from 0.0.10 a value the schema admits too. A scalar branch at the bound
+  stops, as a scalar does anywhere else, and the complement refuses the value
+  with `recursion_limit`.
 
 ## [0.0.18] - 2026-10-12
 

@@ -19,8 +19,7 @@ only one of them is the API:
   failure that was already reported. A name removed or renamed, a parameter that
   stops accepting what it accepted, an exception type that changes.
 - **Not a break.** A relation that answered `False` ("not proven") and now
-  answers `True`. Every relation is sound in both lines, and the conservative
-  answer is documented as "no, or not proven"
+  answers `True`. The conservative answer is documented as "no, or not proven"
   ([decidability](15-decidability.md)) -- so code that treats `False` as a proof
   of the negative was reading a guarantee that was never given. Widenings are
   listed in the notes below, and they are the commonest entry.

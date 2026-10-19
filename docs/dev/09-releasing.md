@@ -89,7 +89,9 @@ release waits for whatever reviewers those environments require.
    new version.
 3. **Check what the index serves** (below).
 4. **Dispatch to PyPI** — `publish_target: pypi`, the same version.
-5. **Check what the index serves** again, against PyPI.
+5. **Check what the index serves** again, against PyPI. A section with
+   `Security` entries has their advisories published now, beside the release,
+   as `SECURITY.md`'s process says: a fix and its advisory go out together.
 6. **Tag the published commit**, annotated, subject `valgebra X.Y.Z`:
 
    ```bash
