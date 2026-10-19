@@ -47,11 +47,10 @@ use crate::validator::Validator;
 
 /// Which deterministic workload to run.
 ///
-/// The comparison gate -- `scripts/compare_gate.py` -- measures seven shapes
-/// against pydantic-core on a wall clock; the instruction gate measured one of
-/// them. The gap is how a shape regresses without a gate saying so: schema
-/// construction grew twelve percent over one release cycle and nothing caught
-/// it, because no deterministic workload built a schema.
+/// The comparison gate -- `scripts/compare_gate.py` -- measures its shapes
+/// against pydantic-core on a wall clock. A shape only it measures regresses
+/// without a gate saying so: a wall clock under a ceiling it clears reads
+/// nothing until the ceiling is crossed.
 ///
 /// Each variant below is the deterministic twin of a comparison shape, so a
 /// wall-clock movement can be confirmed or refuted by an instruction count on
@@ -86,10 +85,10 @@ pub enum BindingShape {
     /// lands: the annotation walk over the dict, the canonical form it imposes
     /// -- fields ordered, clauses deduplicated -- and the validator's own
     /// index. The spelling is built once, outside the loop, so the count is
-    /// of reading it and of nothing the harness does to write it. An earlier
-    /// form assembled the fields in Rust inside the loop, and three quarters
-    /// of what it counted was the harness formatting fifty names and filling
-    /// a dict per iteration, with the annotation walk in none of it.
+    /// of reading it and of nothing the harness does to write it. Assembled in
+    /// Rust inside the loop, three quarters of what it counted would be the
+    /// harness formatting fifty names and filling a dict per iteration, with
+    /// the annotation walk in none of it.
     Build,
     /// The explaining walk over a fifty-field record with one bad field, read
     /// to the end: the twin of `error_report`, and the only shape here that
@@ -98,19 +97,17 @@ pub enum BindingShape {
     /// The accepting walk over the same fifty fields declared by a record that
     /// is **open** the way a `TypedDict` is: its clause admits any further
     /// `str` key. The shape the record walk takes for the annotation users
-    /// write most, and the one the closed twin above could not see -- an open
-    /// record was scanned key by key where a closed one was read by its keys,
-    /// and nothing counted the difference.
+    /// write most, which the closed twin above does not walk.
     Open,
     /// The *accepting* walk over a fifty-field record in explain mode: the path
     /// `validate()` takes when the value is a member.
     ///
-    /// The twin of `Explain` on the other answer, and the shape that was
-    /// missing. Every other accepting shape runs in fast mode, so the cost of
-    /// explain mode on a value that passes -- the mode a caller asking for a
-    /// report is in, most of the time -- was measured by nothing. A change to
-    /// the failing path that pays for itself there and charges the accepting
-    /// one would have read as a pure win.
+    /// The twin of `Explain` on the other answer. Every other accepting shape
+    /// runs in fast mode, so without this one the cost of explain mode on a
+    /// value that passes -- the mode a caller asking for a report is in, most
+    /// of the time -- is measured by nothing, and a change to the failing path
+    /// that pays for itself there and charges the accepting one reads as a
+    /// pure win.
     ExplainAccept,
     /// `validate` over ten thousand integers whose last element is a string:
     /// the explaining walk over a homogeneous list that is refused.
@@ -128,10 +125,10 @@ pub enum BindingShape {
     /// `Build` reads a dict of plain type objects, which asks the frontend for
     /// none of what an annotation with any depth to it costs: a class read
     /// through `get_type_hints`, a field asked whether a qualifier states its
-    /// required-ness, a marker read for the bound names it might carry. Every
-    /// one of those was measured by nothing, which is how a frontend that
-    /// raised an `AttributeError` per absent attribute went three releases
-    /// unnoticed.
+    /// required-ness, a marker read for the bound names it might carry.
+    /// Without this shape every one of those is measured by nothing, and a
+    /// frontend that raises an `AttributeError` per absent attribute moves no
+    /// count.
     Annotated,
     /// The fifty-field record walked with a value whose keys are **interned**:
     /// a dict written as a literal, `**kwargs`, an object's `__dict__`.
@@ -151,11 +148,7 @@ pub enum BindingShape {
     /// neither reaches a class at all. A dataclass does: the frontend asks it
     /// for the `__dataclass_fields__` that `dataclasses.is_dataclass` reads,
     /// reads its fields through `get_type_hints`, and reads the class's own
-    /// declared order. Nothing
-    /// counted any of that -- which is how putting the `dataclasses` import
-    /// back at the top of the frontend cost a build that compiles *no*
-    /// dataclass 6.45%, and had to be found with a profiler because no shape
-    /// here would move.
+    /// declared order. Without this shape nothing counts any of that.
     Object,
     /// Compiling a fifty-member **protocol**: forty-five annotated members and
     /// five methods.
@@ -185,32 +178,29 @@ pub enum BindingShape {
     /// `cpyext` answers it through the object's own `__len__`; it can trust the
     /// accessor for a subclass that *inherits* the base's slot, which is every
     /// `NamedTuple`. Telling the two apart by "is this exactly a tuple" instead
-    /// copied every `NamedTuple` and cost 100 ns against a tuple's 57.
+    /// would copy every `NamedTuple`, at 100 ns against a tuple's 57.
     ///
-    /// That regression was invisible here: no shape walked a subclass, and the
-    /// repair's own mutant is *answer*-equivalent -- reading every subclass as
-    /// a liar decides the same things and only costs more -- so no test can
-    /// hold it either. A count is the only instrument that can, which is what
-    /// this shape is: the cheapest thing that would have caught it.
+    /// No test can hold the difference: reading every subclass as a liar
+    /// decides the same things and only costs more, so the mutant that does it
+    /// is *answer*-equivalent. A count is the only instrument that can, which
+    /// is what this shape is.
     Subclass,
     /// A JSON document of two hundred records, parsed and walked in one pass:
-    /// the twin of `json_document`, and the shape that had none.
+    /// the twin of `json_document`.
     ///
-    /// It is the comparison gate's closest race -- 0.70 of pydantic-core's
-    /// time against a ceiling of 1.00 -- and the tooling page records what a
-    /// wide margin costs: this ratio drifted from 0.78 to 0.87 with no gate
-    /// red, because a wall clock under a ceiling it clears by a third measures
-    /// nothing until somebody looks. A count has no ceiling to hide under.
+    /// It is the comparison gate's closest race, and the tooling page says what
+    /// a wide margin costs: a wall clock under a ceiling it clears by a third
+    /// measures nothing until somebody looks. A count has no ceiling to hide
+    /// under.
     ///
-    /// What it counts is not all this crate's. Profiled at `9700181`, one call
-    /// is about 1.41M instructions: 55% `jiter` building the value tree, 14%
-    /// dropping it, and 31% the walk. `pydantic-core` parses to the same
-    /// `jiter` tree before it validates, so the two-thirds is the floor both
-    /// libraries stand on and the third is what the ratio is actually about.
-    /// A regression in the walk is a sixth of what it would be in a shape
-    /// measuring the walk alone -- which is the reason to count this rather
-    /// than to infer it from [`Record`](BindingShape::Record), whose dict the
-    /// interpreter hands over already built.
+    /// What it counts is not all this crate's: most of one call is `jiter`
+    /// building the value tree and dropping it, and the rest is the walk.
+    /// `pydantic-core` parses to the same `jiter` tree before it validates, so
+    /// the parse is the floor both libraries stand on and the walk is what the
+    /// ratio is actually about. A regression in the walk reads smaller here
+    /// than in a shape measuring the walk alone -- which is the reason to count
+    /// this rather than to infer it from [`Record`](BindingShape::Record),
+    /// whose dict the interpreter hands over already built.
     Json,
     /// A string checked against a **pattern** refinement: the one refinement
     /// whose cost is a compiled object rather than a comparison.
@@ -848,8 +838,8 @@ fn shown(value: &Bound<'_, PyAny>) -> usize {
 /// size of the process environment alone moves it. Measured on one build, the
 /// JSON shape reads 8.2% apart and the recursive one 7.2% apart between a
 /// `uv run` and a bare shell, and a change to the *build* path -- which runs
-/// before the loop and never inside it -- moved the JSON reading by the same
-/// amount while its loop executed the same instructions.
+/// before the loop and never inside it -- can move the JSON reading by the same
+/// amount while its loop executes the same instructions.
 ///
 /// `malloc_trim(0)` consolidates the free lists and returns the top of the
 /// heap, so every shape counts from the same settled state whatever ran before

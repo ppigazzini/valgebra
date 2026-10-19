@@ -128,9 +128,9 @@ pub(super) fn check_seq(
 /// tail, or at least it when a repeated tail follows.
 ///
 /// One argument rather than a length and a flag beside the value's own length.
-/// The two lengths were adjacent and the same type, and transposing them turns
-/// "this list is too short" into "this schema wants fewer elements" without
-/// failing.
+/// The two lengths would be adjacent and of one type, and transposing them
+/// turns "this list is too short" into "this schema wants fewer elements"
+/// without failing.
 #[derive(Clone, Copy)]
 enum SeqArity {
     /// A fixed-length shape: the count must equal this.
@@ -203,11 +203,12 @@ fn json_array_matches(
 /// Match one element at position `i`: the prefix schema at `i`, or the repeated
 /// tail past the prefix. The index segment is pushed only in explain mode, and
 /// only for an element [`admitted_quietly`] does not answer: an explaining walk
-/// reaches here with the elements no sequence reading takes, and each was a
-/// location pushed and popped and a dispatch around what can be one type test.
+/// reaches here with the elements no sequence reading takes, and without that
+/// question each would be a location pushed and popped and a dispatch around
+/// what can be one type test.
 ///
 /// Inlined into the one loop that calls it. It sits between that loop and
-/// [`member`], so leaving it out of line put a second call frame on every
+/// [`member`], so leaving it out of line puts a second call frame on every
 /// element of every sequence -- eleven instructions of entry and thirteen of
 /// call, against the one index lookup and two mode tests it exists to do.
 #[inline]
@@ -283,11 +284,11 @@ fn seq_length_fail(
 /// **The kind is read once per list, not once per element.** Each builtin kind
 /// has a loop of its own, its type test a constant inside it, so no element
 /// pays the dispatch on `kind`. With the dispatch inside one shared loop, the
-/// PGO wheel laid that loop out with one instruction more per element than
-/// the loop read in place had, and `is_valid` on ten thousand integers took 6%
-/// longer, while the instruction gate, which builds without a profile, read the
-/// same change 24% cheaper. The explaining walk reads its list with a test per
-/// kind for the same reason: a match on `kind` at every element is three
+/// PGO wheel lays that loop out with one instruction more per element than
+/// the loop read in place has, and `is_valid` on ten thousand integers takes 6%
+/// longer, while the instruction gate, which builds without a profile, reads
+/// the same change 24% cheaper. The explaining walk reads its list with a test
+/// per kind for the same reason: a match on `kind` at every element is three
 /// instructions of `validate`'s per element on 3.14, where the list is read in
 /// place.
 #[expect(
@@ -357,8 +358,8 @@ fn scalar_list_matches(
 /// [`explained_through_snapshot`].
 ///
 /// Out of line, beside the deciding loop rather than inside it: inlined into
-/// [`scalar_list_matches`], it moved the PGO wheel's layout of that loop, and
-/// `is_valid` on ten thousand integers took 5% longer.
+/// [`scalar_list_matches`], it would move the PGO wheel's layout of that loop,
+/// and `is_valid` on ten thousand integers would take 5% longer.
 #[inline(never)]
 fn list_explained<'py>(
     list: &Bound<'py, PyList>,
@@ -449,9 +450,9 @@ fn admitted_through_snapshot(
 /// a summary, a predicate, an `isinstance` hook -- that writes to the list,
 /// and the scan reads each element as the list holds it when it is reached,
 /// as the general walk reads it. Read in place from the start, a refused
-/// `list[int]` of ten thousand elements failing at its last cost `validate`
-/// 68% more instructions on the 3.12 wheel, a second pass of owned handles
-/// over what the snapshot had already read.
+/// `list[int]` of ten thousand elements failing at its last would cost
+/// `validate` 68% more instructions on the 3.12 wheel, a second pass of owned
+/// handles over what the snapshot has already read.
 fn explained_through_snapshot(
     list: &Bound<'_, PyList>,
     admits: &impl Fn(&Value<'_, '_>) -> bool,
@@ -486,10 +487,10 @@ fn explained_through_snapshot(
 ///
 /// The snapshot is taken by value and released here, before the scan, so a
 /// summary that drops its last other reference releases the element as it
-/// would in place. Released where the test's two exits meet instead, it kept
-/// the position the test stopped at alive through the loop: an instruction an
-/// element on a list that belongs, 4% more of them for `validate` on ten
-/// thousand integers on the 3.12 wheel.
+/// would in place. Released where the test's two exits meet instead, it would
+/// keep the position the test stopped at alive through the loop: an
+/// instruction an element on a list that belongs, 4% more of them for
+/// `validate` on ten thousand integers on the 3.12 wheel.
 #[inline(never)]
 pub(super) fn refused_past(snapshot: Bound<'_, PyTuple>, unread: usize) -> Option<(usize, usize)> {
     let len = snapshot.len();
@@ -578,8 +579,8 @@ pub(super) fn scalar_union_list_matches(
 ///
 /// [`scalar_list_matches`] for the union a scalar and `None` make: each kind
 /// has a loop of its own, both tests constants inside it, where the loop over
-/// the union's branches matched each branch's kind at every element, read the
-/// branch's schema again to do it, and asked the kind it had already ruled out
+/// the union's branches matches each branch's kind at every element, reads the
+/// branch's schema again to do it, and asks the kind it has already ruled out
 /// of every `None`. Reached behind [`homogeneous_scalar_union`], which holds
 /// the two levels the walk would take, as the union's other readings are.
 #[inline(never)]
@@ -804,16 +805,16 @@ fn refined_list_matches(
 /// An exact tuple of the arity whose every position passes its kind's test is
 /// a member, as [`scalar_positions_tuple_matches`] reads it; any other element
 /// is walked, which reads a tuple subclass through its storage and reports
-/// what does not fit. The general loop paid a call into `member` and the
+/// what does not fit. The general loop pays a call into `member` and the
 /// tuple's arm of [`check_seq`] around the same tests, and the positions reader
-/// read each position's schema again for every tuple: 285 instructions an
+/// reads each position's schema again for every tuple: 285 instructions an
 /// element on 3.14, against 110 here. A list is read in place unless a snapshot
 /// every element of which fits settles it, as [`instance_list_matches`] reads
 /// its own, whose body this one repeats rather than shares: drawn into one
 /// generic reader, the class list's elements cost the PGO wheel two
 /// instructions more each, 8% of a thousand `date`s. Out of line for the same
 /// reason: inlined into [`element_list_matches`] beside the class reader, it
-/// cost that reader one instruction an element.
+/// would cost that reader one instruction an element.
 #[inline(never)]
 pub(super) fn tuple_list_matches(
     list: &Bound<'_, PyList>,
@@ -1375,9 +1376,9 @@ fn storage_of<'py>(tuple: &Bound<'py, PyTuple>, ctx: Ctx<'_>) -> Option<Bound<'p
 /// A sequence is walked by position against a length read once, so a list that
 /// grows past that length hides its new items from the walk and one that shrinks
 /// leaves the walk answering about items that are gone. Either way the reading
-/// covers no state the list was ever in, and `is_valid` returned `True` for a
-/// value that is not a member -- which the dict and set scans already refuse to
-/// do, on the same argument, for the same reason.
+/// covers no state the list was ever in, and `is_valid` would return `True`
+/// for a value that is not a member -- which the dict and set scans already
+/// refuse to do, on the same argument, for the same reason.
 ///
 /// The count is read once and re-read before each item and after the last, which
 /// is [`scan_dict`](super::record::scan_dict)'s rule applied to positions
@@ -1392,7 +1393,7 @@ fn storage_of<'py>(tuple: &Bound<'py, PyTuple>, ctx: Ctx<'_>) -> Option<Bound<'p
 /// 3.14 costs 20 instructions an element, against 32 through the free-threaded
 /// spelling. The critical section is no lock on this build, and its closure
 /// stays because the explaining reader inlines the loop differently without
-/// it: `validate` on the same list read 9% more instructions.
+/// it: `validate` on the same list reads 9% more instructions.
 #[cfg(not(Py_GIL_DISABLED))]
 pub(super) fn scan_list<'py>(
     list: &Bound<'py, PyList>,

@@ -15,7 +15,7 @@ create_exception!(
     // and into its qualified name, and `pickle` locates a class by exactly that
     // pair -- so the string is baked into every serialized error and has to name
     // something that keeps resolving. A bare `_valgebra` resolves nowhere at
-    // all; `valgebra._valgebra` resolves today, but the API reference reserves
+    // all; `valgebra._valgebra` resolves, but the API reference reserves
     // the right to rename that module in any release, which would strand data
     // already written. `valgebra` re-exports this name and is the path a user
     // imports it from, so it is the one that stays true.

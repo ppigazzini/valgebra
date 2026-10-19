@@ -378,10 +378,9 @@ fn equal(
 /// Fold the constant a pool slot names into the digest, where it has a hash.
 ///
 /// Equality reads the *value* behind a slot, so the hash must too or two
-/// schemas that differ only in a constant land on one bucket. They did:
-/// `Literal[1]` through `Literal[1000]` were one hash, and a dictionary keyed by
-/// validators -- the reason `__hash__` exists -- degenerated into a list, at
-/// 98 microseconds per lookup over ten thousand entries.
+/// schemas that differ only in a constant land on one bucket: `Literal[1]`
+/// through `Literal[1000]` would be one hash, and a dictionary keyed by
+/// validators -- the reason `__hash__` exists -- would degenerate into a list.
 ///
 /// [`objects_equal`] is `a is b`, or `type(a) is type(b)` and `a == b`, so
 /// folding the constant's own hash beside its type's keeps the two consistent

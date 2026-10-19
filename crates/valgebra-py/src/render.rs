@@ -458,8 +458,8 @@ fn render_keyed_map(
     }
     // Otherwise a record/struct: named fields, then any catch-all clauses. A
     // name is spelled by Python's own `repr`, as a pattern is: written between
-    // two quotes as it stood, a name carrying a quote closed the string early,
-    // and `a': str, 'zz` printed as two fields.
+    // two quotes as it stands, a name carrying a quote would close the string
+    // early, and `a': str, 'zz` would print as two fields.
     let mut entries: Vec<String> = fields
         .iter()
         .map(|field| {

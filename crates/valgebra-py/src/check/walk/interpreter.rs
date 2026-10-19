@@ -517,9 +517,9 @@ fn a_complement_names_the_set_it_excludes() {
 
 /// A value a union admits is never summarized.
 ///
-/// Explaining a union walked every branch in explain mode, and a branch that
-/// refused the value by its kind built a violation nothing kept, summarizing
-/// the value in it -- which ran the value's `__repr__` once for each branch
+/// With every branch of a union walked in explain mode, a branch that refuses
+/// the value by its kind would build a violation nothing keeps, summarizing the
+/// value in it -- which would run the value's `__repr__` once for each branch
 /// before the one that matched. The repr here counts. Each union below admits
 /// the value through its last branch and must leave the count at zero, in both
 /// explaining modes; a union the value does not belong to summarizes it, which
@@ -1084,9 +1084,9 @@ fn a_set_and_a_frozenset_are_distinct_containers() {
 /// The walk copies a list of one scalar kind into a tuple and reads the tuple's
 /// elements borrowed, on the interpreters where owning them is dear, and only
 /// between two widths: a list too narrow cannot pay for the copy's allocation.
-/// Every list in the rest of this file is under that floor, so the copy is a
-/// path nothing here walked -- and the verdict it produces, and the mutation it
-/// reports when the list moves underneath it, went unread.
+/// Every list in the rest of this file is under that floor, so without this
+/// test the copy is a path nothing here walks -- and the verdict it produces,
+/// and the mutation it reports when the list moves underneath it, go unread.
 #[test]
 fn a_list_wide_enough_for_a_snapshot_answers_as_a_narrow_one_does() {
     Python::attach(|py| {
@@ -3170,9 +3170,9 @@ fn the_scalar_loop_and_the_walk_admit_the_same_values() {
 /// A record open under `str: anything` -- the clause a `TypedDict` carries,
 /// since the typing spec makes its keys strings -- is answered by its keys.
 ///
-/// Reading a record by its declared keys was a closed record's path alone,
-/// and every `TypedDict` value was scanned instead: each key resolved by name
-/// and asked of the clause, for a clause that admits any string. The keys
+/// Reading a record by its declared keys is not a closed record's path alone:
+/// scanned instead, every `TypedDict` value would have each key resolved by
+/// name and asked of the clause, for a clause that admits any string. The keys
 /// settle this record as they settle a closed one: every declared field is
 /// probed, and a key to spare is admitted when it is a `str` and refuses the
 /// record when it is not -- which no key need be resolved to say. The general
@@ -4186,7 +4186,7 @@ fn a_record_resolves_a_key_the_way_the_dict_does() {
 /// `"a"` and a `str` that spells `b` and compares as `a` are field `a` to it.
 /// The scan, the reading by keys, the reading a `TypedDict`'s clause takes and
 /// the scan with no plan to lean on are each asked, and `case` holds the
-/// explaining walk to the same answer: a reading that disagreed made the
+/// explaining walk to the same answer: a reading that disagreed would make the
 /// explaining walk, which asks the dict, report a mutation of a value nothing
 /// moved.
 #[test]
@@ -4378,8 +4378,8 @@ fn the_two_readings_agree_at_the_walks_depth_bound() {
 /// A set subclass is walked over the members it holds, not the ones it yields.
 ///
 /// A set has no positions, so it is read through an iterator -- and an iterator
-/// is a slot a subclass may override. One that does was walked through its own
-/// `__iter__`, so `set[int]` admitted a value whose storage held a `str`: an
+/// is a slot a subclass may override. Walked through its own `__iter__`, one
+/// that does would let `set[int]` admit a value whose storage holds a `str`: an
 /// accept with no value under it, which is the one direction the contract
 /// forbids. The base type's slot is asked instead, and the rows below are the
 /// answers that reading has to give.
@@ -6861,12 +6861,12 @@ fn a_complement_refuses_a_value_that_moved_while_read() {
 /// is the third value: a part that decides decides, whatever order the parts
 /// are read in, and a stop beside a member or a refusal is dropped.
 ///
-/// The fast scans stop at a conjunction's first refusal, so a stop met first
-/// was the answer and a refusal met first was too: `~list[R]` refused `[deep,
-/// 'x']` and admitted `['x', deep]`. A union branch that stopped beside one
-/// that admitted left its stop for the complement above to read. And a
-/// refusal the memo kept with a stop is no refusal for a walk that reads past
-/// stops, so it is walked again.
+/// The fast scans stop at a conjunction's first refusal, so read through them a
+/// stop met first would be the answer and a refusal met first would be too:
+/// `~list[R]` would refuse `[deep, 'x']` and admit `['x', deep]`. A union
+/// branch that stopped beside one that admitted would leave its stop for the
+/// complement above to read. And a refusal the memo kept with a stop is no
+/// refusal for a walk that reads past stops, so it is walked again.
 #[test]
 fn a_complement_reads_its_inner_walk_in_kleenes_strong_logic() {
     Python::attach(|py| {
@@ -7369,7 +7369,7 @@ fn a_refused_union_summarizes_the_value_once() {
 
 /// A union with one branch left to walk explains it once: a refused chain of
 /// `checked | list[T]` runs the leaf's predicate once in every mode, where
-/// deciding each level before explaining it ran it once a level.
+/// deciding each level before explaining it would run it once a level.
 #[test]
 fn a_union_explains_a_lone_walked_branch_once() {
     Python::attach(|py| {

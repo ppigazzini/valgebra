@@ -35,8 +35,8 @@ pub(crate) const SUMMARY_CHARS: usize = 80;
 ///
 /// `reprlib.Repr` cuts a container off by depth and by width *while* rendering,
 /// which is the whole point: `repr()` builds the string in full and only then is
-/// it cut, so a value whose repr is enormous was paid for in full and thrown
-/// away 80 characters later.
+/// it cut, so through it a value whose repr is enormous is paid for in full and
+/// thrown away 80 characters later.
 static BOUNDED_REPR: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
 /// The limits are set well above anything a readable message shows, so a value
@@ -101,12 +101,11 @@ pub(crate) fn unless_fatal<T>(result: PyResult<T>, py: Python<'_>, fallback: T) 
 /// A short repr-style summary of a value for error messages.
 ///
 /// A container is rendered under a bound rather than rendered and then cut. The
-/// difference is not cosmetic: explaining a 20,000-deep list built its 40,000
-/// character repr once per level of the walk -- 128 of them, since that is where
-/// the recursion bound stops -- and kept 80 characters of each. That was twelve
-/// seconds for one error, against `is_valid` at twenty microseconds for the same
-/// value, and it grew with the size of the value rather than with the number of
-/// mistakes in it.
+/// difference is not cosmetic: rendered and then cut, explaining a 20,000-deep
+/// list would build its 40,000 character repr once per level of the walk -- 128
+/// of them, since that is where the recursion bound stops -- and keep 80
+/// characters of each, a cost that grows with the size of the value rather than
+/// with the number of mistakes in it.
 ///
 /// A scalar keeps the direct path: its repr is its size, there is nothing to
 /// bound, and it is the common case in an error message.
@@ -172,7 +171,7 @@ pub(crate) fn stored(text: &Bound<'_, PyString>) -> String {
 
 /// Truncate a string this code already owns, keeping it where it is short.
 ///
-/// The short case is every case in practice, and copying it was a second
+/// The short case is every case in practice, and copying it would be a second
 /// allocation per violation on top of the one the repr already made: a value
 /// summary is built for every failure a wide record reports.
 pub(crate) fn shorten(text: String, max_chars: usize) -> String {
@@ -424,7 +423,7 @@ pub(crate) fn into_pyerr(py: Python<'_>, violations: Vec<Violation>) -> PyErr {
 /// any thread waiting for it, once per failing call. The instance is made here
 /// instead and handed to `PyO3` as its type's argument, so the raise is
 /// `PyErr_SetObject(ValidationError, instance)` -- which chains the exception
-/// being handled as `__context__`, as normalizing the lazy error did -- and
+/// being handled as `__context__`, as normalizing the lazy error would -- and
 /// nothing normalizes it.
 ///
 /// The failures are attached with one attribute write, and the violations are

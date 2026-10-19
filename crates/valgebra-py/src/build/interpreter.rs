@@ -263,9 +263,9 @@ fn each_spelling_builds_its_own_schema() {
             // dictionary; the vocabulary this stands in for ships
             // `slots` dataclasses, which keep them on the *type* as
             // descriptors, and a marker may answer through `__getattr__` for a
-            // name no dictionary of either holds. For three releases this
-            // corpus asked only the first, so the reading of the others was
-            // held by pytest alone -- which the mutation sweep cannot see.
+            // name no dictionary of either holds. The corpus asks all three:
+            // a reading held by pytest alone is one the mutation sweep cannot
+            // see.
             (
                 "typing.Annotated[int, slotted.Ge(0)]",
                 "Annotated[int, Ge(0)]",
@@ -461,7 +461,7 @@ fn a_constraint_is_read_off_its_vocabulary_alone() {
             ),
             // A flag on the type behind a hook, and nothing else the type
             // carries: the one marker whose mask is exactly the probe's bit
-            // beside the hook's, now that a marker of the vocabulary carries
+            // beside the hook's, since a marker of the vocabulary carries
             // its class's bits beside them too.
             (
                 "typing.Annotated[int, hooked_group(at.Ge(0))]",
@@ -656,8 +656,8 @@ fn a_callable_is_no_schema_and_a_literal_names_it() {
 }
 
 /// A typing form is refused where a constant or a type argument is read, and
-/// so is a form that names no set at all: each was built quietly as something
-/// else.
+/// so is a form that names no set at all: each would otherwise build quietly as
+/// something else.
 #[test]
 fn a_typing_form_is_refused_where_a_constant_or_a_type_argument_is_read() {
     Python::attach(|py| {

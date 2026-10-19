@@ -82,8 +82,8 @@ struct OpenAlias {
 /// no lambda to carry the fixpoint. So the alias *is* the binder. A token stands
 /// for it while the body is built, every occurrence of the token becomes a
 /// reference to the definition the body turns into, and an alias that never
-/// names itself builds exactly what it did before -- one schema, no definition,
-/// nothing to resolve.
+/// names itself builds what it would without the token -- one schema, no
+/// definition, nothing to resolve.
 ///
 /// A generic alias written bare is its defaults, as PEP 696 reads it, and is
 /// refused where a parameter has none: PEP 695 gives a bare one "an implied
@@ -232,8 +232,8 @@ fn tie_alias(
         });
     });
     // The value is a type *argument*, as a `NewType`'s supertype is: a string
-    // there is a forward reference, and `TypeAliasType("A", "int")` and `type A
-    // = "int"` were read as the literal `'int'`.
+    // there is a forward reference, where the constant reading would make
+    // `TypeAliasType("A", "int")` and `type A = "int"` the literal `'int'`.
     let body = generics::build_type_argument(body, lits, defs);
     let recursive = OPEN_ALIASES
         .with_borrow_mut(Vec::pop)
@@ -425,10 +425,7 @@ fn names_a_parameter(
 /// The margin is what makes the ownership hold rather than happen to hold. Each
 /// level the frontend descends builds at least one schema node, so the deepest
 /// schema `checked` accepts is reached in at most that many descents; one more
-/// lets the schema *past* the bound be built and refused by name. The two
-/// constants were equal while a sequence counted two levels of depth per level of
-/// descent, which hid the question: no list chain could reach this bound before
-/// `checked` had already refused it.
+/// lets the schema *past* the bound be built and refused by name.
 const MAX_BUILD_DEPTH: usize = crate::validator::MAX_SCHEMA_DEPTH + 1;
 
 /// RAII guard over one `build_schema` descent: it bounds the recursion's depth
@@ -576,10 +573,10 @@ struct Forms {
     /// `typing.get_origin` and `typing.get_args`, the spec's own introspection,
     /// held as the callables they are.
     ///
-    /// Every node asks both, and asking them through the module means importing
-    /// `typing` and resolving the name per node: the import machinery alone was
-    /// 7.7% of building a fifty-field validator, for a module `sys.modules` has
-    /// held since the first one.
+    /// Every node asks both, and asking them through the module would import
+    /// `typing` and resolve the name per node: the import machinery alone is
+    /// 7.7% of building a fifty-field validator that way, for a module
+    /// `sys.modules` has held since the first one.
     get_origin: Py<PyAny>,
     get_args: Py<PyAny>,
     /// `typing.TypeVar`, the one kind of type parameter an alias's arguments
@@ -991,10 +988,10 @@ fn read_annotation(
         }
     }
 
-    // `Annotated` written bare annotates nothing. Below 3.13 it is a class, so
-    // the dispatch below read it as an `isinstance` test no value passes; from
-    // 3.13 it is a special form and was refused as one, in words about type
-    // variables. Asked by identity, once, ahead of both.
+    // `Annotated` written bare annotates nothing. Below 3.13 it is a class,
+    // which the dispatch below would read as an `isinstance` test no value
+    // passes; from 3.13 it is a special form, which the dispatch would refuse
+    // in words about type variables. Asked by identity, once, ahead of both.
     if obj.is(forms.annotated.bind(py)) {
         return Err(not_implemented(
             "typing.Annotated written bare annotates nothing: write \
@@ -1018,7 +1015,7 @@ fn read_annotation(
     // carries no `__metadata__` or `__supertype__`, `get_origin` answers `None`
     // for it, and it is no container and no special form, so the fallthrough
     // interns it -- after an attribute read, a call into `typing` and a dozen
-    // tests, which were most of compiling a wide `Literal`. A validator
+    // tests, which would be most of compiling a wide `Literal`. A validator
     // composes in, and a validator has no subclass and matches no arm below
     // before its own.
     if let Some(constant) = builtin_constant(obj, lits) {
@@ -1084,12 +1081,13 @@ fn read_annotation(
     // NewType: validate the supertype it wraps.
     // Asked once, with a name the interpreter already holds -- the reading the
     // `__metadata__` arm above states the reason for. Spelled `hasattr` then
-    // `getattr`, this decoded the name from UTF-8 and hashed it twice per node,
-    // on the path every form that is not a class and has no origin crosses.
+    // `getattr`, this would decode the name from UTF-8 and hash it twice per
+    // node, on the path every form that is not a class and has no origin
+    // crosses.
     //
     // The supertype is a type *argument*: a string there is a forward reference,
-    // and read as the constant fallthrough reads one, `NewType("N", "int")` was
-    // the literal `'int'`.
+    // and read as the constant fallthrough reads one, `NewType("N", "int")`
+    // would be the literal `'int'`.
     if let Some(supertype) = obj.getattr_opt(intern!(py, "__supertype__"))? {
         return generics::build_type_argument(&supertype, lits, defs);
     }
@@ -1114,10 +1112,10 @@ fn read_annotation(
         ));
     }
     // And the frozen one for the same reason. Asked separately because a
-    // `frozenset` is not a `set`: the arm above does not see it, so it fell
-    // through to the constant below and was interned. `frozenset({int})` --
-    // which names a frozen set of integers -- became a schema admitting one
-    // frozen set holding the `int` *type object*, and no value a caller has.
+    // `frozenset` is not a `set`: the arm above does not see it, and the
+    // constant below would intern it. `frozenset({int})` -- which names a
+    // frozen set of integers -- would become a schema admitting one frozen set
+    // holding the `int` *type object*, and no value a caller has.
     if obj.is_instance_of::<PyFrozenSet>() {
         return Err(not_implemented(
             "a frozen set literal is not a schema; write a frozen set as \
@@ -1460,9 +1458,10 @@ fn constant_of(obj: &Bound<'_, PyAny>) -> Constant {
 /// A pool's keys, slot for slot, and the index a new constant is looked up in.
 ///
 /// Built once per validator, by the first relation it is a side of, and shared
-/// by every relation after it. Rebuilt per relation, it read each constant back
-/// out of the interpreter and copied each string: 70% of relating two tables of
-/// ten thousand codes, against the 20% the rules take to decide the pair.
+/// by every relation after it. Rebuilt per relation, it would read each
+/// constant back out of the interpreter and copy each string: 70% of relating
+/// two tables of ten thousand codes, against the 20% the rules take to decide
+/// the pair.
 pub(crate) struct PoolKeys {
     keys: Vec<Constant>,
     index: rustc_hash::FxHashMap<Constant, usize>,
@@ -1500,11 +1499,10 @@ impl Pool {
     /// Seed a pool with an existing validator's constants, rebuilding the index,
     /// so a second schema interns into the same pool when validators merge.
     ///
-    /// A seeded pool can hold two slots under one key -- the constants were
-    /// pooled before this rule, or by another pool -- and the later slot wins the
-    /// key. Both stay in `items`, because a compiled schema already names the
-    /// earlier one; what the key decides is only which slot a *new* occurrence
-    /// joins.
+    /// A seeded pool can hold two slots under one key -- each pooled by a
+    /// different pool -- and the later slot wins the key. Both stay in `items`,
+    /// because a compiled schema already names the earlier one; what the key
+    /// decides is only which slot a *new* occurrence joins.
     pub(crate) fn seeded(py: Python<'_>, items: Vec<Py<PyAny>>) -> Self {
         let index = items
             .iter()
@@ -1543,7 +1541,7 @@ impl Pool {
     ///
     /// The seed is asked first. The two indices share no key, so the order
     /// answers nothing, and a relation pools mostly constants its subject
-    /// already holds: asked second, each of those was hashed twice.
+    /// already holds: asked second, each of those would be hashed twice.
     fn intern_keyed(&mut self, obj: &Bound<'_, PyAny>, key: Constant) -> usize {
         let seeded = self.seed.as_ref().and_then(|seed| seed.index.get(&key));
         if let Some(&index) = seeded.or_else(|| self.index.get(&key)) {
@@ -1657,11 +1655,11 @@ use refine::build_refine;
 ///
 /// Why this module exists rather than leaving the frontend to pytest: pytest
 /// exercises this file thoroughly and a mutation harness cannot observe pytest,
-/// so every mutant of this file read as a survivor and the file was excluded
-/// from the sweep by name. An exclusion is a hole in the coverage claim, and
-/// this one covered the widest file in the binding -- the one place a wrong arm
-/// turns a written annotation into a schema that denotes something else,
-/// silently, with every downstream test still passing.
+/// so without it every mutant of this file reads as a survivor, and the file
+/// would be excluded from the sweep by name. An exclusion is a hole in the
+/// coverage claim, and this one would cover the widest file in the binding --
+/// the one place a wrong arm turns a written annotation into a schema that
+/// denotes something else, silently, with every downstream test still passing.
 ///
 /// The corpus is a table rather than a test per case, because the frontend is a
 /// dispatch and the thing worth asserting is that each spelling lands on its own

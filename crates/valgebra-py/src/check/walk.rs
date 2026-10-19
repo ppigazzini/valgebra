@@ -140,10 +140,11 @@ static DICT_COPY: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 /// Python value it is handed, turned on its own arguments.
 ///
 /// Every container whose contents the walk reads is a member, because the
-/// argument below is about all of them alike: a `set` subclass whose `__iter__`
-/// yields values its storage does not hold was a member of `set[int]` while
-/// holding a `str`, and a `str` subclass whose `__len__` answers nine over one
-/// character satisfied `MinLen(3)` over text nothing counts that way.
+/// argument below is about all of them alike: read through its own methods, a
+/// `set` subclass whose `__iter__` yields values its storage does not hold
+/// would be a member of `set[int]` while holding a `str`, and a `str` subclass
+/// whose `__len__` answers nine over one character would satisfy `MinLen(3)`
+/// over text nothing counts that way.
 #[derive(Clone, Copy)]
 pub(super) enum Base {
     List,
@@ -288,8 +289,8 @@ fn held_iter<'py>(value: &Bound<'py, PyAny>, base: Base) -> PyResult<Bound<'py, 
 /// on `PyPy` alone.
 ///
 /// Asked of the type on every walk that reaches a subclass, and **not
-/// remembered**: a map from type to answer was built and measured beside this,
-/// and a dict probe costs what the type lookup costs -- 67.6 ns against 67.6 on
+/// remembered**: a map from type to answer costs a dict probe, and a dict
+/// probe costs what the type lookup costs -- 67.6 ns against 67.6 on
 /// the fixed-arity `NamedTuple` row. A cache that buys nothing is a global
 /// mutable object, a bound, and a free-threading argument for nothing.
 ///
@@ -580,10 +581,11 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
         // Every definition entered is counted, and once a node has armed the
         // memo one it may remember is answered there ([`remembered_ref`]).
         // The question is asked here rather than in `check_ref`, which stays
-        // the walk of the definition alone: held there, it made `check_ref` a
-        // call the profile-guided build kept out of `member`, and laid out
-        // `member` around the call, which the profiled shape of a list nested
-        // twenty-five deep, which enters no definition, read as 3.6% more.
+        // the walk of the definition alone: held there, it would make
+        // `check_ref` a call the profile-guided build keeps out of `member`,
+        // and lay out `member` around the call, which the profiled shape of a
+        // list nested twenty-five deep, which enters no definition, reads as
+        // 3.6% more.
         Schema::Ref(id) => {
             if ctx.state.memo.enter() && ctx.index.memo.remembers(*id) {
                 return remembered_ref(*id, value, frame);
@@ -991,14 +993,12 @@ pub(super) fn member_again(
 
 /// Decide a union **and** explain it in one walk of each branch.
 ///
-/// The two questions were asked separately: a fast pass over every branch to
-/// decide membership, then -- on failure -- a probe that walked every branch
-/// again in explain mode to find the closest one. Each pass is linear in the
-/// subtree, and the probe's walk reaches the next union one level down, which
-/// did the same thing to the subtree below *it*. The result was quadratic in
-/// the depth of the value: a 5,000-deep value took 0.8 s to explain, 10,000
-/// took 3.3, and 20,000 took 13, against `is_valid` at 1.6 ms for the same
-/// 20,000.
+/// Asked separately -- a fast pass over every branch to decide membership,
+/// then, on failure, a probe walking every branch again in explain mode to find
+/// the closest one -- the two questions would be quadratic in the depth of the
+/// value. Each pass is linear in the subtree, and the probe's walk reaches the
+/// next union one level down, which would do the same thing to the subtree
+/// below *it*.
 ///
 /// A branch walked in explain mode already answers both: it returns whether it
 /// matched, and it reports what failed if it did not. Asking once makes the
@@ -1129,16 +1129,17 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
 ///
 /// Every branch is decided before any is explained, so a value the union
 /// admits builds no report: explaining a branch renders the value, which runs
-/// its `__repr__`, and a member whose matching branch came after a list, a
-/// meet or a named tuple ran it -- and raised for a member where that
-/// `__repr__` raised. Each branch is asked first what it answers without a
-/// walk ([`decided_quietly`]). A branch left unanswered is walked: a record by
-/// its own deciding pass, which keeps where it stopped, any other on the fast
-/// path -- except where it is the only one, which deciding first protects no
-/// other branch from. That one is explained once, as the branch it is: a
-/// union over a recursive branch, `int | list[T]`, walked the levels below it
-/// twice for every level it explained, so a refused chain cost the square of
-/// its depth.
+/// its `__repr__`, so with the branches explained in turn a member whose
+/// matching branch comes after a list, a meet or a named tuple would run it --
+/// and raise for a member where that `__repr__` raises. Each branch is asked
+/// first what it answers without a walk ([`decided_quietly`]). A branch left
+/// unanswered is walked: a record by its own deciding pass, which keeps where
+/// it stopped, any other on the fast path -- except where it is the only one,
+/// which deciding first protects no other branch from. That one is explained
+/// once, as the branch it is: decided first and then explained, a union over a
+/// recursive branch, `int | list[T]`, would walk the levels below it twice for
+/// every level it explained, so a refused chain would cost the square of its
+/// depth.
 fn refused_branches<'s>(
     members: &'s [Schema],
     value: &Value<'_, '_>,
@@ -1278,11 +1279,11 @@ fn record_explained(
 /// A scalar kind or a literal fails at the union's own location, with a
 /// mismatch, and so does any branch whose kind refuses the value before its
 /// constraints or contents are read. [`explain_union`] reports such a failure
-/// only through the union's label, so explaining the branch built a violation
-/// nothing kept -- and summarizing the value in it ran the value's `__repr__`.
-/// A value a union *admits* had its repr run once for each branch before the
-/// one that matched, and a repr that raised a fatal signal made `validate`
-/// raise for a member.
+/// only through the union's label, so explaining the branch would build a
+/// violation nothing keeps -- and summarizing the value in it runs the value's
+/// `__repr__`. A value a union *admits* would have its repr run once for each
+/// branch before the one that matched, and a repr that raised a fatal signal
+/// would make `validate` raise for a member.
 ///
 /// A class is such a branch too: it is its instance test, asked once either
 /// way. So is a class met with the attributes it declares -- a dataclass --

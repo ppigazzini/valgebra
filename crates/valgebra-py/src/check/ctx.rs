@@ -28,7 +28,7 @@ use crate::codes::Code;
 ///
 /// One reference to a structure holding all of it would be two words, carried
 /// in two registers and never copied, and is refused: every read through a
-/// frame takes a load more that way, and the call boundary measured 8.7%
+/// frame takes a load more that way, and the call boundary reads 8.7%
 /// dearer and refined integers 4.1% (`scripts/perf_gate.py --binding-boundary`,
 /// `--binding-refined`).
 #[derive(Clone, Copy)]
@@ -173,8 +173,9 @@ pub(crate) struct WalkState {
 /// by hand.
 ///
 /// The compiler's drop of a box this size is a call out of line, and inlined
-/// into the state's own drop it made that a call too: fifteen instructions a
-/// call, where the state's drop had been a few written where it is dropped.
+/// into the state's own drop it would make that a call too: fifteen
+/// instructions a call, where the state's drop is otherwise a few written where
+/// it is dropped.
 /// Held in `ManuallyDrop`, the box has no drop code, and the `Drop` below tests
 /// the pointer and releases a box out of line only where there is one, as
 /// `Unwritten` holds its buffers in `walk.rs` for the same reason.
@@ -206,8 +207,8 @@ impl RareSlot {
 /// must release. Held inline, the memo's tables are eleven words to write and
 /// three drops to run on every call, which the instruction gate's
 /// call-boundary shape, about a hundred instructions a call, reads as 43%
-/// more; behind the pointer the signal's slot already was, a call that holds
-/// neither writes and tests that one word.
+/// more; behind the one pointer they share with the signal's slot, a call that
+/// holds neither writes and tests that one word.
 #[derive(Default)]
 struct Rare {
     /// A fatal interpreter signal raised mid-walk — a base exception that is not

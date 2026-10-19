@@ -195,8 +195,8 @@ pub(super) fn build_refine(
 ///
 /// The register is read through [`is_a_number`], the question
 /// [`refuse_unnumbered_step`] asks, rather than by importing `numbers` and
-/// decoding `Number` again. Spelled as an import this ran the module lookup and
-/// two attribute names per order bound, and a fifty-field record of
+/// decoding `Number` again. Spelled as an import this would run the module
+/// lookup and two attribute names per order bound, and a fifty-field record of
 /// `Annotated[int, Ge(0)]` carries fifty of them.
 fn order_group(operand: &Bound<'_, PyAny>) -> PyResult<Option<OrderGroup>> {
     let py = operand.py();
@@ -227,10 +227,10 @@ pub(super) fn carries_order(base: &Schema, operand: &Bound<'_, PyAny>) -> PyResu
 ///
 /// A constraint is refused where the base's values cannot be asked it, and the
 /// check reads the base's *node*. A literal's node says only "a literal": the
-/// kind is the constant's, and the constant lives in the pool. So
-/// `Annotated[int, MinLen(1)]` was refused and `Annotated[Literal[1],
-/// MinLen(1)]` -- the same schema one value narrower -- compiled, to a schema
-/// admitting no value and reporting itself inhabited. A set that exists
+/// kind is the constant's, and the constant lives in the pool. Read off the
+/// node, `Annotated[int, MinLen(1)]` is refused while `Annotated[Literal[1],
+/// MinLen(1)]` -- the same schema one value narrower -- would compile, to a
+/// schema admitting no value and reporting itself inhabited: a set that exists
 /// according to the library and holds nothing according to the walk.
 ///
 /// Rewritten rather than special-cased at each check, because the checks fold
@@ -238,8 +238,7 @@ pub(super) fn carries_order(base: &Schema, operand: &Bound<'_, PyAny>) -> PyResu
 /// way a union of integers does, and it does so by being one here.
 ///
 /// A constant of no kind the partition names -- an enum member, an instance --
-/// is left as it is, and the checks read it as they always did: unknown, which
-/// refuses nothing.
+/// is left as it is, and the checks read it as unknown, which refuses nothing.
 fn kinded(base: &Schema, lits: &Pool) -> Schema {
     match base {
         Schema::Literal(index) => Python::attach(|py| {
@@ -451,8 +450,8 @@ fn names(ty: &Bound<'_, PyType>, attr: &Bound<'_, PyString>, want: &str) -> PyRe
 /// protocol at all: msgspec's `Meta`, pydantic's `Field` and a class of one's own
 /// may each carry a `ge` or a `pattern` and mean something else by it. pydantic
 /// and msgspec search with a pattern where this library matches it whole, and a
-/// marker read in part -- `Meta(pattern=..., max_length=3)` lost its length --
-/// admits what its own library refuses. A marker from elsewhere is ignored,
+/// marker read in part -- `Meta(pattern=..., max_length=3)` without its length
+/// -- admits what its own library refuses. A marker from elsewhere is ignored,
 /// which is what every library reading `Annotated` does with another's.
 ///
 /// Asked along the method resolution order, so a subclass of `Ge` is read as a
@@ -694,13 +693,12 @@ fn is_read_where_written(item: &Bound<'_, PyAny>) -> PyResult<bool> {
 ///
 /// A marker carries one or two of these and not the rest: `Ge(0)` has a
 /// `ge` and nothing else, and a compiled pattern has a `pattern` and `flags`.
-/// Absence is the common answer, and it was asked for by *trying*: a `getattr`
-/// for an absent name answers by raising, and `func` was asked with a bare one
-/// on every interpreter while the rest were asked with
-/// `PyObject_GetOptionalAttr` -- the first non-raising spelling the interpreter
-/// offers, and there is none before 3.13. A fifty-field record of
-/// `Annotated[int, Ge(0)]` built, threw and dropped four hundred exceptions to
-/// learn nine times over that a marker was what it said it was.
+/// Absence is the common answer, and a `getattr` for an absent name answers it
+/// by raising: `PyObject_GetOptionalAttr`, the first non-raising spelling the
+/// interpreter offers, does not exist before 3.13. Asked per marker, a
+/// fifty-field record of `Annotated[int, Ge(0)]` would build, throw and drop an
+/// exception for every name a field's marker lacks, to learn nine times over
+/// that a marker is what it says it is.
 ///
 /// Which names a marker can carry is a property of its *type*, so the question
 /// is asked there, once, and the answer kept: see [`Probes`].
@@ -1195,12 +1193,12 @@ fn read_vocabulary<'py>(
             && !bound.is_none()
         {
             // A `bool` is read as the length it equals: `MinLen(True)` is
-            // `MinLen(1)`. Refusing it was tried and withdrawn -- `MinLen(0)` and
-            // `MinLen(False)` are equal and hash alike, so `typing` returns one
-            // `Annotated` object for both and whichever spelling a process built
-            // first is the one every later spelling gets. A refusal would fail
-            // correct `MinLen(0)` code because of a `MinLen(False)` somewhere
-            // else, which is worse than reading the value the marker holds.
+            // `MinLen(1)`. It is not refused: `MinLen(0)` and `MinLen(False)`
+            // are equal and hash alike, so `typing` returns one `Annotated`
+            // object for both and whichever spelling a process built first is
+            // the one every later spelling gets. A refusal would fail correct
+            // `MinLen(0)` code because of a `MinLen(False)` somewhere else,
+            // which is worse than reading the value the marker holds.
             out.push(make(length_bound(probe, &bound)?));
         }
     }

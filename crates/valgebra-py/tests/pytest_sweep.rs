@@ -3,9 +3,9 @@
 //! Seven files of this crate are reached only through the shipped extension:
 //! the entry points, the exception, the report the walk hands back, the render.
 //! `cargo mutants` runs `cargo test`, which never loads the extension, so every
-//! mutant of those files survives and says nothing about the tests. They were
-//! excluded from the sweep by name, and the reason written beside each was
-//! "pytest covers this" -- an assertion nothing measured.
+//! mutant of those files survives and says nothing about the tests. Excluded
+//! from the sweep by name instead, each would carry "pytest covers this" as its
+//! reason -- an assertion nothing measures.
 //!
 //! This makes it a measurement. Behind a feature, because the cost is a rebuild
 //! and a suite run per mutant and no ordinary `cargo test` should pay it; the

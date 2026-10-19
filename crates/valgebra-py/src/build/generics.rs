@@ -155,11 +155,11 @@ pub(super) fn build_parametrized(
 ///
 /// The spec's `Literal` takes `None`, an enum member, or an `int`, `bool`, `str`
 /// or `bytes` value. A **list, dict or set** is none of those, and Python does
-/// not reject the subscription -- so `Literal[[1]]` arrived here as a list, and
-/// the constant fallthrough read it as this library's own native list *schema*:
-/// `Literal[[1]]` became `list[Literal[1]]`, and `Literal[{}]` the empty record.
-/// Those are sets a caller who wrote `Literal` did not ask for, and no message
-/// said so.
+/// not reject the subscription -- so `Literal[[1]]` arrives here as a list, and
+/// the constant fallthrough would read it as this library's own native list
+/// *schema*: `Literal[[1]]` would become `list[Literal[1]]`, and `Literal[{}]`
+/// the empty record. Those are sets a caller who wrote `Literal` did not ask
+/// for, and no message would say so.
 ///
 /// A float is deliberately not refused here. It is not a spelling the spec
 /// allows either, but it is a *constant*, and this library pools it as one --
@@ -635,9 +635,9 @@ pub(super) fn build_tuple(
 /// fixed-length list, which this library spells as a list literal; a set of
 /// several is a set of their union, because a set schema is homogeneous.
 ///
-/// Both halves are the message. Named only as an arity -- which this was --
-/// the refusal says a count is wrong without saying whose or what the caller
-/// should have written, which is a sentence a reader takes back to the page.
+/// Both halves are the message. Named only as an arity, the refusal says a
+/// count is wrong without saying whose or what the caller should have written,
+/// which is a sentence a reader takes back to the page.
 pub(super) fn single_arg<'py>(
     args: &Bound<'py, PyTuple>,
     form: &Bound<'_, PyAny>,
@@ -770,8 +770,8 @@ pub(super) fn build_dict(
 ///
 /// `{"a": int, "a?": str}` is two dict keys and one field name, so the record it
 /// names asks the key to be required and optional at once and to hold two
-/// disjoint types. Building it gave a record admitting nothing, with no message
-/// saying why, and two spellings of it that compared unequal.
+/// disjoint types. Built, it would be a record admitting nothing, with no
+/// message saying why, and two spellings of it that compare unequal.
 ///
 /// Asked once over the finished fields rather than of each name as it arrives:
 /// a record is written with as many keys as a caller likes, and asking each new

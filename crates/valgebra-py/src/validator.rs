@@ -394,9 +394,8 @@ impl Validator {
     ///
     /// Without a traversal the type is untracked, the collector never sees the
     /// edge from the validator back to the class, and the cycle is never
-    /// collected: two thousand such classes stayed alive across a `gc.collect()`
-    /// that freed all two thousand of the same classes when the validator was
-    /// held anywhere else.
+    /// collected: such classes stay alive across a `gc.collect()` that frees
+    /// the same classes when the validator is held anywhere else.
     ///
     /// Traversal alone breaks these. The collector needs to *see* the edge to
     /// find the cycle, and clearing any one participant is enough to break it --

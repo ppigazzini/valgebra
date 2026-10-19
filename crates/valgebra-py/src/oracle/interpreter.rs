@@ -1,10 +1,10 @@
 //! The oracle's own corpus: every question `LeafRelations` asks, driven here.
 //!
-//! This file exists because the mutation sweep said it had to. The answers in
-//! this module are exercised all day by the decision suite in `tests/`, and
-//! that suite is pytest, which `cargo mutants` cannot observe: swept on the
-//! interpreter the lane pins, `oracle.rs` gave **62 survivors of 109**, because
-//! the only Rust rows reaching it constructed the pool and read it back.
+//! This file exists for the mutation sweep. The answers in this module are
+//! exercised all day by the decision suite in `tests/`, and that suite is
+//! pytest, which `cargo mutants` cannot observe: a Rust row that only
+//! constructs the pool and reads it back leaves most of the mutants of
+//! `oracle.rs` alive.
 //!
 //! So the rows below hand the oracle two pool slots, or a class and a kind, and
 //! read the `Option<bool>` it answers. That is deliberately *not* what the

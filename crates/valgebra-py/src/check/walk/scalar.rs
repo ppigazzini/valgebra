@@ -216,9 +216,9 @@ pub(super) fn scalar_union_admits(members: &[Schema], value: &Value<'_, '_>) -> 
 ///
 /// Inlined, and its recording half is not. Every scalar arm of the walk ends
 /// here, so on a list of integers this is called once per element and does
-/// nothing but return the bool it was handed: measured at twenty-two
-/// instructions of call and return around a single test, which was a fifth of
-/// the per-element cost. Inlining leaves the test where the answer already is.
+/// nothing but return the bool it was handed: out of line, that is twenty-two
+/// instructions of call and return around a single test, a fifth of the
+/// per-element cost. Inlining leaves the test where the answer already is.
 /// The other half is a `Vec` push and a value summary, which only a failing
 /// element in explain mode reaches -- it is marked cold so the branch predicts
 /// the accepting path and the code sits away from it.

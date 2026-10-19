@@ -134,10 +134,10 @@ pub(super) fn build_type_object(
     }
     // A bare container class is its kind: `list` admits every list, which is the
     // set `list[object]` names and the set the typing spec assigns an
-    // unparameterised generic. Read as an `isinstance` atom it was a different
-    // sort of thing from the sequence node beside it -- in no kind at all -- and
-    // neither spelling was decided below the other. See "What a bare builtin
-    // class denotes" in `docs/dev/01-schema-ir.md`.
+    // unparameterised generic. Read as an `isinstance` atom it would be a
+    // different sort of thing from the sequence node beside it -- in no kind at
+    // all -- and neither spelling would be decided below the other. See "What a
+    // bare builtin class denotes" in `docs/dev/01-schema-ir.md`.
     if ty.is(py.get_type::<PyList>()) {
         return Ok(Schema::list(SeqShape::homogeneous(Schema::ANYTHING)));
     }
@@ -851,7 +851,8 @@ pub(super) fn build_typed_dict(
             // sets. CPython fills `__required_keys__` when the class is created,
             // from the annotations as written -- and under `from __future__
             // import annotations` those are strings, so `NotRequired[...]` is
-            // invisible to it and every optional key was compiled required.
+            // invisible to it, and read there every optional key would compile
+            // required.
             // `get_type_hints` resolves the string and keeps the qualifier, so
             // reading it there is reading what the author wrote.
             required: match qualified_required(&hint)? {
@@ -1218,8 +1219,8 @@ pub(super) fn build_object(
 ///
 /// A class is never a `Final`, and the caller answers one without calling
 /// this: looking a missing `__origin__` up on `int` walks its whole `__mro__`,
-/// and a fifty-field dataclass paid 7% of its build for it, and the call
-/// itself, made for every field, cost another half percent.
+/// and a fifty-field dataclass would pay 7% of its build for it, and the call
+/// itself, made for every field, another half percent.
 fn field_hint<'py>(
     hint: Bound<'py, PyAny>,
     name: &Bound<'py, PyAny>,

@@ -173,11 +173,12 @@ fn scan_held_dict<'py>(
 /// `CPython` answers `PyDict_Size`, `PyDict_Next` and `PyDict_GetItem` from the
 /// storage of any dict. `PyPy`'s `cpyext` answers the first through the
 /// object's own `__len__`, and reads each value `PyDict_Next` yields through
-/// its own `__getitem__`, so a subclass overriding either was another dict to
-/// the walk than the one it holds: an overridden `__len__` read as an extra key
-/// and refused `{"a": 1}` from a closed record, and an overridden `__getitem__`
-/// refused it from `dict[str, int]`. The base's own `dict.copy` reads the
-/// storage there, and the walk reads the copy. An exact dict, and a subclass
+/// its own `__getitem__`, so read through those, a subclass overriding either
+/// would be another dict to the walk than the one it holds: an overridden
+/// `__len__` would read as an extra key and refuse `{"a": 1}` from a closed
+/// record, and an overridden `__getitem__` would refuse it from
+/// `dict[str, int]`. The base's own `dict.copy` reads the storage there, and
+/// the walk reads the copy. An exact dict, and a subclass
 /// overriding neither, are read where they lie. Compiled for `PyPy` alone: the
 /// walk on `CPython` reads the value itself.
 ///
@@ -408,8 +409,8 @@ fn declared_position(
 /// name its hash and `==` reach.
 ///
 /// Out of line, because records rarely hold such a key and every scan reads
-/// its entries through the caller: inlined, the search made the loop over a
-/// `dict[str, int]`, which resolves no key at all, 2.6% dearer by count.
+/// its entries through the caller: inlined, the search would make the loop over
+/// a `dict[str, int]`, which resolves no key at all, 2.6% dearer by count.
 #[cold]
 #[inline(never)]
 fn reached_by(
@@ -760,8 +761,8 @@ fn keyed_map_scan(
     names: &Names<'_, impl Fn(&str) -> Option<usize>>,
 ) -> bool {
     // Scratch buffers for the whole record, not one pair per field: a fast walk
-    // writes to neither, and a fifty-field record was building and dropping a
-    // hundred of them to answer one membership question.
+    // writes to neither, and a pair per field would build and drop a hundred of
+    // them for a fifty-field record, to answer one membership question.
     let mut unwritten = Unwritten::default();
     let mut sub = unwritten.frame(ctx);
     let room = ctx.room_to_descend();
@@ -772,8 +773,8 @@ fn keyed_map_scan(
         // a lone surrogate, which cannot equal a name, since names are valid
         // UTF-8 by build-time check -- must instead be covered by a default
         // clause. A mapping declares no field, so no key resolves to one, and
-        // its keys are not read as names: decoding each and asking its type was
-        // a fifth of reading a `dict[str, int]`.
+        // its keys are not read as names: decoding each and asking its type
+        // would be a fifth of reading a `dict[str, int]`.
         let index = if fields.is_empty() {
             None
         } else {
@@ -1043,10 +1044,10 @@ fn undeclared_covered(
     // document's own keys, so it hashes them with a hash keyed per process:
     // `rustc-hash` is unseeded, its collisions are the same in every process,
     // and a document can carry keys computed offline to all hash alike -- each
-    // insert then walked the whole chain, and 20,000 such keys, 0.74 MB, took
-    // half a second where ordinary ones took 2 ms. The entries are covered in
-    // the document's order, so the clauses are asked in an order the seed does
-    // not choose.
+    // insert would then walk the whole chain, and 20,000 such keys, 0.74 MB,
+    // take half a second where ordinary ones take 2 ms. The entries are covered
+    // in the document's order, so the clauses are asked in an order the seed
+    // does not choose.
     let mut last: HashMap<&str, usize, RandomState> =
         HashMap::with_capacity_and_hasher(entries.len(), RandomState::new());
     let mut skipped = vec![false; entries.len()];

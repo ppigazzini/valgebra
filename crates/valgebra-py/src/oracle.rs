@@ -195,13 +195,14 @@ impl PoolRelations<'_, '_> {
     ///   created;
     /// * it is **not a `Flag`**. A flag's `|` builds instances the class never
     ///   listed: `P.A | P.B` is an instance of `P`, and `list(P)` is
-    ///   `[P.A, P.B]`. Reading `P` as that union made `P <= Literal[P.A, P.B]`
-    ///   true with `P.A | P.B` standing against it, and `P & ~Literal[P.A,
-    ///   P.B]` was not decided empty although it admits that value.
+    ///   `[P.A, P.B]`. Reading `P` as that union would make
+    ///   `P <= Literal[P.A, P.B]` true with `P.A | P.B` standing against it,
+    ///   and would decide `P & ~Literal[P.A, P.B]` empty although it admits
+    ///   that value.
     /// * it **has at least one member**. An enumeration with none can still be
     ///   subclassed -- that is how an enum base class is written -- so its
     ///   instances are its subclasses' members, and reading it as the empty
-    ///   union made it a subtype of `nothing`.
+    ///   union would make it a subtype of `nothing`.
     /// * two members are two values, which is the identity check. An `IntEnum`
     ///   fails it because its members equal the integers behind them.
     ///

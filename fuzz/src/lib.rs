@@ -67,10 +67,9 @@ fn build_constraint(u: &mut Unstructured) -> Result<Constraint> {
 /// Build one sequence shape: a prefix of up to four element schemas, and a tail
 /// on half the draws.
 ///
-/// The generator covers the shape's whole space, which is what it did not do
-/// while the sequence body was a regular expression: three of its five branches
-/// then built alternations and nested repetitions that nothing else in the tree
-/// produces, so the fuzzer spent its budget on languages no value could reach.
+/// The generator covers the shape's whole space -- a prefix and an optional
+/// repeated tail -- and builds no form the tree does not, so no draw is spent
+/// on a language no value could reach.
 fn build_shape(u: &mut Unstructured, depth: u32) -> Result<SeqShape> {
     let arity = if depth == 0 || u.is_empty() {
         0

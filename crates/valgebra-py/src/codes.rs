@@ -14,14 +14,14 @@
 //! constant here, defined from [`valgebra_core::codes`] so that it is spelled
 //! once.
 //!
-//! Written as literals at the sites that report them, as they were, the set
-//! could only be recovered by scanning files for strings that look like codes.
-//! That reading misses a code written in a file nobody thought to scan, and
-//! invents a cell for any other snake-case string in one that was -- it had
-//! `not_subset`, which is an answer [`relation_to`](crate::validator) gives and
-//! no failure anybody reports. A caller's vocabulary is not a thing to recover
-//! by pattern, so it is declared, and `tests/test_code_table.py` holds every
-//! name here to a site that writes it and every site to a name here.
+//! Written as literals at the sites that report them, the set could only be
+//! recovered by scanning files for strings that look like codes. That reading
+//! misses a code written in a file nobody thought to scan, and invents a cell
+//! for any other snake-case string in one that was -- `not_subset`, say, which
+//! is an answer [`relation_to`](crate::validator) gives and no failure anybody
+//! reports. A caller's vocabulary is not a thing to recover by pattern, so it
+//! is declared, and `tests/test_code_table.py` holds every name here to a site
+//! that writes it and every site to a name here.
 
 use valgebra_core::Schema;
 
