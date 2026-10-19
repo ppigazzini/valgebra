@@ -3661,6 +3661,30 @@ PLANTS = (
         trips=("test_every_run_in_a_checkout_runs_on_what_the_job_installed",),
     ),
     Plant(
+        # The PyPy lane's venv taking whichever maturin is newest.
+        "tests/test_workflow_syncs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "VIRTUAL_ENV=.pypy uv pip install maturin==1.15.0\n",
+            "VIRTUAL_ENV=.pypy uv pip install maturin\n",
+        ),
+        trips=("test_every_maturin_fetched_past_the_lock_is_the_locks",),
+    ),
+    Plant(
+        # The push lane's wheel built by the maturin the action fetches.
+        "tests/test_workflow_syncs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            '          maturin-version: "1.15.0"\n          # --find-interpreter',
+            "          # --find-interpreter",
+        ),
+        trips=("test_every_maturin_fetched_past_the_lock_is_the_locks",),
+    ),
+    Plant(
         # A test module subscripting a typing form with a validator, which on
         # the floor is a collection error that takes the module with it.
         "tests/test_suite_partition.py",

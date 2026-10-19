@@ -1229,7 +1229,11 @@ develop` put there and installs the wheel from the lock, so every command after
 it tests a module the lane did not build. Every lane installs what it needs with
 one `uv sync --locked`, the dependency groups it names included, and runs every
 later command under `uv run --no-sync`; `tests/test_workflow_syncs.py` holds both
-halves over every workflow, the Pages deploy included. Dependabot proposes a release seven days
+halves over every workflow, the Pages deploy included. A build of the extension
+that does not run through the lock -- the build action, which resolves the
+build requirement against a manifest it fetches on the day, and the PyPy lane's
+own venv -- names the maturin the lock resolves, and the same file holds each to
+it. Dependabot proposes a release seven days
 after it is published, so a version pulled in its first week never reaches a
 pull request, and `zizmor` audits the whole of `.github/`, where that setting
 lives.
