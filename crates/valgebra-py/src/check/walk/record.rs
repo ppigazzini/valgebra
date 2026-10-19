@@ -17,7 +17,7 @@ use pyo3::prelude::*;
 use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyDict, PyString};
 use rustc_hash::FxHashMap;
-use valgebra_core::{Attribute, Field, MapClause, PathSegment, Schema};
+use valgebra_core::{Attribute, Field, MapClause, PathSegment, Schema, quoted};
 
 use super::scalar::{admitted_quietly, scalar_member};
 #[cfg(PyPy)]
@@ -1173,7 +1173,7 @@ pub(super) fn keyed_map_explain(
                 frame.path,
                 Arc::clone(&field.name),
                 MISSING_KEY,
-                format!("required key {:?}", field.name),
+                format!("required key {}", quoted(&field.name)),
                 "missing".to_owned(),
             )),
             Ok(None) => {}
@@ -1193,7 +1193,7 @@ pub(super) fn keyed_map_explain(
                         frame.path,
                         Arc::clone(&field.name),
                         MISSING_KEY,
-                        format!("required key {:?}", field.name),
+                        format!("required key {}", quoted(&field.name)),
                         "missing".to_owned(),
                     ));
                 }
@@ -1394,7 +1394,7 @@ fn attribute_missing(
             frame.path,
             Arc::clone(&field.name),
             MISSING_ATTRIBUTE,
-            format!("attribute {:?}", field.name),
+            format!("attribute {}", quoted(&field.name)),
             "missing".to_owned(),
         ));
     }

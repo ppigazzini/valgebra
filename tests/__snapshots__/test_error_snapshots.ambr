@@ -75,8 +75,8 @@
     'missing_required_key': list([
       dict({
         'code': 'missing_key',
-        'expected': 'required key "a"',
-        'message': 'at a: expected required key "a", got missing [missing_key]',
+        'expected': "required key 'a'",
+        'message': "at a: expected required key 'a', got missing [missing_key]",
         'path': tuple(
           'a',
         ),

@@ -68,8 +68,10 @@ parse a string back into steps. The rendering is for a reader, and it keeps two
 paths apart too: a key that is not a bare name is written as a subscript of its
 `quoted` literal, `['a.b']`. Written bare, the key `"a.b"` would read as the
 path `a` then `b` and `"[0]"` as an index, and a key holding a newline would
-split the one-line message; `quoted` is also how a pattern is spelled in its
-`expected` label, as `repr` spells a literal's constant.
+split the one-line message. `quoted` is also how a pattern, and a key or an
+attribute a record names, is spelled in an `expected` label, as `repr` spells a
+literal's constant: a missing key reads `required key 'a'`, and one the path
+writes as `['\x7f']` reads `required key '\x7f'`.
 
 There are **four** variants, and the split between the first three is the whole
 reason the path is usable on a dict:

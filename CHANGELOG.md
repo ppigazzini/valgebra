@@ -54,6 +54,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a wide record whose clause reads keys reads a JSON object in one pass
 - fix: a complement names the set it excludes
 - fix: a record's name survives open or close by what it says alone
+- fix: a missing key or attribute is spelled as repr spells it
 
 -->
 
@@ -364,6 +365,11 @@ answer of its own, or a repair to a change not yet released.
   record refusing the key `b`. A field is read once, as it stands with its
   own records opened: the first pair closes to `{}`, and the second opens to
   `dict[anything, anything]`.
+- **A missing key or attribute is spelled in `expected` as `repr` spells it.**
+  The label used Rust's escapes and double quotes, so a missing key `"\x7f"`
+  read `required key "\u{7f}"` beside the path `['\x7f']`, and every such
+  label was quoted unlike the path and the other labels. It reads
+  `required key 'a'` and `attribute 'x'`, as the path quotes the name.
 
 ## [0.0.18] - 2026-10-12
 
