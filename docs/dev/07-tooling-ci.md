@@ -730,8 +730,10 @@ variable's value changes; the lane's value is `.venv/bin/python` whatever
 release is behind it. A cache saved on another release therefore links HEAD's
 workload against that release, while the base, built in a fresh target
 directory, links the lane's, and every binding shape reads the distance between
-two interpreters as the change's own. The `python` matrix keys its cache on the
-interpreter for the same reason.
+two interpreters as the change's own. Every lane that installs an interpreter
+keys its cache on that interpreter for the same reason, the `python` matrix
+included, and `tests/test_lane_interpreters.py` holds each key to naming every
+interpreter its job installs.
 
 **Every build cache is keyed on the runner image as well.** A lane that names no
 interpreter -- `rust test`, `rust coverage` -- builds against the image's own,

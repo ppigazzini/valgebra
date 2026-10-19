@@ -330,8 +330,8 @@ jobs:
         with:
           # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
           # is `.venv/bin/python` whichever build stands behind it, so a cache
-          # saved on the image's 3.12 would link this lane against that one.
-          key: managed-python
+          # saved on another release would link this lane against that one.
+          key: python-3.12
       - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-llvm-cov@0.9.1
@@ -807,6 +807,8 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: pypy-3.11
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "pypy-3.11"
@@ -1163,7 +1165,7 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          key: free-threaded
+          key: python-3.14t
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.14t"
@@ -1506,8 +1508,8 @@ jobs:
         with:
           # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
           # is `.venv/bin/python` whichever build stands behind it, so a cache
-          # saved on the image's 3.12 would link this lane against that one.
-          key: managed-python
+          # saved on another release would link this lane against that one.
+          key: python-3.12
       # Pinned for the reason the nightly sweep gives: the mutant set is compared
       # against a committed baseline.
       - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
@@ -1668,6 +1670,8 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: python-3.13
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.13"
@@ -1813,6 +1817,8 @@ jobs:
           toolchain: ${{ env.FUZZ_NIGHTLY }}
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: python-${{ env.FLOOR }}
       - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-llvm-cov@0.9.1
@@ -2349,8 +2355,8 @@ jobs:
         with:
           # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
           # is `.venv/bin/python` whichever build stands behind it, so a cache
-          # saved on the image's 3.12 would link this lane against that one.
-          key: managed-python
+          # saved on another release would link this lane against that one.
+          key: python-3.12
       - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-mutants@27.1.0
@@ -2504,8 +2510,8 @@ jobs:
         with:
           # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
           # is `.venv/bin/python` whichever build stands behind it, so a cache
-          # saved on the image's 3.12 would link this lane against that one.
-          key: managed-python
+          # saved on another release would link this lane against that one.
+          key: python-3.12
       - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-mutants@27.1.0

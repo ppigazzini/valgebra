@@ -24,11 +24,12 @@ that, because an import is not an answer. So a stated implementation has a lane
 that runs the suite, and a lane that runs the suite on an implementation is one
 the metadata states.
 
-The third is the build caches. A cache one job saves and another restores links
-the interpreter the first built against: pyo3 resolves it again only when
-`PYO3_PYTHON` changes, and every lane names `.venv/bin/python` whichever build
-stands behind it. So the jobs sharing a rust cache install one interpreter, and
-the key names that interpreter: a lane moving its interpreter moves the key.
+The third is the build caches. A cache a job saves, restored by the job's next
+run or by another job sharing its key, links the interpreter it was built
+against: pyo3 resolves it again only when `PYO3_PYTHON` changes, and every lane
+names `.venv/bin/python` whichever build stands behind it. So every rust cache's
+key names each interpreter its job installs, and the jobs sharing one install
+one interpreter: a lane moving its interpreter moves the key.
 A lane that builds against the image's own interpreter has the image for its
 interpreter, and the key the cache action computes does not name the image: a
 cache saved on Ubuntu 24.04 links libpython3.12 on an image that has none. So
@@ -215,6 +216,50 @@ def test_no_lane_runs_the_suite_on_an_implementation_nobody_states() -> None:
         f"lanes run the suite on implementations the metadata does not state: "
         f"{unstated}. Add the classifier, or the lane is spending minutes on a "
         "target no consumer is told about."
+    )
+
+
+def _caches() -> list[tuple[str, str, list[str]]]:
+    """Give each rust cache as its job, its key, and the interpreters it installs."""
+    found = []
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        for job_name, job in (read_workflow(path).get("jobs") or {}).items():
+            steps = job.get("steps") or []
+            installed = [
+                str(step["with"]["python-version"])
+                for step in steps
+                if "python-version" in (step.get("with") or {})
+            ]
+            found.extend(
+                (
+                    f"{path.name}:{job_name}",
+                    " ".join(
+                        str((step.get("with") or {}).get(name, ""))
+                        for name in ("key", "shared-key")
+                    ),
+                    installed,
+                )
+                for step in steps
+                if str(step.get("uses", "")).startswith(RUST_CACHE)
+            )
+    return found
+
+
+def test_every_rust_cache_names_the_interpreter_its_job_installs() -> None:
+    caches = _caches()
+    # The scan is the detector: a lane that installs no interpreter and builds
+    # no binding has nothing to name, and no lane at all would pass.
+    keyed = [(job, key, installed) for job, key, installed in caches if installed]
+    assert len(keyed) >= 10, f"the scan found {keyed}"
+    unnamed = [
+        f"{job} keys its cache `{key.strip() or 'nothing'}` and installs {version}"
+        for job, key, installed in keyed
+        for version in installed
+        if version not in key
+    ]
+    assert not unnamed, (
+        f"{unnamed}: a cache that does not move with the interpreter restores a "
+        "build configured against the one before"
     )
 
 

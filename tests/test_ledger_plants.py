@@ -3771,11 +3771,24 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "          key: free-threaded\n",
-            "          key: free-threaded\n"
+            "          key: python-3.14t\n",
+            "          key: python-3.14t\n"
             "          add-rust-environment-hash-key: false\n",
         ),
         trips=("test_every_rust_cache_restores_behind_the_toolchain_wrapper",),
+    ),
+    Plant(
+        # The Pages build's cache keyed apart from the interpreter, so moving
+        # the interpreter restores a build configured against the last one.
+        "tests/test_lane_interpreters.py",
+        (".github/workflows/docs.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/docs.yml",
+            "          key: python-3.12\n",
+            "          key: managed-python\n",
+        ),
+        trips=("test_every_rust_cache_names_the_interpreter_its_job_installs",),
     ),
     Plant(
         # A module finding the checkout for itself: a second answer to where
