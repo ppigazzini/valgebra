@@ -27,9 +27,17 @@ The everyday case looks like any validator — a type annotation is a schema, an
 checking it asks whether a value belongs to the set the annotation denotes:
 
 ```python
+from typing import TypedDict
+
 from valgebra import ValidationError, Validator
 
-is_user = Validator({"name": str, "age": int})
+
+class User(TypedDict):
+    name: str
+    age: int
+
+
+is_user = Validator(User)
 
 assert is_user.is_valid({"name": "Ada", "age": 36})
 assert not is_user.is_valid({"name": "Ada", "age": "unknown"})
