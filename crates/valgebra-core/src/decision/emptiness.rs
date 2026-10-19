@@ -413,15 +413,20 @@ fn density_of<'a>(bases: impl IntoIterator<Item = &'a Schema>) -> Density {
 
 /// The verdict and region set of an intersection.
 ///
-/// Five rules can prove a meet empty and they are asked in one place: an empty
-/// member, cancelling scalar regions, a member beside its own complement, two
-/// members of disjoint kinds, refinement bounds that cannot hold together, and a
+/// Seven rules can prove a meet empty and they are asked in one place: an empty
+/// member, cancelling scalar regions, a member beside its own complement, a
+/// pattern beside the complement of one with the same constraints, two members
+/// of disjoint kinds, refinement bounds that cannot hold together, and a
 /// required key two record members cannot agree on.
 ///
-/// Inhabitance has no such rule. Proving a meet inhabited means finding a value
-/// in *every* member, which none of the five does, so it is the region that
-/// settles it -- exactly, over the whole scalar fragment -- and past that the
-/// meet is opaque however inhabited its members are.
+/// Proving a meet inhabited means finding a value in *every* member, which none
+/// of the seven does. The region settles it exactly over the whole scalar
+/// fragment, and past that three shapes do: a direct instance of one class
+/// carrying the attribute record it is met with ([`class_with_attributes`]),
+/// closed maps whose required keys meet in a value
+/// ([`keyed_map_meet_verdict`]), and a reference among the members unfolded
+/// into the meet ([`meet_through_a_reference`]), which decides it either way.
+/// Any other meet is opaque however inhabited its members are.
 fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Regions) {
     let mut any_empty = false;
     let mut region = Regions::MEET_UNIT;

@@ -719,17 +719,20 @@ fn refine(
 
 /// The set one constraint denotes, read under the kinds the base admits.
 ///
-/// A bound is a set of *numbers* and a length bound a set of *words*, so which
-/// component a constraint lands in depends on what it is narrowing. A constraint
-/// the descriptor cannot read -- a predicate, a bound on a float, a length bound
-/// on a sequence -- refuses.
+/// A bound is a set of *numbers* and a length bound a set of *words* or
+/// *sequences*, so which component a constraint lands in depends on what it is
+/// narrowing. A constraint the descriptor cannot read refuses: a predicate, a
+/// bound over a base that is not whole numbers alone or floats alone, an
+/// operand the base's component cannot spell, a length bound over a base
+/// admitting a set, a dict or a value with no length, and a pattern whose
+/// automaton is past its bound.
 fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> Option<Descr> {
     // A bound is a set of whole numbers, and `bool` is a kind of its own here,
     // so the set has to be spelled in both slots: `True` is `1` to every
     // comparison Python makes, and a bound that admits `1` admits it.
     //
     // **Refuses unless the base is whole numbers and nothing else**, for the
-    // reason [`words`] refuses a length bound over more than words. A bound
+    // reason [`lengths`] refuses a length bound over a set or a dict. A bound
     // orders whatever a value's type orders -- a float, a string, a date -- and
     // these two components speak for two of those. Narrowing a float base to a
     // set of integers gives a *smaller* set than the schema denotes, and a
@@ -751,10 +754,8 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
         );
         Some(descr)
     };
-    // The same shape for a float base. A bound on a float was refused outright,
-    // so every relation needing the descriptor and mentioning `Annotated[float,
-    // Gt(0)]` stayed undecided -- which was every one of the eighteen the random
-    // sweep reported as an undecided corpus-true subtype.
+    // The same shape for a float base, so a relation needing the descriptor
+    // and mentioning `Annotated[float, Gt(0)]` is decided rather than declined.
     //
     // **Refuses unless the base is floats and nothing else**, for the reason the
     // integer side refuses: narrowing a wider base to a set of floats gives a
@@ -772,15 +773,8 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
     // A bound's operand is whatever the caller wrote: `Annotated[float, Gt(0)]`
     // carries the *integer* zero, and it orders the floats all the same. So the
     // side a bound lands on is chosen by the **base**, not by the operand's own
-    // type, and the operand is read as a number either way.
-    //
-    // An integer operand past 2^53 has **no float equal to it**, and rounding it
-    // to the nearest one moves the boundary whichever way that rounding went --
-    // naming a set of floats the schema does not denote, in either direction. It
-    // is read against its two neighbours instead: a float is `>= n` exactly when
-    // it is at or above the smallest float above `n`, and `<= n` exactly when it
-    // is at or below the largest float below `n`. Python compares an `int` with
-    // a `float` exactly, and so does this.
+    // type, and the operand is read as a number either way -- an integer past
+    // 2^53 against its neighbours, as [`float_bound`] says.
     let float_bound = |constraint: &Constraint, index: &OperandIx| {
         float_bound(constraint, &pool.operand(*index)?)
     };

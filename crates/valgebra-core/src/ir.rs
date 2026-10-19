@@ -27,7 +27,9 @@
 //! The types stop a shift reaching the wrong space. They say nothing about
 //! whether a payload was shifted at all, which is why one walk serves both ways
 //! of combining two pools ([`Remap`]) and why the child set of each variant is
-//! declared in one place ([`Schema::map_children`]).
+//! stated in two walks and no others: the one a rewrite goes through
+//! ([`Schema::map_children`]) and `push_children`, the one a reading goes
+//! through.
 
 use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
@@ -311,8 +313,8 @@ impl Remap<'_> {
 
 /// Whether a record admits keys it does not declare.
 ///
-/// A name rather than a positional `bool`: `Schema::record(fields, Openness::Closed)` reads
-/// as a flag whose polarity a caller has to remember, and the two openness
+/// A name rather than a positional `bool`: `Schema::record(fields, false)` would
+/// read as a flag whose polarity a caller has to remember, and the two openness
 /// senses -- "closed to extra keys" and "open to them" -- are exactly the pair a
 /// reader gets backwards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1056,8 +1058,8 @@ impl Schema {
         }
     }
 
-    /// A homogeneous mapping `dict[K, V]`: every key in `key`, every value in
-    /// `value`.
+    /// A homogeneous mapping `dict[K, V]`: every key in the clause's `key`,
+    /// every value in its `value`.
     #[must_use]
     pub fn mapping(clause: MapClause) -> Schema {
         Schema::KeyedMap {
@@ -1746,11 +1748,11 @@ impl Schema {
     ///
     /// The reading counterpart of [`map_children`](Self::map_children), and a
     /// second spelling of [`push_children`](Self::push_children) rather than a
-    /// second statement of what a node holds: the child set is matched on in one
-    /// place, and this is the shape a caller that wants an iterator takes. A
-    /// measure that restated the set could read a different set than the map
-    /// writes, and neither the types nor an exhaustive `match` would see the
-    /// difference; a test holds the two that remain together.
+    /// second statement of what a node holds: a reading walk matches on the
+    /// child set there alone, and this is the shape a caller that wants an
+    /// iterator takes. A measure that restated the set could read a different
+    /// set than the map writes, and neither the types nor an exhaustive `match`
+    /// would see the difference; a test holds the two that remain together.
     ///
     /// A leaf allocates nothing, since an empty `Vec` does not.
     pub(crate) fn children(&self) -> std::vec::IntoIter<&Schema> {
@@ -1831,7 +1833,8 @@ impl Schema {
     /// so the count of a recursive schema is finite. Combined with a per-tree
     /// depth bound, a total-node bound rejects a schema that is shallow but
     /// exponentially wide (a doubling union) without rejecting a legitimately deep
-    /// or wide one. A regex constructor is not a schema node and is not counted.
+    /// or wide one. A refinement's constraints count one node each
+    /// (`own_nodes`), so a long list of them is held to the bound too.
     #[must_use]
     pub fn node_count(&self) -> usize {
         // A worklist rather than the obvious recursion: the sum needs no order,

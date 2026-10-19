@@ -51,11 +51,8 @@ pub const MAX_ROW: usize = MAX_STATES;
 /// [`MAX_STATES`] and [`MAX_ROW`] bound the two dimensions *separately*, and a
 /// table can sit inside both while being far too large to hold: four thousand
 /// states each carrying a four-thousand-wide row is sixteen million edges, which
-/// is gigabytes. Neither bound sees that, because neither is exceeded -- so
-/// `Annotated[str, Regex("(a|b)*a(a|b){20}")]` against `Regex("(a|b)*")` spent
-/// six seconds and 668 MB answering, and two more repetitions aborted the
-/// process on a four-gigabyte allocation. A subtype question is not allowed to
-/// do that.
+/// is gigabytes. Neither bound sees that, because neither is exceeded, and a
+/// subtype question is not allowed to allocate that much.
 ///
 /// This bounds the product of the two, which is where the memory is. Sixty-four
 /// thousand edges is a table of a few megabytes, past anything an annotation

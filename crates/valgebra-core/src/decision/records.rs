@@ -115,29 +115,26 @@ pub(super) fn keyed_map_meet_verdict(members: &[Schema], cx: &mut Cx<'_>) -> Ver
 /// `a` only together. `dict[int | str, int]` is below `{int: int, str: int}`,
 /// each key kind under a clause of its own, and no one clause covers the
 /// first's: ICFP 2023 Lemma 4.7 needs the clauses read jointly, which is the
-/// set representation's to decide, and it does. The pieces it reads:
+/// set representation's to decide, and it does.
 ///
-/// 1. **A closed record** (`da` empty): width and depth (each field of `a` maps
-///    into a like-named field of `b` with a subtype schema) and required-ness
-///    (every field `b` requires is required in `a`).
-/// 2. **A pure mapping** (`fa` and `fb` empty): every clause of `a` subsumed by
-///    one clause of `b` narrower in both key and value.
-/// 3. **A record beside a catch-all** (general): each shared field narrows and
-///    respects required-ness; each field `a` declares that `b` does not is
-///    covered by `b`'s catch-all; each field `b` requires that `a` lacks is
-///    governed by `a`'s catch-all — proved when it is **optional** and every
-///    catch-all value of `a` fits it, and *refuted* when `a` carries no
-///    catch-all at all, since a closed record admits no value with a key it does
-///    not declare; and every catch-all clause of `a` subsumed by one of `b`.
+/// One rule, the conjunction of three readings, for every shape a keyed map
+/// takes: a closed record is the rule with `da` empty, and a pure mapping the
+/// rule with both field lists empty.
 ///
-/// A catch-all clause of `a` that no clause of `b` subsumes is asked for a key
-/// it admits that `b` reads one way only ([`clause_escapes`]): a refutation
-/// where some value under that key is outside `b`, a decline otherwise.
+/// 1. **Every field of `b`**: one `a` declares narrows into it and is required
+///    where `b` requires it; one `a` lacks is refuted where `b` requires it,
+///    since a clause never requires a key, and otherwise is held to the clauses
+///    of `a` whose key can spell its name.
+/// 2. **Every field of `a` that `b` lacks** is covered by a clause of `b` whose
+///    key holds every string.
+/// 3. **Every clause of `a`** is subsumed by one clause of `b`, narrower in
+///    both key and value, or asked for a key it admits that `b` reads one way
+///    only ([`clause_escapes`]): a refutation where some value under that key
+///    is outside `b`, a decline otherwise.
 ///
-/// Sound throughout — a required supertype field a subject with a catch-all
-/// cannot guarantee present, or a clause an oracle cannot relate, is undecided
-/// rather than an unsound proof, and a refutation stands on a value of the
-/// subject, which the query's witness guard reads against its emptiness.
+/// Sound throughout — a clause an oracle cannot relate is undecided rather
+/// than an unsound proof, and a refutation stands on a value of the subject,
+/// which the query's witness guard reads against its emptiness.
 pub(super) fn keyed_map_subtype(
     fa: &[Field],
     da: &[MapClause],
@@ -145,8 +142,8 @@ pub(super) fn keyed_map_subtype(
     db: &[MapClause],
     cx: &mut Cx<'_>,
 ) -> Relation {
-    // Index both field lists by name once, so the cross-list lookups below are O(1)
-    // each rather than a fresh linear scan per field (O(fields²) per comparison).
+    // A cursor over each field list, so finding every name of one list in the
+    // other is one forward walk of each rather than a scan per field.
     let order = Cell::new(None);
     let mut a_by_name = FieldCursor::over(fa, fb, &order);
     let mut b_by_name = FieldCursor::over(fb, fa, &order);
@@ -154,9 +151,9 @@ pub(super) fn keyed_map_subtype(
         // One rule for every shape a keyed map takes. The closed record and the
         // pure mapping are not special cases needing a branch of their own: each
         // is this rule with one of the two lists empty, and a dedicated branch
-        // for either can only answer the same question less well. The closed
-        // record did -- it read a field the supertype covered through a catch-all
-        // as undecided, so `{"x": int}` was not seen below `dict[str, int]`.
+        // for either can only answer the same question less well -- a closed
+        // record read alone has no catch-all to read a field through, and would
+        // leave `{"x": int}` undecided against `dict[str, int]`.
         //
         // Every supertype field is checked against `a`: a field `a` declares is
         // matched field-wise; a field `a` lacks is governed by `a`'s catch-all.

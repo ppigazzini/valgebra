@@ -17,11 +17,11 @@
 //! **This is built beside the structural procedure, not in place of it**, and
 //! it is the second decider a caller reaches: `subtype_relation_under` asks the
 //! rules and then asks here where they decline, and `is_empty_with` does the
-//! same for emptiness. What no caller reaches is a schema this cannot *hold* --
-//! each component starts *coarse*, every value of the kind or none, and each
-//! later commit replaces one kind's component with a representation that
-//! distinguishes its values. The type says which is which, so what the
-//! descriptor can and cannot see is read off it rather than inferred.
+//! same for emptiness. What this cannot *hold* -- a predicate, a recursive
+//! schema, a shape past a bound -- it refuses to lower, and a caller reads the
+//! refusal as no answer rather than as a wrong one. [`Component`] says which
+//! representation each kind has, so what the descriptor can see is read off
+//! the type rather than inferred.
 
 mod automaton;
 pub mod budget;
@@ -107,18 +107,17 @@ impl BoolSet {
 
 /// The values of one kind that a [`Descr`] admits.
 ///
-/// One variant per representation, not per kind: a kind whose values are not yet
-/// distinguished carries [`Coarse`](Component::Coarse), and moving a kind to an
-/// exact representation is adding a variant and the arms that go with it.
+/// One variant per representation, not per kind: `str` and `bytes` share one,
+/// as `list` and `tuple` do, and [`Coarse`](Component::Coarse) serves the two
+/// slots that need no structure.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Component {
     /// Every value of the kind, or none.
     ///
-    /// Exact for `None`, which has one value, and coarse for every other kind
-    /// that still carries it: `set[int]` and `set[str]` are the same component,
-    /// so the descriptor cannot yet tell them apart. Coarse is *sound* rather
-    /// than wrong -- it is the honest representation of a distinction not yet
-    /// made, and emptiness over it decides the kind partition and nothing finer.
+    /// Exact for `None`, which has one value, and the kindless slot's
+    /// structure: a value of no listed kind has none this representation reads,
+    /// so that slot's lines are told apart by their classes and attributes
+    /// alone ([`Descr`]).
     Coarse(bool),
     /// The booleans this descriptor admits.
     Booleans(BoolSet),
@@ -178,9 +177,11 @@ impl Component {
     /// What is known about this component admitting a value.
     ///
     /// Exact for every representation whose emptiness is a computation over a
-    /// finite structure. The two held as a *union* can answer `Unknown`: past
-    /// their bound there is no union to read, and a class constraint can rest on
-    /// a subclass the core cannot enumerate.
+    /// finite structure: the coarse slot, the booleans, the integers, the floats
+    /// and the words. The three whose letters or members are descriptors --
+    /// sequences, sets and maps -- can answer `Unknown`, since one of those
+    /// descriptors can: a class constraint can rest on a subclass the core
+    /// cannot enumerate, and past a bound there is no union to read.
     fn emptiness(&self) -> Verdict {
         let exact = |empty: bool| {
             if empty {
@@ -361,21 +362,25 @@ enum Op {
 /// afterwards, which is what makes the operations' laws structural rather than
 /// up-to-equivalence.
 ///
-/// The exceptions are four, and they are of two shapes. [`sets`] and
-/// [`records`] are held as a *union*, and a union can hold the same values two
-/// ways -- `P(A ∪ B)` is also the union of `P(A)`, `P(B)` and the line
-/// subtracting both -- which costs a search for coverings neither runs.
-/// [`symbolic`] is the third once its letters are descriptors: minimisation
-/// asks the guards to join and to say what they leave, and a descriptor cannot
-/// always answer, because answering rebuilds the very automata being minimised.
-/// Each such refusal leaves a coarser table for the same language.
+/// This doc owns the list of exceptions, and they are of two shapes. The first
+/// is a lattice held as a union of summands under a polarity
+/// (`descr/polar.rs`): [`sets`], [`records`] and [`maps`]. A union can hold the
+/// same values two ways -- `P(A ∪ B)` is also the union of `P(A)`, `P(B)` and
+/// the line subtracting both -- and recognising that costs a search for
+/// coverings none of them runs; the polarity gives one set a positive and a
+/// negated spelling besides. [`symbolic`] has the same shape once its letters
+/// are descriptors: minimisation asks the guards to join and to say what they
+/// leave, and a descriptor cannot always answer, because answering rebuilds the
+/// very automata being minimised. Each such refusal leaves a coarser table for
+/// the same language.
 ///
-/// [`integers`] is the fourth, and it differs from the other three: its
-/// *equality* lifts two tables to the period they share and so answers for the
-/// integers, but its form is not canonical and its **order** reads the form.
-/// So two spellings of one integer set are one set to equality and two
-/// positions in a sorted table, which is a line of a union rather than an
-/// answer. `descr::integers` says why no canonical spelling is available.
+/// [`integers`] is the other shape: its *equality* lifts two tables to the
+/// period they share and so answers for the integers, but its form is not
+/// canonical and its **order** reads the form. So two spellings of one integer
+/// set are one set to equality and two positions in a sorted table, which is a
+/// line of a union rather than an answer. `descr::integers` says why no
+/// canonical spelling is available. The booleans, the floats and the words
+/// ([`regular`]) are canonical, and so is the coarse slot.
 ///
 /// So equality is *finer* than agreeing on values once one of these is
 /// involved: equal descriptors still admit the same values, but two that admit

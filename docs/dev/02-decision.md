@@ -34,7 +34,7 @@ optimisation of the other: every recursive schema, predicate and hooked class
 is the rules' alone ("Why every rule stays", below), and a pair the rules
 decline is the descriptor's. Where both reach, the rules go first because
 building a set representation costs about three orders of magnitude more than a
-rule that already answers (under "Four bounds, each measured"), which is what a
+rule that already answers (under "The bounds, each measured"), which is what a
 relation the rules *refute* stops paying. `tests/test_completeness_probe.py`
 asks both of every pair of one corpus and holds the pairs they answer apart --
 each a fixpoint the rules' coinductive hypothesis proves and one unfolding does
@@ -677,17 +677,19 @@ predicate is the constraint the sets will not read through, and a schema nested
 past the lowering's depth is one they give up on, so a pair carrying either is
 decided here or not at all.
 
-## Four bounds, each measured
+## The bounds, each measured
 
-The rules bound their own work with a step counter, and a build is held to three
-more: the schema nodes it will read, the nesting it will descend, and the units
-of multiplying work it may spend. They are named together as
-`descr::lower::Bounds`, they are rows in the table of every bound in the tree
+The rules bound their own work with a step counter and their own depth with a
+count of the levels they hold open (both under "The budget, and what exhausting
+it means", below), and a build is held to three more: the schema nodes it will
+read, the nesting it will descend, and the units of multiplying work it may
+spend. The build's three are named together as `descr::lower::Bounds`, every
+bound is a row in the table of every bound in the tree
 ([00-architecture.md](00-architecture.md)), and
-`crates/valgebra-core/benches/core.rs` carries the workload each number was set
-from -- a bound whose figure lives only in a comment
-cannot be re-derived on another machine, and cannot fail when the shape it guards
-against changes.
+`crates/valgebra-core/benches/core.rs` carries the workload each of the build's
+numbers was set from -- a bound whose figure lives only in a comment cannot be
+re-derived on another machine, and cannot fail when the shape it guards against
+changes.
 
 What the numbers say, and where to read them. `cargo bench --bench core` is the
 harness: the `lower_nested_records_depth*` rows grow from under a microsecond at

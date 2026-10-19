@@ -20,10 +20,11 @@
 /// procedure is invisible from outside and cannot be counted, listed, or held
 /// to a ledger.
 ///
-/// The public relations still answer `bool`, because that is what the contract
-/// promises: [`Relation::Holds`] is `true` and both other answers are `false`.
-/// What the three values buy is that "not proven" is a value the tests can
-/// count and the pages can enumerate.
+/// `is_subtype_of` and `is_equivalent` answer `bool`, because that is what
+/// their contract promises: [`Relation::Holds`] is `true` and both other answers
+/// are `false`. `relation_to` answers all three. What the three values buy is
+/// that "not proven" is a value a caller can ask for, the tests can count and
+/// the pages can enumerate.
 ///
 /// A rule that reports [`Relation::Fails`] is claiming a proof. Where a rule is
 /// sound but incomplete -- it establishes the relation when it fires and says

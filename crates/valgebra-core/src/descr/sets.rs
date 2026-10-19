@@ -247,12 +247,12 @@ impl<G: Members> Summand for Line<G> {
 /// `descr/polar.rs`; the byte automaton keeps complement total the same way, by
 /// flipping its accepting states rather than rebuilding.
 ///
-/// **Not canonical, unlike the other components.** Two unions can hold the same
-/// sets and stay unequal: `P(A ∪ B)` is also the union of `P(A)`, `P(B)` and the
-/// line that subtracts both, and recognising that costs a search for coverings
-/// this does not run. So the laws here are checked against the *sets* rather
-/// than by equality of the forms -- the same weakening the sequence automaton
-/// takes, and for a reason of the same kind.
+/// **Not canonical**, as no lattice held as a polar union is (`Descr` names
+/// every component that is not). Two unions can hold the same sets and stay
+/// unequal: `P(A ∪ B)` is also the union of `P(A)`, `P(B)` and the line that
+/// subtracts both, and recognising that costs a search for coverings this does
+/// not run. So the laws here are checked against the *sets* rather than by
+/// equality of the forms.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SetLattice<G: Members>(PolarUnion<Line<G>>);
 

@@ -17,8 +17,8 @@ so a caller cannot observe which handle it was given.
 thing changed -- an index shifted into another validator's pool, a
 self-reference resolved, a recursive definition unfolded once, a record opened,
 a definitions table pruned of what nothing reaches. Every rewrite is written
-against the child set declared in `Schema::map_children` rather than against
-the variants a second time, and none of them adds a shape: what a node denotes
+against the child set `Schema::map_children` maps rather than against the
+variants a second time, and none of them adds a shape: what a node denotes
 is settled here, and a rewrite carries the denotation across a renumbering
 rather than changing it.
 
@@ -780,7 +780,7 @@ predicate and no class whose metaclass answers `isinstance`.
 The **structural rules** decide by shape, and reach what the descriptor cannot
 build: every recursive schema is theirs alone. Where both reach, building a
 descriptor costs about three orders of magnitude more than a rule that already
-answers, which [02-decision.md](02-decision.md) measures under "Four bounds,
+answers, which [02-decision.md](02-decision.md) measures under "The bounds,
 each measured"; a shape the rules settle in nanoseconds is not worth a set
 representation. So the rules answer first, and the descriptor answers where
 they decline.

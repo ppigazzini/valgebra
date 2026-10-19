@@ -75,11 +75,13 @@ pub use crate::oracle::{LeafRelations, NoLeafRelations};
 /// the two rules. What a table over goals would collect is a saving on that one
 /// shape, measured rather than assumed.
 ///
-/// The ceiling is far above any schema a real annotation produces, so a
-/// legitimate relation is always decided; only an adversarial schema built to
-/// blow up the decision reaches it, and there a `false` ("not proven") is sound
-/// by the conservative contract. A complete, work-sharing decision is the
-/// interning-based procedure.
+/// The ceiling is for a schema built to blow up the decision -- the
+/// distributed tower `subtyping_terminates_on_a_distributed_tower` drives to
+/// it -- and there the query answers undecided, which the conservative
+/// contract allows. A relation the rules have no rule for is undecided well
+/// below it, and that is the procedure's incompleteness rather than this
+/// bound's. A memo over goals that would share the work is not built: the
+/// paragraphs above measure what it would save.
 pub(crate) const DECISION_BUDGET: u32 = 1_000_000;
 
 /// The most levels of its own recursion one decision query holds open.
@@ -1099,13 +1101,15 @@ impl Schema {
 
     /// What a pair no structural rule decided is worth, asked in one place.
     ///
-    /// Three readings, in this order. Two schemas that **share no value**:
-    /// every value of the subject is outside the supertype, which is a
-    /// refutation on the same reading as a mismatched arity, and the
-    /// disjointness here is the cheap one -- two discriminants that cannot
-    /// overlap, a list beside a tuple, a set beside a mapping. Then the
-    /// **oracle**, the only reader of a class or a constant, whose `None` is
-    /// the decline it says it is. Then the supertype's own shape: a
+    /// Three readings, in this order. Four **refutations**, each naming a
+    /// value of the subject outside the supertype: the empty sequence below a
+    /// length bound (`shorter_than`), a region the subject reaches past the
+    /// supertype's (`spills_past`), a kind whose builtin the supertype's class
+    /// does not derive from (`outside_the_class`), and two schemas that share
+    /// no value (`disjoint_with`) -- the cheap disjointness, two discriminants
+    /// that cannot overlap, a list beside a tuple, a set beside a mapping. Then
+    /// the **oracle**, the only reader of a class or a constant, whose `None`
+    /// is the decline it says it is. Then the supertype's own shape: a
     /// **refinement** is a subset of its base, so a subject outside the base is
     /// outside the refinement -- the value that refutes the one refutes the
     /// other, and it is the same value. Its proof does not carry, since being

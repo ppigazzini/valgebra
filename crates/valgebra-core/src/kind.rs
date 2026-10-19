@@ -1,11 +1,13 @@
-//! The partition of the value universe, and the summary derived from it.
+//! The kinds of the value universe, and the summary derived from them.
 //!
-//! [`Kind`] is the eleven-part partition the semantic-subtyping literature
-//! kinds the atoms by, and the one a descriptor is indexed with: `Descr::kinds`
-//! is an array over it, which is what makes that structure "a record mapping
-//! each atomic type to its representation". [`Region`] is the seven-bit
-//! *summary* derived from it, and [`Regions`] is a region set that may be
-//! opaque where a schema is not scalar-decidable.
+//! [`Kind`] is the eleven kinds the semantic-subtyping literature sorts the
+//! atoms by -- a partition but for `bool`, whose values are `int`s too
+//! ([`Kind::shares_values_with`]) -- and the one a descriptor is indexed with:
+//! `Descr::kinds` is an array over it, which is what makes that structure "a
+//! record mapping each atomic type to its representation". [`Region`] is the
+//! seven-bit *summary* derived from it, a partition without exception, and
+//! [`Regions`] is a region set that may be opaque where a schema is not
+//! scalar-decidable.
 //!
 //! All three sit **below both deciders**, which is why they are here rather
 //! than in either. The structural rules reason in the summary, because that is
@@ -174,10 +176,13 @@ impl Regions {
     }
 }
 
-/// A concrete runtime kind: the type a value's `type(x)` is.
+/// A concrete runtime kind: the builtin a value's type derives from.
 ///
-/// The kinds partition the value universe, so two schemas carrying different
-/// kinds share no value -- `bool` and `int` aside, since `bool` subclasses `int`.
+/// Read as [`Schema::Int`](crate::Schema::Int) reads `int`:
+/// `issubclass(type(x), int)` puts an `IntEnum` member in `Int` as it puts
+/// `5`, and a value whose type derives from none of them has no kind. Two
+/// schemas carrying different kinds share no value -- `bool` and `int` aside,
+/// since `bool` subclasses `int`.
 /// A schema the core cannot kind has none, and disjointness stays conservative.
 ///
 /// Public because the core cannot see a Python object: a `Literal`'s kind is a

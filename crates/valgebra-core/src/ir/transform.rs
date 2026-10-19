@@ -9,9 +9,9 @@
 //! was handed), which is what lets an unchanged subtree keep its `Arc` instead
 //! of being rebuilt beside itself.
 //!
-//! The child set of each variant is declared once, in [`Schema::map_children`],
-//! and every rewrite below is written against it rather than against the
-//! variants a second time.
+//! Every rewrite below is written against the child set
+//! [`Schema::map_children`] maps rather than against the variants a second
+//! time.
 
 use std::sync::Arc;
 
@@ -340,17 +340,20 @@ impl Schema {
     /// node's own payloads -- the container kind, a field's name and
     /// required-ness, a pooled index, a constraint -- exactly as they are.
     ///
-    /// **This is the one place the child set of each variant is written down.** A
-    /// walk that only descends -- moving indices, resolving a self-reference --
-    /// inherits the child set from here instead of spelling the descent out per
-    /// pass. Spelled per pass, the compiler forces an arm without being able to
-    /// check that the arm recursed into everything, and a forgotten child is a
-    /// silent stale subtree.
+    /// **This is where a rewrite reads the child set of each variant**, and
+    /// `push_children` is where a reading does: the two walks that state it,
+    /// which `the_functor_and_the_traversal_describe_the_same_children` holds
+    /// to one set. A walk that only descends -- moving indices, resolving a
+    /// self-reference -- inherits the child set from here instead of spelling
+    /// the descent out per pass. Spelled per pass, the compiler forces an arm
+    /// without being able to check that the arm recursed into everything, and a
+    /// forgotten child is a silent stale subtree.
     ///
     /// A new variant carrying a child schema must map it here, or every pass
     /// built on this drops it. A new variant carrying a *pooled index* must also
-    /// be handled in [`remapped_by`](Self::remapped_by), which is why that match
-    /// takes no wildcard.
+    /// be handled in `remapped_where_moved`, behind
+    /// [`remapped_by`](Self::remapped_by), which is why that match takes no
+    /// wildcard.
     pub(crate) fn map_children(&self, f: &impl Fn(&Schema) -> Schema) -> Schema {
         self.mapped_children(&|child| Some(f(child)))
             .unwrap_or_else(|| self.clone())
@@ -368,7 +371,8 @@ impl Schema {
     /// an `Option` the optimiser sees through.
     ///
     /// [`map_children`](Self::map_children) is this with `f` that always
-    /// answers `Some`, so the child set is still written down once.
+    /// answers `Some`, so a rewrite of either kind reads one statement of the
+    /// child set.
     fn mapped_children(&self, f: &impl Fn(&Schema) -> Option<Schema>) -> Option<Schema> {
         match self {
             Schema::Anything(_)
@@ -467,9 +471,9 @@ impl Schema {
                     constraints: moved_constraints.unwrap_or_else(|| Arc::clone(constraints)),
                 })
             }
-            // No payload of its own: descend, and let the child set live in one
-            // place. Spelled out rather than caught by `_` so a new variant with
-            // an index cannot arrive here silently.
+            // No payload of its own: descend through the child set the rewrite
+            // walk states. Spelled out rather than caught by `_` so a new
+            // variant with an index cannot arrive here silently.
             Schema::Anything(_)
             | Schema::Nothing
             | Schema::NoneType

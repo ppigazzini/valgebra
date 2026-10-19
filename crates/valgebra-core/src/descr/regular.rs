@@ -12,9 +12,9 @@
 //! numbered.** A regular language has one minimal DFA up to isomorphism, so
 //! minimising and then renumbering the states in a fixed order makes the
 //! representation canonical: two sets hold the same words exactly when their
-//! tables are equal. That is what the components either side of this one give by
-//! construction, and it is what lets a decision compare representations instead
-//! of running a language-equivalence check at every step.
+//! tables are equal. That is what lets a decision compare representations
+//! instead of running a language-equivalence check at every step; `Descr` names
+//! the components that are not canonical.
 //!
 //! **The alphabet is bytes, in equivalence classes.** A word is a byte string --
 //! UTF-8 for `str`, arbitrary for `bytes` -- so one machine serves both, and the
