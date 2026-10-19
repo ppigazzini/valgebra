@@ -129,7 +129,7 @@ manifest-path = "crates/valgebra-py/Cargo.toml"
 # profile that exists to keep symbols would produce a binary with none and a
 # callgrind run against the shipped extension could attribute nothing.
 # Profile-guided-optimization training workload for `maturin build --pgo`
-# (release lane only). Runs against the instrumented build to record a profile
+# (the release wheels, and `ci.yml`'s bench and PGO comparison lanes). Runs against the instrumented build to record a profile
 # over a broad, production-like spread of validation shapes; depends only on the
 # package itself, so it runs in the minimal environment maturin provisions.
 pgo-command = "python scripts/pgo_workload.py"

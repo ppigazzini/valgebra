@@ -23,8 +23,8 @@ path = "../crates/valgebra-core"
 [lib]
 path = "src/lib.rs"
 
-# Optimize the harness so the fuzzer spends its budget on the target, not on
-# debug-build overhead in the builder.
+# `cargo fuzz` builds this profile, optimized already; `debug = 1` keeps line
+# tables, so a crash's backtrace names its source line.
 [profile.release]
 debug = 1
 

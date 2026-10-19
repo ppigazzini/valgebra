@@ -189,10 +189,13 @@ jobs:
       # itself. `ci.yml` pre-pulls for the same reason; this is the lane where it
       # matters more.
       #
-      # The image is written out per target rather than derived from what
-      # `manylinux:` resolves to, as it is there: a name the action resolves
-      # differently pulls something unused and the build is unaffected, so a
-      # wrong guess costs a pause and never a wheel. A pull that succeeds leaves
+      # The image is written out per target and policy, as the action's own
+      # table (`DEFAULT_CONTAINERS` in its `src/index.ts`) names it for the host
+      # each row runs on: the musl rows build in its cross image on an x86_64
+      # host, and the `2_28` rows in the pypa image of that policy. It is not
+      # derived from what `manylinux:` resolves to, as it is there: a name the
+      # action resolves differently pulls something unused and the build is
+      # unaffected, so a wrong guess costs a pause and never a wheel. A pull that succeeds leaves
       # the image in the daemon and the action's own pull is a no-op; one that
       # does not still lets the action try, because this step exists to make the
       # lane sturdier and not to become a new way for it to fail.
@@ -203,7 +206,8 @@ jobs:
           TARGET: ${{ matrix.platform.target }}
         run: |
           case "$POLICY" in
-            musllinux_1_2) image="quay.io/pypa/musllinux_1_2_${TARGET}:latest" ;;
+            2_28)          image="quay.io/pypa/manylinux_2_28_${TARGET}:latest" ;;
+            musllinux_1_2) image="ghcr.io/rust-cross/rust-musl-cross:${TARGET}-musl" ;;
             *)             image="quay.io/pypa/manylinux2014_${TARGET}:latest" ;;
           esac
           for attempt in 1 2 3; do

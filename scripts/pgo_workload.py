@@ -1,4 +1,4 @@
-"""Profile-guided-optimization training workload for the release PGO lane.
+"""Profile-guided-optimization training workload for every `--pgo` build.
 
 Run against a profile-instrumented build of the extension, this exercises the
 validation hot paths over a broad, production-like spread of schema shapes so the
