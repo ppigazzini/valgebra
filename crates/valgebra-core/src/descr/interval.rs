@@ -61,8 +61,10 @@ impl Span {
         match (self.hi, other.lo) {
             (None, _) | (_, None) => true,
             // No boundary a schema can name comes near the top of the widened
-            // range, so saturating there means the two do not meet -- which is
-            // the answer, rather than a wrap to the bottom of the range.
+            // range. Were `hi` the top, saturating answers that the two meet --
+            // nothing lies past the top, so `other` starts at or before it --
+            // where a wrap to the bottom of the range would answer that they do
+            // not.
             (Some(hi), Some(lo)) => lo <= hi.saturating_add(1),
         }
     }

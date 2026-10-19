@@ -61,7 +61,7 @@ pub(super) fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
 /// narrowed product is refuted against the rest; the base case fails where every
 /// narrowed component is proved inhabited, which is a product with a value and
 /// no branch left. The conjuncts are asked in order and the first that does not
-/// hold is the answer, as the boolean reading stopped at the first `false`.
+/// hold is the answer.
 ///
 /// **Each branch it narrows by is a level of the query's depth.** The recursion
 /// takes one level per branch the product is not proved disjoint from, so how

@@ -126,9 +126,9 @@ macro_rules! pool_index {
             ///
             /// The sum cannot overflow: both terms are bounded by a live pool's
             /// length, so their sum is bounded by the length of the pool they
-            /// are being combined into. Asserted rather than assumed, because
-            /// the release profile wraps and a wrapped index would read a real
-            /// object of the wrong kind.
+            /// are being combined into. The release profile wraps rather than
+            /// traps, so there that bound is the whole argument: a wrapped index
+            /// would read a real object of the wrong kind.
             #[must_use]
             fn shifted(self, by: PoolShift) -> Self {
                 debug_assert!(

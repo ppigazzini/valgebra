@@ -1,7 +1,7 @@
 //! Wall-clock micro-benchmarks for the pure-Rust schema operations.
 //!
 //! These cover the transformations the compiler and combinators lean on:
-//! `shifted` (validator composition), `with_records_open` (the `lax`/`strict`
+//! `shifted` (validator composition), `with_records_open` (the `open`/`close`
 //! recursive transform), and the decision procedures over the shapes a real
 //! annotation produces. The walk
 //! over Python values lives in the bindings crate and is benchmarked from
@@ -156,12 +156,10 @@ fn bench_lowering(c: &mut Criterion) {
             Schema::meet([list(Schema::Int), list(Schema::Str)]),
         ),
         (
-            "double_complement",
+            "tuple_meet",
             Schema::meet([
                 Schema::tuple(SeqShape::fixed([Schema::Int])),
-                Schema::tuple(SeqShape::fixed([Schema::Str]))
-                    .complement()
-                    .complement(),
+                Schema::tuple(SeqShape::fixed([Schema::Str])),
             ]),
         ),
         (

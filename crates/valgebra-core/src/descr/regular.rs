@@ -382,16 +382,13 @@ impl Dfa {
         let mut reached = Reached::from((0, 0));
         let mut transitions: Vec<u32> = Vec::new();
         let mut accepting: Vec<bool> = Vec::new();
-        let mut built = 0usize;
         while let Some((mine, theirs)) = reached.next() {
-            built += 1;
             accepting.push(accept(self.accepts(mine), other.accepts(theirs)));
             for pair in &pairs {
                 let next = (self.step(mine, pair.0), other.step(theirs, pair.1));
                 transitions.push(reached.id(next, || true)?);
             }
         }
-        debug_assert_eq!(built, accepting.len(), "one row is built per state");
         Some(
             Dfa {
                 classes,

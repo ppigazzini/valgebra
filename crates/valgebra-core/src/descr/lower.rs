@@ -173,8 +173,8 @@ pub(crate) fn lower_unfolded(
 ///
 /// They are three because a build can be too big in three ways, and no one of
 /// them implies another: a schema of a dozen nodes can nest ten deep, a shallow
-/// one can be a hundred wide, and either can spend a third of a second inside a
-/// product and then refuse anyway. Named together so a caller measuring one can
+/// one can be a hundred wide, and either can build a whole product and then
+/// refuse anyway. Named together so a caller measuring one can
 /// lift the other two, which is what the benchmark behind these numbers does --
 /// a bound whose figure lives only in a comment cannot be re-derived on another
 /// machine, and cannot fail when the shape it guards against changes.
@@ -212,13 +212,13 @@ impl Bounds {
 /// The work a build may spend before it refuses.
 ///
 /// `BUDGET` bounds the schema this reads; this bounds what reading it costs,
-/// and the two are different quantities. A schema of a dozen nodes can spend a
-/// third of a second and then refuse anyway, because the bounds on a descriptor
-/// say how large a result may be and say nothing about the work of reaching one.
+/// and the two are different quantities. A schema of a dozen nodes can build a
+/// whole product and then refuse anyway, because the bounds on a descriptor say
+/// how large a result may be and say nothing about the work of reaching one.
 ///
 /// Sized from the shapes on both sides of the question. The differences the
 /// descriptor decides and the structural rules do not -- a container meet, a
-/// complement nested inside another, one regular language inside another -- each
+/// meet of two tuples, one regular language inside another -- each
 /// spend under
 /// 256 units. The shapes that blow up spend tens or hundreds of thousands: a
 /// record nested eight deep spends 22,806, and a union of four records nested
@@ -246,12 +246,7 @@ impl Bounds {
 /// what makes this figure re-derivable: the row fails on the commit that
 /// lowers it.
 ///
-/// **This bound is debt.** It counts work rather than limiting what the
-/// representation can hold, and it is here for the reason the decision's own
-/// budget is: a lowering repeats itself over structurally equal subtrees.
-/// Construction shares those subtrees where they are built alike
-/// (`ir/intern.rs`), which is what gives the memo that would replace this
-/// ceiling a cheap key; the memo is the half not written.
+/// **This bound is debt**, for the reason `BUDGET`'s documentation gives.
 pub const WORK: u64 = 4096;
 
 /// The schema nesting this will descend before refusing.
@@ -265,24 +260,17 @@ pub const WORK: u64 = 4096;
 /// and depth is what says which.
 ///
 /// Nesting is the exponential, and `benches/core.rs` measures it:
-/// `lower_nested_records_depth{0,2,4,6}`, run under [`Bounds::UNHELD`], grows
-/// 0.98 microseconds, 134 microseconds, 1.0 milliseconds, 4.8 milliseconds.
-/// Breadth is not the exponential and is bounded by [`BUDGET`] instead.
+/// `lower_nested_records_depth{0,2,4,6}`, run under [`Bounds::UNHELD`]. Breadth
+/// is not the exponential and is bounded by [`BUDGET`] instead.
 ///
 /// Set from both sides. Every relation the descriptor decides and the rules do
 /// not nests five deep or less -- `lower_container_meet`,
-/// `lower_double_complement`, `lower_regular_language` and `lower_step_divides`
-/// are those four, and each builds in 29 to 108 microseconds. The shapes that
-/// blow up nest ten and deeper. `lower_sibling_union_difference_{unheld,held}`
-/// is the pair that shows what the bound buys: 5.6 milliseconds against 0.96
-/// microseconds, on one shape, from this number alone.
+/// `lower_tuple_meet`, `lower_regular_language` and `lower_step_divides` are
+/// those four. The shapes that blow up nest ten and deeper.
+/// `lower_sibling_union_difference_{unheld,held}` is the pair that shows what
+/// the bound buys, on one shape, from this number alone.
 ///
-/// **This bound is debt.** It counts work rather than limiting what the
-/// representation can hold, and it is here for the reason the decision's own
-/// budget is: a lowering repeats itself over structurally equal subtrees.
-/// Construction shares those subtrees where they are built alike
-/// (`ir/intern.rs`), which is what gives the memo that would replace this
-/// ceiling a cheap key; the memo is the half not written.
+/// **This bound is debt**, for the reason `BUDGET`'s documentation gives.
 pub(crate) const DEPTH: u32 = 5;
 
 /// [`lower`] under explicit bounds, for a caller measuring one of them.

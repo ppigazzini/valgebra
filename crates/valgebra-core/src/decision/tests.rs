@@ -795,7 +795,7 @@ use proptest::prelude::*;
 
 /// A generator mixing the scalar-decidable atoms with opaque leaves (the
 /// gradual `Any`, a literal, a content-bearing set) under the Boolean
-/// combinators, so both the region-carrying and the region-`None` paths and
+/// combinators, so both the region-carrying and the `Regions::Unknown` paths and
 /// their propagation through every combinator are exercised.
 fn schema() -> impl Strategy<Value = Schema> {
     let leaf = prop_oneof![

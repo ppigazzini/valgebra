@@ -31,7 +31,9 @@ impl Schema {
     /// Whether this schema and `other` are *provably* disjoint: no value belongs
     /// to both. Sound, not complete — it returns true only when the concrete
     /// types cannot overlap (distinct builtin scalars, distinct container kinds,
-    /// a refinement's base versus another, a union whose every member is), and
+    /// a refinement's base versus another, a union whose every member is, two
+    /// homogeneous sequences or sets of one container whose elements share no
+    /// value where a length bound rules out the empty one), and
     /// false (conservatively) where it cannot decide: `Any`, a reference, a meet
     /// and a complement.
     ///

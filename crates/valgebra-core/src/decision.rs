@@ -1,10 +1,12 @@
 //! The structural rules: subtyping, equivalence and disjointness, decided by
 //! matching constructors against each other.
 //!
-//! One module per surface beside this one -- the emptiness every relation
-//! reduces to, the readings a pair no rule decides is given, the oracle, and
-//! the four constructor surfaces the shelf keeps a paper for each of. What
-//! stays here is the coinductive procedure that ties them together: the trail,
+//! One module per surface beside this one: the emptiness every relation
+//! reduces to, the readings a pair no rule decides is given, and four
+//! constructor surfaces -- a refinement's bounds, sequences split across a
+//! union, keyed maps and attribute records, and tables of constants. What only
+//! a binding can answer is asked of the oracle at the crate root. What stays
+//! here is the coinductive procedure that ties them together: the trail,
 //! the hypothesis a recursive pair is proved under, the shape match, and the
 //! hand-off to the set representation where the rules decline.
 
@@ -449,17 +451,17 @@ impl Schema {
     }
 
     fn subtype_by_rules(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
-        // Bound the total work: the distribution rules below can demand effort
-        // exponential in the schema depth, so once the shared budget is spent the
-        // decision stops and returns the conservative `false` rather than running
-        // unbounded. A real annotation decides in a few steps; only an adversarial
-        // schema reaches the ceiling.
         // Reflexivity, by identity. The checks below are ordered by what they
         // cost, and each answers the whole query on its own, so a cheaper one
         // never hides a verdict a later one would reach.
         if core::ptr::eq(self, other) {
             return Relation::Holds;
         }
+        // Bound the total work: the distribution rules below can demand effort
+        // exponential in the schema depth, so once the shared budget is spent the
+        // decision answers `Unknown` rather than running unbounded. A real
+        // annotation decides in a few steps; only an adversarial schema reaches
+        // the ceiling.
         if !spend(cx.budget) {
             // The work bound stopping a descent proves nothing about the pair.
             return Relation::Unknown;
@@ -722,12 +724,11 @@ impl Schema {
         // without it a chain of records beside a `None` branch is undecided
         // where the record branch alone refutes.
         //
-        // Sound in the direction that matters here, which is the one the page's
-        // three facts cover: the narrowed union is a subset of the original, so
-        // a `Holds` against it holds against the original, and a `Fails` stands
-        // on a value of the subject outside every remaining branch -- a value
-        // the dropped branches do not admit either, since they share none with
-        // the subject.
+        // Sound in both directions, by two facts: the narrowed union is a subset
+        // of the original, so a `Holds` against it holds against the original,
+        // and a `Fails` stands on a value of the subject outside every remaining
+        // branch -- a value the dropped branches do not admit either, since they
+        // share none with the subject.
         //
         // Asked with the cheap reading of disjointness first -- two
         // discriminants, which settles a `None` branch beside a record -- and
@@ -784,11 +785,11 @@ impl Schema {
     /// -- once cheaply and once fully -- without the first answer standing in
     /// for the second.
     ///
-    /// Sound in both directions, by the three facts the theory page names. The
-    /// narrowed union is a subset of the original, so a `Holds` against it
-    /// holds against the original. And a `Fails` stands on a value of the
-    /// subject outside every remaining branch, which the dropped branches do
-    /// not admit either -- they share no value with the subject at all.
+    /// Sound in both directions, by two facts. The narrowed union is a subset
+    /// of the original, so a `Holds` against it holds against the original.
+    /// And a `Fails` stands on a value of the subject outside every remaining
+    /// branch, which the dropped branches do not admit either -- they share no
+    /// value with the subject at all.
     fn below_the_branches_it_can_meet(
         &self,
         members: &[Schema],
@@ -837,11 +838,14 @@ impl Schema {
     ///
     /// Both halves are sound and incomplete: a conjunct that does not contain
     /// the supertype says nothing about the meet, so a disjunction of them that
-    /// finds no proof is unproven rather than refuted.
+    /// finds no proof is unproven rather than refuted. One shape refutes past
+    /// them: a class met with the attributes its instances carry, against a
+    /// class the oracle places it outside or a supertype outside every kind it
+    /// has.
     fn meet_below(&self, other: &Schema, members: &[Schema], cx: &mut Cx<'_>) -> Relation {
-        // Every rule here proves and none refutes: a member that is *not* below
-        // the supertype says nothing about the meet, which is a smaller set
-        // than that member. So a pair none of them places is handed to the
+        // Every placement here proves and none refutes: a member that is *not*
+        // below the supertype says nothing about the meet, which is a smaller
+        // set than that member. So a pair none of them places is handed to the
         // reading every pair with no rule gets, rather than ending the match.
         let placed = Relation::proven(
             Relation::any(members.iter().map(|m| m.is_subtype_rec(other, cx))).holds()
@@ -884,7 +888,7 @@ impl Schema {
     /// The structural subtyping decision: the lattice, recursion, and
     /// constructor-matching rules.
     ///
-    /// Reached from [`is_subtype_rec`](Self::is_subtype_rec) after the
+    /// Reached from [`subtype_by_rules`](Self::subtype_by_rules) after the
     /// coinductive, scalar and identity fast paths, which are the three that
     /// answer without reading a shape.
     fn subtype_decide(

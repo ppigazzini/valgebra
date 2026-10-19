@@ -3,7 +3,7 @@
 //! The bounds on a descriptor -- `MAX_LINES`, `MAX_ATOMS`, `MAX_STATES` -- say
 //! how large a result may be. They say nothing about the work spent reaching
 //! one, and the two are not the same quantity: a union of four records nested
-//! three deep, minus a union of its siblings, spends a third of a second and
+//! three deep, minus a union of its siblings, builds the whole difference and
 //! then refuses because the result is too wide. A caller cannot buy safety by
 //! accepting a smaller answer, because refusing costs what succeeding costs.
 //!
