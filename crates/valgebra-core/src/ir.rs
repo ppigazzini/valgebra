@@ -754,7 +754,7 @@ pub type Constraints = Arc<[Constraint]>;
 /// forces an arm in the matches that name every variant:
 /// - core: the two statements of a node's children, `mapped_children` for a
 ///   walk that rebuilds and `push_children` for one that only reads, which
-///   every structural walk goes through (`map_children`, [`Schema::depth`],
+///   every structural walk goes through (`map_children`, [`Schema::measure`],
 ///   [`Schema::node_count`], `has_reference` among them);
 ///   `remapped_where_moved`, which moves the pooled and definitions indices;
 ///   [`Schema::expected`], [`Schema::error_code`] and `guards_children`, which
@@ -1758,59 +1758,17 @@ impl Schema {
         }
     }
 
-    /// The structural nesting depth of this schema: the longest chain of nested
-    /// constructors from here down to a leaf.
+    /// The structural nesting depth of this schema, by its definition: one
+    /// level for this node, plus its deepest child's.
     ///
-    /// A `Ref` counts as a leaf even though it names a recursive definition: the
-    /// back edge is not followed, so the depth of a recursive schema is finite and
-    /// this terminates. The count mirrors the native stack a recursive walk over
-    /// the tree descends -- one frame per level in clone, drop, the decision
-    /// procedure, and the render back to an annotation -- so composition can be
-    /// bounded to a depth every such walk survives.
-    ///
-    /// Every node is one such level, sequences included: a [`SeqShape`] holds its
-    /// elements directly, so reaching one costs the same descent as reaching a
-    /// set's element or a field's schema. While a sequence carried a regular
-    /// expression a sequence node counted its constructor nesting too, because a
-    /// walk descended those boxes as well.
-    ///
-    /// Read level by level against two buffers rather than by recursion, for
-    /// the reason [`node_count`](Self::node_count) gives and one of its own.
-    /// The obvious spelling asks each node for its `children`, which collects
-    /// them into a vector of that node's own, so every node holding a child
-    /// allocates one and frees it. Two buffers serve the whole walk and a leaf
-    /// allocates neither. The walk is also iterative, so reading the bound off
-    /// a deep schema descends none of the native stack the bound is there to
-    /// protect.
-    ///
-    /// **The level is left before it is counted, rather than counted while the
-    /// list is not empty.** The tidier spelling is `while !level.is_empty()`,
-    /// and the mutation that deletes that `!` is a schema measure that never
-    /// returns: the sweep spends its whole budget on it and reports no verdict,
-    /// which `scripts/mutation_gate.py` reads as a rig fault rather than as a
-    /// result, and the lane fails having judged nothing. Breaking out of a
-    /// `loop` reads the same condition and compiles to the same walk, and no
-    /// single edit to it removes the exit.
-    ///
-    /// [`measure`](Self::measure) reads this beside the node count and the
-    /// marker test in the same walk, which is what building a validator asks.
+    /// The reading [`Measure::depth`] states, written as the recursion it is
+    /// rather than as [`measure`](Self::measure)'s loop, so the property that
+    /// holds the two together compares two algorithms rather than one with
+    /// itself.
+    #[cfg(test)]
     #[must_use]
-    pub fn depth(&self) -> usize {
-        let mut depth = 1;
-        let mut level: Vec<&Schema> = Vec::new();
-        let mut next: Vec<&Schema> = Vec::new();
-        self.push_children(&mut level);
-        loop {
-            if level.is_empty() {
-                break;
-            }
-            depth += 1;
-            for node in level.drain(..) {
-                node.push_children(&mut next);
-            }
-            std::mem::swap(&mut level, &mut next);
-        }
-        depth
+    pub(crate) fn depth(&self) -> usize {
+        1 + self.children().map(Schema::depth).max().unwrap_or(0)
     }
 
     /// The total number of schema nodes in this tree, counting this node plus
@@ -1952,12 +1910,12 @@ impl Schema {
     /// the tree nests, how many nodes it spans, and whether it carries a
     /// self-reference marker whose token `is_open` does not recognise.
     ///
-    /// Each is what [`depth`](Self::depth) and [`node_count`](Self::node_count)
-    /// return and what the marker test below states, and a property test holds
-    /// the three to those readings. They are one walk because every one of them
-    /// visits every node, and building a validator asked for all three: three
-    /// passes over the same tree, one of them recursing and collecting each
-    /// node's children into a vector of its own.
+    /// The depth is the one [`Measure::depth`] states, the count is what
+    /// [`node_count`](Self::node_count) returns, and the marker is the test
+    /// below; a property test holds the depth and the marker to recursions over
+    /// the children and the count to `node_count`. They are one walk because
+    /// each of them visits every node and building a validator asks for all
+    /// three, which apart would be three passes over one tree.
     ///
     /// **The marker.** A finished schema carries none: `recursive` resolves the
     /// one it minted into a back edge before it returns. A marker reaches
@@ -1968,9 +1926,22 @@ impl Schema {
     /// defining any more. Which token is which is the caller's fact, so the
     /// caller brings the test and this walk brings the traversal.
     ///
-    /// Read level by level against two buffers, as `depth` is, so a leaf
-    /// allocates nothing and a deep schema descends none of the native stack the
-    /// depth bound is there to protect.
+    /// Read level by level against two buffers rather than by recursion. The
+    /// obvious spelling asks each node for its `children`, which collects them
+    /// into a vector of that node's own, so every node holding a child
+    /// allocates one and frees it; two buffers serve the whole walk, and a leaf
+    /// allocates neither. The walk is also iterative, so reading the depth off
+    /// a deep schema descends none of the native stack the depth bound is there
+    /// to protect.
+    ///
+    /// **The level is left before it is counted, rather than counted while the
+    /// list is not empty.** The tidier spelling is `while !level.is_empty()`,
+    /// and the mutation that deletes that `!` is a schema measure that never
+    /// returns: the sweep spends its whole budget on it and reports no verdict,
+    /// which `scripts/mutation_gate.py` reads as a rig fault rather than as a
+    /// result, and the lane fails having judged nothing. Breaking out of a
+    /// `loop` reads the same condition and compiles to the same walk, and no
+    /// single edit to it removes the exit.
     #[must_use]
     pub fn measure(&self, is_open: &dyn Fn(u64) -> bool) -> Measure {
         let escapes = |node: &Schema| matches!(node, Schema::SelfRef(token) if !is_open(*token));
@@ -2002,7 +1973,17 @@ impl Schema {
 /// on, taken in one walk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Measure {
-    /// How deep the tree nests, as [`Schema::depth`] counts it.
+    /// How deep the tree nests: the longest chain of nested constructors from
+    /// the root down to a leaf, each node one level.
+    ///
+    /// A `Ref` counts as a leaf even though it names a recursive definition: the
+    /// back edge is not followed, so the depth of a recursive schema is finite.
+    /// The count mirrors the native stack a recursive walk over the tree
+    /// descends -- one frame per level in clone, drop, the decision procedure,
+    /// and the render back to an annotation -- so composition can be bounded to
+    /// a depth every such walk survives. A sequence is no exception: a
+    /// [`SeqShape`] holds its elements directly, so reaching one costs the same
+    /// descent as reaching a set's element or a field's schema.
     pub depth: usize,
     /// How many nodes the tree spans, as [`Schema::node_count`] counts it.
     pub nodes: usize,

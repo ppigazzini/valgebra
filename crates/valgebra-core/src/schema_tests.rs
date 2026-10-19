@@ -1059,11 +1059,12 @@ fn the_functor_and_the_traversal_describe_the_same_children() {
 /// than child schemas. Neither measure can read a child the other misses.
 #[test]
 fn both_size_measures_read_the_shared_traversal() {
+    let depth = |schema: &Schema| schema.measure(&|_| true).depth;
     for schema in every_variant() {
         let children: Vec<&Schema> = schema.children().collect();
-        let deepest = children.iter().map(|c| c.depth()).max().unwrap_or(0);
+        let deepest = children.iter().map(|c| depth(c)).max().unwrap_or(0);
         let total: usize = children.iter().map(|c| c.node_count()).sum();
-        assert_eq!(schema.depth(), 1 + deepest);
+        assert_eq!(depth(&schema), 1 + deepest);
         assert_eq!(schema.node_count(), schema.own_nodes() + total);
     }
 }
@@ -1997,9 +1998,10 @@ fn measured_tree() -> impl proptest::strategy::Strategy<Value = Schema> {
 }
 
 proptest::proptest! {
-    /// One walk reads what the three readings it stands for read: the depth
-    /// and the node count as their own functions count them, and an escaped
-    /// marker as the recursion over every child finds one.
+    /// One walk reads what the three readings it stands for read: the depth as
+    /// the recursion over every child defines it, the node count as
+    /// `node_count`'s worklist counts it, and an escaped marker as the
+    /// recursion over every child finds one.
     #[test]
     fn one_measure_is_the_depth_the_count_and_the_marker_test(
         tree in measured_tree(),
