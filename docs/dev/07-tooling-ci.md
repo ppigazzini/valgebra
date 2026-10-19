@@ -998,9 +998,10 @@ skip. The nightly lanes run on
 full nightlies side by side compete for the runners and double the night, and
 `main`'s tip is a tree the next fast-forward replaces with the one the
 dispatched run read. Each lane reads the dispatcher's `dispatched` output, or
-the result of the sweep it ratchets. The dispatched run's push sweeps take their
-base from `main`'s tip, as any dispatch does (`scripts/change_base.py`), so a
-night also sweeps every file the next release cut will push.
+the result of the sweep it ratchets. A dispatch changes nothing, so its push
+sweeps list no file: measured from `main`'s tip they would sweep the whole
+release window at the push seed, which the push that moves `main` sweeps once
+and the night's full sweeps read whole.
 `tests/test_required_jobs.py` holds the dispatch to the push trigger's other
 branch and every scheduled lane to that reading.
 
@@ -1158,10 +1159,9 @@ of the *sweep* and an entry that survives nothing is known to only when every
 shard has reported. A shard's ceiling (`timeout-minutes` in `ci.yml`) is twice
 the slowest shard's reading, because a job that reaches its ceiling is
 canceled and a canceled job is red. The slowest reading is taken over every
-event that runs the sweep, and the events differ: the night's dispatched run
-and a push to `main` sweep every file a release window touched where a push to
-`github_ci` sweeps one change's, so a push sweep's shard reads slowest on the
-night. And the runners differ: one class builds and tests a mutant at half
+event that runs the sweep, and the events differ: a push to `main` sweeps every
+file a release window touched where a push to `github_ci` sweeps one change's,
+so a push sweep's shard reads slowest on the push that moves `main`. And the runners differ: one class builds and tests a mutant at half
 the speed of another, so a shard read on the faster class costs twice that on
 the slower, and the factor of two is that margin. Every sweep shards
 round-robin: cut in consecutive slices, a file's mutants fall to one shard,

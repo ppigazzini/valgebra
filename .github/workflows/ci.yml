@@ -1285,9 +1285,8 @@ jobs:
     # mutants, since a caught mutant runs the whole suite: nine mutants a shard
     # is about 18 minutes. What a push sweeps is the core files it touches, so
     # the slowest reading is the run touching the most of the largest: the
-    # night's sweep of the release window, which a dispatch measures from
-    # `main`'s tip and which can hold nearly every core file, reads 108
-    # minutes a shard. So the ceiling is 220, twice the slowest -- the rule
+    # push that moves `main` over a release window, which can hold nearly
+    # every core file, reads 108 minutes a shard. So the ceiling is 220, twice the slowest -- the rule
     # `docs/dev/07-tooling-ci.md` states for a sharded sweep, because a job
     # that reaches its ceiling is canceled and a canceled job is red -- read
     # on the run that sweeps the most rather than on the one that comes most
@@ -1368,10 +1367,10 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EVENT: ${{ github.event_name }}
         run: |
           # The bench gate's base, read the same way: past a force-push, which
           # otherwise measures an amended commit from itself and sweeps nothing.
-          base="$(python3 scripts/change_base.py)"
           # WHOLE FILES, not the diff's lines. `--in-diff` would sweep only the
           # lines the change touches, and the miss that matters is the other
           # direction: an edit that stops an EXISTING test from killing a mutant
@@ -1383,7 +1382,16 @@ jobs:
           # whole crate, and the nightly sweep alone judges it.
           # A file whose diff is comments and blank lines alone compiles as it
           # did, so its mutants answer as they did, and it is left out.
-          python3 scripts/code_changes.py "$base" > changed.txt
+          # A dispatch changes nothing: it carries no `before`, and measured from
+          # the default branch's tip it would sweep the whole release window at
+          # the push seed, which the push that moves `main` sweeps once and the
+          # night's full sweeps read whole. So it sweeps no file.
+          if [ "$EVENT" = workflow_dispatch ]; then
+            : > changed.txt
+          else
+            base="$(python3 scripts/change_base.py)"
+            python3 scripts/code_changes.py "$base" > changed.txt
+          fi
           core=$(grep '^crates/valgebra-core/' changed.txt || true)
           {
             echo "core<<EOF"; echo "$core"; echo "EOF"
@@ -1444,10 +1452,9 @@ jobs:
     # the rest, two thirds of their mutants unviable, to the others, so one
     # shard would carry nearly all the work. Round-robin gives every shard the
     # same mix. The ceiling is set by a change that touches every listed file,
-    # as the night's sweep of the release window and a push to `main`
-    # carrying one do: about twenty-six hundred mutants, whose slowest shard
-    # reads 65 minutes, so the ceiling is 135, twice that, by the rule the
-    # core's sweep states.
+    # as a push to `main` carrying a release window does: about twenty-six
+    # hundred mutants, whose slowest shard reads 65 minutes, so the ceiling is
+    # 135, twice that, by the rule the core's sweep states.
     runs-on: ubuntu-26.04
     timeout-minutes: 135
     # One seed for the baseline and every mutant of this shard, and the same
@@ -1513,10 +1520,10 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EVENT: ${{ github.event_name }}
         run: |
           # The bench gate's base, read the same way: past a force-push, which
           # otherwise measures an amended commit from itself and sweeps nothing.
-          base="$(python3 scripts/change_base.py)"
           # WHOLE FILES, not the diff's lines. `--in-diff` would sweep only the
           # lines the change touches, and the miss that matters is the other
           # direction: an edit that stops an EXISTING test from killing a mutant
@@ -1528,7 +1535,16 @@ jobs:
           # whole crate, and the nightly sweep alone judges it.
           # A file whose diff is comments and blank lines alone compiles as it
           # did, so its mutants answer as they did, and it is left out.
-          python3 scripts/code_changes.py "$base" > changed.txt
+          # A dispatch changes nothing: it carries no `before`, and measured from
+          # the default branch's tip it would sweep the whole release window at
+          # the push seed, which the push that moves `main` sweeps once and the
+          # night's full sweeps read whole. So it sweeps no file.
+          if [ "$EVENT" = workflow_dispatch ]; then
+            : > changed.txt
+          else
+            base="$(python3 scripts/change_base.py)"
+            python3 scripts/code_changes.py "$base" > changed.txt
+          fi
           # The listed files among the changed ones, matched against the list
           # itself: every file the sweep can take starts it, and no other does.
           walk=$(grep -Fx -f changed.txt <<< "$BINDING_SWEPT" || true)

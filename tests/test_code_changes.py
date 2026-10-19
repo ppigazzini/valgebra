@@ -253,14 +253,21 @@ def test_a_base_git_cannot_read_is_not_an_empty_sweep(tmp_path: Path) -> None:
 
 
 def test_both_push_sweeps_list_their_files_through_it() -> None:
-    """Both diff-scoped sweeps read the script, so neither sweeps a comment."""
+    """Both diff-scoped sweeps read the script, so neither sweeps a comment.
+
+    And neither sweeps a dispatch: it changes nothing, and measured from the
+    default branch's tip it would sweep the whole release window again.
+    """
     listings = [
-        step["run"]
+        step
         for job in read_workflow()["jobs"].values()
         for step in job.get("steps", [])
         if "> changed.txt" in str(step.get("run", ""))
     ]
     assert len(listings) == 2, listings
-    for run in listings:
+    for step in listings:
+        run = step["run"]
         assert 'python3 scripts/code_changes.py "$base" > changed.txt' in run, run
         assert "git diff --name-only" not in run, run
+        assert step["env"]["EVENT"] == "${{ github.event_name }}", step["env"]
+        assert 'if [ "$EVENT" = workflow_dispatch ]; then\n  : > changed.txt' in run
