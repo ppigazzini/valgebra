@@ -1,12 +1,10 @@
 """The coverage lanes measure the code that ships, and say so in numbers.
 
-A coverage figure is read as "how much of this library is exercised". Both
-lanes computed it over the test code too. The binding's four interpreter
-corpora are 4,048 lines that run by construction -- a corpus is a table and a
-loop -- so they arrive at 100% and lift the figure for the code around them.
-The binding read 98.15% of lines with them and 97.01% without; regions, which
-count each arm of a branch rather than each line, read 96.24% with and 93.61%
-without. Two and a half points of the number described the tests.
+A coverage figure is read as "how much of this library is exercised", and a
+figure computed over the test code too answers another question. The binding's
+interpreter corpora run by construction -- a corpus is a table and a loop -- so
+they arrive at 100% and lift the figure for the code around them: counted in,
+part of the number describes the tests.
 
 So the scope is written down here, in both directions:
 
@@ -88,8 +86,8 @@ def _ignored(lane: str) -> re.Pattern[str]:
 
     The argument rather than the step's text: a step is mostly prose, and the
     word `interpreter` appears in it three times about the *embedded* one. A
-    check reading the whole script found it there and passed on a tree with the
-    exclusion removed, which the planted defect is what caught.
+    check reading the whole script would find it there and pass on a tree with
+    the exclusion removed, which the planted defect holds.
     """
     script = _lane_scripts()[lane]
     # The argument is quoted and may be wrapped, so the continuations go first.
@@ -286,8 +284,7 @@ def test_the_page_counts_the_tests_the_gil_stands_down() -> None:
 
     The paragraph argues that some arms are executed by the python matrix and
     measured by no lane, and the tests that stand down under a lock are the
-    evidence for it. A count nothing reads is a count that drifts, and this one
-    had: the page said six where the tree skips three.
+    evidence for it. A count nothing reads is a count that drifts.
 
     Here rather than beside the tests, because the claim is about what a
     coverage lane measures -- which is this file's subject -- and because the

@@ -232,7 +232,7 @@ def test_recursion_through_a_field_and_a_catch_all() -> None:
 def test_a_key_name_ending_in_a_question_mark_is_written_with_one_more() -> None:
     """The suffix is stripped once, so the escape is doubling it.
 
-    Undocumented until now, and the sort of rule a reader guesses wrong: they
+    The sort of rule a reader guesses wrong: they
     would expect `{"page?": int}` to be the key `page?`, and it is the optional
     key `page`.
     """

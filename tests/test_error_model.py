@@ -97,10 +97,10 @@ def test_an_integer_key_stays_an_integer_in_the_path() -> None:
 def test_every_integer_key_reaches_its_value_from_the_path() -> None:
     """`docs/08` promises a path a caller can walk back down.
 
-    A key that is an `int` must arrive as an `int`, whatever its size: it used
-    to be `repr`-ed into the path once it left the range of a machine word, and
-    a `bool` was excluded outright -- so `path` held `'1180591620717411303424'`
-    and `'True'`, strings that index nothing. Each row below indexes the very
+    A key that is an `int` must arrive as an `int`, whatever its size: one
+    `repr`-ed into the path past the range of a machine word, or a `bool`
+    excluded outright, puts `'1180591620717411303424'` and `'True'` in `path`,
+    strings that index nothing. Each row below indexes the very
     dict the error came from, which is the property the page states.
     """
     for key in (2, -1, 0, 2**70, -(2**70), True, False):
@@ -228,13 +228,13 @@ def test_a_string_key_with_no_text_is_named_not_read_as_empty() -> None:
 def test_a_value_a_union_admits_is_never_summarized() -> None:
     """A member builds no report, so nothing reads its repr.
 
-    `validate` explained a union by walking each branch in explaining mode, and
-    a branch refusing the value summarized it -- running the value's
-    `__repr__`, or a field's, once for each branch before the one that matched.
-    A repr that raised `MemoryError` made `validate` raise for a member. The
-    union is decided before any branch is explained, whatever the branch's
-    kind: a named tuple, a meet, a complement, a list, a set or a tuple before
-    the matching branch read the repr as a record or a class once did.
+    Explaining a union by walking each branch in explaining mode has a branch
+    refusing the value summarize it -- running the value's `__repr__`, or a
+    field's, once for each branch before the one that matches -- and a repr
+    raising `MemoryError` then makes `validate` raise for a member. The union is
+    decided before any branch is explained, whatever kind the branches before
+    the matching one are: a named tuple, a meet, a complement, a list, a set, a
+    tuple, a record or a class.
     """
     reprs = []
 
@@ -297,9 +297,9 @@ def test_a_value_a_union_admits_is_never_summarized() -> None:
 def test_a_message_names_each_key_on_one_line() -> None:
     """A key that is not a bare name is written as a subscript of its literal.
 
-    Bare, the key `"a.b"` read as the path `a` then `b`, `"[0]"` as the index 0,
-    and a key holding a newline broke the one-line message across two. The
-    path itself was always exact; the message is what a log line keeps.
+    Bare, the key `"a.b"` reads as the path `a` then `b`, `"[0]"` as the index 0,
+    and a key holding a newline breaks the one-line message across two. The
+    path itself is exact; the message is what a log line keeps.
     """
     cases = [
         ({"a.b": "x"}, dict[str, int], "at ['a.b']: "),

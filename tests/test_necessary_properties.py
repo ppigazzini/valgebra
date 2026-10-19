@@ -4,13 +4,13 @@ The file is named for what all six are, because the four that are not
 metamorphic outnumber the two that are and a name is a claim. Chen et al. 2018,
 Concept 1: a metamorphic relation relates *multiple* inputs and their outputs,
 so a necessary property of one input -- the review's own example is
-`-1 <= sin(x) <= 1` -- is not one. Under the old name this file said six MRs and
-held two; the tests never changed and do not change here.
+`-1 <= sin(x) <= 1` -- is not one.
 
-The name also collided with something real. The two metamorphic checks
-`docs/dev/10-theory.md` cites as load-bearing are *not* in this file -- they are
-the JSON path against the object path, and fast mode against explain mode -- and
-a reader looking for those found these.
+Named for metamorphic relations, the file would also collide with something
+real. The two metamorphic checks `docs/dev/10-theory.md` cites as load-bearing
+are *not* in this file -- they are the JSON path against the object path, and
+fast mode against explain mode -- and a reader looking for those would find
+these.
 
 Each property is a theorem any sound relation satisfies, so a violation is a
 proof of a defect rather than a conservatism. They hold for valgebra because the
@@ -43,7 +43,7 @@ from valgebra import (
 _GE0 = Annotated[int, at.Ge(0)]
 # Recursive schemas exercise the coinductive rules under every invariant, so a
 # meet, complement, or nesting that mixes recursion is checked for reflexivity and
-# the other laws -- the shape the reflexivity defect lived in.
+# the other laws -- the shape a reflexivity defect hides in.
 _RECURSIVE = [
     recursive(lambda t: union(None, {"next": t})),
     recursive(lambda t: union(int, [t])),

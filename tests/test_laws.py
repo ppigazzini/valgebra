@@ -133,8 +133,8 @@ def _fixpoints() -> st.SearchStrategy[object]:
 def _schemas() -> st.SearchStrategy[object]:
     """Every shape a law is checked over, drawn rather than listed.
 
-    The list of atoms was the whole universe, so a law held over scalars and
-    containers and was never asked about a refinement, a class or a fixpoint.
+    A list of atoms as the whole universe holds a law over scalars and
+    containers and never asks it about a refinement, a class or a fixpoint.
     Each of those reaches arms the others do not: a refinement compares
     constraints, a class compares by `isinstance`, and a fixpoint is decided by
     the rules because the descriptor cannot hold a cycle.

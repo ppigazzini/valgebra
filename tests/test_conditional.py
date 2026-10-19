@@ -3,7 +3,7 @@
 valgebra ships no `ifthen`/`cond`: material implication and first-match dispatch
 are derived from the Boolean algebra (`union`/`intersection`/`complement`). These
 helpers are the documented recipe; the tests assert the recipe reaches the
-decisions the removed combinators did, so the derivation stays covered.
+decisions a combinator would, so the derivation stays covered.
 """
 
 from typing import Annotated

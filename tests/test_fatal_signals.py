@@ -220,8 +220,8 @@ def test_fatal_signal_propagates_through_the_json_entries(
 
     `validate_json` and `load` run the object walk over the parsed document, and
     `is_valid_json` runs the in-place one. All three promise a fatal interpreter
-    signal propagates rather than being read as a non-member, and the promise
-    was held on the object path alone.
+    signal propagates rather than being read as a non-member, and this holds
+    the promise past the object path.
     """
     validator = Validator(_class_raising(signal()))
     with pytest.raises(signal):

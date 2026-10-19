@@ -2,15 +2,15 @@
 
 A code is the part of a failure a caller writes code against: `exc.code ==
 "missing_key"` is a branch in somebody's error handler, so the set of them is a
-published vocabulary. It was written as `&'static str` literals at the sites
-that report them -- twenty-one of the forty-two, scattered across the walk, the
-call boundary and the report -- and `scripts/use_case_ledger.py` recovered the
-set by scanning four hand-picked paths for snake-case strings.
+published vocabulary. Written as `&'static str` literals at the sites that
+report them -- scattered across the walk, the call boundary and the report --
+the set is one a ledger can recover only by scanning hand-picked paths for
+snake-case strings.
 
 That derivation is a guess from a path, and it is wrong in both directions. A
-code written in a file outside the four is a code the ledger cannot see, so a
+code written in a file outside the paths is a code the ledger cannot see, so a
 cell nothing names passes as a cell nobody has. And a snake-case string in one
-of the four that is *not* a code is a cell the ledger invents and then asks the
+of the paths that is *not* a code is a cell the ledger invents and then asks the
 suite to cover.
 
 So the binding names its codes once, in `crates/valgebra-py/src/codes.rs`, and

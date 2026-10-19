@@ -6,8 +6,7 @@ An `assert_type` row therefore holds a reading all three agree on, and a
 reading they do not agree on cannot be written as one: whichever checker
 disagrees fails the lane. Those readings are the ones a downstream user meets
 first -- a `NewType` that is typed under one checker and `object` under the
-other two -- and until now they lived in a report, which is a reading nobody
-holds.
+other two -- and a reading kept in a report is a reading nobody holds.
 
 So each disagreement is a fixture under `tests/typing/readings/`: one file, one
 expression, one `reveal_type`. This ledger runs the three checkers over the

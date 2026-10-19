@@ -1,27 +1,23 @@
 """A change a user can see, with no line in the changelog, is a silent release.
 
-Nine of them accumulated once: every argument became positional-only, `repr`
-changed for three forms, twenty-five relations flipped, constants started
-pooling by value -- and the changelog recorded four other things. Each commit
-was reviewed, each was described in its own message, and nobody was asked
-whether the release notes had grown a line. Reviewing a diff and writing the
-notes are two jobs, and only one of them has a gate.
+A commit is reviewed and described in its own message, and neither asks whether
+the release notes have grown a line: reviewing a diff and writing the notes are
+two jobs, and only one of them has a gate.
 
 So the unreleased section carries a roll of the commits it accounts for, and
 this holds that roll to `git log` in both directions. The universe is the
-commits typed `feat` or `fix`, because those are the two conventional types
-that mean a caller can see the change, and they are what a version number is
-read off. Scoping by *path* was tried and is wrong: the descriptor lives in the
-core crate and flipping twenty-five relations is as visible as anything the
-bindings do.
+commits typed `feat` or `fix`, because those are the two conventional types that
+mean a caller can see the change, and they are what a version number is read
+off. Scoping by *path* is wrong: the descriptor lives in the core crate and
+flipping twenty-five relations is as visible as anything the bindings do.
 
 A `perf` or `refactor` commit that a caller can see is a mislabelled commit, and
 this ledger makes that visible rather than papering over it: relabel it, or the
 change it carries goes unrolled.
 
 Being on the roll is not a claim that a commit earned a paragraph. It is a
-claim that somebody looked at it and decided, which is the step that was
-missing. A commit that deserves no line stays on the roll with `-- internal`
+claim that somebody looked at it and decided, which is the step a review
+skips. A commit that deserves no line stays on the roll with `-- internal`
 after it.
 
 A shallow clone cannot answer any of this: it carries the tip and no tags, so
@@ -40,8 +36,8 @@ one *before* the last match names a commit that went away, and that is the stale
 line this catches. The invariant, in one sentence: **every `feat`/`fix` line
 before the last one that matches names a commit in the range.** A line of any
 other type -- a `perf` someone chose to account for -- is outside the universe
-and is never stale, wherever it sits; it was once read as a settled line, and a
-`fix` appended after a run of them turned every one of them red.
+and is never stale, wherever it sits; read as a settled line, a `fix` appended
+after a run of them would turn every one of them red.
 
 LEDGER: every feat/fix commit since the last release is on the changelog roll
 """

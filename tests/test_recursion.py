@@ -337,8 +337,8 @@ def test_a_fixpoint_is_decided_against_the_kinds_its_body_admits() -> None:
     """A meet with a kind the body never names is empty, and provably so.
 
     The rules read a fixpoint's *shape* and a set representation holds no cycle,
-    so this pair of questions was answered by neither: `bytes` and a JSON value
-    share no value, and nothing could say it. Unfolding the body once puts the
+    so neither answers this pair of questions alone: `bytes` and a JSON value
+    share no value, and neither can say it. Unfolding the body once puts the
     kinds it admits in front of the representation, with a bound standing where
     the reference was.
     """
@@ -506,9 +506,9 @@ def test_every_entry_point_gives_one_answer_at_the_depth_bound(leaf: str) -> Non
     """At the walk's depth bound `is_valid` and `validate` give one answer.
 
     A union of literals is decided by a table in the deciding walk and branch
-    by branch in the explaining one, and the table answered without the level
-    a branch opens: a value whose leaf sat one level past the bound was a
-    member to `is_valid` and `in` and refused with `recursion_limit` by
+    by branch in the explaining one, and a table answering without the level
+    a branch opens would make a value whose leaf sits one level past the bound
+    a member to `is_valid` and `in` and refused with `recursion_limit` by
     `validate`, `ensure` and a fail-fast `validate`. The levels swept are the
     ones on either side of the first the walk refuses, whatever that bound is.
     """

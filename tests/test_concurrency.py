@@ -182,8 +182,8 @@ def test_markers_compile_from_many_threads() -> None:
     interpreter's per-object lock, with two threads that miss on one type
     computing the same mask because the mask is the type's and not the thread's.
 
-    The argument was written and not run. Every other row here validates with
-    schemas built before the threads start; none compiles, so none reached the
+    An argument no row runs is not held. Every other row here validates with
+    schemas built before the threads start; none compiles, so none reaches the
     cache at all.
     """
     assert not _run_marker_threads()

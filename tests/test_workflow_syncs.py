@@ -3,10 +3,10 @@
 `docs/dev/07-tooling-ci.md` says every lane installs with one `uv sync` and runs
 every later command under `uv run --no-sync`. Both halves decide what a lane
 tests. A `uv sync` without `--locked` resolves afresh where the lock is stale,
-so the Pages deploy could publish a site built from a resolution no lane had
-tested. A bare `uv run` resolves again before it runs, uninstalling the build
-`maturin develop` made. Held over every workflow, so a job added tomorrow is
-held the day it lands.
+so a Pages deploy can publish a site built from a resolution no lane tested. A
+bare `uv run` resolves again before it runs, uninstalling the build `maturin
+develop` made. Held over every workflow, so a job added tomorrow is held the day
+it lands.
 
 A build of the extension that does not run through the lock fetches its own
 maturin: the build action resolves `[build-system] requires` against a manifest

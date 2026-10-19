@@ -371,12 +371,12 @@ _UNION_AT_THE_BOUND = {
 def test_a_complement_admits_no_member_at_any_depth(where: str) -> None:
     """A union of scalars at the walk's bound stops, as a scalar there does.
 
-    The union's fast path asked each scalar branch its type test, and answered
-    `false` where no level was left: a decided refusal, which a complement
+    The union's fast path asks each scalar branch its type test, and a `false`
+    where no level is left would be a decided refusal, which a complement
     reads as the value being outside, and admits it. So a value the schema
-    admits at the top was admitted by its complement too, one level deeper,
-    and every value nested past the bound was admitted by the complement
-    though the schema's walk stopped on it. Every depth across the bound is
+    admits at the top would be admitted by its complement too, one level
+    deeper, and every value nested past the bound admitted by the complement
+    though the schema's walk stops on it. Every depth across the bound is
     asked, since where the union lands is a property of the body: a level of
     nesting is four of the walk's, so a hundred and forty pass both the walk's
     bound and the unfolding bound.
@@ -704,11 +704,11 @@ def test_a_documents_colliding_keys_are_read_in_linear_time() -> None:
     """A parsed object's keys are not trusted to hash apart.
 
     The undeclared keys of a parsed object wider than eight entries go through
-    a table keyed by the document's own keys, and that table hashed with
-    `rustc-hash`, which is unseeded: 20,000 keys computed to collide, 0.74 MB,
-    took half a second where as many ordinary keys took 2 ms, and four times as
-    long for each doubling. The table is keyed per process now, so the keys
-    collide in the document only.
+    a table keyed by the document's own keys. Hashed with `rustc-hash`, which
+    is unseeded, 20,000 keys computed to collide, 0.74 MB, take half a second
+    where as many ordinary keys take 2 ms, and four times as long for each
+    doubling. The table is keyed per process, so the keys collide in the
+    document only.
     """
     schema = Validator(dict[str, int])
 
@@ -896,13 +896,13 @@ def test_a_pattern_whose_determinisation_explodes_answers_in_bounded_time() -> N
 
     `(a|b)*a(a|b){k}` doubles its DFA states for every `k`: the automaton has to
     remember the last `k` letters to know whether an `a` sat `k` back. The
-    descriptor bounds the automaton it keeps, but that bound is checked after
-    the regex engine has built the whole dense table -- so `k = 20` spent six
-    seconds and 668 MB reaching a refusal, and `k = 25` aborted the interpreter
-    on a four-gigabyte allocation. A caller who lets a user supply a pattern had
-    handed that user the process.
+    descriptor bounds the automaton it keeps, and a bound checked after the
+    regex engine has built the whole dense table comes too late: `k = 20`
+    spends six seconds and 668 MB reaching a refusal, and `k = 25` aborts the
+    interpreter on a four-gigabyte allocation -- the process, handed to any
+    user a caller lets supply a pattern.
 
-    The engine is now given the size limit, so the refusal happens where the
+    The engine is given the size limit, so the refusal happens where the
     memory would be spent. Timed rather than merely answered: a bound that only
     stops the allocation would still leave the question taking minutes.
     """
@@ -932,15 +932,15 @@ def test_explaining_a_deep_value_does_not_scale_with_its_size() -> None:
     """A summary is bounded while it is built, not built and then cut.
 
     The walk stops at `MAX_WALK_DEPTH` levels, so an error over a deeply nested
-    value names a bounded path -- but every violation along the way summarised
-    the value it was about, and a summary was the value's *whole* repr cut to
-    eighty characters afterwards. A 20,000-deep list has a 40,000-character
-    repr, built once per level and discarded, which was twelve seconds for a
-    single error against twenty microseconds for `is_valid` on the same value.
+    value names a bounded path -- but every violation along the way summarises
+    the value it is about. A summary cut to eighty characters from the value's
+    *whole* repr would build a 20,000-deep list's 40,000-character repr once
+    per level and discard it: twelve seconds for a single error against twenty
+    microseconds for `is_valid` on the same value.
 
-    Timed against depth rather than against a constant: the defect was a cost
-    that grew with the size of the value, and only a comparison across sizes
-    fails if it comes back.
+    Timed against depth rather than against a constant: the cost refused is
+    one that grows with the size of the value, and only a comparison across
+    sizes fails on it.
     """
     schema = Validator(recursive(lambda node: union(int, [node])))
 
@@ -962,7 +962,7 @@ def test_explaining_a_deep_value_does_not_scale_with_its_size() -> None:
 
     small, large = explain(2_000), explain(20_000)
     # Ten times the value, and the work must not follow it. Generous, because a
-    # loaded machine moves a millisecond around: quadratic was a factor of 40.
+    # loaded machine moves a millisecond around: a whole repr a level is 40.
     assert large < small * 5 + 0.05, (
         f"explaining a 20,000-deep value took {large:.3f}s against "
         f"{small:.3f}s for a 2,000-deep one; the summary is scaling with the value"
@@ -983,10 +983,10 @@ def _fastest(call: Callable[[], object]) -> float:
 def test_a_tag_after_a_recursive_field_refuses_its_branch_first() -> None:
     """A union of records told apart by a tag is linear, whatever the tag is called.
 
-    Fields are stored sorted by name, so `type` beside `left` was read after
-    the child, and each branch the tag refuses walked the whole child first:
-    four branches to the power of the depth, a second at depth ten and no
-    answer at twenty, on a valid value of a few hundred bytes. The deciding
+    Fields are stored sorted by name, so in stored order `type` beside `left`
+    comes after the child, and each branch the tag refuses would walk the whole
+    child first: four branches to the power of the depth, a second at depth ten
+    and no answer at twenty, on a valid value of a few hundred bytes. The deciding
     walk reads a field decided by its own value first. Both entry points, as
     the JSON path reads a record by the same plan.
     """
@@ -1006,16 +1006,17 @@ def test_a_tag_after_a_recursive_field_refuses_its_branch_first() -> None:
             _fastest(lambda d=d, check=check: check(chain(d))) for d in (6, 12)
         )
         assert check(chain(12)) is True
-        # Twice the depth: linear is a factor of two, and the defect was 4,096.
+        # Twice the depth: linear is a factor of two, the child read first 4,096.
         assert large < small * 5 + 0.05, (small, large)
 
 
 def test_explaining_a_refused_union_of_records_does_not_double_per_level() -> None:
     """A union of records explains one record branch, not each of them.
 
-    Explaining every refused record branch walked the levels below once per
-    branch, so the default report on a refused chain doubled with each level:
-    a third of a second at eighteen levels of a value of three hundred bytes.
+    Explaining every refused record branch would walk the levels below once per
+    branch, so the default report on a refused chain would double with each
+    level: a third of a second at eighteen levels of a value of three hundred
+    bytes.
     The branch explained is the one whose deciding walk admitted the most.
     """
     schema = Validator(
@@ -1041,7 +1042,7 @@ def test_explaining_a_refused_union_of_records_does_not_double_per_level() -> No
 
     small, large = _fastest(explain(8)), _fastest(explain(16))
     # Twice the depth: the report is quadratic at worst, a factor of four, and
-    # the defect was 256.
+    # explaining every branch is 256.
     assert large < small * 6 + 0.05, (small, large)
 
 
@@ -1142,7 +1143,7 @@ def test_a_value_every_branch_walks_is_linear_where_one_admits_it() -> None:
 
 
 def test_a_bounded_summary_still_names_a_small_value_exactly() -> None:
-    """The bound must not cost the messages that were already readable."""
+    """The bound costs no message a small value prints in full."""
 
     def message(schema: object, value: object) -> str:
         with pytest.raises(ValidationError) as info:
@@ -1161,16 +1162,16 @@ def test_two_steps_that_meet_past_the_period_bound_are_refused() -> None:
     """A pair of ordinary steps must not be a way to crash or to lie.
 
     A `MultipleOf` lowers to a set held as one interval set per residue, so its
-    period is the step, and the representation caps that period. The cap was on
-    one step and not on two: `MultipleOf(64)` and `MultipleOf(81)` are each far
-    inside it and meet at 5,184, which is past it. Asking whether their meet was
-    empty then materialised a table at the largest period the representation
-    holds -- the multiples of something else -- and answered from it, or, on a
+    period is the step, and the representation caps that period. A cap on one
+    step is not a cap on two: `MultipleOf(64)` and `MultipleOf(81)` are each far
+    inside it and meet at 5,184, which is past it. Asking whether such a meet is
+    empty would materialise a table at the largest period the representation
+    holds -- the multiples of something else -- and answer from it, or, on a
     build with debug assertions (which is what `maturin develop` produces),
-    raised a panic across the language boundary that no caller catches as a
+    raise a panic across the language boundary that no caller catches as a
     validation failure.
 
-    Composition is now bounded like the automaton components are: past the
+    Composition is bounded like the automaton components are: past the
     shared period the operation refuses, the descriptor becomes unbuildable and
     the relation stays undecided. Membership is unaffected either way, because
     the walk runs the modulo rather than the set.

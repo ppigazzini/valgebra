@@ -6,10 +6,10 @@ natural spelling a reference cycle -- a class that keeps its own validator holds
 the validator, and the validator holds the class -- and a cycle is only
 collectable if the collector can *see* both edges.
 
-It could not: the type was untracked, so every class that owned its validator
-leaked, and a long-running process building validators per request grew without
-bound. These hold the two halves of the fix, and the control that says the leak
-was the cycle rather than the reference.
+An untracked type hides an edge from it, so every class that owns its validator
+leaks, and a long-running process building validators per request grows without
+bound. These hold the type tracked and the cycle collected, and the control that
+says a leak is the cycle rather than the reference.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ def test_a_class_that_owns_its_validator_is_collected() -> None:
 
 @NEEDS_A_RELEASING_BOUNDARY
 def test_the_same_classes_without_the_cycle_are_collected_too() -> None:
-    """The control: the leak was the cycle, not the reference."""
+    """The control: a leak is the cycle, not the reference."""
     assert _classes_alive(200, own_validator=False) == 0
 
 

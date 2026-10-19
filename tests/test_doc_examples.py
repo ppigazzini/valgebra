@@ -2,10 +2,10 @@
 
 `scripts/run_doc_examples.py` executes every fenced `python` block it reaches,
 each in its own process, so a snippet a reader copies is one this project has
-run. What it reaches is a list, and the list said `docs/*.md` while the
-docstring above it said "every page under docs/" -- so a page one directory
-down carried an example nothing had ever executed, and the count the lane
-prints was the count of what it looked at rather than of what the tree has.
+run. What it reaches is a list, and a list reading `docs/*.md` beside a
+docstring saying "every page under docs/" leaves a page one directory down with
+an example nothing executes, and the count the lane prints is then the count of
+what it looked at rather than of what the tree has.
 
 The two halves, held here:
 
@@ -15,11 +15,10 @@ The two halves, held here:
   takes its entry with it rather than leaving a name that reads as covered.
 
 The universe is globbed from `git ls-files` rather than listed, because the
-direction that matters is an example arriving on a page nobody thought to
-name -- which is how the one above arrived. And the blocks are found with the
-runner's own pattern: a fence indented inside a list item is a block it runs,
-and a checker with its own stricter pattern would call those unreached and
-report a hole the tree does not have.
+direction that matters is an example arriving on a page nobody thought to name.
+And the blocks are found with the runner's own pattern: a fence indented inside
+a list item is a block it runs, and a checker with its own stricter pattern
+would call those unreached and report a hole the tree does not have.
 
 A skipped block says so on a comment line. The runner reads the marker
 anywhere in the block, which is a word a snippet could use in its own prose or
@@ -192,10 +191,10 @@ def test_every_refusal_example_fails_when_the_refusal_stops() -> None:
     """An example of a refusal holds the page to it only if no refusal fails it.
 
     A block that asserts on the error inside `except` passes when the call
-    stops raising: the handler never runs, and the block exits 0. Twenty-seven
-    did, and two of them had stopped raising -- a predicate that grows the dict
-    once, so the second call read it whole, and a loop that joins the same
-    member to a union again, which folds and never grows.
+    stops raising: the handler never runs, and the block exits 0. A call stops
+    raising quietly -- a predicate that grows the dict once, so the second call
+    reads it whole, or a loop that joins the same member to a union again,
+    which folds and never grows.
     """
     module = runner()
     vacuous = [

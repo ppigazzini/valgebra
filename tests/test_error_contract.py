@@ -7,11 +7,11 @@ key is itself as an integer** ... so walking the path back down reaches the
 value".
 
 Each is one rule with several sites, and a rule held at one site and not another
-is the shape this file is for: a union and a mapping clause each aggregated a
-whole branch under `fail_fast`, and an undeclared integer key came back as the
-string of its digits from one reading of a record and as the integer from the
-other. A caller indexing `d[path[-1]]` finds nothing in the first case, which is
-the sentence the page wrote the rule for.
+is the shape this file is for: a union or a mapping clause aggregating a whole
+branch under `fail_fast`, or an undeclared integer key coming back as the string
+of its digits from one reading of a record and as the integer from the other. A
+caller indexing `d[path[-1]]` finds nothing under the string, which is the
+sentence the page wrote the rule for.
 """
 
 from __future__ import annotations

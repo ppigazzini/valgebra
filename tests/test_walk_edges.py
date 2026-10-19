@@ -268,9 +268,9 @@ def test_a_bound_off_the_scalar_kinds_is_explained_not_only_decided(
 ) -> None:
     """A refinement over a class reports the constraint that failed.
 
-    These bases were driven through `is_valid` alone, which answers a `bool`:
-    a walk that reached them and reported the wrong thing -- the class rather
-    than the bound, or the bound at the wrong location -- gave the same `False`
+    Driven through `is_valid` alone, which answers a `bool`, these bases hide a
+    walk that reaches them and reports the wrong thing -- the class rather than
+    the bound, or the bound at the wrong location -- behind the same `False`
     either way. The explaining walk is where a report is built, and it is a
     different arm of every node it passes.
     """
@@ -298,8 +298,8 @@ def test_a_bytes_refinement_is_explained_at_its_own_bound() -> None:
     """A length over `bytes` counts bytes, and reports them.
 
     `bytes` is the one scalar kind with a length that is not text, so its
-    length bound is a separate reading from a string's -- and it was decided
-    and never explained.
+    length bound is a separate reading from a string's, with a report of its
+    own.
     """
     schema = Validator(Annotated[bytes, at.MinLen(3)])
     assert schema.is_valid(b"abc")
@@ -342,8 +342,8 @@ def test_a_list_of_scalars_decides_the_same_at_every_width(width: int) -> None:
     claim, so it is asserted at the widths where the reading changes rather
     than at a width somebody picked.
 
-    The upper edge was in no test: every row sat well below it, so the arm that
-    stops copying was reached by no value the suite had.
+    Rows sitting well below the upper edge would leave the arm that stops
+    copying reached by no value the suite has.
     """
     schema = Validator(list[int])
     whole = [1] * width

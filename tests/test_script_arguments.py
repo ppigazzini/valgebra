@@ -1,8 +1,8 @@
 """Every script answers `--help` and refuses a flag it does not know.
 
 A script that reads its flags by substring treats a flag it does not know as no
-flag at all: `perf_gate.py --bindng` measured the core workload and answered
-for it, and `perf_gate.py --help` built both workloads before saying nothing
+flag at all: `perf_gate.py --bindng` would measure the core workload and answer
+for it, and `perf_gate.py --help` build both workloads before saying nothing
 about how to call it. So every script reads its command line through
 `argparse` before doing any work, which prints the usage on `--help` and exits
 2 -- the gates' "could not run" -- on anything else it does not know.
@@ -114,8 +114,8 @@ def test_no_script_restates_what_the_shared_module_says() -> None:
 
     A parser spelled in a script can leave out `allow_abbrev=False` and read a
     prefix of a flag as the flag, and a code spelled in a script can answer
-    "could not run" in a code of its own. Each was one line copied into most
-    scripts, held together by nothing but the likeness of the copies.
+    "could not run" in a code of its own. Each is one line, and copied into most
+    scripts it is held together by nothing but the likeness of the copies.
     """
     offenders = {
         script.name: found

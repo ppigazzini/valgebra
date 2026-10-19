@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.repository
 
 
-# Scripts deliberately driven by nothing, each with the reason. Empty today:
+# Scripts deliberately driven by nothing, each with the reason. Empty while
 # every script under scripts/ is driven by a workflow, by pyproject, or by a
 # test. An entry here is a hole in the coverage claim, so it carries an argument
 # rather than a name alone.
@@ -145,7 +145,7 @@ def test_a_longer_name_does_not_satisfy_a_shorter_one() -> None:
 
 
 def test_the_stale_excuse_rules_fire() -> None:
-    # The excused list is empty today, so its two failure directions are driven
+    # The excused list may be empty, so its two failure directions are driven
     # against synthetic inputs rather than left unexercised until the first
     # excuse is written.
     gone, _ = _stale({"no_such_script.py": "an excuse for a script that is gone"})

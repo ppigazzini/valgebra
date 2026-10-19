@@ -1,14 +1,14 @@
 """An enumeration is the union of its members only when it *is* that union.
 
 Reading a class as `Literal[*cls]` is sound only if every instance of the class
-is one of the values `list(cls)` yields. Three enumeration kinds break that, and
-two of them were read as the union anyway:
+is one of the values `list(cls)` yields. Three enumeration kinds break that,
+and two of them are easy to read as the union anyway:
 
-* a `Flag` builds instances with `|` that the class never listed, so
-  `Validator(P).is_subtype_of(Literal[P.A, P.B])` was `True` with `P.A | P.B`
-  standing against it;
+* a `Flag` builds instances with `|` that the class never listed, so read as its
+  members, `Validator(P).is_subtype_of(Literal[P.A, P.B])` is `True` with
+  `P.A | P.B` standing against it;
 * an `Enum` with no members can still be subclassed -- that is how an enum base
-  class is written -- so reading it as the empty union made it a subtype of
+  class is written -- so reading it as the empty union makes it a subtype of
   `nothing`, with a subclass's member standing against that.
 
 Each row below pairs the relation with the value that refutes it, so a kind that

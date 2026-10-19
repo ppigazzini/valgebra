@@ -5,8 +5,8 @@ quiet one: a form read as a *different* schema rather than refused. A refusal a
 caller sees is a message they act on; a schema that admits more than the
 annotation names is a validator that passes what it was written to stop.
 
-Each row below is a form whose reading was not its meaning, with the value that
-shows it, and beside it the form it must keep reading as it did.
+Each row below is a form whose reading can part from its meaning, with the
+value that shows it, and beside it the form it must keep reading as it does.
 
 Some rows carry a `ty: ignore`. A form read as something other than what it says
 is often one a checker refuses outright, and the suppression marks that: the
@@ -93,7 +93,7 @@ def test_a_grouped_marker_carries_the_constraints_it_yields() -> None:
 
 
 def test_the_grouped_markers_of_the_vocabulary_are_unmoved() -> None:
-    """`Interval` and `Len` are grouped markers, and read as they did."""
+    """`Interval` and `Len` are grouped markers, and read as the ones they group."""
     interval = Validator(Annotated[int, at.Interval(ge=0, lt=10)])
     assert interval == Validator(Annotated[int, at.Ge(0), at.Lt(10)])
     assert interval.is_valid(0) is True
@@ -172,7 +172,7 @@ def test_a_typing_extensions_form_reads_as_its_typing_spelling() -> None:
 
     On 3.10 that is `Any`, `Never`, `Self`, `LiteralString`, the field
     qualifiers and `Unpack`, and before 3.15 `TypeAliasType`. Read against
-    `typing` alone, `Never` was a literal of the form object, `Any` a class
+    `typing` alone, `Never` would be a literal of the form object, `Any` a class
     nothing is an instance of, `Required[int]` an unsupported form, and an alias
     a literal of itself. Where a release spells the form in `typing` the two are
     one object, and this reads the same.
@@ -235,10 +235,11 @@ assert Validator(extensions.TypeAliasType("Ints", list[int])) == Validator(list[
 def test_a_typing_extensions_form_read_while_the_module_imports_is_not_lost() -> None:
     """A module is in `sys.modules` before its body has run.
 
-    A validator built on another thread while `typing_extensions` imports read
-    the module's forms half-defined, and kept the ones the body had not reached
-    as absent: `ReadOnly[int]` was an unsupported form for the rest of the
-    process. Run in a fresh interpreter, where the module is not yet loaded.
+    A validator built on another thread while `typing_extensions` imports reads
+    the module's forms half-defined, and a reader that kept the ones the body
+    has not reached as absent would make `ReadOnly[int]` an unsupported form for
+    the rest of the process. Run in a fresh interpreter, where the module is not
+    yet loaded.
     """
     pytest.importorskip("typing_extensions")
     subprocess.run(  # noqa: S603 - this interpreter, a fixed script, no shell
@@ -270,8 +271,8 @@ def test_a_bare_typed_dict_or_named_tuple_is_refused(module: str, name: str) -> 
 def test_the_unsupported_form_refusal_names_the_forms_it_reads() -> None:
     """The fallback lists what the dispatch reads, and each of those builds.
 
-    The list left `frozenset` out, which `frozenset[int]` builds, so a reader
-    looking for the spelling that works was told there was none.
+    A list leaving `frozenset` out, which `frozenset[int]` builds, tells a
+    reader looking for the spelling that works that there is none.
     """
     with pytest.raises(
         NotImplementedError, match="the subscripted forms read"
@@ -318,9 +319,9 @@ def test_a_pattern_that_is_not_text_says_what_it_is() -> None:
 def test_a_frozenset_literal_is_refused_as_its_set_sibling_is() -> None:
     """`frozenset({int})` names a container of ints, and is not one.
 
-    A set literal `{int}` is refused with a sentence naming `set[T]`. Its
-    frozen sibling fell past every arm to the constant fallthrough and was
-    interned: `Validator(frozenset({int}))` built `Literal[frozenset({<class
+    A set literal `{int}` is refused with a sentence naming `set[T]`, and so is
+    its frozen sibling. Past every arm, the constant fallthrough would intern
+    it: `Validator(frozenset({int}))` would build `Literal[frozenset({<class
     'int'>}))`, a schema admitting one frozen set of one type object and no
     other value. The annotation names a frozen set of integers, so the reading
     is not a narrower version of what was written -- it is a different set,
@@ -390,8 +391,8 @@ if sys.version_info >= (3, 11):
 
 if FROZENDICT is not None:
     # The dict literal's frozen sibling. A `frozendict` is not a `dict`, so it
-    # misses the dict literal's arm and, without one of its own, was read as a
-    # constant: a schema admitting that one mapping of a type object.
+    # misses the dict literal's arm and, without one of its own, would be read
+    # as a constant: a schema admitting that one mapping of a type object.
     NO_SET += [("a frozen dict literal", FROZENDICT(a=int))]
 
 

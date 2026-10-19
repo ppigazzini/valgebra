@@ -136,8 +136,8 @@ def test_a_typeddict_is_the_record_its_pep_728_spelling_names(
     `typing` takes them from 3.15 and `typing_extensions` on every release, and
     each writes "no `extra_items` given" with a sentinel of its own: two objects
     before 3.15. Read against `typing`'s alone, `typing_extensions`' open default
-    was a record admitting exactly its sentinel, and `extra_items=None`, which
-    says the extra values are `None`, was read as no marker at all.
+    would be a record admitting exactly its sentinel, and `extra_items=None`,
+    which says the extra values are `None`, no marker at all.
     """
     module = pytest.importorskip(implementation)
     if not hasattr(module, "NoExtraItems"):
@@ -522,9 +522,9 @@ def test_a_bare_container_class_is_its_kind() -> None:
     """`list` and `list[object]` admit the same values, so they are one schema.
 
     An unparameterised generic names its kind's whole set — what the typing spec
-    assigns it, and what the membership check always performed. Read as an
-    `isinstance` atom it was a different sort of thing from the sequence node
-    beside it, and neither spelling was decided below the other.
+    assigns it, and what the membership check performs. Read as an `isinstance`
+    atom it would be a different sort of thing from the sequence node beside
+    it, and neither spelling decided below the other.
     """
     for bare, parameterised in (
         (list, list[object]),
@@ -608,7 +608,7 @@ def test_a_refutation_about_a_class_needs_a_value_of_the_kind_it_is_read_on() ->
     classes, and a builtin kind is one more class.
 
     So the relation is undecided rather than refuted. A `"not_subset"` is a
-    statement about a value, and this one had no value to stand on.
+    statement about a value, and this one has no value to stand on.
     """
 
     class Plain:
@@ -897,12 +897,11 @@ def test_a_dataclass_is_read_against_the_kind_a_reference_names() -> None:
 def test_a_complement_names_its_witness_from_the_kinds_it_still_holds() -> None:
     """A complement of a kind holds a value of every other kind.
 
-    The class reading asked one question, of the subject's own kind, and a
-    complement has none of its own -- so the complement of a builtin against a
-    class was left to the descriptor. It has better than a kind: it has every
-    kind but one, and any of them the class's order refutes names the witness.
-    A value built as `str` is not an instance of a class `str` does not derive
-    from, and it is not an integer either.
+    A class reading that asks one question, of the subject's own kind, has
+    nothing to ask of a complement, which has no kind of its own. It has better
+    than a kind: it has every kind but one, and any of them the class's order
+    refutes names the witness. A value built as `str` is not an instance of a
+    class `str` does not derive from, and it is not an integer either.
 
     `bool` is the kind that cannot be named that way. Every boolean is an
     integer, so the complement of the integers holds no booleans -- the one

@@ -77,7 +77,7 @@ _HOLE = re.compile(r"\{[^{}]*\}")
 #: as much as to one read out of a table, because a short one holds a sentence
 #: by accident either way: `match="set"` is satisfied by any refusal with the
 #: word in it, and the planted defect -- a message reworded to "this class does
-#: not name a set" -- went on reading as held while it was counted.
+#: not name a set" -- reads as held under it.
 #:
 #: Eight leaves every phrase the suite writes and drops every bare word it
 #: writes: `MultipleOf` and `contractive` are kept, `set` and `tuple` are not.
@@ -153,8 +153,8 @@ def _is_repository_check(tree: ast.Module) -> bool:
     """Whether a module marks itself a repository check, read off its code.
 
     Read from the assignment rather than searched for as text: this file spells
-    the marker in its own filter, so a text search excluded it whether or not
-    it carried the marker, and the check below could not fail on it.
+    the marker in its own filter, so a text search would exclude it whether or
+    not it carries the marker, and the check below could not fail on it.
     """
     return any(
         isinstance(node, ast.Assign)
@@ -187,8 +187,8 @@ def _match_arguments(tree: ast.Module) -> tuple[set[str], bool]:
     The second half is what lets a table be read. A test that provokes one
     refusal passes the sentence where it stands; a table of rows passes a
     *variable*, and the sentences sit in the table. Reading only the first
-    found nothing in the file written for this ledger -- thirteen rows, every
-    one of them a `match=`, none spelled beside the keyword.
+    finds nothing in such a table: every row is a `match=`, and none is spelled
+    beside the keyword.
     """
     spelled: set[str] = set()
     by_name = False
@@ -275,9 +275,7 @@ def _too_broad(patterns: set[str]) -> set[str]:
     A pattern this wide says nothing about the site it is counted against, so
     it is evidence for none of them: `match="."` satisfies `pytest.raises` for
     any message at all, and a row carrying one reads here as evidence for every
-    refusal in the tree. That row was in this file's own first draft, on a case
-    that only needed the exception to be raised, and the plant is what found
-    it.
+    refusal in the tree.
 
     Half is the line because two sites do share a sentence -- a `...` out of
     place is the same mistake whether the list ends in one or not -- and a rule

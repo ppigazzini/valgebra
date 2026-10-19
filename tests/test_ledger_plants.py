@@ -2,12 +2,11 @@
 
 A ledger is an enumerated list held to the tree in both directions, and the
 count is kept on the testing page rather than here. Their worth rests entirely
-on failing when the tree stops matching the list -- and one of them could
-not. `tests/test_local_gate.py` filtered its steps with ``not runnable(name)
-and name not in NEEDS_A_RUNNER``, which is ``X and not X``: the list it built
-was empty for every possible workflow, so the assertion passed on a tree that
-had already broken the claim. The comment above it said the clause was true by
-construction, and the `assert` stayed.
+on failing when the tree stops matching the list, and a ledger can be unable
+to. A filter of ``not runnable(name) and name not in NEEDS_A_RUNNER`` is ``X
+and not X``: the list it builds is empty for every possible workflow, so the
+assertion passes on a tree that has already broken the claim, under a comment
+calling the clause true by construction.
 
 Reading a ledger cannot tell you whether it can fail. Running it against a tree
 that breaks its claim can, so that is what this does: plant a defect a ledger
@@ -1146,7 +1145,7 @@ PLANTS = (
         trips=("test_a_check_reading_the_interpreter_runs_on_every_leg",),
     ),
     Plant(
-        # The same ledger, the other direction it grew: a job the gate cannot
+        # The same ledger, its other direction: a job the gate cannot
         # reach carries its reason by *name*, and a rename leaves the reason
         # naming nothing while the real job drops out of the count.
         "tests/test_local_gate.py",
@@ -1525,7 +1524,7 @@ PLANTS = (
     Plant(
         # The failure the ledger is for: an entry added to the published
         # boundary and driven by nothing. The page is what a caller reads to
-        # learn what the relations decide, and it was maintained by hand
+        # learn what the relations decide, and it is written by hand
         # against a procedure that moves -- so a promise it makes and the tree
         # breaks, or a decline it states and the tree decides, reads the same
         # as a page nobody has checked.
@@ -2297,7 +2296,7 @@ PLANTS = (
         trips=("test_no_stand_in_repeats_a_step_the_gate_runs",),
     ),
     Plant(
-        # The floor environment pointed at the caller's, the reverted experiment.
+        # The floor environment pointed at the caller's, which it overwrites.
         "tests/test_local_gate.py",
         ("scripts/gate.py",),
         lambda tree: _edit(

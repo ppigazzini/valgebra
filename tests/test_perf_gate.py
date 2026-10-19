@@ -106,11 +106,10 @@ def test_a_step_the_file_has_outlived_is_refused() -> None:
     """A record that outlives what it records is worse than no record.
 
     A step describes one transition -- from a base, by at most a ceiling -- and
-    is worth keeping while the shape's budget is somewhere inside it. The
-    `binding-build` record below is the one this rule was written for: its shape
-    was re-recorded at less than half the base it steps from, for a reason that
-    had nothing to do with the step, and the record sat in the file reading as
-    an argument somebody still stood behind.
+    is worth keeping while the shape's budget is somewhere inside it. A shape
+    re-recorded at less than half the base its step leaves from, for a reason
+    that has nothing to do with the step, leaves the record in the file reading
+    as an argument somebody still stands behind.
     """
     budget = json.loads((ROOT / "scripts" / "perf_budget.json").read_text("utf-8"))
     assert not gate.stale_steps(budget), (
@@ -956,8 +955,8 @@ def test_the_merge_base_is_never_the_commit_being_measured(
 
     `github.event.before` is unreachable after a force-push, so the step falls
     back to the default branch -- and on a force-push *to* the default branch
-    that is the very commit under test. The gate then compared a build with
-    itself, reported 0.00%, and passed whatever the change did.
+    that is the very commit under test. The gate then compares a build with
+    itself, reports 0.00%, and passes whatever the change does.
 
     Driven through the step's own shell, read out of the workflow, so the test
     cannot agree with a copy that has drifted.

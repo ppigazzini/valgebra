@@ -151,7 +151,7 @@ def test_opening_is_not_a_function_of_the_set() -> None:
 
 # THEORY: open-and-close-read-the-region
 def test_one_term_closes_one_way_whichever_reading_wrote_it() -> None:
-    """The pair the core's own rows name, and the one `close` used to part.
+    """The pair the core's own rows name, which `close` must not part.
 
     `{"a?": Any, ...}` and `dict[Any, Any]` admit every dict, by different
     routes, and they are one term: a keyed map with no field and a catch-all

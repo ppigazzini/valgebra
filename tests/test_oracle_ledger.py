@@ -2,15 +2,14 @@
 
 `LeafRelations` is the whole of what `valgebra-core` cannot decide alone, so the
 page that documents the decision has to list it. A list maintained by hand drifts
-the moment a question is added: two of the trait's ten reached the tree with the
-readings that rest on them and never reached the page, and the page went on
-saying there were five.
+the moment a question is added: the question reaches the tree with the readings
+that rest on it and not the page, and the page goes on giving the old count.
 
 The sweep is the other half. A mutation of an oracle default is excusable only
 where no test can tell the default's `None` from the mutant's answer, and that
 argument rests on the call sites: a question that grows a reader of the other
-answer turns an excused mutant into a decided one, which `leaf_subtype` did
-with a refutation and `no_int_between` with a value. So the argument is not
+answer turns an excused mutant into a decided one, as a refutation does for
+`leaf_subtype` and a value for `no_int_between`. So the argument is not
 made at all. Every default declines, `the_default_oracle_declines_every_question`
 asserts it of each, and a default that answers fails there whatever reads it.
 

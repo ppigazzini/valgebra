@@ -175,9 +175,9 @@ def test_the_detector_finds_a_memo_and_reads_the_sentence() -> None:
 def test_a_memo_without_a_revert_condition_fails_placement() -> None:
     """A table over goals in the coinductive procedure says how it reverts.
 
-    Vacuous today, and that is the point: the sentence is owed by whatever memo
-    is ever built, and a vacuous guard is what makes the debt outlive the reader
-    who measured it away.
+    Vacuous while no memo is built, and that is the point: the sentence is owed
+    by whatever memo is ever built, and a vacuous guard is what makes the debt
+    outlive the reader who measured it away.
     """
     undischarged: list[str] = []
     for path in PROCEDURE:

@@ -1,10 +1,10 @@
 """The comparison gate's drift ratchet, driven in every direction it can answer.
 
 A ceiling is a claim the project makes and a shape can sit far under one for a
-long time. The JSON document measured 0.87 against a ceiling of 1.00 while a
-commit message published 0.78 for it, and nothing was red until somebody re-ran
-the gate for an unrelated reason -- a number wrong on `main` for as long as it
-took to notice by accident.
+long time. A shape reading 0.87 against a ceiling of 1.00 is green while a commit
+message publishes 0.78 for it, and stays green until somebody re-runs the gate
+for an unrelated reason -- a number wrong on `main` for as long as it takes to
+notice by accident.
 
 So the file carries a recorded ratio beside the ceiling, and this drives the
 verdict that reads it. The gate's own timing is not involved: `drifted` takes
@@ -57,8 +57,8 @@ def test_a_shape_that_holds_its_ratio_does_not_drift() -> None:
 
 def test_a_shape_that_loses_more_than_its_spread_drifts() -> None:
     here = GATE.environment()
-    # 0.87 against a recorded 0.78 and a spread of 0.05: the move that went
-    # unseen under a ceiling of 1.00, which is why this file exists.
+    # 0.87 against a recorded 0.78 and a spread of 0.05: a move a ceiling of
+    # 1.00 does not see, which is why this file exists.
     moved, unarmed = GATE.drifted(
         {"scalar": 0.230, "json_document": 0.870}, _block(here)
     )

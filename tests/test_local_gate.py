@@ -16,9 +16,9 @@ clone shaped like the runner's. This holds the two halves of that claim:
 * nothing in that list has outlived its step, so the excuses cannot accumulate.
 
 The first of those is asked of the *plan*, not of `runnable`. Asked of
-`runnable` it was `name in NEEDS_A_RUNNER and name not in NEEDS_A_RUNNER` -- a
-contradiction, so the list it built was empty for every workflow and the
-assertion could not fail. The defect it now catches is planted below.
+`runnable` it reads `name in NEEDS_A_RUNNER and name not in NEEDS_A_RUNNER` -- a
+contradiction, so the list it builds is empty for every workflow and the
+assertion cannot fail. The defect it catches is planted below.
 
 And the property the whole thing exists for: the tree it runs in is a shallow
 clone with no tags.
@@ -98,12 +98,12 @@ def test_every_merge_gate_step_is_planned_or_excused_by_name() -> None:
 def test_a_step_only_a_runner_can_fill_in_is_unaccounted() -> None:
     """The defect the assertion above exists to catch, planted on a spec.
 
-    `${{ github.sha }}` is the runner's to answer and `gate.py` cannot. Before
-    this, `resolved` searched for `env.` expressions alone, so such a step came
-    back "resolved" with its braces intact, was planned, and would have been
-    handed to bash verbatim -- while the ledger passed, because its filter was a
-    contradiction. Planting it on a synthetic workflow keeps the case in the
-    suite without a step in `ci.yml` that exists only to be caught.
+    `${{ github.sha }}` is the runner's to answer and `gate.py` cannot. A
+    `resolved` searching for `env.` expressions alone would hand such a step
+    back "resolved" with its braces intact, plan it, and pass it to bash
+    verbatim -- while a ledger whose filter is a contradiction passes. Planting
+    it on a synthetic workflow keeps the case in the suite without a step in
+    `ci.yml` that exists only to be caught.
     """
     planted = "A step only a runner can fill in"
     spec = {
@@ -162,10 +162,6 @@ def test_no_stand_in_repeats_a_step_the_gate_runs() -> None:
     lane arrives that runs the very command the stand-in was written to
     substitute for. The gate then pays for it twice, and the second failure
     names a substitute rather than the step a reader would go looking for.
-
-    That is what happened when the binding's corpora gained a lane of their
-    own: they had been reachable here only through the coverage rebuild's
-    stand-in, and afterwards through both.
     """
     spec = gate.workflow()
     plan, _ = gate.build_plan(spec, gate.required_jobs(spec))
@@ -213,7 +209,7 @@ def test_every_network_row_stands_for_a_step_the_gate_runs() -> None:
 def test_a_network_step_runs_its_offline_form() -> None:
     """The plan carries the offline command, not the workflow's online one.
 
-    The substitution is the whole of the fix: the runner keeps the online form,
+    The substitution is the whole of the rule: the runner keeps the online form,
     because catching a newly published advisory is its job, and this gate reads
     the database the fetch already landed.
     """
@@ -352,7 +348,7 @@ def test_every_excuse_carries_a_reason() -> None:
 
 
 def test_the_python_suite_is_one_of_the_steps_it_runs() -> None:
-    # The step that would have caught the failure this gate exists for: the
+    # The step that catches the failure this gate exists for: the
     # whole Python suite, run in a clone with no tags.
     runnable = {name for _, name in _merge_gate_steps() if gate.runnable(name)}
     assert "pytest" in runnable
@@ -408,20 +404,20 @@ def test_a_forced_colour_variable_does_not_reach_a_step(
 ) -> None:
     """A step sees the environment a runner has, not the caller's terminal.
 
-    The plant: `FORCE_COLOR` set in the caller's shell reached `uv export`,
-    which wrote ANSI escapes into the requirements file it generates, and
-    `pip-audit` refused the file. The gate reported a failed step for a
-    property of the terminal it was run from.
+    The plant: `FORCE_COLOR` set in the caller's shell. Reaching `uv export`, it
+    writes ANSI escapes into the requirements file the step generates, and
+    `pip-audit` refuses the file: a failed step for a property of the terminal
+    the gate is run from.
 
-    The second plant: `VIRTUAL_ENV`, which `uv run` sets for the gate itself,
-    reached a clone step's `uv pip install`, which installed the wheel into the
-    caller's venv, and the step after it ran under `uv run` in the clone's venv
-    and could not import what was installed. The gate reported the profile
-    comparison failed for a property of how it was launched.
+    The second plant: `VIRTUAL_ENV`, which `uv run` sets for the gate itself.
+    Reaching a clone step's `uv pip install`, it installs the wheel into the
+    caller's venv, and the step after it runs under `uv run` in the clone's venv
+    and cannot import what was installed: a failed profile comparison for a
+    property of how the gate is launched.
 
     The third: that venv's `bin` on `PATH`, where `uv run --no-sync pytest` in a
-    clone with no environment of its own found the caller's pytest, and the
-    gate reported green on the caller's tree.
+    clone with no environment of its own finds the caller's pytest, and the
+    gate reports green on the caller's tree.
     """
     monkeypatch.setenv("FORCE_COLOR", "3")
     monkeypatch.setenv("CLICOLOR_FORCE", "1")
@@ -617,11 +613,10 @@ def test_the_floor_interpreter_runs_the_product_suite() -> None:
 def test_the_floor_build_does_not_write_the_callers_environment() -> None:
     """The floor is built beside the caller's, never into it.
 
-    This is the reverted experiment, in the one place it would be tempting
-    again: lending the caller's `.venv` to a step in the clone uninstalled the
-    extension and the bench group from the tree the developer was working in.
-    A second interpreter needs a second environment by definition, so the only
-    way to get that failure back is to point this one at the first.
+    Lending the caller's `.venv` to a step in the clone uninstalls the
+    extension and the bench group from the tree the developer is working in. A
+    second interpreter needs a second environment by definition, so the only
+    way to get that failure is to point this one at the first.
     """
     environment = gate.floor_environment()
     venv = Path(environment["UV_PROJECT_ENVIRONMENT"])
@@ -646,15 +641,15 @@ def test_the_floor_build_does_not_write_the_callers_environment() -> None:
     reason="the gate's steps run on ubuntu-26.04; Git-Bash is a different shell",
 )
 def test_the_floor_build_runs_a_second_time(tmp_path: Path) -> None:
-    """A gate run is repeatable, and the floor step is the one that was not.
+    """A gate run is repeatable, the floor step included.
 
     The floor interpreter is built into a directory under `target/`, and the
     page says it is "a `uv venv` and a second build the first time, and cached
     after". Cached after is the claim; refusing to touch an existing
-    environment is what `uv venv` does by default, so every run after the first
-    failed at that step -- and it failed with an exit code and a hint, which a
-    reader takes for a broken toolchain rather than for a directory that is
-    already there.
+    environment is what `uv venv` does by default, so without the flag every
+    run after the first fails at that step -- with an exit code and a hint,
+    which a reader takes for a broken toolchain rather than for a directory
+    that is already there.
 
     Driven rather than read off the command: the flag's name is uv's, the
     behaviour is what the step needs, and a test asserting the spelling would
@@ -693,9 +688,9 @@ def test_the_instruction_gate_runs_here_or_says_why() -> None:
     The lane wants cachegrind, a profiled wheel, a second interpreter and a
     system package installed with `sudo`, so the gate excuses it by name. The
     *comparison* wants none of those: two builds of one workload, measured in
-    one job. Excusing it with the rest is how a change that read sound and
-    cost seventy-one times the instructions passed this script with every
-    step green.
+    one job. Excused with the rest, a change that reads sound and costs
+    seventy-one times the instructions would pass this script with every step
+    green.
 
     So the step runs, or it names the one thing it lacks. Both are answers;
     silence is not.

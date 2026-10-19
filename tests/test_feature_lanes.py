@@ -6,11 +6,11 @@ makes of a live annotation and what the walk makes of a live value -- and
 `cargo test --workspace` does not pass it, so those tables run only where some
 lane names the feature.
 
-For one push the only lane that did was `binding coverage`. A corpus row went
-stale under a change to the check it describes, and the lane that reddened was
-the one whose job is to *measure*: its failure reads as a coverage problem, the
-row's own suite stayed green on three operating systems, and a `cargo test
---workspace` on a developer's machine agreed. A test that fails is worth what
+Where the only lane naming it is `binding coverage`, a corpus row gone stale
+under a change to the check it describes reddens the one lane whose job is to
+*measure*: its failure reads as a coverage problem, the row's own suite stays
+green on three operating systems, and a `cargo test --workspace` on a
+developer's machine agrees. A test that fails is worth what
 its failure says, and "the measurement broke" is not what a stale corpus means.
 
 So the rule, held in both directions:

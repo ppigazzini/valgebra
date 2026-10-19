@@ -203,7 +203,7 @@ def test_opening_a_record_that_claims_a_region_leaves_one_clause() -> None:
     `TypedDict` builds named fields beside `str: anything` for the keys it does
     not name, so opening it frees the key-types that clause leaves over. Those
     two clauses carry one value between them and cover every key, which is one
-    clause -- the catch-all a record opened has always had.
+    clause -- the catch-all an opened record has.
 
     Writing it as two would cost the pair rather than the answer: a clause keyed
     by a complement is a shape the set representation declines, so the same set

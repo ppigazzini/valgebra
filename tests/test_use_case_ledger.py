@@ -311,8 +311,8 @@ def test_a_cell_is_covered_by_code_rather_than_by_prose() -> None:
 def test_a_call_with_no_assertion_is_named_and_not_asserted() -> None:
     """The narrower reading is a detector, so it is shown to reject something.
 
-    Named and asserted are equal over the tree today, which is the result the
-    page reports -- and a narrowing that accepted everything would report the
+    Named and asserted being equal over the tree is the result the page
+    reports -- and a narrowing that accepted everything would report the
     same number while measuring nothing. So the two readings are put to three
     modules: one that calls a name and reads nothing, one that asserts about
     it, and one that drives it to raise. The wider reading finds the cell in
@@ -361,9 +361,9 @@ _CODES = "every error code a report can carry"
 def test_the_page_carries_the_figure_each_product_has() -> None:
     """The page states each product's size, and the tree is what it states.
 
-    "Seventy-odd cells" was the page's word for two products added together,
-    and it was wrong in both directions at once: it hid which of the two was
-    growing, and it aged without ever failing, because an approximation cannot
+    An approximate word for two products added together -- "seventy-odd
+    cells" -- is wrong in both directions at once: it hides which of the two is
+    growing, and it ages without ever failing, because an approximation cannot
     be out by one. The lane prints the two figures apart and the page carries
     them, so the reader who wants to know how large the public surface is does
     not have to run anything -- and the day a name is added, the page is what

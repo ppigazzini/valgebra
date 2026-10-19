@@ -115,10 +115,9 @@ def test_every_property_file_runs_under_the_nightly_profile() -> None:
     The ``ci`` profile is derandomised: its draw is a function of the test's
     source, so every push asks the same examples until the test is edited. Only
     the nightly lane draws at random, and only in the files its deep suite
-    names. Seven files with twelve properties were left off that list -- the
-    four that hold the walk to pydantic-core and jsonschema among them -- so the
-    tree's one independent oracle answered the same 2,000 questions on every
-    push and none at night.
+    names. A file left off that list draws the same examples on every push and
+    none at night, so where it holds the walk to pydantic-core or jsonschema,
+    the tree's one independent oracle is asked the same questions every time.
     """
     drawn = {
         path.relative_to(ROOT).as_posix()

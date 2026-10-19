@@ -245,7 +245,7 @@ def _relative(path: Path) -> str:
     written with `/` on the page, and `str(Path)` gives a backslash on Windows,
     so two readers spelling a path differently agree on no file there while
     agreeing on every file here. One helper rather than a convention, because a
-    convention is what the two readers already had.
+    convention is what two readers drift from.
     """
     return path.relative_to(ROOT).as_posix()
 
@@ -608,12 +608,10 @@ def test_every_marked_test_is_one_its_claim_names() -> None:
     """A test that says which claim it holds is a test that claim names.
 
     The marker above is the page reaching the test. This is the test reaching
-    the page, and it is the direction that was missing: a test written for a
-    claim, carrying the claim's own id, and left off the holding line reads --
-    from the page, which is where a reader looks -- as evidence nobody has.
-    Sixteen tests were in that state at once, the seven strongest among them
-    written the week the claims they hold were tightened, so the page pointed
-    at the weaker tests beside them while the ledger stayed green.
+    the page: a test written for a claim, carrying the claim's own id, and left
+    off the holding line reads -- from the page, which is where a reader looks
+    -- as evidence nobody has, and the page points at the weaker tests beside
+    it while the ledger stays green.
 
     A marker naming a claim the page does not carry fails here too, which is
     the same line gone stale from the other end.
@@ -816,9 +814,8 @@ def test_every_deviation_the_argument_tables_is_restated_here() -> None:
 
     A deviation is the kind of claim that goes stale quietly: it is not a rule
     the code enforces, it is a place the code *departs* from its source, so
-    nothing fails when one is closed and nothing fails when one is added. The
-    table and this page were kept in step by hand, and the two differed by four
-    rows when that was last read.
+    nothing fails when one is closed and nothing fails when one is added. Kept
+    in step with this page by hand, the table drifts from it.
 
     So each live row names the tagged paragraph restating it. A row with no id
     fails, an id naming no tag fails, and a row whose id resolves to a tag of

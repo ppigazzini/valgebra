@@ -4,7 +4,7 @@
 is one cell of four. A report has two modes -- stop at the first violation, or
 aggregate them -- and two entry paths -- a Python value, or a JSON document
 parsed on the way in -- and a caller reading `errors` in aggregate mode over a
-document is running a combination the suite had not.
+document is running a combination that one cell does not hold.
 
 So each row below names a code and is driven through all of them:
 
@@ -14,10 +14,10 @@ So each row below names a code and is driven through all of them:
   the way down to it rather than the root;
 * **the JSON path**, for every code a parsed document can carry -- and a written
   reason for every code it cannot, beside the code a document gets instead, so
-  the reason is falsifiable. It had to be: `validate_json` parses and then runs
+  the reason is falsifiable. It has to be: `validate_json` parses and then runs
   the *object* walk, so most codes a first reading calls unreachable are
-  reached. Four of this table's reasons were wrong when it was written, and the
-  column that names the other code is what said so.
+  reached, and the column that names the other code is what shows a reason
+  wrong.
 
 The codes are derived from the tree by `tests/test_use_case_ledger.py`, which
 holds this file's tables to that list in both directions: a code added to the
@@ -681,8 +681,8 @@ def test_ensure_refuses_by_raising_rather_than_by_answering() -> None:
 def test_load_stops_at_the_first_failure_when_asked_to() -> None:
     """`load` parses and validates, and takes the same `fail_fast` as the rest.
 
-    It is the one entry point whose keyword was never passed in a test, so
-    nothing said whether the parse path honours it or quietly aggregates.
+    Without this row no test passes it the keyword, and nothing says whether the
+    parse path honours it or quietly aggregates.
     """
     schema = Validator({"a": int, "b": int})
     document = '{"a": "x", "b": "y"}'
@@ -703,8 +703,8 @@ def test_load_stops_at_the_first_failure_when_asked_to() -> None:
 def test_a_document_given_as_bytes_refuses_the_same_way_as_text() -> None:
     """A document is read from either spelling, and refuses alike.
 
-    The bytes form was exercised only on success, so nothing said the failure
-    path carries the same code -- and that path decodes before it walks.
+    Exercised only on success, the bytes form would leave the failure path's code
+    unheld -- and that path decodes before it walks.
     """
     schema = Validator({"a": int})
     good, bad = b'{"a": 1}', b'{"a": "x"}'

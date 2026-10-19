@@ -63,10 +63,10 @@ def _run(  # noqa: PLR0913 - a fixture per file the gate reads, named at each ca
 def test_an_accepted_note_naming_no_survivor_fails(tmp_path: Path) -> None:
     """An excuse must not outlive the thing it excuses.
 
-    The accepted set carries a hand-written argument per survivor, and nothing
-    read those arguments: a note whose mutant a test started killing, or one
-    spelled the way no survivor line spells it, sat in the file and the gate
-    passed. Both were true of this tree at once.
+    The accepted set carries a hand-written argument per survivor, and unless
+    something reads those arguments, a note whose mutant a test starts killing,
+    or one spelled the way no survivor line spells it, sits in the file and the
+    gate passes.
     """
     survivor = "crates/x/src/a.rs: replace + with - in f"
     result = _run(
@@ -301,10 +301,10 @@ def _tracked_tree(work: Path, files: list[str]) -> None:
 def test_an_accepted_survivor_for_a_moved_file_fails(tmp_path: Path) -> None:
     """A baseline keyed by path goes stale when the path moves, and says so here.
 
-    Eight entries moved with the frontend's surfaces and nothing said so until
-    the sweep read every one of that file's survivors as new -- nine minutes
-    into a shard, with the mutants listed and no hint that what changed was the
-    path. A path is cheaper to check than a sweep and is checked before one.
+    Entries that move with their file say nothing until the sweep reads every
+    one of that file's survivors as new -- minutes into a shard, with the
+    mutants listed and no hint that what changed is the path. A path is
+    cheaper to check than a sweep and is checked before one.
     """
     _tracked_tree(tmp_path, ["crates/x/src/b.rs"])
     result = _run(

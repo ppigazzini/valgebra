@@ -32,10 +32,10 @@ def test_open_leaves_a_missing_required_key_failing() -> None:
 
 
 def test_open_record_renders_as_the_record_that_rebuilds_it() -> None:
-    # The catch-all renders as the entry it is. `{'name': str, ...}` read better
-    # and rebuilt a *different* schema: `...` is a dict key like any other, so
-    # the frontend read it back as `Literal[Ellipsis]` and the record came out
-    # closed with an odd field.
+    # The catch-all renders as the entry it is. `{'name': str, ...}` would read
+    # better and rebuild a *different* schema: `...` is a dict key like any
+    # other, so the frontend reads it back as `Literal[Ellipsis]` and the record
+    # comes out closed with an odd field.
     opened = Validator({"name": str}).open()
     assert repr(opened) == "{'name': str, anything: anything}"
     assert Validator({"name": str, anything: anything}) == opened

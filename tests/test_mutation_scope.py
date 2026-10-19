@@ -128,7 +128,7 @@ def _every_mutant() -> list[str]:
 def _binding_sources() -> set[str]:
     """Read the binding's source files: what a sweep could mutate, tests aside.
 
-    A test module is not a subject. The long ones live in sibling files now --
+    A test module is not a subject. The long ones live in sibling files --
     declared `#[cfg(test)] mod tests;` in the file they test -- and mutating one
     says nothing about the product: it makes the harness wrong, not the code
     untested.

@@ -2,9 +2,9 @@
 
 `.pre-commit-config.yaml` runs clippy on every commit that touches Rust, so a
 lint the lane would refuse is caught before a push. That holds only while the
-hook and the lane run one command. The plain clippy hook dropped `--locked`,
-which the lane passes: without it cargo rewrites a lock that does not match the
-manifests where the lane refuses it, so the hook and the lane read two locks.
+hook and the lane run one command. A clippy hook without `--locked`, which the
+lane passes, lets cargo rewrite a lock that does not match the manifests where
+the lane refuses it, so the hook and the lane read two locks.
 
 So every clippy hook's command is one a lint step runs, flag for flag.
 """

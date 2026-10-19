@@ -127,15 +127,16 @@ def test_is_valid_agrees_with_validate(spec: object, value: object) -> None:
 
 
 def test_two_wide_literal_sets_are_decided_as_sets_not_pair_by_pair() -> None:
-    """A member-by-member walk is quadratic in the oracle, and it showed.
+    """A member-by-member walk is quadratic in the oracle.
 
-    The core decides a union against a union by asking each member about each
-    member, so two 20,000-member literal unions were 400 million calls into the
-    bindings: six seconds for a question about two sets of integers, on a shape
-    a contract really writes -- an enumeration of codes is one.
+    A union decided against a union by asking each member about each member
+    makes two 20,000-member literal unions 400 million calls into the bindings:
+    six seconds for a question about two sets of integers, on a shape a
+    contract really writes -- an enumeration of codes is one.
 
-    Timed against size rather than against a constant, because the defect was
-    the *growth*: quadratic passes any bound generous enough for the small case.
+    Timed against size rather than against a constant, because the cost refused
+    is the *growth*: quadratic passes any bound generous enough for the small
+    case.
     """
 
     def disjointness(count: int) -> float:

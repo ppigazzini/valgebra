@@ -345,9 +345,9 @@ def test_a_refused_annotation_says_which_refusal_it_is(
 def test_an_arity_refusal_names_the_annotation_that_was_written() -> None:
     """The message quotes the spelling, so a reader can find it in their source.
 
-    `single_arg` served list, set and frozenset and said only "expected exactly
-    one type argument": a count, with no mention of whose or of what to write.
-    A caller with one long annotation had nothing to search for.
+    A message saying only "expected exactly one type argument" for list, set
+    and frozenset alike is a count, with no mention of whose or of what to
+    write, and leaves a caller with one long annotation nothing to search for.
     """
     for annotation, spelling in [
         (list[int, str], "list[int, str]"),  # ty: ignore[invalid-type-arguments]

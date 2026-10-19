@@ -164,10 +164,11 @@ def test_no_base_at_all_cannot_run(tmp_path: Path) -> None:
 def test_every_step_that_reads_the_event_base_names_it_through_the_script() -> None:
     """One reading of the base, so the gates cannot disagree about a push.
 
-    The bench step guarded against measuring `HEAD` from itself and the sweeps
-    did not, which is how an amended commit swept nothing on the lane that
-    reads it most carefully. A step carrying `BASE_SHA` works the base out by
-    calling the script, not by a shell of its own.
+    Steps working the base out each for itself can disagree -- one guarding
+    against measuring `HEAD` from itself and another not -- and an amended
+    commit then sweeps nothing on the lane that reads it most carefully. A step
+    carrying `BASE_SHA` works the base out by calling the script, not by a shell
+    of its own.
     """
     spec = read_workflow()
     readers = [

@@ -2,10 +2,10 @@
 
 Seven files of the binding are reached only through the shipped extension.
 `cargo mutants` runs `cargo test`, which never loads it, so every mutant of
-those files survives while saying nothing about the tests -- and they were
-excluded by name with the reason "pytest covers this". That reason was a
-sentence, and nothing measured it: a file could lose its Python coverage
-entirely and the exclusion would read the same.
+those files survives while saying nothing about the tests. Excluded by name
+with the reason "pytest covers this", a file could lose its Python coverage
+entirely and the exclusion would read the same: the reason is a sentence, and
+nothing measures it.
 
 A second configuration measures it. `.cargo/mutants-pytest.toml` examines
 exactly those files with a test command that builds the extension from the
@@ -167,7 +167,7 @@ def test_the_workers_of_a_sweep_do_not_share_one_environment() -> None:
     every path outside those copies, so an environment named by the variable and
     used as named is one both workers rebuild the extension into -- at the same
     moment, which fails with `File exists` and ends the sweep with no verdict a
-    third of the way through. It did, twice.
+    third of the way through.
 
     So the wrapper derives an environment from the checkout it is running in,
     whose directory name a sweep makes unique per worker. Checked by shape

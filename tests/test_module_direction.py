@@ -12,16 +12,12 @@ predicate or a hooked class.
 A dependency graph matching that order has the definition below the
 procedure, importing nothing from it: the definition is what the procedure
 hands a pair it declines, and built from a rule it would carry that rule's
-defect into the answer given where the rule declined. The tree ran it both ways: every
-`descr/` module wrote `use crate::decision::{Kind, Verdict}` for the partition
-it is indexed by and the answer it returns, while `decision.rs` imported
-`descr::lower` for the fallback it asks when its rules decline.
+defect into the answer given where the rule declined.
 
-What travelled the wrong way was never a rule. `Kind` is the partition a
-descriptor's components are an array over, `Region` the summary derived from
-it, and `Verdict` and `Relation` the two three-valued answers both deciders
-give. Each belongs to the frame the pair shares, and none to the half that
-happened to define it.
+What both halves name is not a rule. `Kind` is the partition a descriptor's
+components are an array over, `Region` the summary derived from it, and
+`Verdict` and `Relation` the two three-valued answers both deciders give. Each
+belongs to the frame the pair shares, and none to either half.
 
 So the frame sits in `kind.rs`, `verdict.rs` and `oracle.rs`, below both, and
 this holds the direction. The reverse edge stays allowed -- an optimisation may
@@ -96,8 +92,8 @@ def test_the_term_imports_nothing_from_the_optimisation() -> None:
     """The constructors apply lattice laws, not decisions.
 
     A law about the term is a law wherever it is read, so it sits below every
-    reader. The edge this refuses is the one that was there: `ir.rs` naming
-    `crate::decision` to fold `A | ~A` at construction.
+    reader. The edge this refuses is `ir.rs` naming `crate::decision` to fold
+    `A | ~A` at construction.
     """
     for name in ("ir.rs", "ir/transform.rs", "ir/intern.rs"):
         source = CORE / name
@@ -118,8 +114,8 @@ def test_the_term_imports_nothing_from_the_optimisation() -> None:
 
 
 def test_the_frame_is_where_the_definition_can_reach_it() -> None:
-    # The other direction of the same claim: the modules the descriptor was
-    # emptied into exist and hold what it needs. Without this the test above
+    # The other direction of the same claim: the frame modules the descriptor
+    # reads exist and hold what it needs. Without this the test above
     # passes by the frame having been deleted.
     kind = (CORE / "kind.rs").read_text(encoding="utf-8")
     verdict = (CORE / "verdict.rs").read_text(encoding="utf-8")

@@ -1,16 +1,15 @@
 """The node set is minimal, and this is where that stops being a slogan.
 
-`AGENTS.md` says valgebra is "the smallest set of schema nodes whose Boolean
-closure is consistent and complete for its domain", and nothing checked it. Five
-of the twenty variants denote sets the others already reach -- `Bool` is
-`Literal[True] | Literal[False]`, `Anything` is `complement(C) | C` for any
-class -- so read literally the claim was false, and read charitably it was a
-claim nobody had written down.
+Read as "the smallest set of schema nodes whose Boolean closure is consistent
+and complete for its domain", minimality is false: several variants denote sets
+the others already reach -- `Bool` is `Literal[True] | Literal[False]`,
+`Anything` is `complement(C) | C` for any class.
 
-So the definition is restated and held: the node set is a **generating set plus
-named representatives**. A generator denotes a set no combination of the others
-reaches, and admitting one is the argument `docs/dev/01-schema-ir.md` describes.
-A representative denotes a set the generators do reach, and earns its place by
+So the definition is the one `AGENTS.md` states, and it is held here: the node
+set is a **generating set plus named representatives**. A generator denotes a
+set no combination of the others reaches, and admitting one is the argument
+`docs/dev/01-schema-ir.md` describes. A representative denotes a set the
+generators do reach, and earns its place by
 being the form the normal form names -- `A & ~A` has to fold to *something*, and
 `Nothing` is what it folds to. What is not allowed is a third kind: a variant
 that is neither irreducible nor the canonical form of something.

@@ -22,9 +22,8 @@ A **release tag** is the same claim by another name, and the one a rewrite
 costs most. `v0.0.11` says a release was cut at a commit, the changelog roll is
 measured from it, and a rebase below it leaves the tag pointing at a commit no
 branch reaches -- so the tag still resolves, `git show` still prints it, and
-nothing in a diff of the tree is different. It happened here: two tags were
-orphaned by an amend two hundred commits down, and what noticed was a ledger
-failing on the *changelog*, three steps away from the cause.
+nothing in a diff of the tree is different. The first thing to fail is a
+ledger reading the *changelog*, three steps away from the cause.
 
 LEDGER: every commit a tracked file cites is an ancestor of this branch
 """

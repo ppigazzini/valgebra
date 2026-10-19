@@ -4,8 +4,7 @@ A bound on *growth* is a bound on the algorithm, and the tree says so in two
 places: the performance page, and the core's own step-count instrument, whose
 doc records that a wall-clock assertion "measures the machine as much as the
 algorithm -- it passes on a quiet laptop and fails on a loaded runner for
-reasons that have nothing to do with the code". One of the three below did
-exactly that during a session that had a compiler running beside it.
+reasons that have nothing to do with the code".
 
 Each survives for a reason, and the reason is that no counter in this tree
 measures what it measures: two count work the decision's own step counter does

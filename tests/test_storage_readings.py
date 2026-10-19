@@ -217,9 +217,9 @@ def test_a_subclass_that_overrides_neither_slot_is_read_where_it_lies() -> None:
 def test_the_two_length_readings_agree_on_one_value() -> None:
     """A length bound and the shape beside it count the same items.
 
-    A schema carrying both is where believing the override showed first: the
-    bound read the lie and the element walk read the storage, so one value
-    satisfied each constraint in a different sense.
+    A schema carrying both is where believing the override shows first: a bound
+    reading the lie beside an element walk reading the storage would let one
+    value satisfy each constraint in a different sense.
     """
     schema = Annotated[set[int], at.MinLen(3)]
     value = LyingLen({1})

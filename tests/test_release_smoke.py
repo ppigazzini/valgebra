@@ -2,11 +2,11 @@
 
 `release.yml` builds wheels in one matrix and smokes them in another, joined by
 an artifact name each side spells for itself. A build row whose artifact no
-smoke row downloads ships a wheel nothing ran; that is how the PyPy wheels
-shipped for two releases as profile-guided builds that died at the walk's depth
-bound while the push lane stayed green on a plain wheel it built itself. A
-smoke row naming an artifact no build row uploads fails the release instead,
-late and for the wrong reason.
+smoke row downloads ships a wheel nothing ran, and a defect of that wheel alone
+-- a profile-guided build dying at the walk's depth bound -- ships while the
+push lane stays green on a plain wheel it builds itself. A smoke row naming an
+artifact no build row uploads fails the release instead, late and for the wrong
+reason.
 
 Held here, both ways: every build row has a smoke row for its artifact, and
 every smoke row names an artifact a build row uploads -- the musllinux sets in
@@ -17,9 +17,8 @@ holds each profile-guided wheel's deepest walk to a 1 MiB thread. A set whose
 build row names no interpreter, the musllinux image building every one it
 carries, is read off its artifact by the smoke itself, which fails on a wheel no
 container loaded unless `UNLOADABLE` names its tag. Each wheel is a build of
-its own, profiled on its own interpreter, and 0.0.15 shipped 36 of its 62
-without loading any of them -- every cp311, cp312, cp313 and GIL cp314 wheel,
-and every musllinux one. A smoke is the product suite rather than an import, for the
+its own, profiled on its own interpreter, so a wheel no smoke row loads is a
+wheel nothing ran. A smoke is the product suite rather than an import, for the
 wheels and for the build from source, and the import it starts with fails on a
 warning. And the PyPy wheel is built in a row of its own, without the profile:
 the rows that carry the profile name their interpreters, and none of them names
@@ -163,10 +162,10 @@ def _steps(job: str) -> list[dict[str, str]]:
 
 @pytest.mark.parametrize("job", ["smoke", "smoke-musl", "sdist-smoke"])
 def test_every_smoke_runs_the_product_suite(job: str) -> None:
-    """An import is not a smoke: the crash that shipped showed only in the suite.
+    """An import is not a smoke: a crash at the depth bound shows only in the suite.
 
-    A profiled PyPy build died at the walk's depth bound, which no import
-    reaches. Every row of the job runs the suite, so the step carries no
+    A profiled build dying at the walk's depth bound passes an import, which
+    reaches no depth. Every row of the job runs the suite, so the step carries no
     condition a row could leave unset.
     """
     runs = [
@@ -240,9 +239,9 @@ def _artifact_step(job: str) -> dict:
 def test_a_set_its_image_chooses_is_read_off_its_artifact() -> None:
     """Every smoke of a set whose build names no interpreter checks the artifact.
 
-    The image builds every interpreter it carries, so the set is whatever that
-    was on the day: 0.0.18 shipped four musllinux wheels no container loaded,
-    and an image that gains a release ships its wheel the same way. The step
+    The image builds every interpreter it carries, so the set is whatever the
+    image carries on the day, and an image that gains a release ships a wheel
+    no container loads unless the smoke reads the set off the artifact. The step
     names the tags it accepts unloaded, and they are the ones `UNLOADABLE`
     gives reasons for.
     """

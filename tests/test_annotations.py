@@ -91,9 +91,9 @@ def test_a_qualifier_survives_a_string_annotation() -> None:
     CPython computes `__required_keys__` when the class is created, from the
     annotations *as written*. Under PEP 563 those are strings, so
     `"NotRequired[list[str]]"` is opaque to it and every key lands in
-    `__required_keys__` -- which the builder read. Every optional key in every
-    module using the future import was therefore compiled required, and correct
-    data failed with `missing_key`.
+    `__required_keys__` -- so a builder reading it compiles every optional key
+    in every module using the future import required, and correct data fails
+    with `missing_key`.
 
     `get_type_hints` resolves the string and keeps the qualifier, so the
     resolved hint is what says whether the key must be present. The assertions
@@ -127,10 +127,10 @@ def test_a_required_qualifier_survives_it_too() -> None:
 def test_a_qualifier_inside_annotated_survives_it_too() -> None:
     """`Annotated[NotRequired[T], m]`: the search reads through the metadata.
 
-    `Annotated`'s origin is the type it annotates, so a search that asked only
-    for a qualifier stopped there and answered nothing, and the key was read
-    from `__required_keys__` -- which CPython fills from strings and gets wrong
-    in both directions.
+    `Annotated`'s origin is the type it annotates, so a search that asks only
+    for a qualifier stops there and answers nothing, leaving the key to
+    `__required_keys__` -- which CPython fills from strings and gets wrong in
+    both directions.
     """
     schema = Validator(_deferred.DeferredAnnotated)
     assert repr(schema) == (
@@ -199,19 +199,20 @@ BARE_ALIASES = [
 def test_a_bare_legacy_alias_is_the_class_it_aliases(
     name: str, alias: object, origin: type
 ) -> None:
-    """`typing.Tuple` is `tuple`, and used to be the *empty* tuple.
+    """`typing.Tuple` is `tuple`, never the *empty* tuple.
 
     A bare legacy alias and a parametrization carry the same thing: no type
-    arguments. `typing.Tuple` was therefore read as `tuple[()]` -- a schema
-    admitting `()` and nothing else -- and `typing.List` was refused for wanting
-    exactly one argument. Silently narrowing to the empty tuple is the worse of
-    the two, and both are wrong: the typing spec says a bare alias is its origin.
+    arguments. Read as a parametrization, `typing.Tuple` is `tuple[()]` -- a
+    schema admitting `()` and nothing else -- and `typing.List` is refused for
+    wanting exactly one argument. Silently narrowing to the empty tuple is the
+    worse of the two, and both are wrong: the typing spec says a bare alias is
+    its origin.
     """
     assert Validator(alias) == Validator(origin)
 
 
 def test_the_empty_tuple_is_still_the_empty_tuple() -> None:
-    """What the bare alias was mistaken for must keep meaning what it means."""
+    """The empty tuple, which a bare alias is not, keeps meaning what it means."""
     empty = Validator(tuple[()])
     assert empty.is_valid(())
     assert not empty.is_valid((1,))
@@ -247,10 +248,10 @@ def test_a_container_is_not_a_literal_argument(name: str, argument: object) -> N
 
     The typing spec's `Literal` takes `None`, an enum member, or an `int`,
     `bool`, `str` or `bytes` value. A container is none of those, and
-    `Literal[[1]]` builds at runtime -- so the argument reached the constant
-    fallthrough, where a list is this library's own *native list schema*.
-    `Literal[[1]]` was `list[Literal[1]]` and `Literal[{}]` the empty record:
-    sets a caller writing `Literal` did not ask for, with no message saying so.
+    `Literal[[1]]` builds at runtime -- and at the constant fallthrough, a list
+    is this library's own *native list schema*. Read there, `Literal[[1]]` is
+    `list[Literal[1]]` and `Literal[{}]` the empty record: sets a caller writing
+    `Literal` did not ask for, with no message saying so.
     """
     with pytest.raises(NotImplementedError) as info:
         Validator(Literal[argument])  # ty: ignore[invalid-type-form]
@@ -275,9 +276,9 @@ def test_the_literal_arguments_the_spec_allows_still_build() -> None:
 def test_a_bare_forward_reference_is_refused_like_one_in_an_argument() -> None:
     """`ForwardRef('int')` names a type; it is not one.
 
-    In a type-argument position this was already refused. At the top level it
-    reached the constant fallthrough and became `Literal[ForwardRef('int')]` --
-    a schema matching only that `ForwardRef` object, which no caller has.
+    It is refused at the top level as in a type-argument position. Read by the
+    constant fallthrough, it is `Literal[ForwardRef('int')]` -- a schema
+    matching only that `ForwardRef` object, which no caller has.
     """
     with pytest.raises(NotImplementedError) as info:
         Validator(ForwardRef("int"))

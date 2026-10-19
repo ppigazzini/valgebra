@@ -200,7 +200,7 @@ def test_known_relations() -> None:
 
 
 def test_complement_reflexivity_and_contravariance() -> None:
-    # Regression: a complement or refinement must be a subtype of itself. This
+    # A complement or refinement must be a subtype of itself. This
     # needs both the contravariant complement rule and the identity-interning
     # pool merge (so a shared constant keeps one index across the comparison).
     assert complement(Literal[0]).is_subtype_of(complement(Literal[0]))
@@ -238,7 +238,7 @@ def test_recursive_subtyping_is_coinductive() -> None:
 
 
 def test_recursion_composed_with_literals_and_instances() -> None:
-    # Regression: the coinductive subtyping must compose with the leaf oracle
+    # The coinductive subtyping must compose with the leaf oracle
     # (literal-by-membership, instance-by-subclass) inside a recursive type.
     a = recursive(lambda t: union(Literal["leaf"], {"value": int, "next": t}))
     b = recursive(lambda t: union(Literal["leaf"], {"value": int, "next": t}))

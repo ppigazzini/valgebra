@@ -1,12 +1,12 @@
 """A commit message names nothing a reader outside this tree can't open.
 
-The maintainer's working area is gitignored, so the notes and plans kept there --
-the audit write-ups, the iteration files, the milestone ladder -- reach nobody
-who clones this repository. A tracked page naming one is caught by the docs
-lint. A *commit message* naming one was caught by nothing, and the history is
-the part of this project that travels furthest: it is read on a forge, in a
-bisect, and in a release note, by people who have none of those files and no way
-to get them.
+The maintainer's working area is gitignored, so the notes and plans kept there
+-- the audit write-ups, the iteration files, the milestone ladder -- reach
+nobody who clones this repository. A tracked page naming one is caught by the
+docs lint, which never reads a *commit message* -- and the history is the part
+of this project that travels furthest: it is read on a forge, in a bisect, and
+in a release note, by people who have none of those files and no way to get
+them.
 
 The failure is not that the reference is private. It is that the sentence stops
 being an argument. "This was planned as a fix" says what happened; naming a note

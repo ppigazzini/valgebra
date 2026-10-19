@@ -163,7 +163,7 @@ def test_the_test_module_detector_distinguishes_the_two_shapes() -> None:
     """Both test-only shapes read as test-only, and a site above them does not.
 
     Driven on text rather than on a file of the tree: the nested shape has no
-    instance today -- the feature-only sites sit in sibling test files, which
+    instance in the tree -- the feature-only sites sit in sibling test files, which
     `_test_module_files` reads -- so a file named here would be read as holding
     no site, and pass on a detector that had stopped reading the shape at all.
     """

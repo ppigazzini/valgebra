@@ -5,9 +5,8 @@ someone already thought of. The ledger in ``tests/test_completeness_ledger.py``
 enumerates relations a human wrote down; the property suites assert soundness,
 which inspects a ``True`` and has nothing to say about a ``False``; a mutation
 sweep changes code that exists and cannot report a rule never written. So a
-missing rule was invisible to all of them at once, which is how the lattice
-bounds stayed keyed on the ``Nothing``/``Anything`` atoms rather than on
-emptiness while every gate stayed green.
+missing rule is invisible to all of them at once: lattice bounds keyed on the
+``Nothing``/``Anything`` atoms rather than on emptiness leave every gate green.
 
 This probe is the missing direction. ``is_subtype_of`` is sound, so a ``False``
 means "not proven" -- but when a wide value universe holds no witness at all (no
@@ -19,7 +18,7 @@ read rather than a failure.
 Held in both directions:
 
 * a suspected gap with no ledger entry fails, so an incompleteness cannot arrive
-  unnoticed -- the direction that was missing;
+  unnoticed -- the direction the others miss;
 * a ledger entry the procedure now decides, or that a witness now refutes, fails,
   so an excuse cannot outlive the gap it excuses.
 

@@ -3,13 +3,12 @@
 A wall-clock benchmark says what it timed or it says nothing: `maturin develop`
 without `--release` installs a debug extension that looks exactly like the
 release one from Python, and a run against it reads an order of magnitude slow
--- which is indistinguishable from a regression, and was read as a *win* of 56%
-here on 2026-09-14 when the change was worth five.
+-- which is indistinguishable from a regression, and a comparison with one side
+built that way reads a change worth five percent as a win of fifty.
 
-`scripts/compare_gate.py` has refused a non-release extension since two of its
-own readings were of a binary nobody meant to measure. This directory had no
-such refusal, so the same rule is asked of it, from the same statement of the
-rule rather than a second copy.
+`scripts/compare_gate.py` refuses a non-release extension, and the same rule is
+asked of this directory, from the same statement of the rule rather than a
+second copy.
 
 The check is by *size*: a release extension is a couple of megabytes and one
 carrying its debug symbols is an order of magnitude larger, which separates

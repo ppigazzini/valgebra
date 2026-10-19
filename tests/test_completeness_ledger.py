@@ -408,8 +408,8 @@ _DECIDED = [
         id="mu-t<=its-own-body",
     ),
     # A fixpoint met with a kind its body never admits. The rules read the
-    # shape and a set representation holds no cycle, so this was undecided in
-    # both; unfolding the body once puts the kinds it admits in front of the
+    # shape and a set representation holds no cycle, so neither decides it
+    # alone; unfolding the body once puts the kinds it admits in front of the
     # representation, and a bound stands where the reference was.
     pytest.param("empty", intersection(bytes, _JSON), None, id="empty:bytes&json"),
     pytest.param("empty", intersection(tuple, _JSON), None, id="empty:tuple&json"),
@@ -522,8 +522,8 @@ _DECIDED = [
     # The lattice bounds, decided by EMPTINESS rather than by the shape of the
     # atom. A schema that denotes the empty set without being spelled `nothing`
     # is below everything; one that covers the universe without being spelled
-    # `anything` is above everything. Both were enumerated only for the atoms,
-    # which is a rule confirming itself -- and the region check upstream decides
+    # `anything` is above everything. Enumerated only for the atoms, both would
+    # be a rule confirming itself -- and the region check upstream decides
     # a scalar right-hand side correctly, so these want a container, a record or
     # the gradual atom on the other side to reach the arm at all.
     pytest.param(
@@ -917,9 +917,9 @@ _DECIDED = [
     # Divisibility, which the steps decide between them: every multiple of `a`
     # is a multiple of `b` exactly when `b` divides `a`. The rules read the two
     # steps rather than the values they name, so the answer does not depend on
-    # how many residues a representation materialises -- which is what left the
-    # pair below undecided while `MultipleOf(4)` against `MultipleOf(2)` was
-    # decided, for no reason a caller could see.
+    # how many residues a representation materialises -- a rule reading the
+    # residues would leave the pair below undecided and decide `MultipleOf(4)`
+    # against `MultipleOf(2)`, for no reason a caller could see.
     pytest.param(
         "subtype",
         Annotated[int, at.MultipleOf(5000)],
@@ -955,9 +955,9 @@ _DECIDED = [
     ),
     pytest.param("subtype", int, complement(str), id="complement:int<=~str"),
     # Decided on the *sets* rather than by a rule: each is a fact about values
-    # that no recursion over the schema tree reaches, and each was ledgered as a
-    # miss until the descriptor was asked where the rules decline. A container
-    # meet is the meet of the element sets, a complement is a set again, a word
+    # that no recursion over the schema tree reaches, and each is decided by
+    # asking the descriptor where the rules decline. A container meet is the
+    # meet of the element sets, a complement is a set again, a word
     # set is a language, a dict is a union of atoms with a default per key kind,
     # and a bound is a set of whole numbers -- so container meets, double
     # complements, regular-language inclusion, dict emptiness and the ordering of
@@ -1345,8 +1345,8 @@ def test_widening_a_table_is_decided_at_the_sizes_a_table_reaches(
     # built at run time, so no two are one object. A constant is a value rather
     # than an object, so they pool together anyway, the narrow union's branches
     # are branches of the wide one, and containment settles it without
-    # distributing. Before constants were pooled by value the two largest sizes
-    # spent the decision budget instead.
+    # distributing. Pooled by object rather than by value, the two largest sizes
+    # would spend the decision budget instead.
     assert _codes(members).is_subtype_of(_codes(members, extra=True))
 
 
@@ -1357,8 +1357,8 @@ def test_a_table_is_decided_however_it_was_written(members: int) -> None:
     # table's constants by the order the first met them -- for a table written
     # backwards, its own reverse -- and the union is rebuilt in that order. A
     # table is decided as a set only in canonical order, so the transform that
-    # renumbers a member set leaves it canonical; before it did, these four
-    # read exactly as they read before tables were decided by membership.
+    # renumbers a member set leaves it canonical; left out of order, these four
+    # would fall back to distributing one table against the other.
     forward = _codes(members)
     same_backwards = _codes(members, backwards=True)
     wider_backwards = _codes(members, extra=True, backwards=True)
@@ -1374,10 +1374,9 @@ def test_a_table_missing_a_member_refutes_at_every_size(members: int) -> None:
     # reach: the wider table holds a code the narrow one does not, so a value of
     # one is outside the other and the inclusion is *refuted* rather than left
     # unproven. A union of literals denotes a finite set, and a finite set is
-    # decided by membership in both directions -- before that rule the answer
-    # was "undecided" from a thousand members up, because the procedure
-    # distributed one table against the other and spent its budget on the
-    # product.
+    # decided by membership in both directions -- distributing one table against
+    # the other would spend the budget on the product and answer "undecided"
+    # from a thousand members up.
     narrow = _codes(members)
     wider = _codes(members, extra=True)
     assert wider.relation_to(narrow) == "not_subset"
@@ -1506,8 +1505,8 @@ _RECURSIVE_FAMILY = [
 # Every atom the decided fragment reaches, so the search covers the components
 # that carry it: a bare container names its kind, a builtin subclass narrows one,
 # a pattern is a regular language and a step an integer set. An atom the search
-# never draws is a component the soundness direction is never asked about, which
-# is how the one unsoundness found here reached a release.
+# never draws is a component the soundness direction is never asked about, and
+# an unsoundness there is one that reaches a release.
 _atoms = st.sampled_from(
     [
         int,
@@ -1629,7 +1628,7 @@ def test_a_literal_is_not_always_a_singleton() -> None:
     assert not left.is_subtype_of(right)
     assert not right.is_subtype_of(left)
 
-    # Sound today, and the reason the narrow rule must be gated on the
+    # Sound, and the reason the narrow rule must be gated on the
     # constant's type rather than on the subtype relation.
     assert not intersection(left, right).is_empty()
 

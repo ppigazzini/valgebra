@@ -280,9 +280,9 @@ def test_a_stop_beside_a_refusal_is_refused_in_either_order(
 
     A part the schema refuses refuses the whole, whatever a part beside it
     stopped on, so the complement admits the value. The fast walk stops a
-    conjunction at its first refusal, and the stop counted as one: whichever
-    part came first was the answer, so the two orders answered apart and a
-    dict's answer moved with how it was built.
+    conjunction at its first refusal, and were the stop counted as one,
+    whichever part came first would be the answer: the two orders would answer
+    apart and a dict's answer move with how it was built.
     """
     _, schema, first, second = case
     outside = complement(schema)
@@ -293,12 +293,12 @@ def test_a_stop_beside_a_refusal_is_refused_in_either_order(
 
 
 def test_a_stop_beside_a_branch_that_admits_is_dropped() -> None:
-    """A union a branch admits is admitted, and the stop beside it said nothing.
+    """A union a branch admits is admitted, and the stop beside it says nothing.
 
     `U` stops on `deep` in its first branch and admits it as a list in its
     second, so `~U` refuses it, `list[~U]` refuses `[deep]`, and `~list[~U]`
-    admits `[deep]`. The stop from the first branch stayed in the walk's cell,
-    and the outer complement read it as its own.
+    admits `[deep]`. A stop from the first branch left in the walk's cell would
+    be read by the outer complement as its own.
     """
     deep = _nested(1000)
     lists = recursive(lambda t: union(int, [t]))
@@ -426,8 +426,8 @@ def test_every_outcome_the_constructors_document_is_driven() -> None:
 
     `union`, `intersection`, `complement` and `recursive` are how a schema the
     annotation syntax cannot spell is written, so their refusals are the ones a
-    caller meets first -- and the outcomes ledger had no cell for any of them
-    until the blocks naming them existed. Each row below is one of those cells.
+    caller meets first, and each is a cell of the outcomes ledger. Each row
+    below is one of those cells.
 
     The forms with no set are the schema-language page's own: a set literal and
     a tuple literal, which read like schemas and denote the collection object

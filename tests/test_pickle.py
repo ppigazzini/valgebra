@@ -7,8 +7,8 @@ names nothing cannot be serialized at all -- and a process pool, a task queue or
 a subprocess test runner then reports a pickling error instead of the validation
 result.
 
-Nothing else in this suite exercises serialization, which is how a defect of that
-shape stayed invisible while every other gate passed.
+Nothing else in this suite exercises serialization, so a defect of that shape is
+invisible to every other gate.
 """
 
 from __future__ import annotations

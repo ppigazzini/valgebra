@@ -4,7 +4,8 @@ Arbitrary nested schemas ``a`` and ``b`` and an arbitrary value ``v`` are
 generated, then the decision is held to real membership: ``is_subtype_of`` and
 ``is_equivalent`` never claim a relation membership contradicts, ``is_empty`` never
 accepts a value, and every schema is a subtype of itself. This is deliberately
-adversarial — it found the complement-reflexivity and pool-merge bugs.
+adversarial: a complement that is not a subtype of itself, or a pool merge that
+gives one constant two indices, fails it.
 """
 
 import json

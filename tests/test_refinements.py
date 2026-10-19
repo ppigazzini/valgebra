@@ -163,8 +163,8 @@ _UserId = typing.NewType("_UserId", int)
 @pytest.mark.parametrize(
     ("annotation", "base", "values"),
     [
-        # Called with a value, each built one and was judged by its truth:
-        # `list("")` refused the empty string, a `NewType` refused zero.
+        # Called with a value, each would build one and be judged by its truth:
+        # `list("")` refusing the empty string, a `NewType` refusing zero.
         (Annotated[str, list[int]], str, ["", "ab"]),
         (Annotated[str, typing.List[int]], str, ["", "ab"]),  # noqa: UP006
         (Annotated[int, _UserId], int, [0, 5]),
@@ -721,8 +721,8 @@ def test_two_refinements_of_different_kinds_are_refuted_without_the_sets() -> No
 
     The constraint rule only ever *proves* -- one refinement is below another
     when its base is and it carries every constraint the wider one asks for --
-    so it left a pair it could not prove to the descriptor, which answered by
-    building both sets. Disjointness is the one refutation that survives
+    so alone it leaves a pair it cannot prove to the descriptor, which answers
+    by building both sets. Disjointness is the one refutation that survives
     narrowing on both sides: a subset of the lists shares no value with a
     subset of the integers, so the kinds settle it and neither constraint
     matters.

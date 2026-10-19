@@ -2,27 +2,27 @@
 
 A ceiling in `scripts/perf_compare.json`, a band in `scripts/perf_budget.json`
 and a mutation sweep are each claims about an interpreter as much as about the
-code: a ratio is a property of the pair running, a budget's band was widened to
-cover the distance between two releases, and a mutant on a version-gated branch
+code: a ratio is a property of the pair running, a budget's band is as wide as
+the distance between two releases, and a mutant on a version-gated branch
 is killable on one interpreter and unviable on the next.
 
 The wrapper action's `python-version` defaults to the empty string, documented
 as "left empty, uv picks one itself", and what uv picks is whatever the runner
-image ships. So those claims rested on an image's default, and the day the
-image moves they would all change meaning at once with every lane green.
+image ships. So a lane naming none rests those claims on an image's default,
+and the day the image moves they all change meaning at once with every lane
+green.
 
 Held over both workflows: a `setup-uv` use with no version fails, and the
 version each lane names is the one its own comment argues for.
 
 The second half is the implementations. The packaging metadata states CPython
-and PyPy, which is a promise that a schema means the same thing on both -- and
-for eight months only CPython ran the suite. PyPy's C API answers differently
-as well as exporting differently: `PyTuple_Size` goes through the object's own
-`__len__` there, and a `tuple` subclass that overrode it walked past the end of
-its storage and killed the process. The import check the lane had could not see
-that, because an import is not an answer. So a stated implementation has a lane
-that runs the suite, and a lane that runs the suite on an implementation is one
-the metadata states.
+and PyPy, which is a promise that a schema means the same thing on both. PyPy's
+C API answers differently as well as exporting differently: `PyTuple_Size` goes
+through the object's own `__len__` there, so a `tuple` subclass overriding it
+can walk a reader past the end of its storage and kill the process, which an
+import check cannot see, because an import is not an answer. So a stated
+implementation has a lane that runs the suite, and a lane that runs the suite on
+an implementation is one the metadata states.
 
 The third is the build caches. A cache a job saves, restored by the job's next
 run or by another job sharing its key, links the interpreter it was built

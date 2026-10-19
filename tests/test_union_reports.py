@@ -6,11 +6,10 @@ it reports one summary naming the branches. And that summary names each branch
 "as each would name itself alone", which is the sentence the rows here hold.
 
 The summary is the part to distrust, because it stands in for whatever it could
-not read. Two branch kinds had no name of their own in it and fell back to the
-node's bare kind, and a branch whose failure sat at the union's own depth was
-counted as no progress -- so a walk that ran out of levels, or found a value
-inside itself, was reported as "this union matched nothing" with the reason
-dropped.
+not read. A branch kind with no name of its own falls back to the node's bare
+kind, and a branch whose failure sits at the union's own depth, counted as no
+progress, would report a walk that ran out of levels, or found a value inside
+itself, as "this union matched nothing" with the reason dropped.
 """
 
 from __future__ import annotations
@@ -52,7 +51,7 @@ def _nested(levels: int) -> object:
 
 # PROMISE: Unions report the closest branch
 def test_a_branch_names_itself_as_it_would_alone() -> None:
-    """The page's own words, for the two branch kinds that had no name."""
+    """The page's own words, for a complement branch."""
     # A complement alone says what it excludes.
     alone = _errors(complement(str), "zz")
     assert alone[0]["expected"] == "not str"
@@ -154,11 +153,11 @@ def test_the_closest_branch_is_reported_where_one_descends() -> None:
 def test_the_record_branch_that_admitted_the_most_is_reported() -> None:
     """Of the record branches, the one whose deciding walk got furthest.
 
-    Each refused record branch was explained and the one whose first failure
-    lay deepest was kept, the earliest on a tie -- so a value tagged for the
-    second branch, refused at its own field, was reported against the first
-    branch's tag. One record branch is explained, the one whose deciding walk
-    admitted the most fields, and the tag is read first.
+    Keeping the explained branch whose first failure lies deepest, the earliest
+    on a tie, would report a value tagged for the second branch, refused at its
+    own field, against the first branch's tag. One record branch is explained,
+    the one whose deciding walk admitted the most fields, and the tag is read
+    first.
     """
     branches = union(
         {"t": Literal["x"], "z": int},

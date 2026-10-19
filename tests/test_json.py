@@ -365,8 +365,8 @@ def test_a_json_entry_refuses_a_value_that_is_not_a_document() -> None:
     The three entries take a *document*, so a caller handing one an `int` has
     made a type error and not written an invalid document -- and reading it as
     the second would report a `ValidationError` about a document nobody wrote.
-    The distinction is the docstrings' own, and it was held for `validate_json`
-    and for neither of the others.
+    The distinction is the docstrings' own, and it is held for all three, not
+    for `validate_json` alone.
     """
     validator = Validator(int)
     with pytest.raises(TypeError, match="str or bytes"):

@@ -6,12 +6,10 @@ some lane runs an interpreter on that side of the line. A gate at a release no
 lane reaches is code that runs nowhere and passes; a gate below the floor is a
 guard always taken, which reads as caution and asserts nothing.
 
-Both halves were untested until the binding's corpora gained a lane. The four
-rows that named `typing.Required` and the star inside a subscript had never run
-on the floor, because the only lane passing `interpreter-tests` measured
-coverage on one interpreter -- so the release those rows *needed* was a fact
-about the tree that nothing read. Writing the release onto each row fixed the
-rows and left the same hole one level up: nothing said the release was one the
+A corpus row gated on a release -- one naming `typing.Required`, or the star
+inside a subscript -- states a fact about the tree that nothing reads unless a
+lane runs the row on both sides of that release. Writing the release onto each
+row leaves the same hole one level up: nothing says the release is one the
 matrix installs.
 
 Two spellings, one rule:

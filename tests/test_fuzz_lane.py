@@ -9,9 +9,9 @@ builder's eight megabytes, the product's edge count -- and the thing worth
 reddening a lane.
 
 Leaving both unnamed gives the second the value of the first, so the only check
-that ran was the one that cannot name a defect: the soak crossed the unnamed
-2,048 MB default partway through its own budget and reported an out-of-memory
-against whichever input was in flight, which replayed in 25 ms.
+that runs is the one that cannot name a defect: the soak crosses the unnamed
+2,048 MB default partway through its own budget and reports an out-of-memory
+against whichever input is in flight, an input that replays clean.
 
 Held in both directions: the step must carry a fork mode, so the process ceiling
 bounds a batch rather than the whole run, and it must name the allocation
@@ -62,9 +62,9 @@ SOAK = "Fuzz the decision procedures"
 #: the process ceiling, so it fires on a runaway allocation and on nothing else.
 ALLOCATION_CEILING_MB = 64
 
-#: The most one batch's process may hold, in megabytes: about three times the
-#: 1,317 the first child peaked at in the five nights to 2026-10-05, since an
-#: out-of-memory now fails the lane and the sanitizer's own growth must not.
+#: The most one batch's process may hold, in megabytes: about three times a
+#: child's peak in the nightly soak, since an out-of-memory fails the lane and
+#: the sanitizer's own growth must not.
 PROCESS_CEILING_MB = 4096
 
 

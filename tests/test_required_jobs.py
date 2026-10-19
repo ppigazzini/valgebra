@@ -785,7 +785,7 @@ def test_every_supported_interpreter_runs_on_every_event() -> None:
 
     The release ships a wheel built per version against a version-specific ABI,
     so each interpreter is a separate artifact a caller installs. A lane that
-    runs only at night is a wheel nothing exercised until somebody reported it,
+    runs only at night is a wheel nothing exercises until somebody reports it,
     and a lane that runs on no event at all is one `requires-python` promises
     and nothing checks.
 

@@ -47,7 +47,7 @@ def _expected(spec: object, value: object) -> str:
         (union(Literal["only"], int), 1.5, ["'only'", "int"]),
         # An Enum branch names the class, as it does when it fails alone.
         (union(_Backend, Literal["cpu"]), "arcfase", ["_Backend", "'cpu'"]),
-        # Mixed scalars already worked; kept so the change is shown not to regress.
+        # Mixed scalars, each branch named by its kind.
         (int | str, 1.5, ["int", "str"]),
     ],
 )

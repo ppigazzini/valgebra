@@ -16,9 +16,9 @@ and the difference between the two schemas comes out empty -- a proof against a
 string a caller can write in one line.
 
 The rows below pair each relation with the value that decides it, and the rows
-beside them are the ones the change must not move: a pattern inside another
+beside them are the ones the surrogate must not move: a pattern inside another
 pattern, a literal inside its own language, and the `bytes` kind, whose universe
-is every byte string and always was.
+is every byte string.
 """
 
 from __future__ import annotations

@@ -6,15 +6,16 @@ equivalent on one CPython and killable on another, because the objects the code
 compares are not the same objects across releases.
 
 Such an argument is a claim about the lane's own environment, and a lane can be
-repinned. One was: the walk sweep moved from 3.14 to 3.12, where `typing.Union`
-and `types.UnionType` are two objects rather than one, and a note reading
-"equivalent on the interpreter this sweep runs" went on saying so for two days.
-The sweep killed the mutant, the ratchet reported the entry stale, and the
-nightly was red for a sentence.
+repinned. `typing.Union` and `types.UnionType` are one object on 3.14 and two on
+3.12, so a note reading "equivalent on the interpreter this sweep runs" goes on
+saying so after the walk sweep moves from one to the other: the sweep kills the
+mutant, the ratchet reports the entry stale, and the nightly is red for a
+sentence.
 
-Nothing held it. `tests/test_mutation_scope.py` holds every note to a mutant
-that exists, and `tests/test_lane_interpreters.py` holds every lane to naming
-its interpreter; neither reads what the notes say *about* that interpreter.
+The neighbouring ledgers do not hold it. `tests/test_mutation_scope.py` holds
+every note to a mutant that exists, and `tests/test_lane_interpreters.py` holds
+every lane to naming its interpreter; neither reads what the notes say *about*
+that interpreter.
 
 So this does. A note that argues from the sweep's own interpreter has to name
 the version the sweep pins -- it may discuss any other release it likes, and
@@ -144,7 +145,7 @@ def test_a_sweep_starts_its_embedded_interpreter_from_the_venv() -> None:
     configures the build. With the venv named by `PYO3_PYTHON` alone, uv's build
     of 3.12 starts on its bare prefix, imports no `typing_extensions`, the
     corpus installs its stand-in, and all four mutants are caught: the nightly
-    read four entries stale, and the notes stayed correct the whole time.
+    reads four entries stale while the notes are correct.
 
     So every sweep that embeds its interpreter puts the venv first on `PATH`
     before it runs, as the tooling page's recipe does.

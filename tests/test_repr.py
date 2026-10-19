@@ -127,8 +127,8 @@ ROUNDTRIP_SCHEMAS = [
     union(int, str),
     intersection(int, complement(bool)),
     complement(int),
-    # The three forms 21.4 fixed: each rendered as something that was not an
-    # expression, or was one that built a different schema.
+    # Three forms easy to render wrong: as something that is not an expression,
+    # or as one that builds a different schema.
     tuple[()],
     recursive(lambda t: int | list[t]),  # ty: ignore[invalid-type-form]
     Validator({"name": str}).open(),
@@ -153,8 +153,8 @@ ROUNDTRIP_SCHEMAS = [
     union([int, str], int),
     union(Validator({"a": int}).open(), None),
     # A record's name is spelled as Python spells it: printed between quotes
-    # as it stood, a name carrying a quote closed the string and read back as
-    # two fields.
+    # as it stands, a name carrying a quote would close the string and read
+    # back as two fields.
     {"a': str, 'zz": int},
     {'say "hi"': int, "b\n?": str},
 ]
@@ -396,10 +396,10 @@ def test_a_pattern_prints_as_python_spells_it() -> None:
 
     A pattern is a string, and a rendered schema claims to read back. Rust's
     debug spelling is not Python's -- it writes `\u{7}` where Python writes
-    `\x07`, and double quotes where Python's repr picks single -- so a repr
-    carrying a control character was a syntax error to the interpreter it was
-    printed for, and one carrying none still disagreed with the marker beside
-    it about how a string is written.
+    `\x07`, and double quotes where Python's repr picks single -- so a repr in
+    Rust's spelling carrying a control character is a syntax error to the
+    interpreter it is printed for, and one carrying none still disagrees with
+    the marker beside it about how a string is written.
     """
     for pattern in ("[a-z]+", "\x07+", "a'b", "\u00e9+", '"'):
         marker = Regex(pattern)
@@ -636,9 +636,9 @@ def test_one_link_further_truncates_and_says_so(shape: str) -> None:
     Every other render re-parses to the schema it came from. A truncated one
     cannot -- what is past the bound is not in the string -- so the mark has to
     be something no reader, and no `eval`, mistakes for a schema. An ellipsis is
-    valid Python inside a subscript, so `list[...]` parsed, built and handed
-    back a validator that was *not* the one printed: a lossy render with nothing
-    to say it was lossy.
+    valid Python inside a subscript, so a mark of `list[...]` would parse, build
+    and hand back a validator that is *not* the one printed: a lossy render with
+    nothing to say it is lossy.
     """
     rendered = repr(Validator(_chain(shape, _CHAIN_SHAPES[shape][1])))
     assert TRUNCATED in rendered

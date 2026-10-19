@@ -2,10 +2,10 @@
 
 `docs/15-decidability.md` is the page a caller reads to learn what the relations
 decide. It is three lists -- decided exactly, sound but conservative,
-undecidable at runtime -- and until this file nothing read it: the completeness
-ledger enumerates relations without citing a bullet, the relation ledger and the
-completeness probe quote the page in prose inside their reasons, and the page
-itself was maintained by hand against a procedure that moves.
+undecidable at runtime -- and but for this file nothing reads it: the
+completeness ledger enumerates relations without citing a bullet, the relation
+ledger and the completeness probe quote the page in prose inside their reasons,
+and the page itself is written by hand against a procedure that moves.
 
 Both halves of that are failures, and they are different. A bullet on the
 decided list that the procedure stopped deciding is a **published promise the
@@ -13,8 +13,7 @@ tree breaks**. A bullet on the conservative list that the procedure started
 deciding is a page telling a caller to expect less than it gets, which is the
 gentler one and is how the list grows stale until nobody trusts it. A relation
 that is on neither list is the third: neither promised nor declined, so a
-caller has no way to read an `undecided` as kept or broken -- and that is the
-state a record against a union of records sat in.
+caller has no way to read an `undecided` as kept or broken.
 
 So the universe is the **page**, read bullet by bullet, and each bullet carries
 a query this file drives:

@@ -463,13 +463,13 @@ def test_another_librarys_marker_is_ignored(
     """A marker another library writes is that library's, and valgebra reads none.
 
     A constraint is read off ``annotated_types``' markers alone. An attribute
-    name is no protocol: ``Meta(pattern=..., max_length=3)`` was read as a
-    whole-string pattern with its length dropped, where msgspec searches and
-    keeps the length; ``Meta(ge=0)`` was refused for its unset pattern;
-    ``AfterValidator`` was called as a predicate on what it returned; and
-    ``Field(gt=0)`` was ignored all along. Each is ignored now, as pydantic
-    ignores msgspec's and msgspec pydantic's: the validator is its base's, and
-    it admits the value the marker's own library refuses.
+    name is no protocol: read by attribute, ``Meta(pattern=..., max_length=3)``
+    is a whole-string pattern with its length dropped, where msgspec searches
+    and keeps the length; ``Meta(ge=0)`` is refused for its unset pattern; and
+    ``AfterValidator`` is called as a predicate on what it returns. Each is
+    ignored, as pydantic ignores msgspec's and msgspec pydantic's: the
+    validator is its base's, and it admits the value the marker's own library
+    refuses.
     """
     annotated = Annotated[base, marker]  # ty: ignore[invalid-type-form]
     assert Validator(annotated) == Validator(base)

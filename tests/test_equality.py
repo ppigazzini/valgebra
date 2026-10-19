@@ -1,21 +1,21 @@
 """Two spellings of one schema are one schema.
 
-`==` is the question "are these the same schema", and until the constructors
-settled it the answer was "were these built the same way": a record's fields kept
-the order they were written in, a map's clauses theirs, and a literal or a
-refinement marker kept the *pool slot* its constant landed in, which is the order
-the constants were first seen. So `{"a": int, "b": int}` and `{"b": int, "a":
-int}` -- one set, by every other measure the library offers -- compared unequal,
-hashed apart, and stayed two members of a union that folds repeats.
+`==` is the question "are these the same schema", and a term that keeps its
+spelling answers "were these built the same way" instead: a record's fields in
+the order they were written in, a map's clauses in theirs, and a literal or a
+refinement marker in the *pool slot* its constant landed in, which is the order
+the constants were first seen. Read that way, `{"a": int, "b": int}` and `{"b":
+int, "a": int}` -- one set, by every other measure the library offers -- compare
+unequal, hash apart, and stay two members of a union that folds repeats.
 
-Two mechanisms fix it and this holds both. Construction puts a record's fields, a
-map's clauses and a refinement's constraints in a canonical order, so the term
-itself stops carrying the spelling. And `==` reads *through* a pool slot to the
-constant it names, matching a union's members and a refinement's constraints as
-the sets they are -- because a slot is construction order and cannot be sorted
-away. Composing two validators renumbers one side's slots, and every set it
-renumbers is put back in the order construction gives it, so a union of two
-spellings compares the terms it would have built from one.
+Two mechanisms answer the question asked, and this holds both. Construction puts
+a record's fields, a map's clauses and a refinement's constraints in a canonical
+order, so the term itself stops carrying the spelling. And `==` reads *through*
+a pool slot to the constant it names, matching a union's members and a
+refinement's constraints as the sets they are -- because a slot is construction
+order and cannot be sorted away. Composing two validators renumbers one side's
+slots, and every set it renumbers is put back in the order construction gives
+it, so a union of two spellings compares the terms it would have built from one.
 
 What this is not is a decision. `int | ~int` and `anything` denote one set and
 are not equal here; `is_equivalent` is the question for that, and the pair below
@@ -225,8 +225,8 @@ def test_a_composition_folds_what_construction_folds(
     `==` reads through the slots and calls each pair one schema; the fold that
     drops a repeat and the one that cancels a schema against its complement
     compare terms. With the renumbered side left in the order it held, the two
-    readings disagreed: the union kept both members, and `a | ~b` stood
-    unfolded beside an `a` equal to `b`.
+    readings would disagree: the union would keep both members, and `a | ~b`
+    stand unfolded beside an `a` equal to `b`.
     """
     first, second = Validator(left), Validator(right)
     assert first == second, name
@@ -307,9 +307,9 @@ def test_a_validator_is_usable_as_a_dictionary_key() -> None:
     assert registry[Validator({"a": int, "b": str})] == "row again"
 
 
-# Schemas that differ only in a constant. `==` has always told these apart;
-# `__hash__` skipped every pool slot, so all of them shared one bucket and a
-# registry keyed by validators was a linear scan.
+# Schemas that differ only in a constant. `==` tells these apart, and a
+# `__hash__` that skipped every pool slot would put all of them in one bucket
+# and make a registry keyed by validators a linear scan.
 def _integer_literal(i: int) -> Validator:
     return Validator(Literal[i])  # ty: ignore[invalid-type-form]
 

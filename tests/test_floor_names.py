@@ -1,12 +1,12 @@
 """A name a module reads at import time has to exist on the oldest interpreter.
 
-Three CI lanes went red at once on a `from typing import NotRequired` written at
-module scope: the name reaches `typing` in 3.11, the floor is 3.10, and a name
-missing at import time is a *collection* error, so the module took the whole
-file down rather than one test. A fourth lane went red the same day on
-`enum.StrEnum`, which arrives in the same release. Both passed on the machine
-they were written on, because that machine runs the newest interpreter in the
-matrix and the difference only exists on the oldest.
+A `from typing import NotRequired` written at module scope fails every lane on
+the floor: the name reaches `typing` in 3.11, the floor is 3.10, and a name
+missing at import time is a *collection* error, so the module takes the whole
+file down rather than one test. `enum.StrEnum`, which arrives in the same
+release, does the same. Both pass on the machine they are written on, because
+that machine runs the newest interpreter in the matrix and the difference only
+exists on the oldest.
 
 The local gate runs the suite once, on whichever interpreter the caller has, so
 it cannot see this at all: the failure is a property of a Python the caller is
@@ -570,10 +570,10 @@ def test_the_reader_sees_a_name_a_release_takes_away() -> None:
     """The other edge, and the guard that answers it.
 
     `typing.no_type_check_decorator` is in every release from the floor and gone
-    in 3.15, which is how this half was found: a lane on the newest interpreter
-    failed the table rather than the tree. A module that reads such a name
-    unguarded is refused; one that reads it under `< (3, 15)` is not, because
-    that is the release range where it is there.
+    in 3.15: read unguarded, it fails the newest interpreter's lane and no
+    other. A module that reads such a name unguarded is refused; one that reads
+    it under `< (3, 15)` is not, because that is the release range where it is
+    there.
     """
     unguarded = "import typing\n\nDECORATOR = typing.no_type_check_decorator\n"
     reader = Reader("planted.py", deferred=False)

@@ -624,8 +624,8 @@ def test_the_fast_and_explaining_walks_agree_at_the_depth_bound() -> None:
     The fast walk shortcuts a homogeneous list of a scalar kind and the
     explaining walk does not, so the level each element sits at is taken in one
     and skipped in the other unless the shortcut opens it. A fixpoint with four
-    nodes per unfolding puts the innermost list at the walk's ceiling, which is
-    where the two used to part.
+    nodes per unfolding puts the innermost list at the walk's ceiling, the one
+    depth where a level one walk takes and the other skips changes the answer.
     """
     deep = recursive(
         lambda node: union(

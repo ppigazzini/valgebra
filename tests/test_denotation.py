@@ -844,8 +844,8 @@ def test_every_refinement_leaf_matches_its_denotation(
 
     The recursive draw places a leaf under a container or a connective far more
     often than at the root, and a kind drawn only nested is a reading no
-    boundary value is asked about: under the `ci` profile the length of a
-    `set[int]` was never read at all.
+    boundary value is asked about: drawn only nested, the length of a
+    `set[int]` goes unread under the `ci` profile.
     """
     spec, predicate = data.draw(leaf)
     compiled = Validator(spec)

@@ -257,8 +257,8 @@ def relate(a: Validator, b: Validator) -> Relation:
     `relation_to` is the one that tells a refutation from a decline, so its
     return type is what a caller branches on -- and it is the three answers
     rather than `str`, so a checker refuses a branch on a fourth. Bound to a
-    `str` this file read as agreeing while saying something weaker, which is
-    the reading `assert_type` replaced.
+    `str`, this file would read as agreeing while saying something weaker,
+    which is why it asserts the type.
     """
     assert_type(a.relation_to(b), Relation)
     answer = a.relation_to(b)
