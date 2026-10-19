@@ -1,4 +1,15 @@
+use std::borrow::Cow;
+use std::ops::ControlFlow;
 use std::sync::Arc;
+
+use jiter::JsonValue;
+use pyo3::types::{
+    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyModule, PySet, PyString,
+    PyTuple,
+};
+use valgebra_core::{
+    Attribute, Constraint, DefIx, Field, MapClause, Openness, PathSegment, SeqShape,
+};
 
 use super::record::{
     SMALL_OBJECT, Undeclared, keyed_map_matches_json, resolves_through_the_plan, scan_dict,
@@ -8,14 +19,6 @@ use super::*;
 use crate::check::ctx::{MAX_RECURSION_DEPTH, MAX_WALK_DEPTH};
 use crate::check::index::ValidatorIndex;
 use crate::check::{WalkMode, WalkState, build_index};
-use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyModule, PyString, PyTuple};
-use std::borrow::Cow;
-use std::ops::ControlFlow;
-
-use jiter::JsonValue;
-use pyo3::types::{PyFrozenSet, PySet};
-use valgebra_core::SeqShape;
-use valgebra_core::{Attribute, Constraint, DefIx, Field, MapClause, Openness, PathSegment};
 
 /// Decide membership of a Python value against a schema, through the real
 /// walk, in the mode a validator's `is_valid` uses.
