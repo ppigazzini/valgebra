@@ -3,10 +3,10 @@
 `tests/test_floor_names.py` refuses a name a module reaches at import time
 before the release that spells it -- and a standard-library *module* a source
 imports before the release that ships it, which is the same mistake one level
-up. It reads both answers out of `tests/floor_names.json`. That table was
-assembled by hand across six interpreters, which is a thing nobody does twice:
-the release that adds a name is a fact about CPython, and a fact about CPython
-is read rather than remembered.
+up. It reads both answers out of `tests/floor_names.json`. That table spans
+six interpreters, which is not a thing to assemble by hand: the release that
+adds a name is a fact about CPython, and a fact about CPython is read rather
+than remembered.
 
 Every interpreter in the table's own range is asked what it carries, and the
 spans are computed from the answers -- `since` for the first release holding a

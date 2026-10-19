@@ -16,7 +16,7 @@ uncommitted change.
 
 **The counts in ``scripts/perf_budget.json`` are a record, not a gate.** The
 count is deterministic for a build, but not across toolchains or target
-features. Measured, the commit that recorded the core count re-measures 5.35%
+features. Measured, the core count recorded on one machine re-measures 5.35%
 away from it on another machine of the same rustc line, so a band wide enough
 not to flake is too wide to see a real 5% regression. The record is read where
 there is no base count to compare with -- a shape the base does not carry, and
@@ -25,20 +25,19 @@ recorded count inside that band instead. A re-recorded workload the base can
 build is built there from this change's source and compared at 2%.
 ``--update`` writes it.
 
-Three workloads, and thirty-five shapes across them:
+Three workloads, and the shapes each is read in:
 
 * The default **core** workload (`perf_workload`, pure Rust) measures the schema
   operations and is fully deterministic, so its recorded count carries the
   narrower band.
 * The **decision** workloads measure the three relations, which the core one
-  never calls, in seven shapes: relations that hold (`--decision`), relations
-  that are refuted (`--decision-refute`), goals asked again
-  (`--decision-repeat`), the pairs that reach the set representation
-  (`--decision-matrix`), one corpus asked of the rules (`--decision-rules`)
-  and of the sets (`--decision-sets`), whose two counts are what a rule's
-  answer saves over building the sets for it, and length bounds over a list
-  asked of the sets (`--decision-lengths`), which read what a bound costs an
-  element.
+  never calls: relations that hold (`--decision`), relations that are refuted
+  (`--decision-refute`), goals asked again (`--decision-repeat`), the pairs
+  that reach the set representation (`--decision-matrix`), one corpus asked of
+  the rules (`--decision-rules`) and of the sets (`--decision-sets`), whose two
+  counts are what a rule's answer saves over building the sets for it, and
+  length bounds over a list asked of the sets (`--decision-lengths`), which
+  read what a bound costs an element.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
   twenty-seven shapes: the membership walk (`--binding`), the call boundary
@@ -342,8 +341,8 @@ def measure(binary: Path, *args: str, branches: bool = False) -> Measurement:
     is drawn per process**, and the record shapes probe a dict of fifty string
     keys: a different seed lays that dict out differently, collides differently,
     and executes a different number of instructions. Three runs of one binary
-    measured 255,472,587, 255,818,996 and 256,656,284; three with the seed fixed
-    measured 258,773,618 three times.
+    read 255,472,587, 255,818,996 and 256,656,284; three with the seed fixed
+    read 258,773,618 three times.
 
     Half a percent on a raw count is several percent on the *difference* of two
     counts this gate reads, which is the two-percent ceiling it holds changes to.
@@ -433,10 +432,10 @@ def check_against_budget(measured: int, recorded: int, tolerance: float) -> int:
 #:
 #: The four modes after `binding` -- `binding-boundary`, `binding-record`,
 #: `binding-build` and `binding-explain` -- are the deterministic twins of the
-#: comparison gate's wall-clock shapes. The gate compared seven shapes against
-#: another library and budgeted one of them, and the gap is how a shape moves
-#: without anything saying so: schema construction grew twelve percent over one
-#: release cycle, and no instruction count was watching the thing that grew.
+#: comparison gate's wall-clock shapes. A shape that gate times against another
+#: library and nothing counts is how a shape moves without anything saying so:
+#: schema construction can grow over a release cycle with no instruction count
+#: watching the thing that grows.
 #:
 #: Every binding mode is the *difference* of two iteration counts, so the
 #: embedded interpreter's startup cancels; the modes share the pair of counts and
@@ -497,8 +496,8 @@ CORE_READINGS = {
 
 #: The iteration pair each binding mode runs at.
 #: Iterations per shape, high and low, chosen so each measurement is a minute or
-#: so under cachegrind rather than ten. The walk keeps the pair its count was
-#: first recorded with; the shapes that do more work per iteration run fewer of them,
+#: so under cachegrind rather than ten. The walk runs the pair its recorded
+#: count is taken at; the shapes that do more work per iteration run fewer of them,
 #: and the difference still cancels startup because both runs share it.
 BINDING_ITERATIONS = {
     "binding": (150_000, 50_000),
@@ -744,9 +743,7 @@ def stale_steps(budget: dict) -> list[str]:
 
     This is the changelog roll's rule, one file over: a record that outlives
     what it records is worse than no record, because it reads as an argument
-    somebody still stands behind. `binding-build`'s step sat here after its
-    shape was re-recorded at less than half the base it steps from, and nothing
-    said so.
+    somebody still stands behind.
     """
     stale = []
     for step in budget.get("steps", []):
@@ -1335,8 +1332,8 @@ def run_profiled(rev: str) -> int:
 def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     """Read the command line, refusing a flag it does not know.
 
-    A mistyped shape read as no shape measured the core workload instead, and
-    answered for a measurement nobody asked for. `argparse` refuses it with exit
+    A mistyped shape read as no shape would measure the core workload instead,
+    and answer for a measurement nobody asked for. `argparse` refuses it with exit
     2, which is this gate's "could not run".
     """
     parser = arguments(__doc__)

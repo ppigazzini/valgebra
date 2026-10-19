@@ -227,7 +227,7 @@ ignore = [
 # The PyPy link check builds the *legacy* typing spellings on purpose: telling
 # `typing.List` from `list[...]` is what reached for the type object it exists
 # to guard, so the rules that modernise those spellings would rewrite the check
-# into one that compares a form against itself. Which they did, once.
+# into one that compares a form against itself.
 "scripts/pypy_import_check.py" = ["INP001", "T201", "UP006", "UP007", "UP035", "UP045"]
 # The frontend form matrix builds the *legacy* typing spellings on purpose: a
 # bare `typing.List` and a parametrised `typing.Tuple[()]` are two forms this
@@ -315,9 +315,9 @@ strict-equality-semantics = true
 # optional bench dependency group (pydantic, jsonschema), which is absent in the
 # type-check lane.
 # The checker-reading fixtures are the one place a diagnostic is the point:
-# one of them holds ty's reading of a `TypeForm` overload, which is an error
-# today. `tests/test_checker_readings.py` runs ty over them by name, which an
-# exclusion does not stop, and holds what it reports.
+# one of them holds ty's reading of a `TypeForm` overload, which the pinned ty
+# reports as an error. `tests/test_checker_readings.py` runs ty over them by
+# name, which an exclusion does not stop, and holds what it reports.
 exclude = [
     "benches",
     "tests/typing/readings",

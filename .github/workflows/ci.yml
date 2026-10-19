@@ -232,8 +232,8 @@ jobs:
       # The same check over the private items, which are most of the prose:
       # the walk, the decider and the builders are crate-private, and the build
       # above renders none of them, so a link in their docs to an item that
-      # moved was never resolved at all. A second build rather than a flag on
-      # the first, because documenting private items also silences the lint
+      # moved is never resolved there at all. A second build rather than a flag
+      # on the first, because documenting private items also silences the lint
       # that refuses a public doc linking to a private item -- which only the
       # build above sees.
       - name: Build the private-item rustdoc, denying warnings
@@ -267,14 +267,14 @@ jobs:
       #
       # `laws.rs` and `index_laws.rs` are the property suites, compiled into the
       # crate because they reach its private items. They run by construction and
-      # arrive at full coverage, so counting them measured the tests: 2,502 of
-      # the 8,658 lines the figure was computed over were test code. Excluded,
-      # the core reads 98.75% of lines and 97.85% of regions -- measured with
-      # the command below, under nextest, against a cleaned profile in a target
-      # directory of its own, which is the only reading that is the lane's. The
-      # property suites draw, so two runs differ in the third digit; the figure
-      # is the lower of two and the floors clear it by three quarters of a
-      # point, which is the margin a drawn figure needs before a ratchet.
+      # arrive at full coverage, so counting them would measure the tests,
+      # which are a large share of the lines the figure reads. Excluded, the
+      # figure is read with the command below, under nextest, against a cleaned
+      # profile in a target directory of its own, which is the only reading
+      # that is the lane's. The property suites draw, so two runs differ in the third digit;
+      # a floor is set from the lower of two runs and clears it by three
+      # quarters of a point, which is the margin a drawn figure needs before a
+      # ratchet.
       #
       # Both floors sit about a point below the measurement, which is the
       # tolerance a figure carries between machines and no more: five points of
@@ -294,10 +294,10 @@ jobs:
       # per-file floor beside it. A second spelling of it is a second thing to
       # keep in step, and `tests/test_coverage_scope.py` reads this one.
       #
-      # The crate floor is a *total*, and a total absorbs a file: one entered
-      # the core reading 84% of lines against a crate held to 98, moved the
-      # total by a hundredth of a percent, and passed every gate while a scoped
-      # sweep of it reported every mutant surviving. So the same profile is read
+      # The crate floor is a *total*, and a total absorbs a file: one entering
+      # the core at 84% of lines against a crate held to 98 moves the total by
+      # a hundredth of a percent, and passes every gate while a scoped sweep of
+      # it reports every mutant surviving. So the same profile is read
       # per file against a floor far below the crate's, which detects a file
       # nothing drives rather than ratcheting one that could be driven harder.
       - name: Coverage floors, per crate and per file
@@ -349,10 +349,9 @@ jobs:
       #
       # The product suite, without the repository audit. The audit reads the
       # tree, and its plants rerun product ledgers on a broken copy of it, so
-      # it loads the extension; measured with this flow on 2026-10-09, the
-      # binding read 930 of 13,576 regions unreached with the audit and the
-      # same 930 without it, and the audit took 313 seconds to the product
-      # suite's 72.
+      # it loads the extension -- but read with this flow, the binding leaves
+      # the same regions unreached with the audit as without it, and the audit
+      # takes several times the product suite's time.
       - name: Measure binding coverage via the Python suite and Rust unit tests
         run: |
           cargo llvm-cov clean --workspace
@@ -391,12 +390,11 @@ jobs:
           # The four `interpreter.rs` corpora are the same case one step over.
           # A corpus is a table and a loop: it runs by construction, arrives at
           # full coverage, and lifts the figure for the code around it. They are
-          # 4,048 of the 8,668 lines this was computed over -- nearly half the
-          # number described the tests. Excluded, the binding reads 97.28% of
-          # lines and 93.28% of regions -- measured with the flow above on
-          # 2026-10-08, against a cleaned profile in a target directory of its
-          # own, which is the only reading that is the lane's. The suites draw,
-          # so a figure moves in its third digit between runs.
+          # nearly half the lines the figure reads, so counted, half the number
+          # would describe the tests. Excluded, the figure is read with the flow
+          # above, against a cleaned profile in a target directory of its own,
+          # which is the only reading that is the lane's. The suites draw, so a figure
+          # moves in its third digit between runs.
           #
           # The region floor is the one that notices a branch with an arm nobody
           # reached, and it is three points below the line figure here. The line
@@ -780,19 +778,19 @@ jobs:
       needs['nightly-dispatch'].outputs.dispatched == 'false')
     runs-on: ubuntu-26.04
     timeout-minutes: 30
-    # The extension is built for PyPy and published for it, and nothing on a
-    # push built one: the wheel matrix lives in the release workflow, which runs
-    # on a dispatch. So a type object PyPy's `cpyext` does not export could
-    # land, pass every lane here, and surface as an `undefined symbol` at
-    # *import* inside a release build -- which is what `Py_GenericAliasType`
-    # did, on the wheel job of a release that had already been prepared.
+    # The extension is built for PyPy and published for it, and but for this
+    # lane nothing on a push builds one: the wheel matrix lives in the release
+    # workflow, which runs on a dispatch. So a type object PyPy's `cpyext` does
+    # not export -- `Py_GenericAliasType` is one -- could land, pass every lane
+    # here, and surface as an `undefined symbol` at *import* inside a release
+    # build.
     #
     # The link check is the first step and the suite is the second, because
     # PyPy's C API differs from CPython's in what it *answers* too, not only in
     # what it exports: `PyTuple_Size` goes through the object's own `__len__`
-    # there, so a tuple subclass that overrode it walked past the end of the
-    # allocation and took the process down. An import cannot see that; the
-    # suite saw it on the first run. An implementation this project states as a
+    # there, so a tuple subclass that overrides it can lead a walk past the end
+    # of the allocation, which takes the process down. An import cannot see
+    # that; the suite does. An implementation this project states as a
     # target has its suite run here -- `tests/test_lane_interpreters.py` holds
     # that both ways.
     #
@@ -872,8 +870,8 @@ jobs:
       - run: uv run --no-sync maturin develop --uv
       # --strict fails the build on a broken link or an unresolved reference.
       # The mechanical half of documentation rot. Read the script's own docstring
-      # for the rules; restating them here is how this comment went stale once
-      # already. It cannot tell you a sentence is false.
+      # for the rules; a comment restating them here goes stale with the first
+      # rule added. It cannot tell you a sentence is false.
       - run: uv run --no-sync python scripts/docs_lint.py
       # The use-case count, printed rather than asserted: the universe grows
       # with the tree, so a lane pinning the number would fail on the commit
@@ -883,8 +881,8 @@ jobs:
       # cell a test now names.
       - run: uv run --no-sync python scripts/use_case_ledger.py
       - run: uv run --no-sync mkdocs build --strict
-      # A build that exits 0 is not evidence the API reference has content: the
-      # page rendered headings and no prose for two releases while it did.
+      # A build that exits 0 is not evidence the API reference has content: a
+      # page of headings and no prose builds as cleanly as one with its prose.
       - run: uv run --no-sync python scripts/docs_stubs.py --check
 
   bench:
@@ -979,19 +977,15 @@ jobs:
         env:
           BASE: ${{ steps.base.outputs.sha }}
       # The same gate for the binding hot paths, in every shape the binding
-      # workload names: the membership walk, the call boundary alone, the walk
-      # over a wide record, building one, explaining a failure in one and
-      # accepting one, the JSON document accepted, rejected, read through a
-      # union and through a key-type clause, and against a recursive schema, the
-      # compiled pattern, a value nested twenty-five deep, refined elements, and
-      # the reference a recursive schema enters. Schema construction grows twelve
-      # percent over a release cycle where only the walk is counted, which is
-      # what the shapes beside it are for, and a shape no flag here passes is a
-      # count nothing reads. Every shape is measured against one build of
-      # the base, since the build is the expensive half. The workload embeds the
-      # interpreter, so PYO3_PYTHON selects it at build time and its library
-      # directory goes on the loader path at run time; each shape subtracts two
-      # iteration counts so the interpreter startup cancels.
+      # workload names (`crates/valgebra-py/src/workload.rs` owns the list).
+      # Schema construction can grow over a release cycle in which only the
+      # walk is counted, which is what the shapes beside the walk are for, and a
+      # shape no flag here passes is a count nothing reads. Every shape is
+      # measured against one build of the base, since the build is the expensive
+      # half. The workload embeds the interpreter, so PYO3_PYTHON selects it at
+      # build time and its library directory goes on the loader path at run
+      # time; each shape subtracts two iteration counts so the interpreter
+      # startup cancels.
       - name: Binding-path instruction-count regression gate
         run: |
           py="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
@@ -1017,7 +1011,7 @@ jobs:
       # resolve a few percent. This builds the profile-guided wheel at HEAD and
       # at the base, one after the other in one directory -- the directory a
       # profiled build runs in moves the layout of a loop the training does not
-      # reach -- and counts the comparison gate's seven shapes on each, as the
+      # reach -- and counts the comparison gate's shapes on each, as the
       # difference of two call counts. Two builds from an empty target, since a
       # profile is a file the compiler flags name by path.
       - name: Profiled-wheel instruction-count regression gate
@@ -1071,7 +1065,7 @@ jobs:
     # to arrange, so a shape whose cost is one hot loop over one element type is
     # laid out straight, and a shape whose cost is fifty key lookups -- each
     # dispatching on its field's own schema -- can be laid out worse. The
-    # release matrix builds `--pgo` on five targets and this box is none of
+    # release matrix builds `--pgo` on its own targets and this box is none of
     # them, so this lane is the reading closest to them, not a ranking of
     # microarchitectures.
     #
@@ -1154,7 +1148,7 @@ jobs:
     #
     # A job of its own rather than a step in the interpreter matrix, because a
     # timing needs an optimized build and that matrix installs a debug one for
-    # its tests: sharing the lane meant compiling the extension twice in it,
+    # its tests: sharing the lane would compile the extension twice in it,
     # once for each purpose.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1268,13 +1262,12 @@ jobs:
   # touch is absent by construction and would otherwise read as a whole baseline
   # gone stale.
   #
-  # **One sweep, one job.** The two were one job with one shard matrix, and the
-  # core sweep grew until a shard of it spent 27 of the 30 minutes on its own --
-  # leaving the walk sweep, which needs about three, to run past the limit and
-  # take the lane down with it. They are separate sweeps over separate crates
+  # **One sweep, one job.** The two are separate sweeps over separate crates
   # with separate baselines, and their costs differ by an order of magnitude, so
   # one shard count cannot be right for both: it starves the expensive one and
-  # wastes runners on the cheap one. Each is sized for what it sweeps.
+  # wastes runners on the cheap one, and one job under one ceiling lets the
+  # core's shard take the walk's minutes with it. Each is sized for what it
+  # sweeps.
   #
   # The shard index is **zero-based**: `--shard 3/3` is out of range and sweeps
   # nothing at all, which is a job that passes having tested none of its third.
@@ -1287,18 +1280,10 @@ jobs:
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
     # Sharded because one large file is more mutants than a push-time job can
-    # carry, and cut as widely as the readings say. Three shards were measured
-    # too few: a change touching `decision.rs`, `ir.rs` and `lib.rs` together
-    # spent 27 of the 30 minutes on one of its thirds. Twelve are too few for a
-    # core suite of two minutes on a runner: a documentation change touching
-    # three files of `decision/` and `laws.rs` put 216 mutants in the sweep,
-    # and every one of the twelve shards read 28 to 30 minutes -- two and a
-    # half for the baseline, then about three for each pair of mutants, since a
-    # caught mutant runs the whole suite -- and the one that reached 30 was
-    # cancelled.
-    #
-    # Twenty-four cuts halve that: nine mutants a shard, about 18 minutes by
-    # the same readings. What a push sweeps is the core files it touches, so
+    # carry, and cut as widely as the readings say. A shard spends about two
+    # and a half minutes on its baseline, then about three for each pair of
+    # mutants, since a caught mutant runs the whole suite: nine mutants a shard
+    # is about 18 minutes. What a push sweeps is the core files it touches, so
     # the slowest reading is the run touching the most of the largest: the
     # night's sweep of the release window, which a dispatch measures from
     # `main`'s tip and which can hold nearly every core file, reads 108
@@ -1308,8 +1293,8 @@ jobs:
     # on the run that sweeps the most rather than on the one that comes most
     # often. The failure mode is a red lane rather than a slow one, and a
     # sweep that has to be re-sharded after every large commit is not a gate.
-    # A shard with no core file to sweep ends in seconds, so the added cuts
-    # cost a push that touches none of the core nothing but their start.
+    # A shard with no core file to sweep ends in seconds, so the cuts cost a
+    # push that touches none of the core nothing but their start.
     # Sharding splits the mutants and keeps the file granularity, which is the
     # part that matters -- see the note above on why the lines are not enough.
     # Each shard runs its own baseline, and the ratchet is already written for
@@ -1338,9 +1323,9 @@ jobs:
       # A mutant's verdict is whether the tests fail, never on what input, and
       # proptest shrinks a failure for as long as it takes -- `max_shrink_time`
       # carries no limit by default. Every *caught* mutant pays that, and it is
-      # the variable part of what one costs: on the mutant this ratchet read as
-      # a survivor, 42s of test time against 13s with the bound, and stable
-      # rather than swinging by an order of magnitude.
+      # the variable part of what one costs: on a mutant whose law shrinks, 42s
+      # of test time against 13s with the bound, and stable rather than swinging
+      # by an order of magnitude.
       #
       # What makes it a wrong verdict rather than a slow one: a mutant's budget
       # is the baseline's test time times a multiplier, and the baseline has no
@@ -1453,17 +1438,16 @@ jobs:
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
       needs['nightly-dispatch'].outputs.dispatched == 'false')
-    # Three round-robin shards over the files of `BINDING_SWEPT` the change
-    # touches, run against an embedded interpreter. Cut in consecutive slices,
-    # the walk's files, whose mutants build and run, fell to one shard and the
-    # rest, two thirds of their mutants unviable, to the other two: 19, 15 and
-    # past 30 minutes on 2026-10-05, the third cancelled at its ceiling, where
-    # it read 29 one commit earlier. Round-robin gives every shard the same
-    # mix, a third of the work between them. The ceiling is set by a change
-    # that touches every listed file, as the night's sweep of the release
-    # window and a push to `main` carrying one do: about twenty-six hundred
-    # mutants, whose slowest shard reads 65 minutes, so the ceiling is 135,
-    # twice that, by the rule the core's sweep states.
+    # Round-robin shards over the files of `BINDING_SWEPT` the change touches,
+    # run against an embedded interpreter. Cut in consecutive slices, the
+    # walk's files, whose mutants build and run, would fall to one shard and
+    # the rest, two thirds of their mutants unviable, to the others, so one
+    # shard would carry nearly all the work. Round-robin gives every shard the
+    # same mix. The ceiling is set by a change that touches every listed file,
+    # as the night's sweep of the release window and a push to `main`
+    # carrying one do: about twenty-six hundred mutants, whose slowest shard
+    # reads 65 minutes, so the ceiling is 135, twice that, by the rule the
+    # core's sweep states.
     runs-on: ubuntu-26.04
     timeout-minutes: 135
     # One seed for the baseline and every mutant of this shard, and the same
@@ -1474,9 +1458,9 @@ jobs:
       # A mutant's verdict is whether the tests fail, never on what input, and
       # proptest shrinks a failure for as long as it takes -- `max_shrink_time`
       # carries no limit by default. Every *caught* mutant pays that, and it is
-      # the variable part of what one costs: on the mutant this ratchet read as
-      # a survivor, 42s of test time against 13s with the bound, and stable
-      # rather than swinging by an order of magnitude.
+      # the variable part of what one costs: on a mutant whose law shrinks, 42s
+      # of test time against 13s with the bound, and stable rather than swinging
+      # by an order of magnitude.
       #
       # What makes it a wrong verdict rather than a slow one: a mutant's budget
       # is the baseline's test time times a multiplier, and the baseline has no
@@ -1695,8 +1679,7 @@ jobs:
           restore-keys: hypothesis-examples-
       # Every file a property is drawn in, which `tests/test_property_profiles.py`
       # holds: the merge gate's `ci` profile draws the same examples on every
-      # push, so a file left off this list never asks a new one -- the four
-      # properties that hold the walk to pydantic-core and jsonschema were.
+      # push, so a file left off this list never asks a new one.
       - name: Deep property suite
         env:
           HYPOTHESIS_PROFILE: nightly
@@ -1742,9 +1725,8 @@ jobs:
     # The core's property suites at a depth no merge gate can afford. The push
     # lanes draw a thousand cases on three platforms, which is what a
     # thirty-minute budget buys; the shapes that hide a defect are rarer than
-    # that. A sort of guards over an intransitive order took one draw in more
-    # than forty to reach, and the draw that reached it was a sweep's baseline
-    # rather than a lane built to look.
+    # that: a sort of guards over an intransitive order is one draw in more
+    # than forty to reach.
     #
     # Scheduled and manual only, and never a merge gate: it is an early-warning
     # lane, and its first red is a seed pinned as a row rather than a revert.
@@ -1755,8 +1737,8 @@ jobs:
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
     runs-on: ubuntu-26.04
     # Eight times the push lanes' depth. A passing run takes most of the hour
-    # on a shared runner, as the drawn laws have grown, so the ceiling is the
-    # hour: a run past it is a red to read as growth, not a limit to raise.
+    # on a shared runner, so the ceiling is the hour: a run past it is a red
+    # to read as growth, not a limit to raise.
     timeout-minutes: 60
     env:
       # Eight times what the merge gate draws. The number is what the budget
@@ -1915,27 +1897,27 @@ jobs:
       # 16,384, still climbing -- because the sanitizer does not return freed
       # memory and this target allocates heavily. libFuzzer's unnamed default
       # ceiling is 2,048 MB, so a run of any length crosses it eventually and
-      # reports an out-of-memory against whatever input happened to be running:
-      # a 24-byte input that replays in 25 ms. `-fork=1` puts the ceiling on a
-      # child, which starts fresh, so the ceiling bounds one batch rather than
-      # the whole soak.
+      # reports an out-of-memory against whatever input is running, one that
+      # replays in milliseconds. `-fork=1` puts the ceiling on a child, which
+      # starts fresh, so the ceiling bounds one batch rather than the whole
+      # soak.
       #
       # `-malloc_limit_mb` is the check that names a defect: no single
-      # allocation may reach 64 MB. It is what the default ceiling was standing
-      # in for and could not enforce, since it fires on the process rather than
-      # on an allocation. The largest block this code can ask for is the regex
+      # allocation may reach 64 MB. It is what a process ceiling stands in for
+      # and cannot enforce, since that fires on the process rather than on an
+      # allocation. The largest block this code can ask for is the regex
       # builder's, bounded at 8 MB, and a full soak makes none above 1 MB.
       #
       # An out-of-memory or a timeout stops the soak and fails the step. In fork
       # mode libFuzzer counts either in a child and carries on --
       # `-ignore_ooms` and `-ignore_timeouts` default to 1 there -- and `tee`
-      # hid the exit status the soak ended with: with one 80 MB allocation
-      # planted in a copy of the target, the step exited 0 while printing
-      # `oom/timeout/crash: 3/0/0`. Both are off, and the pipe fails with the
-      # soak. That makes the process ceiling a verdict as well, so it is named
-      # rather than left at libFuzzer's 2,048 MB: the first child, which reads
-      # the accumulated corpus, peaked at 968 to 1,317 MB in the five nights to
-      # 2026-10-05, and 4,096 is about three times that.
+      # hides the exit status the soak ends with: with one 80 MB allocation
+      # planted in a copy of the target, a step reading neither exits 0 while
+      # printing `oom/timeout/crash: 3/0/0`. Both are off, and the pipe fails
+      # with the soak. That makes the process ceiling a verdict as well, so it
+      # is named rather than left at libFuzzer's 2,048 MB: the first child,
+      # which reads the accumulated corpus, peaks at about 1,300 MB, and 4,096
+      # is about three times that.
       #
       # And the seconds carry a floor. A budget says when to stop; it does not
       # say the run did anything, so a target that dies on its first input ends
@@ -2054,12 +2036,11 @@ jobs:
     # broken baseline or a usage error still fails, because those are real breakage
     # unrelated to test coverage.
     #
-    # Sharded, as the diff sweep beside it is. The whole core is sixteen hundred
-    # mutants at fifteen to twenty seconds each, which is more than one job's
-    # two-hour timeout holds -- and a job that times out is cancelled, so the
-    # ratchet after it never runs and the sweep reports nowhere. Each shard
-    # reports its own slice and uploads it; the job after merges them and
-    # ratchets once.
+    # Sharded, as the diff sweep beside it is. The whole core's mutants, at
+    # fifteen to twenty seconds each, are more than one job's two-hour timeout
+    # holds -- and a job that times out is cancelled, so the ratchet after it
+    # never runs and the sweep reports nowhere. Each shard reports its own
+    # slice and uploads it; the job after merges them and ratchets once.
     needs: nightly-dispatch
     if: >-
       !cancelled() && (inputs.nightly ||
@@ -2073,27 +2054,14 @@ jobs:
     # times the core's suite, neither of which a budget can talk down, and the
     # only free variable is how many ways it is cut.
     #
-    # Measured, twelve ways: at the 0.0.12 tag the slowest shard took 58
-    # minutes of a 90-minute budget; the laws drawn since take the core's own
-    # suite from 26 to 53 seconds and a sweep runs that suite once per mutant,
-    # so every shard roughly doubled and the budget followed to 150. The last
-    # fully green sweep then ran its twelve shards at 100 to 141 minutes --
-    # nine minutes of margin on a shared runner -- and the next two runs put
-    # six and then eight of the twelve on the ceiling at exactly 150.
-    #
-    # Twenty-four ways cut the same pile in half: about 73 minutes a shard
-    # against a budget of 150. The suite grew again, and on 2026-10-05 the
-    # slowest of the twenty-four read 94.6 minutes, a ceiling 1.6 times its
-    # reading where the rule `docs/dev/07-tooling-ci.md` states is twice.
-    # Thirty-six ways cut it by a third again, and the slowest of the
-    # thirty-six read 85 minutes as the suite grew, 1.8 times under 150.
-    # Forty-eight ways cut it by a quarter again, about 64 minutes a shard on
-    # the slowest runner, which clears twice under 150 with room for the suite
-    # to grow by a sixth. It buys that with one more baseline build per added
-    # shard and no more total work. The alternative -- drawing the laws at
-    # fewer cases so the sweep fits -- is refused here as it was when the
-    # budget moved to 150: the sweep follows the suite, never the other way
-    # round.
+    # The cut is read off the slowest shard on the slowest runner, and the
+    # ceiling is twice that reading, the rule `docs/dev/07-tooling-ci.md`
+    # states. The matrix below cuts the pile to about 64 minutes a shard
+    # there, which clears twice under 150 with room for the suite to grow by
+    # a sixth; a suite that grows past that room takes more cuts. A cut costs
+    # one more baseline build and no more total work. The alternative --
+    # drawing the laws at fewer cases so the sweep fits -- is refused: the
+    # sweep follows the suite, never the other way round.
     timeout-minutes: 150
     # One seed for the baseline and every mutant of this shard. A mutation is
     # caught when the tests answer differently with it than without it, so the
@@ -2110,9 +2078,9 @@ jobs:
       # A mutant's verdict is whether the tests fail, never on what input, and
       # proptest shrinks a failure for as long as it takes -- `max_shrink_time`
       # carries no limit by default. Every *caught* mutant pays that, and it is
-      # the variable part of what one costs: on the mutant this ratchet read as
-      # a survivor, 42s of test time against 13s with the bound, and stable
-      # rather than swinging by an order of magnitude.
+      # the variable part of what one costs: on a mutant whose law shrinks, 42s
+      # of test time against 13s with the bound, and stable rather than swinging
+      # by an order of magnitude.
       #
       # What makes it a wrong verdict rather than a slow one: a mutant's budget
       # is the baseline's test time times a multiplier, and the baseline has no
@@ -2161,10 +2129,9 @@ jobs:
           # the case outrun the timeout and the whole run returns no verdict.
           # tests/test_sweep_skips.py holds this list to the sources.
           # Round-robin rather than the default consecutive slices: a slice
-          # puts one expensive file in one shard, and the last sweep's shards
-          # ran twenty-one to forty-eight minutes for a critical path near
-          # twice its mean. Mutant `i` on shard `i` modulo the count spreads
-          # every file across every shard.
+          # puts one expensive file in one shard, which leaves a critical path
+          # near twice the mean shard. Mutant `i` on shard `i` modulo the count
+          # spreads every file across every shard.
           cargo mutants --package valgebra-core -j 4 --timeout-multiplier 20 \
             --shard "${{ matrix.shard }}/48" --sharding round-robin \
             -- -- --skip deep_subtype_into_bottom_terminates \
@@ -2304,14 +2271,11 @@ jobs:
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
     runs-on: ubuntu-26.04
-    # Eight round-robin shards, merged and ratcheted by the job after them, as
-    # the core and pytest sweeps are. One job swept the whole binding in 34
-    # minutes on 2026-09-26 and 47 to 52 at 0.0.15, and was cancelled at its
-    # 60-minute ceiling on 0.0.16's tree with the sweep nearly read. Three
-    # shards then read 35 to 58 minutes, and one was cancelled at the ceiling:
-    # a third of the binding's mutants is about 65 minutes on the slower of the
-    # runner classes, which builds and tests a mutant at half the speed of the
-    # other. An eighth each is about 25 minutes there, beside one baseline
+    # Round-robin shards, merged and ratcheted by the job after them, as the
+    # core and pytest sweeps are. The slower of the runner classes builds and
+    # tests a mutant at half the speed of the other, and a third of the
+    # binding's mutants is about 65 minutes there, past the ceiling. The
+    # matrix's cut is about 25 minutes a shard there, beside one baseline
     # build apiece, which leaves the ceiling twice a shard's reading with room
     # for the binding to grow.
     timeout-minutes: 60
@@ -2324,9 +2288,9 @@ jobs:
       # A mutant's verdict is whether the tests fail, never on what input, and
       # proptest shrinks a failure for as long as it takes -- `max_shrink_time`
       # carries no limit by default. Every *caught* mutant pays that, and it is
-      # the variable part of what one costs: on the mutant this ratchet read as
-      # a survivor, 42s of test time against 13s with the bound, and stable
-      # rather than swinging by an order of magnitude.
+      # the variable part of what one costs: on a mutant whose law shrinks, 42s
+      # of test time against 13s with the bound, and stable rather than swinging
+      # by an order of magnitude.
       #
       # What makes it a wrong verdict rather than a slow one: a mutant's budget
       # is the baseline's test time times a multiplier, and the baseline has no

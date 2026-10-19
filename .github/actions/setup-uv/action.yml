@@ -26,17 +26,16 @@ runs:
   steps:
     # setup-uv reads its version manifest from raw.githubusercontent.com under a
     # hard five-second timeout and never retries, so a slow response there does
-    # not slow the job down -- it fails it. That took the pip-audit lane out on
-    # 2026-08-10 while the twelve other lanes in the same run installed uv fine.
-    # A second attempt turns that failure back into the delay it should have
-    # been. The first attempt is allowed to fail, so keep its `with` block and
-    # the retry's identical: the retry is the same install, not a fallback to
-    # some laxer one.
+    # not slow the job down -- it fails it, on one lane while every other lane
+    # in the same run installs uv fine. A second attempt turns that failure
+    # back into the delay it should be. The first attempt is allowed to fail,
+    # so keep its `with` block and the retry's identical: the retry is the same
+    # install, not a fallback to some laxer one.
     # A lane names a release, and uv takes a runner image's own interpreter for
-    # it where the image has one: every "3.12" lane ran Ubuntu's 3.12.3, of
-    # April 2024 and eleven patch releases behind, while a lane naming a
-    # release the image lacks ran uv's build of the newest patch. Every lane
-    # takes uv's build, which the uv version pinned above fixes.
+    # it where the image has one, so left to it a "3.12" lane runs Ubuntu's
+    # 3.12.3, patch releases behind, while a lane naming a release the image
+    # lacks runs uv's build of the newest patch. Every lane takes uv's build,
+    # which the uv version pinned above fixes.
     - name: Take uv's interpreter rather than the image's
       shell: bash
       run: echo "UV_PYTHON_PREFERENCE=only-managed" >> "$GITHUB_ENV"

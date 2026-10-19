@@ -264,18 +264,17 @@ def _keys_for_absent_files(baseline: set[str]) -> bool:
 
     This baseline is keyed by path, so a file that moves takes every entry
     naming it out of the set. The sweep then reads each of that file's
-    survivors as *new* and the lane fails -- with the mutants listed and no hint
-    that what changed was the path. Eight entries moved with the frontend's
-    surfaces and the lane is where that was found, nine minutes into a shard.
+    survivors as *new* and the lane fails, minutes into a shard -- with the
+    mutants listed and no hint that what changed was the path.
 
     A path is cheaper to check than a sweep: an entry naming a file that does
     not exist is stale by construction, whatever any sweep would say, and this
     runs before one. Read from `git ls-files` rather than the filesystem so a
     build directory or a stray copy cannot answer for a tracked file.
 
-    Keying by something other than the path was considered and is not done: two
-    functions of one name in two files would share a key, and an argument for
-    one would silently excuse the other.
+    Keying by something other than the path is refused: two functions of one
+    name in two files would share a key, and an argument for one would silently
+    excuse the other.
     """
     listed = git_output("ls-files", "-z", cwd=ROOT) or ""
     tracked = {name for name in listed.split("\0") if name}
@@ -299,11 +298,11 @@ def _keys_for_absent_files(baseline: set[str]) -> bool:
 def _orphan_notes(recorded: dict, baseline: set[str]) -> bool:
     """Report accepted notes naming no survivor, and whether any were found.
 
-    An accepted survivor carries a hand-written argument beside it, and nothing
-    read those arguments: a note could name a mutant that stopped surviving, or
-    name one in a spelling no survivor takes, and the set passed either way.
-    Both were true of this tree. An argument matching nothing is an excuse
-    outliving the thing it excused, which is what the ratchet exists to refuse.
+    An accepted survivor carries a hand-written argument beside it, and an
+    unread note can name a mutant that stopped surviving, or name one in a
+    spelling no survivor takes, and the set passes either way. An argument
+    matching nothing is an excuse outliving the thing it excused, which is what
+    the ratchet exists to refuse.
     """
     orphans = sorted(
         key for key in recorded.get("_accepted", {}) if key not in baseline

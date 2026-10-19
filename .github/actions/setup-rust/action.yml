@@ -2,11 +2,11 @@ name: Set up Rust
 description: Install a Rust toolchain with rustup, which every hosted runner carries, and make it the default.
 
 # A toolchain action is a third-party commit a lane runs, pinned by hash with a
-# comment naming the tag it came from. The one these lanes used publishes a
+# comment naming the tag it came from. The common toolchain action publishes a
 # single moving tag, `v1`, and moves it with every upstream change, so the pin
 # and its comment part company and the workflow audit fails every lane behind it
-# until somebody re-pins. What that action ran for these lanes is the rustup
-# command below, so the lanes run it themselves: there is no tag to drift and no
+# until somebody re-pins. What such an action runs is the rustup command
+# below, so the lanes run it themselves: there is no tag to drift and no
 # third-party code between the runner and the compiler.
 # `tests/test_workflow_actions.py` holds every workflow to installing a
 # toolchain this way.

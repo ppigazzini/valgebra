@@ -47,11 +47,11 @@ PACKAGE = ROOT / "python" / "valgebra" / "__init__.py"
 IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
 #: The binding's half of the vocabulary, declared rather than scanned for.
 #:
-#: The codes were recovered by reading four hand-picked files for snake-case
-#: strings, which is a guess from a path: it misses a code written in a file
-#: nobody thought to name, and invents a cell for any other string of that
-#: shape in one that was -- it had `not_subset`, an answer `relation_to` gives
-#: and no failure anybody reports. `tests/test_code_table.py` holds every name
+#: Recovered by reading hand-picked files for snake-case strings, the codes
+#: would be a guess from a path: it misses a code written in a file nobody
+#: thought to name, and invents a cell for any other string of that shape in
+#: one that was -- `not_subset`, an answer `relation_to` gives and no failure
+#: anybody reports, is one. `tests/test_code_table.py` holds every name
 #: here to a site that writes it.
 CODE_TABLE = ROOT / "crates" / "valgebra-py" / "src" / "codes.rs"
 CORE_CODE_TABLE = ROOT / "crates" / "valgebra-core" / "src" / "codes.rs"
@@ -138,7 +138,7 @@ def _without_prose(text: str) -> str:
     A cell is covered by a test *doing* something with it, and this suite
     writes a great deal of prose: a name mentioned in a paragraph about why
     something is hard would otherwise read as coverage. No cell is covered that
-    way today, and cutting the prose is what keeps it so rather than a note
+    way, and cutting the prose is what keeps it so rather than a note
     saying somebody checked. Unparsing drops the comments on its own.
     """
     tree = ast.parse(text)

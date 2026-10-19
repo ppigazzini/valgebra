@@ -17,12 +17,9 @@ that list to the workflow in both directions, so a step added to CI is a step
 this either runs or refuses by name.
 
 An excused step may still carry a `STANDINS` row: the part of it a developer's
-machine can run, with what the substitute gives up written beside it. The
-binding's interpreter-backed Rust tests are the case it was written for -- the
-merge gate reached them only inside an instrumented coverage rebuild, so
-excusing the rebuild left seventy-odd tests in no local step at all. They have a
-lane of their own, so the list is empty; a stand-in for a step some lane runs
-outright is that command twice, which `tests/test_local_gate.py` refuses.
+machine can run, with what the substitute gives up written beside it. A
+stand-in for a step some lane runs outright is that command twice, which
+`tests/test_local_gate.py` refuses.
 
 What it is not is a CI replacement: the steps that need a PGO wheel, valgrind, a
 mutation sweep or a second operating system are named and skipped. Those are the
@@ -103,29 +100,26 @@ NEEDS_A_RUNNER = {
     # own, and a step reaching for a tool finds the caller's instead -- a pytest
     # that imports the caller's package and reports on the caller's tree, green,
     # from inside the clone. They run in the clone and write the clone's `.venv`,
-    # which is the one environment a gate may write: lending it the caller's was
-    # tried and reverted, because `uv` then uninstalled what the developer built.
+    # which is the one environment a gate may write: lent the caller's, `uv`
+    # would uninstall what the developer built.
     "Build the fuzz targets": "needs the pinned nightly toolchain and cargo-fuzz",
     "Test the fuzz harness": "needs the pinned nightly toolchain",
 }
 
 #: A step only a runner can run, and the part of it a developer can.
 #:
-#: An excuse is honest and is still a hole: the merge gate runs the binding's
-#: interpreter-backed Rust tests only inside an instrumented coverage rebuild,
-#: so naming that rebuild as a runner's step leaves seventy-odd tests in no
-#: local step at all. The rebuild is the runner's; the tests are not. Each row
-#: is a `NEEDS_A_RUNNER` step, the command that reaches the same failures here,
-#: and what the substitute gives up -- because a stand-in nobody can tell from
-#: the step is the next excuse.
+#: An excuse is honest and is still a hole: a runner's step that also carries
+#: tests no other step runs leaves those tests in no local step at all. The
+#: step is the runner's; the tests are not. Each row is a `NEEDS_A_RUNNER`
+#: step, the command that reaches the same failures here, and what the
+#: substitute gives up -- because a stand-in nobody can tell from the step is
+#: the next excuse.
 #:
 #: Held to `NEEDS_A_RUNNER` in both directions by `tests/test_local_gate.py`: a
 #: stand-in for a step that is not excused is a step the gate should just run.
-#: Empty today. The row it was written for stood in for the binding's
-#: interpreter-backed tests, which the merge gate reached only inside the
-#: coverage rebuild; they have a step of their own in the `python` lane, so this
-#: gate runs them as itself rather than as a substitute. A row here would be
-#: that command a second time.
+#: Empty while every excused step's tests have a step of their own, which this
+#: gate runs as itself rather than as a substitute; a row here would be that
+#: command a second time.
 STANDINS: dict[str, tuple[str, str]] = {}
 
 #: A step that reaches the network, and the offline form this gate runs instead.
@@ -134,8 +128,7 @@ STANDINS: dict[str, tuple[str, str]] = {}
 #: not run" -- exists because a gate that could not run has proven nothing. A
 #: step that fetches an advisory database proves nothing about this tree when
 #: the fetch fails, and mapping that to the same red as a failing test is the
-#: one confusion the exit codes were split to prevent. Two of four gate runs in
-#: one afternoon went red on a fetch.
+#: one confusion the exit codes are split to prevent.
 #:
 #: Each row is the workflow's step name, the fetch that has to succeed first,
 #: and the command to run once it has. The fetch is retried, and a fetch that
@@ -273,8 +266,7 @@ def shallow_clone(into: Path, source: Path = ROOT) -> Path:
     """Clone `source`'s `HEAD` with one commit and no tags, as a checkout does.
 
     The difference this exists for. A local clone carries every tag and the
-    whole history, so a check that reads either passes here and fails there --
-    which is exactly what happened, on eight jobs at once.
+    whole history, so a check that reads either passes here and fails there.
     """
     tree = into / "tree"
     clone(
@@ -312,12 +304,12 @@ def clone(command: list[str], what: str) -> None:
 #: steps of it a shallow clone cannot run.
 #:
 #: `ci.yml` gives `fetch-depth: 0` to exactly one matrix entry -- ubuntu on the
-#: floor interpreter -- so seven of the eight run against a checkout with no tags
-#: and one runs against a checkout with all of them. The clone below models the
-#: seven. The tests that read the history *skip* where there is no tag to measure
-#: from, which is the right behaviour and also means the gate could not see them
-#: fail: a commit message naming the internal working area passed here and failed
-#: there, twice, before this was added.
+#: floor interpreter -- so every other entry runs against a checkout with no
+#: tags and that one against a checkout with all of them. The clone below models
+#: the others. The tests that read the history *skip* where there is no tag to
+#: measure from, which is the right behaviour and also means the clone cannot
+#: see them fail: a commit message naming the internal working area passes in it
+#: and fails on the full-history entry.
 #:
 #: So these run in the caller's own tree, which has the tags a full checkout has.
 #: They read git and touch nothing, which is what makes that safe.
@@ -360,15 +352,14 @@ NOTES_STEPS = (
 
 #: The instruction gate, which the bench lane owns and this gate excused.
 #:
-#: **The hole this fills is measured.** A change to the decision procedure
-#: that read sound and cost seventy-one times the instructions -- 6.45 billion
-#: against 89.8 million on the relation matrix -- passed this script with
-#: forty-five steps green, because every instruction count lives in the
-#: `bench` lane and that lane is excused by name for wanting cachegrind and a
-#: base built beside the head. The lane is right to be excused: it also wants
-#: a profiled wheel, a second interpreter and a system package installed with
-#: `sudo`. The *comparison* wants none of those, and it runs here in three
-#: minutes.
+#: **The hole this fills.** Every instruction count lives in the `bench` lane,
+#: and that lane is excused by name for wanting cachegrind and a base built
+#: beside the head, so without this step a change to the decision procedure
+#: that reads sound and costs seventy-one times the instructions on the
+#: relation matrix passes this script with every step green. The lane is
+#: right to be excused: it also wants a profiled wheel, a second interpreter
+#: and a system package installed with `sudo`. The *comparison* wants none of
+#: those, and it runs here in three minutes.
 #:
 #: One mode: `--decision-matrix`, the relation matrix whose shapes reach the
 #: set representation. `--decision-sets` and `--decision-lengths` reach it too,
@@ -477,9 +468,8 @@ def floor_environment() -> dict[str, str]:
     """Compose the environment the floor steps run in: a second one, throughout.
 
     Every name here points somewhere the caller's own interpreter does not.
-    That is the whole content of this function, and it is what the reverted
-    experiment got wrong in the other direction: a `uv` command handed the
-    caller's `.venv` *wrote* it, uninstalling what the developer had built. A
+    That is the whole content of this function: a `uv` command handed the
+    caller's `.venv` *writes* it, uninstalling what the developer built. A
     second release needs a second environment by definition, so the way to get
     that failure back is to leave one of these names off.
 
@@ -736,8 +726,8 @@ def runner_environment() -> dict[str, str]:
     is launched by `uv run`, which sets it to the caller's venv, and a step in
     the clone that runs `uv pip install` then installs into the caller's venv
     while the step after it, run by `uv run`, reads the clone's. The wheel the
-    profile comparison times went to the wrong environment that way, and the
-    caller's venv kept a wheel of a clone of `HEAD` it never asked for. Without
+    profile comparison times goes to the wrong environment that way, and the
+    caller's venv keeps a wheel of a clone of `HEAD` it never asked for. Without
     the variable, `uv pip` finds the clone's `.venv` from the working
     directory, which is what a runner's step does.
 
@@ -1013,10 +1003,9 @@ def report_what_was_not_run(*, here: bool, floor: bool) -> None:
     """Say what a green gate did not check, because a green gate is read as more.
 
     The audit's standing rule is that a slice names the lanes this gate cannot
-    run and what was done about each. The gate itself never said, so the reader
-    doing the naming had to remember the list -- and three lanes went red in one
-    week on things it does not reach. Printed on success only: a failure is
-    already telling the reader to look somewhere.
+    run and what was done about each, and a list the reader has to remember is
+    one a lane goes red on. Printed on success only: a failure is already
+    telling the reader to look somewhere.
     """
     print(
         f"gate: {len(NEEDS_A_RUNNER)} step(s) excused by name, and "

@@ -9,7 +9,7 @@ states something true of one shape and false of the next, which is the claim thi
 exists to stop anyone making.
 
 The shapes are `scripts/compare_gate.py`'s own, so the table below and the
-competitive ratios speak of the same seven workloads rather than two sets that
+competitive ratios speak of the same workloads rather than two sets that
 drift apart.
 
 A reading carries the environment it was taken in. A ratio between two builds

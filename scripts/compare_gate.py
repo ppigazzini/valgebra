@@ -115,11 +115,10 @@ class Shape(TypedDict):
 def provenance() -> str | None:
     """Say which extension is being timed, and refuse one that is not optimised.
 
-    Two readings during this gate's own history were of a binary nobody meant to
-    measure: an editable install that silently fell back to a debug build, and a
-    profiling build swapped in for symbols. Both produced figures off by a factor
-    of ten or more, and both looked exactly like a regression. A timing run has
-    to say what it timed.
+    A binary nobody meant to measure reads as a regression: an editable install
+    that silently falls back to a debug build, or a profiling build swapped in
+    for symbols, gives figures off by a factor of ten or more that look exactly
+    like one. A timing run has to say what it timed.
 
     The module that is *loaded* is the one asked, not a file matching a glob: a
     package directory can hold an extension per interpreter, and naming the

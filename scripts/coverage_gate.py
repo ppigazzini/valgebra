@@ -3,14 +3,13 @@
 The merge path's floors are **totals**: `--fail-under-lines` and
 `--fail-under-regions` are read against the crate, so a file may sit far under
 either as long as the rest of the crate carries it. That is the right shape for
-a ratchet and the wrong shape for a detector, and the difference is not
-academic -- a module was added to the core reading 84% of lines and 86% of
-regions, worst in the crate by twelve points, and every merge-path gate stayed
-green because the total moved by a hundredth of a percent.
+a ratchet and the wrong shape for a detector: a module entering the core at 84%
+of lines and 86% of regions, worst in the crate by twelve points, moves the
+total by a hundredth of a percent and leaves every merge-path gate green.
 
-`scripts/branch_coverage.py` already holds a region floor **per file**, and it
-is what reported that module. It runs on the nightly lane, on a pinned nightly
-toolchain, so it answered hours after the change had merged. This is the same
+`scripts/branch_coverage.py` holds a region floor **per file** too, and reports
+such a module, but it runs on the nightly lane, on a pinned nightly toolchain,
+so it answers hours after the change has merged. This is the same
 question asked where the change is: on the merge path, on the toolchain the
 lane already has. The two are not duplicates -- that one ratchets a recorded
 figure and moves with the measurement, this one is a fixed floor a file either
@@ -63,10 +62,11 @@ if TYPE_CHECKING:
 #:
 #: Per scope for the reason the crate floors already are -- the binding is held
 #: to 96/93 where the core is held to 98/97 -- and then lower again by more
-#: than a figure moves between machines. The same file read 87.65% of regions
-#: here and 84.77% on a runner, a spread of nearly three points, so a floor set
-#: within three points of a measurement reports the machine rather than the
-#: tests. What it has to catch is a file nothing drives, which reads near zero.
+#: than a figure moves between machines. One file reads 87.65% of regions on a
+#: developer's machine and 84.77% on a runner, a spread of nearly three points,
+#: so a floor set within three points of a measurement reports the machine
+#: rather than the tests. What it has to catch is a file nothing drives, which
+#: reads near zero.
 #: Each entry is the pair `(lines, regions)` the scope is held to.
 FLOORS: dict[str, tuple[float, float]] = {
     "core": (90.0, 85.0),

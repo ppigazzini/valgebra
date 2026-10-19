@@ -84,10 +84,10 @@ jobs:
         # frames, and on a value nested to the walk's own depth bound the budget
         # runs out first: a call that layer assumes cannot fail then does, and
         # the process dies with SIGSEGV where the plain build reports
-        # `recursion_limit`. Measured on the 0.0.12 and 0.0.13 wheels; the same
-        # source built plain passes the whole suite. The Linux rows therefore
-        # name the CPython interpreters rather than finding every one the image
-        # has, and the smoke runs the suite on the PyPy wheel that ships.
+        # `recursion_limit`, and the same source built plain passes the whole
+        # suite. The Linux rows therefore name the CPython interpreters rather
+        # than finding every one the image has, and the smoke runs the suite on
+        # the PyPy wheel that ships.
         #
         # Two PyPy wheels per architecture, because PyPy 8.0 changed the ABI
         # tag: a `pp73` wheel does not install on PyPy 8.0 and a `pp80` one
@@ -144,13 +144,13 @@ jobs:
           python-version: ${{ matrix.platform.pythons }}
           allow-prereleases: true
       # On macOS a free-threaded install answers to `python3.14` as well as
-      # `python3.14t`, and the one installed last is first on `PATH`: there
-      # `--find-interpreter` found the free-threaded build under the release's
-      # name, and built `cp314t` and `cp315t` with no `cp314` or `cp315` beside
-      # them. So each interpreter is found where `setup-python` records it, in
-      # the tool cache under the runner's architecture -- some releases install
-      # as a framework and some as a plain build, and the tool cache holds both
-      # -- and asked whether it is the build it is named for.
+      # `python3.14t`, and the one installed last is first on `PATH`, so
+      # `--find-interpreter` can find the free-threaded build under the
+      # release's name and build `cp314t` and `cp315t` with no `cp314` or
+      # `cp315` beside them. So each interpreter is found where `setup-python`
+      # records it, in the tool cache under the runner's architecture -- some
+      # releases install as a framework and some as a plain build, and the tool
+      # cache holds both -- and asked whether it is the build it is named for.
       - name: Name the interpreters
         id: interpreters
         if: ${{ matrix.platform.pythons && runner.os == 'macOS' }}
@@ -271,7 +271,7 @@ jobs:
     # Install each built wheel on its own platform, import it and run the product
     # suite on it before anything is published. A wheel that compiles and fails to
     # load (the "init function of _valgebra returned uninitialized object" class
-    # of failure) fails the import; a profiled build that crashed only at the
+    # of failure) fails the import; a profiled build that crashes only at the
     # walk's depth bound, which no import reaches, fails the suite. The lanes run
     # the suite on a wheel they build themselves, never on the one that ships.
     strategy:

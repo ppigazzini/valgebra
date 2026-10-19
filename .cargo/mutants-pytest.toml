@@ -3,11 +3,11 @@
 # Seven files of `valgebra-py` are reached only through it -- the entry points,
 # the exception, the report the walk hands back, the render -- so `cargo test`
 # never calls them and every mutant of them survives a sweep run the ordinary
-# way. They were excluded by name in `.cargo/mutants.toml`, each with the reason
-# "reached only through pytest, which this harness cannot observe". This is the
-# configuration that observes it: `crates/valgebra-py/tests/pytest_sweep.rs`
-# rebuilds the extension from the mutated copy and runs the Python suite against
-# it, so a mutant those files carry is caught by the suite or by nothing.
+# way. `.cargo/mutants.toml` excludes them by name, as reached only through
+# pytest, which that harness cannot observe. This is the configuration that
+# observes it: `crates/valgebra-py/tests/pytest_sweep.rs` rebuilds the
+# extension from the mutated copy and runs the Python suite against it, so a
+# mutant those files carry is caught by the suite or by nothing.
 #
 # Run with `--features pytest-sweep` and `VALGEBRA_SWEEP_VENV` naming a prepared
 # environment; the test refuses rather than passing where the variable is unset,

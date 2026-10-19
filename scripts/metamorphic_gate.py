@@ -17,8 +17,8 @@ a reference build and the build under test:
   but is never a refactor.
 * **Decisions only widen.** A relation the reference proved must still be
   proven: the procedure is sound, so losing a `True` loses a proof. Gaining one
-  is allowed, because the procedure is deliberately incomplete and every
-  milestone after this one makes it decide more.
+  is allowed, because the procedure is deliberately incomplete and a change
+  to it may make it decide more.
 
 The second relation has an escape the first does not, and this gate closes it: a
 build that answered `True` to everything would satisfy "only widens" perfectly.
@@ -371,7 +371,7 @@ def lost_proofs(reference: dict[str, str], measured: dict[str, str]) -> list[str
 
     Soundness makes this one-directional. A `y` that became `n` lost a proof the
     reference had, which no refactor should do; an `n` that became `y` is the
-    procedure deciding more, which every later milestone does on purpose.
+    procedure deciding more, which a change to the procedure does on purpose.
     """
     return [
         f"{key}: proven by the reference, not by this build"
