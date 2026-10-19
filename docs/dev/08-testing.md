@@ -306,7 +306,7 @@ take, and a corpus could take any other. So `tests/test_mutation_scope.py` does
 not ask a test module to be swept, and `tests/test_harness_conditionals.py` does
 not read a feature gate inside one as reaching production. The coverage lanes
 take a filename pattern and cannot ask, so `tests/test_coverage_scope.py` holds
-each lane's pattern to the predicate's answer.
+each lane's pattern to the predicate's answer, in both directions.
 
 ## The binding's own corpora
 

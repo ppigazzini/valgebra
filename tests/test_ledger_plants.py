@@ -2771,6 +2771,45 @@ PLANTS = (
         ),
     ),
     Plant(
+        # The nightly's branch figure reading the sibling test modules as
+        # shipped code: the third scope, which no floor reads.
+        "tests/test_coverage_scope.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "--ignore-filename-regex 'valgebra-py|/(laws|index_laws)\\.rs$"
+            "|tests\\.rs$'",
+            "--ignore-filename-regex 'valgebra-py|/(laws|index_laws)\\.rs$'",
+        ),
+        trips=("test_a_lane_excludes_every_corpus_file_of_the_crate_it_measures",),
+    ),
+    Plant(
+        # A shipped module whose name the core's pattern takes for a test file.
+        "tests/test_coverage_scope.py",
+        ("crates/valgebra-core/src/contests.rs",),
+        lambda tree: _write(
+            tree,
+            "crates/valgebra-core/src/contests.rs",
+            "pub fn planted() -> u8 {\n    1\n}\n",
+        ),
+        trips=("test_a_lane_counts_every_shipped_file_of_the_crate_it_measures",),
+    ),
+    Plant(
+        # The instrument a lane leaves out, moved without its exclusion.
+        "tests/test_coverage_scope.py",
+        (
+            "crates/valgebra-py/src/workload.rs",
+            "crates/valgebra-py/src/instrument.rs",
+        ),
+        lambda tree: _move(
+            tree,
+            "crates/valgebra-py/src/workload.rs",
+            "crates/valgebra-py/src/instrument.rs",
+        ),
+        trips=("test_a_lane_counts_every_shipped_file_of_the_crate_it_measures",),
+    ),
+    Plant(
         # The binding lane's region floor dropped, leaving the line floor alone.
         "tests/test_coverage_scope.py",
         (".github/workflows/ci.yml",),

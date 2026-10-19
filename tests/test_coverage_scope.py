@@ -6,13 +6,14 @@ interpreter corpora run by construction -- a corpus is a table and a loop -- so
 they arrive at 100% and lift the figure for the code around them: counted in,
 part of the number describes the tests.
 
-So the scope is written down here, in both directions:
+So the scope is written down here, in both directions, for every job that
+hands `cargo llvm-cov` one -- the two floors and the nightly's branch figure:
 
-* every corpus file in the tree is one the lanes exclude, so a corpus added
+* every test file the tree declares is one the lanes exclude, so a corpus added
   tomorrow does not quietly lift the figure;
-* every exclusion the lanes carry names something that exists, so a file that
-  moves takes its exclusion with it rather than leaving a pattern matching
-  nothing.
+* nothing else the crate ships is excluded but the files named below with a
+  reason, each of which still exists, so a pattern too wide to read drops no
+  shipped code, and a file that moves takes its exclusion with it.
 
 A third scope is read here for the same reason, one measurement over. Coverage
 counts the lines a suite *reached*; it says nothing about what those suites
@@ -47,6 +48,11 @@ pytestmark = pytest.mark.repository
 #: The jobs that enforce a coverage floor, and the crate each one measures.
 LANES = {"rust-coverage": "valgebra-core", "binding-coverage": "valgebra-py"}
 
+#: Every job that hands `cargo llvm-cov` a scope, and the crate it reads. The
+#: nightly's branch figure reads the core's scope, so the three figures are
+#: about one set of files.
+SCOPES = {**LANES, "nightly-branch-coverage": "valgebra-core"}
+
 #: What makes a file test code rather than shipped code: the `#[cfg(test)]` on
 #: the `mod` that declares it, which `is_test_module` reads for every script
 #: and ledger asking.
@@ -66,6 +72,15 @@ LANES = {"rust-coverage": "valgebra-core", "binding-coverage": "valgebra-py"}
 #: this ledger is about; a suite is measured by whether it *kills mutants*, not
 #: by how much of itself it executes.
 lib = load_script("_lib")
+
+#: Shipped files a lane leaves out on purpose, each with the reason.
+LEFT_OUT = {
+    "crates/valgebra-py/src/workload.rs": (
+        "the instruction gate's own instrument: no caller reaches it and "
+        "neither suite runs it, so every line of it counts against a figure "
+        "it says nothing about"
+    ),
+}
 
 
 def _lane_scripts() -> dict[str, str]:
@@ -91,7 +106,13 @@ def _ignored(lane: str) -> re.Pattern[str]:
     check reading the whole script would find it there and pass on a tree with
     the exclusion removed, which the planted defect holds.
     """
-    script = _lane_scripts()[lane]
+    steps = [
+        step["run"]
+        for step in read_workflow()["jobs"][lane]["steps"]
+        if "--ignore-filename-regex" in str(step.get("run", ""))
+    ]
+    assert len(steps) == 1, f"{lane}: {len(steps)} steps name a scope"
+    script = steps[0]
     # The argument is quoted and may be wrapped, so the continuations go first.
     flat = script.replace("\\\n", " ")
     # A lane names its scope once and spends it twice -- the crate floor and
@@ -137,13 +158,13 @@ def test_the_tree_has_corpus_files_to_exclude() -> None:
     assert sum(name.endswith("tests.rs") for name in corpora) >= 15, sorted(corpora)
 
 
-@pytest.mark.parametrize("lane", sorted(LANES))
+@pytest.mark.parametrize("lane", sorted(SCOPES))
 def test_a_lane_excludes_every_corpus_file_of_the_crate_it_measures(
     lane: str,
 ) -> None:
     """A corpus counted as shipped code lifts the figure for the code around it."""
     ignored = _ignored(lane)
-    crate = LANES[lane]
+    crate = SCOPES[lane]
     mine = sorted(name for name in _corpus_files() if crate in name)
     assert mine, f"{lane} measures {crate}, which has no corpus file"
     missing = [name for name in mine if not ignored.search(name)]
@@ -151,6 +172,43 @@ def test_a_lane_excludes_every_corpus_file_of_the_crate_it_measures(
         f"{lane} counts these corpus files as shipped code: {missing}. Add each "
         "to the step's --ignore-filename-regex, and re-record the floor in the "
         "same change with the number it measures."
+    )
+
+
+@pytest.mark.parametrize("lane", sorted(SCOPES))
+def test_a_lane_counts_every_shipped_file_of_the_crate_it_measures(
+    lane: str,
+) -> None:
+    """A pattern wider than the test files drops shipped code from the figure.
+
+    A pattern for every name ending in `tests.rs` also takes a module named
+    `contests.rs`, and a lane reading a pattern cannot tell. The files are read
+    here instead, so a shipped file is excluded only where it is named with its
+    reason, and a named file that moves takes its exclusion with it.
+    """
+    ignored = _ignored(lane)
+    crate = SCOPES[lane]
+    tests = _corpus_files()
+    shipped = sorted(
+        name
+        for name in (
+            path.relative_to(ROOT).as_posix()
+            for path in (ROOT / "crates" / crate / "src").rglob("*.rs")
+        )
+        if name not in tests
+    )
+    dropped = [
+        name for name in shipped if ignored.search(name) and name not in LEFT_OUT
+    ]
+    assert not dropped, (
+        f"{lane} leaves these shipped files out of its figure: {dropped}. Narrow "
+        "the step's --ignore-filename-regex, or name the file in LEFT_OUT with "
+        "the reason it is not measured."
+    )
+    named = [name for name in LEFT_OUT if crate in name]
+    stale = [name for name in named if name not in shipped or not ignored.search(name)]
+    assert not stale, (
+        f"{lane}: LEFT_OUT names files the lane measures or lacks: {stale}"
     )
 
 
