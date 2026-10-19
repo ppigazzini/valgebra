@@ -92,15 +92,15 @@ in the commit message, which is the durable per-task record. A page states what
 is true **now**.
 
 `scripts/docs_lint.py` holds a narrow list of those words, `HISTORY`, over
-every tracked page, every line comment in the sources `COMMENTED_SOURCES`
-names, and the comment fields of the baselines `COMMENTED_BASELINES` names, all
-three in that script. A comment ages exactly as a page does and is read by
-fewer people, which is why it is in the sweep. The list is narrow on purpose:
-`no longer` states a rule a reader applies to a run -- a baseline entry that is
-no longer a survivor fails -- and a sweep refusing it would be one nobody could
-keep. The changelog is a record of releases and is exempt, as are the files
-that spell the words to forbid them: this page, the lint and its test, which
-`HISTORY_EXEMPT` in `scripts/docs_lint.py` names.
+every tracked page, every line comment in the sources `COMMENTED_SOURCES` names
+and every docstring of the Python ones, and the comment fields of the baselines
+`COMMENTED_BASELINES` names, all three in that script. A comment ages exactly
+as a page does and is read by fewer people, which is why it is in the sweep. The
+list is narrow on purpose: `no longer` states a rule a reader applies to a run
+-- a baseline entry that is no longer a survivor fails -- and a sweep refusing
+it would be one nobody could keep. The changelog is a record of releases and is
+exempt, as are the files that spell the words to forbid them: this page, the
+lint and its test, which `HISTORY_EXEMPT` in `scripts/docs_lint.py` names.
 
 A measurement is the exception, and only as a rule: where a number explains why
 the code has its shape — the walk mode's discriminant order in

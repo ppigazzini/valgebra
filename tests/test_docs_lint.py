@@ -140,7 +140,7 @@ def test_a_gitignored_path_is_skipped() -> None:
     # A generated path is absent from a fresh clone and present on a machine that
     # has run the tool that writes it. Asking git rather than the filesystem is
     # what makes the verdict the same on both -- a check that answers differently
-    # is measuring the machine, and this one did, and it broke a lane.
+    # is measuring the machine.
     assert lint.check_named_paths("run it over fuzz/corpus/simplify") == []
     # The exemption is not blanket: a path git does not ignore is still checked.
     assert lint.check_named_paths("see fuzz/src/nope.rs")
@@ -294,6 +294,8 @@ def test_a_sentence_about_what_the_tree_was_is_refused() -> None:
     """
     assert lint.check_history("The walk previously read the element twice.")
     assert lint.check_history("# a record used to compile to two definitions")
+    assert lint.check_history("an inline hint was tried and moved nothing")
+    assert lint.check_history("the nightly went red on a flaky draw")
     problems = lint.check_history("fine\nthis was fixed in the release before")
     assert problems
     assert problems[0].startswith("line 2:")
@@ -317,6 +319,33 @@ def test_a_comment_is_read_and_a_string_is_not() -> None:
     assert read.splitlines()[0] == "", "a URL inside a string reads as a comment"
     assert len(read.split("\n")) == 3, "the sweep drops the line numbers"
     assert lint.check_history(read)[0].startswith("line 2:")
+
+
+def test_a_docstring_is_read_whole_and_code_is_not() -> None:
+    """A docstring is the comment Python keeps, so the sweep reads it.
+
+    Every node that opens one is read -- the module, a class, a function --
+    and nothing else: a string that is not the first statement is a value.
+    """
+    source = (
+        '"""The module previously read two."""\n'
+        "class Shape:\n"
+        '    """A class formerly kept twice."""\n'
+        "    def read(self) -> str:\n"
+        '        """One line,\n'
+        "\n"
+        '        and a second that used to wrap."""\n'
+        '        return "previously"\n'
+    )
+    documented = lint.docstring_lines(source)
+    assert documented == {1, 3, 5, 6, 7}, documented
+    problems = lint.check_history(lint.comments(source, documented))
+    assert [problem.split(":")[0] for problem in problems] == [
+        "line 1",
+        "line 3",
+        "line 7",
+    ], problems
+    assert lint.docstring_lines("def broken(:\n") == set(), "a parse error reads none"
 
 
 def test_every_history_exemption_names_a_file_that_spells_the_words() -> None:
@@ -350,12 +379,12 @@ def test_a_width_read_off_a_table_is_not_a_bound() -> None:
 
 
 def test_a_baseline_comment_is_held_to_the_prose_rules() -> None:
-    """A baseline's own argument is prose, and was the prose no rule read.
+    """A baseline's own argument is prose, held to the rules prose is.
 
-    The counts that went stale in those fields were the counts the same file
-    records: a comment saying a budget was re-recorded at some figure reads as
-    current for as long as it sits there, and the number beside it is the one
-    thing in the tree guaranteed to move.
+    A count in those fields is a count the same file records: a comment saying
+    a budget is recorded at some figure reads as current for as long as it sits
+    there, and the number beside it is the one thing in the tree guaranteed to
+    move.
     """
     assert lint.baseline_prose(), "no baseline carries a comment field"
     for relative, prose in lint.baseline_prose():

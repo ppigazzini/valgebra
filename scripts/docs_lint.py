@@ -15,7 +15,7 @@ claims:
 * **A link from the site into the developer set.** ``mkdocs.yml`` excludes
   ``docs/dev/``, so a published page linking there resolves in the tree and
   answers 404 on the site, where ``mkdocs build --strict`` reports it only at
-  INFO. Twelve did. A published page names such a page by its path instead.
+  INFO. A published page names such a page by its path instead.
 * **A named path that does not exist.** A ``crates/...``, ``scripts/...``,
   ``tests/...`` or ``.github/...`` path written in prose is a claim about this
   tree. A path holding a placeholder (``*``, ``<``, ``>``, ``...``) is skipped,
@@ -34,9 +34,8 @@ claims:
   ``scripts/perf_budget.json`` and move when the budget is re-recorded. A figure
   copied into a page is stale the next time it moves, and a stale number is worse
   than an absent one -- it tells a reader to hold the wrong invariant. Every
-  recorded count is read, not a chosen few: the check held two of sixteen
-  ``*_irefs`` keys, so the rule was written against the whole file and asked of
-  an eighth of it. The changelog is exempt, as it is below.
+  recorded count is read, not a chosen few: a check that reads some of the keys
+  holds the rest to nothing. The changelog is exempt, as it is below.
 
 * **A comparison multiplier that names no interpreter.** A ratio against another
   checker cancels the machine and not the interpreter: one gated shape takes
@@ -45,6 +44,10 @@ claims:
   one reader and false for the next, so the version is part of the claim and
   lives in the section that makes it. The changelog is exempt, being a dated
   record rather than a description of this tree.
+* **A sentence about what this tree was.** A word of ``HISTORY`` on a page, in
+  a comment or a Python docstring of the sources ``COMMENTED_SOURCES`` names,
+  or in a baseline's comment field fails. The list is narrow and the rule is
+  not: a reader applies the rest of it.
 
 The rest hold a specific list to the tree in **both** directions, because a
 hand-written index satisfies the direction it was written for and misses the
@@ -106,6 +109,7 @@ from typing import TYPE_CHECKING
 from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from pathlib import Path
 
 INTERNAL = "__DEV"
@@ -368,9 +372,8 @@ def baseline_prose() -> list[tuple[str, str]]:
     """Every comment field of the JSON baselines, with the file it sits in.
 
     A baseline's argument lives in keys the gate ignores and a reader does not,
-    so it is prose by every rule that governs prose -- and it was the one prose
-    in the tree no rule read. The counts that went stale there were the counts
-    the file itself records.
+    so it is prose by every rule that governs prose, and the count most likely
+    to go stale in it is one the file itself records.
     """
     prose: list[tuple[str, str]] = []
     for relative in COMMENTED_BASELINES:
@@ -409,10 +412,14 @@ def _commented(node: object) -> list[tuple[str, object]]:
 HISTORY = re.compile(
     r"\b(previously|formerly|historically|originally|used to|at one point"
     r"|in the past|back then|before this change|this was fixed in"
-    r"|the old behaviou?r|we had)\b",
+    r"|the old behaviou?r|we had|until now|was tried|went red)\b",
     re.IGNORECASE,
 )
-COMMENTED_SOURCES = frozenset({".rs", ".py", ".toml", ".yml"})
+COMMENTED_SOURCES = frozenset({".rs", ".py", ".pyi", ".toml", ".yml", ".yaml"})
+#: The sources whose docstrings are read beside their comments.
+PYTHON_SOURCES = frozenset({".py", ".pyi"})
+#: The nodes a docstring can open.
+DOCUMENTED = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
 #: Where a history word is the subject rather than the claim: the changelog is a
 #: record of releases and is read as one, and the rule has to spell the words to
 #: forbid them.
@@ -431,19 +438,43 @@ LINE_COMMENT = re.compile(r"(?:(?<=^)|(?<=[\s(\[{,;]))(?://+|#)[^\n]*", re.MULTI
 QUOTED = re.compile(r'"(?:[^"\\\n]|\\.)*"' + r"|'(?:[^'\\\n]|\\.)*'")
 
 
-def comments(text: str) -> str:
+def comments(text: str, documented: Collection[int] = ()) -> str:
     """Read the comment lines of a source file, with code and strings removed.
 
     A comment is prose about this tree that no page carries, and it goes stale
     the same way -- so the rules that govern prose read it too. The quoted runs
     go first: a `#` inside a string starts no comment, and a scan that read one
-    as prose would refuse a pattern for the words it matches.
+    as prose would refuse a pattern for the words it matches. A line numbered in
+    `documented` belongs to a docstring and is read whole.
     """
     # Line for line with the file, so a problem names the line a reader opens.
     return "\n".join(
-        " ".join(LINE_COMMENT.findall(QUOTED.sub("", line)))
-        for line in text.splitlines()
+        line
+        if number in documented
+        else " ".join(LINE_COMMENT.findall(QUOTED.sub("", line)))
+        for number, line in enumerate(text.splitlines(), start=1)
     )
+
+
+def docstring_lines(text: str) -> set[int]:
+    """Find the lines of a Python source its docstrings cover, counted from 1.
+
+    A docstring is a comment the interpreter keeps: prose about this tree that
+    `help()` prints and the API page renders, and it ages as a `#` line does. A
+    source that does not parse has none to read; the suite reports it.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return set()
+    return {
+        number
+        for node in ast.walk(tree)
+        if isinstance(node, DOCUMENTED) and ast.get_docstring(node) is not None
+        for number in range(
+            node.body[0].lineno, (node.body[0].end_lineno or node.body[0].lineno) + 1
+        )
+    }
 
 
 def check_history(text: str) -> list[str]:
@@ -470,10 +501,10 @@ def check_fences(text: str) -> list[str]:
 
     ``` followed by a sentence is an *opening* fence with a long info string,
     not a closing one, so everything after it renders as code -- including the
-    headings, which then have no anchors for a link to reach. One page carried
-    that for a release: a fence closed with "``` On a `TypedDict`, ..." and took
-    a section and its anchor into a code block, which nothing noticed because
-    the page still built and the prose still read as prose in the source.
+    headings, which then have no anchors for a link to reach. Nothing else sees
+    it: a fence closed with "``` On a `TypedDict`, ..." takes the section after
+    it and its anchor into a code block, and the page still builds and the prose
+    still reads as prose in the source.
 
     A real info string is one word: `python`, `bash`, `text`, `json`,
     `mermaid`, or one of those with a brace-delimited attribute list. Anything
@@ -518,9 +549,8 @@ def check_comparison_claims(text: str) -> list[str]:
     on one box, because reading an element costs more there than checking it.
 
     A page that states "5x on a large list" without saying which interpreter
-    therefore states something true of one reader and false of the next, and the
-    figure was read on a bench runner whose interpreter nobody had looked at.
-    So a multiplier in a section that compares against another checker names the
+    therefore states something true of one reader and false of the next. So a
+    multiplier in a section that compares against another checker names the
     interpreter it holds on, in that same section, beside the number. The
     changelog is exempt: a released entry records what a release measured, under
     a heading that dates it, and is not re-measured or amended.
@@ -662,10 +692,9 @@ def check_product_table() -> list[str]:
     every public name, every ordered pair of variants -- and the testing page's
     table is what says which ones there are and, per row, what "covered" means
     for that one. `check_ledger_table` asks only that a ledger be named
-    *somewhere* on the page, and a paragraph satisfies that: three products
-    added in one pass were described in prose and in the ledger table, and the
-    products table went on listing six. A reader counting products counts the
-    table.
+    *somewhere* on the page, and a paragraph satisfies that: a product described
+    in prose and in the ledger table passes it while the products table omits
+    it. A reader counting products counts the table.
 
     So a file declaring itself a product with a ``PRODUCT:`` marker has a row,
     and a row names a file that declares itself one. The marker is explicit for
@@ -745,7 +774,7 @@ def before_the_test_module(text: str) -> str:
 def test_module_files(sources: list[Path]) -> set[str]:
     """The `.rs` files some parent module declares under a `#[cfg(test)]`.
 
-    A long test module lives in a sibling file now -- `decision.rs` declares
+    A long test module lives in a sibling file -- `decision.rs` declares
     `#[cfg(test)] mod tests;` and the body is `decision/tests.rs` -- so a file
     with no `#[cfg(test)]` in it can still be test-only. Read from the
     declaration rather than from a naming convention, since `tests.rs` is a
@@ -1228,13 +1257,16 @@ def main(argv: list[str]) -> int:
         # and read by nobody who is checking pages. It states the rule a reader
         # applies, on the same terms a page does.
         if path.suffix in COMMENTED_SOURCES and relative not in HISTORY_EXEMPT:
+            documented = (
+                docstring_lines(text) if path.suffix in PYTHON_SOURCES else set()
+            )
             failures += [
-                f"{relative}: {problem}" for problem in check_history(comments(text))
+                f"{relative}: {problem}"
+                for problem in check_history(comments(text, documented))
             ]
     # A baseline's own comment fields are prose about this tree, held to the
-    # rules that govern prose. The counts that went stale in them were the
-    # counts the same file records, which is the shape the pinned-number rule
-    # exists for and the one surface it did not read.
+    # rules that govern prose. A count in them is a count the same file
+    # records, which is the shape the pinned-number rule exists for.
     failures += [
         f"{relative}: {problem}"
         for relative, prose in baseline_prose()
