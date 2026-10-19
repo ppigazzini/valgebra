@@ -48,6 +48,11 @@ claims:
   a comment or a Python docstring of the sources ``COMMENTED_SOURCES`` names,
   or in a baseline's comment field fails. The list is narrow and the rule is
   not: a reader applies the rest of it.
+* **A British spelling.** A form of ``BRITISH`` in the same prose fails,
+  outside a code span: the ``-our``, ``-ise``, ``-yse``, ``-tre`` and ``-ence``
+  forms the tree has written, and their families. A name keeps its own spelling,
+  so a code span is not read, and nor is the changelog past its first released
+  heading, which records a release as it was published.
 
 The rest hold a specific list to the tree in **both** directions, because a
 hand-written index satisfies the direction it was written for and misses the
@@ -82,7 +87,7 @@ other:
 
 Three classes stay out of its reach, and they are the common ones: a real
 symbol attributed to the wrong file, a list in prose with the wrong count or
-order, and a behaviour described as absent from a build that has it. **It cannot
+order, and a behavior described as absent from a build that has it. **It cannot
 tell you a sentence is false.** It buys the mechanical half so review can spend
 its attention on the half that needs a reader.
 
@@ -450,17 +455,24 @@ def comments(text: str, documented: Collection[int] = ()) -> str:
 
     A comment is prose about this tree that no page carries, and it goes stale
     the same way -- so the rules that govern prose read it too. The quoted runs
-    go first: a `#` inside a string starts no comment, and a scan that read one
-    as prose would refuse a pattern for the words it matches. A line numbered in
-    `documented` belongs to a docstring and is read whole.
+    are blanked to find where a comment starts: a `#` inside a string starts no
+    comment, and a scan that read one as prose would refuse a pattern for the
+    words it matches. The comment itself is read as written, since an
+    apostrophe in it opens no string. A line numbered in `documented` belongs to
+    a docstring and is read whole.
     """
     # Line for line with the file, so a problem names the line a reader opens.
     return "\n".join(
-        line
-        if number in documented
-        else " ".join(LINE_COMMENT.findall(QUOTED.sub("", line)))
+        line if number in documented else _comment(line)
         for number, line in enumerate(text.splitlines(), start=1)
     )
+
+
+def _comment(line: str) -> str:
+    """Read the comment a source line ends in, or nothing."""
+    blanked = QUOTED.sub(lambda run: " " * len(run.group(0)), line)
+    found = LINE_COMMENT.search(blanked)
+    return line[found.start() :] if found else ""
 
 
 def docstring_lines(text: str) -> set[int]:
@@ -490,7 +502,7 @@ def check_history(text: str) -> list[str]:
     A page states the rule a reader applies. What the tree did before is the
     changelog's business and the history's, and a sentence carrying it ages into
     a false one: the incident it describes is fixed, the reader cannot tell
-    whether the behaviour it names is current, and every sweep that reads the
+    whether the behavior it names is current, and every sweep that reads the
     surface reads the sentence as a claim about today.
     """
     problems = []
@@ -501,6 +513,52 @@ def check_history(text: str) -> list[str]:
             for found in HISTORY.finditer(line)
         ]
     return problems
+
+
+#: The British forms the tree has written, by family: `-our`, `-ise` with its
+#: inflections and nouns, `-yse`, `-tre` and `-ence`, and `artefact`. Each form
+#: is one codespell's British-to-American dictionary lists, or a member of a
+#: family it lists. A doubled consonant before a suffix stays out: American
+#: dictionaries give both spellings, and GitHub names a job's status with two.
+BRITISH = re.compile(
+    r"\b(?:(?:behavio|colo|favo|flavo|hono|humo|labo|neighbo|rumo)ur\w*"
+    r"|(?:amorti|authori|canonicali|capitali|categori|characteri|customi"
+    r"|deseriali|emphasi|finali|formali|generali|initiali|lineari|locali"
+    r"|materiali|maximi|memoi|minimi|moderni|normali|optimi|organi|parametri"
+    r"|prioriti|reali|recogni|saniti|seriali|speciali|stabili|standardi"
+    r"|summari|symboli|synthesi|tokeni|utili|vectori|visuali)"
+    r"s(?:e|es|ed|er|ers|ing|ation|ations|able)"
+    r"|(?:analy|cataly|paraly)s(?:e|ed|ing)"
+    r"|centre[sd]?|(?:licen|defen|offen)ces?|artefacts?)\b",
+    re.IGNORECASE,
+)
+#: An inline code span, which spells a name: a name keeps its own spelling.
+CODE_SPAN = re.compile(r"(`+)[^`]*?\1")
+#: The changelog's first released heading, past which it is a published record.
+RELEASED = re.compile(r"^## \[\d", re.MULTILINE)
+
+
+def check_spelling(text: str) -> list[str]:
+    """Refuse a British spelling in prose, outside the names it quotes.
+
+    The names the prose explains are American -- `unicodedata.normalize`,
+    pytest's `parametrize`, the typing spec -- and one spelling keeps a word the
+    same on both sides of a backtick. A code span keeps its line breaks, so a
+    problem names the line a reader opens.
+    """
+    read = CODE_SPAN.sub(lambda span: "\n" * span.group(0).count("\n"), text)
+    return [
+        f"line {number}: spells {found.group(0)!r} the British way; write the "
+        "American form, or quote a name as code"
+        for number, line in enumerate(read.splitlines(), start=1)
+        for found in BRITISH.finditer(line)
+    ]
+
+
+def before_the_releases(text: str) -> str:
+    """Cut the changelog at its first released heading."""
+    found = RELEASED.search(text)
+    return text[: found.start()] if found else text
 
 
 def check_fences(text: str) -> list[str]:
@@ -1241,6 +1299,9 @@ def main(argv: list[str]) -> int:
                 else check_pinned_numbers(text, numbers) + check_comparison_claims(text)
             )
             + ([] if rel.as_posix() in HISTORY_EXEMPT else check_history(text))
+            + check_spelling(
+                before_the_releases(text) if path.name == "CHANGELOG.md" else text
+            )
         ]
     for path in referencing:
         if path.suffix == ".md":
@@ -1256,13 +1317,15 @@ def main(argv: list[str]) -> int:
         # A comment is prose about this tree, kept beside the code it describes
         # and read by nobody who is checking pages. It states the rule a reader
         # applies, on the same terms a page does.
-        if path.suffix in COMMENTED_SOURCES and relative not in HISTORY_EXEMPT:
+        if path.suffix in COMMENTED_SOURCES:
             documented = (
                 docstring_lines(text) if path.suffix in PYTHON_SOURCES else set()
             )
+            read = comments(text, documented)
             failures += [
                 f"{relative}: {problem}"
-                for problem in check_history(comments(text, documented))
+                for problem in check_spelling(read)
+                + ([] if relative in HISTORY_EXEMPT else check_history(read))
             ]
     # A baseline's own comment fields are prose about this tree, held to the
     # rules that govern prose. A count in them is a count the same file
@@ -1273,6 +1336,7 @@ def main(argv: list[str]) -> int:
         for problem in check_pinned_numbers(prose, numbers)
         + check_internal_reference(prose)
         + check_history(prose)
+        + check_spelling(prose)
     ]
     failures += check_index("docs/dev") + check_index("docs")
     failures += check_example_installs()

@@ -37,18 +37,18 @@ When you find yourself writing the sentence that makes the odd thing sound
 intended, stop and check whether it is.
 
 **Name the owner and the invariant, not just the mechanism.** Say which file and
-symbol owns the behaviour and what must stay true about it. "The pool holds the
+symbol owns the behavior and what must stay true about it. "The pool holds the
 literals" is accurate and useless; what a reader needs is that four index spaces
 address that one pool, so a payload used against the wrong kind retrieves a real
 object of the wrong kind. Write the sentence a reader needs before they delete
 your line.
 
-**Verify the claim against the tree; run it when it is behavioural.** Not "read
+**Verify the claim against the tree; run it when it is behavioral.** Not "read
 it carefully" — `grep -n` for the symbol, `python scripts/perf_gate.py --against
-HEAD` for a count, `uv run --no-sync pytest -k` for a behaviour. Claims that
+HEAD` for a count, `uv run --no-sync pytest -k` for a behavior. Claims that
 took seconds to disprove have shipped in documentation sets.
 
-**A claim about *meaning* is not behavioural, and running it does not check it.**
+**A claim about *meaning* is not behavioral, and running it does not check it.**
 What a schema denotes is stated by the variant's doc comment in
 `crates/valgebra-core/src/ir.rs`. A `Validator` probe shows what the walk does,
 and the walk can agree with the denotation by accident — a node that refuses a
@@ -61,7 +61,7 @@ the structure is wrong. So:
 | what a node *denotes* | the doc comment in `ir.rs` |
 | whether a set is expressible at all | the node set, and [01-schema-ir.md](01-schema-ir.md)'s admission test |
 
-The failure this prevents has a shape: arguing from **behaviour** or from **what
+The failure this prevents has a shape: arguing from **behavior** or from **what
 the implementation computes internally** to **what the algebra denotes**. A
 REPL check cannot see a denotation, so a false claim of that shape survives
 one.
@@ -83,7 +83,7 @@ mutation score is a statement about one test command; a gate that could not run
 has proven nothing.
 
 **Show the command.** "It is faster" is not a claim; an instruction count with
-the command that produced it is. A performance or behaviour claim ships with what
+the command that produced it is. A performance or behavior claim ships with what
 produced it, so the next reader re-runs it instead of trusting you.
 
 **No history in shipped prose.** "It used to be X", "this was fixed in Y", "we
@@ -106,6 +106,22 @@ A measurement is the exception, and only as a rule: where a number explains why
 the code has its shape — the walk mode's discriminant order in
 [06-type-design.md](06-type-design.md) — write it as the rule a reader applies
 now, and let the number be the evidence.
+
+**Spell it American.** Prose, comments, docstrings and messages write `-or`,
+`-ize`, `-yze`, `-ter` and `-ense` where British writes `-our`, `-ise`, `-yse`,
+`-tre` and `-ence`, and `artifact`. The names the prose explains are American --
+`unicodedata.normalize`, pytest's `parametrize`, the typing spec -- and one
+spelling keeps a word the same on both sides of a backtick. A name keeps its own
+spelling, this tree's included: a function, a test or a class is renamed with
+the code it names, never by a spelling sweep. A doubled consonant before a
+suffix is left to the writer, since American dictionaries give both `canceled`
+and `cancelled` and GitHub names a job's status with two.
+
+`scripts/docs_lint.py` holds the forms the tree has written, `BRITISH`, over the
+prose `HISTORY` reads, without its exemptions, and outside code spans. The
+changelog is read up to its first released heading: a released section records
+a release as it was published. A message inside a string literal is out of its reach, since a
+string is as often a name; a reviewer applies the rule there.
 
 **One example beats three paragraphs**, and **pair every prohibition with an
 alternative.** "Do not pin the budget" leaves a reader stuck; "do not pin the
@@ -217,7 +233,7 @@ exemption creates.
 - a real symbol attributed to the **wrong file**;
 - a list with the wrong **count or order** — the jobs in CI, the commands in the
   local gate. Each lints perfectly clean;
-- a behaviour or flag described as absent from a build that has it.
+- a behavior or flag described as absent from a build that has it.
 
 ### It cannot tell you a sentence is false
 

@@ -2,12 +2,12 @@
 
 A gate that cannot be shown to fail is not evidence. Each of the four rules is
 driven against a synthetic tree here -- no repository state is edited -- so the
-lint's own behaviour is tested rather than assumed, and the index rule is driven
+lint's own behavior is tested rather than assumed, and the index rule is driven
 in both of its directions.
 
 The rules it cannot check are named in `docs/dev/12-writing.md`, not here: a
 real symbol attributed to the wrong file, a list with the wrong count, and a
-behaviour described as absent from a build that has it.
+behavior described as absent from a build that has it.
 """
 
 from __future__ import annotations
@@ -290,7 +290,7 @@ def test_a_sentence_about_what_the_tree_was_is_refused() -> None:
     """The rule, and the line it names.
 
     A comment is prose about this tree that no page carries: it ages the same
-    way, and a reader cannot tell whether the behaviour it describes is current.
+    way, and a reader cannot tell whether the behavior it describes is current.
     """
     assert lint.check_history("The walk previously read the element twice.")
     assert lint.check_history("# a record used to compile to two definitions")
@@ -348,6 +348,64 @@ def test_a_docstring_is_read_whole_and_code_is_not() -> None:
     assert lint.docstring_lines("def broken(:\n") == set(), "a parse error reads none"
 
 
+def test_a_comment_is_read_whole_past_an_apostrophe() -> None:
+    """An apostrophe in a comment opens no string, so the words past it are read.
+
+    Two apostrophes in one comment line read as a quoted run would hide the
+    words between them from every rule that reads comments.
+    """
+    source = "let t = label; // a label's type previously stood by its neighbor's\n"
+    read = lint.comments(source)
+    assert "previously" in read, read
+    assert lint.check_history(read)
+    assert not lint.comments('let s = "it\'s // not a comment";\n').strip()
+
+
+def test_a_british_spelling_is_refused_and_a_name_is_not() -> None:
+    """The rule, its families, and what it leaves to the writer.
+
+    A name keeps its own spelling, this tree's included, so a code span is not
+    read; a doubled consonant before a suffix is left alone, as American
+    dictionaries leave it.
+    """
+    for prose in (
+        "the behaviour of a walk",
+        "the neighbouring float",
+        "a key normalised on the way in",
+        "a minimisation pass",
+        "they analyse the table",
+        "the centre of the range",
+        "not a licence to free it",
+        "an artefact of the build",
+    ):
+        assert lint.check_spelling(prose), prose
+    problems = lint.check_spelling("fine\nthe walk recognises it")
+    assert problems
+    assert problems[0].startswith("line 2:")
+    for kept in (
+        "`fn normalise` reads `-0.0`",
+        "the normalise_key helper",
+        "a job reported cancelled",
+        "two labelled rows",
+        "the analyses below",
+        "an emphasis on synthesis, as an organism has",
+        "behavior, color, normalize, center, license, artifact",
+    ):
+        assert not lint.check_spelling(kept), kept
+    spanned = lint.check_spelling("a `long\nnormalise` span\nthen recognised")
+    assert [problem.split(":")[0] for problem in spanned] == ["line 3"], spanned
+
+
+def test_the_changelog_is_read_to_its_first_release() -> None:
+    """A released section records a release as published, and is not amended."""
+    text = (
+        "## [Unreleased]\n\n- a table minimised\n\n"
+        "## [0.0.1] - 2026-01-01\n\n- a table minimised\n"
+    )
+    assert len(lint.check_spelling(lint.before_the_releases(text))) == 1
+    assert lint.before_the_releases("nothing released\n") == "nothing released\n"
+
+
 def test_every_history_exemption_names_a_file_that_spells_the_words() -> None:
     """An exemption outlives its reason silently, so it is held to one."""
     for relative in lint.HISTORY_EXEMPT:
@@ -390,6 +448,7 @@ def test_a_baseline_comment_is_held_to_the_prose_rules() -> None:
     for relative, prose in lint.baseline_prose():
         assert not lint.check_pinned_numbers(prose, lint.gate_numbers()), relative
         assert not lint.check_internal_reference(prose), relative
+        assert not lint.check_spelling(prose), relative
 
 
 def test_a_baseline_comment_quoting_its_own_budget_is_refused() -> None:
