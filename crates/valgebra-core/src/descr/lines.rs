@@ -279,6 +279,7 @@ impl Lines {
     /// The two halves are asked of the *same* line, which is what the shape is
     /// for: a value meeting one line's structure and another's class meets
     /// neither. The polarity flips the answer, as it does for the record atoms.
+    #[cfg(test)]
     pub(crate) fn admits(
         &self,
         structural: &dyn Fn(&Component) -> bool,

@@ -38,7 +38,9 @@ use regex_automata::{Anchored, Input};
 use rustc_hash::FxHashMap;
 use std::sync::{Arc, OnceLock};
 
-pub use super::automaton::MAX_STATES;
+// The links below name it and the tests count against it; no code here does.
+#[cfg(any(test, doc))]
+use super::automaton::MAX_STATES;
 use super::automaton::{Reached, canonical_order, chain_fits, reaches};
 
 /// What `regex-automata` may spend building one pattern's table, in bytes.
@@ -63,7 +65,7 @@ use super::automaton::{Reached, canonical_order, chain_fits, reaches};
 /// descriptor operation already handles -- the relation stays undecided and the
 /// walk still matches the pattern, since the walk runs the regex rather than
 /// the automaton.
-pub const BUILD_SIZE_LIMIT: usize = 8 * 1024 * 1024;
+pub(crate) const BUILD_SIZE_LIMIT: usize = 8 * 1024 * 1024;
 
 /// A byte's equivalence class. Two bytes share a class when no state's
 /// transition tells them apart.
@@ -138,6 +140,7 @@ impl Dfa {
     }
 
     /// Whether this automaton accepts `word`.
+    #[cfg(test)]
     fn holds(&self, word: &[u8]) -> bool {
         let mut state = 0;
         for byte in word {
@@ -163,6 +166,7 @@ impl Dfa {
     }
 
     /// The automaton accepting nothing, over the one-class alphabet.
+    #[cfg(test)]
     fn empty() -> Dfa {
         Dfa {
             classes: vec![0; 256],
@@ -818,7 +822,7 @@ impl Partition {
 
 /// Which words a pattern is read over.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Alphabet {
+pub(crate) enum Alphabet {
     /// UTF-8 text, where `.` is one code point and a pattern may name a
     /// Unicode class. This is what a `str` refinement means.
     Text,
@@ -842,14 +846,15 @@ static EVERY_WORD: OnceLock<Arc<Dfa>> = OnceLock::new();
 /// for. Equality and order read the table through it, so two spellings of one
 /// language stay one value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct RegularSet {
+pub(crate) struct RegularSet {
     dfa: Arc<Dfa>,
 }
 
 impl RegularSet {
     /// The empty set.
+    #[cfg(test)]
     #[must_use]
-    pub fn empty() -> RegularSet {
+    pub(crate) fn empty() -> RegularSet {
         RegularSet {
             dfa: Arc::new(Dfa::empty()),
         }
@@ -864,7 +869,7 @@ impl RegularSet {
     /// difference that holds only those reads as inhabited and refutes an
     /// inclusion nothing stands against.
     #[must_use]
-    pub fn all(alphabet: Alphabet) -> RegularSet {
+    pub(crate) fn all(alphabet: Alphabet) -> RegularSet {
         // Both are built once and handed out as handles. A universe is asked for
         // wherever a slot is complemented -- which is every kind of every
         // descriptor -- and neither table depends on anything, so rebuilding one
@@ -893,7 +898,7 @@ impl RegularSet {
     /// Handing the limits to the builder makes the refusal happen where the
     /// memory would be spent.
     #[must_use]
-    pub fn pattern(pattern: &str, alphabet: Alphabet) -> Option<RegularSet> {
+    pub(crate) fn pattern(pattern: &str, alphabet: Alphabet) -> Option<RegularSet> {
         // A caller's pattern is read over *text*, whichever kind it constrains,
         // which is what the walk does with it: a `Regex` matches the characters
         // of a string. So it compiles in UTF-8 mode for `str`, and its language
@@ -939,7 +944,7 @@ impl RegularSet {
     /// merge: the state after `i` bytes is `n - i` bytes from acceptance and
     /// the sink is never, so the table holds what `chain_fits` counts.
     #[must_use]
-    pub fn word(word: &[u8]) -> Option<RegularSet> {
+    pub(crate) fn word(word: &[u8]) -> Option<RegularSet> {
         if !chain_fits(word.len()) {
             return None;
         }
@@ -951,31 +956,32 @@ impl RegularSet {
     /// The words of at least `length` symbols -- code points for
     /// [`Alphabet::Text`], bytes for [`Alphabet::Bytes`].
     #[must_use]
-    pub fn at_least(length: usize, alphabet: Alphabet) -> Option<RegularSet> {
+    pub(crate) fn at_least(length: usize, alphabet: Alphabet) -> Option<RegularSet> {
         RegularSet::compile(&format!("{}{{{length},}}", code_point(alphabet)), false)
     }
 
     /// The words of at most `length` symbols.
     #[must_use]
-    pub fn at_most(length: usize, alphabet: Alphabet) -> Option<RegularSet> {
+    pub(crate) fn at_most(length: usize, alphabet: Alphabet) -> Option<RegularSet> {
         RegularSet::compile(&format!("{}{{0,{length}}}", code_point(alphabet)), false)
     }
 
     /// Whether this set holds no word.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.dfa.is_empty()
     }
 
     /// Whether this set holds `word`.
+    #[cfg(test)]
     #[must_use]
-    pub fn holds(&self, word: &[u8]) -> bool {
+    pub(crate) fn holds(&self, word: &[u8]) -> bool {
         self.dfa.holds(word)
     }
 
     /// The words in either set, or `None` past [`MAX_STATES`].
     #[must_use]
-    pub fn union(&self, other: &RegularSet) -> Option<RegularSet> {
+    pub(crate) fn union(&self, other: &RegularSet) -> Option<RegularSet> {
         self.dfa
             .product(&other.dfa, |a, b| a || b)
             .map(|dfa| RegularSet { dfa: Arc::new(dfa) })
@@ -983,7 +989,7 @@ impl RegularSet {
 
     /// The words in both sets, or `None` past [`MAX_STATES`].
     #[must_use]
-    pub fn intersect(&self, other: &RegularSet) -> Option<RegularSet> {
+    pub(crate) fn intersect(&self, other: &RegularSet) -> Option<RegularSet> {
         self.dfa
             .product(&other.dfa, |a, b| a && b)
             .map(|dfa| RegularSet { dfa: Arc::new(dfa) })
@@ -1000,7 +1006,7 @@ impl RegularSet {
     /// to the caller that knows the kind: `Line::complement` meets this with
     /// [`RegularSet::all`] for the kind it complements within.
     #[must_use]
-    pub fn complement(&self) -> RegularSet {
+    pub(crate) fn complement(&self) -> RegularSet {
         RegularSet {
             dfa: Arc::new(self.dfa.complement()),
         }

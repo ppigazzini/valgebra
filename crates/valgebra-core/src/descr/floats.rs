@@ -107,6 +107,7 @@ impl Span {
         self.lo.total_cmp(&self.hi) == core::cmp::Ordering::Greater
     }
 
+    #[cfg(test)]
     fn holds(self, value: f64) -> bool {
         self.lo <= value && value <= self.hi
     }
@@ -152,7 +153,7 @@ fn normalise(value: f64) -> f64 {
 
 /// A set of floats.
 #[derive(Debug, Clone, PartialEq)]
-pub struct FloatSet {
+pub(crate) struct FloatSet {
     /// Sorted intervals over the ordered floats, with a float between each two
     /// that neither holds.
     spans: Vec<Span>,
@@ -187,7 +188,7 @@ impl PartialOrd for FloatSet {
 impl FloatSet {
     /// The empty set.
     #[must_use]
-    pub fn empty() -> FloatSet {
+    pub(crate) fn empty() -> FloatSet {
         FloatSet {
             spans: Vec::new(),
             nan: false,
@@ -196,7 +197,7 @@ impl FloatSet {
 
     /// Every float, `nan` included.
     #[must_use]
-    pub fn all() -> FloatSet {
+    pub(crate) fn all() -> FloatSet {
         FloatSet {
             spans: vec![Span::new(f64::NEG_INFINITY, true, f64::INFINITY, true)],
             nan: true,
@@ -204,8 +205,9 @@ impl FloatSet {
     }
 
     /// Just `nan`.
+    #[cfg(test)]
     #[must_use]
-    pub fn nan() -> FloatSet {
+    pub(crate) fn nan() -> FloatSet {
         FloatSet {
             spans: Vec::new(),
             nan: true,
@@ -218,7 +220,7 @@ impl FloatSet {
     /// nothing -- itself included. So a literal `nan` admits no value at all,
     /// which is a fact about Python's equality rather than a choice made here.
     #[must_use]
-    pub fn just(value: f64) -> FloatSet {
+    pub(crate) fn just(value: f64) -> FloatSet {
         if value.is_nan() {
             FloatSet::empty()
         } else {
@@ -228,25 +230,25 @@ impl FloatSet {
 
     /// The floats at or above `bound`, or none where `bound` is `nan`.
     #[must_use]
-    pub fn at_least(bound: f64) -> FloatSet {
+    pub(crate) fn at_least(bound: f64) -> FloatSet {
         FloatSet::ordered(bound, true, f64::INFINITY, true)
     }
 
     /// The floats strictly above `bound`.
     #[must_use]
-    pub fn above(bound: f64) -> FloatSet {
+    pub(crate) fn above(bound: f64) -> FloatSet {
         FloatSet::ordered(bound, false, f64::INFINITY, true)
     }
 
     /// The floats at or below `bound`.
     #[must_use]
-    pub fn at_most(bound: f64) -> FloatSet {
+    pub(crate) fn at_most(bound: f64) -> FloatSet {
         FloatSet::ordered(f64::NEG_INFINITY, true, bound, true)
     }
 
     /// The floats strictly below `bound`.
     #[must_use]
-    pub fn below(bound: f64) -> FloatSet {
+    pub(crate) fn below(bound: f64) -> FloatSet {
         FloatSet::ordered(f64::NEG_INFINITY, true, bound, false)
     }
 
@@ -275,13 +277,14 @@ impl FloatSet {
 
     /// Whether this set holds no float.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.spans.is_empty() && !self.nan
     }
 
     /// Whether this set holds `value`.
+    #[cfg(test)]
     #[must_use]
-    pub fn holds(&self, value: f64) -> bool {
+    pub(crate) fn holds(&self, value: f64) -> bool {
         if value.is_nan() {
             return self.nan;
         }
@@ -318,7 +321,7 @@ impl FloatSet {
 
     /// The floats in either set.
     #[must_use]
-    pub fn union(&self, other: &FloatSet) -> FloatSet {
+    pub(crate) fn union(&self, other: &FloatSet) -> FloatSet {
         FloatSet {
             spans: self.spans.iter().chain(&other.spans).copied().collect(),
             nan: self.nan || other.nan,
@@ -328,7 +331,7 @@ impl FloatSet {
 
     /// The floats in both sets.
     #[must_use]
-    pub fn intersect(&self, other: &FloatSet) -> FloatSet {
+    pub(crate) fn intersect(&self, other: &FloatSet) -> FloatSet {
         let mut spans = Vec::new();
         for mine in &self.spans {
             for theirs in &other.spans {
@@ -351,7 +354,7 @@ impl FloatSet {
     /// one interval's end to the float before the next one's start. The `nan`
     /// bit flips on its own, which is what keeps the two halves independent.
     #[must_use]
-    pub fn complement(&self) -> FloatSet {
+    pub(crate) fn complement(&self) -> FloatSet {
         let mut spans = Vec::new();
         // The least float no interval so far holds, or `None` once `inf` is.
         let mut next = Some(f64::NEG_INFINITY);

@@ -46,11 +46,11 @@ use crate::verdict::Verdict;
 /// one is itself a union. The bound is a limit of the representation rather than
 /// an approximation -- past it there is no sound union to substitute, so the
 /// operation refuses.
-pub const MAX_LINES: usize = 256;
+pub(crate) const MAX_LINES: usize = 256;
 
 /// What the set lattice asks of a letter beyond the algebra: which of its
 /// distinct values a Python set keeps as one member.
-pub trait Members: Guard {
+pub(crate) trait Members: Guard {
     /// Whether one Python set can hold a member of each of `sets`, each of
     /// which holds a value.
     ///
@@ -131,6 +131,7 @@ impl<G: Members> Line<G> {
     }
 
     /// Whether the set whose members are `members` satisfies this line.
+    #[cfg(test)]
     fn holds(&self, members: &[G::Value]) -> bool {
         members.iter().all(|value| self.elements.holds(value))
             && self
@@ -254,24 +255,25 @@ impl<G: Members> Summand for Line<G> {
 /// not run. So the laws here are checked against the *sets* rather than by
 /// equality of the forms.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SetLattice<G: Members>(PolarUnion<Line<G>>);
+pub(crate) struct SetLattice<G: Members>(PolarUnion<Line<G>>);
 
 impl<G: Members> SetLattice<G> {
     /// No set at all -- not even the empty one.
+    #[cfg(test)]
     #[must_use]
-    pub fn empty() -> SetLattice<G> {
+    pub(crate) fn empty() -> SetLattice<G> {
         SetLattice(PolarUnion::of(Vec::new()))
     }
 
     /// Every set: the one line that subtracts nothing and bounds nothing.
     #[must_use]
-    pub fn all() -> SetLattice<G> {
+    pub(crate) fn all() -> SetLattice<G> {
         SetLattice(PolarUnion::of(vec![Line::top(())]))
     }
 
     /// The sets whose members all lie in `elements`.
     #[must_use]
-    pub fn of(elements: G) -> SetLattice<G> {
+    pub(crate) fn of(elements: G) -> SetLattice<G> {
         SetLattice(PolarUnion::of(vec![Line {
             elements: Values::Only(elements),
             minus: Vec::new(),
@@ -284,32 +286,34 @@ impl<G: Members> SetLattice<G> {
     /// is never empty however empty its elements. A negated form has to be
     /// expanded first, and a refusal there reads as *not* empty -- the safe
     /// direction, since claiming emptiness is the claim that can be wrong.
+    #[cfg(test)]
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.emptiness() == Verdict::Empty
     }
 
     /// What is known about this holding a set.
     #[must_use]
-    pub fn emptiness(&self) -> Verdict {
+    pub(crate) fn emptiness(&self) -> Verdict {
         self.0.verdict((), Line::emptiness)
     }
 
     /// Whether the set whose members are `members` is held.
+    #[cfg(test)]
     #[must_use]
-    pub fn holds(&self, members: &[G::Value]) -> bool {
+    pub(crate) fn holds(&self, members: &[G::Value]) -> bool {
         self.0.holds(|line| line.holds(members))
     }
 
     /// The sets in either, or `None` past [`MAX_LINES`].
     #[must_use]
-    pub fn union(&self, other: &SetLattice<G>) -> Option<SetLattice<G>> {
+    pub(crate) fn union(&self, other: &SetLattice<G>) -> Option<SetLattice<G>> {
         self.0.union(&other.0, ()).map(SetLattice)
     }
 
     /// The sets in both, or `None` past [`MAX_LINES`] or where a guard refuses.
     #[must_use]
-    pub fn intersect(&self, other: &SetLattice<G>) -> Option<SetLattice<G>> {
+    pub(crate) fn intersect(&self, other: &SetLattice<G>) -> Option<SetLattice<G>> {
         self.0.intersect(&other.0, ()).map(SetLattice)
     }
 
@@ -318,7 +322,7 @@ impl<G: Members> SetLattice<G> {
     /// Total, which is what the [`Guard`] contract asks and what keeps a
     /// descriptor complementable.
     #[must_use]
-    pub fn complement(&self) -> SetLattice<G> {
+    pub(crate) fn complement(&self) -> SetLattice<G> {
         SetLattice(self.0.complement(()))
     }
 

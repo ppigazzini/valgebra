@@ -39,7 +39,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// It holds every table as it is built, before minimisation: a table reached
 /// by a walk through `Reached`, and a table built as a chain -- a literal word,
 /// a sequence shape -- through `chain_fits`.
-pub const MAX_STATES: usize = 4096;
+pub(crate) const MAX_STATES: usize = 4096;
 
 /// Whether a chain of `letters` fits [`MAX_STATES`] as it is built: a state for
 /// each letter, the state after the last, and the sink a wrong letter leads to.

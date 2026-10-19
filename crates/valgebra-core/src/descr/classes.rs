@@ -142,7 +142,7 @@ impl Attributes {
     /// `class C: pass` is, for every name neither its namespace nor `object`'s
     /// defines.
     #[must_use]
-    pub fn plain() -> Attributes {
+    pub(crate) fn plain() -> Attributes {
         Attributes::new(true, Hook::Neither)
     }
 
@@ -287,7 +287,7 @@ impl Class {
     ///
     /// Set beside the constructor, as the kind is, because only a caller that
     /// can see the class object can read its namespace. A class built without
-    /// it carries [`Attributes::plain`]. Shared, because a caller reads a class
+    /// it carries `Attributes::plain`. Shared, because a caller reads a class
     /// once and hands the reading to every snapshot of it.
     #[must_use]
     pub fn carrying(self, attributes: Arc<Attributes>) -> Class {
@@ -320,7 +320,7 @@ impl Class {
     /// constructor that set it to the id in silence would make two calls with
     /// different ids mean "these can share no value" without ever saying so.
     #[must_use]
-    pub fn laid_out(id: u32, layout: u32) -> Class {
+    pub(crate) fn laid_out(id: u32, layout: u32) -> Class {
         Class::new(id, Some(layout), &[])
     }
 
@@ -338,7 +338,7 @@ impl Class {
     /// The ids are the top of the range, one per kind, below the `u32::MAX` a
     /// caller saturates at; the bindings number a query's classes from zero.
     #[must_use]
-    pub fn exact(kind: Kind) -> Class {
+    pub(crate) fn exact(kind: Kind) -> Class {
         // The kind's place in `Kind::ALL`: one of eleven, so the subtraction
         // cannot wrap and no two kinds share an id.
         let at = kind as u32;

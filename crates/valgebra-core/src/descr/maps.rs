@@ -53,14 +53,14 @@ use crate::verdict::Verdict;
 /// label and per key kind, so the union needs a bound for the reason every other
 /// union here does: past it there is no sound set to substitute, since one too
 /// wide is complemented into one too narrow.
-pub const MAX_ATOMS: usize = 256;
+pub(crate) const MAX_ATOMS: usize = 256;
 
 /// The listed kinds a dict key may have: the hashable ones.
 ///
 /// A `list`, a `set` and a `dict` are unhashable, so no key has those kinds and
 /// the atom carries no default for them. The array is what makes the default a
 /// function on a partition rather than a set of clauses that might overlap.
-pub const KEY_KINDS: [Kind; 8] = [
+pub(crate) const KEY_KINDS: [Kind; 8] = [
     Kind::NoneType,
     Kind::Bool,
     Kind::Int,
@@ -101,7 +101,7 @@ fn key_slot(kind: Option<Kind>) -> Option<usize> {
 /// grounds that infinity and `nan` have no clean spelling. Nor is a tuple or a
 /// frozenset, which are hashable but not constants a `Literal` names.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Label {
+pub(crate) enum Label {
     /// `None`.
     NoneType,
     /// One of the two booleans.
@@ -115,13 +115,13 @@ pub enum Label {
 impl Label {
     /// A `str` key with this text, which is what a record's field is.
     #[must_use]
-    pub fn str(text: &str) -> Label {
+    pub(crate) fn str(text: &str) -> Label {
         Label::Word(text.as_bytes().to_vec(), Kind::Str)
     }
 
     /// The kind of the key, which is the part of the partition it falls in.
     #[must_use]
-    pub fn kind(&self) -> Kind {
+    pub(crate) fn kind(&self) -> Kind {
         match self {
             Label::NoneType => Kind::NoneType,
             Label::Bool(_) => Kind::Bool,
@@ -136,14 +136,15 @@ impl Label {
 /// The key is given twice over, because an atom asks two questions of it:
 /// whether it is a key the atom *names*, and which part of the partition it
 /// falls in. A key that is not a constant has no label and only a part.
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq)]
-pub struct Entry<V> {
+pub(crate) struct Entry<V> {
     /// The key, where it is a constant an atom could name.
-    pub label: Option<Label>,
+    pub(crate) label: Option<Label>,
     /// The key's kind, or `None` where the key is of no listed kind.
-    pub kind: Option<Kind>,
+    pub(crate) kind: Option<Kind>,
     /// What the key maps to.
-    pub value: V,
+    pub(crate) value: V,
 }
 
 /// One constraint of `S`: some key outside `besides`, of this part, maps into
@@ -190,7 +191,7 @@ fn one_key(a: &Label, b: &Label) -> bool {
 /// search is a product of those counts. It is small wherever an atom came out
 /// of the schemas a caller writes, and past the bound the atom is *unknown*,
 /// which is sound: nothing is proved empty or inhabited.
-pub const MAX_ASSIGNMENTS: usize = 4096;
+pub(crate) const MAX_ASSIGNMENTS: usize = 4096;
 
 /// Every key of a part with finitely many, or `None` for a part with
 /// infinitely many.
@@ -572,6 +573,7 @@ impl<G: Guard> MapAtom<G> {
     }
 
     /// Whether this atom holds the dict carrying `entries`.
+    #[cfg(test)]
     fn holds(&self, entries: &[Entry<G::Value>]) -> bool {
         let named = |label: &Label| {
             entries
@@ -667,19 +669,20 @@ impl<G: Guard> Summand for MapAtom<G> {
 /// `descr/polar.rs`, and for the same reason: a complement must be total, and
 /// its positive form can pass [`MAX_ATOMS`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MapLattice<G: Guard>(PolarUnion<MapAtom<G>>);
+pub(crate) struct MapLattice<G: Guard>(PolarUnion<MapAtom<G>>);
 
 impl<G: Guard> MapLattice<G> {
     /// No dict at all.
+    #[cfg(test)]
     #[must_use]
-    pub fn empty() -> MapLattice<G> {
+    pub(crate) fn empty() -> MapLattice<G> {
         MapLattice(PolarUnion::of(Vec::new()))
     }
 
     /// Every dict: the one atom that names no label and lets every key map
     /// anywhere.
     #[must_use]
-    pub fn all() -> MapLattice<G> {
+    pub(crate) fn all() -> MapLattice<G> {
         MapLattice(PolarUnion::of(vec![MapAtom::top()]))
     }
 
@@ -687,8 +690,9 @@ impl<G: Guard> MapLattice<G> {
     ///
     /// `optional` admits the dicts without the key at all, which is the `⊥` in
     /// the field's type rather than a rule beside it.
+    #[cfg(test)]
     #[must_use]
-    pub fn label(label: Label, ty: G, optional: bool) -> MapLattice<G> {
+    pub(crate) fn label(label: Label, ty: G, optional: bool) -> MapLattice<G> {
         let mut atom = MapAtom::top();
         atom.labels.insert(
             label,
@@ -714,7 +718,7 @@ impl<G: Guard> MapLattice<G> {
     /// reading of overlapping clauses: a key belongs when *some* clause admits
     /// it.
     #[must_use]
-    pub fn record(
+    pub(crate) fn record(
         labels: impl IntoIterator<Item = (Label, G, bool)>,
         opened: impl IntoIterator<Item = (Option<Kind>, G)>,
     ) -> Option<MapLattice<G>> {
@@ -753,8 +757,9 @@ impl<G: Guard> MapLattice<G> {
     }
 
     /// The dicts every one of whose keys of `kind` maps into `ty`.
+    #[cfg(test)]
     #[must_use]
-    pub fn keyed(kind: Kind, ty: G) -> MapLattice<G> {
+    pub(crate) fn keyed(kind: Kind, ty: G) -> MapLattice<G> {
         let mut atom = MapAtom::top();
         if let Some(slot) = key_slot(Some(kind))
             && let Some(default) = atom.defaults.get_mut(slot)
@@ -777,8 +782,9 @@ impl<G: Guard> MapLattice<G> {
     ///
     /// `None` in `parts` is the part for a key of no listed kind, which a closed
     /// record has to shut too: an object with a `__hash__` is a key.
+    #[cfg(test)]
     #[must_use]
-    pub fn keys_among(parts: &[Option<Kind>]) -> MapLattice<G> {
+    pub(crate) fn keys_among(parts: &[Option<Kind>]) -> MapLattice<G> {
         let mut atom = MapAtom::top();
         for slot in 0..PARTS {
             let open = parts.iter().any(|part| key_slot(*part) == Some(slot));
@@ -797,19 +803,20 @@ impl<G: Guard> MapLattice<G> {
     /// A negated form has to be expanded first, and a refusal there is *unknown*
     /// rather than inhabited: past the bound there is no union to read.
     #[must_use]
-    pub fn emptiness(&self) -> Verdict {
+    pub(crate) fn emptiness(&self) -> Verdict {
         self.0.verdict((), MapAtom::emptiness)
     }
 
     /// Whether the dict carrying `entries` is held.
+    #[cfg(test)]
     #[must_use]
-    pub fn holds(&self, entries: &[Entry<G::Value>]) -> bool {
+    pub(crate) fn holds(&self, entries: &[Entry<G::Value>]) -> bool {
         self.0.holds(|atom| atom.holds(entries))
     }
 
     /// The dicts in either, or `None` past [`MAX_ATOMS`].
     #[must_use]
-    pub fn union(&self, other: &MapLattice<G>) -> Option<MapLattice<G>> {
+    pub(crate) fn union(&self, other: &MapLattice<G>) -> Option<MapLattice<G>> {
         self.0.union(&other.0, ()).map(MapLattice)
     }
 
@@ -821,7 +828,7 @@ impl<G: Guard> MapLattice<G> {
     /// already held drops the atoms holding no dict before the next factor
     /// multiplies them.
     #[must_use]
-    pub fn intersect(&self, other: &MapLattice<G>) -> Option<MapLattice<G>> {
+    pub(crate) fn intersect(&self, other: &MapLattice<G>) -> Option<MapLattice<G>> {
         self.0.intersect(&other.0, ()).map(MapLattice)
     }
 
@@ -829,7 +836,7 @@ impl<G: Guard> MapLattice<G> {
     ///
     /// Total, which is what the [`Guard`] contract asks.
     #[must_use]
-    pub fn complement(&self) -> MapLattice<G> {
+    pub(crate) fn complement(&self) -> MapLattice<G> {
         MapLattice(self.0.complement(()))
     }
 

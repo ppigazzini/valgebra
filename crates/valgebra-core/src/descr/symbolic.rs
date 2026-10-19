@@ -30,7 +30,7 @@ use crate::verdict::Verdict;
 use rustc_hash::FxHashMap;
 use std::collections::VecDeque;
 
-pub use super::automaton::MAX_STATES;
+pub(crate) use super::automaton::MAX_STATES;
 
 /// The most transitions one state may have.
 ///
@@ -44,7 +44,7 @@ pub use super::automaton::MAX_STATES;
 /// there are positions in a shape. Both are far past what an annotation writes
 /// -- `list[int | str]` branches three ways -- and both are limits of the
 /// representation rather than approximations, so a shape past either refuses.
-pub const MAX_ROW: usize = MAX_STATES;
+pub(crate) const MAX_ROW: usize = MAX_STATES;
 
 /// The most edges a product's whole table may hold.
 ///
@@ -59,7 +59,7 @@ pub const MAX_ROW: usize = MAX_STATES;
 /// writes -- a pattern in a contract distinguishes tens of positions, not
 /// thousands -- and reaching it refuses, which every caller of a descriptor
 /// operation already handles.
-pub const MAX_EDGES: usize = 1 << 16;
+pub(crate) const MAX_EDGES: usize = 1 << 16;
 
 /// A Boolean algebra of value sets, which is what an automaton's guards must
 /// form.
@@ -87,8 +87,9 @@ pub const MAX_EDGES: usize = 1 << 16;
 /// choose, because an order read off a pair of spellings is not an order at
 /// all. A letter that orders two equal sets apart keeps an edge a merge would
 /// have folded, which is a larger table and never a different language.
-pub trait Guard: Clone + Eq + Ord + core::fmt::Debug {
+pub(crate) trait Guard: Clone + Eq + Ord + core::fmt::Debug {
     /// A value a guard is asked about.
+    #[cfg(test)]
     type Value;
 
     /// The set holding no value.
@@ -121,6 +122,7 @@ pub trait Guard: Clone + Eq + Ord + core::fmt::Debug {
         }
     }
     /// Whether the set holds `value`.
+    #[cfg(test)]
     fn holds(&self, value: &Self::Value) -> bool;
 }
 
@@ -139,6 +141,7 @@ pub(crate) struct Edge<G> {
 impl<G: Guard> Edge<G> {
     /// Whether this edge takes `value`, which for the else edge is decided by
     /// the caller having tried the others first.
+    #[cfg(test)]
     fn takes(&self, value: &G::Value) -> bool {
         self.guard.as_ref().is_none_or(|guard| guard.holds(value))
     }
@@ -190,7 +193,7 @@ type Signature<G> = (bool, Vec<(u32, Option<G>)>);
 /// well-formed table has none, and `minimal`, which every table here passes
 /// through, asserts each one it reads and builds.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SymbolicDfa<G: Guard> {
+pub(crate) struct SymbolicDfa<G: Guard> {
     edges: Vec<Vec<Edge<G>>>,
     accepting: Vec<bool>,
 }
@@ -198,13 +201,13 @@ pub struct SymbolicDfa<G: Guard> {
 impl<G: Guard> SymbolicDfa<G> {
     /// The language holding no sequence.
     #[must_use]
-    pub fn empty() -> SymbolicDfa<G> {
+    pub(crate) fn empty() -> SymbolicDfa<G> {
         SymbolicDfa::single(false)
     }
 
     /// The language holding every sequence.
     #[must_use]
-    pub fn all() -> SymbolicDfa<G> {
+    pub(crate) fn all() -> SymbolicDfa<G> {
         SymbolicDfa::single(true)
     }
 
@@ -244,7 +247,7 @@ impl<G: Guard> SymbolicDfa<G> {
     /// never reaches its sink, and the numbering walk leaves it out, so that
     /// table holds one state fewer than the bound counts.
     #[must_use]
-    pub fn shape(prefix: &[G], tail: Option<&G>) -> Option<SymbolicDfa<G>> {
+    pub(crate) fn shape(prefix: &[G], tail: Option<&G>) -> Option<SymbolicDfa<G>> {
         if !chain_fits(prefix.len()) {
             return None;
         }
@@ -347,8 +350,9 @@ impl<G: Guard> SymbolicDfa<G> {
     ///
     /// A *proof*: [`emptiness`](Self::emptiness) is what tells an unproved
     /// language from an empty one.
+    #[cfg(test)]
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.emptiness() == Verdict::Empty
     }
 
@@ -366,7 +370,7 @@ impl<G: Guard> SymbolicDfa<G> {
     /// Reading the generous walk alone reports a sequence of such a guard
     /// inhabited, which is a refutation standing on a value nobody has.
     #[must_use]
-    pub fn emptiness(&self) -> Verdict {
+    pub(crate) fn emptiness(&self) -> Verdict {
         if self.accepts_under(Reach::Certain) {
             return Verdict::Inhabited;
         }
@@ -403,8 +407,9 @@ impl<G: Guard> SymbolicDfa<G> {
     }
 
     /// Whether this language holds the sequence `values`.
+    #[cfg(test)]
     #[must_use]
-    pub fn holds(&self, values: &[G::Value]) -> bool {
+    pub(crate) fn holds(&self, values: &[G::Value]) -> bool {
         let mut state = 0;
         for value in values {
             // The guarded edges are disjoint, so at most one takes the value;
@@ -438,7 +443,7 @@ impl<G: Guard> SymbolicDfa<G> {
     /// the table rejects by falling, and flipping its flags would accept those
     /// sequences instead of the ones it meant.
     #[must_use]
-    pub fn complement(&self) -> SymbolicDfa<G> {
+    pub(crate) fn complement(&self) -> SymbolicDfa<G> {
         // The flip of a minimal machine is minimal: a sequence separates two
         // states in one language exactly when it separates them in the other,
         // and the edges it walks are untouched, so neither the partition nor the
@@ -458,7 +463,7 @@ impl<G: Guard> SymbolicDfa<G> {
     /// that is either answers without a product -- whose table would be the
     /// other side's again, rebuilt pair by pair and minimised.
     #[must_use]
-    pub fn union(&self, other: &SymbolicDfa<G>) -> Option<SymbolicDfa<G>> {
+    pub(crate) fn union(&self, other: &SymbolicDfa<G>) -> Option<SymbolicDfa<G>> {
         match (self.constant(), other.constant()) {
             (Some(true), _) | (_, Some(true)) => Some(SymbolicDfa::all()),
             (Some(false), _) => Some(other.clone()),
@@ -470,7 +475,7 @@ impl<G: Guard> SymbolicDfa<G> {
     /// The sequences in both languages: the whole language is the identity and
     /// the empty one absorbs, as [`union`](Self::union) reads them.
     #[must_use]
-    pub fn intersect(&self, other: &SymbolicDfa<G>) -> Option<SymbolicDfa<G>> {
+    pub(crate) fn intersect(&self, other: &SymbolicDfa<G>) -> Option<SymbolicDfa<G>> {
         match (self.constant(), other.constant()) {
             (Some(false), _) | (_, Some(false)) => Some(SymbolicDfa::empty()),
             (Some(true), _) => Some(other.clone()),

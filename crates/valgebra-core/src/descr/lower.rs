@@ -77,17 +77,6 @@ pub trait Constants {
     }
 }
 
-/// A pool that knows nothing, for a caller that has none.
-///
-/// The core's own relations have no object table -- the constants live in the
-/// bindings -- so a schema naming one refuses to lower here rather than being
-/// guessed at. What still lowers is everything whose meaning is structural: the
-/// kinds, the sequences, the sets, the three operations, and the length and
-/// pattern constraints, which carry their operand inline.
-pub struct NoConstants;
-
-impl Constants for NoConstants {}
-
 /// The nodes this will lower before refusing.
 ///
 /// A schema is a tree the caller writes, and lowering both recurses over it and
@@ -122,7 +111,7 @@ impl Constants for NoConstants {}
 /// Construction shares those subtrees where they are built alike
 /// (`ir/intern.rs`), which is what gives the memo that would replace this
 /// ceiling a cheap key; the memo is the half not written.
-pub const BUDGET: u32 = 64;
+pub(crate) const BUDGET: u32 = 64;
 
 /// The set a schema denotes, or `None` where the descriptor cannot yet hold it.
 ///
@@ -150,7 +139,7 @@ pub fn lower(schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
 /// stating: those three say what a build may spend, and this says what it is
 /// given to build *from*. A `Ref` has no component to land in, so without the
 /// unfolding a recursive schema does not lower at all.
-pub const UNFOLDS: u32 = 1;
+pub(crate) const UNFOLDS: u32 = 1;
 
 /// [`lower`], resolving a recursive schema's references through `definitions`.
 ///
@@ -163,7 +152,7 @@ pub const UNFOLDS: u32 = 1;
 ///
 /// Refuses what [`lower`] refuses. A reference `definitions` does not resolve
 /// is one of those: the unfolding leaves it in place and no component holds it.
-pub fn lower_unfolded(
+pub(crate) fn lower_unfolded(
     schema: &Schema,
     definitions: &[Schema],
     polarity: Polarity,
@@ -192,17 +181,17 @@ pub fn lower_unfolded(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bounds {
     /// The schema nodes a lowering will read.
-    pub nodes: u32,
+    pub(crate) nodes: u32,
     /// The schema nesting a lowering will descend.
-    pub depth: u32,
+    pub(crate) depth: u32,
     /// The units of multiplying work a build may spend.
-    pub work: u64,
+    pub(crate) work: u64,
 }
 
 impl Bounds {
     /// The bounds every relation lowers under. See the three constants for what
     /// each number is measured from.
-    pub const DEFAULT: Bounds = Bounds {
+    pub(crate) const DEFAULT: Bounds = Bounds {
         nodes: BUDGET,
         depth: DEPTH,
         work: WORK,
@@ -222,7 +211,7 @@ impl Bounds {
 
 /// The work a build may spend before it refuses.
 ///
-/// [`BUDGET`] bounds the schema this reads; this bounds what reading it costs,
+/// `BUDGET` bounds the schema this reads; this bounds what reading it costs,
 /// and the two are different quantities. A schema of a dozen nodes can spend a
 /// third of a second and then refuse anyway, because the bounds on a descriptor
 /// say how large a result may be and say nothing about the work of reaching one.
@@ -235,7 +224,7 @@ impl Bounds {
 /// record nested eight deep spends 22,806, and a union of four records nested
 /// three deep minus a union of its siblings spends 170,597.
 ///
-/// On the shapes measured above, [`DEPTH`] refuses first for anything deep, so
+/// On the shapes measured above, `DEPTH` refuses first for anything deep, so
 /// this number stops a build only where a shape is shallow and wide -- which is
 /// the one nesting cannot catch, and what it is kept for.
 ///
@@ -249,7 +238,7 @@ impl Bounds {
 /// margin is real rather than nominal.
 ///
 /// The field after that is outside on both counts: four fields against sixteen
-/// corners spend 9,965 units and read 96 nodes against a [`BUDGET`] of 64, so
+/// corners spend 9,965 units and read 96 nodes against a `BUDGET` of 64, so
 /// raising either bound alone leaves the refusal where it is. That is the width
 /// of the decided fragment, and `docs/15-decidability.md` states it as one.
 ///
@@ -294,7 +283,7 @@ pub const WORK: u64 = 4096;
 /// Construction shares those subtrees where they are built alike
 /// (`ir/intern.rs`), which is what gives the memo that would replace this
 /// ceiling a cheap key; the memo is the half not written.
-pub const DEPTH: u32 = 5;
+pub(crate) const DEPTH: u32 = 5;
 
 /// [`lower`] under explicit bounds, for a caller measuring one of them.
 ///
@@ -540,7 +529,7 @@ fn label_of(operand: &Operand) -> Option<Label> {
 /// that were lowered; a reference no definition resolves is cut, as lowering
 /// one refuses.
 #[must_use]
-pub fn an_empty_reading_stands(
+pub(crate) fn an_empty_reading_stands(
     widened: &[&Schema],
     narrowed: &[&Schema],
     definitions: &[Schema],

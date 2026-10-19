@@ -769,8 +769,9 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "crates/valgebra-core/src/descr/lower.rs",
-            "pub const UNFOLDS: u32 = 1;",
-            "pub const UNFOLDS: u32 = 1;\npub const MAX_PLANTED_BOUND: u32 = 1;",
+            "pub(crate) const UNFOLDS: u32 = 1;",
+            "pub(crate) const UNFOLDS: u32 = 1;\n"
+            "pub(crate) const MAX_PLANTED_BOUND: u32 = 1;",
         ),
         trips=("test_every_declared_bound_is_driven_or_accepted",),
     ),
@@ -2589,8 +2590,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "crates/valgebra-core/src/descr/regular.rs",
-            "pub const BUILD_SIZE_LIMIT: usize = 8 * 1024 * 1024;",
-            "pub const BUILD_BYTES_LIMIT: usize = 8 * 1024 * 1024;",
+            "pub(crate) const BUILD_SIZE_LIMIT: usize = 8 * 1024 * 1024;",
+            "pub(crate) const BUILD_BYTES_LIMIT: usize = 8 * 1024 * 1024;",
         ),
         trips=("test_every_accepted_bound_exists_and_has_a_reason",),
     ),

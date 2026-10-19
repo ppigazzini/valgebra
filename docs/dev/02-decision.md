@@ -283,8 +283,12 @@ into a refusal and never one answer into a different one -- and only one of
 them asks the ceiling about an intermediate nobody wanted.
 
 `descr/lower.rs` is the map from a term to a set, and the two live side by side
-rather than one replacing the other: the walk still decides membership, and the
-descriptor is what the algebra reasons in.
+rather than one replacing the other: the walk decides membership, and the
+descriptor is what the algebra reasons in. So the descriptor's own membership --
+`Value`, `Descr::admits` and each component's `holds` -- compiles under
+`cfg(test)` alone: no relation asks whether a value is a member, and the laws
+hold every operation to it. The components are crate-private, so a part no
+relation reaches is dead code the compiler reports.
 
 ## Why every rule stays
 

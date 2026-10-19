@@ -19,27 +19,27 @@
 //! rules and then asks here where they decline, and `is_empty_with` does the
 //! same for emptiness. What this cannot *hold* -- a predicate, a recursive
 //! schema, a shape past a bound -- it refuses to lower, and a caller reads the
-//! refusal as no answer rather than as a wrong one. [`Component`] says which
+//! refusal as no answer rather than as a wrong one. `Component` says which
 //! representation each kind has, so what the descriptor can see is read off
 //! the type rather than inferred.
 
 mod automaton;
 pub mod budget;
 pub mod classes;
-pub mod floats;
-pub mod integers;
-pub mod interval;
+pub(crate) mod floats;
+pub(crate) mod integers;
+pub(crate) mod interval;
 #[cfg(test)]
 mod lattice_tests;
 mod lines;
 pub mod lower;
-pub mod maps;
+pub(crate) mod maps;
 mod polar;
-pub mod records;
-pub mod regular;
-pub mod sets;
-pub mod symbolic;
-pub mod values;
+pub(crate) mod records;
+pub(crate) mod regular;
+pub(crate) mod sets;
+pub(crate) mod symbolic;
+pub(crate) mod values;
 
 use std::sync::{Arc, OnceLock};
 
@@ -49,7 +49,9 @@ use classes::Class;
 use floats::FloatSet;
 use integers::IntSet;
 use lines::Lines;
-use maps::{Entry, Label, MapLattice};
+#[cfg(test)]
+use maps::Entry;
+use maps::{Label, MapLattice};
 use records::RecordLattice;
 use regular::{Alphabet, RegularSet};
 use sets::SetLattice;
@@ -62,13 +64,13 @@ use symbolic::{Guard, SymbolicDfa};
 /// whole kind rather than a union the procedure must recognise. A two-bit set is
 /// the smallest thing closed under the three operations here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct BoolSet(u8);
+pub(crate) struct BoolSet(u8);
 
 impl BoolSet {
     /// Neither boolean.
-    pub const EMPTY: BoolSet = BoolSet(0);
+    pub(crate) const EMPTY: BoolSet = BoolSet(0);
     /// Both booleans: the whole `bool` kind.
-    pub const BOTH: BoolSet = BoolSet(0b11);
+    pub(crate) const BOTH: BoolSet = BoolSet(0b11);
 
     /// The singleton holding just this boolean.
     ///
@@ -78,13 +80,13 @@ impl BoolSet {
     /// disjointness -- which is what makes the union of the singletons the whole
     /// kind -- would be a fact about two literals rather than about the shift.
     #[must_use]
-    pub fn just(value: bool) -> BoolSet {
+    pub(crate) fn just(value: bool) -> BoolSet {
         BoolSet(1 << u8::from(value))
     }
 
     /// Whether this set holds `value`.
     #[must_use]
-    pub fn holds(self, value: bool) -> bool {
+    pub(crate) fn holds(self, value: bool) -> bool {
         self.0 & BoolSet::just(value).0 != 0
     }
 
@@ -111,7 +113,7 @@ impl BoolSet {
 /// as `list` and `tuple` do, and [`Coarse`](Component::Coarse) serves the two
 /// slots that need no structure.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Component {
+pub(crate) enum Component {
     /// Every value of the kind, or none.
     ///
     /// Exact for `None`, which has one value, and the kindless slot's
@@ -309,6 +311,7 @@ impl Component {
 ///
 /// `None` for a value no `Literal` names -- a float, a tuple, an object -- which
 /// a map reads through the default for its part rather than by name.
+#[cfg(test)]
 fn label_of(value: &Value) -> Option<Label> {
     match value.kind? {
         Kind::NoneType => Some(Label::NoneType),
@@ -364,23 +367,23 @@ enum Op {
 ///
 /// This doc owns the list of exceptions, and they are of two shapes. The first
 /// is a lattice held as a union of summands under a polarity
-/// (`descr/polar.rs`): [`sets`], [`records`] and [`maps`]. A union can hold the
+/// (`descr/polar.rs`): `sets`, `records` and `maps`. A union can hold the
 /// same values two ways -- `P(A ∪ B)` is also the union of `P(A)`, `P(B)` and
 /// the line subtracting both -- and recognising that costs a search for
 /// coverings none of them runs; the polarity gives one set a positive and a
-/// negated spelling besides. [`symbolic`] has the same shape once its letters
+/// negated spelling besides. `symbolic` has the same shape once its letters
 /// are descriptors: minimisation asks the guards to join and to say what they
 /// leave, and a descriptor cannot always answer, because answering rebuilds the
 /// very automata being minimised. Each such refusal leaves a coarser table for
 /// the same language.
 ///
-/// [`integers`] is the other shape: its *equality* lifts two tables to the
+/// `integers` is the other shape: its *equality* lifts two tables to the
 /// period they share and so answers for the integers, but its form is not
 /// canonical and its **order** reads the form. So two spellings of one integer
 /// set are one set to equality and two positions in a sorted table, which is a
 /// line of a union rather than an answer. `descr::integers` says why no
 /// canonical spelling is available. The booleans, the floats and the words
-/// ([`regular`]) are canonical, and so is the coarse slot.
+/// (`regular`) are canonical, and so is the coarse slot.
 ///
 /// So equality is *finer* than agreeing on values once one of these is
 /// involved: equal descriptors still admit the same values, but two that admit
@@ -452,7 +455,7 @@ impl Whole {
 impl Descr {
     /// The empty set.
     #[must_use]
-    pub fn nothing() -> Descr {
+    pub(crate) fn nothing() -> Descr {
         Descr {
             kinds: Descr::no_lines(),
             other: Lines::bottom(),
@@ -461,7 +464,7 @@ impl Descr {
 
     /// Every value.
     #[must_use]
-    pub fn anything() -> Descr {
+    pub(crate) fn anything() -> Descr {
         Descr {
             kinds: Kind::ALL.map(|kind| Lines::everything(Component::top(kind))),
             other: Lines::everything(KINDLESS),
@@ -470,7 +473,7 @@ impl Descr {
 
     /// Every value of `kind` and nothing else.
     #[must_use]
-    pub fn of_kind(kind: Kind) -> Descr {
+    pub(crate) fn of_kind(kind: Kind) -> Descr {
         let mut descr = Descr::nothing();
         descr.put(kind, Component::top(kind));
         descr
@@ -492,7 +495,7 @@ impl Descr {
 
     /// The singleton holding one boolean.
     #[must_use]
-    pub fn boolean(value: bool) -> Descr {
+    pub(crate) fn boolean(value: bool) -> Descr {
         let mut descr = Descr::nothing();
         descr.put(Kind::Bool, Component::Booleans(BoolSet::just(value)));
         descr
@@ -500,7 +503,7 @@ impl Descr {
 
     /// The singleton holding one integer.
     #[must_use]
-    pub fn integer(value: i64) -> Descr {
+    pub(crate) fn integer(value: i64) -> Descr {
         let mut descr = Descr::nothing();
         descr.put(Kind::Int, Component::Integers(IntSet::just(value)));
         descr
@@ -508,7 +511,7 @@ impl Descr {
 
     /// The singleton holding one float, which is empty for `nan`.
     #[must_use]
-    pub fn float(value: f64) -> Descr {
+    pub(crate) fn float(value: f64) -> Descr {
         let mut descr = Descr::nothing();
         descr.put(Kind::Float, Component::Floats(FloatSet::just(value)));
         descr
@@ -520,7 +523,7 @@ impl Descr {
     /// bound, or where the kind is not a word kind: a pattern over a kind that
     /// has no words is a caller error rather than a set.
     #[must_use]
-    pub fn pattern(pattern: &str, kind: Kind) -> Option<Descr> {
+    pub(crate) fn pattern(pattern: &str, kind: Kind) -> Option<Descr> {
         let language = RegularSet::pattern(pattern, alphabet_of(kind)?)?;
         let mut descr = Descr::nothing();
         descr.put(kind, Component::Words(language));
@@ -534,7 +537,7 @@ impl Descr {
     /// pattern written here, because a bound counts every symbol a word has and
     /// a pattern's `.` skips the newline unless it is told not to.
     #[must_use]
-    pub fn words_at_least(least: usize, kind: Kind) -> Option<Descr> {
+    pub(crate) fn words_at_least(least: usize, kind: Kind) -> Option<Descr> {
         let language = RegularSet::at_least(least, alphabet_of(kind)?)?;
         let mut descr = Descr::nothing();
         descr.put(kind, Component::Words(language));
@@ -545,7 +548,7 @@ impl Descr {
     ///
     /// The upper half of [`Descr::words_at_least`], on the same alphabet.
     #[must_use]
-    pub fn words_at_most(most: usize, kind: Kind) -> Option<Descr> {
+    pub(crate) fn words_at_most(most: usize, kind: Kind) -> Option<Descr> {
         let language = RegularSet::at_most(most, alphabet_of(kind)?)?;
         let mut descr = Descr::nothing();
         descr.put(kind, Component::Words(language));
@@ -555,7 +558,7 @@ impl Descr {
     /// The one-word set, for a word kind, or `None` past the state bound. A
     /// `str` is its UTF-8 bytes.
     #[must_use]
-    pub fn word(word: &[u8], kind: Kind) -> Option<Descr> {
+    pub(crate) fn word(word: &[u8], kind: Kind) -> Option<Descr> {
         alphabet_of(kind)?;
         let mut descr = Descr::nothing();
         descr.put(kind, Component::Words(RegularSet::word(word)?));
@@ -572,7 +575,7 @@ impl Descr {
     /// `None` where the kind's values are not sequences, which is a caller error
     /// rather than a set, and past the state bound.
     #[must_use]
-    pub fn sequence(prefix: &[Descr], tail: Option<&Descr>, kind: Kind) -> Option<Descr> {
+    pub(crate) fn sequence(prefix: &[Descr], tail: Option<&Descr>, kind: Kind) -> Option<Descr> {
         if !is_sequence(kind) {
             return None;
         }
@@ -616,7 +619,7 @@ impl Descr {
     /// 1,340 elements, well inside the state bound, and
     /// `a_length_bound_costs_three_units_an_element` holds the figures.
     #[must_use]
-    pub fn sequences_at_least(least: usize, kind: Kind) -> Option<Descr> {
+    pub(crate) fn sequences_at_least(least: usize, kind: Kind) -> Option<Descr> {
         // Asked before the shape asks it, because the letters come first: one
         // handle an element, and a bound of a trillion is eight terabytes of
         // them.
@@ -635,7 +638,7 @@ impl Descr {
     /// The complement of "at least one more", taken inside the kind so the other
     /// ten kinds are not swept in with it.
     #[must_use]
-    pub fn sequences_at_most(most: usize, kind: Kind) -> Option<Descr> {
+    pub(crate) fn sequences_at_most(most: usize, kind: Kind) -> Option<Descr> {
         let longer = Descr::sequences_at_least(most.checked_add(1)?, kind)?;
         Descr::of_kind(kind).intersect(&longer.complement())
     }
@@ -652,7 +655,7 @@ impl Descr {
     ///
     /// `None` where the kind's values are not sets.
     #[must_use]
-    pub fn set(elements: &Descr, kind: Kind) -> Option<Descr> {
+    pub(crate) fn set(elements: &Descr, kind: Kind) -> Option<Descr> {
         if !is_set(kind) {
             return None;
         }
@@ -672,8 +675,9 @@ impl Descr {
     ///
     /// `optional` admits the dicts without the key at all, which is the `⊥` in
     /// the field's type rather than a rule beside it.
+    #[cfg(test)]
     #[must_use]
-    pub fn label(key: Label, ty: &Descr, optional: bool) -> Descr {
+    pub(crate) fn label(key: Label, ty: &Descr, optional: bool) -> Descr {
         let mut descr = Descr::nothing();
         descr.put(
             Kind::Dict,
@@ -688,8 +692,9 @@ impl Descr {
     /// a function: `dict[str, int]` says what a `str` key maps to and leaves
     /// every other kind of key alone, and the two spellings meet rather than
     /// overlapping.
+    #[cfg(test)]
     #[must_use]
-    pub fn mapping(kind: Kind, ty: &Descr) -> Descr {
+    pub(crate) fn mapping(kind: Kind, ty: &Descr) -> Descr {
         let mut descr = Descr::nothing();
         descr.put(
             Kind::Dict,
@@ -705,7 +710,7 @@ impl Descr {
     /// naming are not independent: "no keys at all" met with `{"a": int}` is
     /// empty, since the closing default governs `a` too.
     #[must_use]
-    pub fn keyed_map(
+    pub(crate) fn keyed_map(
         labels: impl IntoIterator<Item = (Label, Descr, bool)>,
         opened: impl IntoIterator<Item = (Option<Kind>, Descr)>,
     ) -> Option<Descr> {
@@ -724,8 +729,9 @@ impl Descr {
     ///
     /// `None` in `parts` is the part for a key of no listed kind: an object with
     /// a `__hash__` is a key, and a closed record has to shut it too.
+    #[cfg(test)]
     #[must_use]
-    pub fn keys_among(parts: &[Option<Kind>]) -> Descr {
+    pub(crate) fn keys_among(parts: &[Option<Kind>]) -> Descr {
         let mut descr = Descr::nothing();
         descr.put(Kind::Dict, Component::Maps(MapLattice::keys_among(parts)));
         descr
@@ -742,7 +748,7 @@ impl Descr {
     /// which is membership of the undefined value rather than a rule beside the
     /// type.
     #[must_use]
-    pub fn attribute(label: &str, ty: &Descr, optional: bool) -> Descr {
+    pub(crate) fn attribute(label: &str, ty: &Descr, optional: bool) -> Descr {
         Descr::objects(&RecordLattice::attribute(
             label,
             Arc::new(ty.clone()),
@@ -756,7 +762,7 @@ impl Descr {
     /// `isinstance` and `issubclass` alone. A class with a hook answers
     /// arbitrary code and is not a set this algebra holds.
     #[must_use]
-    pub fn instance_of(class: Class) -> Descr {
+    pub(crate) fn instance_of(class: Class) -> Descr {
         // A class that confines its instances to a kind belongs on that kind's
         // line alone, which is exact: every instance of a `str` subclass is a
         // string, so the class narrows the `Str` kind rather than standing
@@ -783,8 +789,9 @@ impl Descr {
     }
 
     /// The values that do not carry `label` at all.
+    #[cfg(test)]
     #[must_use]
-    pub fn without_attribute(label: &str) -> Descr {
+    pub(crate) fn without_attribute(label: &str) -> Descr {
         Descr::objects(&RecordLattice::without(label))
     }
 
@@ -795,8 +802,9 @@ impl Descr {
     /// silently widened here would be complemented into one that is wrong the
     /// other way, and the caller is the one that can decide to keep the step
     /// opaque instead.
+    #[cfg(test)]
     #[must_use]
-    pub fn multiple_of(step: i64) -> Option<Descr> {
+    pub(crate) fn multiple_of(step: i64) -> Option<Descr> {
         let mut descr = Descr::nothing();
         descr.put(Kind::Int, Component::Integers(IntSet::multiple_of(step)?));
         Some(descr)
@@ -814,7 +822,7 @@ impl Descr {
     /// The one place a caller outside this module builds a component directly:
     /// a refinement is a set of integers before it is anything else, and the
     /// lowering meets it with whatever the base admits.
-    pub fn integers(&mut self, set: IntSet) {
+    pub(crate) fn integers(&mut self, set: IntSet) {
         self.put(Kind::Int, Component::Integers(set));
     }
 
@@ -823,7 +831,7 @@ impl Descr {
     /// Beside [`integers`](Self::integers), for a bound that orders floats. The
     /// two cannot be folded together: a float bound orders `nan` out of every
     /// side of itself, and an integer bound says nothing about a float at all.
-    pub fn floats(&mut self, set: FloatSet) {
+    pub(crate) fn floats(&mut self, set: FloatSet) {
         self.put(Kind::Float, Component::Floats(set));
     }
 
@@ -832,7 +840,7 @@ impl Descr {
     /// Beside [`integers`](Self::integers) and for the same caller: `bool` is a
     /// kind of its own here, so a bound that orders the integers orders these
     /// two as well and has to say so in both slots.
-    pub fn booleans(&mut self, set: BoolSet) {
+    pub(crate) fn booleans(&mut self, set: BoolSet) {
         self.put(Kind::Bool, Component::Booleans(set));
     }
 
@@ -850,7 +858,7 @@ impl Descr {
     /// complemented into one too narrow. The refusal reaches the caller rather
     /// than being absorbed into a descriptor that is quietly wrong.
     #[must_use]
-    pub fn union(&self, other: &Descr) -> Option<Descr> {
+    pub(crate) fn union(&self, other: &Descr) -> Option<Descr> {
         self.zip(other, Op::Union)
     }
 
@@ -913,7 +921,7 @@ impl Descr {
     /// so it answers `false`. [`emptiness`](Descr::emptiness) is what tells a
     /// proof of inhabitation apart from a failure to prove emptiness.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.emptiness() == Verdict::Empty
     }
 
@@ -974,8 +982,9 @@ impl Descr {
     }
 
     /// Whether this set admits `value`.
+    #[cfg(test)]
     #[must_use]
-    pub fn admits(&self, value: Value) -> bool {
+    pub(crate) fn admits(&self, value: Value) -> bool {
         let lines = match value.kind {
             Some(kind) => self.component(kind),
             None => &self.other,
@@ -1035,6 +1044,7 @@ impl Descr {
 /// table coarser rather than wrong, which is why the automaton's minimisation
 /// asks for a join and accepts a refusal.
 impl Guard for Arc<Descr> {
+    #[cfg(test)]
     type Value = Value;
 
     fn none() -> Arc<Descr> {
@@ -1081,6 +1091,7 @@ impl Guard for Arc<Descr> {
         Descr::emptiness(self)
     }
 
+    #[cfg(test)]
     fn holds(&self, value: &Value) -> bool {
         self.admits(*value)
     }
@@ -1107,19 +1118,20 @@ fn idempotent(left: &Arc<Descr>, right: &Arc<Descr>) -> Option<Arc<Descr>> {
 /// descriptor can answer about a value -- which kind it belongs to, and, where
 /// the kind's component distinguishes its values, which value it is. A
 /// component made exact widens this alongside it.
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Value {
+pub(crate) struct Value {
     /// The kind, or `None` for a value of no listed kind.
-    pub kind: Option<Kind>,
+    pub(crate) kind: Option<Kind>,
     /// Which boolean, where the kind is [`Kind::Bool`].
-    pub boolean: Option<bool>,
+    pub(crate) boolean: Option<bool>,
     /// Which integer, where the kind is [`Kind::Int`].
-    pub integer: Option<i64>,
+    pub(crate) integer: Option<i64>,
     /// Which float, where the kind is [`Kind::Float`].
-    pub float: Option<f64>,
+    pub(crate) float: Option<f64>,
     /// Which word, where the kind is [`Kind::Str`] or [`Kind::Bytes`]. A `str`
     /// is its UTF-8 bytes, which is the same alphabet the language is over.
-    pub word: Option<&'static [u8]>,
+    pub(crate) word: Option<&'static [u8]>,
     /// The elements, where the kind is a sequence or a set kind.
     ///
     /// A value again, which is what makes the question recursive: whether a
@@ -1127,32 +1139,33 @@ pub struct Value {
     /// For a set kind these are its *members*, in no particular order -- a set
     /// is its members and the powerset rule reads them as a whole rather than
     /// as a word.
-    pub elements: Option<&'static [Value]>,
+    pub(crate) elements: Option<&'static [Value]>,
     /// The class, where the value is of no listed kind.
     ///
     /// What the value *is*, as far as the snapshot of the class order can say.
     /// A value with none is one whose class the core was never told, which every
     /// class constraint declines rather than admits.
-    pub class: Option<&'static Class>,
+    pub(crate) class: Option<&'static Class>,
     /// The attributes, where the value is of no listed kind.
     ///
     /// What an object *is*, at this resolution: the names it carries and what
     /// each one holds. An attribute absent from the list is one the object does
     /// not carry, which an open record reads as the undefined value.
-    pub attributes: Option<&'static [(&'static str, Value)]>,
+    pub(crate) attributes: Option<&'static [(&'static str, Value)]>,
     /// The entries, where the kind is [`Kind::Dict`]: each key beside what it
     /// maps to.
     ///
     /// A key is a value again, which is what lets the component read its *kind*
     /// -- the part of the key partition it falls in -- and, where it is a
     /// string, the label it may be named by.
-    pub entries: Option<&'static [(Value, Value)]>,
+    pub(crate) entries: Option<&'static [(Value, Value)]>,
 }
 
+#[cfg(test)]
 impl Value {
     /// A representative value of `kind`, for a kind whose component is coarse.
     #[must_use]
-    pub const fn of_kind(kind: Kind) -> Value {
+    pub(crate) const fn of_kind(kind: Kind) -> Value {
         Value {
             kind: Some(kind),
             boolean: None,
@@ -1168,7 +1181,7 @@ impl Value {
 
     /// One of the two booleans.
     #[must_use]
-    pub const fn boolean(value: bool) -> Value {
+    pub(crate) const fn boolean(value: bool) -> Value {
         Value {
             kind: Some(Kind::Bool),
             boolean: Some(value),
@@ -1184,7 +1197,7 @@ impl Value {
 
     /// One integer. `bool` is a kind of its own, so this is never a boolean.
     #[must_use]
-    pub const fn integer(value: i64) -> Value {
+    pub(crate) const fn integer(value: i64) -> Value {
         Value {
             kind: Some(Kind::Int),
             boolean: None,
@@ -1201,7 +1214,7 @@ impl Value {
     /// One word, for a word kind. A `str` is its UTF-8 bytes, which is the
     /// alphabet the language is over.
     #[must_use]
-    pub const fn word(word: &'static [u8], kind: Kind) -> Value {
+    pub(crate) const fn word(word: &'static [u8], kind: Kind) -> Value {
         Value {
             kind: Some(kind),
             boolean: None,
@@ -1217,7 +1230,7 @@ impl Value {
 
     /// One float, `nan` included.
     #[must_use]
-    pub const fn float(value: f64) -> Value {
+    pub(crate) const fn float(value: f64) -> Value {
         Value {
             kind: Some(Kind::Float),
             boolean: None,
@@ -1233,7 +1246,7 @@ impl Value {
 
     /// A value of no listed kind carrying no attribute anyone named.
     #[must_use]
-    pub const fn other() -> Value {
+    pub(crate) const fn other() -> Value {
         Value::object(&[])
     }
 
@@ -1244,7 +1257,7 @@ impl Value {
     /// holds the two on one line. This is what lets one be written down to ask a
     /// law about.
     #[must_use]
-    pub const fn carrying(self, attributes: &'static [(&'static str, Value)]) -> Value {
+    pub(crate) const fn carrying(self, attributes: &'static [(&'static str, Value)]) -> Value {
         Value {
             attributes: Some(attributes),
             ..self
@@ -1253,7 +1266,7 @@ impl Value {
 
     /// The same value, also seen as an instance of `class`.
     #[must_use]
-    pub const fn of_class(
+    pub(crate) const fn of_class(
         self,
         class: &'static Class,
         attributes: &'static [(&'static str, Value)],
@@ -1266,7 +1279,7 @@ impl Value {
 
     /// An instance of `class`, described by that and the attributes it carries.
     #[must_use]
-    pub const fn instance(
+    pub(crate) const fn instance(
         class: &'static Class,
         attributes: &'static [(&'static str, Value)],
     ) -> Value {
@@ -1279,7 +1292,7 @@ impl Value {
     /// A value of no listed kind -- a class instance, a callable -- described by
     /// the attributes it carries.
     #[must_use]
-    pub const fn object(attributes: &'static [(&'static str, Value)]) -> Value {
+    pub(crate) const fn object(attributes: &'static [(&'static str, Value)]) -> Value {
         Value {
             kind: None,
             boolean: None,
@@ -1295,7 +1308,7 @@ impl Value {
 
     /// One dict, as its entries: each key beside what it maps to.
     #[must_use]
-    pub const fn dict(entries: &'static [(Value, Value)]) -> Value {
+    pub(crate) const fn dict(entries: &'static [(Value, Value)]) -> Value {
         Value {
             kind: Some(Kind::Dict),
             boolean: None,
@@ -1311,7 +1324,7 @@ impl Value {
     /// One sequence, for a sequence kind. The elements are values again, which
     /// is the letters the automaton reads.
     #[must_use]
-    pub const fn sequence(elements: &'static [Value], kind: Kind) -> Value {
+    pub(crate) const fn sequence(elements: &'static [Value], kind: Kind) -> Value {
         Value {
             kind: Some(kind),
             boolean: None,

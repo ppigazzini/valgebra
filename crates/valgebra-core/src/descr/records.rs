@@ -43,7 +43,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// one contributes a union over its labels. The bound is a limit of the
 /// representation rather than an approximation -- past it there is no sound
 /// union to substitute, so the operation refuses.
-pub const MAX_ATOMS: usize = 256;
+pub(crate) const MAX_ATOMS: usize = 256;
 
 /// Whether an attribute that can be `reach` on a direct instance can satisfy
 /// `field`, which is known to admit something -- a value, or its absence.
@@ -233,6 +233,7 @@ impl<G: Guard> Atom<G> {
     ///
     /// An attribute the object does not carry satisfies the field exactly when
     /// the field admits being missing, which is the `⊥` again.
+    #[cfg(test)]
     fn holds(&self, class: Option<&Class>, attributes: &[(&str, G::Value)]) -> bool {
         let instance_of = |wanted: &Class| class.is_some_and(|held| held.derives_from(wanted));
         self.fields.iter().all(|(label, field)| {
@@ -322,18 +323,19 @@ impl<G: Guard> Summand for Atom<G> {
 /// unions can hold the same objects and stay unequal, and recognising that costs
 /// a search this does not run.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct RecordLattice<G: Guard>(PolarUnion<Atom<G>>);
+pub(crate) struct RecordLattice<G: Guard>(PolarUnion<Atom<G>>);
 
 impl<G: Guard> RecordLattice<G> {
     /// No object at all.
+    #[cfg(test)]
     #[must_use]
-    pub fn empty() -> RecordLattice<G> {
+    pub(crate) fn empty() -> RecordLattice<G> {
         RecordLattice(PolarUnion::of(Vec::new()))
     }
 
     /// Every object: the one atom that constrains no attribute.
     #[must_use]
-    pub fn all() -> RecordLattice<G> {
+    pub(crate) fn all() -> RecordLattice<G> {
         RecordLattice::one(Atom::top())
     }
 
@@ -344,7 +346,7 @@ impl<G: Guard> RecordLattice<G> {
 
     /// The objects that are instances of `class`.
     #[must_use]
-    pub fn instance_of(class: Class) -> RecordLattice<G> {
+    pub(crate) fn instance_of(class: Class) -> RecordLattice<G> {
         RecordLattice::one(Atom {
             is_a: BTreeSet::from([class]),
             ..Atom::top()
@@ -356,7 +358,7 @@ impl<G: Guard> RecordLattice<G> {
     /// `optional` admits the objects that do not carry it at all, which is the
     /// `⊥` in the field's type rather than a rule beside it.
     #[must_use]
-    pub fn attribute(label: &str, ty: G, optional: bool) -> RecordLattice<G> {
+    pub(crate) fn attribute(label: &str, ty: G, optional: bool) -> RecordLattice<G> {
         RecordLattice::one(Atom {
             fields: BTreeMap::from([(
                 label.to_owned(),
@@ -370,8 +372,9 @@ impl<G: Guard> RecordLattice<G> {
     }
 
     /// The objects that do *not* carry `label` at all.
+    #[cfg(test)]
     #[must_use]
-    pub fn without(label: &str) -> RecordLattice<G> {
+    pub(crate) fn without(label: &str) -> RecordLattice<G> {
         RecordLattice::one(Atom {
             fields: BTreeMap::from([(
                 label.to_owned(),
@@ -389,14 +392,16 @@ impl<G: Guard> RecordLattice<G> {
     /// A negated form has to be expanded first, and a refusal there reads as
     /// *not* empty -- the safe direction, since claiming emptiness is the claim
     /// that can be wrong.
+    #[cfg(test)]
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.emptiness() == Verdict::Empty
     }
 
     /// What is known about this holding an object.
+    #[cfg(test)]
     #[must_use]
-    pub fn emptiness(&self) -> Verdict {
+    pub(crate) fn emptiness(&self) -> Verdict {
         self.emptiness_of_kind(None)
     }
 
@@ -415,26 +420,27 @@ impl<G: Guard> RecordLattice<G> {
     /// is the whole of what is asked and the documented assumption -- a class
     /// the bindings can read has an instance -- is the answer.
     #[must_use]
-    pub fn emptiness_of_kind(&self, kind: Option<Kind>) -> Verdict {
+    pub(crate) fn emptiness_of_kind(&self, kind: Option<Kind>) -> Verdict {
         self.0.verdict((), |atom| atom.emptiness_of_kind(kind))
     }
 
     /// Whether the object carrying `attributes` is held.
+    #[cfg(test)]
     #[must_use]
-    pub fn holds(&self, class: Option<&Class>, attributes: &[(&str, G::Value)]) -> bool {
+    pub(crate) fn holds(&self, class: Option<&Class>, attributes: &[(&str, G::Value)]) -> bool {
         self.0.holds(|atom| atom.holds(class, attributes))
     }
 
     /// The objects in either, or `None` past [`MAX_ATOMS`].
     #[must_use]
-    pub fn union(&self, other: &RecordLattice<G>) -> Option<RecordLattice<G>> {
+    pub(crate) fn union(&self, other: &RecordLattice<G>) -> Option<RecordLattice<G>> {
         self.0.union(&other.0, ()).map(RecordLattice)
     }
 
     /// The objects in both, or `None` past [`MAX_ATOMS`] or where a guard
     /// refuses.
     #[must_use]
-    pub fn intersect(&self, other: &RecordLattice<G>) -> Option<RecordLattice<G>> {
+    pub(crate) fn intersect(&self, other: &RecordLattice<G>) -> Option<RecordLattice<G>> {
         self.0.intersect(&other.0, ()).map(RecordLattice)
     }
 
@@ -442,7 +448,7 @@ impl<G: Guard> RecordLattice<G> {
     ///
     /// Total, which is what the [`Guard`] contract asks.
     #[must_use]
-    pub fn complement(&self) -> RecordLattice<G> {
+    pub(crate) fn complement(&self) -> RecordLattice<G> {
         RecordLattice(self.0.complement(()))
     }
 

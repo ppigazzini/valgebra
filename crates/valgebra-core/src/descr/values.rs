@@ -12,7 +12,7 @@ use crate::verdict::Verdict;
 
 /// A set of values: every one, or the ones a guard holds.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Values<G> {
+pub(crate) enum Values<G> {
     /// Every value.
     Every,
     /// The values one guard holds.
@@ -22,13 +22,13 @@ pub enum Values<G> {
 impl<G: Guard> Values<G> {
     /// No value at all.
     #[must_use]
-    pub fn none() -> Values<G> {
+    pub(crate) fn none() -> Values<G> {
         Values::Only(G::none())
     }
 
     /// The values in both, or `None` where a guard refuses.
     #[must_use]
-    pub fn meet(&self, other: &Values<G>) -> Option<Values<G>> {
+    pub(crate) fn meet(&self, other: &Values<G>) -> Option<Values<G>> {
         match (self, other) {
             (Values::Every, kept) | (kept, Values::Every) => Some(kept.clone()),
             (Values::Only(a), Values::Only(b)) => Some(Values::Only(a.meet(b)?)),
@@ -37,7 +37,7 @@ impl<G: Guard> Values<G> {
 
     /// The values in either, or `None` where a guard refuses.
     #[must_use]
-    pub fn join(&self, other: &Values<G>) -> Option<Values<G>> {
+    pub(crate) fn join(&self, other: &Values<G>) -> Option<Values<G>> {
         match (self, other) {
             (Values::Every, _) | (_, Values::Every) => Some(Values::Every),
             (Values::Only(a), Values::Only(b)) => Some(Values::Only(a.join(b)?)),
@@ -46,7 +46,7 @@ impl<G: Guard> Values<G> {
 
     /// The values in neither, which a guard always answers.
     #[must_use]
-    pub fn complement(&self) -> Values<G> {
+    pub(crate) fn complement(&self) -> Values<G> {
         match self {
             Values::Every => Values::none(),
             Values::Only(guard) => Values::Only(guard.complement()),
@@ -56,7 +56,7 @@ impl<G: Guard> Values<G> {
     /// What is known about a value being in here. The universe holds one
     /// whatever the guards say.
     #[must_use]
-    pub fn emptiness(&self) -> Verdict {
+    pub(crate) fn emptiness(&self) -> Verdict {
         match self {
             Values::Every => Verdict::Inhabited,
             Values::Only(guard) => guard.emptiness(),
@@ -69,7 +69,7 @@ impl<G: Guard> Values<G> {
     /// Asked as `inner ∧ ¬self = ∅`, which is the one shape a Boolean algebra
     /// answers without an order of its own.
     #[must_use]
-    pub fn covers(&self, inner: &Values<G>) -> Option<bool> {
+    pub(crate) fn covers(&self, inner: &Values<G>) -> Option<bool> {
         match self {
             Values::Every => Some(true),
             // A difference whose own emptiness is unproved settles neither
@@ -84,8 +84,9 @@ impl<G: Guard> Values<G> {
     }
 
     /// Whether `value` is one of these.
+    #[cfg(test)]
     #[must_use]
-    pub fn holds(&self, value: &G::Value) -> bool {
+    pub(crate) fn holds(&self, value: &G::Value) -> bool {
         match self {
             Values::Every => true,
             Values::Only(guard) => guard.holds(value),
@@ -103,17 +104,17 @@ impl<G: Guard> Values<G> {
 /// same question of a name -- what it holds, and whether it has to be there --
 /// and the paper's `T⊥` is that question with a name.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Field<G> {
+pub(crate) struct Field<G> {
     /// The type the value must be in.
-    pub ty: Values<G>,
+    pub(crate) ty: Values<G>,
     /// Whether the key or attribute may be missing altogether.
-    pub absent: bool,
+    pub(crate) absent: bool,
 }
 
 impl<G: Guard> Field<G> {
     /// Any value, or none at all -- what an attribute no atom names holds.
     #[must_use]
-    pub fn top() -> Field<G> {
+    pub(crate) fn top() -> Field<G> {
         Field {
             ty: Values::Every,
             absent: true,
@@ -122,7 +123,7 @@ impl<G: Guard> Field<G> {
 
     /// The values in both, or `None` where a guard refuses.
     #[must_use]
-    pub fn meet(&self, other: &Field<G>) -> Option<Field<G>> {
+    pub(crate) fn meet(&self, other: &Field<G>) -> Option<Field<G>> {
         Some(Field {
             ty: self.ty.meet(&other.ty)?,
             absent: self.absent && other.absent,
@@ -132,7 +133,7 @@ impl<G: Guard> Field<G> {
     /// The values in either, or `None` where a guard refuses. Missing on either
     /// side is missing in the union.
     #[must_use]
-    pub fn join(&self, other: &Field<G>) -> Option<Field<G>> {
+    pub(crate) fn join(&self, other: &Field<G>) -> Option<Field<G>> {
         Some(Field {
             ty: self.ty.join(&other.ty)?,
             absent: self.absent || other.absent,
@@ -141,7 +142,7 @@ impl<G: Guard> Field<G> {
 
     /// The rest of `T⊥`, which flips the extra element along with the type.
     #[must_use]
-    pub fn complement(&self) -> Field<G> {
+    pub(crate) fn complement(&self) -> Field<G> {
         Field {
             ty: self.ty.complement(),
             absent: !self.absent,
@@ -151,7 +152,7 @@ impl<G: Guard> Field<G> {
     /// What is known about something satisfying this field. Being allowed to be
     /// missing settles it whatever the type says.
     #[must_use]
-    pub fn emptiness(&self) -> Verdict {
+    pub(crate) fn emptiness(&self) -> Verdict {
         if self.absent {
             Verdict::Inhabited
         } else {

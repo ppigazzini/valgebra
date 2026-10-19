@@ -1,6 +1,6 @@
 """Every bound the tree declares is driven by a test, or accepted with a reason.
 
-A bound is a `pub const` an untrusted input can reach: a depth the walk
+A bound is a constant an untrusted input can reach: a depth the walk
 descends, a count the descriptor builds, a size a table may grow to. Each one
 is a promise on the limits page -- the operation stops here, cleanly -- and a
 promise a test does not drive to its edge is one the tree can stop keeping

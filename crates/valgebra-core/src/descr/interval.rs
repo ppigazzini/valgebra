@@ -84,20 +84,20 @@ fn bound(a: Option<i128>, b: Option<i128>, pick: fn(i128, i128) -> i128) -> Opti
 
 /// A set of integers: sorted, disjoint, non-adjacent spans.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct IntervalSet {
+pub(crate) struct IntervalSet {
     spans: Vec<Span>,
 }
 
 impl IntervalSet {
     /// The empty set.
     #[must_use]
-    pub fn empty() -> IntervalSet {
+    pub(crate) fn empty() -> IntervalSet {
         IntervalSet { spans: Vec::new() }
     }
 
     /// Every integer.
     #[must_use]
-    pub fn all() -> IntervalSet {
+    pub(crate) fn all() -> IntervalSet {
         IntervalSet {
             spans: vec![Span { lo: None, hi: None }],
         }
@@ -105,7 +105,7 @@ impl IntervalSet {
 
     /// The integers from `lo` to `hi` inclusive, with `None` unbounded.
     #[must_use]
-    pub fn between(lo: Option<i64>, hi: Option<i64>) -> IntervalSet {
+    pub(crate) fn between(lo: Option<i64>, hi: Option<i64>) -> IntervalSet {
         // The bounds a schema names are `i64`; the span holds them wider, so
         // the complement of one has room for the integer just outside it.
         let span = Span {
@@ -121,19 +121,19 @@ impl IntervalSet {
 
     /// The one-element set.
     #[must_use]
-    pub fn just(value: i64) -> IntervalSet {
+    pub(crate) fn just(value: i64) -> IntervalSet {
         IntervalSet::between(Some(value), Some(value))
     }
 
     /// Whether this set holds no integer.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.spans.is_empty()
     }
 
     /// Whether this set holds `value`.
     #[must_use]
-    pub fn holds(&self, value: i64) -> bool {
+    pub(crate) fn holds(&self, value: i64) -> bool {
         self.spans.iter().any(|span| span.holds(i128::from(value)))
     }
 
@@ -161,7 +161,7 @@ impl IntervalSet {
     /// sorted by their lower end, and folded so that any two that meet or touch
     /// become one.
     #[must_use]
-    pub fn union(&self, other: &IntervalSet) -> IntervalSet {
+    pub(crate) fn union(&self, other: &IntervalSet) -> IntervalSet {
         let spans: Vec<Span> = self.spans.iter().chain(&other.spans).copied().collect();
         IntervalSet { spans }.canonical()
     }
@@ -172,7 +172,7 @@ impl IntervalSet {
     /// interval, and what comes out is canonicalised rather than assumed
     /// ordered.
     #[must_use]
-    pub fn intersect(&self, other: &IntervalSet) -> IntervalSet {
+    pub(crate) fn intersect(&self, other: &IntervalSet) -> IntervalSet {
         let mut spans = Vec::new();
         for mine in &self.spans {
             for theirs in &other.spans {
@@ -191,7 +191,7 @@ impl IntervalSet {
     /// adjacent pair, and the run above the last. The empty set has no span to
     /// skip, so the same walk gives every integer.
     #[must_use]
-    pub fn complement(&self) -> IntervalSet {
+    pub(crate) fn complement(&self) -> IntervalSet {
         let mut spans = Vec::new();
         // Where the next gap starts: `None` until the first span is seen, which
         // is the unbounded run below it.
@@ -265,7 +265,7 @@ impl IntervalSet {
     /// values the schema does not and misses values it does. Dividing by a
     /// stride of at least one shrinks the magnitude, so the quotient stays where
     /// the difference was.
-    pub fn preimage(&self, offset: i64, stride: i64) -> IntervalSet {
+    pub(crate) fn preimage(&self, offset: i64, stride: i64) -> IntervalSet {
         debug_assert!(stride > 0, "a stride is a positive step");
         let shifted = |bound: i128| bound.saturating_sub(i128::from(offset));
         let stride = i128::from(stride);

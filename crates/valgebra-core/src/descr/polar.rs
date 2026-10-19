@@ -140,6 +140,7 @@ impl<S: Summand> PolarUnion<S> {
     /// Asked of the summands as they are: a value in some summand of a negated
     /// form is a value the set does *not* hold, so the polarity flips the
     /// answer and nothing is expanded.
+    #[cfg(test)]
     pub(super) fn holds(&self, held_by: impl FnMut(&S) -> bool) -> bool {
         self.summands.iter().any(held_by) != self.negated
     }

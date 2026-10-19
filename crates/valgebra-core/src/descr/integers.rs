@@ -60,7 +60,7 @@ use super::interval::IntervalSet;
 /// third guard can sort those lists apart and compare as two -- a summand of
 /// width, never an answer.
 #[derive(Debug, Clone)]
-pub struct IntSet {
+pub(crate) struct IntSet {
     /// The period. At least one; a modulus of one is a set with no step, whose
     /// single class is the integers themselves.
     modulus: i64,
@@ -88,7 +88,7 @@ pub struct IntSet {
 /// for a period this cannot hold. One too wide is complemented into one too
 /// narrow, so a rounded answer is wrong in one direction or the other, and a
 /// refusal is what every caller of a descriptor operation already handles.
-pub const MAX_PERIOD: i64 = 4096;
+pub(crate) const MAX_PERIOD: i64 = 4096;
 
 impl IntSet {
     /// A set with one class per residue, built by `of`, for a period the
@@ -126,25 +126,25 @@ impl IntSet {
 
     /// The empty set.
     #[must_use]
-    pub fn empty() -> IntSet {
+    pub(crate) fn empty() -> IntSet {
         IntSet::build(1, |_| IntervalSet::empty())
     }
 
     /// Every integer.
     #[must_use]
-    pub fn all() -> IntSet {
+    pub(crate) fn all() -> IntSet {
         IntSet::build(1, |_| IntervalSet::all())
     }
 
     /// The one-element set.
     #[must_use]
-    pub fn just(value: i64) -> IntSet {
+    pub(crate) fn just(value: i64) -> IntSet {
         IntSet::build(1, |_| IntervalSet::just(value))
     }
 
     /// The integers from `lo` to `hi` inclusive, with `None` unbounded.
     #[must_use]
-    pub fn between(lo: Option<i64>, hi: Option<i64>) -> IntSet {
+    pub(crate) fn between(lo: Option<i64>, hi: Option<i64>) -> IntSet {
         IntSet::build(1, |_| IntervalSet::between(lo, hi))
     }
 
@@ -164,7 +164,7 @@ impl IntSet {
     /// that is wrong the other way, so a step this cannot hold must stay opaque
     /// in whatever lowers it.
     #[must_use]
-    pub fn multiple_of(step: i64) -> Option<IntSet> {
+    pub(crate) fn multiple_of(step: i64) -> Option<IntSet> {
         match step.checked_abs() {
             Some(0) => Some(IntSet::just(0)),
             Some(step) if step <= MAX_PERIOD => Some(IntSet::build(step, |residue| {
@@ -181,13 +181,13 @@ impl IntSet {
 
     /// Whether this set holds no integer.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.classes.iter().all(IntervalSet::is_empty)
     }
 
     /// Whether this set holds `value`.
     #[must_use]
-    pub fn holds(&self, value: i64) -> bool {
+    pub(crate) fn holds(&self, value: i64) -> bool {
         // `value = residue + modulus * k`, and the class holds that `k`.
         let residue = value.rem_euclid(self.modulus);
         usize::try_from(residue)
@@ -310,13 +310,13 @@ impl IntSet {
 
     /// The integers in either set, or `None` past [`MAX_PERIOD`].
     #[must_use]
-    pub fn union(&self, other: &IntSet) -> Option<IntSet> {
+    pub(crate) fn union(&self, other: &IntSet) -> Option<IntSet> {
         self.zip(other, IntervalSet::union)
     }
 
     /// The integers in both sets, or `None` past [`MAX_PERIOD`].
     #[must_use]
-    pub fn intersect(&self, other: &IntSet) -> Option<IntSet> {
+    pub(crate) fn intersect(&self, other: &IntSet) -> Option<IntSet> {
         self.zip(other, IntervalSet::intersect)
     }
 
@@ -328,7 +328,7 @@ impl IntSet {
     /// interval-and-residue pairs would have to distribute a complement over
     /// every pair.
     #[must_use]
-    pub fn complement(&self) -> IntSet {
+    pub(crate) fn complement(&self) -> IntSet {
         IntSet {
             modulus: self.modulus,
             classes: self.classes.iter().map(IntervalSet::complement).collect(),
