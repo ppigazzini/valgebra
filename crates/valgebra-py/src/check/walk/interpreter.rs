@@ -469,6 +469,52 @@ fn a_union_names_a_class_branch_by_its_class() {
     });
 }
 
+/// A complement names what its inner schema admits, as a branch and alone: the
+/// inner node's kind -- `not literal`, `not union` -- names no set. A union or a
+/// meet under the `not` is put in parentheses, so the negation reads over the
+/// whole of it rather than over its first operand.
+#[test]
+fn a_complement_names_the_set_it_excludes() {
+    Python::attach(|py| {
+        let pool: Vec<Py<PyAny>> = vec![PyString::new(py, "admin").into_any().unbind()];
+        let admin = Schema::Literal(ConstIx::new(0)).complement();
+        let schema = Schema::Union(
+            vec![
+                Schema::meet([Schema::Str, admin.clone()]),
+                Schema::union([Schema::Int, Schema::Str]).complement(),
+                Schema::meet([Schema::Int, Schema::Bool.complement()]).complement(),
+            ]
+            .into(),
+        );
+        let index = build_index(py, &schema, &[], &pool);
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &pool,
+            defs: &[],
+            index: &index,
+            state: &state,
+            mode: WalkMode::Explain,
+        };
+        let mut labels = BranchLabels::new();
+        push_branch_label(&schema, ctx, py, &mut labels);
+        assert_eq!(
+            labels.render(),
+            "one of: str and not the literal 'admin', not (int or str), \
+             not (int and not bool)",
+            "each complement names what it excludes, compound ones in parentheses"
+        );
+
+        let value = PyString::new(py, "admin").into_any();
+        let (ok, violations) = explain(py, &admin, &value, &pool, &[]);
+        assert!(!ok);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert_eq!(
+            violations[0].expected, "not the literal 'admin'",
+            "alone, the complement names what it excludes as its branch does"
+        );
+    });
+}
+
 /// A value a union admits is never summarized.
 ///
 /// Explaining a union walked every branch in explain mode, and a branch that

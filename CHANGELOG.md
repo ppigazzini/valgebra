@@ -52,6 +52,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: two spellings of a wide union compare in one pass
 - fix: a refused union renders only the labels it names
 - fix: a wide record whose clause reads keys reads a JSON object in one pass
+- fix: a complement names the set it excludes
 
 -->
 
@@ -346,6 +347,11 @@ answer of its own, or a repair to a change not yet released.
   ns a field at eight hundred fields against 70 at fifty. A record declaring
   more than eight fields resolves the document's keys through its plan, as a
   closed or an open record does, at about 40 ns a field whatever the width.
+- **A complement's `expected` names the set it excludes.** It named the kind
+  of the schema it negates, so `complement(Literal["admin"])` said `not
+  literal` and `complement(int | str)` said `not union`, alone and as a union's
+  branch. It reads `not the literal 'admin'` and `not (int or str)`, naming its
+  inner schema as a union names a branch.
 
 ## [0.0.18] - 2026-10-12
 

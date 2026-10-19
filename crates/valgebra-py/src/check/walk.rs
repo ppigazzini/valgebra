@@ -657,6 +657,9 @@ const UNION_LABEL_LIMIT: usize = 64;
 struct BranchLabels {
     rendered: Vec<String>,
     truncated: bool,
+    /// Whether a label joins a meet's members with `and`, which the `not` of a
+    /// complement around it would otherwise read as applying to the first.
+    joined: bool,
 }
 
 impl BranchLabels {
@@ -664,6 +667,7 @@ impl BranchLabels {
         Self {
             rendered: Vec::new(),
             truncated: false,
+            joined: false,
         }
     }
 
@@ -738,7 +742,7 @@ fn push_branch_label_within(
         }
         // What a complement excludes, which is what it says when it is the only
         // thing that failed: `not str` rather than the word `complement`.
-        Schema::Complement(inner) => out.push(format!("not {}", inner.expected())),
+        Schema::Complement(inner) => out.push(complement_label(inner, ctx, py, unfolded)),
         // The definition's own branches. A reference is the node `recursive`
         // builds, and its kind alone tells a reader nothing about what it admits.
         Schema::Ref(id) => match ctx.defs.get(id.get()) {
@@ -758,10 +762,14 @@ fn push_branch_label_within(
         // A class with declared attributes is a meet of an atom and a record, and
         // the branch names the class the user wrote rather than the algebra's
         // spelling of it. Any other meet names what each member admits.
-        Schema::Intersection(members) => match schema.object_class() {
-            Some(class) => out.push(class_name(class, schema, ctx, py)),
-            None => out.push(meet_label(members, ctx, py, unfolded)),
-        },
+        Schema::Intersection(members) => {
+            if let Some(class) = schema.object_class() {
+                out.push(class_name(class, schema, ctx, py));
+            } else {
+                out.push(meet_label(members, ctx, py, unfolded));
+                out.joined = true;
+            }
+        }
         // A refinement's type is its base, matching `Schema::expected`; the
         // constraints report themselves when one of them is what failed.
         Schema::Refine { base, .. } => push_branch_label_within(base, ctx, py, out, unfolded),
@@ -776,21 +784,34 @@ fn push_branch_label_within(
 fn meet_label(members: &[Schema], ctx: Ctx<'_>, py: Python<'_>, unfolded: u32) -> String {
     members
         .iter()
-        .map(|member| {
-            let mut labels = BranchLabels::new();
-            push_branch_label_within(member, ctx, py, &mut labels, unfolded);
-            let mut joined = labels.rendered.join(" or ");
-            if labels.truncated {
-                joined.push_str(" or ...");
-            }
-            if labels.rendered.len() > 1 {
-                format!("({joined})")
-            } else {
-                joined
-            }
-        })
+        .map(|member| operand_label(member, ctx, py, unfolded))
         .collect::<Vec<_>>()
         .join(" and ")
+}
+
+/// Name what a complement excludes by what its inner schema admits: `not the
+/// literal 'admin'`, where the inner node's kind would say `not literal` and
+/// name no set.
+fn complement_label(inner: &Schema, ctx: Ctx<'_>, py: Python<'_>, unfolded: u32) -> String {
+    format!("not {}", operand_label(inner, ctx, py, unfolded))
+}
+
+/// Name `schema` as one operand of the `and` or the `not` around it: its branch
+/// labels joined with `or`, in parentheses where there are several or the one
+/// joins a meet's members, so `not (int or str)` and `not (int and not bool)`
+/// read over the whole of what they name.
+fn operand_label(schema: &Schema, ctx: Ctx<'_>, py: Python<'_>, unfolded: u32) -> String {
+    let mut labels = BranchLabels::new();
+    push_branch_label_within(schema, ctx, py, &mut labels, unfolded);
+    let mut joined = labels.rendered.join(" or ");
+    if labels.truncated {
+        joined.push_str(" or ...");
+    }
+    if labels.rendered.len() > 1 || labels.joined {
+        format!("({joined})")
+    } else {
+        joined
+    }
 }
 
 /// The pooled class's own name, falling back to the node's kind when the pool
@@ -1405,7 +1426,7 @@ fn check_complement(inner: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_,
         frame.out.push(Violation {
             code: code.as_str(),
             path: frame.path.clone(),
-            expected: format!("not {}", inner.expected()),
+            expected: complement_label(inner, ctx, value.py(), 0),
             value_summary: summarize_value(value, ctx),
         });
     }

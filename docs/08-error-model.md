@@ -497,12 +497,15 @@ assert expected_of(union(Backend, Literal["cpu"]), "arcfase") == (
 assert expected_of(union(str, intersection(int, complement(bool))), 1.5) == (
     "one of: str, int and not bool"
 )
+assert expected_of(complement(int | str), 1) == "not (int or str)"
 ```
 
 A `Literal[...]` builds a union of its constants, so its branches are the
 constants and the message lists them. An `Enum` branch names the class, as it
 does alone. A meet names what each of its members admits, joined with `and`,
-and a class with declared attributes, which is a meet too, names the class.
+and a class with declared attributes, which is a meet too, names the class. A
+complement names what its inner schema admits after a `not`, with a union or a
+meet in parentheses, alone as it does as a branch.
 
 The list is bounded at 64 labels (`UNION_LABEL_LIMIT` in
 `crates/valgebra-py/src/check/walk.rs`) and ends in `...` beyond that, so a

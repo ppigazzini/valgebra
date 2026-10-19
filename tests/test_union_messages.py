@@ -17,7 +17,14 @@ from typing import Literal
 
 import pytest
 
-from valgebra import ValidationError, Validator, recursive, union
+from valgebra import (
+    ValidationError,
+    Validator,
+    complement,
+    intersection,
+    recursive,
+    union,
+)
 
 
 class _Backend(enum.Enum):
@@ -51,6 +58,16 @@ def test_a_union_names_what_its_branches_accept(
     expected = _expected(spec, value)
     for token in wanted:
         assert token in expected, expected
+
+
+def test_a_complement_names_the_set_it_excludes() -> None:
+    """A complement names what it negates, not the kind of node that is."""
+    admin = complement(Literal["admin"])
+    assert _expected(admin, "admin") == "not the literal 'admin'"
+    assert _expected(union(intersection(str, admin), None), 5) == (
+        "one of: None, str and not the literal 'admin'"
+    )
+    assert _expected(complement(int | str), 5) == "not (int or str)"
 
 
 def test_a_branch_is_named_as_it_would_name_itself_alone() -> None:
