@@ -71,7 +71,7 @@ Three workloads, and the shapes each is read in:
   FFI variance while still catching a per-node regression, which is far larger.
 
 **The profiled shapes** (`--profiled`) are the comparison gate's seven, counted
-on the wheel a release ships: built with profile-guided optimisation, which the
+on the wheel a release ships: built with profile-guided optimization, which the
 three workloads above are not, so a change to the profile's training moves
 nothing they read. The wheel is built at the change and at its base, each from
 a snapshot of its tree unpacked into **one** directory, since the directory a
@@ -314,7 +314,7 @@ def measuring_toolchain() -> dict[str, str]:
     A recorded budget is a reading of one environment, and two parts of it move
     a count without any change to the tree: the valgrind that simulates the
     machine, and the allocator the workloads call, whose free lists
-    `settle_the_heap` normalises and which glibc 2.43 reorganised.
+    `settle_the_heap` normalizes and which glibc 2.43 reorganised.
     """
     valgrind = subprocess.run(
         ["valgrind", "--version"], capture_output=True, text=True, check=False
@@ -1187,7 +1187,7 @@ def build_profiled(tree: str, scratch: Path, out: Path) -> Path:
     emptied, target directory whichever side it is, so the two builds differ in
     their sources and nothing else. The target is emptied rather than reused:
     a profile is a file the compiler flags name by path, so a dependency
-    optimised by the first side's profile would read as current to the second.
+    optimized by the first side's profile would read as current to the second.
     The training runs with its hash seed fixed, so a profile is the tree's.
     """
     maturin = shutil.which("maturin")

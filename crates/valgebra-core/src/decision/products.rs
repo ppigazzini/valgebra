@@ -32,7 +32,7 @@ pub(super) fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
 /// Whether the product `components` is contained in the union of the products in
 /// `branches`, all of the same arity, in the three values of [`Relation`].
 ///
-/// JACM Lemma 6.5 characterises this by splitting the negative set every way,
+/// JACM Lemma 6.5 characterizes this by splitting the negative set every way,
 /// which is `2^|N|` subsets *and* needs a hypothesis retracted whenever a split
 /// fails. ICFP §2.1.4 gives the equivalent formulation that does not backtrack,
 /// and this is that function at `n` components rather than two:
@@ -56,7 +56,7 @@ pub(super) fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
 /// out of budget on an inclusion that holds. A branch is dropped only on a
 /// *proof* that the two share nothing; one merely not shown to overlap stays.
 ///
-/// **The characterisation is exact, so it refutes as well as proves.** A
+/// **The characterization is exact, so it refutes as well as proves.** A
 /// conjunct fails where its position is refuted against the branch *and* the
 /// narrowed product is refuted against the rest; the base case fails where every
 /// narrowed component is proved inhabited, which is a product with a value and
@@ -207,7 +207,7 @@ pub(super) fn linear_subtype(
     // side is then just its fixed prefix. Emptiness is decided with the same
     // oracle and definitions as the rest of the decision, so a tail empty only
     // under a refinement bound or an uninhabited recursive reference is
-    // recognised here too, consistent with the context-aware recursion around it.
+    // recognized here too, consistent with the context-aware recursion around it.
     //
     // The verdict is kept in three values, because the one refutation below
     // that stands on the tail *repeating* needs the element proven to have a

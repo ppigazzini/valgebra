@@ -134,7 +134,7 @@ def test_a_class_is_metadata_rather_than_a_predicate() -> None:
     `Kilograms(1.5)` builds a unit marker; it does not answer whether 1.5 is in
     the set. Reading a class as a predicate turns a documentation marker into a
     schema that admits nothing, so a class is metadata valgebra does not
-    recognise, and the typing spec says to ignore that.
+    recognize, and the typing spec says to ignore that.
     """
 
     class Kilograms:
@@ -178,7 +178,7 @@ def test_a_typing_form_is_metadata_rather_than_a_predicate(
 ) -> None:
     """A typing form is callable, and calling it builds rather than asks.
 
-    It is metadata this frontend does not recognise, as a class is, and the
+    It is metadata this frontend does not recognize, as a class is, and the
     schema is its base.
     """
     schema = Validator(annotation)
@@ -193,7 +193,7 @@ def test_deprecated_in_metadata_is_metadata_rather_than_a_predicate() -> None:
     standard library's from it, whose call raises for anything but a class or a
     function: read as a predicate, it would refuse every value on the releases
     where it is the standard library's. It is metadata this frontend does not
-    recognise on every release, and the schema is its base.
+    recognize on every release, and the schema is its base.
     """
     extensions = pytest.importorskip("typing_extensions")
     marker = extensions.deprecated("read the account id instead")
@@ -632,7 +632,7 @@ def test_a_field_narrowed_by_a_validator_keeps_its_type_and_its_set() -> None:
 # The decision procedures do not reason about a predicate's satisfiability, and
 # the pages say so. They do run one: deciding whether a literal is a subtype of a
 # refinement is deciding whether that literal's value is a member of it, and
-# membership runs the predicate. These pin the behaviour the pages describe, so a
+# membership runs the predicate. These pin the behavior the pages describe, so a
 # doc edit and a code change cannot disagree about which is true.
 
 
@@ -650,7 +650,7 @@ def test_a_subtyping_query_runs_the_predicate_of_a_literal_supertype() -> None:
 
 def test_a_subtyping_query_does_not_reason_about_a_predicate() -> None:
     # Two refinements carrying the same predicate are not related through it: the
-    # procedure compares constraints, it does not analyse them.
+    # procedure compares constraints, it does not analyze them.
     always = Annotated[int, at.Predicate(lambda _: True)]
     assert not Validator(always).is_subtype_of(Annotated[int, at.Ge(0)])
 

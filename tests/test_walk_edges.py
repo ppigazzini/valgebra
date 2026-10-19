@@ -1,7 +1,7 @@
 """Values at the edge of what the walk reads, and the answer each gets.
 
 The node matrix asks every node about a representative value. These are the
-values that are not representative: a container of the wrong flavour, a
+values that are not representative: a container of the wrong flavor, a
 subclass that answers a question by running code, a value that contains itself,
 a refinement over a carrier arithmetic reaches and the kinds do not.
 
@@ -314,7 +314,7 @@ def test_a_bytes_refinement_is_explained_at_its_own_bound() -> None:
 #: Below the first it reads in place, between them it reads a copy, above the
 #: second it reads in place again. The numbers are `SNAPSHOT_MIN_ELEMENTS` and
 #: `SNAPSHOT_MAX_ELEMENTS` in `crates/valgebra-py/src/check/walk/sequence.rs`,
-#: restated here because a test asserting behaviour at a boundary has to name
+#: restated here because a test asserting behavior at a boundary has to name
 #: it; the bounds table in `docs/dev/00-architecture.md` names this file as
 #: what measures them.
 SNAPSHOT_BAND = (16, 262_144)

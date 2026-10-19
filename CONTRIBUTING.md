@@ -124,13 +124,13 @@ file that owns the contract and the single command that reproduces its verdict.
 | the merge gate's steps a developer can run pass, in a clone shaped like a runner's | `.github/workflows/ci.yml` | `uv run --no-sync python scripts/gate.py` |
 | Rust formatting | rustfmt defaults, unconfigured | `cargo fmt --check` |
 | Rust lint policy | `Cargo.toml` `[workspace.lints]` | `cargo clippy --all-targets --all-features -- -D warnings && cargo clippy --all-targets -- -D warnings` |
-| Rust behaviour | `crates/` | `cargo test` |
+| Rust behavior | `crates/` | `cargo test` |
 | Rust documentation links | the doc comments in `crates/` | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps && RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items` |
 | the extension links on PyPy | `crates/valgebra-py/src/` | `uv venv --python pypy-3.11 .pypy && VIRTUAL_ENV=.pypy uv pip install maturin && VIRTUAL_ENV=.pypy .pypy/bin/maturin build --release --out dist-pypy -i "$(uv python find pypy-3.11)" && VIRTUAL_ENV=.pypy uv pip install --no-index dist-pypy/*.whl && .pypy/bin/python scripts/pypy_import_check.py` |
 | the binding's four corpora | `crates/valgebra-py/src/check/walk/interpreter.rs`, `crates/valgebra-py/src/build/interpreter.rs`, `crates/valgebra-py/src/equality/interpreter.rs`, `crates/valgebra-py/src/oracle/interpreter.rs` | `cargo test -p valgebra-py --features interpreter-tests` |
 | the detached fuzz surface | `fuzz/Cargo.toml` | `cargo check --manifest-path fuzz/Cargo.toml --all-targets` |
 | fuzz harness laws | `fuzz/src/lib.rs` | `cargo +nightly test --manifest-path fuzz/Cargo.toml --lib` |
-| Python behaviour | `tests/` | `uv run --no-sync pytest` |
+| Python behavior | `tests/` | `uv run --no-sync pytest` |
 | Python lint and format | `pyproject.toml` `[tool.ruff]` | `uv run --no-sync ruff check . && uv run --no-sync ruff format --check .` |
 | Python types | `pyproject.toml` | `uv run --no-sync ty check` |
 | documentation claims | every tracked `*.md` | `uv run --no-sync python scripts/docs_lint.py` |

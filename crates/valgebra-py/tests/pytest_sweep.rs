@@ -64,7 +64,7 @@ fn worker_venv(base: &Path, at: &Path) -> PathBuf {
 /// Build the worker's environment from the lock file, unless it is there.
 ///
 /// Once per worker rather than once per mutant: the check is the whole of what
-/// makes the cost amortise. The project itself is left out -- the extension is
+/// makes the cost amortize. The project itself is left out -- the extension is
 /// built into this environment by `maturin develop` below, from the mutated
 /// checkout, which is the thing being varied.
 fn ensure(venv: &Path, at: &Path) -> Result<(), String> {

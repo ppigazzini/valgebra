@@ -152,7 +152,7 @@ row that loads it.
 
 **Do not add PyPI as a second index while checking TestPyPI.** uv resolves a name
 from the first index that carries it, so `--extra-index-url https://pypi.org/simple/`
-makes it refuse the TestPyPI version in favour of the older released one — the
+makes it refuse the TestPyPI version in favor of the older released one — the
 dependency-confusion guard, working as designed. valgebra has no runtime
 dependencies, so the TestPyPI index alone resolves it; a package that needs PyPI
 for its own dependencies passes `--index-strategy unsafe-best-match` instead.
@@ -227,7 +227,7 @@ musllinux cross-builds, the PyPy wheels and the Windows arm64 row ship plain
 release builds with the same compatibility.
 
 **No wheel links an interpreter.** maturin injects the pyo3 `extension-module`
-behaviour at build time, and `crates/valgebra-py/Cargo.toml` leaves the feature
+behavior at build time, and `crates/valgebra-py/Cargo.toml` leaves the feature
 unset, so `cargo test` and the workloads link an interpreter as any other
 library does.
 
@@ -257,7 +257,7 @@ running the job out: a job its own limit stops is cancelled, and `ci` reads a
 cancelled job as red. The ledgers evaluate each flag on every leg, as the runner
 does, rather than looking for the version in its text: `!= '3.16'` spells the
 version and forgives every other leg. No other job forgives itself, and no other
-step but the fuzz lane's corpus minimisation, whose failure reports nothing
+step but the fuzz lane's corpus minimization, whose failure reports nothing
 about the code. PyO3 builds for
 the release after the newest it supports with a warning that the artifact must
 not be distributed, which is what a forgiven leg is; it refuses the release

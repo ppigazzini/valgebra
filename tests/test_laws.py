@@ -281,7 +281,7 @@ def test_closing_an_opened_schema_is_at_most_closing_it(
     not injective. `{"a?": anything}` and `{}` are two sets that open to the
     same one, and `dict[str, anything]` opens to a single clause over every
     key, because two clauses carrying the same value are one clause. Neither
-    normalisation is optional -- without them `open` and `close` would map
+    normalization is optional -- without them `open` and `close` would map
     equal sets to unequal ones -- and neither is recoverable.
 
     So the direction is what holds, and `tests/test_projection_laws.py` carries

@@ -444,7 +444,7 @@ fn names(ty: &Bound<'_, PyType>, attr: &Bound<'_, PyString>, want: &str) -> PyRe
 /// vocabulary this frontend reads.
 ///
 /// Constraint attributes are read off a marker of that vocabulary and no other.
-/// The typing spec says to ignore metadata a consumer does not recognise, and
+/// The typing spec says to ignore metadata a consumer does not recognize, and
 /// the vocabulary's own README tells a third party how to join it -- a
 /// `GroupedMetadata` that yields its markers -- where an attribute *name* is no
 /// protocol at all: msgspec's `Meta`, pydantic's `Field` and a class of one's own
@@ -477,7 +477,7 @@ fn derives_from_vocabulary(ty: &Bound<'_, PyType>) -> PyResult<bool> {
 /// from the vocabulary -- pydantic's own `BaseMetadata` subclass, which its
 /// `StringConstraints` yields with a pattern in it -- is read for what it
 /// carries in the vocabulary's names and otherwise ignored, as the
-/// vocabulary's README asks of metadata a consumer does not recognise.
+/// vocabulary's README asks of metadata a consumer does not recognize.
 fn is_constraint_vocabulary(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let py = ty.py();
     // The name is asked only where the module says the class is from the
@@ -533,7 +533,7 @@ fn is_pattern_marker(ty: &Bound<'_, PyType>) -> PyResult<bool> {
 /// A class whose instances would be read or refused as a constraint is a marker
 /// written without its parentheses, and ignoring it would widen the schema to
 /// its base in silence, so it is refused with the spelling that was meant. Any
-/// other class is metadata this frontend does not recognise, which the typing
+/// other class is metadata this frontend does not recognize, which the typing
 /// spec says to ignore.
 fn read_a_class(class: &Bound<'_, PyType>) -> PyResult<()> {
     if !is_a_marker_class(class)? {
@@ -610,7 +610,7 @@ fn is_typing_form(marker: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// refused the same way. A PEP 695 alias of one, `type Pos = Annotated[int,
 /// Gt(0)]`, is the same alias under a name, and is read through to it (see
 /// [`aliased_form`]). Any other typing form is metadata this frontend does
-/// not recognise, and is ignored as a class is.
+/// not recognize, and is ignored as a class is.
 fn read_a_typing_form(marker: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = marker.py();
     let Some(form) = aliased_form(marker)? else {
@@ -776,7 +776,7 @@ static CARRIED: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
 /// A cache entry holds a type, so it keeps one alive. The markers a program
 /// uses are a handful of module-level classes and the map stops growing after
 /// them; a program that *builds* a marker class per call would grow it without
-/// a bound, and `typing` memoises `Annotated[...]` in a cache of its own that
+/// a bound, and `typing` memoizes `Annotated[...]` in a cache of its own that
 /// holds the last hundred and twenty-eight, so this map would be the one that
 /// grows. Past the bound a type is read each time rather than remembered --
 /// slower than the cache, and no worse than having none.
@@ -1040,7 +1040,7 @@ fn parse_constraint_within<'py>(
     depth: u32,
 ) -> PyResult<()> {
     // A compiled validator is this library's own statement of a set, written to
-    // narrow the base. Read as metadata nothing recognises it would be ignored,
+    // narrow the base. Read as metadata nothing recognizes it would be ignored,
     // and the schema would admit every value of the base in silence; it is kept
     // for the caller to meet with the base, grouped or not. The class takes no
     // subclass, so the exact type is the whole test.
@@ -1135,7 +1135,7 @@ fn parse_constraint_within<'py>(
         return read_a_typing_form(marker);
     } else if out.len() == before && probes.mask & Probes::CONSTRAINT_CLASS != 0 {
         // The typing spec says to ignore metadata a consumer does not
-        // recognise, and that is right for metadata written for someone else.
+        // recognize, and that is right for metadata written for someone else.
         // A marker from the constraint vocabulary is not that: it was written to
         // narrow this schema, and ignoring it leaves a validator that admits
         // everything the marker excludes.

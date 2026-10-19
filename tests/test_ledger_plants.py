@@ -1773,7 +1773,7 @@ PLANTS = (
         trips=("test_no_build_targets_the_stable_abi",),
     ),
     Plant(
-        # The structural rules reaching for a normalising pass.
+        # The structural rules reaching for a normalizing pass.
         "tests/test_refusals_ledger.py",
         ("crates/valgebra-core/src/decision.rs",),
         lambda tree: _edit(

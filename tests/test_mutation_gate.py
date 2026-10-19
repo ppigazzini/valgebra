@@ -2,7 +2,7 @@
 
 A gate that cannot be shown to fail is not evidence. These drive
 ``scripts/mutation_gate.py`` against synthetic ``mutants.out`` fixtures so the
-ratchet's pass/fail behaviour is itself tested, without running a real sweep.
+ratchet's pass/fail behavior is itself tested, without running a real sweep.
 """
 
 from __future__ import annotations

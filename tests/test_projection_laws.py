@@ -246,7 +246,7 @@ def test_closing_an_opened_schema_is_not_closing_it() -> None:
     """The two values where the round trip is strict, and what each is about.
 
     `close` after `open` reads as a round trip and is not one, because `open`
-    is not injective: it normalises, and both normalisations are forced.
+    is not injective: it normalizes, and both normalizations are forced.
 
     A declared name admitting everything says exactly what the catch-all an
     opening writes already says, so it goes -- and it has to, or `{"a?":

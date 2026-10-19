@@ -295,7 +295,7 @@ impl<G: Guard> Summand for Atom<G> {
     /// Once by equality rather than by position after a sort. A guard's
     /// equality can be coarser than its order -- an integer set compares two
     /// spellings of one set equal and sorts them apart -- so two equal atoms
-    /// need not be neighbours once sorted, and a sort cannot be what finds the
+    /// need not be neighbors once sorted, and a sort cannot be what finds the
     /// repeat.
     fn compacted(atoms: Vec<Atom<G>>) -> Option<Vec<Atom<G>>> {
         let mut kept: Vec<Atom<G>> = Vec::with_capacity(atoms.len());
@@ -320,7 +320,7 @@ impl<G: Guard> Summand for Atom<G> {
 /// in `descr/polar.rs`.
 ///
 /// **Not canonical**, for the reason a union of powerset lines is not: two
-/// unions can hold the same objects and stay unequal, and recognising that costs
+/// unions can hold the same objects and stay unequal, and recognizing that costs
 /// a search this does not run.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct RecordLattice<G: Guard>(PolarUnion<Atom<G>>);

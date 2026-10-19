@@ -275,7 +275,7 @@ proptest! {
     ///
     /// The claim the whole representation rests on, held against the
     /// *emptiness* decision -- a reachability walk, which shares no code
-    /// with the minimisation and renumbering that make the form canonical.
+    /// with the minimization and renumbering that make the form canonical.
     /// Two spellings of one language have one table, and two languages that
     /// differ have two.
     #[test]
@@ -676,7 +676,7 @@ fn a_text_complement_cut_to_its_kind_holds_only_str_words() {
 
 /// Complementing a minimal table leaves a minimal table.
 ///
-/// The property `RegularSet::complement` relies on to skip a minimisation pass:
+/// The property `RegularSet::complement` relies on to skip a minimization pass:
 /// a word distinguishes two states in `L` exactly when it distinguishes them in
 /// `¬L`, and the transitions are untouched, so both the partition and the
 /// canonical numbering survive the flip.
@@ -712,14 +712,14 @@ fn a_complement_is_already_minimal() {
 }
 
 /// A table whose lookups land outside it stops a debug build where it is
-/// minimised, rather than reading the missing state as state zero.
+/// minimized, rather than reading the missing state as state zero.
 ///
 /// The passes answer a miss with zero because a well-formed table has none,
 /// and that is a different language wherever it does happen; the assertion is
 /// what makes the answer about the table rather than about a lookup.
 #[test]
 #[cfg(debug_assertions)]
-#[should_panic(expected = "a table is minimised as it was built")]
+#[should_panic(expected = "a table is minimized as it was built")]
 fn a_table_with_a_transition_off_it_stops_a_debug_build() {
     let malformed = super::Dfa {
         classes: vec![0; 256],
@@ -820,12 +820,12 @@ fn a_cut_moves_the_smaller_part() {
 
 /// A word is a chain of states, which is the table a refinement by rounds
 /// spends a round per state on, so that refinement's cost grows with the
-/// square of the word's length. Cut by halves, the chain minimises, and holds
-/// its word and neither neighbour.
+/// square of the word's length. Cut by halves, the chain minimizes, and holds
+/// its word and neither neighbor.
 ///
 /// `RegularSet::word` refuses a word this long, since the state bound holds
 /// its table before it is built, so the chain is built here past the
-/// constructor: the minimisation's cost is its own, and the bound's own chain
+/// constructor: the minimization's cost is its own, and the bound's own chain
 /// is too short for a quadratic cost to stand out.
 // SWEEP-SKIP: this case exists to prove a bound, so a mutation that relabels
 // the larger part of a cut makes it quadratic, past ten minutes on a debug
@@ -854,7 +854,7 @@ fn a_word_past_the_state_bound_refuses() {
     assert!(RegularSet::word(&[edge.as_slice(), b"a"].concat()).is_none());
 }
 
-/// A product that keeps a word's chain is a chain again, minimised again: a
+/// A product that keeps a word's chain is a chain again, minimized again: a
 /// word of four thousand bytes met with a language that holds it is the word.
 #[test]
 fn a_product_keeping_a_long_word_is_the_word() {

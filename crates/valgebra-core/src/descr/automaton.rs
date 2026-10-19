@@ -3,7 +3,7 @@
 //!
 //! The word automaton (`regular.rs`) steps on byte classes and the sequence
 //! automaton (`symbolic.rs`) on guarded edges, and each keeps its own table
-//! and its own minimisation passes. What is the same in both is the reading of
+//! and its own minimization passes. What is the same in both is the reading of
 //! a table as a graph from state zero: whether an accepting state is reachable,
 //! the order a canonical numbering visits the states in, and the walk that
 //! numbers the states a product or a builder reaches. Each is written once
@@ -30,13 +30,13 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// The most states an automaton may hold.
 ///
 /// A product multiplies the two state counts -- `|A| * |B|` states before
-/// minimisation -- and a complement of a product does it again, so a bound is
+/// minimization -- and a complement of a product does it again, so a bound is
 /// what keeps a pathological pattern or shape from exhausting memory rather than
 /// answering. Past it the set is not representable, and the operation says so
 /// rather than returning an automaton for a different language. One bound for
 /// both automata, since both multiply the same way.
 ///
-/// It holds every table as it is built, before minimisation: a table reached
+/// It holds every table as it is built, before minimization: a table reached
 /// by a walk through `Reached`, and a table built as a chain -- a literal word,
 /// a sequence shape -- through `chain_fits`.
 pub(crate) const MAX_STATES: usize = 4096;
@@ -47,7 +47,7 @@ pub(crate) const MAX_STATES: usize = 4096;
 /// A leaf built as a chain is never walked, so [`Reached`] does not see it, and
 /// past the bound its table buys no answer, since the first product it enters
 /// refuses. Asked before anything is built, the refusal costs one comparison:
-/// built, a word of a million bytes is a table of a million states minimised
+/// built, a word of a million bytes is a table of a million states minimized
 /// before that product refuses it.
 pub(super) const fn chain_fits(letters: usize) -> bool {
     letters <= MAX_STATES - 2

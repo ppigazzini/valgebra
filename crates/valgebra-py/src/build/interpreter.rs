@@ -175,7 +175,7 @@ fn each_spelling_builds_its_own_schema() {
             // A marker standing for the constraints it yields, which is the
             // protocol `annotated_types` documents and the shape `Interval` and
             // `Len` are written in. Read by attribute alone it is metadata this
-            // frontend does not recognise, which leaves the base admitting
+            // frontend does not recognize, which leaves the base admitting
             // everything the marker excludes.
             (
                 "typing.Annotated[int, grouped(at.Ge(0), at.Le(10))]",
@@ -237,7 +237,7 @@ fn each_spelling_builds_its_own_schema() {
             // A callable is a class here: what a runtime check can ask of a
             // value is whether it is one, not what it accepts or returns.
             ("typing.Callable[[int], int]", "Callable"),
-            // Metadata the frontend does not recognise is ignored, as the
+            // Metadata the frontend does not recognize is ignored, as the
             // typing spec says to -- unless it is a constraint from the
             // vocabulary, which is the refusal below.
             ("typing.Annotated[int, 'a note']", "int"),

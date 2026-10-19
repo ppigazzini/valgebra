@@ -61,7 +61,7 @@ use symbolic::{Guard, SymbolicDfa};
 ///
 /// `bool` is a kind with exactly two values, so a *finite set* over it is exact:
 /// `Literal[True]` is `{True}`, and `Literal[True] | Literal[False]` is the
-/// whole kind rather than a union the procedure must recognise. A two-bit set is
+/// whole kind rather than a union the procedure must recognize. A two-bit set is
 /// the smallest thing closed under the three operations here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct BoolSet(u8);
@@ -361,7 +361,7 @@ enum Op {
 ///
 /// **Equality is equality of the values, with exceptions.** There is exactly
 /// one component per kind, so two descriptors that differ in a component that
-/// compares as a set admit different values. Nothing needs normalising
+/// compares as a set admit different values. Nothing needs normalizing
 /// afterwards, which is what makes the operations' laws structural rather than
 /// up-to-equivalence.
 ///
@@ -369,12 +369,12 @@ enum Op {
 /// is a lattice held as a union of summands under a polarity
 /// (`descr/polar.rs`): `sets`, `records` and `maps`. A union can hold the
 /// same values two ways -- `P(A ∪ B)` is also the union of `P(A)`, `P(B)` and
-/// the line subtracting both -- and recognising that costs a search for
+/// the line subtracting both -- and recognizing that costs a search for
 /// coverings none of them runs; the polarity gives one set a positive and a
 /// negated spelling besides. `symbolic` has the same shape once its letters
-/// are descriptors: minimisation asks the guards to join and to say what they
+/// are descriptors: minimization asks the guards to join and to say what they
 /// leave, and a descriptor cannot always answer, because answering rebuilds the
-/// very automata being minimised. Each such refusal leaves a coarser table for
+/// very automata being minimized. Each such refusal leaves a coarser table for
 /// the same language.
 ///
 /// `integers` is the other shape: its *equality* lifts two tables to the
@@ -1041,7 +1041,7 @@ impl Descr {
 /// The three operations and emptiness are the ones above; the trait is the
 /// interface the automaton asks a letter for, and nothing here is new work. It
 /// is the *fallibility* that shows through: a guard that cannot join leaves the
-/// table coarser rather than wrong, which is why the automaton's minimisation
+/// table coarser rather than wrong, which is why the automaton's minimization
 /// asks for a join and accepts a refusal.
 impl Guard for Arc<Descr> {
     #[cfg(test)]

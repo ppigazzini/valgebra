@@ -9,7 +9,7 @@ They come from two places: what a runtime check can observe at all, and what
 this library decided not to be. Knowing which is which tells you whether to wait
 for it, work around it, or use another tool — so each says which it is.
 
-The neighbouring pages cover two nearby questions: [resource
+The neighboring pages cover two nearby questions: [resource
 limits](10-limits.md) is what a *value* cannot make the validator do, and the
 [decidability boundary](15-decidability.md) is what the comparison operators
 cannot yet prove. This page is about the shape of the product.

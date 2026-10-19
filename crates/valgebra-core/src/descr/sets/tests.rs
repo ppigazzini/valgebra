@@ -235,7 +235,7 @@ fn a_union_past_the_bound_refuses() {
 /// would be worse, since a proof of emptiness is what a caller is allowed to
 /// act on. The arm returns the third answer, and nothing had asked it to.
 ///
-/// The negated form itself has to be *reached*: complementing normalises back
+/// The negated form itself has to be *reached*: complementing normalizes back
 /// to a positive union wherever the product fits, so a complement taken with
 /// an allowance is not negated at all. One taken without an allowance is, and
 /// it is the shape a caller holds after a build that ran out.

@@ -1058,7 +1058,7 @@ fn read_annotation(
         //
         // The two are told apart by whether the form carries a type argument
         // list at all, rather than by whether that list is empty. A bare alias
-        // carries none; a parametrisation carries one even where it is empty,
+        // carries none; a parametrization carries one even where it is empty,
         // and `typing.Tuple[()]` is exactly that -- the empty tuple, a different
         // type from every tuple. `get_args` answers `()` for both, so reading it
         // made `typing.Tuple[()]` admit `(1,)`.

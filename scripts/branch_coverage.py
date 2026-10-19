@@ -49,7 +49,7 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     """Read the command line; an unknown flag or a missing report exits 2.
 
     `--record` is overridable so a test can put the gate to a record of its own:
-    the per-file floors are a scope, and a synthesised report of one file
+    the per-file floors are a scope, and a synthesized report of one file
     against the tree's thirty is a scope mismatch rather than a regression.
     """
     parser = arguments(__doc__)

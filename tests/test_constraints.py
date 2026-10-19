@@ -116,7 +116,7 @@ def test_a_divisor_of_another_type_divides(
 def _fresh(build: Callable[[], object]) -> Validator:
     """Build a validator of `build()` with `typing`'s memo of `Annotated` cleared.
 
-    `typing` memoises `Annotated[...]` by equality, and `MultipleOf(6.0)` equals
+    `typing` memoizes `Annotated[...]` by equality, and `MultipleOf(6.0)` equals
     `MultipleOf(6)`, so a form built earlier would carry the other step.
     """
     for cleanup in getattr(typing, "_cleanups", ()):

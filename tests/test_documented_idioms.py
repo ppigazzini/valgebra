@@ -136,7 +136,7 @@ def test_the_schema_language_page_names_each_form_it_refuses(
     bug, or a deliberate exclusion — which means the page has to name the forms
     they are most likely to have written.
     """
-    del form  # the companion row above owns the behaviour
+    del form  # the companion row above owns the behavior
     page = (_DOCS / "03-schema-language.md").read_text(encoding="utf-8")
     generic = label.split("[", maxsplit=1)[0]
     assert f"{generic}[" in page, (

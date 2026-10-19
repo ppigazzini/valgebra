@@ -30,7 +30,7 @@ const REACH: i64 = 9;
 /// agreement on an accident.
 fn window(a: &IntSet, b: &IntSet) -> core::ops::RangeInclusive<i64> {
     let period = lcm(a.modulus, b.modulus).expect("two periods in the bound share one in range");
-    // A period past the bound cannot be materialised, so it cannot be
+    // A period past the bound cannot be materialized, so it cannot be
     // compared either. Clamping keeps the window finite where the assertion
     // is compiled out; reaching it at all is the bug the assertion names.
     debug_assert!(period <= MAX_PERIOD, "a period of {period} past the bound");

@@ -740,7 +740,7 @@ fn the_longest_trail_any_recursive_shape_builds_is_three_pairs() {
 /// A goal reached by two paths is derived twice, so a family whose every level
 /// reaches the next twice doubles its work per level until the budget declines.
 ///
-/// The family is the one Gapeyev, Levin & Pierce (JFP 2002) analyse for an
+/// The family is the one Gapeyev, Levin & Pierce (JFP 2002) analyze for an
 /// algorithm that keeps no proved pair across its calls, where the two
 /// directions of an arrow reach the level below twice; the paper is not on the
 /// shelf, so this describes it rather than citing a section. A second constructor does it here -- a

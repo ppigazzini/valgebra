@@ -7,7 +7,7 @@ CPython exports: `Py_GenericAliasType` is one it does not carry. Naming such a
 symbol links here and fails on PyPy at **import** -- before any schema is built,
 with `undefined symbol` and nothing else to go on.
 
-That is a *link* property, not a behavioural one, so this is a link check. It
+That is a *link* property, not a behavioral one, so this is a link check. It
 imports the extension and builds the annotation forms whose compilation most
 plausibly reaches a type object the limited API does not define -- the
 parametrized generics, the legacy aliases they are told apart from, the unions

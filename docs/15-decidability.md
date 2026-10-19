@@ -723,7 +723,7 @@ the shape. What is left below is what the descriptor cannot hold.
   values of any other type -- a `Decimal`, a `Fraction`, `object` -- declines.
 
 - **A meet of two moduli the representation cannot hold.** A `MultipleOf`
-  becomes a residue class, and a class is materialised per residue up to a
+  becomes a residue class, and a class is materialized per residue up to a
   recorded period. Two steps *meet* at the period they share, so `MultipleOf(64)`
   with `MultipleOf(81)` is the multiples of 5,184 -- past the period although
   both steps are well inside it -- and a relation that turns on that meet

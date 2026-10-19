@@ -308,7 +308,7 @@ def _forget_annotated() -> None:
 def forgetting_annotated() -> Iterator[None]:
     """Forget `typing`'s memo of `Annotated` before the test and after it.
 
-    `typing` memoises `Annotated[...]` by equality, and a hostile operand here
+    `typing` memoizes `Annotated[...]` by equality, and a hostile operand here
     equals the ordinary one another test spells: `Ge(B(0))` is `Ge(0)`. Left in
     the memo, it is handed to that test, and before this one it hands back the
     previous signal's operand.

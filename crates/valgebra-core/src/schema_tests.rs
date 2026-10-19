@@ -747,14 +747,14 @@ fn a_name_survives_opening_by_what_it_says_alone() {
 }
 
 // THEORY: open-and-close-are-term-rewrites
-/// One term has one reading, so the two neighbours close alike.
+/// One term has one reading, so the two neighbors close alike.
 ///
 /// `{"a?": anything, ...}` and `dict[anything, anything]` admit exactly the
 /// same dicts -- every one -- and the second **is** the term
 /// `KeyedMap { fields: [], defaults: [top] }`, which is also what an open
 /// record with no field is. One term, and an operator that reads a spelling has
 /// to pick a reading for it -- keep a mapping's clauses, drop a record's -- so
-/// one of the two neighbours closes to a different set from the other.
+/// one of the two neighbors closes to a different set from the other.
 ///
 /// Reading openness as the default of the region no clause claims leaves
 /// nothing to pick. `[top]` claims every key, so it *is* the unclaimed region's
@@ -845,9 +845,9 @@ fn opening_a_mapping_frees_the_region_no_clause_claims() {
 /// every key it does not name nothing at all, so `{"a?": nothing}` names a key
 /// and says what the record already said: one domain, one record.
 ///
-/// The constructors canonicalise the *order* -- the fields and the clauses are
+/// The constructors canonicalize the *order* -- the fields and the clauses are
 /// sorted, so two terms differing only in how they were written are one term --
-/// and they do not canonicalise the domain. That is deviation 3, and this is
+/// and they do not canonicalize the domain. That is deviation 3, and this is
 /// its extent rather than its cost: `==` is the written form, and the two
 /// spellings above are two terms and one set.
 ///
@@ -1879,7 +1879,7 @@ fn a_map_keeps_a_clause_that_is_not_the_catch_all() {
         value: Schema::Int,
     };
     // Through the general constructor, which is where the two shared lists are
-    // recognised: a clause that is neither empty nor the catch-all is the map's
+    // recognized: a clause that is neither empty nor the catch-all is the map's
     // own, and reading it as the catch-all would open a map that names a
     // narrower key or value.
     let Schema::KeyedMap { defaults, .. } = Schema::keyed_map(Vec::new(), vec![narrow.clone()])
@@ -2199,7 +2199,7 @@ fn closing_an_opened_mapping_takes_out_only_the_region_open_freed() {
         Schema::keyed_map(Vec::new(), Vec::new())
     );
 
-    // The clause is recognised by its shape, whoever wrote it.
+    // The clause is recognized by its shape, whoever wrote it.
     let written = Schema::keyed_map(
         Vec::new(),
         vec![

@@ -21,7 +21,7 @@ the `bench` group's differential oracle, and ruff and ty are `dev` tools
   and values run through both over the fragment where the semantics agree.
 - **jiter** — <https://github.com/pydantic/jiter>. The JSON parser valgebra
   uses, and the reason `is_valid_json` can decide in place rather than
-  materialising Python objects first.
+  materializing Python objects first.
 - **ruff and ty** — <https://github.com/astral-sh/ruff>. ty's semantic crates are
   a set-theoretic type system in Rust, read for how a lattice of types is
   represented and decided. valgebra does not link them.

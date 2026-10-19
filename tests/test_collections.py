@@ -68,7 +68,7 @@ def test_prefix_tail_tuple_rejects_an_interior_ellipsis() -> None:
 
 def test_prefix_tail_tuple_decides_distinctly_from_lists() -> None:
     # The frontend builds the same prefix-plus-tail regex the list form does, but
-    # under the tuple container, so the decision procedure honours the container
+    # under the tuple container, so the decision procedure honors the container
     # throughout subtyping, emptiness, and equivalence.
 
     # Subtyping is covariant in the prefix and the repeated tail.

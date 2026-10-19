@@ -275,7 +275,7 @@ pub(super) fn product<S: Summand>(left: &[S], right: &[S]) -> Option<Vec<S>> {
 /// Bring a list into the lattice's canonical form, and refuse a union past
 /// the bound.
 ///
-/// Dropping a summand proved empty is not an optimisation: it contributes no
+/// Dropping a summand proved empty is not an optimization: it contributes no
 /// value to the union, so removing it leaves the same set and keeps the count
 /// from growing on shapes that describe nothing. One merely *unknown* stays,
 /// because it may yet hold a value. The order is what makes two equal unions

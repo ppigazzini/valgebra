@@ -271,7 +271,7 @@ def _merges(jobs: dict) -> dict[str, tuple[str, int]]:
     Derived from the step rather than listed, because a second sharded sweep is
     exactly the kind of thing a hand-written pair list does not grow to cover --
     and the pair that went unlisted would be the one whose guard was never
-    checked. A merge is recognised by its step name, and the sweep it merges by
+    checked. A merge is recognized by its step name, and the sweep it merges by
     the job it needs.
     """
     found = {}

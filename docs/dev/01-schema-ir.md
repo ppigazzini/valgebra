@@ -134,7 +134,7 @@ deliberate narrowing".
 
 Three arguments look like they settle case 1 and do not:
 
-- **"The behaviour already looks right."** A `Validator` probe shows what the
+- **"The behavior already looks right."** A `Validator` probe shows what the
   walk does. The walk can agree with a denotation by accident, and a node's
   denotation is what the doc comment in this file says.
 - **"The implementation already computes it."** `build_object` computes
@@ -277,7 +277,7 @@ rewriting the term. `test_no_method_reduces_a_schema` in
 
 | argument | why it fails |
 |---|---|
-| "the behaviour already looks right" | a probe shows the walk, not the denotation |
+| "the behavior already looks right" | a probe shows the walk, not the denotation |
 | "the implementation already computes it" | `build_object` computes attribute checks into an `AttrRecord` it meets with the class's `Instance` atom; a computation on the way to that meet is not a set of its own |
 | "it only changes which values a constructor sees" | subtyping is defined from the denotation, so that *is* the algebra |
 | "the sources name no carrier, so adding one is free" | an absence of guidance is not permission. It also is not a refusal — the refusal rests on the admission test, not on this row |
@@ -438,7 +438,7 @@ call. That is the cost of `==` being equality of a normal form, below.
 laws and not others is neither: it renders `union(int, int)` as `int | int`,
 unequal to `int`, while `union(int, complement(int))` renders `anything`, so `==`
 is equality of nothing in particular and `repr` shows a shape no rule was written
-for. Normalising at construction makes `==` equality of a normal form -- which is
+for. Normalizing at construction makes `==` equality of a normal form -- which is
 what the API reference calls it -- and makes the shape every rule downstream may
 assume the shape it gets. The form is one per
 spelling, not one per set: two spellings of one set can still compare unequal,
@@ -607,11 +607,11 @@ is not an instance. Neither is information: the first is the algebra's spelling
 of a thing the user spelled as `Pt`, and the second reports attributes of an
 object that has no reason to have them.
 
-So the surface is preserved by construction. `Schema::object_class` recognises
+So the surface is preserved by construction. `Schema::object_class` recognizes
 the pair — exactly one instance atom beside exactly one declaration, an
 attribute record or a sequence, other members tolerated — and `render` and a
 union's branch label both read the class out of it, which is why the shape is
-recognised once rather than matched at each of them. The walk stops collecting
+recognized once rather than matched at each of them. The walk stops collecting
 once a member of a meet has failed *at the meet's own path*: a member that
 rejects the value itself has settled it, and a member that fails inside the
 value leaves the others meaningful. That second rule is not specific to classes
@@ -788,7 +788,7 @@ they decline.
 What that ordering is *not* is a second opinion. Both are asked of the same
 question, both answer in the same three values, and both are sound, so where
 both decide they agree: neither overturns the other, and neither is asked once
-the other has decided. Nor is one an optimisation of the other. They are two
+the other has decided. Nor is one an optimization of the other. They are two
 sound deciders with partly disjoint reach, joined where the rules decline and
 held to each other by `tests/test_completeness_probe.py`, and the page that
 describes the decision says so in that order.

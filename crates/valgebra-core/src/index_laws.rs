@@ -154,7 +154,7 @@ fn sets_are_canonical(schema: &Schema) -> bool {
 ///
 /// A set rather than the sequence the walk meets them in, because a join's or
 /// a meet's members are a set and a remap that renumbers them puts them back
-/// in canonical order -- so two indices that were neighbours may not be after.
+/// in canonical order -- so two indices that were neighbors may not be after.
 /// The laws below ask whether every index moved and by how much, which the
 /// set answers as well as the sequence would: an index that stood still keeps
 /// a value the image of a shift by one or more does not hold.

@@ -647,7 +647,7 @@ impl<G: Guard> Summand for MapAtom<G> {
     /// Once by equality, for the reason the record atoms give: a guard's
     /// equality can be coarser than its order -- an integer set compares two
     /// spellings of one set equal and sorts them apart -- so two equal atoms
-    /// need not be neighbours once sorted. A repeat kept is a summand of
+    /// need not be neighbors once sorted. A repeat kept is a summand of
     /// width toward [`MAX_ATOMS`] and a factor in every complement of the
     /// union.
     fn compacted(atoms: Vec<MapAtom<G>>) -> Option<Vec<MapAtom<G>>> {

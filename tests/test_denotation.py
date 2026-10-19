@@ -95,7 +95,7 @@ _SCALAR_PRED: dict[object, Pred] = dict(_SCALARS)
 # stress the `1`/`True`/`1.0` distinction the walk must keep.
 # Constants a literal is built from. The boundaries are here because a literal
 # is decided by *equality*, and equality is where these values stop behaving
-# like their neighbours: `nan` equals nothing including itself, `-0.0` equals
+# like their neighbors: `nan` equals nothing including itself, `-0.0` equals
 # `0.0` and hashes with it, and the two integers sit at the ends of the carrier
 # a bound is lowered across.
 _CONSTS = [
@@ -622,7 +622,7 @@ def _values() -> st.SearchStrategy[object]:
         st.integers(min_value=-5, max_value=5),
         st.sampled_from([0, 1, -1, 0.0, 1.0, 3.5]),
         # The boundaries, which a drawn value reaches only by luck. Each is a
-        # value some operation reads differently from its neighbours: the two
+        # value some operation reads differently from its neighbors: the two
         # infinities bound every comparison, `nan` satisfies none, `-0.0` is
         # `0.0`'s equal and its hash-mate, the integers sit at the ends of the
         # carrier a bound is lowered across, and a newline is where a pattern's
@@ -762,7 +762,7 @@ _NODES_DRAWN: dict[str, str] = {
 
 #: The values every case is checked against, beside the drawn one.
 #:
-#: Each is a value some operation reads differently from its neighbours, and
+#: Each is a value some operation reads differently from its neighbors, and
 #: each is one a drawn value reaches only by luck: measured over six hundred
 #: draws, three of these five kinds never appeared. A boundary that depends on
 #: the draw is a boundary the suite reaches on some runs and not others, and a

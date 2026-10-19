@@ -46,7 +46,7 @@ fn a_guard_met_with_itself_is_shared_rather_than_rebuilt() {
 /// pair of states.
 ///
 /// Pinned by size because size is what a guard stored by value changes: it
-/// would pass every behavioural law in this file and bring the growth with
+/// would pass every behavioral law in this file and bring the growth with
 /// it.
 #[test]
 fn an_edge_holds_its_guard_by_handle() {
@@ -198,7 +198,7 @@ fn universe() -> Vec<Value> {
     }
     // Dicts, as the entries they carry. The empty one separates a map that
     // constrains a key from one that forbids it; the two values under one
-    // key separate a label's type from its neighbour's; and the integer key
+    // key separate a label's type from its neighbor's; and the integer key
     // is what tells one part of the key partition from another.
     values.extend(DICTS.map(Value::dict));
     // Objects of no listed kind, described by the attributes they carry.
@@ -1097,7 +1097,7 @@ const BY_VALUES: Algebra<Descr> = Algebra {
 
 /// The word descriptors the generator draws from, built once.
 ///
-/// A pattern's automaton is determinised and minimised, which is far more
+/// A pattern's automaton is determinised and minimized, which is far more
 /// work than drawing a number: built per draw it dominates the suite, and
 /// proptest's shrinking -- thousands of draws over one failure -- turns a
 /// caught mutation into a run that does not finish.
@@ -1367,7 +1367,7 @@ fn every_kind_has_exactly_one_component() {
 }
 
 /// `bool` is its two values, which is what makes the union of the two
-/// singletons the whole kind rather than a shape a rule must recognise.
+/// singletons the whole kind rather than a shape a rule must recognize.
 #[test]
 fn the_two_booleans_are_the_bool_kind() {
     let both = Descr::boolean(true).union(&Descr::boolean(false));

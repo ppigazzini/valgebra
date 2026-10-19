@@ -92,7 +92,7 @@ def _run(args: Sequence[str]) -> subprocess.CompletedProcess[str]:
 def _own_record(tmp_path: Path, floor: float, files: dict[str, float]) -> Path:
     """Write a record of this test's own, for a report of this test's own.
 
-    The per-file floors are a *scope*: a synthesised report of one file against
+    The per-file floors are a *scope*: a synthesized report of one file against
     the tree's thirty is a scope that changed rather than a figure that fell,
     and the gate says so. So a test about the scope-wide figure supplies a
     record naming the file its report carries.

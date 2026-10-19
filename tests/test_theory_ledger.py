@@ -202,7 +202,7 @@ def _held() -> list[Claim]:
 
 
 def _held_at_collection() -> list[Claim]:
-    """Give the held claims to parametrise over, or none where the page does not parse.
+    """Give the held claims to parametrize over, or none where the page does not parse.
 
     Read at import, so a page the parse refuses would fail the module as a
     collection error that names no test. `test_the_page_parses` names it.
@@ -742,7 +742,7 @@ def test_every_cited_source_is_a_section_the_argument_has() -> None:
     The page restates an argument kept out of the distribution, so a reader
     holding both has no way to find the paragraph a sentence came from and a
     reader holding one has no way to know a citation went stale. The fragment
-    is quoted rather than summarised for the same reason a citation carries a
+    is quoted rather than summarized for the same reason a citation carries a
     page number: a section is a screenful, and the sentence is the claim.
     """
     sections = _argument()

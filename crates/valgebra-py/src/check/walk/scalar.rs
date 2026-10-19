@@ -543,7 +543,7 @@ pub(super) fn is_of_its_kind(base: &Schema, value: &Value<'_, '_>) -> bool {
     }
 }
 
-/// A builtin container the walk counts, with the tests that recognise one.
+/// A builtin container the walk counts, with the tests that recognize one.
 ///
 /// Two tests rather than one, and the first is what keeps the common reading
 /// cheap: an exact container overrides nothing, so its own `__len__` *is* the

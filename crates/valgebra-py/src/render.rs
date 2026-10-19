@@ -233,7 +233,7 @@ fn binder(open: usize) -> String {
 /// repr, which are known only once printed, so the binders are named last, each
 /// the first of its level's names that no word of the render spells. A word is
 /// a run of characters no ASCII punctuation or space breaks, read after the
-/// interpreter's NFKC normalisation, which reads `Ｘ` as `X`. That is wider
+/// interpreter's NFKC normalization, which reads `Ｘ` as `X`. That is wider
 /// than Python's identifiers -- a word inside a quoted string is one too -- and
 /// the cost of the width is a suffixed name where a plain one would have read
 /// back as well.
@@ -537,7 +537,7 @@ fn python_repr(py: Python<'_>, text: &str) -> String {
 /// placeholder in the rendered string instead of panicking across the FFI
 /// boundary, matching the defensive `.get` posture in the walk. The index is
 /// pool-valid by construction, so the miss is an invariant break -- loud in
-/// debug, a recognisable placeholder in release.
+/// debug, a recognizable placeholder in release.
 fn pool_repr(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<String> {
     if let Some(constant) = pool.get(index) {
         let text = constant.bind(py).repr().map(|text| stored(&text));

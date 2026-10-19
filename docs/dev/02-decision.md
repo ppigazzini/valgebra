@@ -30,7 +30,7 @@ That ordering is not a second opinion. Both are asked the same question, both
 answer in three values -- proved, refuted, or neither -- and both are sound, so
 where both decide they agree, the descriptor is asked only where the rules
 reach the third, and the pair gives whichever of them decides. Neither is an
-optimisation of the other: every recursive schema, predicate and hooked class
+optimization of the other: every recursive schema, predicate and hooked class
 is the rules' alone ("Why every rule stays", below), and a pair the rules
 decline is the descriptor's. Where both reach, the rules go first because
 building a set representation costs about three orders of magnitude more than a
@@ -179,7 +179,7 @@ two kinds that hold their values alike share one:
 |---|---|---|---|
 | `Booleans` | `bool` | a two-bit subset, which is exact for a kind with two values | `descr/mod.rs` |
 | `Integers` | `int` | eventually periodic sets: an interval set per residue class, which is what holds a bound, a point *and* a step | `descr/integers.rs` |
-| `Floats` | `float` | closed intervals of floats, an open end held as its neighbouring float, plus a bit for `nan`, which sits outside the order | `descr/floats.rs` |
+| `Floats` | `float` | closed intervals of floats, an open end held as its neighboring float, plus a bit for `nan`, which sits outside the order | `descr/floats.rs` |
 | `Words` | `str`, `bytes` | a minimal deterministic automaton, canonically numbered, so two spellings of one language are one table | `descr/regular.rs` |
 | `Sequences` | `list`, `tuple` | an automaton whose transitions are guarded by value sets -- the letters are descriptors, so the component recurses through the automaton's *states* | `descr/symbolic.rs` |
 | `Sets` | `set`, `frozenset` | a union of powerset lines: a set is its members and has no order for an automaton to walk | `descr/sets.rs` |
@@ -238,7 +238,7 @@ among them, as meeting in nothing where the complemented base holds every string
 are read as a set first, since a predicate may answer two occurrences apart.
 `fuzz/seeds/decision/` keeps the input,
 `a_pattern_over_two_bases_that_hold_every_string_is_one_set` in
-`decision/tests.rs` holds the pair and two neighbours that stay inhabited, and
+`decision/tests.rs` holds the pair and two neighbors that stay inhabited, and
 `a_universe_through_a_pattern_over_two_bases_bounds_a_subject_the_sets_refuse`
 in `laws.rs` draws the family.
 
@@ -736,8 +736,8 @@ on that workload rather than argued from this split.
 
 Subtyping distributes over unions and intersections; emptiness recurses the
 structural fragment. A deeply nested Boolean combination can therefore demand
-work exponential in its depth unless a goal already decided can be recognised
-when it comes back — and recognising one cheaply needs *identity*, not structure.
+work exponential in its depth unless a goal already decided can be recognized
+when it comes back — and recognizing one cheaply needs *identity*, not structure.
 The IR gives that: two subtrees built alike are one allocation
 ([01-schema-ir.md](01-schema-ir.md)), so a goal is named by a pair of pointers
 and a memo over goals has the cheap key it wants. What a memo lacks is its
@@ -934,7 +934,7 @@ construction leaves standing, for the same reason.
 `∅ ⊆ B` for every `B`, and `A ⊆ U` for every `A`. Both are decided by asking
 whether a schema **denotes** the empty set — not by matching the `Nothing` or
 `Anything` atom — so a record with an uninhabited required field, a cancelling
-intersection, and a union that covers the universe are all recognised.
+intersection, and a union that covers the universe are all recognized.
 
 **Stating a bound over the atom is a rule that confirms itself**, and that is
 why neither is stated that way. A pattern matching only the shape the rule is
@@ -1053,7 +1053,7 @@ whose subject refused, and this lowers the complement's inner set only where the
 complement rule has declined, which leaves the relation matrix's count where it
 is. `fuzz/seeds/decision/` keeps the input, and
 `a_complement_only_the_descriptor_empties_bounds_a_subject_with_no_descriptor`
-in `decision/tests.rs` holds the pair and its non-universal neighbour, which
+in `decision/tests.rs` holds the pair and its non-universal neighbor, which
 stays a decline.
 
 **The contravariant rule asks the same where it declines.** `¬A ⊆ ¬B` is read

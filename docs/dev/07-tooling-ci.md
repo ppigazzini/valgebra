@@ -51,7 +51,7 @@ or a parser of its own.
 
 What a script runs a step or a measurement in is not shared, because the two
 are different rules. `gate.py` gives a step the caller's environment, less the
-colour a terminal forces and the venv `uv run` names. `perf_gate.py` gives a
+color a terminal forces and the venv `uv run` names. `perf_gate.py` gives a
 workload the few names it needs, with the hash seed and the allocator fixed,
 since the environment's size moves a count. Either rule applied to the other's case fails a test:
 `test_a_forced_colour_variable_does_not_reach_a_step` needs a caller's variable
@@ -236,7 +236,7 @@ that builds it.
 **An ignore in `pyproject.toml` covers the files its reason is about, and no
 others.** ruff selects every rule. The global list holds only what is true of
 every file -- the two formatter conflicts, the contradicting docstring pairs,
-the licence header. The annotation and docstring rules apply to the shipped
+the license header. The annotation and docstring rules apply to the shipped
 package, which satisfies them, and are excused per directory in `tests/`,
 `scripts/` and `benches/`, by the codes each one breaks and with the reason
 beside them. An ignore written wider than its reason lifts a rule from the
@@ -695,7 +695,7 @@ then come from one run, one image and one toolchain, though from two runners
 that may be of different classes.
 
 **What a profile buys is read from the same lane, and it is per shape.**
-Profile-guided optimisation arranges what fat LTO left to arrange, so a shape
+Profile-guided optimization arranges what fat LTO left to arrange, so a shape
 whose cost is one hot loop over one element type is laid out straight and a
 shape whose cost is fifty key lookups -- each dispatching on its field's own
 schema -- can be laid out worse. A single figure for it would therefore be true
@@ -839,7 +839,7 @@ python scripts/mutation_gate.py --baseline walk --new-only --out sweep/mutants.o
 ```
 
 The core sweep is the same shape without an interpreter to point at, and its
-skips are the two termination proofs and the long chain's minimisation:
+skips are the two termination proofs and the long chain's minimization:
 
 ```bash
 export PROPTEST_MAX_SHRINK_TIME=1000
@@ -954,7 +954,7 @@ binding's coverage floor counts and no CPython test can reach.
 **A reading compiled per interpreter names what it answers, and is measured on
 one side.** `crates/valgebra-py/build.rs` re-emits the interpreter's `Py_3_x`
 and `Py_GIL_DISABLED` flags, so a `cfg!` on one compiles a different reading per
-interpreter. Such a site says in its doc comment which behaviour of which
+interpreter. Such a site says in its doc comment which behavior of which
 release it answers, with the measurement for each reading; `snapshot_pays` in
 the sequence walk is the one site. Each lane that measures reads one side: the
 binding sweep and the coverage lane pin 3.12, where the snapshot reading

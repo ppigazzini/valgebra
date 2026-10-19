@@ -917,7 +917,7 @@ _DECIDED = [
     # Divisibility, which the steps decide between them: every multiple of `a`
     # is a multiple of `b` exactly when `b` divides `a`. The rules read the two
     # steps rather than the values they name, so the answer does not depend on
-    # how many residues a representation materialises -- a rule reading the
+    # how many residues a representation materializes -- a rule reading the
     # residues would leave the pair below undecided and decide `MultipleOf(4)`
     # against `MultipleOf(2)`, for no reason a caller could see.
     pytest.param(
@@ -1025,7 +1025,7 @@ _DECIDED = [
         id="{a:int|str}<={a:int}|{a:str}",
     ),
     # A container meet is not intersected componentwise, so a meet that is the
-    # empty container is not recognised as one.
+    # empty container is not recognized as one.
     # A scalar kind is a region bit rather than a set of its values, so a finite
     # kind is not the union of its members and a negated literal has nowhere to go.
     pytest.param("subtype", bool, Literal[True, False], id="bool<=L[True,False]"),

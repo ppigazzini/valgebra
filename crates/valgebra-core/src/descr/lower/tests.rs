@@ -1310,8 +1310,8 @@ fn a_length_bound_costs_three_units_an_element() {
     assert_eq!(cost(Constraint::MinLen(20)), 134);
 }
 
-/// An integer bound no float equals is read against the neighbour on the
-/// bound's own side, and which side that is decides which neighbour.
+/// An integer bound no float equals is read against the neighbor on the
+/// bound's own side, and which side that is decides which neighbor.
 ///
 /// Past 2^53 the floats are two apart, so an odd integer there lies between two
 /// of them and a bound written over it cuts at one or the other. A lower bound
@@ -1322,8 +1322,8 @@ fn a_length_bound_costs_three_units_an_element() {
 fn a_float_bound_over_an_inexact_integer_cuts_at_the_right_neighbour() {
     // Two integers with no float of their own, one either side of the rounding:
     // the nearest float is *below* the first and *above* the second, so between
-    // them they reach both directions the neighbour is picked in. Which side the
-    // bound is on decides which neighbour, and the rounding decides nothing.
+    // them they reach both directions the neighbor is picked in. Which side the
+    // bound is on decides which neighbor, and the rounding decides nothing.
     const ROUNDS_DOWN: (i64, f64, f64) = (
         9_007_199_254_740_993,
         9_007_199_254_740_992.0,
@@ -1372,7 +1372,7 @@ fn a_float_bound_over_an_inexact_integer_cuts_at_the_right_neighbour() {
         }
 
         // No float is on both sides, so the two together admit none -- which is
-        // the answer only where each cut at its own neighbour.
+        // the answer only where each cut at its own neighbor.
         assert!(
             refined(vec![
                 Constraint::Ge(OperandIx::new(0)),

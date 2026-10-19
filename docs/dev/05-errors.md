@@ -128,7 +128,7 @@ in the meet's turn, so the report carries the elements' violations beside it.
   over its whole body, so one equal to a name the body prints would read that
   name back as the back edge; the binders are named after the render, each the
   first spelling of its level's letter that no word of the text takes, read
-  under the interpreter's NFKC normalisation (`name_binders`). A constant
+  under the interpreter's NFKC normalization (`name_binders`). A constant
   prints by its own `repr` whole, since one cut where an error message cuts
   does not read back, and a literal's constant whose `repr` is a builtin's
   spelling of a subclass's value prints in angle brackets, since it would read

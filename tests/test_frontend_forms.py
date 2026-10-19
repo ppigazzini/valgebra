@@ -41,7 +41,7 @@ class Yields(at.GroupedMetadata):
     `annotated_types` documents this as the way to write one: a marker that is
     several constraints answers `__iter__` with them, which is how `Interval`
     and `Len` are written. Reading a marker by attribute alone finds nothing on
-    this one, and metadata this frontend does not recognise is ignored -- which
+    this one, and metadata this frontend does not recognize is ignored -- which
     leaves a schema admitting exactly what the marker was written to exclude.
     """
 
@@ -78,7 +78,7 @@ def test_a_bare_legacy_alias_is_the_class_it_aliases() -> None:
     assert Validator(typing.Tuple).is_valid((1, 2)) is True
     assert Validator(typing.List) == Validator(list)
     assert Validator(typing.Dict) == Validator(dict)
-    # And a parametrised legacy alias is its parametrisation.
+    # And a parametrized legacy alias is its parametrization.
     assert Validator(typing.List[int]) == Validator(list[int])
 
 

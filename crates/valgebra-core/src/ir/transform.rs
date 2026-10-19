@@ -373,7 +373,7 @@ impl Schema {
     /// about every node pays one comparison per child for the privilege, which
     /// is the trade the shared representation makes worth taking: what it
     /// saves is a rebuild of everything beneath the node, and what it costs is
-    /// an `Option` the optimiser sees through.
+    /// an `Option` the optimizer sees through.
     ///
     /// [`map_children`](Self::map_children) is this with `f` that always
     /// answers `Some`, so a rewrite of either kind reads one statement of the

@@ -98,7 +98,7 @@ class Declines:
     what has not been built. What is driven is the `"undecided"`.
 
     `beside` is the other half of such an entry. A conservative entry usually
-    says which neighbouring question *is* decided: the direction the carrier
+    says which neighboring question *is* decided: the direction the carrier
     proves, the inclusion two steps settle between them, the length a word's
     automaton counts. That sentence is a promise of the same page, and driving
     only the decline leaves it stated and unheld -- so the entry carries the
@@ -302,7 +302,7 @@ ROWS: dict[str, Row] = {
         ),
         Annotated[int, at.MultipleOf(5184)],
         "a residue representation whose period is the one two steps share, "
-        "rather than one materialised up to a recorded bound",
+        "rather than one materialized up to a recorded bound",
         # The refutation the residues do reach, which is the one the entry
         # contrasts the declining pair with.
         beside=(
@@ -412,7 +412,7 @@ def test_every_entry_of_the_boundary_answers_as_the_page_says(title: str) -> Non
             left, right, decided = row.beside
             beside = Validator(left).relation_to(right)
             assert beside == decided, (
-                f"{title}: the page says the neighbouring relation is "
+                f"{title}: the page says the neighboring relation is "
                 f"{decided!r} and the procedure answers {beside!r}. A "
                 "conservative entry naming a decided question is held to both."
             )

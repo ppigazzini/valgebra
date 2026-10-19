@@ -2,7 +2,7 @@
 #
 # PyO3 keeps a pool of reference-count decrements deferred while a thread is
 # detached from the interpreter, and every call into the extension asks it for
-# them. Once any of PyO3's lazy initialisers has detached and attached again --
+# them. Once any of PyO3's lazy initializers has detached and attached again --
 # the first interned name does -- that question locks the pool's mutex: forty
 # instructions and eight branches on `Validator(int).is_valid(1)`. The binding
 # never detaches, so it never defers a decrement and the pool is never anything

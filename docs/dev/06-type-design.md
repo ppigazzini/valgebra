@@ -264,7 +264,7 @@ The last three take the value first, and all three are `&Bound<'_, PyAny>`, so
 an operand passed first typechecks.
 
 **Overflow, though the policy makes the shape safe.** Overflow is a program
-error and which behaviour a build gets is a per-profile choice, so `Cargo.toml`
+error and which behavior a build gets is a per-profile choice, so `Cargo.toml`
 states it: dev and test trap, release wraps. That is what makes the discipline
 pay — every intended saturation in this tree is spelled, so a bare `+` that
 wraps is a defect the test profile catches rather than a shape somebody meant,

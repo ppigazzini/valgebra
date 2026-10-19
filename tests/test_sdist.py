@@ -9,7 +9,7 @@ by what `maturin sdist` collects, which no other check reads.
 
 Held both ways against the tree: the archive carries every tracked file of the
 workspace's crates and of the Python package, the manifests and the lock, the
-readme and licences `pyproject.toml` names and the files `[tool.maturin]
+readme and licenses `pyproject.toml` names and the files `[tool.maturin]
 include` adds; and it carries nothing besides them but the `PKG-INFO` it
 writes.
 

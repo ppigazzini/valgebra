@@ -63,7 +63,7 @@ SOURCE: §13.2 "**The laws hold by construction**"; §2 "every combinator builds
 HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference
 
 **Stone's representation theorem (1936).** Every Boolean algebra is isomorphic to
-an algebra of sets. **[GUIDING: stone-duality]** — the licence for treating the scalar fragment
+an algebra of sets. **[GUIDING: stone-duality]** — the license for treating the scalar fragment
 as a bitset over disjoint regions, which is what makes emptiness and subtyping
 exact there ([02-decision.md](02-decision.md)).
 
@@ -108,7 +108,7 @@ compromises stated. **[GUIDING: a-peer-implementation]** — the closest thing t
 implementation.
 
 **Castagna & Duboc, "Guard Analysis and Safe Erasure Gradual Typing: a Type
-System for Elixir" (2024).** The same system formalised, with its implementation
+System for Elixir" (2024).** The same system formalized, with its implementation
 in §7.1: a descriptor per kind of atom, a type of tuples kept as a union of
 tuple atoms by distributing a negated tuple over its components "and likewise
 for larger arities", and a gradual type as two static descriptors. The two
@@ -154,18 +154,18 @@ to the `regex` matcher the walk runs.
 
 **The rule that splits a fixed-length sequence across a union** is the product
 decomposition — Frisch, Castagna & Benzaken Lemma 6.5 for pairs, in the
-backtrack-free form Castagna gives as `Φ`, and generalised to a fixed component
+backtrack-free form Castagna gives as `Φ`, and generalized to a fixed component
 count the way Castagna & Duboc §7.1 state the tuple rule for larger arities.
 **[LOAD-BEARING: a-sequence-splits-across-a-union]** — `product_subtype` in `decision/products.rs`. It applies in subtyping
 and nowhere else: emptiness's rules do not decompose a product, so the same
 relation asked as a meet with a complement is left to the set representation,
 which decides it where the difference fits the build bounds -- `tuple[int | str,
-int]` against its two corners -- and declines past them. `Φ` characterises the
+int]` against its two corners -- and declines past them. `Φ` characterizes the
 inclusion exactly, so the rule refutes as well as proves -- a product with a
 value and no branch left is outside the union -- where every member the rule
 sets aside holds none of the subject's values; and a branch that shares no value
 with the narrowed product at some position is dropped, which the same
-characterisation makes exact.
+characterization makes exact.
 
 SOURCE: §13.1 "**The product decomposition.**"
 
@@ -338,7 +338,7 @@ interpretation -- and *arrows* are why. A `Callable[...]` here is an
 membership walk is structural and never consults `is_subtype_of`, so the naive
 interpretation is available and the whole apparatus -- the universal model, the
 extensional interpretation, the theorems that close the circle -- is machinery
-this project does not need and does not have. The consequence is a licence
+this project does not need and does not have. The consequence is a license
 rather than a lack. **[NOT-REACHED: no-arrow-type]**
 
 SOURCE: §13.0 "**The circularity, and why valgebra escapes it.**"
@@ -494,7 +494,7 @@ was not read first-hand:
 | where | the construction | the work it belongs to |
 |---|---|---|
 | `crates/valgebra-core/src/descr/regular.rs` | a minimal deterministic automaton per word kind: cut the blocks of a partition of the states by the transitions read backwards, queueing the smaller part of each cut, then coarsen the alphabet and renumber canonically | **Hopcroft's** algorithm, `k n log n` over `n` states and `k` classes, named at the function |
-| `crates/valgebra-core/src/descr/symbolic.rs` | a refinement of the states until their signatures stop changing, started from a partition by each state's distances to acceptance and to refusal and its longest walk that keeps acceptance in reach, and signing in each round only the states that share a block, one alphabet up, where a letter is a descriptor, an edge carries a guard and the total transition is an *else* edge rather than a guard naming the universe | **Moore's** algorithm, named at the function in `automaton.rs`, and the minimisation of **symbolic automata** over a Boolean algebra of guards |
+| `crates/valgebra-core/src/descr/symbolic.rs` | a refinement of the states until their signatures stop changing, started from a partition by each state's distances to acceptance and to refusal and its longest walk that keeps acceptance in reach, and signing in each round only the states that share a block, one alphabet up, where a letter is a descriptor, an edge carries a guard and the total transition is an *else* edge rather than a guard naming the universe | **Moore's** algorithm, named at the function in `automaton.rs`, and the minimization of **symbolic automata** over a Boolean algebra of guards |
 | `crates/valgebra-core/src/descr/integers.rs` | eventually periodic sets as an interval set per residue class, two periods meeting at their least common multiple | the ultimately periodic sets, which are the **one-variable fragment of Presburger arithmetic**. The representation is semilinear rather than automaton-based |
 
 **Why they are described and not cited.** A citation here is held to the rule the
@@ -673,7 +673,7 @@ emptiness. **[OBLIGATION: the-budget-declines]**
 
 HELD-BY: the_budget_declines_on_every_subtyping_path, an_exhausted_budget_refuses_to_spend, a_budgeted_equivalence_query_decides_the_same_or_declines, the_budget_declines_on_every_drawn_pair, the_depth_bound_declines_and_gives_its_levels_back
 
-**The goals a query repeats are counted.** The decision not to memoise goals
+**The goals a query repeats are counted.** The decision not to memoize goals
 rests on a number: zero repeats over the workload shapes and the thirty-two
 field DAG, four per query where a meet meets a union, eight over the relation
 matrix. The number is held by a test-side counter compiled for the core's own
@@ -782,12 +782,12 @@ SOURCE: §14.7 "The IR should be exactly as expressive as its producers"
 
 HELD-BY: every_variant_is_built_by_a_producer_and_the_placeholder_by_none, test_every_variant_is_a_generator_a_representative_or_a_marker, test_no_column_names_a_variant_that_is_gone, test_the_node_table_covers_every_ir_variant
 
-**The definition imports nothing from the optimisation.** The partition and the
+**The definition imports nothing from the optimization.** The partition and the
 answer types sit below both deciders; no descriptor module names the structural
 procedure, and the procedure still imports the lowering it asks when its rules
 decline, so the one permitted edge is seen to be used. **[OBLIGATION: the-definition-imports-nothing]**
 
-SOURCE: §14.8 "The definition should not import the optimisation"
+SOURCE: §14.8 "The definition should not import"
 
 HELD-BY: test_the_definition_imports_nothing_from_the_optimisation, test_the_term_imports_nothing_from_the_optimisation, test_the_optimisation_may_still_depend_on_the_definition
 
@@ -822,7 +822,7 @@ SOURCE: §13.1 "construction builds the lattice normal form and no pass reduces 
 
 HELD-BY: test_eq_is_the_normal_form_and_not_the_set, laws.rs::construction_preserves_membership_over_values
 
-**The IR's keyed map carries no negative component and is not canonicalised.**
+**The IR's keyed map carries no negative component and is not canonicalized.**
 The descriptor has one -- `MapAtom::wanted` -- so a negated record has a
 representation there; what remains is the IR node, whose `dom` is the field
 list as written rather than the semantic domain the paper's operators read.
@@ -840,7 +840,7 @@ HELD-BY: test_heterogeneous_mapping_by_key_schema, test_two_clauses_claiming_one
 
 **Clauses are quasi-K-step rather than quasi-constant.** A default per
 key-type region rather than one default for the rest; nothing against the
-literature, which introduces exactly this generalisation. **[DEVIATION: clauses-are-quasi-k-step]**
+literature, which introduces exactly this generalization. **[DEVIATION: clauses-are-quasi-k-step]**
 
 HELD-BY: every_key_falls_in_exactly_one_part, a_map_constrains_one_part_of_the_key_partition
 
@@ -908,7 +908,7 @@ than by the sets they name: two steps by the oracle's `%`, where the base and
 both steps meet in one kind of number, and two order bounds by the oracle's
 comparison. So `MultipleOf(5000)` is proved below `MultipleOf(2500)` and
 `Ge(2**70 + 1)` below `Ge(2**70)`, at any size, with no interval and no residue
-materialised to say so. What wants the representation is the **refutation**,
+materialized to say so. What wants the representation is the **refutation**,
 which needs a value the two schemas disagree on, and the meet, whose period is
 the one the two steps share.
 **[DEVIATION: the-carriers-are-i64-and-f64]**
@@ -955,7 +955,7 @@ over its own type language, carried out here over the fragment this IR can
 spell. The word component is the classical construction, a complement by subset
 construction, a product and an emptiness test, on the regular languages a `str`
 refinement denotes. Hosoya-Vouillon-Pierce §4.1 describe it and set it aside:
-an early XDuce used it, and it realised every exponential blow-up the types
+an early XDuce used it, and it realized every exponential blow-up the types
 held, so their paper decides inclusion top-down instead. Neither that algorithm
 nor the tree-automata inclusion it decides is built, and neither is the
 tree-logic engine above. The

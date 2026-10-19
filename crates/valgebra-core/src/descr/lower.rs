@@ -751,7 +751,7 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
     // carries the *integer* zero, and it orders the floats all the same. So the
     // side a bound lands on is chosen by the **base**, not by the operand's own
     // type, and the operand is read as a number either way -- an integer past
-    // 2^53 against its neighbours, as [`float_bound`] says.
+    // 2^53 against its neighbors, as [`float_bound`] says.
     let float_bound = |constraint: &Constraint, index: &OperandIx| {
         float_bound(constraint, &pool.operand(*index)?)
     };
@@ -811,11 +811,11 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
 /// Where an integer bound falls among the floats.
 ///
 /// Every integer up to 2^53 is a float. Past that a bound may have *no* float
-/// equal to it, and then the set it cuts is bounded by a neighbour rather than
+/// equal to it, and then the set it cuts is bounded by a neighbor rather than
 /// by the bound itself -- which is a different set from the one the nearest
 /// float would cut, in whichever direction that rounding went.
 ///
-/// The neighbour is the one on the side the bound keeps, so the type has no
+/// The neighbor is the one on the side the bound keeps, so the type has no
 /// reading for the other side and no caller has a crossed case to answer.
 enum Straddle {
     /// A float equals the bound.
@@ -834,7 +834,7 @@ enum Straddle {
 fn straddle(value: i64, lower: bool) -> Straddle {
     #[expect(
         clippy::cast_precision_loss,
-        reason = "the rounding is the thing measured: its direction picks the neighbour"
+        reason = "the rounding is the thing measured: its direction picks the neighbor"
     )]
     let nearest = value as f64;
     #[expect(
@@ -857,7 +857,7 @@ fn straddle(value: i64, lower: bool) -> Straddle {
 /// An integer operand past 2^53 has no float equal to it, and rounding it to the
 /// nearest one moves the boundary whichever way that rounding went -- naming a
 /// set of floats the schema does not denote, in either direction. It is read
-/// against its neighbours instead: a float is `>= n` exactly when it is at or
+/// against its neighbors instead: a float is `>= n` exactly when it is at or
 /// above the smallest float above `n`, and `<= n` exactly when it is at or below
 /// the largest float below `n`. Strictness costs nothing there, since no float
 /// equals the bound for `>` or `<` to exclude. Python compares an `int` with a
@@ -871,7 +871,7 @@ fn float_bound(constraint: &Constraint, operand: &Operand) -> Option<FloatSet> {
         _ => return None,
     };
     // No float equals an inexact bound, so `>` and `>=` admit the same ones and
-    // the neighbour carries what the strictness would have.
+    // the neighbor carries what the strictness would have.
     Some(match value {
         Straddle::Exact(bound) if strict => {
             if lower {

@@ -59,7 +59,7 @@ regex-syntax = "0.8"
 [features]
 # Enables an embedded interpreter (pyo3 `auto-initialize`) so the binding-internal
 # unit tests can acquire the GIL under `cargo test`. Off by default: without it
-# the test binary initialises no interpreter, so the tests that need one are not
+# the test binary initializes no interpreter, so the tests that need one are not
 # built and the cross-OS lanes stay Python-free.
 #
 # The binary links libpython either way -- this crate does not set pyo3's

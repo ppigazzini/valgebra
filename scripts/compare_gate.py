@@ -113,7 +113,7 @@ class Shape(TypedDict):
 
 
 def provenance() -> str | None:
-    """Say which extension is being timed, and refuse one that is not optimised.
+    """Say which extension is being timed, and refuse one that is not optimized.
 
     A binary nobody meant to measure reads as a regression: an editable install
     that silently falls back to a debug build, or a profiling build swapped in

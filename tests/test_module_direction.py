@@ -1,4 +1,4 @@
-"""The definition does not import the optimisation.
+"""The definition does not import the optimization.
 
 Two sound deciders answer the three relations, and the shipped pages state an
 order between them: `crates/valgebra-core/src/descr/` is the **definition** for
@@ -20,8 +20,8 @@ components are an array over, `Region` the summary derived from it, and
 belongs to the frame the pair shares, and none to either half.
 
 So the frame sits in `kind.rs`, `verdict.rs` and `oracle.rs`, below both, and
-this holds the direction. The reverse edge stays allowed -- an optimisation may
-depend on the definition it optimises -- which is what makes this a direction
+this holds the direction. The reverse edge stays allowed -- an optimization may
+depend on the definition it optimizes -- which is what makes this a direction
 rather than a separation.
 
 `ir.rs` is under the same rule and for a stronger reason: it is the term, which
@@ -133,10 +133,10 @@ def test_the_frame_is_where_the_definition_can_reach_it() -> None:
     assert "pub trait LeafRelations" in oracle
     assert "fn has_complementary_pair_within" in oracle
     assert "fn denotes_a_set_within" in oracle
-    assert not _DECISION.search(oracle), "oracle.rs imports the optimisation"
+    assert not _DECISION.search(oracle), "oracle.rs imports the optimization"
     # And the frame does not reach back into either decider.
     for name, source in (("kind.rs", kind), ("verdict.rs", verdict)):
-        assert not _DECISION.search(source), f"{name} imports the optimisation"
+        assert not _DECISION.search(source), f"{name} imports the optimization"
 
 
 # THEORY: the-definition-imports-nothing

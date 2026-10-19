@@ -9,7 +9,7 @@ through `use super::*`, compiled only under `cfg(test)`, and out of the way.
 A page stating a rule the tree does not follow is the same defect as a page
 stating a dependency order the module graph does not, which
 `tests/test_module_direction.py` holds for that case: the page is the definition
-of what the code is organised into, and a rule nothing holds decays into prose.
+of what the code is organized into, and a rule nothing holds decays into prose.
 
 "A screen" needs a number to be checkable, and this file is where that number
 lives. The bar is generous on purpose: a module short enough to read past is not

@@ -159,7 +159,7 @@ what to do instead.
   refused algebra changes, `docs/dev/03-frontend.md` the refused frontend ones,
   each with the test it fails rather than a verdict.
 
-- **Analysis is not authorisation.** A request to review, audit, measure or write
+- **Analysis is not authorization.** A request to review, audit, measure or write
   a report is a request for a document. It does not license a commit to this
   tree, a dependency bump, or a "small fix while I was in there". Propose the
   change in the document — the diff belongs in the report as a candidate, and
@@ -174,7 +174,7 @@ what to do instead.
   is its doc comment in `crates/valgebra-core/src/ir.rs`. A `Validator` probe
   shows what the walk does, and the two can agree by accident — a node that
   refuses a value for its carrier looks exactly like one refusing it for its
-  structure. Never argue from behaviour, or from what the implementation
+  structure. Never argue from behavior, or from what the implementation
   computes internally, to what the algebra denotes.
 
 - **Prove laws, don't assert them.** Any claimed algebraic equivalence

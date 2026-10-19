@@ -106,7 +106,7 @@ def error_codes() -> set[str]:
     Two sources, because a code arrives two ways. The node kinds come from the
     table in the IR, which is what a leaf reports for its own kind, and the ones
     the walk writes too from the core's code table the IR reads them from. The
-    rest are written at the site that reports them, and are recognised by shape:
+    rest are written at the site that reports them, and are recognized by shape:
     a code is snake_case with at least one underscore, which is what separates
     one from the words beside it (`"dict"`, `"list"`) that name a kind in a
     message.

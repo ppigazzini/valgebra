@@ -453,7 +453,7 @@ error model (`docs/dev/05-errors.md`) and the schema representation
   is the floor [the cheapest door](#the-cheapest-door-and-where-the-floor-is)
   measures.
 - **No reference pool.** PyO3 keeps a pool of reference-count decrements
-  deferred while a thread is detached, and once any of its lazy initialisers
+  deferred while a thread is detached, and once any of its lazy initializers
   has detached and attached again -- the first interned name does -- every call
   into the extension locks that pool's mutex to ask it for them: forty
   instructions and eight branches on `Validator(int).is_valid(1)`. The binding
@@ -466,7 +466,7 @@ error model (`docs/dev/05-errors.md`) and the schema representation
 - **A failure is raised in one step.** `into_pyerr` in
   `crates/valgebra-py/src/errors.rs` builds the `ValidationError` instance and
   hands it to PyO3 as the error's value, so the raise is one
-  `PyErr_SetObject`. A lazily built error is normalised by releasing the
+  `PyErr_SetObject`. A lazily built error is normalized by releasing the
   interpreter lock and taking it back, which lets another thread run in the
   middle of a raise and costs a failing `validate` of a fifty-field record 5.4%
   more instructions. The exception being handled is chained as `__context__`
@@ -867,7 +867,7 @@ program that builds validators per request, and to no validation call.
   interned, a violation's message and path are built once and shared between
   the error item and the attribute that mirrors it, and a path segment shares
   the field name the schema already holds.
-- **A value summary is bounded while it is built.** Every violation summarises
+- **A value summary is bounded while it is built.** Every violation summarizes
   the value it is about, and a container is rendered through `reprlib` under a
   depth and width bound (`BOUNDED_REPR` in `crates/valgebra-py/src/errors.rs`)
   rather than rendered whole and cut, so reporting on a value nested twenty
@@ -925,7 +925,7 @@ as a list against a length-bounded list of the same element.
   automaton keeps it minimal, and a question about which kinds a descriptor
   reaches is read off its components (`Descr::within`, `Descr::reaches` in
   `descr/mod.rs`) rather than answered by building a meet and testing it.
-- **A word automaton is minimised by halves.** The states no word tells apart
+- **A word automaton is minimized by halves.** The states no word tells apart
   merge once blocks of states are cut by the transitions read backwards, and
   only the smaller part of each cut is queued to cut by next
   (`equivalent_states` in `descr/regular.rs`, Hopcroft's algorithm): `k n log n`
@@ -934,7 +934,7 @@ as a list against a length-bounded list of the same element.
   which is what a literal is: a literal of four thousand bytes takes about
   1.5 ms to build on a release build, where signing every state each round
   takes 603 ms, and a
-  product that keeps its chain is minimised again at the same cost.
+  product that keeps its chain is minimized again at the same cost.
   `--decision-sets` reads 6.12% fewer instructions, the signatures the rounds
   allocated.
 - **A length bound costs a state an element and little else.** A bound over a

@@ -448,7 +448,7 @@ jobs:
     # version against a version-specific ABI, so each one is a separate
     # artifact a caller installs, and a lane that does not run is a wheel
     # nothing exercised until somebody reported it. Sampling the ends
-    # rests on the claim that a break between two neighbours shows at the floor
+    # rests on the claim that a break between two neighbors shows at the floor
     # or at the current release first, and that claim is about the interpreters
     # rather than about this extension -- so it is not one to hold a supported
     # version on.
@@ -1756,7 +1756,7 @@ jobs:
       # The two SWEEP-SKIP cases that prove the decision budget's bound are
       # skipped for the reason the sweep skips them: each runs until the budget
       # stops it, and a deeper draw makes that proof slower without making it
-      # stronger. The third, a long chain's minimisation, draws nothing and runs
+      # stronger. The third, a long chain's minimization, draws nothing and runs
       # here. tests/test_sweep_skips.py holds the list.
       - name: The core laws, deep
         run: >
@@ -2125,7 +2125,7 @@ jobs:
           set +e
           # The three SWEEP-SKIP cases leave the sweep, not the test lane. Each
           # exists to prove a bound -- two the decision budget's, one the work
-          # a word's table takes to minimise -- so a mutation removing it makes
+          # a word's table takes to minimize -- so a mutation removing it makes
           # the case outrun the timeout and the whole run returns no verdict.
           # tests/test_sweep_skips.py holds this list to the sources.
           # Round-robin rather than the default consecutive slices: a slice

@@ -709,7 +709,7 @@ fn decides_sequence_subtyping_with_prefix_tail_and_alternation() {
 fn decides_tuple_prefix_tail_distinctly_from_lists() {
     // The same prefix-plus-tail regex carried by the tuple container. The
     // decision procedure shares the regex with lists, so this pins that the
-    // container is honoured throughout subtyping, emptiness, and equivalence.
+    // container is honored throughout subtyping, emptiness, and equivalence.
     let tup = |head, tail| Schema::tuple(SeqShape::prefix_tail([head], tail));
 
     // Subtyping is covariant in both the prefix and the repeated tail.
@@ -3330,7 +3330,7 @@ const EDGE_SPAN: usize = 1;
 /// bound at three decides on sequences of two, three and four, and a universe
 /// holding none of them reports the relation sound because nothing in it can
 /// say otherwise. So each schema contributes its own edges -- the operand of
-/// every bound with its two neighbours, a container of each kind at each side
+/// every bound with its two neighbors, a container of each kind at each side
 /// of every length, the constant of every literal, and a mapping at each side
 /// of every record's width -- and the property is judged over the union of
 /// those with the fixed kind edges.
@@ -3969,7 +3969,7 @@ fn a_length_bound_is_separated_by_the_shape_it_narrows() {
 /// **two-byte string** and by nothing shorter, and a byte string is a value
 /// only the bound puts in the universe: the kind edges carry the empty one and
 /// one of a single byte, which are members of both sides. The bound has to
-/// contribute a byte string at each of its neighbouring lengths, as it does a
+/// contribute a byte string at each of its neighboring lengths, as it does a
 /// string and a container of each kind, because `bytes` is a kind a length is
 /// read from.
 #[test]
@@ -4410,7 +4410,7 @@ fn interleaved(groups: &[Vec<Obj>]) -> Vec<Obj> {
 ///
 /// The schema's own come first because they are what separates it from the
 /// schema beside it -- a set where the other admits `None` -- and a cap that cut
-/// them in favour of the fixed probes would leave the pair undecided by the
+/// them in favor of the fixed probes would leave the pair undecided by the
 /// universe. The probes follow for the schema whose own values are thin: the top
 /// builds one member and is separated from a complement by any of the others.
 fn candidates(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
@@ -5576,7 +5576,7 @@ fn universe_values() -> [Obj; 9] {
 
 /// Whether a dict of any keys belongs to a map, read off the map's denotation.
 ///
-/// [`member_full`]'s reading of a map with the key generalised from a name to
+/// [`member_full`]'s reading of a map with the key generalized from a name to
 /// a value: a key is a field's when it is the string the field is named, and
 /// is otherwise read by the clauses, one of which must hold both it and its
 /// value.
@@ -5681,7 +5681,7 @@ proptest! {
     /// passes all of them, because nothing asks the refutation for its witness.
     ///
     /// The universe is the schemas' own: each subterm contributes a member of
-    /// itself and each bound its two neighbours, so a shape no fixed corpus
+    /// itself and each bound its two neighbors, so a shape no fixed corpus
     /// spells still has a value here. A failure is either a refutation with
     /// nothing under it or a universe too thin to hold the witness, and the
     /// message carries the pair so the two are told apart by reading it.
@@ -6136,7 +6136,7 @@ proptest! {
 
 /// Every way of assigning each branch to one of `arity` positions, as a
 /// digit string: the `2^|N|` subsets JACM Lemma 6.5 states over the negative
-/// atoms of a clause, generalised to `k^|N|` at arity `k`.
+/// atoms of a clause, generalized to `k^|N|` at arity `k`.
 fn assignments(count: usize, arity: usize) -> impl Iterator<Item = Vec<usize>> {
     (0..arity.pow(u32::try_from(count).unwrap_or(0))).map(move |mut code| {
         (0..count)
@@ -6235,7 +6235,7 @@ fn union_of(members: Vec<Schema>) -> Schema {
 }
 
 /// The same at three positions, which is the fixed component count the rule
-/// generalises to and the pair cannot show.
+/// generalizes to and the pair cannot show.
 fn scalar_triple() -> impl Strategy<Value = Vec<Schema>> {
     (scalar_schema(), scalar_schema(), scalar_schema()).prop_map(|(a, b, c)| vec![a, b, c])
 }

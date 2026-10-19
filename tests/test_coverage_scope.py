@@ -312,7 +312,7 @@ def _gil_skipped_tests() -> list[str]:
     """Every test the running interpreter's lock stands down, by name.
 
     Read from the decorators rather than by running the suite: a count taken
-    from a run would be a count of *items*, which the parametrised one
+    from a run would be a count of *items*, which the parametrized one
     multiplies. A test is counted by the *condition* it skips on -- the running
     interpreter holding its lock, `_gil_enabled()` -- because that is the case
     the page's paragraph is about: two threads that cannot overlap, so the arm

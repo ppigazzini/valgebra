@@ -978,7 +978,7 @@ fn a_reference_and_a_refinement_are_read_beside_the_union_rule() {
     // And a subject that neither rule reaches still lands in its branch.
     assert!(Schema::Int.is_subtype_of(&Schema::union([Schema::Int, Schema::Str])));
 
-    // Sound in the other direction: unfolding a reference is not a licence.
+    // Sound in the other direction: unfolding a reference is not a license.
     assert!(!Schema::Ref(DefIx::new(0)).is_subtype_of_under(
         &Schema::union([Schema::Int, Schema::Bytes]),
         &NoLeafRelations,
@@ -1898,7 +1898,7 @@ impl LeafRelations for Sets {
 /// calls. So where both sides are nothing but literals the constants are
 /// gathered and handed over together. Both halves of that are asserted, because
 /// the verdict alone cannot tell the two readings apart -- they agree, which is
-/// the point -- and what the optimisation *is* is which question gets asked.
+/// the point -- and what the optimization *is* is which question gets asked.
 #[test]
 fn two_sets_of_literals_are_asked_as_sets() {
     let lit = |i: usize| Schema::Literal(ConstIx::new(i));

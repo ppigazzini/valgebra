@@ -158,7 +158,7 @@ answer of its own, or a repair to a change not yet released.
   `{"c": X(), "n": None}`, in 0.0.17 and 0.0.18. Each binder is the first
   spelling of its letter, `X`, `X_1`, `X_2` and on, that no word of the render
   spells: a class's name, a constant's `repr`, or a name the interpreter reads
-  as that spelling under NFKC normalisation, such as a fullwidth `Ｘ`.
+  as that spelling under NFKC normalization, such as a fullwidth `Ｘ`.
 - **A validator's pickle refusal sends a reader to the forms `repr` cannot
   spell.** It said `repr` rebuilds every form but a class or a predicate, and
   the API reference lists seven, two of which read back as a different schema;
@@ -253,7 +253,7 @@ answer of its own, or a repair to a change not yet released.
   built after `MultipleOf(2 + 0j)` arrives as it and is refused with it, where
   it admitted nothing before; the message says so.
 - **A relation over a long `Literal` string or bytes answers at once.** The set
-  representation built a literal's automaton a state per byte and minimised it
+  representation built a literal's automaton a state per byte and minimized it
   before the first product refused it as past the state bound, so
   `Validator(Annotated[str, Regex("a*")]).relation_to(complement(Literal["a" *
   1_000_000]))` took a second to answer `undecided`. A literal past 4,094

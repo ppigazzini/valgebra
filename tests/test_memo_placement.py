@@ -16,7 +16,7 @@ whole contract is that a `True` is a proof.
 
 There is no memo in the tree, and the obligation is vacuous until one arrives.
 That is exactly when a reader is least likely to remember it: the decision not
-to memoise rests on a measured count (`decision/goal_tests.rs`), and a later
+to memoize rests on a measured count (`decision/goal_tests.rs`), and a later
 reader who moves that count adds the table without meeting the condition.
 
 This holds the hazard in the tree rather than in memory. A map keyed by a pair

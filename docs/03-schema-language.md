@@ -361,7 +361,7 @@ with a message instead:
 | `TypeVar`, `ParamSpec`, `TypeVarTuple` | a variable stands for a type and is not one |
 | `Final`, `ClassVar` | a declaration about a name, not about a value; a dataclass field's `Final[T]` is read as `T` ([classes](#classes)) |
 | `Unpack[X]` | binds element types into a `tuple[...]`, so it has no meaning alone, and nor has `*tuple[...]` outside one |
-| a user `Generic[T]` parametrisation | the parameter is erased at runtime, so the type argument narrows nothing |
+| a user `Generic[T]` parametrization | the parameter is erased at runtime, so the type argument narrows nothing |
 | bare `Protocol`, and a generic `Protocol[T]` | the base a protocol is declared from declares no member, and a protocol over a type parameter names one set per argument |
 | a `Protocol` member declared `ClassVar` or `Final` | the qualifier says where the value lives rather than what it is |
 | a set or frozen set literal | `{int}` and `frozenset({int})` name containers, which are `set[T]` and `frozenset[T]` |
@@ -556,8 +556,8 @@ assert beside_a_field.open().is_valid({"name": "Ada", 7: "free"})
 assert not beside_a_field.open().is_valid({"name": "Ada", "count": "not an int"})
 ```
 
-Where it is not a round trip, the reason is that `open` **normalises**, and
-both normalisations are forced. A declared name admitting everything says what
+Where it is not a round trip, the reason is that `open` **normalizes**, and
+both normalizations are forced. A declared name admitting everything says what
 the catch-all an opening writes already says, so it goes -- and it has to, or
 `{"a?": anything}` and `{}`, one set once opened, would close to two. Two
 clauses carrying one value are one clause over the union of their keys, so

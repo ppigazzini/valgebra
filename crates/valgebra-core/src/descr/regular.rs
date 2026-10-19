@@ -10,7 +10,7 @@
 //!
 //! **The representation is a minimal deterministic automaton, canonically
 //! numbered.** A regular language has one minimal DFA up to isomorphism, so
-//! minimising and then renumbering the states in a fixed order makes the
+//! minimizing and then renumbering the states in a fixed order makes the
 //! representation canonical: two sets hold the same words exactly when their
 //! tables are equal. That is what lets a decision compare representations
 //! instead of running a language-equivalence check at every step; `Descr` names
@@ -80,7 +80,7 @@ type Class = u16;
 /// **The lookups below answer a miss with state or class zero rather than
 /// refusing.** A well-formed table has no miss -- [`well_formed`](Self::well_formed)
 /// says what that means -- and the operations that read one are total: a
-/// complement, a membership walk, the three passes of a minimisation. Read as
+/// complement, a membership walk, the three passes of a minimization. Read as
 /// zero, a miss would be another language, so [`minimal`](Self::minimal),
 /// which every table here passes through or is built as, asserts the table it
 /// reads and each one it builds: a malformed table stops a debug build where it
@@ -152,7 +152,7 @@ impl Dfa {
     /// Whether any reachable state accepts.
     ///
     /// Read by a walk rather than off the minimal form, so it answers before
-    /// minimisation as well as after -- which is what the product construction
+    /// minimization as well as after -- which is what the product construction
     /// needs when it stops early.
     fn is_empty(&self) -> bool {
         !reaches(
@@ -353,7 +353,7 @@ impl Dfa {
     /// *complete*: a partial automaton rejects by falling off the end, and
     /// flipping its flags would accept those words instead of the ones it meant.
     ///
-    /// **The flip of a minimal table is minimal**, so this re-minimises nothing.
+    /// **The flip of a minimal table is minimal**, so this re-minimizes nothing.
     /// A word distinguishes two states in `L` exactly when it distinguishes them
     /// in `¬L` -- it leads one to acceptance and the other not, either way round
     /// -- so the state partition is the same; and the transitions and the byte
@@ -375,7 +375,7 @@ impl Dfa {
     /// One walk over reachable state *pairs* ([`Reached`]), so the states built
     /// are the ones a word can reach rather than the whole cross product. The
     /// alphabets are refined together first: a class of the product is a pair
-    /// of classes, one from each side, and only the pairs some byte realises
+    /// of classes, one from each side, and only the pairs some byte realizes
     /// get an id.
     fn product(&self, other: &Dfa, accept: impl Fn(bool, bool) -> bool) -> Option<Dfa> {
         let (classes, class_count, pairs) = refine_alphabets(self, other);
@@ -408,7 +408,7 @@ impl Dfa {
     /// order. A minimal DFA is unique up to isomorphism, so fixing the numbering
     /// fixes the table.
     fn minimal(&self) -> Dfa {
-        debug_assert!(self.well_formed(), "a table is minimised as it was built");
+        debug_assert!(self.well_formed(), "a table is minimized as it was built");
         let merged = self.merge_equivalent();
         debug_assert!(merged.well_formed(), "merging the states kept the table");
         let coarsened = merged.coarsen();
@@ -590,7 +590,7 @@ impl Dfa {
 }
 
 /// The alphabet two automata share: a class per pair of classes some byte
-/// realises, plus the byte-to-class map over it.
+/// realizes, plus the byte-to-class map over it.
 fn refine_alphabets(a: &Dfa, b: &Dfa) -> (Vec<Class>, usize, Vec<(Class, Class)>) {
     let mut ids: FxHashMap<(Class, Class), Class> = FxHashMap::default();
     let mut pairs: Vec<(Class, Class)> = Vec::new();
@@ -1045,7 +1045,7 @@ impl Dfa {
     /// language the whole-word one.
     fn from_automaton(built: &dense::DFA<Vec<u32>>) -> Option<Dfa> {
         // The crate's alphabet carries a class for the end of input, which no
-        // byte realises. The alphabet here is the classes some byte does, so a
+        // byte realizes. The alphabet here is the classes some byte does, so a
         // table is never built over a column no word can take.
         let crate_classes = built.byte_classes();
         let mut used: Vec<u8> = Vec::new();
@@ -1088,7 +1088,7 @@ impl Dfa {
 /// A byte belonging to `class`, or `None` where no byte does.
 ///
 /// The crate's alphabet includes a class for the end of input, which no byte
-/// realises; a table built over it would carry a column no word can take.
+/// realizes; a table built over it would carry a column no word can take.
 fn representative(byte_class: &[Class], class: usize) -> Option<u8> {
     let wanted = Class::try_from(class).ok()?;
     byte_class

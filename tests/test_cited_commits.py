@@ -126,7 +126,7 @@ def test_every_cited_commit_is_reachable() -> None:
     orphaned: list[str] = []
     for text, files in sorted(_cited().items()):
         if _git("rev-parse", "--verify", "--quiet", f"{text}^{{commit}}").returncode:
-            continue  # not a commit: a content hash, a colour, an id
+            continue  # not a commit: a content hash, a color, an id
         if _git("merge-base", "--is-ancestor", text, "HEAD").returncode:
             orphaned.append(f"{text} (in {', '.join(sorted(set(files)))})")
     assert not orphaned, (

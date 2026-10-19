@@ -724,7 +724,7 @@ class _Right:
 )
 # TRUST: A class relation holds of values whose `__class__` is their type.
 def test_a_meet_decided_empty_by_layout_admits_no_proxy() -> None:
-    """The known-unsound case of honouring `__class__` for a user class.
+    """The known-unsound case of honoring `__class__` for a user class.
 
     `_Left` and `_Right` lay down distinct slots, so no object is an instance of
     both and their meet is decided empty. A `_Right` that declares itself a
@@ -734,7 +734,7 @@ def test_a_meet_decided_empty_by_layout_admits_no_proxy() -> None:
     proxy = _Right()
     meet = intersection(_Left, _Right)
 
-    assert meet.is_valid(proxy), "the walk honours the declared class"
+    assert meet.is_valid(proxy), "the walk honors the declared class"
     assert not meet.is_empty(), "so the meet is not empty"
 
 
@@ -1014,7 +1014,7 @@ def test_a_stdlib_class_is_the_isinstance_check_it_looks_like(
     library says nothing about them anywhere -- which is the claim being made:
     that there is nothing to say. Each denotes its instances, admits one, and
     refuses a value of the kind it is most often written next to, which for
-    every row here is the string or number it serialises as.
+    every row here is the string or number it serializes as.
 
     The outsider matters more than the member. A frontend that quietly read one
     of these as something else -- a date as a string, a `Decimal` as a float --
@@ -1042,7 +1042,7 @@ def test_a_stdlib_class_is_not_the_kind_it_serialises_as() -> None:
     assert Validator(pathlib.PurePosixPath).relation_to(str) == "not_subset"
     assert Validator(pathlib.Path).relation_to(str) == "not_subset"
     # The concrete path is below the pure one it derives from and beside the
-    # flavour it does not: the class order, again.
+    # flavor it does not: the class order, again.
     assert Validator(pathlib.Path).relation_to(pathlib.PurePath) == "subset"
     assert Validator(pathlib.PurePosixPath).relation_to(pathlib.Path) == "not_subset"
     assert Validator(dt.datetime).relation_to(str) == "not_subset"

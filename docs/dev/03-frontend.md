@@ -54,7 +54,7 @@ A class whose instances would be read or refused — a class of the vocabulary
 other than the two that exclude no value, or a pattern marker's class — is a
 marker written without its parentheses, and is **refused** with the
 spelling that was meant: ignored, it would widen the schema to its base in
-silence. Any other class is metadata this frontend does not recognise, and is
+silence. Any other class is metadata this frontend does not recognize, and is
 ignored.
 
 **A typing form is never read as a predicate**, though every one is callable:
@@ -83,7 +83,7 @@ raises for a value that is neither a class nor a function, so read as a
 predicate, `Annotated[int, deprecated("...")]` would refuse every value from
 3.13 and be `int` below it, where the class is `typing_extensions`' own.
 
-**A decorator function is a predicate.** What the rule recognises is an
+**A decorator function is a predicate.** What the rule recognizes is an
 *object* whose class is a typing form's or `deprecated`'s. A decorator is a
 `builtins.function`, as a predicate is, and its module says nothing about what
 it does: `typing.final` and `math.isfinite` are both the standard library's.
@@ -117,7 +117,7 @@ The rest are read in this order:
    ignored: one documents an annotation, and the other names what a number is
    measured in and leaves the reading to the consumer. A class *deriving* from
    the vocabulary is read for the vocabulary's names and otherwise ignored, as
-   the README asks of metadata a consumer does not recognise: pydantic derives
+   the README asks of metadata a consumer does not recognize: pydantic derives
    the object carrying `StringConstraints`' pattern from `BaseMetadata`.
 
 Metadata matching none of these is ignored, which the typing spec says a
@@ -255,7 +255,7 @@ symmetry:
     callable that is no class, each refused by name (`build_unrecognised` in
     `build.rs`).
 
-Moving a branch earlier is a behaviour change, not a refactor. `Any` above the
+Moving a branch earlier is a behavior change, not a refactor. `Any` above the
 type branch is the sharp one. Steps 6 and 7 are the moves that are not, and the
 argument is what makes them safe: an exact builtin scalar's type carries no
 `__metadata__` or `__supertype__`, `get_origin` answers `None` for it, and it is

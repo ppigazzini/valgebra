@@ -312,7 +312,7 @@ FORMS: dict[str, Reads | Refuses] = {
         "unpacks into the arguments",
         needs=(3, 11),
     ),
-    "a user `Generic[T]` parametrisation": Refuses(
+    "a user `Generic[T]` parametrization": Refuses(
         lambda: Parametrised[int], "unsupported typing form with origin"
     ),
     PROTOCOL_BASES: Refuses(lambda: Protocol, "the base a protocol is declared from"),
@@ -477,7 +477,7 @@ def _refusing() -> list[tuple[str, Refuses]]:
 def test_a_form_the_tables_read_admits_and_refuses(cell: str, row: Reads) -> None:
     """A form the page says is read admits its member and refuses its outsider.
 
-    On both paths. The JSON path parses before it walks and materialises a
+    On both paths. The JSON path parses before it walks and materializes a
     value only at the nodes that compare against a Python object, so a form
     read one way from an object and another from a document would pass the
     object row alone. Asked wherever a document names the value: a tuple, a
@@ -533,7 +533,7 @@ def test_a_read_form_is_not_a_literal_of_itself() -> None:
     """The quiet failure, named: a form read as a literal admits only itself.
 
     Held over every reading row rather than at one, because that is the shape
-    the fallback produces for *any* form it stops recognising -- and a row
+    the fallback produces for *any* form it stops recognizing -- and a row
     asserting a member and an outsider would not see it if the member happened
     to be the form object.
     """

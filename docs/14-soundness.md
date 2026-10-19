@@ -206,7 +206,7 @@ The soundness is relative to a small, explicit trust base:
   answer to each kind.
 
   Where a schema names a *user* class, membership is `isinstance` by definition
-  and a lying `__class__` is honoured: overriding it is how a proxy is written,
+  and a lying `__class__` is honored: overriding it is how a proxy is written,
   and a proxy every other consumer treats as a `Target` is one here too.
 - **A class relation holds of values whose `__class__` is their type.** The
   walk admits a proxy -- a `wrapt.ObjectProxy`, a

@@ -1645,7 +1645,7 @@ const HELD: [Held; 2] = [
 ];
 
 /// A set-like container the walk reads: what its type failure reports, and the
-/// test that recognises it.
+/// test that recognizes it.
 struct Collection {
     code: Code,
     word: &'static str,

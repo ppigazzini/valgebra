@@ -340,7 +340,7 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
         "undecided",
         [0, 2**63 - 1, 2**63],
     ),
-    # A modulus is materialised per residue up to a recorded period, so two
+    # A modulus is materialized per residue up to a recorded period, so two
     # moduli the representation builds decide and two above it decline. The
     # control row is what makes the decline a property of the period rather
     # than of the rule.

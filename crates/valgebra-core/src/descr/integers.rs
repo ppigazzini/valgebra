@@ -69,7 +69,7 @@ pub(crate) struct IntSet {
     classes: Vec<IntervalSet>,
 }
 
-/// The largest period this representation materialises.
+/// The largest period this representation materializes.
 ///
 /// A class per residue is what makes the three operations pointwise, and it is
 /// also what makes the cost linear in the period: `MultipleOf(n)` holds `n`

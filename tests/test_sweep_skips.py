@@ -1,7 +1,7 @@
 """A test the mutation sweep skips must be marked in its own source.
 
 Four Rust tests exist to prove a bound -- the decision budget, the recursion
-depth, the work a word's table takes to minimise -- and a fifth walks a union of
+depth, the work a word's table takes to minimize -- and a fifth walks a union of
 two walked branches to the depth bound. A mutation that removes the bound, or
 that makes the union's deciding walk explain, makes each of them run past any
 timeout the sweep sets, so the whole sweep returns no verdict for that mutant: a

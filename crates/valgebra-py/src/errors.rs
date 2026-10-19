@@ -306,7 +306,7 @@ fn empty_attribute<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAn
 ///
 /// The attributes exist only where `__getattr__` is on the class, so every
 /// entry point that can raise one of these errors installs them: the module
-/// initialiser, and a test that reaches [`into_pyerr`] without importing the
+/// initializer, and a test that reaches [`into_pyerr`] without importing the
 /// module. One installer rather than two keeps the class one shape.
 ///
 /// Through a Python `def` rather than the compiled functions directly: a
@@ -344,14 +344,14 @@ pub(crate) fn install_lazy_attributes(py: Python<'_>) -> PyResult<()> {
     let failure = py.get_type::<ValidationError>();
     failure.setattr("__getattr__", hooks.get_item(0)?)?;
     // Pickling and copying carry the instance dictionary, and the failures live
-    // there as a Rust object that does not travel; this materialises the six
+    // there as a Rust object that does not travel; this materializes the six
     // first, so what crosses a process boundary is the plain data the model
     // documents.
     failure.setattr("__reduce__", hooks.get_item(1)?)?;
     Ok(())
 }
 
-/// Materialise every attribute before the error is pickled or copied.
+/// Materialize every attribute before the error is pickled or copied.
 ///
 /// `BaseException.__reduce__` carries the instance dictionary, and the failures
 /// live there as a Rust object that does not travel. Forcing the six turns the
@@ -411,7 +411,7 @@ pub(crate) fn into_pyerr(py: Python<'_>, violations: Vec<Violation>) -> PyErr {
     let message = summary_message(&first.to_string(), first, rest);
     // If building the instance or attaching the failures fails, surface that
     // rather than shipping an error whose `.errors` is silently empty while
-    // `str(error)` still summarises real failures.
+    // `str(error)` still summarizes real failures.
     raised(py, message, violations).unwrap_or_else(|err| err)
 }
 

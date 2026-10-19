@@ -1,6 +1,6 @@
 """The values a drawn value reaches only by luck, written once.
 
-Each is one some operation reads differently from its neighbours: `nan` equals
+Each is one some operation reads differently from its neighbors: `nan` equals
 nothing including itself, the infinities bound every comparison, `-0.0` equals
 `0.0` and hashes with it, the four integers sit at the ends of the carriers a
 lowering uses, a newline is where a pattern's `.` and `$` part company, and a

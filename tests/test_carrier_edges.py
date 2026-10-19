@@ -112,7 +112,7 @@ def test_a_bound_past_the_carrier_is_proved_by_the_order() -> None:
     between two bounds is a question about the bounds: every integer at or
     above one is at or above a smaller one because the first is the larger,
     and the oracle compares the two Python integers to say so. No interval is
-    materialised, so their size is not the question.
+    materialized, so their size is not the question.
 
     What wants the carrier is the **refutation**, which needs a value between
     them -- and naming one takes a representation that can spell it. That is
@@ -167,7 +167,7 @@ def test_a_step_past_the_period_bound_declines() -> None:
     Divisibility between two steps is a question about the steps, so the
     *inclusion* is decided whatever their size: every multiple of 5,000 is a
     multiple of 2,500 because 2,500 divides 5,000, and no residue is
-    materialised to say so.
+    materialized to say so.
 
     What the period bounds is the **refutation**, which needs a value rather
     than a rule. `MultipleOf(2)` is refuted below `MultipleOf(4)` by the
@@ -210,7 +210,7 @@ def test_a_step_past_the_period_bound_declines() -> None:
 
 
 def test_a_float_bound_written_as_an_integer_no_float_equals() -> None:
-    """The float carrier's own edge, read against the bound's two neighbours."""
+    """The float carrier's own edge, read against the bound's two neighbors."""
     subject = Annotated[float, at.Lt(FLOAT_EXACT_LIMIT + 1)]
     supertype = Annotated[float, at.Lt(FLOAT_EXACT_LIMIT)]
     witness = float(FLOAT_EXACT_LIMIT)
@@ -220,7 +220,7 @@ def test_a_float_bound_written_as_an_integer_no_float_equals() -> None:
 
 
 def test_no_float_lies_between_a_float_and_the_next() -> None:
-    """An open float bound is the closed one at the neighbouring float."""
+    """An open float bound is the closed one at the neighboring float."""
     after_one = math.nextafter(1.0, math.inf)
     strict = Validator(Annotated[float, at.Gt(1.0)])
     assert strict.is_equivalent(Annotated[float, at.Ge(after_one)])

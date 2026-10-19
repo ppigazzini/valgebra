@@ -307,7 +307,7 @@ def clone(command: list[str], what: str) -> None:
 #: floor interpreter -- so every other entry runs against a checkout with no
 #: tags and that one against a checkout with all of them. The clone below models
 #: the others. The tests that read the history *skip* where there is no tag to
-#: measure from, which is the right behaviour and also means the clone cannot
+#: measure from, which is the right behavior and also means the clone cannot
 #: see them fail: a commit message naming the internal working area passes in it
 #: and fails on the full-history entry.
 #:
@@ -710,10 +710,10 @@ CALLERS_VENV = ("VIRTUAL_ENV",)
 def runner_environment() -> dict[str, str]:
     """Read the caller's environment, less what only a terminal would put in it.
 
-    A step runs on the runner with no TTY and nothing forcing colour, so a tool
+    A step runs on the runner with no TTY and nothing forcing color, so a tool
     there writes plain text -- including into any file it generates. A
     developer's terminal sets `FORCE_COLOR`, some harnesses set it for every
-    child process, and a tool that honours it writes escape codes into that
+    child process, and a tool that honors it writes escape codes into that
     file too. `pip-audit` refuses a requirements file `uv export` wrote that
     way, and the gate reports a failed step: a verdict about the caller's
     terminal rather than about the tree, which is the one thing this gate must

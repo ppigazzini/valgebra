@@ -3,7 +3,7 @@ use crate::descr::lattice_tests::Algebra;
 use proptest::prelude::*;
 
 /// The endpoints the generator writes, the float after `1.0` among them, so an
-/// open end at one meets a closed end at its neighbour.
+/// open end at one meets a closed end at its neighbor.
 fn points() -> [f64; 9] {
     [
         f64::NEG_INFINITY,
@@ -20,10 +20,10 @@ fn points() -> [f64; 9] {
 
 /// The floats a law is checked over.
 ///
-/// Every endpoint a built set can have is a point or a neighbour of one: an
-/// open end is held as its neighbour, and a complement ends a gap one float
+/// Every endpoint a built set can have is a point or a neighbor of one: an
+/// open end is held as its neighbor, and a complement ends a gap one float
 /// short of the interval beside it. Each of those is here with its own
-/// neighbours, so every run of floats between two endpoints has a member here,
+/// neighbors, so every run of floats between two endpoints has a member here,
 /// the unbounded runs included. Both zeros, both infinities, and `nan` are here
 /// too: a law that held over ordinary finite values alone would miss every one
 /// of the three ways a float differs from an integer.
@@ -120,7 +120,7 @@ proptest! {
     }
 
     /// Holding the same floats is being equal, which is what the merging and
-    /// the endpoint normalisation are for.
+    /// the endpoint normalization are for.
     #[test]
     fn holding_the_same_floats_is_being_equal(a in float_set(), b in float_set()) {
         prop_assert_eq!(same(&a, &b), a == b);
@@ -219,7 +219,7 @@ fn an_open_end_excludes_exactly_its_own_point() {
 }
 
 /// No float lies between a float and the next one, so an open end is the
-/// closed end at its neighbour, and two intervals no float separates are one.
+/// closed end at its neighbor, and two intervals no float separates are one.
 #[test]
 fn no_float_lies_between_a_float_and_the_next() {
     let next = 1.0f64.next_up();
@@ -238,7 +238,7 @@ fn no_float_lies_between_a_float_and_the_next() {
         FloatSet::just(1.0).union(&FloatSet::just(next)),
         FloatSet::at_least(1.0).intersect(&FloatSet::at_most(next))
     );
-    // Across zero, where the neighbour of the least positive float is the
+    // Across zero, where the neighbor of the least positive float is the
     // zero both signs spell.
     let least = f64::from_bits(1);
     assert_eq!(FloatSet::above(0.0), FloatSet::at_least(least));

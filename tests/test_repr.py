@@ -337,7 +337,7 @@ def test_a_binder_is_a_name_the_body_does_not_print() -> None:
     names by the same name reads back as the back edge: a record holding an
     instance of a class `X` would rebuild as one holding the record again. The
     binder skips every word the render spells -- a class's name, a constant's
-    repr, a name the interpreter reads as `X` under NFKC normalisation -- and
+    repr, a name the interpreter reads as `X` under NFKC normalization -- and
     takes the next spelling of its own letter. A word glued to a letter past
     ASCII is a longer name and takes nothing.
     """
@@ -618,7 +618,7 @@ def test_a_chain_one_link_short_of_the_bound_renders_whole(shape: str) -> None:
     refuses past `MAX_SCHEMA_DEPTH`, which is lower -- but a chain composes:
     the render descends into each definition in turn, so a hundred shallow
     links reach a depth no one annotation can be written to. The bound is
-    therefore a behaviour rather than dead code, and this is the side of it
+    therefore a behavior rather than dead code, and this is the side of it
     where nothing is lost.
     """
     schema = _chain(shape, _CHAIN_SHAPES[shape][1] - 1)

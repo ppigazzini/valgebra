@@ -206,7 +206,7 @@ def test_a_subclass_that_overrides_neither_slot_is_read_where_it_lies() -> None:
     """The common subclass keeps the reading its storage already gives.
 
     The base slot is asked only of a type that overrides, so a subclass adding
-    behaviour beside the container's own pays nothing for this rule.
+    behavior beside the container's own pays nothing for this rule.
     """
     assert _both_modes(set[int], QuietSet({1, 2})) == (True, True)
     assert _both_modes(set[int], QuietSet({"a"})) == (False, False)

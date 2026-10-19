@@ -2,7 +2,7 @@ use super::WalkMode;
 
 /// Both predicates are single comparisons over an ordered discriminant, so
 /// they are pinned over every variant: a reordering that changes what a mode
-/// means fails here rather than silently switching the walk's behaviour.
+/// means fails here rather than silently switching the walk's behavior.
 #[test]
 fn every_mode_answers_both_predicates() {
     assert!(WalkMode::Explain.explains());

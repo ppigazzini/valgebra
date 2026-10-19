@@ -140,7 +140,7 @@ def test_a_key_that_is_neither_a_string_nor_an_integer_is_named_by_its_repr() ->
 
 # PROMISE: When a comparison raises
 def test_a_predicate_that_raises_names_its_error_without_flooding_the_message() -> None:
-    """A large error is summarised, as every other value in a message is."""
+    """A large error is summarized, as every other value in a message is."""
 
     def boom(_value: object) -> bool:
         raise ValueError("Z" * 5000)
@@ -219,7 +219,7 @@ _MESSAGE_SITES: dict[str, Callable[[], tuple[object, object]]] = {
 @pytest.mark.parametrize("site", _MESSAGE_SITES)
 def test_a_fatal_signal_from_any_part_of_a_message_propagates(site: str) -> None:
     """The constant, the bound, the key and the value are all asked to render."""
-    # `typing` memoises `Annotated` by equality, and `Ge(_LoudInt(11))` equals
+    # `typing` memoizes `Annotated` by equality, and `Ge(_LoudInt(11))` equals
     # `Ge(11)`, so a form another test built would stand in for this one.
     for cleanup in getattr(typing, "_cleanups", ()):
         cleanup()

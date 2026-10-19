@@ -932,7 +932,7 @@ def test_explaining_a_deep_value_does_not_scale_with_its_size() -> None:
     """A summary is bounded while it is built, not built and then cut.
 
     The walk stops at `MAX_WALK_DEPTH` levels, so an error over a deeply nested
-    value names a bounded path -- but every violation along the way summarises
+    value names a bounded path -- but every violation along the way summarizes
     the value it is about. A summary cut to eighty characters from the value's
     *whole* repr would build a 20,000-deep list's 40,000-character repr once
     per level and discard it: twelve seconds for a single error against twenty
@@ -1165,7 +1165,7 @@ def test_two_steps_that_meet_past_the_period_bound_are_refused() -> None:
     period is the step, and the representation caps that period. A cap on one
     step is not a cap on two: `MultipleOf(64)` and `MultipleOf(81)` are each far
     inside it and meet at 5,184, which is past it. Asking whether such a meet is
-    empty would materialise a table at the largest period the representation
+    empty would materialize a table at the largest period the representation
     holds -- the multiples of something else -- and answer from it, or, on a
     build with debug assertions (which is what `maturin develop` produces),
     raise a panic across the language boundary that no caller catches as a
@@ -1289,7 +1289,7 @@ def test_a_lying_class_attribute_does_not_admit_a_value_to_a_builtin_kind() -> N
 
 
 def test_a_user_class_is_whatever_python_says_it_is() -> None:
-    """Membership of a user class *is* `isinstance`, so a lie there is honoured.
+    """Membership of a user class *is* `isinstance`, so a lie there is honored.
 
     The boundary the row above sits on. A builtin kind has storage this library
     can read and a claim it can check against; a user class has neither, and

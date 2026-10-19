@@ -1,7 +1,7 @@
 """Time each comparison shape on a profiled build and on a plain one.
 
 Whether a profile pays is a question **per shape**, not per project. Profile-
-guided optimisation arranges what fat LTO has left to arrange, so a shape whose
+guided optimization arranges what fat LTO has left to arrange, so a shape whose
 cost is one hot loop over one element type is laid out straight and a shape whose
 cost is many warm paths -- fifty key lookups, each dispatching on its field's own
 schema -- can be laid out worse. A single figure for "what PGO buys" therefore

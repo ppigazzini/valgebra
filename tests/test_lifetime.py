@@ -101,7 +101,7 @@ def test_a_predicate_reaching_back_to_its_class_is_collected() -> None:
     A predicate is a Python callable held in the validator's constants pool, so
     a callable that closes over the class makes the same cycle one hop longer.
 
-    `typing` memoises `Annotated[...]`, and that cache holds the marker, the
+    `typing` memoizes `Annotated[...]`, and that cache holds the marker, the
     callable and everything it closes over for the life of the process -- so
     this cycle stays alive whatever valgebra traverses. Clearing it is what
     leaves *this* claim under test rather than CPython's caching: without the
@@ -150,7 +150,7 @@ def test_a_validator_can_be_weakly_referenced() -> None:
 
 
 def test_a_live_validator_keeps_the_class_its_schema_names() -> None:
-    """Traversal must not become a licence to free what the walk still reads."""
+    """Traversal must not become a license to free what the walk still reads."""
     model = type("Held", (), {"__annotations__": {"a": int}})
     watch = weakref.ref(model)
     validator = Validator(model)

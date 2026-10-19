@@ -48,7 +48,7 @@ that defines it -- so a rename dates the entry.
 | **refuted** | a relation disproved by a value: `Relation::Fails` in `crates/valgebra-core/src/verdict.rs`, which asserts that some value of the subject lies outside the other schema. A refutation stands on a witness, so a reading that cannot name one declines instead |
 | **lowering** | turning a schema into the set it denotes -- `descr::lower`, which walks the tree and builds one `Descr`. The descriptor's entry point, and the step a `Bounds` holds |
 | **unfolding** | replacing a `Ref` with the definition it names, once: `Schema::unfolded` in `crates/valgebra-core/src/ir/transform.rs`. The fixpoint reading a relation over a recursive schema needs: the subject is unfolded to widen and the supertype to narrow, which is what `Polarity`, in the same file, names ([02-decision.md](02-decision.md)) |
-| **goal** | one pair a decision is asked about, subject and supertype together, as the recursion carries it. The unit a trail of seen goals would memoise, and the unit `DECISION_BUDGET` charges ([02-decision.md](02-decision.md)) |
+| **goal** | one pair a decision is asked about, subject and supertype together, as the recursion carries it. The unit a trail of seen goals would memoize, and the unit `DECISION_BUDGET` charges ([02-decision.md](02-decision.md)) |
 | **the readings** | the two ways a relation is answered -- the rules and the descriptor -- and, in `decision/readings.rs`, the structural cases the rules decide by reading a schema's shape rather than its set |
 | **the ledger** (of completeness) | `tests/test_completeness_ledger.py`, enumerated relations the procedure must *decide*, failing in both directions |
 

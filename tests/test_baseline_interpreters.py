@@ -12,7 +12,7 @@ saying so after the walk sweep moves from one to the other: the sweep kills the
 mutant, the ratchet reports the entry stale, and the nightly is red for a
 sentence.
 
-The neighbouring ledgers do not hold it. `tests/test_mutation_scope.py` holds
+The neighboring ledgers do not hold it. `tests/test_mutation_scope.py` holds
 every note to a mutant that exists, and `tests/test_lane_interpreters.py` holds
 every lane to naming its interpreter; neither reads what the notes say *about*
 that interpreter.

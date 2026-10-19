@@ -420,12 +420,12 @@ by `test_the_pages_give_the_gap_between_the_deciders_the_record_holds` in
 `tests/test_perf_gate.py`, and `test_the_two_deciders_are_measured_against_each_other`
 in `tests/test_completeness_probe.py`.
 
-**Normalising a query's arguments where a decision starts.** The lattice laws
+**Normalizing a query's arguments where a decision starts.** The lattice laws
 are settled once, where a schema is built
 ([01-schema-ir.md](01-schema-ir.md#which-laws-construction-settles)), so the
 deciders read a schema already in the constructors' normal form and rebuild none
 per query: a construction happens once, a query many times. No figure for the
-per-query cost is recorded, and the holder refuses a normalising pass, named
+per-query cost is recorded, and the holder refuses a normalizing pass, named
 `simplify`, in the deciders' production files. Held by
 `test_the_deciders_never_normalise_a_query` in `tests/test_refusals_ledger.py`,
 and `test_eq_is_the_normal_form_and_not_the_set` in `tests/test_operators.py`.

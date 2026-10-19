@@ -652,7 +652,7 @@ def test_the_floor_build_runs_a_second_time(tmp_path: Path) -> None:
     that is already there.
 
     Driven rather than read off the command: the flag's name is uv's, the
-    behaviour is what the step needs, and a test asserting the spelling would
+    behavior is what the step needs, and a test asserting the spelling would
     pass on a flag that means something else.
     """
     creation = gate.floor_steps()[0][2].split("&&")[0].strip()

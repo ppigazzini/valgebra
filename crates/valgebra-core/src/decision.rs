@@ -513,7 +513,7 @@ impl Schema {
     ///
     /// Decided by emptiness rather than by matching the `Nothing` or `Anything`
     /// atom, so a record with an uninhabited required field and a union covering
-    /// the universe are both recognised. Asking the atom alone is a rule that
+    /// the universe are both recognized. Asking the atom alone is a rule that
     /// confirms itself: the pattern matches only the shape it is written for.
     ///
     /// The universe side asks whether the complement is empty, which is the same
@@ -833,7 +833,7 @@ impl Schema {
     /// When `C` is a union the meet may instead land in one branch, so that
     /// sound rule is tried here too -- ahead of the plain `_ ⊆ (Y ∪ Z)` rule, so
     /// a meet that contains its own supertype (a reference beside that union)
-    /// decides, which is what lets such a meet be recognised as a subtype of
+    /// decides, which is what lets such a meet be recognized as a subtype of
     /// itself.
     ///
     /// Both halves are sound and incomplete: a conjunct that does not contain

@@ -13,7 +13,7 @@ through, so the claim is the compiler's to keep. This file holds the other half:
 that the attribute is *there*. Removing it compiles, and the page would go on
 asserting a property nothing enforces.
 
-Read from the tracked source rather than from a built artefact, because the
+Read from the tracked source rather than from a built artifact, because the
 claim is about what the crates say and not about what one build of them did.
 
 LEDGER: every crate root forbids unsafe code

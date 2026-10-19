@@ -484,7 +484,7 @@ def test_a_grouped_marker_from_another_library_is_read_for_its_vocabulary() -> N
     does, as a ``GroupedMetadata``, and yields ``MinLen``, ``MaxLen`` and an
     object of pydantic's own carrying the pattern, which pydantic searches with.
     The lengths are read and the pattern is ignored, as the README asks of
-    metadata a consumer does not recognise.
+    metadata a consumer does not recognize.
     """
     grouped = Annotated[
         str, pydantic.StringConstraints(min_length=1, max_length=3, pattern="a")

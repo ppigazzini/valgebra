@@ -177,7 +177,7 @@ impl Reach {
     }
 }
 
-/// What distinguishes one state from another during minimisation: whether it
+/// What distinguishes one state from another during minimization: whether it
 /// accepts, and the values it sends to each block it can reach.
 type Signature<G> = (bool, Vec<(u32, Option<G>)>);
 
@@ -185,7 +185,7 @@ type Signature<G> = (bool, Vec<(u32, Option<G>)>);
 ///
 /// State zero is the start. The edges leaving each state partition the value
 /// universe and are held in guard order, so the table is a name for the
-/// language: equal tables are equal languages, and the minimisation below is
+/// language: equal tables are equal languages, and the minimization below is
 /// what makes the converse true.
 ///
 /// A lookup below answers a miss with state zero or with no edges rather than
@@ -255,7 +255,7 @@ impl<G: Guard> SymbolicDfa<G> {
         if !minimal {
             return Some(table.minimal());
         }
-        debug_assert!(table.well_formed(), "a table is minimised as it was built");
+        debug_assert!(table.well_formed(), "a table is minimized as it was built");
         let canonical = table.sorted().renumber();
         debug_assert!(canonical.well_formed(), "renumbering the states kept it");
         Some(canonical)
@@ -271,8 +271,8 @@ impl<G: Guard> SymbolicDfa<G> {
         // Whether a letter takes every value, and whether it is proved to take
         // one: asked here rather than in [`SymbolicDfa::sorted`] because they
         // are questions *about the guard*, and a letter may be a descriptor
-        // whose own complement rebuilds automata -- asking during minimisation
-        // would run the minimisation again, without end. The answers are kept
+        // whose own complement rebuilds automata -- asking during minimization
+        // would run the minimization again, without end. The answers are kept
         // for the next position, so a run of one letter -- a length bound is
         // one letter per element -- asks them once rather than once a position.
         let mut before: Option<(G, bool, bool)> = None;
@@ -461,7 +461,7 @@ impl<G: Guard> SymbolicDfa<G> {
     ///
     /// The empty language is the identity and the whole one absorbs, so a side
     /// that is either answers without a product -- whose table would be the
-    /// other side's again, rebuilt pair by pair and minimised.
+    /// other side's again, rebuilt pair by pair and minimized.
     #[must_use]
     pub(crate) fn union(&self, other: &SymbolicDfa<G>) -> Option<SymbolicDfa<G>> {
         match (self.constant(), other.constant()) {
@@ -659,7 +659,7 @@ impl<G: Guard> SymbolicDfa<G> {
     /// a wrong one. A complement never needs to fail, so it does not.
     #[must_use]
     fn minimal(self) -> SymbolicDfa<G> {
-        debug_assert!(self.well_formed(), "a table is minimised as it was built");
+        debug_assert!(self.well_formed(), "a table is minimized as it was built");
         let merged = self.merge_equivalent();
         debug_assert!(merged.well_formed(), "merging the states kept the table");
         let sorted = merged.sorted();
@@ -695,7 +695,7 @@ impl<G: Guard> SymbolicDfa<G> {
     /// holds the two starts to one answer.
     ///
     /// The signature is only a faithful reading of the transition function
-    /// because the edges are normalised first: one edge per target, guards in
+    /// because the edges are normalized first: one edge per target, guards in
     /// order. Without that, two states could send the same values to the same
     /// places through differently-split guards and read as different.
     fn merge_equivalent(self) -> SymbolicDfa<G> {

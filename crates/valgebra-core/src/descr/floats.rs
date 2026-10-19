@@ -11,14 +11,14 @@
 //!
 //! **`-0.0` and `0.0` are one value.** They are two bit patterns that `==`
 //! cannot tell apart, so a set that held one and not the other would be a set no
-//! value can distinguish. Every endpoint is normalised on the way in, and the
+//! value can distinguish. Every endpoint is normalized on the way in, and the
 //! negative zero never reaches the representation.
 //!
 //! **The floats are discrete.** Every float but the largest has a next one, and
 //! nothing lies between the two: `Gt(1.0)` admits the floats from the one after
 //! `1.0` up, which is what `Ge(math.nextafter(1.0, inf))` admits too. So an
 //! interval holds both its ends, and an open end a caller writes is held as its
-//! neighbouring float. Two spellings of one set are then one interval, an
+//! neighboring float. Two spellings of one set are then one interval, an
 //! interval between two adjacent floats is empty, and two intervals with no float
 //! between them are one. Endpoints are floats, so the infinities are *values*
 //! rather than open ends: `[-inf, inf]` is every float but `nan`.
@@ -37,7 +37,7 @@ impl Eq for Span {}
 /// from.
 ///
 /// `total_cmp` rather than `partial_cmp`, so the order is total without an arm
-/// that cannot happen, and it agrees with equality: normalisation leaves no
+/// that cannot happen, and it agrees with equality: normalization leaves no
 /// `-0.0`, so two endpoints compare equal here exactly when `==` says so.
 impl Ord for Span {
     fn cmp(&self, other: &Span) -> core::cmp::Ordering {
@@ -63,10 +63,10 @@ const EMPTY: Span = Span {
 impl Span {
     /// The floats between two endpoints, each held or not.
     ///
-    /// An end that is not held is read as its neighbouring float, which is exact
+    /// An end that is not held is read as its neighboring float, which is exact
     /// rather than a rounding: no float lies between a float and the next one.
     ///
-    /// Normalisation is the invariant every other method here rests on: the
+    /// Normalization is the invariant every other method here rests on: the
     /// order compares endpoints with `total_cmp` and equality compares them
     /// with `==`, and the two disagree on exactly one pair of values. `-0.0`
     /// reaching an endpoint would make `[0.0, -0.0]` a span that `is_empty`
@@ -86,7 +86,7 @@ impl Span {
         };
         // The order and equality must agree on the endpoints, because one
         // decides whether a span is empty and the other whether two spans are
-        // one. `-0.0` is the only pair they part on, and normalisation is what
+        // one. `-0.0` is the only pair they part on, and normalization is what
         // keeps it out; the comparison is the point of the assertion, so the
         // lint against comparing floats is allowed here by name.
         #[expect(
@@ -96,7 +96,7 @@ impl Span {
         {
             debug_assert!(
                 (lo.total_cmp(&hi) == core::cmp::Ordering::Equal) == (lo == hi),
-                "normalisation leaves the order and equality agreeing on {lo} and {hi}"
+                "normalization leaves the order and equality agreeing on {lo} and {hi}"
             );
         }
         Span { lo, hi }
@@ -161,7 +161,7 @@ pub(crate) struct FloatSet {
     nan: bool,
 }
 
-/// Reflexive because `nan` never reaches a span: the endpoints are normalised
+/// Reflexive because `nan` never reaches a span: the endpoints are normalized
 /// and the one value that is not equal to itself lives in the bit beside them,
 /// where it is an ordinary `bool`.
 impl Eq for FloatSet {}
@@ -172,7 +172,7 @@ impl Eq for FloatSet {}
 /// The order is on the representation, not the sets -- no order on sets is
 /// wanted here, only a stable one. It agrees with equality, which is what a
 /// sort needs of it: `total_cmp` separates two endpoints exactly when `==`
-/// does, because normalisation leaves no `-0.0` and no span holds `nan`.
+/// does, because normalization leaves no `-0.0` and no span holds `nan`.
 impl Ord for FloatSet {
     fn cmp(&self, other: &FloatSet) -> core::cmp::Ordering {
         self.spans.cmp(&other.spans).then(self.nan.cmp(&other.nan))

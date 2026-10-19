@@ -283,7 +283,7 @@ value, since its explaining pass waits for that. A predicate
 is user code, so each occurrence the walk reaches is a call, and a cache keyed
 on the value's identity would decide for an impure predicate which of its
 answers counts. The refinements page states the count a caller sees; a predicate
-that must run once per value is memoised on the caller's side, where the key is
+that must run once per value is memoized on the caller's side, where the key is
 the caller's to choose.
 
 ## What is precomputed, and what correctness may not depend on
@@ -313,7 +313,7 @@ deciding walk takes its answer either way; the explaining walk takes only its
 *yes*, for the elements of a list of the union (`literal_list_matches`), and
 walks every other element. A non-literal union, another value type and a JSON
 value all fall through to the linear scan, which stays the one source of truth
-for behaviour.
+for behavior.
 
 **The constant itself is found by its address.** A literal a program spells in
 its own source is usually the object it validates: a string constant is

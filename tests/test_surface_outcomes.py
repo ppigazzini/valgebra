@@ -304,7 +304,7 @@ def _covers(cell: tuple[str, str], asserted: set[tuple[str, str]]) -> bool:
 
     A docstring saying `BaseException` means *whatever* signal reaches the
     caller -- a fatal one the walk must not fold -- and the suite drives the
-    concrete signals, parametrised over them. `BaseException` is the top of the
+    concrete signals, parametrized over them. `BaseException` is the top of the
     exception lattice, so any raise asserted through that call is below it and
     covers the cell; reading the name literally would leave a cell empty that
     four rows drive, which is a ledger measuring its own spelling.

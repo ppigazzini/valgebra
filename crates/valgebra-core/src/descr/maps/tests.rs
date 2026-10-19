@@ -1166,7 +1166,7 @@ fn evens_twice_and_a_set_between() -> (IntSet, IntSet, IntSet) {
 /// A union of map atoms holds an atom once, however its guard is spelled.
 ///
 /// Two atoms equal as sets of dicts can sort apart, with a third between them,
-/// and a dedup of neighbours would keep both: a summand of width toward
+/// and a dedup of neighbors would keep both: a summand of width toward
 /// [`MAX_ATOMS`] that holds no dict the other does not.
 #[test]
 fn a_union_holds_an_atom_once_whatever_its_guard_spells() {

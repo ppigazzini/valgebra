@@ -72,7 +72,7 @@ large_stack_frames = "warn"
 # is unaffected; for a native debugging session, build under `profiling`.
 [profile.dev]
 debug = 0
-# Overflow is a program error, and which behaviour a build gets is a per-profile
+# Overflow is a program error, and which behavior a build gets is a per-profile
 # choice rather than something to inherit. Trapping in dev and test is what makes
 # the discipline pay: every intended saturation in this tree is spelled --
 # `saturating_add` on the node-count sum, `saturating_sub` on the required-field

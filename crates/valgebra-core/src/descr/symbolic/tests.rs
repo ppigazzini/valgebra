@@ -69,7 +69,7 @@ fn agree_on_sequences(a: &SymbolicDfa<IntSet>, b: &SymbolicDfa<IntSet>) -> bool 
 /// The sequence languages' operations, as the shared laws ask them, compared
 /// against the sequences: the canonical form is earned only where the guards
 /// can answer every meet, so a law held by `==` alone would be a claim about
-/// the minimisation.
+/// the minimization.
 const SEQUENCES: Algebra<SymbolicDfa<IntSet>> = Algebra {
     join: SymbolicDfa::union,
     meet: SymbolicDfa::intersect,
@@ -134,7 +134,7 @@ proptest! {
     ///
     /// Against the sequences rather than by equality of the tables: the
     /// canonical form is earned only where the guards can answer every meet,
-    /// so a law held by `==` alone would be a claim about the minimisation.
+    /// so a law held by `==` alone would be a claim about the minimization.
     #[test]
     fn the_lattice_laws_hold_of_the_sequences(
         a in language(),
@@ -241,7 +241,7 @@ proptest! {
     /// rounds started from one block reach.
     ///
     /// Over tables drawn state by state rather than built by the operations,
-    /// which minimise what they build: a drawn table has states no sequence
+    /// which minimize what they build: a drawn table has states no sequence
     /// tells apart, cycles, and states that cannot accept, so the seed parts
     /// some states, leaves others for the rounds, and is wrong if it parts two
     /// the rounds would join.
@@ -478,7 +478,7 @@ fn a_union_of_fixed_sequences_joins_their_element_sets() {
 /// takes two: a correct table, and not the canonical one that every equality
 /// of two languages compares.
 ///
-/// Written row by row because the operations minimise what they build, and a
+/// Written row by row because the operations minimize what they build, and a
 /// product reaches this table only on some draws of a property.
 #[test]
 fn two_letters_into_one_block_join_in_the_signature() {
@@ -508,7 +508,7 @@ fn two_letters_into_one_block_join_in_the_signature() {
 /// The edges of a state partition the universe, and the else edge is the
 /// part the guards do not take. Where they take everything that part is
 /// empty, so a row spelling it out is the same transition table as one
-/// without it -- and two equal languages must be one table, or minimisation
+/// without it -- and two equal languages must be one table, or minimization
 /// has not finished.
 #[test]
 fn a_guard_that_takes_everything_leaves_no_else_edge() {
@@ -871,10 +871,10 @@ fn an_accepting_state_behind_an_undecided_letter_is_unproved() {
 }
 
 /// A table with an edge to a state it does not have stops a debug build where
-/// it is minimised, for the reason the byte automaton's test gives.
+/// it is minimized, for the reason the byte automaton's test gives.
 #[test]
 #[cfg(debug_assertions)]
-#[should_panic(expected = "a table is minimised as it was built")]
+#[should_panic(expected = "a table is minimized as it was built")]
 fn a_table_with_an_edge_off_it_stops_a_debug_build() {
     let malformed: SymbolicDfa<IntSet> = SymbolicDfa {
         edges: vec![vec![Edge {

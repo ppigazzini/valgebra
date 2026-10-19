@@ -2,7 +2,7 @@
 
 PyO3 keeps a pool of reference-count decrements deferred while a thread is
 detached, and every call into the extension asks it for them. Once the pool
-exists -- and the first of PyO3's lazy initialisers to detach and attach again
+exists -- and the first of PyO3's lazy initializers to detach and attach again
 creates it -- the question locks a mutex, which costs `Validator(int).is_valid`
 forty instructions a call. The binding never detaches, so the pool only ever
 holds nothing, and `.cargo/config.toml` compiles it out.

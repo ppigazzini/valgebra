@@ -609,7 +609,7 @@ def test_every_code_renders_the_same_way(snapshot: object) -> None:
     different set.
 
     An object's repr carries its address, which differs per run, so the one row
-    whose value is an instance has that normalised out. Nothing else here has
+    whose value is an instance has that normalized out. Nothing else here has
     an unstable repr, because every other row's value is a literal.
     """
     rendered = {}
@@ -682,7 +682,7 @@ def test_load_stops_at_the_first_failure_when_asked_to() -> None:
     """`load` parses and validates, and takes the same `fail_fast` as the rest.
 
     Without this row no test passes it the keyword, and nothing says whether the
-    parse path honours it or quietly aggregates.
+    parse path honors it or quietly aggregates.
     """
     schema = Validator({"a": int, "b": int})
     document = '{"a": "x", "b": "y"}'

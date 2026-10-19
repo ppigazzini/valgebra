@@ -171,7 +171,7 @@ impl IntervalSet {
     /// The integers in both sets.
     ///
     /// Pairwise: each span of one meets each span of the other in at most one
-    /// interval, and what comes out is canonicalised rather than assumed
+    /// interval, and what comes out is canonicalized rather than assumed
     /// ordered.
     #[must_use]
     pub(crate) fn intersect(&self, other: &IntervalSet) -> IntervalSet {

@@ -566,7 +566,7 @@ when the schema is built, so `Annotated[int, f, f]` calls `f` once a value. The
 walk keeps no cache over it, because a cache would change what a predicate that
 does not answer from its value alone observes, and the same reading is what
 keeps `A & ~A` from folding when `A` carries one. A predicate that must run once
-per value memoises on its own side. Use it for checks the markers cannot
+per value memoizes on its own side. Use it for checks the markers cannot
 express:
 
 ```python
@@ -619,7 +619,7 @@ rule for that position is the one below.
 A **typing form** in metadata is not a predicate either, although every one is
 callable: calling `list[int]`, a `NewType` or an `Annotated` alias with a value
 builds something rather than answering whether the value belongs. A typing form
-is metadata this frontend does not recognise and is ignored, as a class is. An
+is metadata this frontend does not recognize and is ignored, as a class is. An
 `Annotated` alias carrying a marker this page reads -- `at.IsFinite`, or an
 alias of your own over `at.Gt(0)`, written as an assignment or with the `type`
 statement -- is refused rather than ignored: it carries its markers for the

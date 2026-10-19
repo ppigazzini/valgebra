@@ -128,7 +128,7 @@ procedure did not see it.** That is a suspected gap, and suspected is the honest
 word: the universe is finite, so the result is a ledger to read rather than a
 verdict to trust.
 
-The lesson generalises past this procedure. An enumerated list can only confirm
+The lesson generalizes past this procedure. An enumerated list can only confirm
 the rules it was built from. When the failure you fear is *a rule nobody wrote*,
 no list will find it — only a search will.
 
@@ -685,7 +685,7 @@ procedure is judged against its own denotation instead: the value model, the
 witness each refutation stands on, and the enumerated universes.
 
 **The stack a walk needs is the shipped build's, not a development build's.**
-`maturin develop` builds without optimisation, and there a walk to the depth
+`maturin develop` builds without optimization, and there a walk to the depth
 bound needs 1.5 to 1.9 MiB of native stack on Linux, against the 1 MiB thread
 [the limits page](../10-limits.md) promises for the wheels. A test that runs a
 deep walk on a thread of its own overflows that thread on a development build.
@@ -755,7 +755,7 @@ The walk snapshots a container and compares the snapshot against what it read,
 because the container can move underneath the reading -- and under a global
 interpreter lock another thread cannot be the one that moves it. Three tests
 skip for that reason -- five items, since the one about a container written
-underneath a walk is parametrised over the shapes that can move -- the arms they
+underneath a walk is parametrized over the shapes that can move -- the arms they
 would drive sit in the sequence and record walks,
 and the binding's coverage lane runs on a single-threaded release. So those
 arms are executed on the free-threaded leg of the python matrix and *measured*
@@ -790,10 +790,10 @@ Each lane runs `cargo llvm-cov clean --workspace` before it measures
 A difference of that size in a **total** is indistinguishable from a real hole
 of the same size, and neither figure alone settles which it is. What settles it
 is the per-file column: a file whose zero-count lines are comments has a mapping
-artefact, and a file whose zero-count lines are statements has untested code.
+artifact, and a file whose zero-count lines are statements has untested code.
 So the rule is to compare *a file's* figure between the two runs and read the
 annotated report for that file, never to compare totals -- a total absorbs the
-artefact and the hole equally well, and says the same number for both.
+artifact and the hole equally well, and says the same number for both.
 
 **And one floor per file beside the scope-wide one.** A total absorbs a hole
 the size of a file: half of the decision procedure going unreached moves a

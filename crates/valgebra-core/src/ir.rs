@@ -448,9 +448,9 @@ fn unclaimed_region(defaults: &[MapClause]) -> Schema {
 /// What of `clause` stands once the default of the unclaimed region is taken
 /// out: the clause, nothing, or the keys it claims beside that region.
 ///
-/// That default is what `close` removes and `open` writes, and it is recognised
+/// That default is what `close` removes and `open` writes, and it is recognized
 /// rather than marked: a clause carrying every value over exactly the keys the
-/// others leave over. Recognising it structurally keeps this file below the
+/// others leave over. Recognizing it structurally keeps this file below the
 /// decision procedure, which is where the representation belongs.
 ///
 /// **`open` folds the region into a clause carrying every value**, since two
@@ -730,7 +730,7 @@ pub(crate) fn with_member_buffer<R>(build: impl FnOnce(&mut Vec<Schema>) -> R) -
 /// The members of a join or a meet.
 ///
 /// A shared, immutable slice rather than a `Vec`: the members are written once
-/// by the constructor that normalises them and read for the rest of the node's
+/// by the constructor that normalizes them and read for the rest of the node's
 /// life, so what the representation has to be cheap at is *carrying* the list,
 /// not editing it.
 pub type Members = Arc<[Schema]>;
@@ -1559,8 +1559,8 @@ impl Schema {
     /// so it is what a user who wrote a class name is holding. `repr` and a
     /// union's branch label both read the class back out of it, and a later meet
     /// may flatten other members in beside the pair without changing which class
-    /// it is. The shape is recognised here, once, so the two readers cannot
-    /// recognise different shapes.
+    /// it is. The shape is recognized here, once, so the two readers cannot
+    /// recognize different shapes.
     ///
     /// The deep check is an attribute record where the fields are named and a
     /// sequence where they are positions: a `NamedTuple` is its class met with
@@ -1908,7 +1908,7 @@ impl Schema {
 
     /// The three facts a validator is accepted on, read in one walk: how deep
     /// the tree nests, how many nodes it spans, and whether it carries a
-    /// self-reference marker whose token `is_open` does not recognise.
+    /// self-reference marker whose token `is_open` does not recognize.
     ///
     /// The depth is the one [`Measure::depth`] states, the count is what
     /// [`node_count`](Self::node_count) returns, and the marker is the test
@@ -1987,7 +1987,7 @@ pub struct Measure {
     pub depth: usize,
     /// How many nodes the tree spans, as [`Schema::node_count`] counts it.
     pub nodes: usize,
-    /// Whether a self-reference marker the caller does not recognise is
+    /// Whether a self-reference marker the caller does not recognize is
     /// anywhere in the tree.
     pub escaped_self_ref: bool,
 }
