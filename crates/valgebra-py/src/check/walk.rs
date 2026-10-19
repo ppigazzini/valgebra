@@ -13,7 +13,7 @@
 //!
 //! Membership reads a value through Python operations that can raise — `__eq__`
 //! for a literal, a rich comparison for a bound, `isinstance` for a class,
-//! `getattr` for an attribute, `__mod__` for a multiple-of, `__len__` for a
+//! `getattr` for an attribute, `%` and `== 0` for a multiple-of, `__len__` for a
 //! length. The single rule across every such site: **a value whose comparison,
 //! instance check, or attribute access raises an ordinary exception is treated as
 //! a non-member**. This matches pydantic-core: a value that cannot answer "are

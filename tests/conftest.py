@@ -10,8 +10,9 @@ Three property-test profiles select the example budget by the
   random with a database, so each night asks examples the last one did not and
   a failure is kept for the replay.
 
-Each profile says ``derandomize`` and ``database`` itself rather than inheriting
-them. Hypothesis reads ``CI`` from the environment and makes its own ``ci``
+``ci`` and ``nightly`` say ``derandomize`` and ``database`` themselves rather
+than inheriting them; ``dev`` names neither, so on a runner it inherits both.
+Hypothesis reads ``CI`` from the environment and makes its own ``ci``
 profile the default a registration inherits from, which is derandomised with no
 database: a ``nightly`` that named neither replayed the same examples every
 night on a runner and hunted nothing.

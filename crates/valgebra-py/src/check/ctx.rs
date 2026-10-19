@@ -50,8 +50,9 @@ pub(crate) struct Ctx<'a> {
 
 /// The most levels of recursive descent allowed before a value is rejected.
 ///
-/// A finite value never reaches this; the bound exists so a pathologically deep
-/// value fails with `recursion_limit` instead of overflowing the native stack.
+/// Only a value nested this deep under a recursive schema reaches it; the bound
+/// exists so a pathologically deep value fails with `recursion_limit` instead of
+/// overflowing the native stack.
 /// It is the height [`Trail`] refuses to grow past, which is where a walk turns
 /// a deep value into an answer rather than a crash.
 pub(crate) const MAX_RECURSION_DEPTH: usize = 128;

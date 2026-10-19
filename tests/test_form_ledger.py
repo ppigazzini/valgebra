@@ -221,7 +221,7 @@ def _tuple_prefix_tail() -> GenericAlias:
 #: The unpacked spelling of the same tuple, which is a *syntax* error below the
 #: release the page marks it with -- so it is compiled at import where the
 #: interpreter has it, and the row falls back to the spelling it is the same as
-#: where it does not. Written through `exec` for the reason the alias below is.
+#: where it does not. Written through `exec` for the reason the alias above is.
 _UNPACKED: dict[str, Any] = {}
 if sys.version_info >= (3, 11):
     exec(  # noqa: S102 - a fixed literal

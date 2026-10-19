@@ -11,8 +11,10 @@
 # that way: naming one in a call is a `TypeError` at runtime, and a stub that
 # allowed it would type-check code that cannot run. The keyword-only `fail_fast`
 # is one exception. `__class_getitem__`'s `key` and `__deepcopy__`'s `_memo` take
-# a keyword too, as PyO3 builds those two; the stub writes them positional-only,
-# which admits fewer calls than run rather than more.
+# a keyword too, as PyO3 builds those two. The stub writes `__deepcopy__`'s
+# positional-only, which admits fewer calls than run rather than more, and `key`
+# as the runtime has it: `stubtest` holds `__class_getitem__` to the runtime's
+# parameter kinds and refuses a `/` there.
 
 from collections.abc import Callable
 from types import GenericAlias

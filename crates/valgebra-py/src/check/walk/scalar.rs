@@ -327,9 +327,9 @@ pub(crate) fn is_the_constant(value: &Bound<'_, PyAny>, literal: &Bound<'_, PyAn
             || value.is_none())
 }
 
-/// Whether `value % operand == 0`. The remainder is zero iff it is falsy. Returns
-/// the result so a raising `%` is folded by the caller (a non-numeric value whose
-/// modulo is not defined is then a non-multiple).
+/// Whether `value % operand == 0`. Returns the result so a raising `%` is folded
+/// by the caller (a non-numeric value whose modulo is not defined is then a
+/// non-multiple).
 ///
 /// The operator, not `__mod__` by name: the dunder is only half of what `%`
 /// means. A type that does not know the operand answers `NotImplemented` and the

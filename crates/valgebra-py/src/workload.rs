@@ -7,7 +7,7 @@
 //! extension's documented surface.
 //!
 //! **They live apart from the crate root for a reason a number tells.** The
-//! coverage lane holds the binding to 95% of its lines, measured by the Python
+//! coverage lane holds the binding to a floor on its lines, measured by the Python
 //! suite and the Rust unit tests -- and a workload is run by neither, so every
 //! line here counts against a figure it says nothing about: held in a file the
 //! lane reads, these shapes are lines nothing covers, so adding one lowers the

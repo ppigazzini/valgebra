@@ -396,7 +396,7 @@ def test_recursive_dataclass_is_rejected_not_crashed() -> None:
 
 
 def test_finite_deep_schema_still_compiles() -> None:
-    # The recursion guard rejects only genuine recursion, not deep finite nesting.
+    # The recursion guard rejects nesting past its bound, not nesting within it.
     depth = 60
     schema: object = int
     value: object = 1
