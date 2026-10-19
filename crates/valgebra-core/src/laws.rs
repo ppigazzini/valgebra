@@ -3362,18 +3362,18 @@ fn boundary_values(schemas: &[&Schema]) -> Vec<Obj> {
     values.extend(interleaved(&sources));
     // The cap is read after the duplicates leave, so a node that repeats a
     // value cannot push another node's own values past the end.
-    let mut values = deduplicated(values);
-    values.truncate(CAP_UNIVERSE);
-    values
+    deduplicated(values, CAP_UNIVERSE)
 }
 
-/// The values in order, each kept the first time it is seen.
+/// The values in order, each kept the first time it is seen, up to `cap`.
 ///
 /// Read before a cap, because a cap spent on a value the list already holds
-/// buys nothing and costs the value behind it. The universe's cap is read this
-/// way, and a *node's* cap needs it for the same reason and at a shape where it
-/// decides the answer. `candidates` round-robins three sources that overlap by
-/// construction -- the pool the inherited values are strided from already
+/// buys nothing and costs the value behind it. It stops at the cap, since a
+/// value past it would be cut and each one read is compared with every value
+/// kept. The universe's cap is read this way, and a *node's* cap needs it for
+/// the same reason and at a shape where it decides the answer. `candidates`
+/// round-robins three sources that overlap by construction -- the pool the
+/// inherited values are strided from already
 /// holds the node's own -- so without it a variadic tuple over the top spends
 /// four of its first twenty on one repeated single-element tuple, and the
 /// tuple holding a `bool` falls past the quarter-cap. That is the value which
@@ -3387,9 +3387,12 @@ fn boundary_values(schemas: &[&Schema]) -> Vec<Obj> {
 /// against one-and-a-third for the comparison. Two NaNs compare unequal and
 /// both stay, which is the only repeat a rendered key would have dropped and
 /// this keeps.
-fn deduplicated(values: Vec<Obj>) -> Vec<Obj> {
-    let mut kept: Vec<Obj> = Vec::with_capacity(values.len());
+fn deduplicated(values: Vec<Obj>, cap: usize) -> Vec<Obj> {
+    let mut kept: Vec<Obj> = Vec::with_capacity(values.len().min(cap));
     for value in values {
+        if kept.len() == cap {
+            break;
+        }
         if !kept.contains(&value) {
             kept.push(value);
         }
@@ -3430,8 +3433,11 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
             .or(shape.tail.as_deref())
             .cloned()
     };
+    // Built until the cap is full and no further: what is made past it is cut
+    // below, and nothing reads the pool after this pass.
+    let cap = CAP_PER_NODE * 4;
     let mut made = Vec::new();
-    for (container, mine) in &shapes {
+    'crossed: for (container, mine) in &shapes {
         if mine.tail.is_some() {
             continue; // no fixed width to fill
         }
@@ -3462,6 +3468,9 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
                     let mut items = base.clone();
                     items[position] = value;
                     made.push(hold(*container, items));
+                    if made.len() == cap {
+                        break 'crossed;
+                    }
                 }
             }
         }
@@ -3473,20 +3482,26 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
     // `list[Any]` of at most two is refuted by a three-element list of sets,
     // and neither the bound -- which builds its widths out of a fixed item --
     // nor the subject -- which reaches two past its own prefix -- spells one.
-    for (container, len) in bounded_widths(schemas) {
+    'bounded: for (container, len) in bounded_widths(schemas) {
         for (_, theirs) in &shapes {
+            if made.len() >= cap {
+                break 'bounded;
+            }
             for element in theirs
                 .elements()
                 .flat_map(|element| candidates(element, out))
                 .take(CAP_PER_NODE / 4)
             {
                 for width in len.saturating_sub(EDGE_SPAN)..=(len + EDGE_SPAN) {
+                    if made.len() >= cap {
+                        break 'bounded;
+                    }
                     made.push(hold(container, vec![element.clone(); width]));
                 }
             }
         }
     }
-    made.truncate(CAP_PER_NODE * 4);
+    made.truncate(cap);
     out.extend(made.iter().cloned());
     made
 }
@@ -4415,11 +4430,10 @@ fn interleaved(groups: &[Vec<Obj>]) -> Vec<Obj> {
 /// builds one member and is separated from a complement by any of the others.
 fn candidates(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
     let before = out.len();
-    let mut mine = deduplicated(edges_of(schema, out));
     // A quarter of a node's budget, so the two sources that follow are inside
     // every cap a caller of this applies: a position probed with the schema's
     // own values alone is one no `bool` reaches where the schema is an `int`.
-    mine.truncate(CAP_PER_NODE / 4);
+    let mine = deduplicated(edges_of(schema, out), CAP_PER_NODE / 4);
     // What the rest of the comparison contributed, most recent first.
     //
     // This is the half a fixed probe list cannot supply. A position is
@@ -4447,7 +4461,7 @@ fn candidates(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
     // and the three sources separate a pair about equally often. Deduplicated
     // because the three overlap -- the pool the inherited values are strided
     // from already holds this node's own -- and a caller caps what comes back.
-    deduplicated(interleaved(&[mine, probes(), inherited]))
+    deduplicated(interleaved(&[mine, probes(), inherited]), usize::MAX)
 }
 
 /// The sequences one shape puts a boundary at: its own member with each
