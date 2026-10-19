@@ -12,7 +12,7 @@ Two oracles cover the two membership paths:
 
 - **pydantic-core** (``TypeAdapter.validate_python`` in strict mode) for the
   object path. Strict mode disables coercion, so a success is the closest
-  analogue to valgebra's check-only membership; it still constructs a value, so
+  analog to valgebra's check-only membership; it still constructs a value, so
   it does strictly more work, but the accept/reject verdict is comparable.
 - **jsonschema** (``Draft202012Validator.is_valid``) for the JSON path. It is a
   pure check with no coercion against the JSON Schema 2020-12 data model.

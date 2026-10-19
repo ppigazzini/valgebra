@@ -314,7 +314,7 @@ def measuring_toolchain() -> dict[str, str]:
     A recorded budget is a reading of one environment, and two parts of it move
     a count without any change to the tree: the valgrind that simulates the
     machine, and the allocator the workloads call, whose free lists
-    `settle_the_heap` normalizes and which glibc 2.43 reorganised.
+    `settle_the_heap` normalizes and which glibc 2.43 reorganized.
     """
     valgrind = subprocess.run(
         ["valgrind", "--version"], capture_output=True, text=True, check=False
@@ -1023,7 +1023,7 @@ def run_relative(modes: list[str], rev: str) -> int:
         print("than a repair to the tip.")
     elif batch:
         print("\nA pass over a batch is a pass on the sum: a regression inside it")
-        print("cancelled by an improvement beside it reads exactly like this.")
+        print("canceled by an improvement beside it reads exactly like this.")
     return outcome
 
 

@@ -147,7 +147,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | competitive ratio | `scripts/perf_compare.json` | `uv run --no-sync --group bench python scripts/compare_gate.py` |
 | what a profile buys, per shape | the two wheels a run builds | `uv run --no-sync --group bench python scripts/pgo_compare.py --record plain.json` |
 | membership held and decisions only widened | `scripts/metamorphic_reference.json` | `uv run --no-sync python scripts/metamorphic_gate.py` |
-| core mutation adequacy | `scripts/mutation_baseline.json` | `cargo mutants --package valgebra-core -- -- --skip deep_subtype_into_bottom_terminates --skip subtyping_terminates_on_a_distributed_tower --skip a_chain_of_a_hundred_thousand_states_minimises` |
+| core mutation adequacy | `scripts/mutation_baseline.json` | `cargo mutants --package valgebra-core -- -- --skip deep_subtype_into_bottom_terminates --skip subtyping_terminates_on_a_distributed_tower --skip a_chain_of_a_hundred_thousand_states_minimizes` |
 | walk mutation adequacy | `scripts/mutation_baseline_walk.json` | `cargo mutants --package valgebra-py --features interpreter-tests -- -- --skip recursion_deeper_than_the_bound_is_refused --skip the_two_readings_agree_at_the_walks_depth_bound` |
 | suite mutation adequacy | `scripts/mutation_baseline_pytest.json` | `cargo mutants --config .cargo/mutants-pytest.toml --package valgebra-py --features pytest-sweep` |
 | a mutation verdict | any baseline | `python3 scripts/mutation_gate.py --baseline core` |

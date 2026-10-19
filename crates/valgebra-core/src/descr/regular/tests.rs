@@ -779,7 +779,7 @@ fn each_defect_of_a_table_is_one_well_formed_refuses() {
 ///
 /// The rule the `k n log n` bound stands on: a state that takes a new number is
 /// one whose block at least halved, which happens to it at most `log n` times,
-/// and the part queued is the part relabelled. A tie moves the marked part, a
+/// and the part queued is the part relabeled. A tie moves the marked part, a
 /// state marked twice counts once, a block whose members are all marked stays
 /// whole, and a cut clears the marks it read. The rejecting states are block
 /// zero before any cut, and the accepting ones block one.
@@ -833,7 +833,7 @@ fn a_cut_moves_the_smaller_part() {
 // that returns no verdict is a rig fault; `a_cut_moves_the_smaller_part`
 // catches that mutation there.
 #[test]
-fn a_chain_of_a_hundred_thousand_states_minimises() {
+fn a_chain_of_a_hundred_thousand_states_minimizes() {
     let word: Vec<u8> = b"abc".iter().copied().cycle().take(100_000).collect();
     let table = Dfa::word(&word);
     assert_eq!(table.state_count(), word.len() + 2);

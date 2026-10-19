@@ -26,7 +26,7 @@ import pytest
 from valgebra import Validator, complement, intersection, nothing, union
 
 
-class Colour(enum.Enum):
+class Color(enum.Enum):
     """The shape the union reading is for: plain members, identity equality."""
 
     RED = 1
@@ -66,12 +66,12 @@ if sys.version_info >= (3, 11):
 
 
 def test_a_plain_enumeration_is_the_union_of_its_members() -> None:
-    members = Literal[Colour.RED, Colour.GREEN]
-    assert Validator(Colour).is_subtype_of(members)
-    assert Validator(members).is_subtype_of(Colour)
-    assert Validator(Colour).is_equivalent(members)
+    members = Literal[Color.RED, Color.GREEN]
+    assert Validator(Color).is_subtype_of(members)
+    assert Validator(members).is_subtype_of(Color)
+    assert Validator(Color).is_equivalent(members)
     # And two members are two values, which is what the identity check buys.
-    assert intersection(Literal[Colour.RED], Literal[Colour.GREEN]).is_empty()
+    assert intersection(Literal[Color.RED], Literal[Color.GREEN]).is_empty()
 
 
 def test_a_flag_is_not_the_union_of_the_members_it_lists() -> None:
@@ -146,7 +146,7 @@ def test_every_refused_kind_still_answers_membership() -> None:
         assert union(cls, int).is_valid(value), cls
 
 
-class _Colour(enum.Enum):
+class _Color(enum.Enum):
     RED = 1
     GREEN = 2
 
@@ -162,13 +162,13 @@ class _Colour(enum.Enum):
 def test_an_instance_made_past_the_class_is_one_of_its_members() -> None:
     """The known-unsound case of reading an enumeration as its members.
 
-    `_Colour` and the union of its two members are decided one set. An
+    `_Color` and the union of its two members are decided one set. An
     instance `object.__new__` builds is admitted by the class atom and by no
     member's literal, so the inclusion has a value against it.
     """
-    ghost = object.__new__(_Colour)
-    members = Validator(Literal[_Colour.RED, _Colour.GREEN])
+    ghost = object.__new__(_Color)
+    members = Validator(Literal[_Color.RED, _Color.GREEN])
 
-    assert Validator(_Colour).is_valid(ghost), "the walk asks `isinstance`"
+    assert Validator(_Color).is_valid(ghost), "the walk asks `isinstance`"
     assert not members.is_valid(ghost), "no member is the ghost"
-    assert Validator(_Colour).relation_to(members) != "subset"
+    assert Validator(_Color).relation_to(members) != "subset"

@@ -415,7 +415,7 @@ fn density_of<'a>(bases: impl IntoIterator<Item = &'a Schema>) -> Density {
 /// The verdict and region set of an intersection.
 ///
 /// Seven rules can prove a meet empty and they are asked in one place: an empty
-/// member, cancelling scalar regions, a member beside its own complement, a
+/// member, canceling scalar regions, a member beside its own complement, a
 /// pattern beside the complement of one with the same constraints, two members
 /// of disjoint kinds, refinement bounds that cannot hold together, and a
 /// required key two record members cannot agree on.

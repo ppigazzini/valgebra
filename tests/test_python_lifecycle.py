@@ -299,8 +299,8 @@ _COMMAND_BOUND = re.compile(r"\btimeout (\d+)\b")
 def test_a_hang_on_the_forgiven_leg_is_a_forgiven_failure() -> None:
     """Each step the forgiven leg runs is bounded, and together under the job's.
 
-    A job that reaches its own `timeout-minutes` ends cancelled, not failed,
-    and the `ci` gate reads a cancelled job as red, so a step that hangs on the
+    A job that reaches its own `timeout-minutes` ends canceled, not failed,
+    and the `ci` gate reads a canceled job as red, so a step that hangs on the
     release in development reddens the merge whatever its `continue-on-error`
     says. A step bounded below the job fails where it hangs, which the leg
     forgives. The bounds together stay under the job's, so whichever step hangs
@@ -330,7 +330,7 @@ def test_a_hang_on_the_forgiven_leg_is_a_forgiven_failure() -> None:
             else:
                 pytest.fail(
                     f"the python job's step {name!r} runs on {' '.join(leg.values())} "
-                    "with no bound: a hang there is cancelled with the job, and red"
+                    "with no bound: a hang there is canceled with the job, and red"
                 )
         assert sum(bounds.values()) < limit, (
             f"the steps of {' '.join(leg.values())} are bounded at {bounds}, "

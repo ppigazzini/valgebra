@@ -12,7 +12,7 @@ order.
 
 It assumes valgebra is [installed](00-installation.md). For the meaning of each
 form you meet here, the [schema language](03-schema-language.md) is the reference;
-this page is the path, not the catalogue.
+this page is the path, not the catalog.
 
 ## 1. Your first validator
 

@@ -276,7 +276,7 @@ def test_a_readable_measurement_carries_both_halves() -> None:
     )
     assert measured.irefs == 252026154
     assert measured.checksum == 134000
-    # The binding workload prints a bare number rather than a labelled one.
+    # The binding workload prints a bare number rather than a labeled one.
     bare = gate.parse_measurement("150000\n", "==1== I   refs:      1,000")
     assert bare.checksum == 150000
 

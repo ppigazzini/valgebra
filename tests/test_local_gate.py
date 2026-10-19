@@ -399,7 +399,7 @@ def test_the_gate_runs_in_a_shallow_clone_with_no_tags(tmp_path: Path) -> None:
     assert tags.stdout.strip() == "", "the clone carries tags a checkout would not"
 
 
-def test_a_forced_colour_variable_does_not_reach_a_step(
+def test_a_forced_color_variable_does_not_reach_a_step(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A step sees the environment a runner has, not the caller's terminal.

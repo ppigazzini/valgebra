@@ -139,7 +139,7 @@ TYPING_ALIASES_BARE = (
 )
 
 
-class Parametrised(Generic[T]):
+class Parametrized(Generic[T]):
     """A user generic, whose parameter is erased before a value exists."""
 
 
@@ -181,7 +181,7 @@ class Pair(NamedTuple):
     b: str
 
 
-class Colour(enum.Enum):
+class Color(enum.Enum):
     """An enum, whose members are the values it admits."""
 
     RED = "red"
@@ -275,7 +275,7 @@ FORMS: dict[str, Reads | Refuses] = {
     # A `Point` whose field was never set: outside the dataclass, inside the class.
     "`instance_of(C)`": Reads(instance_of(Point), object.__new__(Point), "a"),
     "`NamedTuple`": Reads(Pair, Pair(1, "a"), (1, 2)),
-    "`Enum`": Reads(Colour, Colour.RED, "red"),
+    "`Enum`": Reads(Color, Color.RED, "red"),
     "`Protocol`": Reads(HasX, Point(1), "a"),
     "`NewType`": Reads(UserId, 1, "a"),
     # An instance whose field holds the wrong type: the field is never read.
@@ -313,7 +313,7 @@ FORMS: dict[str, Reads | Refuses] = {
         needs=(3, 11),
     ),
     "a user `Generic[T]` parametrization": Refuses(
-        lambda: Parametrised[int], "unsupported typing form with origin"
+        lambda: Parametrized[int], "unsupported typing form with origin"
     ),
     PROTOCOL_BASES: Refuses(lambda: Protocol, "the base a protocol is declared from"),
     "a `Protocol` member declared `ClassVar` or `Final`": Refuses(

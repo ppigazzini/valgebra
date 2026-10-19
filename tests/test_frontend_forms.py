@@ -57,7 +57,7 @@ class YieldsItself(at.GroupedMetadata):
         yield self
 
 
-def test_a_parametrised_legacy_tuple_is_the_tuple_it_names() -> None:
+def test_a_parametrized_legacy_tuple_is_the_tuple_it_names() -> None:
     """`typing.Tuple[()]` is the empty tuple, as `tuple[()]` is.
 
     The two spell one type, and the legacy one carries an empty argument list
@@ -413,7 +413,7 @@ def test_a_form_with_no_set_is_refused_rather_than_read_as_a_literal(
     assert len(str(caught.value)) > 40, caught.value
 
 
-def test_a_generic_parametrisation_of_a_user_class_is_refused() -> None:
+def test_a_generic_parametrization_of_a_user_class_is_refused() -> None:
     """A user `Generic[T]` erases its parameter, so the argument narrows nothing.
 
     Built as the class alone it would admit every instance whatever its

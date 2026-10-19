@@ -795,7 +795,7 @@ fn a_class_with_its_own_instance_test_is_asked_once_through_a_union() {
 fn a_signal_a_later_branch_raises_stops_an_earlier_record_report() {
     use pyo3::exceptions::PyKeyboardInterrupt;
     Python::attach(|py| {
-        let module = union_classes(py, c"union_signalled");
+        let module = union_classes(py, c"union_signaled");
         let pool = vec![
             module
                 .getattr("interrupts")

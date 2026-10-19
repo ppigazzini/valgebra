@@ -933,7 +933,7 @@ construction leaves standing, for the same reason.
 
 `∅ ⊆ B` for every `B`, and `A ⊆ U` for every `A`. Both are decided by asking
 whether a schema **denotes** the empty set — not by matching the `Nothing` or
-`Anything` atom — so a record with an uninhabited required field, a cancelling
+`Anything` atom — so a record with an uninhabited required field, a canceling
 intersection, and a union that covers the universe are all recognized.
 
 **Stating a bound over the atom is a rule that confirms itself**, and that is

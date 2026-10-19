@@ -1782,7 +1782,7 @@ PLANTS = (
             "use crate::descr::lower::{",
             "use crate::simplify::simplify;\nuse crate::descr::lower::{",
         ),
-        trips=("test_the_deciders_never_normalise_a_query",),
+        trips=("test_the_deciders_never_normalize_a_query",),
     ),
     Plant(
         # A cargo alias standing for a task crate.
@@ -2044,7 +2044,7 @@ PLANTS = (
                 for n in range(5)
             ),
         ),
-        trips=("test_the_ledger_is_serialisable_for_a_report",),
+        trips=("test_the_ledger_is_serializable_for_a_report",),
     ),
     Plant(
         # A fixpoint schema added to the universe, bringing a disagreement the
@@ -3554,7 +3554,7 @@ PLANTS = (
             "use crate::verdict::Verdict;",
             "use crate::decision::Verdict;",
         ),
-        trips=("test_the_definition_imports_nothing_from_the_optimisation",),
+        trips=("test_the_definition_imports_nothing_from_the_optimization",),
     ),
     Plant(
         # The term reaching into a decider for an answer type.
@@ -3566,7 +3566,7 @@ PLANTS = (
             "use std::sync::Arc;\n",
             "use std::sync::Arc;\n\nuse crate::decision::Verdict;\n",
         ),
-        trips=("test_the_term_imports_nothing_from_the_optimisation",),
+        trips=("test_the_term_imports_nothing_from_the_optimization",),
     ),
     Plant(
         # The frame reaching back into the decider it sits below.
@@ -3591,7 +3591,7 @@ PLANTS = (
             "use crate::descr::lower::{",
             "use crate::lowering::{",
         ),
-        trips=("test_the_optimisation_may_still_depend_on_the_definition",),
+        trips=("test_the_optimization_may_still_depend_on_the_definition",),
     ),
     Plant(
         # The walk asking the procedure whether one schema holds another.
@@ -3855,7 +3855,7 @@ PLANTS = (
         trips=("test_the_checkout_is_found_in_one_place",),
     ),
     Plant(
-        # `--strict-markers` dropped, so a misspelt marker is accepted and the
+        # `--strict-markers` dropped, so a misspelled marker is accepted and the
         # boundary drawn by it moves silently.
         "tests/test_suite_partition.py",
         ("pyproject.toml",),
@@ -3909,7 +3909,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "CONTRIBUTING.md",
-            " --skip a_chain_of_a_hundred_thousand_states_minimises` |",
+            " --skip a_chain_of_a_hundred_thousand_states_minimizes` |",
             "` |",
         ),
         trips=("test_the_documented_rerun_command_carries_the_same_skips",),
@@ -4153,7 +4153,7 @@ PLANTS = (
         ),
     ),
     Plant(
-        # A row for a name `typing` carries on no release, as a misspelt row is:
+        # A row for a name `typing` carries on no release, as a misspelled row is:
         # read by no source, so only the interpreter can say it is wrong, and
         # every release says so rather than the one a removal date would name.
         "tests/test_floor_names.py",
@@ -4529,7 +4529,7 @@ PLANTS = (
     ),
     Plant(
         # A step of the forgiven leg left unbounded: a hang there runs the job
-        # out, and a job its own limit stops is cancelled, which is red.
+        # out, and a job its own limit stops is canceled, which is red.
         "tests/test_python_lifecycle.py",
         (".github/workflows/ci.yml",),
         lambda tree: _edit(
@@ -5163,7 +5163,7 @@ UNPLANTED: dict[str, str] = {
         "test_local_gate.py",
         OWN_PLANT,
         "test_a_clone_that_does_not_land_is_could_not_run",
-        "test_a_forced_colour_variable_does_not_reach_a_step",
+        "test_a_forced_color_variable_does_not_reach_a_step",
         "test_a_step_only_a_runner_can_fill_in_is_unaccounted",
         "test_an_env_expression_the_workflow_defines_is_filled_in",
     ),

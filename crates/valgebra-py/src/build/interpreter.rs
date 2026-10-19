@@ -197,11 +197,11 @@ fn each_spelling_builds_its_own_schema() {
             ("object", "anything"),
             ("typing.Any", "Any"),
             // A bare container class is its kind, which is what the typing
-            // spec assigns an unparameterised generic.
+            // spec assigns an unparameterized generic.
             ("list", "list[anything]"),
             ("set", "set[anything]"),
             ("frozenset", "frozenset[anything]"),
-            // The parameterised forms, one per container arm.
+            // The parameterized forms, one per container arm.
             ("list[int]", "list[int]"),
             ("set[str]", "set[str]"),
             ("frozenset[bytes]", "frozenset[bytes]"),
@@ -1987,7 +1987,7 @@ fn a_class_is_a_dataclass_where_is_dataclass_says_so() {
               Pair = typing.NamedTuple('Pair', [('a', int), ('b', str)])\n\
               class Keys(typing.TypedDict):\n\
               \x20   a: int\n\
-              class Colour(enum.Enum):\n\
+              class Color(enum.Enum):\n\
               \x20   RED = 1\n\
               builtin = int\n",
             c"is_dataclass_corpus.py",
@@ -2007,7 +2007,7 @@ fn a_class_is_a_dataclass_where_is_dataclass_says_so() {
             "Bare",
             "Pair",
             "Keys",
-            "Colour",
+            "Color",
             "builtin",
         ] {
             let ty = module.getattr(class).expect("the class is defined");

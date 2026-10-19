@@ -149,10 +149,10 @@ def test_a_class_is_metadata_rather_than_a_predicate() -> None:
 def test_an_enum_class_is_metadata_rather_than_a_predicate() -> None:
     """The same, for the marker shape a reader is most likely to reach for."""
 
-    class Colour(enum.Enum):
+    class Color(enum.Enum):
         RED = "red"
 
-    schema = Validator(Annotated[int, Colour])
+    schema = Validator(Annotated[int, Color])
     assert repr(schema) == "int"
     assert schema.is_valid(1)
 
@@ -216,7 +216,7 @@ def test_a_unit_is_metadata_that_narrows_nothing() -> None:
     ignoring it would admit them, so it is still refused.
     """
 
-    class NonNegativeMetres(at.GroupedMetadata):
+    class NonNegativeMeters(at.GroupedMetadata):
         def __iter__(self) -> typing.Iterator[object]:
             yield at.Unit("m")
             yield at.Ge(0)
@@ -227,10 +227,10 @@ def test_a_unit_is_metadata_that_narrows_nothing() -> None:
         Annotated[float, Annotated[float, at.Unit("m")]],
     ):
         assert Validator(annotation) == Validator(float)
-    metres = Validator(Annotated[float, NonNegativeMetres()])
-    assert metres == Validator(Annotated[float, at.Ge(0)])
-    assert metres.is_valid(1.5)
-    assert not metres.is_valid(-1.5)
+    meters = Validator(Annotated[float, NonNegativeMeters()])
+    assert meters == Validator(Annotated[float, at.Ge(0)])
+    assert meters.is_valid(1.5)
+    assert not meters.is_valid(-1.5)
     with pytest.raises(NotImplementedError, match="does not check"):
         Validator(Annotated[str, at.Timezone(None)])
 

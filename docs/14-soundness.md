@@ -113,7 +113,7 @@ model](08-error-model.md#unions-report-the-closest-branch)).
 
 Every fold a constructor applies is a law of the Boolean algebra of sets —
 flattening associative nodes, dropping identities and duplicates, letting the
-top absorb a join and the bottom a meet, ordering the members, cancelling `¬¬X`
+top absorb a join and the bottom a meet, ordering the members, canceling `¬¬X`
 to `X`, and folding `X ∩ ¬X` to `⊥` and `X ∪ ¬X` to `⊤` where `X` holds no class
 and no predicate — each of which holds of the *sets*, so none can change `⟦S⟧`.
 Absorption of a member another contains is not among them: that fold needs a
@@ -231,9 +231,9 @@ The soundness is relative to a small, explicit trust base:
   matched, and a dict lookup hands back only the value, so every record would
   be scanned rather than asked for its keys. The case is pinned as a
   known-unsound test.
-- **An enumeration's instances are made through it.** `Colour` is decided to be
+- **An enumeration's instances are made through it.** `Color` is decided to be
   the union of its members because the class makes no other instance.
-  `object.__new__(Colour)` makes one past it: the walk admits it to `Colour`,
+  `object.__new__(Color)` makes one past it: the walk admits it to `Color`,
   and no member's literal holds it, so it is outside the relation that equates
   the two. A refutation standing on such a value is sound as it is: an
   `IntEnum` is not below `Ge(1)` although both its members are, because

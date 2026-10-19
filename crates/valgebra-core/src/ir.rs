@@ -330,7 +330,7 @@ pub enum Openness {
 /// reference.
 ///
 /// A `recursive` definition is contractive only when every occurrence of its
-/// self-reference sits under one. The condition travelled as a positional
+/// self-reference sits under one. The condition traveled as a positional
 /// `bool`, where `occurs_unguarded(id, false)` reads as neither "no guard yet"
 /// nor "not guarded" without checking the callee.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

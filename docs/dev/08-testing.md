@@ -357,7 +357,7 @@ no valgebra loaded, hang sixteen runs in twenty on 3.15, four in ten on 3.15t,
 and none on 3.14, which has no lazy imports. The whole binary on four cores
 hangs in none of twenty, because a test that imports `annotationlib` reaches the
 interpreter before the pair meet. The matrix step's five-minute `timeout` is
-what turns a hang there into a failing step rather than a cancelled job.
+what turns a hang there into a failing step rather than a canceled job.
 
 A hung binary is this defect when one thread's native stack holds
 `_PyImport_LoadLazyImportTstate` and another's `_imp_acquire_lock` or a module

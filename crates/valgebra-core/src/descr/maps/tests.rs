@@ -23,7 +23,7 @@ fn at(label: &str, value: i64) -> Entry<i64> {
 }
 
 // THEORY: the-key-partition-is-by-kind
-/// A wanted key is witnessed by a *labelled* key too, not by the part's
+/// A wanted key is witnessed by a *labeled* key too, not by the part's
 /// default alone.
 ///
 /// `S` asks for some key of a part, outside its exclusion set, to map into
@@ -36,7 +36,7 @@ fn at(label: &str, value: i64) -> Entry<i64> {
 /// scan wrong: taking labels of the wrong part, and taking labels the
 /// exclusion set names.
 #[test]
-fn a_labelled_key_witnesses_a_wanted_key() {
+fn a_labeled_key_witnesses_a_wanted_key() {
     let words = |labels: Vec<(Label, IntSet, bool)>| {
         MapLattice::record(labels, [(Some(Kind::Str), IntSet::just(1))]).expect("a small record")
     };
@@ -668,7 +668,7 @@ fn a_negation_the_bound_cannot_expand_answers_unknown() {
 // Every other component of the descriptor holds these as a property; this one
 // held its operations to hand-written pairs alone, which is the shape that
 // confirms the cases somebody thought of. A dict is the kind with the most
-// structure -- labelled keys, a default per part of the key partition, and the
+// structure -- labeled keys, a default per part of the key partition, and the
 // wanted-key set (13) adds -- so it is the one where a law is most likely to
 // part from the form, and the `emptiness` arm the sweep accepts as equivalent
 // is inside it.
@@ -720,8 +720,8 @@ const DICTS: Algebra<MapLattice<IntSet>> = Algebra {
 /// One drawn entry: a key of any part the generator's atoms name, and a
 /// value in the range their integer sets separate.
 ///
-/// The labelled keys are the two the atoms name and one they do not; the
-/// unlabelled ones cover the integer part, the boolean part -- whose labels
+/// The labeled keys are the two the atoms name and one they do not; the
+/// unlabeled ones cover the integer part, the boolean part -- whose labels
 /// fold onto the integers' -- and a part no atom constrains.
 fn entry() -> impl Strategy<Value = Entry<i64>> {
     let key = prop_oneof![

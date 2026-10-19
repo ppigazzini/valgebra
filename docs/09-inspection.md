@@ -184,7 +184,7 @@ answer three more questions of them: whether a value arrived that the declaratio
 rejects, whether the declaration is wider than anything observed, and **which arms
 of a union the workload never reached**.
 
-The last has no analogue in a coverage report: a line report says the branch ran,
+The last has no analog in a coverage report: a line report says the branch ran,
 and cannot say which members of `int | str` ever arrived.
 
 ```python

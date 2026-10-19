@@ -6,7 +6,7 @@ the docs state the caveats:
 
 - valgebra checks membership of the object already in hand: no copy, no coercion.
 - jsonschema (``Draft202012Validator.is_valid``) is also a pure check with no
-  coercion, the closest semantic analogue, but it is pure Python.
+  coercion, the closest semantic analog, but it is pure Python.
 - pydantic (``TypeAdapter.validate_python`` in strict mode) validates and
   *constructs*; strict mode disables coercion, but it still builds and returns a
   value, so it does strictly more work than a membership check.
@@ -70,7 +70,7 @@ def make_wide_record(lib: str) -> tuple[object, object]:
     if lib == "valgebra":
         return Validator(fields).is_valid, data
     if lib == "pydantic":
-        # A named, closed record's analogue is a TypedDict, not dict[str, int]
+        # A named, closed record's analog is a TypedDict, not dict[str, int]
         # (which is valgebra's Mapping). Build one with the same fields.
         record = TypedDict("Wide", fields)
         adapter = TypeAdapter(record)

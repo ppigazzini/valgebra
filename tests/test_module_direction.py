@@ -74,7 +74,7 @@ def test_the_descriptor_modules_are_read_at_all() -> None:
 
 
 # THEORY: the-definition-imports-nothing
-def test_the_definition_imports_nothing_from_the_optimisation() -> None:
+def test_the_definition_imports_nothing_from_the_optimization() -> None:
     offenders: list[str] = []
     for source in _descr_sources():
         for number, line in enumerate(
@@ -91,7 +91,7 @@ def test_the_definition_imports_nothing_from_the_optimisation() -> None:
 
 
 # THEORY: the-definition-imports-nothing
-def test_the_term_imports_nothing_from_the_optimisation() -> None:
+def test_the_term_imports_nothing_from_the_optimization() -> None:
     """The constructors apply lattice laws, not decisions.
 
     A law about the term is a law wherever it is read, so it sits below every
@@ -140,7 +140,7 @@ def test_the_frame_is_where_the_definition_can_reach_it() -> None:
 
 
 # THEORY: the-definition-imports-nothing
-def test_the_optimisation_may_still_depend_on_the_definition() -> None:
+def test_the_optimization_may_still_depend_on_the_definition() -> None:
     """The reverse edge is a direction, not a separation.
 
     `decision.rs` asks the descriptor where its own rules decline, so it imports

@@ -54,7 +54,7 @@ are different rules. `gate.py` gives a step the caller's environment, less the
 color a terminal forces and the venv `uv run` names. `perf_gate.py` gives a
 workload the few names it needs, with the hash seed and the allocator fixed,
 since the environment's size moves a count. Either rule applied to the other's case fails a test:
-`test_a_forced_colour_variable_does_not_reach_a_step` needs a caller's variable
+`test_a_forced_color_variable_does_not_reach_a_step` needs a caller's variable
 kept, and `test_a_workload_runs_without_the_callers_environment` needs it
 dropped.
 
@@ -109,7 +109,7 @@ less than it claims while staying green.
 
 **What the clone models, the environment does not.** A step gets the caller's
 environment plus the job's and the step's own `env:`, and the runner's own
-absences are not modelled by that -- so a variable a developer's terminal sets
+absences are not modeled by that -- so a variable a developer's terminal sets
 reaches a step that a lane runs with it unset. One of them gives a false red:
 `FORCE_COLOR` overrides a tool's terminal check, so `uv export` writes escape
 codes into the requirements file it generates, and `pip-audit` refuses the file
@@ -127,10 +127,10 @@ with no environment of its own would find the caller's pytest, which imports
 the caller's package and reports green on the caller's tree.
 
 **The whole list, since any one of these can cost a day.** The table is what a
-lane differs from a local run in, and the `modelled` column is what the gate
+lane differs from a local run in, and the `modeled` column is what the gate
 reproduces; the count is the table's rather than this sentence's:
 
-| difference | modelled | what it costs when it is not |
+| difference | modeled | what it costs when it is not |
 | --- | --- | --- |
 | the clone: one commit, no tags | yes, `shallow_clone` | a ledger reading `git describe` passes here and reddens every job that runs it there |
 | the step's declared `env:` | yes, since the plan carries it | without `RUSTDOCFLAGS=-D warnings`, `cargo doc` cannot fail locally |
@@ -141,7 +141,7 @@ reproduces; the count is the table's rather than this sentence's:
 | the operating system and architecture | no | a macOS or Windows leg fails where Linux does not, and nothing local sees it |
 | the pinned tool versions | no, for the tools `taiki-e/install-action` installs | `ci.yml` installs `cargo-deny`, `cargo-llvm-cov` and `cargo-mutants` at versions it names, and the gate runs whichever is on the caller's `PATH`; a `uvx` step carries its pin in its own command, so the gate runs the lane's version of it |
 | the build of the interpreter, not only its version | no: a rule answers it instead | `sys.stdlib_module_names` is the build's, not the release's -- one 3.12 build lists the Windows-only `_wmi` and a runner's does not, so a table of every name would report a difference between two builds as a moved row. The floor table records the modules this tree imports, which are portable by construction |
-| the machine's own speed | not modelled, and not a gate: every merge-blocking number is an instruction count | an absolute count reads 5--8% apart between two machines on one `rustc` line, which is why a recorded count is read only where there is no base count, inside a band that wide |
+| the machine's own speed | not modeled, and not a gate: every merge-blocking number is an instruction count | an absolute count reads 5--8% apart between two machines on one `rustc` line, which is why a recorded count is read only where there is no base count, inside a band that wide |
 | secrets, tokens and the event payload | no, and the steps that need one are excused by name | the merge base comes from the event, so `--against` runs only in the lane |
 | what a gate **counts**, against what it claims to | no: a scope is a claim in prose, and no check reads it | a coverage floor that counts the instruction gate's own workloads, which no suite runs, reddens over a change that adds no uncovered line of its own; a shape that counts its harness reports the harness |
 
@@ -848,7 +848,7 @@ cargo mutants --package valgebra-core --file <each core file the change touches>
   -j 4 --timeout-multiplier 20 --output sweep \
   -- -- --skip deep_subtype_into_bottom_terminates \
   --skip subtyping_terminates_on_a_distributed_tower \
-  --skip a_chain_of_a_hundred_thousand_states_minimises
+  --skip a_chain_of_a_hundred_thousand_states_minimizes
 python scripts/mutation_gate.py --baseline core --new-only --out sweep/mutants.out
 ```
 
@@ -1011,7 +1011,7 @@ tens of runner-hours of sweeps, fuzzers and deep laws. The input is on unless
 cleared, because the schedule runs `main`'s copy of `ci.yml`, which may predate
 the input on the branch it dispatches, and a dispatch that sets no input is the
 night. The night is a concurrency group of its own, so a dispatch for a reading
-on the same branch neither cancels it nor is cancelled by it.
+on the same branch neither cancels it nor is canceled by it.
 `tests/test_required_jobs.py` runs both dispatches.
 
 **The push jobs run on `main`'s night only where nothing was dispatched.** The
@@ -1025,8 +1025,8 @@ branch, where the scheduled run is the only one.
 `needs:` *and* fails unless each result is `success` rather than merely
 not-failure. The duplicated list is a deliberate second copy.
 
-**A cancelled job is red.** A job that reaches its timeout is reported
-`cancelled` rather than `failure`, and a job nothing waits on is cancelled in
+**A canceled job is red.** A job that reaches its timeout is reported
+`cancelled` rather than `failure`, and a job nothing waits on is canceled in
 silence -- so a ratchet behind a timeout runs nowhere while every lane reads
 green. The aggregate therefore waits on the scheduled
 jobs too, allowing one answer more from them than from the others — `skipped`,
@@ -1157,7 +1157,7 @@ after them merges the slices and ratchets once, since a survivor is a survivor
 of the *sweep* and an entry that survives nothing is known to only when every
 shard has reported. A shard's ceiling (`timeout-minutes` in `ci.yml`) is twice
 the slowest shard's reading, because a job that reaches its ceiling is
-cancelled and a cancelled job is red. The slowest reading is taken over every
+canceled and a canceled job is red. The slowest reading is taken over every
 event that runs the sweep, and the events differ: the night's dispatched run
 and a push to `main` sweep every file a release window touched where a push to
 `github_ci` sweeps one change's, so a push sweep's shard reads slowest on the

@@ -521,20 +521,20 @@ def test_a_read_only_typed_dict_field_is_the_type_it_qualifies() -> None:
 def test_a_bare_container_class_is_its_kind() -> None:
     """`list` and `list[object]` admit the same values, so they are one schema.
 
-    An unparameterised generic names its kind's whole set — what the typing spec
+    An unparameterized generic names its kind's whole set — what the typing spec
     assigns it, and what the membership check performs. Read as an `isinstance`
     atom it would be a different sort of thing from the sequence node beside
     it, and neither spelling decided below the other.
     """
-    for bare, parameterised in (
+    for bare, parameterized in (
         (list, list[object]),
         (tuple, tuple[object, ...]),
         (set, set[object]),
         (frozenset, frozenset[object]),
         (dict, dict[object, object]),
     ):
-        assert Validator(bare) == Validator(parameterised), bare
-        assert Validator(bare).is_equivalent(parameterised), bare
+        assert Validator(bare) == Validator(parameterized), bare
+        assert Validator(bare).is_equivalent(parameterized), bare
 
 
 def test_a_bare_container_class_admits_what_it_did() -> None:
@@ -1029,7 +1029,7 @@ def test_a_stdlib_class_is_the_isinstance_check_it_looks_like(
     assert repr(schema) == declared.__name__
 
 
-def test_a_stdlib_class_is_not_the_kind_it_serialises_as() -> None:
+def test_a_stdlib_class_is_not_the_kind_it_serializes_as() -> None:
     """The relations, where a silent folding would show as a proof.
 
     A `Decimal` is not a `float` and a `Path` is not a `str`, whatever either
@@ -1105,7 +1105,7 @@ class _Point:
 
 
 @dataclasses.dataclass
-class _Labelled(_Point):
+class _Labeled(_Point):
     label: str
     x: bool
 
@@ -1118,10 +1118,10 @@ def test_a_dataclass_reads_the_annotations_of_every_base() -> None:
     reading of its whole `__mro__`: `y` is declared by the base alone, and `x`
     is redeclared, so the derived type is the one checked.
     """
-    labelled = Validator(_Labelled)
-    assert labelled.is_valid(_Labelled(x=True, y=2, label="p"))
-    assert not labelled.is_valid(_Labelled(x=True, y="2", label="p"))  # ty: ignore[invalid-argument-type]
-    assert not labelled.is_valid(_Labelled(x=1, y=2, label="p"))  # ty: ignore[invalid-argument-type]
+    labeled = Validator(_Labeled)
+    assert labeled.is_valid(_Labeled(x=True, y=2, label="p"))
+    assert not labeled.is_valid(_Labeled(x=True, y="2", label="p"))  # ty: ignore[invalid-argument-type]
+    assert not labeled.is_valid(_Labeled(x=1, y=2, label="p"))  # ty: ignore[invalid-argument-type]
 
 
 def test_two_classes_laying_down_slots_of_their_own_share_no_instance() -> None:

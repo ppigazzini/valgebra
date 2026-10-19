@@ -137,7 +137,7 @@ Row = Decides | Declines | Refuses | Opaque
 _T = TypeVar("_T")
 
 
-class _Colour(enum.Enum):
+class _Color(enum.Enum):
     """An enumeration whose members compare by identity, which is the default."""
 
     RED = 1
@@ -172,13 +172,13 @@ ROWS: dict[str, Row] = {
     "Complement and disjointness across kinds.": Decides(
         intersection(list[int], set[int]), nothing, "subset"
     ),
-    "A bare container class and its parameterised form.": Decides(
+    "A bare container class and its parameterized form.": Decides(
         list, list[object], "subset"
     ),
-    "Class and literal inclusion.": Decides(_Colour.RED, _Colour, "subset"),
+    "Class and literal inclusion.": Decides(_Color.RED, _Color, "subset"),
     "Literals against other kinds.": Decides(Literal["a"], complement(int), "subset"),
     "An enumeration against the union of its members": Decides(
-        _Colour, Literal[_Colour.RED, _Colour.GREEN], "subset"
+        _Color, Literal[_Color.RED, _Color.GREEN], "subset"
     ),
     "Divisibility between two moduli": Decides(
         Annotated[int, at.MultipleOf(5000)],

@@ -134,7 +134,7 @@ pub(super) fn build_type_object(
     }
     // A bare container class is its kind: `list` admits every list, which is the
     // set `list[object]` names and the set the typing spec assigns an
-    // unparameterised generic. Read as an `isinstance` atom it would be a
+    // unparameterized generic. Read as an `isinstance` atom it would be a
     // different sort of thing from the sequence node beside it -- in no kind at
     // all -- and neither spelling would be decided below the other. See "What a
     // bare builtin class denotes" in `docs/dev/01-schema-ir.md`.

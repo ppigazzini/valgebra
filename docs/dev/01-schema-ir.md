@@ -225,7 +225,7 @@ subtype rule could disagree over it without any caller seeing.
 `tests/test_closure_ledger.py` holds the derivation the flag fails on.
 
 **Records keyed by a non-string.** Refused. A record's fields are named by
-strings, and arbitrary keys are a different labelling than the record model
+strings, and arbitrary keys are a different labeling than the record model
 assumes.
 
 **Folding `A & ~A` to `nothing`, and `A | ~A` to the top, when `A` carries a
@@ -468,10 +468,10 @@ records in `{a: int} | ~{a: int}` maps both sides to one schema beside its own
 complement: a shape construction promises never survives it, so
 `records_opened` refolds what it rebuilt. The other rewrites neither flatten
 nor fold. Reindexing, resolving a self-reference and renumbering definitions
-relabel a pool slot or a reference, and what a relabelling can move is order:
+relabel a pool slot or a reference, and what a relabeling can move is order:
 a member list, a refinement's constraints and a map's clauses are sets sorted
 by a key that reads the slot, so each is sorted and deduplicated again where it
-is rebuilt. Sorting is all a relabelling needs, because interning is one-to-one
+is rebuilt. Sorting is all a relabeling needs, because interning is one-to-one
 -- a pool holds one slot per constant -- so two members are equal after it
 exactly when they were before, and no complement law gains a pair to fold.
 `a_renumbered_set_is_canonical` in `crates/valgebra-core/src/index_laws.rs`
@@ -745,7 +745,7 @@ other -- `list[object]` is a sequence node in the `List` kind, and an
 `set`, `frozenset` and `dict` to the kind's own top -- `list[anything]`,
 `tuple[anything, ...]`, `set[anything]`, `frozenset[anything]`,
 `dict[anything, anything]` -- which is the set the typing spec assigns an
-unparameterised generic, and the set the walk already checked. The two spellings
+unparameterized generic, and the set the walk already checked. The two spellings
 build one schema and compare as one. `str`, `bytes`, `int`, `float` and `bool`
 are their kinds too; this is the rest of that rule.
 
@@ -833,7 +833,7 @@ closing commutes with absorption and that a second application gives the set
 the first did ([10-theory.md](10-theory.md)).
 
 `ensure` is `validate(x); return x` and is kept for what it reads as, typed as
-the identity it is. That is a judgement about the surface rather than about the
+the identity it is. That is a judgment about the surface rather than about the
 algebra, and it is the only one here.
 
 **And the operator surface stops at `|`.** It is there because Python's own type

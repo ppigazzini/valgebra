@@ -476,7 +476,7 @@ class Fielded:
 class Plain:
     a: int
 
-class Colour(enum.Enum):
+class Color(enum.Enum):
     RED = 1
 
 class Record(TypedDict):
@@ -515,7 +515,7 @@ fn instance_of_reads_the_class_alone() {
         }
         // A tuple subclass carrying no `_fields`, and a `_fields` on a class that
         // is no tuple: neither declares fields, so each is the class step's atom.
-        for name in ["Row", "Fielded", "Plain", "Colour"] {
+        for name in ["Row", "Fielded", "Plain", "Color"] {
             let built = crate::instance_of(&class(name)).expect("a class");
             assert!(matches!(built.schema, Schema::Instance(_)), "{name}");
             assert_eq!(built.schema, declared(&class(name)), "{name}");

@@ -48,7 +48,7 @@ def test_an_enum_literal_meet_is_decided_by_how_the_members_compare() -> None:
     # otherwise, and two distinct objects are then two values -- so the meet is
     # empty. An `IntEnum` says otherwise: its members equal the integers they
     # carry, and two of them may share a value with one, so the rule declines.
-    class Colour(enum.Enum):
+    class Color(enum.Enum):
         RED = 1
         BLUE = 2
 
@@ -56,7 +56,7 @@ def test_an_enum_literal_meet_is_decided_by_how_the_members_compare() -> None:
         LOW = 1
         HIGH = 2
 
-    assert intersection(Literal[Colour.RED], Literal[Colour.BLUE]).is_empty()
+    assert intersection(Literal[Color.RED], Literal[Color.BLUE]).is_empty()
     assert not intersection(Literal[Level.LOW], Literal[Level.HIGH]).is_empty()
 
 
@@ -197,7 +197,7 @@ def test_a_meet_with_a_complement_is_the_bottom() -> None:
     assert intersection(list[int], complement(list[int])) == Validator(nothing)
 
 
-def test_the_cancelling_folds_decline_an_atom_that_is_not_a_set() -> None:
+def test_the_canceling_folds_decline_an_atom_that_is_not_a_set() -> None:
     """The law is about sets, and an atom that answers by running code is not one.
 
     ``A | ~A`` and ``A & ~A`` ask ``A`` twice, and a predicate may answer
@@ -223,7 +223,7 @@ def test_an_enumeration_is_the_union_of_its_members() -> None:
     another.
     """
 
-    class Colour(enum.Enum):
+    class Color(enum.Enum):
         RED = 1
         GREEN = 2
         BLUE = 3
@@ -232,14 +232,14 @@ def test_an_enumeration_is_the_union_of_its_members() -> None:
         LOW = 1
         HIGH = 2
 
-    members = Literal[Colour.RED, Colour.GREEN, Colour.BLUE]
-    assert Validator(Colour).is_equivalent(members)
-    assert Validator(Colour).is_subtype_of(union(members, int))
+    members = Literal[Color.RED, Color.GREEN, Color.BLUE]
+    assert Validator(Color).is_equivalent(members)
+    assert Validator(Color).is_subtype_of(union(members, int))
     # Not every union: a member left out is a value the class still admits.
-    assert not Validator(Colour).is_subtype_of(Literal[Colour.RED, Colour.GREEN])
+    assert not Validator(Color).is_subtype_of(Literal[Color.RED, Color.GREEN])
     # The `IntEnum` stays an atom, in both directions.
     assert not Validator(Level).is_equivalent(Literal[Level.LOW, Level.HIGH])
     # And membership is unchanged: the class is still what the walk checks.
-    assert Validator(Colour).is_valid(Colour.RED)
-    assert not Validator(Colour).is_valid(1)
-    assert repr(Validator(Colour)) == "Colour"
+    assert Validator(Color).is_valid(Color.RED)
+    assert not Validator(Color).is_valid(1)
+    assert repr(Validator(Color)) == "Color"

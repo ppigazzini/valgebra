@@ -634,7 +634,7 @@ denotes what the table says.** Union, intersection and complement stay inside
 each kind's representation -- interval sets with a residue class per step for
 integers, closed intervals of floats with `nan` held apart in a bit of its own, a
 minimal automaton per word kind, a symbolic automaton for sequences, a union of
-lines for sets, labelled fields with a default per key kind for dicts, a class
+lines for sets, labeled fields with a default per key kind for dicts, a class
 lattice for instances -- and the lattice laws hold of each against membership.
 Each top is checked at the value that decides it: the ends of the integer
 carrier, `nan`, the newline, the empty container. **[LOAD-BEARING: each-kind-is-closed]**
@@ -789,7 +789,7 @@ decline, so the one permitted edge is seen to be used. **[OBLIGATION: the-defini
 
 SOURCE: §14.8 "The definition should not import"
 
-HELD-BY: test_the_definition_imports_nothing_from_the_optimisation, test_the_term_imports_nothing_from_the_optimisation, test_the_optimisation_may_still_depend_on_the_definition
+HELD-BY: test_the_definition_imports_nothing_from_the_optimization, test_the_term_imports_nothing_from_the_optimization, test_the_optimization_may_still_depend_on_the_definition
 
 ### Where this tree departs from its sources
 
@@ -870,7 +870,7 @@ HELD-BY: a_decision_leaves_an_assumption_it_did_not_make, a_decision_leaves_the_
 two labels to the partition, so an atom requiring both under distinct values
 holds no dict, and the descriptor reads it that way. **[DEVIATION: the-key-partition-is-by-kind]**
 
-HELD-BY: an_atom_requiring_a_key_and_its_boolean_holds_no_dict, a_want_with_one_viable_witness_requires_that_key, a_labelled_key_witnesses_a_wanted_key
+HELD-BY: an_atom_requiring_a_key_and_its_boolean_holds_no_dict, a_want_with_one_viable_witness_requires_that_key, a_labeled_key_witnesses_a_wanted_key
 
 **The kind partition overlaps at `bool`.** The source's kinds are its three
 constructors, and no value has two of them. Here the basic kind is split eleven

@@ -433,13 +433,13 @@ def test_repr_of_class_and_recursive_forms() -> None:
     # its renderings sort in, whichever class was named first.
 
     @dataclasses.dataclass
-    class Labelled:
+    class Labeled:
         x: int
         y: str
 
     assert (
-        repr(Validator(intersection(Point, Labelled)))
-        == "intersection(instance_of(Labelled), instance_of(Point), "
+        repr(Validator(intersection(Point, Labeled)))
+        == "intersection(instance_of(Labeled), instance_of(Point), "
         "object(x=int), object(x=int, y=str))"
     )
     assert (

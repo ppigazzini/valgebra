@@ -35,7 +35,7 @@ import annotated_types as at
 from valgebra import Validator
 
 
-class Colour(Enum):
+class Color(Enum):
     """An ordinary enumeration: its members compare by identity."""
 
     RED = 1
@@ -108,11 +108,11 @@ def test_a_constant_the_oracle_trusts_is_counted_exactly() -> None:
     """
     assert Validator(Annotated[set[None], at.MinLen(2)]).is_empty() is True
     assert Validator(Annotated[set[None], at.MinLen(1)]).is_empty() is False
-    one_colour = Annotated[set[Literal[Colour.RED]], at.MinLen(2)]
-    assert Validator(one_colour).is_empty() is True
-    two_colours = Annotated[set[Literal[Colour.RED, Colour.GREEN]], at.MinLen(2)]
-    assert Validator(two_colours).is_empty() is False
-    assert Validator(two_colours).is_valid({Colour.RED, Colour.GREEN}) is True
+    one_color = Annotated[set[Literal[Color.RED]], at.MinLen(2)]
+    assert Validator(one_color).is_empty() is True
+    two_colors = Annotated[set[Literal[Color.RED, Color.GREEN]], at.MinLen(2)]
+    assert Validator(two_colors).is_empty() is False
+    assert Validator(two_colors).is_valid({Color.RED, Color.GREEN}) is True
 
 
 def test_the_two_booleans_bound_a_set_of_them() -> None:

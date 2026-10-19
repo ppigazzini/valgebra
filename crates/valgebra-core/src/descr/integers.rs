@@ -102,7 +102,7 @@ impl IntSet {
         debug_assert!(modulus >= 1, "a modulus is at least one");
         debug_assert!(
             modulus <= MAX_PERIOD,
-            "a period of {modulus} materialises that many classes, past the \
+            "a period of {modulus} materializes that many classes, past the \
              {MAX_PERIOD} this representation holds"
         );
         IntSet {

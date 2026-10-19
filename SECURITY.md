@@ -70,7 +70,7 @@ got, and what verdict the denotation requires.
 
 This is a solo, pre-release project, so timelines are best-effort:
 
-- Acknowledgement within **7 days**.
+- Acknowledgment within **7 days**.
 - An initial assessment (in scope, severity) within **30 days**.
 - Coordinated disclosure: a fix and an advisory published together, crediting the
   reporter unless anonymity is requested. A patched `0.0.x` release ships to PyPI

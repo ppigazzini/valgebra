@@ -54,7 +54,7 @@ work. Read the ratios with that in mind:
 - **valgebra** checks membership of the object already in hand: no copy, no
   coercion. `is_valid` returns a bool through the membership fast path.
 - **jsonschema** (`Draft202012Validator.is_valid`) is also a pure check with no
-  coercion — the closest semantic analogue — but it is pure Python.
+  coercion — the closest semantic analog — but it is pure Python.
 - **pydantic** (`TypeAdapter.validate_python`, strict mode) validates *and
   constructs* a value. Strict mode disables coercion, but it still builds and
   returns output, so it does strictly more work than a membership check. It is
@@ -230,7 +230,7 @@ their keep elsewhere, not by regressing the core.
 Each cell is the **median of five independent runs** of the comparison
 benchmark, each run reporting pytest-benchmark's own median over its rounds. The
 `+/-` is the half-range across the five runs, not a standard deviation: it states
-the observed spread rather than modelling one. With the release wheel installed
+the observed spread rather than modeling one. With the release wheel installed
 as above:
 
 ```bash

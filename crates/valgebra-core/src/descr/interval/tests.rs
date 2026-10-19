@@ -168,8 +168,8 @@ fn a_residue_class_at_the_bottom_of_the_range_keeps_its_members() {
     for stride in [1i64, 2, 3, 5] {
         for offset in 0..stride {
             let lifted = span.preimage(offset, stride);
-            let centre = low / i128::from(stride);
-            for wide in (centre - 4)..=(centre + 4) {
+            let center = low / i128::from(stride);
+            for wide in (center - 4)..=(center + 4) {
                 let Ok(k) = i64::try_from(wide) else {
                     continue;
                 };

@@ -361,7 +361,7 @@ pub fn check_relations(a: &Schema, b: &Schema, defs: &[Schema]) {
     // the syntactic rule: `Nothing` is hardcoded on the left, so a schema that
     // denotes the empty set without being spelled `Nothing` is never the
     // subject, however long the fuzzer runs. Both sides are generated below, so
-    // a cancelling intersection and an uninhabited record are reached -- and
+    // a canceling intersection and an uninhabited record are reached -- and
     // they are common in this generator's space, not rare.
     if a.is_empty_under(defs) {
         assert!(

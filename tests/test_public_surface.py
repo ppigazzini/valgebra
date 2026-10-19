@@ -158,7 +158,7 @@ def test_the_extension_says_whether_it_was_built_for_speed() -> None:
 
     Not part of the package's public surface -- it is not in `__all__` and a
     caller has no use for it -- but it is in the stub, and the comparison gate
-    reads it to refuse a timing run against an unoptimised build. A rename would
+    reads it to refuse a timing run against an unoptimized build. A rename would
     make that gate measure a debug extension and report the numbers as a
     release's.
     """

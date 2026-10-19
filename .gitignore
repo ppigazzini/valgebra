@@ -4,7 +4,7 @@ __DEV/
 # Rust build output
 /target/
 
-# Python packaging and build artefacts. Anchored, because an unanchored rule
+# Python packaging and build artifacts. Anchored, because an unanchored rule
 # matches a directory of that name at any depth: `build/` quietly ignored
 # `crates/valgebra-py/src/build/`, the frontend's test module, and the tree
 # compiled here and nowhere else.

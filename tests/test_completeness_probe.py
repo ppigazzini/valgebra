@@ -617,7 +617,7 @@ def test_every_ledger_entry_carries_a_reason() -> None:
         assert is_a_reason(why), f"{relation}: an accepted gap with no reason"
 
 
-def test_the_ledger_is_serialisable_for_a_report() -> None:
+def test_the_ledger_is_serializable_for_a_report() -> None:
     # The set is small enough to read in a review; this keeps it that way and
     # keeps the keys plain strings so a diff on it is legible.
     assert len(ACCEPTED) <= 12, (

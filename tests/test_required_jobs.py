@@ -168,7 +168,7 @@ def test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may() -> None:
     the push jobs -- so the gate has to accept that answer from them, and from
     nothing else, since `skipped` from a job the run does run is a job that did
     not run. What every run refuses is a failure and a **cancellation**: a job
-    that reaches its timeout is reported cancelled rather than failed, and one
+    that reaches its timeout is reported canceled rather than failed, and one
     nothing waits on takes a whole scheduled run red without a red job to point
     at.
 

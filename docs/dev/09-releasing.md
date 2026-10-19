@@ -196,7 +196,7 @@ ask it which build it is -- a framework path holds only some releases. The
 wheel job's ceiling (`timeout-minutes` in `release.yml`) is twice its slowest
 row's reading, rounded up, which is the macOS x86_64 build: eight interpreters,
 each built twice for its profile, on the slowest runner the matrix uses. A row
-that reaches the ceiling is cancelled, and the release waits on every row. The
+that reaches the ceiling is canceled, and the release waits on every row. The
 Windows arm64 smoke runs
 on the arm64 interpreters `setup-python` installs, because uv's own build of a
 release candidate can be x64 alone. The maturin a release builds with is the one `uv.lock`
@@ -253,8 +253,8 @@ not the job's own check, and a red check marks the commit with a red cross, so a
 failure is forgiven at the step that fails and reads as that step's annotation
 in the run. Each step it runs is bounded, and the bounds together fit inside the
 job's limit, so a hang fails the step, which the leg forgives, rather than
-running the job out: a job its own limit stops is cancelled, and `ci` reads a
-cancelled job as red. The ledgers evaluate each flag on every leg, as the runner
+running the job out: a job its own limit stops is canceled, and `ci` reads a
+canceled job as red. The ledgers evaluate each flag on every leg, as the runner
 does, rather than looking for the version in its text: `!= '3.16'` spells the
 version and forgives every other leg. No other job forgives itself, and no other
 step but the fuzz lane's corpus minimization, whose failure reports nothing

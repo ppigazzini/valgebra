@@ -95,7 +95,7 @@ metadata are called and refuse every value, and `typing.final` and
 `build_refine` meets the refined base with every validator the metadata holds,
 grouped or not, so `Annotated[T, v]` is `intersection(T, v)`. It is this
 library's own statement of a set, written to narrow the base; ignored as
-unrecognised metadata, it would widen the schema to `T` in silence.
+unrecognized metadata, it would widen the schema to `T` in silence.
 
 The rest are read in this order:
 
@@ -252,7 +252,7 @@ symmetry:
     `NewType("N", "int")` would be the literal `'int'`.
 11. Anything else — a literal of itself, except a forward reference, an
     `InitVar`, `TypedDict` or `NamedTuple` itself, a typing construct, and a
-    callable that is no class, each refused by name (`build_unrecognised` in
+    callable that is no class, each refused by name (`build_unrecognized` in
     `build.rs`).
 
 Moving a branch earlier is a behavior change, not a refactor. `Any` above the
@@ -289,7 +289,7 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    is its own node.
 2. **A bare container class** is its kind: `list` admits every list, which is
    the set `list[object]` names and the set the typing spec assigns an
-   unparameterised generic. Read as an `isinstance` atom it would be a
+   unparameterized generic. Read as an `isinstance` atom it would be a
    different sort of thing from the sequence node beside it, and neither
    spelling would be decided below the other.
 3. **`object`** is the lattice top, and a bare `Union`/`Optional` — a class on

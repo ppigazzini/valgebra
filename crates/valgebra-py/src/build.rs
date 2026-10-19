@@ -1138,7 +1138,7 @@ fn read_annotation(
         return build_dict(dict, lits, defs);
     }
 
-    build_unrecognised(obj, lits, defs)
+    build_unrecognized(obj, lits, defs)
 }
 
 /// The literal an exact `bool`, `int`, `float`, `str` or `bytes` is, or `None`
@@ -1187,7 +1187,7 @@ fn compose(py: Python<'_>, inner: &Validator, lits: &mut Pool, defs: &mut Vec<Sc
 
 /// An object [`build_schema`] has no other reading for: a literal of itself,
 /// unless it is a typing form that a literal would misread.
-fn build_unrecognised(
+fn build_unrecognized(
     obj: &Bound<'_, PyAny>,
     lits: &mut Pool,
     defs: &mut Vec<Schema>,

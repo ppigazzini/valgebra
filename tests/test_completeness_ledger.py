@@ -83,7 +83,7 @@ _LINK = recursive(lambda t: {"next": union(t, None)})
 _NESTED = recursive(lambda t: union(None, {"a": t}))
 
 
-class _Colour(enum.Enum):
+class _Color(enum.Enum):
     """An enumeration whose members compare by identity, which is the default."""
 
     RED = 1
@@ -423,11 +423,11 @@ _DECIDED = [
     # fail one of those stay atoms, and `test_enums.py` holds each to a value
     # that would refute the union reading.
     pytest.param(
-        "equivalent", _Colour, Literal[_Colour.RED, _Colour.GREEN], id="Colour==members"
+        "equivalent", _Color, Literal[_Color.RED, _Color.GREEN], id="Color==members"
     ),
     pytest.param(
         "empty",
-        intersection(Literal[_Colour.RED], Literal[_Colour.GREEN]),
+        intersection(Literal[_Color.RED], Literal[_Color.GREEN]),
         None,
         id="empty:RED&GREEN",
     ),

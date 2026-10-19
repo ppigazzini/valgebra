@@ -42,7 +42,7 @@ jobs:
     # is twice its slowest shard's: the macOS x86_64 row builds eight
     # interpreters with a profile each, and read 34.7 to 50.9 minutes over six
     # release runs on the macOS 15 x86_64 image, the four-core Intel VM size
-    # macos-26-intel runs on. A row that reaches the ceiling is cancelled with
+    # macos-26-intel runs on. A row that reaches the ceiling is canceled with
     # the release waiting on it.
     timeout-minutes: 105
     strategy:

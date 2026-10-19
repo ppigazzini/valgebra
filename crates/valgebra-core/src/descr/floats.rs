@@ -73,7 +73,7 @@ impl Span {
     /// reads as crossed and `holds` reads as holding zero, which is not a
     /// canonicity cost but a wrong answer.
     fn new(lo: f64, lo_held: bool, hi: f64, hi_held: bool) -> Span {
-        let (lo, hi) = (normalise(lo), normalise(hi));
+        let (lo, hi) = (normalize(lo), normalize(hi));
         debug_assert!(
             !lo.is_nan() && !hi.is_nan(),
             "an endpoint is never `nan`: the one value outside the order is held \
@@ -134,12 +134,12 @@ impl Span {
 
 /// The least float above `value`, or `None` above the largest.
 fn successor(value: f64) -> Option<f64> {
-    (value != f64::INFINITY).then(|| normalise(value.next_up()))
+    (value != f64::INFINITY).then(|| normalize(value.next_up()))
 }
 
 /// The greatest float below `value`, or `None` below the least.
 fn predecessor(value: f64) -> Option<f64> {
-    (value != f64::NEG_INFINITY).then(|| normalise(value.next_down()))
+    (value != f64::NEG_INFINITY).then(|| normalize(value.next_down()))
 }
 
 /// `-0.0` read as the value it is equal to.
@@ -147,7 +147,7 @@ fn predecessor(value: f64) -> Option<f64> {
 /// The two zeros are one value under `==`, so only one of them may reach the
 /// representation: otherwise a set holding `0.0` would answer differently about
 /// `-0.0`, which no float can tell apart from it.
-fn normalise(value: f64) -> f64 {
+fn normalize(value: f64) -> f64 {
     if value == 0.0 { 0.0 } else { value }
 }
 
@@ -288,7 +288,7 @@ impl FloatSet {
         if value.is_nan() {
             return self.nan;
         }
-        let value = normalise(value);
+        let value = normalize(value);
         self.spans.iter().any(|span| span.holds(value))
     }
 

@@ -9,7 +9,7 @@
 //! a byte.
 //!
 //! An alphabet of value sets cannot be enumerated, so the transitions carry
-//! **guards**: each edge is labelled by a set, and the edges leaving a state
+//! **guards**: each edge is labeled by a set, and the edges leaving a state
 //! partition the universe -- pairwise disjoint, and covering. That is what keeps
 //! the machine deterministic and complete without listing an alphabet, and it is
 //! what makes a complement a flip of the accepting states rather than a
@@ -699,10 +699,10 @@ impl<G: Guard> SymbolicDfa<G> {
     /// order. Without that, two states could send the same values to the same
     /// places through differently-split guards and read as different.
     fn merge_equivalent(self) -> SymbolicDfa<G> {
-        let normalised = self.merge_targets().sorted();
-        let count = normalised.state_count();
-        let block = refine(count, normalised.seed(), |state, block| {
-            normalised.signature(state, block)
+        let normalized = self.merge_targets().sorted();
+        let count = normalized.state_count();
+        let block = refine(count, normalized.seed(), |state, block| {
+            normalized.signature(state, block)
         });
         let blocks = block.iter().copied().max().map_or(1, |m| m as usize + 1);
         let mut edges: Vec<Vec<Edge<G>>> = vec![Vec::new(); blocks];
@@ -712,10 +712,10 @@ impl<G: Guard> SymbolicDfa<G> {
                 continue;
             };
             if let Some(flag) = accepting.get_mut(id as usize) {
-                *flag = normalised.accepts(u32::try_from(state).unwrap_or(0));
+                *flag = normalized.accepts(u32::try_from(state).unwrap_or(0));
             }
             if let Some(slot) = edges.get_mut(id as usize) {
-                *slot = normalised
+                *slot = normalized
                     .outgoing(u32::try_from(state).unwrap_or(0))
                     .iter()
                     .map(|edge| Edge {

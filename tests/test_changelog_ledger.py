@@ -11,7 +11,7 @@ mean a caller can see the change, and they are what a version number is read
 off. Scoping by *path* is wrong: the descriptor lives in the core crate and
 flipping twenty-five relations is as visible as anything the bindings do.
 
-A `perf` or `refactor` commit that a caller can see is a mislabelled commit, and
+A `perf` or `refactor` commit that a caller can see is a mislabeled commit, and
 this ledger makes that visible rather than papering over it: relabel it, or the
 change it carries goes unrolled.
 

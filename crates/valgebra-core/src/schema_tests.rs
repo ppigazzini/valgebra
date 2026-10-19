@@ -956,7 +956,7 @@ fn opening_a_record_that_claims_a_region_leaves_one_clause() {
 /// Opening the records in `{a: int} | ~{a: int}` maps both sides to one
 /// schema beside its own complement -- a shape `union` folds away, and one a
 /// rule downstream is entitled never to meet. The descent refolds for that
-/// reason; reindexing does not, because a relabelling that changed the shape
+/// reason; reindexing does not, because a relabeling that changed the shape
 /// would not be one.
 #[test]
 fn with_records_open_refolds_a_pair_it_creates() {

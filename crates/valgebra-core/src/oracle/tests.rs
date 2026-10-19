@@ -130,7 +130,7 @@ fn a_reference_is_not_a_set_the_fold_may_cancel() {
         // Nested, so a reference reached through a constructor refuses too.
         let nested = Schema::set(reference.clone());
         assert!(!denotes_a_set_within(&nested, &NoLeafRelations, &[]));
-        // And the constructors decline the two cancelling laws for it.
+        // And the constructors decline the two canceling laws for it.
         let not = |s: Schema| Schema::Complement(Arc::new(s));
         assert_ne!(
             Schema::union([reference.clone(), not(reference.clone())]),

@@ -711,7 +711,7 @@ class was refused.
   `Annotated[float, at.IsFinite[float]]` admitted infinity and refused zero,
   `Annotated[str, list[int]]` refused the empty string, and a bare
   `at.IsFinite` raised for every value. A typing form is metadata this frontend
-  does not recognise, and is ignored; an `Annotated` alias carrying a marker
+  does not recognize, and is ignored; an `Annotated` alias carrying a marker
   this frontend reads is refused, naming the spelling that was meant.
 
 ## [0.0.16] - 2026-10-04
@@ -843,7 +843,7 @@ first failure.
   whichever implementation built the class.
 - **A validator in `Annotated` metadata narrows the schema.** `Annotated[int,
   v]` for a compiled validator `v` was read as `int`: the validator was taken
-  for metadata nothing recognises and ignored, so a class field written to
+  for metadata nothing recognizes and ignored, so a class field written to
   refuse what `v` refuses admitted every `int`. It is the meet of the refined
   base and `v`, the set `intersection(int, v)` builds, whether the validator is
   written on its own, beside other markers or inside a grouped one; a static
@@ -875,7 +875,7 @@ first failure.
   3.14. Only an exact list is copied.
 - **A marker class is refused with the spelling that was meant.**
   `Annotated[int, at.Ge]`, a marker written without its parentheses, was
-  ignored as unrecognised metadata, so the schema was `int` and admitted every
+  ignored as unrecognized metadata, so the schema was `int` and admitted every
   value the bound was written to exclude. A class whose instances would be read
   or refused as a constraint -- one from `annotated_types`, or one carrying a
   name a constraint is read through, such as `ge` or `pattern` -- is refused
@@ -903,7 +903,7 @@ first failure.
   as a set of reals, so `Annotated[float, Gt(1.0)]` and `Annotated[float,
   Ge(math.nextafter(1.0, math.inf))]` were proved to differ though they admit
   the same floats, and a pair of bounds with no float between them was read as
-  inhabited. An open bound is held as the closed one at its neighbouring float,
+  inhabited. An open bound is held as the closed one at its neighboring float,
   and both relations are decided exactly.
 - **A step dividing another is not read across kinds of number.**
   `Annotated[int, MultipleOf(6.0)]` was proved below `Annotated[int,
@@ -1390,7 +1390,7 @@ set the representation named wrongly, so each was a relation answered wrongly.
   arm to the literal fallback and compiled to a schema admitting one frozen set
   holding the `int` type object, and no value a caller has. A `frozenset` is not
   a `set`, so the arm that refuses the one never saw the other. Both are now
-  refused, each naming the parametrised form to write instead.
+  refused, each naming the parametrized form to write instead.
 
 - **A `NamedTuple` prints as its name, as every other class does.**
   `repr(Validator(Point))` gave `intersection(tuple[int, str], Point)` where a
@@ -1441,7 +1441,7 @@ set the representation named wrongly, so each was a relation answered wrongly.
   how far each descended. An undeclared **integer** key is named in the path as
   an integer, so `err.path[-1]` indexes back down to the entry -- one reading of
   a record gave the string of its digits and the other the integer, for the same
-  value. A predicate's raised error is summarised like every other value a
+  value. A predicate's raised error is summarized like every other value a
   message carries rather than copied whole. An undeclared key's value reads as a
   Python repr, as every other value does. And a `__repr__` raising a fatal
   signal while a message is built propagates it rather than folding it into
@@ -1451,7 +1451,7 @@ set the representation named wrongly, so each was a relation answered wrongly.
 - **An annotation builds the schema it names, or is refused.** Four forms were
   read as a different schema, with no message saying so. `typing.Tuple[()]` is
   the empty tuple and built every tuple, admitting `(1,)`, because a bare legacy
-  alias and an empty parametrisation are told apart by whether a type-argument
+  alias and an empty parametrization are told apart by whether a type-argument
   list is present rather than by whether it is empty. A marker standing for the
   constraints it yields -- the grouping protocol `annotated_types` documents,
   which `Interval` and `Len` are written against -- was read by attribute alone,
@@ -1991,10 +1991,10 @@ each is written out below.
   one built through the constructors; a shape built another way — a recursive
   definition, a respelling, constants equal but not identical — reaches the
   procedure and is not decided. `repr`, `==`, and the code a violation reports
-  follow the cancelled form: `complement(complement(int))` reports `int_type`
+  follow the canceled form: `complement(complement(int))` reports `int_type`
   where it reported `unexpected_match`, and `intersection(int, complement(int))`
   reports `no_match` naming `nothing`. A predicate and a class with an
-  `isinstance` hook are exempt from the two cancelling folds: the law is about
+  `isinstance` hook are exempt from the two canceling folds: the law is about
   sets, and an atom that answers by running code is not one.
 
 - A meet of two record schemas is decided empty when a key one side requires
@@ -2184,7 +2184,7 @@ each is written out below.
   all in the other, so neither spelling was decided below the other and
   `repr(Validator(list))` said `list` where the schema said otherwise. `list`,
   `tuple`, `set`, `frozenset` and `dict` name their kind's whole set, which is
-  what the typing spec assigns an unparameterised generic and what the membership
+  what the typing spec assigns an unparameterized generic and what the membership
   check always performed; the two spellings are one schema and compare equal.
   `str`, `bytes`, `int` and `float` always read this way. `repr` follows the
   schema, so `Validator(list)` renders `list[anything]`.
@@ -2327,7 +2327,7 @@ each is written out below.
   not export it, so the wheel built for PyPy failed to *load* — an
   `undefined symbol` at import, before any schema was built. The class is read
   from the `types` module instead, which is where every other special form this
-  frontend recognises is already read from, and which PyPy carries.
+  frontend recognizes is already read from, and which PyPy carries.
 
   Only the PyPy wheels were affected; every CPython wheel imported and behaved
   the same throughout. A CI job now builds the extension for PyPy and imports
@@ -2479,7 +2479,7 @@ each is written out below.
   so a `bool` arrives as the integer it is.
 
 - Explaining a failure over a large value no longer costs the size of the value.
-  Every violation summarised the value it was about by building that value's
+  Every violation summarized the value it was about by building that value's
   whole `repr` and keeping eighty characters of it, so a 20,000-deep list was
   rendered in full once per level of the walk: twelve seconds for a single
   error, against twenty microseconds for `is_valid` on the same value. A
@@ -2705,7 +2705,7 @@ changes.
   its rule rather than a heuristic.
 
 - A **class** in `Annotated` metadata is ignored, as the typing spec asks of
-  metadata a consumer does not recognise. A marker carries its values on an
+  metadata a consumer does not recognize. A marker carries its values on an
   instance and a class carries the descriptors that read them: `Ge(0)` holds
   `ge = 0`, while `Ge` holds the slot descriptor, and reading that as a bound
   built a comparison no value is ordered against. A class is also callable, and
@@ -2841,7 +2841,7 @@ Membership costs less on a refined schema, and no decision or message changes.
   0.0.5, and validation, `is_empty`, the error model, `repr`, and every compiled
   form are unchanged.
 
-  Nothing to do on upgrade. The version exists so the reorganisation ships under
+  Nothing to do on upgrade. The version exists so the reorganization ships under
   a release of its own rather than inside one whose entries describe something
   else.
 
@@ -2857,13 +2857,13 @@ Membership costs less on a refined schema, and no decision or message changes.
 ### Fixed
 
 - `is_subtype_of` decides a **closed record against a catch-all mapping**:
-  `{"x": int}` is recognised below `dict[str, int]`. The closed record had a
+  `{"x": int}` is recognized below `dict[str, int]`. The closed record had a
   dispatch branch of its own that read a field the supertype covers through a
   catch-all as undecided, though the general keyed-map rule beside it already
   decided exactly that. One rule serves every keyed-map shape.
 
 - `is_subtype_of` decides **inclusion in a complement**: `A` is below `~B` when
-  the two share no value, so `list[int]` is recognised below `~int` and
+  the two share no value, so `list[int]` is recognized below `~int` and
   `dict[str, int]` below `~str`. There was no rule for a complement on the right
   at all, so the relation was decided only when the left side was itself a
   complement.
@@ -2875,8 +2875,8 @@ Membership costs less on a refined schema, and no decision or message changes.
 - `is_subtype_of` and `is_equivalent` decide the lattice bounds by **emptiness**
   rather than by the shape of the atom. A schema that denotes the empty set
   without being spelled `nothing` — a record with an uninhabited required field,
-  a cancelling intersection — is recognised as a subtype of every schema, and one
-  that covers the universe without being spelled `anything` is recognised as a
+  a canceling intersection — is recognized as a subtype of every schema, and one
+  that covers the universe without being spelled `anything` is recognized as a
   supertype of every schema. Both previously answered `False`, which was sound
   but incomplete.
 

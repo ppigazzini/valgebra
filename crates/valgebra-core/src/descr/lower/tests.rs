@@ -1319,7 +1319,7 @@ fn a_length_bound_costs_three_units_an_element() {
 /// nearest one instead moves the boundary by one representable step, and
 /// reading the wrong side of it turns a lower bound into an upper one.
 #[test]
-fn a_float_bound_over_an_inexact_integer_cuts_at_the_right_neighbour() {
+fn a_float_bound_over_an_inexact_integer_cuts_at_the_right_neighbor() {
     // Two integers with no float of their own, one either side of the rounding:
     // the nearest float is *below* the first and *above* the second, so between
     // them they reach both directions the neighbor is picked in. Which side the

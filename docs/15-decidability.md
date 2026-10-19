@@ -67,8 +67,8 @@ answers `"undecided"`.
   structural kinds, not only the scalars. `Any` is the top, spelled, so the rule
   reaches it like any other set: `intersection(Any, complement(Any))` is decided
   empty.
-- **A bare container class and its parameterised form.** `list` and
-  `list[object]` are one schema: an unparameterised generic names its kind's
+- **A bare container class and its parameterized form.** `list` and
+  `list[object]` are one schema: an unparameterized generic names its kind's
   whole set, which is what the typing spec assigns it. `tuple`, `set`,
   `frozenset` and `dict` read the same way, as `str` and `int` do.
 - **Class and literal inclusion.** A class is a subtype of its base *classes*,
@@ -108,8 +108,8 @@ answers `"undecided"`.
   `object.__new__` steps past
   ([the trust base](14-soundness.md#what-this-argument-assumes)): an `Enum`
   that is not a `Flag`, carrying at least one member, whose members compare by
-  identity. Then `Colour` and
-  `Literal[Colour.RED, Colour.GREEN]` are one set, decided in both directions;
+  identity. Then `Color` and
+  `Literal[Color.RED, Color.GREEN]` are one set, decided in both directions;
   the class is still what `repr` prints and what a failure names. The three
   exclusions are each a value that would stand against the union:
 

@@ -352,15 +352,15 @@ def test_no_build_targets_the_stable_abi() -> None:
 # --- the deciders read the normal form construction builds ----------------------
 
 
-def test_the_deciders_never_normalise_a_query() -> None:
+def test_the_deciders_never_normalize_a_query() -> None:
     deciders = sorted(
         path
         for path in _production()
         if path.startswith((CORE + "decision", CORE + "descr/"))
     )
     assert len(deciders) > 10, f"the deciders read as {deciders}"
-    normalising = [path for path in deciders if re.search(r"\bsimplify\b", _code(path))]
-    assert not normalising, f"a decider names a normalizing pass: {normalising}"
+    normalizing = [path for path in deciders if re.search(r"\bsimplify\b", _code(path))]
+    assert not normalizing, f"a decider names a normalizing pass: {normalizing}"
 
 
 # --- the gates are scripts ------------------------------------------------------

@@ -156,7 +156,7 @@ FETCH_TRIES = 3
 #: How a job says it runs on a schedule and not on a push, read from the job's
 #: own condition. The merge gate waits on the nightly jobs so that one reaching
 #: its timeout takes the scheduled run red -- a job nothing waits on is
-#: cancelled in silence -- and a push skips them. This gate stands in for what a
+#: canceled in silence -- and a push skips them. This gate stands in for what a
 #: push runs, so it stands in for none of those.
 SCHEDULED_ONLY = re.compile(r"github\.event_name == 'schedule'")
 
@@ -198,7 +198,7 @@ def steps(spec: dict, job: str) -> Iterator[tuple[str, str, dict[str, str]]]:
     A step that denies warnings does so through `RUSTDOCFLAGS`, so a gate that
     ran the command without it ran a command that *cannot fail*: `cargo doc`
     reports a broken intra-doc link as a warning and exits zero. That is a step
-    modelled here and green here while red on the runner, which is the one
+    modeled here and green here while red on the runner, which is the one
     outcome this script exists to prevent.
 
     A value only a runner can answer is dropped, as the job's own environment
@@ -698,7 +698,7 @@ def fetched(plan: list[Step], cwd: Path) -> bool:
 
 #: Variables whose only purpose is to override a tool's "am I a terminal?"
 #: check. A runner sets none of them.
-FORCED_COLOUR = ("FORCE_COLOR", "CLICOLOR_FORCE")
+FORCED_COLOR = ("FORCE_COLOR", "CLICOLOR_FORCE")
 
 #: The variable `uv run` sets for the process it starts, naming the caller's
 #: environment. In the clone it points `uv pip` at the caller's venv while
@@ -737,7 +737,7 @@ def runner_environment() -> dict[str, str]:
     caller's package, reporting on the caller's tree from inside the clone.
     Without the entry such a step fails on a missing command instead.
     """
-    dropped = FORCED_COLOUR + CALLERS_VENV
+    dropped = FORCED_COLOR + CALLERS_VENV
     environment = {
         key: value for key, value in os.environ.items() if key not in dropped
     }

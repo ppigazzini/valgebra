@@ -163,10 +163,10 @@ def _claims() -> tuple[Claim, ...]:
             assert found, f"a HELD-BY line before any claim: {paragraph!r}"
             last = found[-1]
             assert not last.names, (
-                f"two holding lines for one claim: {_summarise(last.text)}"
+                f"two holding lines for one claim: {_summarize(last.text)}"
             )
             assert last.owed is None, (
-                f"two holding lines for one claim: {_summarise(last.text)}"
+                f"two holding lines for one claim: {_summarize(last.text)}"
             )
             found[-1] = last._replace(names=names)
             continue
@@ -174,17 +174,17 @@ def _claims() -> tuple[Claim, ...]:
             assert found, f"an OWED line before any claim: {paragraph!r}"
             last = found[-1]
             assert not last.names, (
-                f"two holding lines for one claim: {_summarise(last.text)}"
+                f"two holding lines for one claim: {_summarize(last.text)}"
             )
             assert last.owed is None, (
-                f"two holding lines for one claim: {_summarise(last.text)}"
+                f"two holding lines for one claim: {_summarize(last.text)}"
             )
             found[-1] = last._replace(owed=" ".join(paragraph.split()))
             continue
         tags = _TAG.findall(paragraph)
         if tags:
             assert len(tags) == 1, (
-                f"a paragraph carrying two tags: {_summarise(paragraph)}"
+                f"a paragraph carrying two tags: {_summarize(paragraph)}"
             )
             kind, identifier = tags[0]
             found.append(Claim(paragraph, kind, identifier, [], None))
@@ -192,7 +192,7 @@ def _claims() -> tuple[Claim, ...]:
         bare = [tag for tag in (*CLAIMS, *CONTEXT) if f"[{tag}]" in paragraph]
         assert not bare, (
             "a claim tagged without an id, which no test can name: "
-            + _summarise(paragraph)
+            + _summarize(paragraph)
         )
     return tuple(found)
 
@@ -300,7 +300,7 @@ def _homes_of(names: set[str]) -> set[str]:
     return homes
 
 
-def _summarise(paragraph: str) -> str:
+def _summarize(paragraph: str) -> str:
     """Give the first sentence of a claim, for a failure a reader can place."""
     return " ".join(paragraph.split())[:110]
 
@@ -338,7 +338,7 @@ def test_every_claim_names_a_test_held_or_owed() -> None:
     test would. A claim with neither is a sentence.
     """
     unheld = [
-        _summarise(claim.text)
+        _summarize(claim.text)
         for claim in _must_be_held(_claims())
         if not claim.names and claim.owed is None
     ]
@@ -355,7 +355,7 @@ def test_an_owed_claim_names_the_test_and_the_reason() -> None:
     a tracked page, for dangling on every reader but its author -- is not one.
     """
     malformed = [
-        f"{_summarise(claim.text)}\n  {claim.owed}"
+        f"{_summarize(claim.text)}\n  {claim.owed}"
         for claim in _claims()
         if claim.owed is not None and not _OWED_FORM.match(claim.owed)
     ]
@@ -372,7 +372,7 @@ def test_what_is_owed_only_shrinks() -> None:
     A claim that lands its test lowers `RECORDED_OWED` in the same commit; a
     claim added with an `OWED:` line has to raise it, in a diff a reviewer sees.
     """
-    owed = [_summarise(claim.text) for claim in _claims() if claim.owed is not None]
+    owed = [_summarize(claim.text) for claim in _claims() if claim.owed is not None]
     assert len(owed) <= RECORDED_OWED, (
         f"{len(owed)} claims are owed, up from the recorded {RECORDED_OWED}:\n"
         + "\n".join(owed)
@@ -395,7 +395,7 @@ def test_an_owed_test_does_not_already_exist() -> None:
     """A debt paid is a `HELD-BY:` line, not an `OWED:` one left standing."""
     defined = _defined_names()
     paid = [
-        f"{_summarise(text)}\n  {name}"
+        f"{_summarize(text)}\n  {name}"
         for text, name in _owed_names()
         if name in defined
     ]
@@ -408,13 +408,13 @@ def test_an_owed_test_does_not_already_exist() -> None:
 @pytest.mark.parametrize(
     ("claim", "names"),
     [(c.text, c.names) for c in _held_at_collection()],
-    ids=[_summarise(c.text)[:40] for c in _held_at_collection()],
+    ids=[_summarize(c.text)[:40] for c in _held_at_collection()],
 )
 def test_every_named_test_exists(claim: str, names: list[str]) -> None:
     """A name that resolves to no test is a claim with no evidence left."""
     defined = _defined_names()
     missing = [name for name in names if _name_of(name) not in defined]
-    assert not missing, f"{_summarise(claim)}\nnames no test: {missing}"
+    assert not missing, f"{_summarize(claim)}\nnames no test: {missing}"
 
 
 def test_every_named_test_addresses_one_definition() -> None:
@@ -439,7 +439,7 @@ def test_every_named_test_addresses_one_definition() -> None:
             if len(homes) == 1:
                 continue
             where = ", ".join(sorted(homes)) if homes else "nothing"
-            ambiguous.append(f"{_summarise(claim.text)[:60]}\n    {entry} -> {where}")
+            ambiguous.append(f"{_summarize(claim.text)[:60]}\n    {entry} -> {where}")
     assert not ambiguous, (
         "HELD-BY entries that address more than one test, or none:\n"
         + "\n".join(f"  {row}" for row in ambiguous)
@@ -476,7 +476,7 @@ def test_the_names_are_test_functions_rather_than_helpers() -> None:
     for claim in _held():
         for entry in claim.names:
             name = _name_of(entry)
-            assert name in runnable, f"{_summarise(claim.text)}\n{name!r} is not a test"
+            assert name in runnable, f"{_summarize(claim.text)}\n{name!r} is not a test"
 
 
 def test_a_claim_is_held_by_more_than_its_own_restatement() -> None:

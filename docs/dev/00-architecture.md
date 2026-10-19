@@ -223,7 +223,7 @@ implements. [02-decision.md](02-decision.md) owns the detail and
 
 A change that breaks one of these is a defect, not a trade-off.
 
-- **One walk.** Deciding and explaining are one `member` function parameterised
+- **One walk.** Deciding and explaining are one `member` function parameterized
   by the walk's mode. Where a reading has a reader per mode, a test rather than
   the construction holds the pair to one verdict ([04-walk.md](04-walk.md)).
 - **One boundary crossing.** Tree walks, key lookups and bound checks run in the
@@ -305,7 +305,7 @@ times a plain release build's, so a depth bound is set from the profile-guided
 wheel's frames against 1 MiB, the least stack any thread CPython creates has,
 and `tests/test_adversarial_bounds.py` runs the deepest walks and relations on a
 thread of that size, which the release smoke runs on every wheel it loads. A
-plain or unoptimised build fits another figure and is a build nothing ships; a
+plain or unoptimized build fits another figure and is a build nothing ships; a
 thread a host starts smaller can overflow before the bound refuses, which
 `docs/10-limits.md` tells a caller.
 
@@ -427,7 +427,7 @@ deciders read a schema already in the constructors' normal form and rebuild none
 per query: a construction happens once, a query many times. No figure for the
 per-query cost is recorded, and the holder refuses a normalizing pass, named
 `simplify`, in the deciders' production files. Held by
-`test_the_deciders_never_normalise_a_query` in `tests/test_refusals_ledger.py`,
+`test_the_deciders_never_normalize_a_query` in `tests/test_refusals_ledger.py`,
 and `test_eq_is_the_normal_form_and_not_the_set` in `tests/test_operators.py`.
 
 **A streaming JSON check.** [04-walk.md](04-walk.md) refuses it: a stream saves

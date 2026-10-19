@@ -70,8 +70,8 @@ UNLOADABLE = {
 
 def _artifact(build: dict[str, object]) -> str:
     """Spell the artifact name the upload step composes for a build row."""
-    flavour = build.get("variant") or build.get("manylinux") or "native"
-    return f"wheels-{build['runner']}-{build['target']}-{flavour}"
+    flavor = build.get("variant") or build.get("manylinux") or "native"
+    return f"wheels-{build['runner']}-{build['target']}-{flavor}"
 
 
 def test_the_matrices_were_read() -> None:

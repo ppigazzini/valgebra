@@ -6,7 +6,7 @@ when an accept looks wrong.
 
 ## One walk, two input paths, three modes
 
-There is **one** `member` function, parameterised by mode rather than a fast one
+There is **one** `member` function, parameterized by mode rather than a fast one
 and an explaining one side by side. Two walks drift, and the defect that follows
 is an answer that depends on which of them ran. Below it, a reading that would
 cost one mode what the other needs has a reader per mode -- a list of scalars

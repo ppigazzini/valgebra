@@ -45,7 +45,7 @@ concurrency:
   # scheduled nightly soak (both resolve github.ref to refs/heads/main) and cancel
   # it mid-run. A push to `github_ci` cancels the run of the commit it replaces.
   # A dispatched night is keyed apart from other dispatches on its branch, so a
-  # dispatch for a reading neither cancels the night nor is cancelled by it.
+  # dispatch for a reading neither cancels the night nor is canceled by it.
   group: >-
     ${{ github.workflow }}-${{ github.ref }}-${{
     inputs.nightly && 'nightly' || github.event_name }}
@@ -522,8 +522,8 @@ jobs:
       # Each step the forgiven leg runs is bounded, at least twice its slowest
       # reading over 286 legs of thirty pushes (0.2, 1.5 and 5.1 minutes), so a
       # hang fails the step, which the leg forgives, rather than reaching the
-      # job's thirty minutes: a job killed by its own limit is cancelled, and
-      # `ci` reads a cancelled job as red. The bounds sum to 24 with the
+      # job's thirty minutes: a job killed by its own limit is canceled, and
+      # `ci` reads a canceled job as red. The bounds sum to 24 with the
       # corpora's five, which leaves the setup steps their time.
       # `tests/test_python_lifecycle.py` holds both halves.
       - name: Install dev dependencies
@@ -562,7 +562,7 @@ jobs:
       # matrix's macOS and Windows legs exist for the shipped extension.
       #
       # Bounded, because an embedded interpreter can *hang* rather than fail,
-      # and a job killed by its own thirty-minute limit is **cancelled** rather
+      # and a job killed by its own thirty-minute limit is **canceled** rather
       # than failed, which the aggregate gate reads as red without saying why.
       # With a bound, a hang is a failing step in five minutes.
       - name: The binding's interpreter corpora
@@ -1289,7 +1289,7 @@ jobs:
     # `main`'s tip and which can hold nearly every core file, reads 108
     # minutes a shard. So the ceiling is 220, twice the slowest -- the rule
     # `docs/dev/07-tooling-ci.md` states for a sharded sweep, because a job
-    # that reaches its ceiling is cancelled and a cancelled job is red -- read
+    # that reaches its ceiling is canceled and a canceled job is red -- read
     # on the run that sweeps the most rather than on the one that comes most
     # often. The failure mode is a red lane rather than a slow one, and a
     # sweep that has to be re-sharded after every large commit is not a gate.
@@ -1409,7 +1409,7 @@ jobs:
             --output core-diff-mutants \
             -- -- --skip deep_subtype_into_bottom_terminates \
             --skip subtyping_terminates_on_a_distributed_tower \
-            --skip a_chain_of_a_hundred_thousand_states_minimises
+            --skip a_chain_of_a_hundred_thousand_states_minimizes
           status=$?
           set -e
           # A change confined to excluded files generates nothing; that is a clean
@@ -2038,7 +2038,7 @@ jobs:
     #
     # Sharded, as the diff sweep beside it is. The whole core's mutants, at
     # fifteen to twenty seconds each, are more than one job's two-hour timeout
-    # holds -- and a job that times out is cancelled, so the ratchet after it
+    # holds -- and a job that times out is canceled, so the ratchet after it
     # never runs and the sweep reports nowhere. Each shard reports its own
     # slice and uploads it; the job after merges them and ratchets once.
     needs: nightly-dispatch
@@ -2047,7 +2047,7 @@ jobs:
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
     runs-on: ubuntu-26.04
-    # A cancelled job is red, and a job that runs out of time is cancelled --
+    # A canceled job is red, and a job that runs out of time is canceled --
     # so the ceiling has to clear the slowest shard rather than sit near it,
     # and what clears it is the shard COUNT rather than the ceiling. The sweep
     # is one fixed pile of work cut into pieces: the pile is the core's mutants
@@ -2136,7 +2136,7 @@ jobs:
             --shard "${{ matrix.shard }}/48" --sharding round-robin \
             -- -- --skip deep_subtype_into_bottom_terminates \
             --skip subtyping_terminates_on_a_distributed_tower \
-            --skip a_chain_of_a_hundred_thousand_states_minimises
+            --skip a_chain_of_a_hundred_thousand_states_minimizes
           status=$?
           set -e
 
@@ -2749,7 +2749,7 @@ jobs:
       # dispatch input asks for -- are read the same way with one value more
       # allowed: a push skips them, and `skipped` is the answer that says so.
       # Everything else is refused, **cancellation included** -- a job that
-      # reaches its timeout is reported cancelled rather than failed, so a
+      # reaches its timeout is reported canceled rather than failed, so a
       # cancellation nothing waits on leaves a red nightly reading green.
       #
       # On a night handed to the development branch the push jobs run there

@@ -678,7 +678,7 @@ impl Predecessors {
 ///
 /// A block's members sit side by side in `members`, its marked ones first, so
 /// a mark is a swap and a cut is a boundary moved: the work is in the states
-/// marked and the states relabelled, never in the size of a block they leave.
+/// marked and the states relabeled, never in the size of a block they leave.
 struct Partition {
     /// The states, each block's members side by side.
     members: Vec<u32>,

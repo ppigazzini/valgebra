@@ -629,7 +629,7 @@ impl Schema {
             // `{a: int} | ~{a: int}` maps both sides to one schema beside its own
             // complement, and a rule downstream is entitled to assume no such
             // shape exists. [`map_children`] itself stays raw -- reindexing uses
-            // it to relabel pool slots, and a relabelling that changed the shape
+            // it to relabel pool slots, and a relabeling that changed the shape
             // would not be one.
             _ => self
                 .mapped_children(&|s| s.records_opened(open))

@@ -2203,7 +2203,7 @@ proptest! {
     /// else already asserted, and asserting only those is a rule confirming
     /// itself: a schema that denotes the empty set without being spelled
     /// `Nothing` is never the subject. This generator produces such schemas
-    /// constantly -- a cancelling intersection is two leaves away.
+    /// constantly -- a canceling intersection is two leaves away.
     ///
     /// This is a COMPLETENESS assertion, which the procedure does not make
     /// in general; it is assertable here because emptiness is decided on

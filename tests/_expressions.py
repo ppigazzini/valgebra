@@ -36,7 +36,7 @@ def spelled_in_python(expression: str) -> str:
 #: The expression language's named literals, which Python reads as names.
 LITERALS = {"true": True, "false": False, "null": None}
 
-#: The status functions, as they answer on a run nobody cancelled.
+#: The status functions, as they answer on a run nobody canceled.
 STATUS = {"always": True, "cancelled": False}
 
 
@@ -67,7 +67,7 @@ def _leaf(node: ast.expr, context: dict, expression: str) -> object:
 
 
 def evaluate(expression: str, context: dict) -> object:
-    """Evaluate a workflow expression as the runner does, on a run not cancelled.
+    """Evaluate a workflow expression as the runner does, on a run not canceled.
 
     A property nothing set reads as the empty string, which is what an output a
     step never wrote reads as, and a skipped job's outputs. A form this does not

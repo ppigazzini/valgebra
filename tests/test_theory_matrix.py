@@ -209,7 +209,7 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
         [0.0, float(TWO_53), float(TWO_53 + 2), -math.inf, NAN],
     ),
     (
-        "a bound between two neighbours admits no float",
+        "a bound between two neighbors admits no float",
         Annotated[float, at.Ge(TWO_53 + 1), at.Le(TWO_53 + 1)],
         nothing,
         "subset",
