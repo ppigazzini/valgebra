@@ -211,9 +211,19 @@ what to do instead.
   `filter`, `time`, and `date` clash with Python builtins; the public API
   must not reuse them.
 
+- **Write American English, names included.** `behavior`, `normalize`,
+  `color`, `analyze`, `labeled`, `canceled`: in prose, comments, messages,
+  identifiers and file names, as Rust's standard library states for its own
+  (RFC 1574) and CPython, pydantic, mypy, ruff and ty write theirs. Rename a
+  British name with every citation of it in the change that finds it; what the
+  rename costs the push sweep is reported, never a reason to keep it. The one
+  spelling kept is a name another system owns: GitHub Actions' job status
+  `cancelled`. `scripts/docs_lint.py` refuses a British word anywhere in a
+  tracked file, a name read a word at a time.
+
 - **Lead every example with the typing-annotation form.** Show a valgebra
   combinator only for what annotations cannot express. Examples run as written
-  with full imports, or are labelled planned.
+  with full imports, or are labeled planned.
 
 
 ## Commits

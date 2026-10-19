@@ -48,11 +48,11 @@ claims:
   a comment or a Python docstring of the sources ``COMMENTED_SOURCES`` names,
   or in a baseline's comment field fails. The list is narrow and the rule is
   not: a reader applies the rest of it.
-* **A British spelling.** A form of ``BRITISH`` in the same prose fails,
-  outside a code span: the ``-our``, ``-ise``, ``-yse``, ``-tre`` and ``-ence``
-  forms the tree has written, and their families. A name keeps its own spelling,
-  so a code span is not read, and nor is the changelog past its first released
-  heading, which records a release as it was published.
+* **A British spelling.** A word of ``BRITISH`` anywhere in a tracked text
+  file, or in its path, fails: prose, code, a string, a name. A name is read a
+  word at a time, so ``build_unrecognised`` and ``NonNegativeMetres`` each
+  fail. GitHub's own status, spelled ``cancelled``, passes where the code names
+  it: called, quoted, or in an alternation.
 
 The rest hold a specific list to the tree in **both** directions, because a
 hand-written index satisfies the direction it was written for and misses the
@@ -515,50 +515,84 @@ def check_history(text: str) -> list[str]:
     return problems
 
 
-#: The British forms the tree has written, by family: `-our`, `-ise` with its
-#: inflections and nouns, `-yse`, `-tre` and `-ence`, and `artefact`. Each form
-#: is one codespell's British-to-American dictionary lists, or a member of a
-#: family it lists. A doubled consonant before a suffix stays out: American
-#: dictionaries give both spellings, and GitHub names a job's status with two.
+#: A British word, by family: `-our`, `-ise` with its inflections and nouns,
+#: `-yse`, `-re`, `-ence`, `-ogue`, `-ement`, a doubled `l` before a suffix, and
+#: a few words of their own. Each form is one codespell's British-to-American
+#: dictionary lists, or a member of a family it lists. Matched against one whole
+#: word, after any prefix: `unrecognised` and `relabelled` are words of it.
 BRITISH = re.compile(
-    r"\b(?:(?:behavio|colo|favo|flavo|hono|humo|labo|neighbo|rumo)ur\w*"
+    r"[a-z]*(?:"
+    r"(?:behavio|colo|endeavo|favo|flavo|harbo|hono|humo|labo|neighbo|rumo"
+    r"|vapo)ur(?:s|ed|ing|er|ers|al|ally|able|ably|ite|ites|ful|less|hood)?"
     r"|(?:amorti|authori|canonicali|capitali|categori|characteri|customi"
-    r"|deseriali|emphasi|finali|formali|generali|initiali|lineari|locali"
-    r"|materiali|maximi|memoi|minimi|moderni|normali|optimi|organi|parametri"
-    r"|prioriti|reali|recogni|saniti|seriali|speciali|stabili|standardi"
-    r"|summari|symboli|synthesi|tokeni|utili|vectori|visuali)"
+    r"|emphasi|finali|formali|generali|initiali|lineari|locali|materiali|maximi"
+    r"|memoi|minimi|moderni|normali|optimi|organi|parameteri|parametri"
+    r"|prioriti|rationali|reali|recogni|saniti|seriali|speciali|stabili"
+    r"|standardi|summari|symboli|synthesi|tokeni|utili|vectori|visuali)"
     r"s(?:e|es|ed|er|ers|ing|ation|ations|able)"
-    r"|(?:analy|cataly|paraly)s(?:e|ed|ing)"
-    r"|centre[sd]?|(?:licen|defen|offen)ces?|artefacts?)\b",
+    r"|(?:analy|cataly|paraly)s(?:e|ed|er|ers|ing)"
+    r"|(?:cent|fib|lit|met|theat)re[sd]?"
+    r"|(?:defen|licen|offen|preten)ces?"
+    r"|(?:analog|catalog)ue[sd]?"
+    r"|(?:acknowledg|judg)ements?"
+    r"|(?:cancel|channel|dial|fuel|label|level|marshal|model|signal|total"
+    r"|travel|tunnel)l(?:ed|ing|er|ers)"
+    r"|artefacts?|whilst|amongst|programmes?|grey|learnt|spelt|fulfils?"
+    r"|fulfilment)",
     re.IGNORECASE,
 )
-#: An inline code span, which spells a name: a name keeps its own spelling.
-CODE_SPAN = re.compile(r"(`+)[^`]*?\1")
-#: The changelog's first released heading, past which it is a published record.
-RELEASED = re.compile(r"^## \[\d", re.MULTILINE)
+#: One word of prose, or one word of a name: `build_unrecognised` is two, and
+#: `NonNegativeMetres` three.
+WORD = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])")
+#: GitHub Actions' own status, which it spells with two `l`s. Called, quoted or
+#: in an alternation, the word is that name rather than the English verb.
+GITHUB_STATUS = re.compile(r"cancelled(?=\()|(?<=[`'\"|])cancelled(?=[`'\"|])")
+#: The files that spell the words to forbid them: this script and its test.
+SPELLING_EXEMPT = frozenset({"scripts/docs_lint.py", "tests/test_docs_lint.py"})
 
 
-def check_spelling(text: str) -> list[str]:
-    """Refuse a British spelling in prose, outside the names it quotes.
-
-    The names the prose explains are American -- `unicodedata.normalize`,
-    pytest's `parametrize`, the typing spec -- and one spelling keeps a word the
-    same on both sides of a backtick. A code span keeps its line breaks, so a
-    problem names the line a reader opens.
-    """
-    read = CODE_SPAN.sub(lambda span: "\n" * span.group(0).count("\n"), text)
+def british_words(line: str) -> list[str]:
+    """Give each British word of a line, a name read a word at a time."""
     return [
-        f"line {number}: spells {found.group(0)!r} the British way; write the "
-        "American form, or quote a name as code"
-        for number, line in enumerate(read.splitlines(), start=1)
-        for found in BRITISH.finditer(line)
+        found.group(0)
+        for found in WORD.finditer(line)
+        if BRITISH.fullmatch(found.group(0))
+        and not GITHUB_STATUS.match(line, found.start())
     ]
 
 
-def before_the_releases(text: str) -> str:
-    """Cut the changelog at its first released heading."""
-    found = RELEASED.search(text)
-    return text[: found.start()] if found else text
+def check_spelling(text: str) -> list[str]:
+    """Refuse a British spelling anywhere in a file: prose, code or a name.
+
+    `AGENTS.md` states the rule this holds.
+    """
+    return [
+        f"line {number}: spells {word!r} the British way; write the American form"
+        for number, line in enumerate(text.splitlines(), start=1)
+        for word in british_words(line)
+    ]
+
+
+def check_tree_spelling() -> list[str]:
+    """Read every tracked text file whole, and its path, for a British word.
+
+    A spelling is a property of every word the tree writes -- a page, a comment,
+    a message, a name -- so no part of a file is skipped.
+    """
+    failures: list[str] = []
+    for path in tracked_files():
+        relative = path.relative_to(ROOT).as_posix()
+        if relative in SPELLING_EXEMPT:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue  # a binary file spells nothing a reader reads
+        failures += [
+            f"{relative}: the path spells {word!r} the British way"
+            for word in british_words(relative)
+        ] + [f"{relative}: {problem}" for problem in check_spelling(text)]
+    return failures
 
 
 def check_fences(text: str) -> list[str]:
@@ -1299,9 +1333,6 @@ def main(argv: list[str]) -> int:
                 else check_pinned_numbers(text, numbers) + check_comparison_claims(text)
             )
             + ([] if rel.as_posix() in HISTORY_EXEMPT else check_history(text))
-            + check_spelling(
-                before_the_releases(text) if path.name == "CHANGELOG.md" else text
-            )
         ]
     for path in referencing:
         if path.suffix == ".md":
@@ -1317,16 +1348,15 @@ def main(argv: list[str]) -> int:
         # A comment is prose about this tree, kept beside the code it describes
         # and read by nobody who is checking pages. It states the rule a reader
         # applies, on the same terms a page does.
-        if path.suffix in COMMENTED_SOURCES:
+        if path.suffix in COMMENTED_SOURCES and relative not in HISTORY_EXEMPT:
             documented = (
                 docstring_lines(text) if path.suffix in PYTHON_SOURCES else set()
             )
-            read = comments(text, documented)
             failures += [
                 f"{relative}: {problem}"
-                for problem in check_spelling(read)
-                + ([] if relative in HISTORY_EXEMPT else check_history(read))
+                for problem in check_history(comments(text, documented))
             ]
+    failures += check_tree_spelling()
     # A baseline's own comment fields are prose about this tree, held to the
     # rules that govern prose. A count in them is a count the same file
     # records, which is the shape the pinned-number rule exists for.
@@ -1336,7 +1366,6 @@ def main(argv: list[str]) -> int:
         for problem in check_pinned_numbers(prose, numbers)
         + check_internal_reference(prose)
         + check_history(prose)
-        + check_spelling(prose)
     ]
     failures += check_index("docs/dev") + check_index("docs")
     failures += check_example_installs()

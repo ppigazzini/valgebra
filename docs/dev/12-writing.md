@@ -32,7 +32,7 @@ what keeps it alive — nobody fixes a design. Say unimplemented, say what the
 absence costs today, and say which kind it is: not yet built, or ruled out with a
 reason.
 
-**Never rationalise a defect into a convention.** The same rule one level down.
+**Never rationalize a defect into a convention.** The same rule one level down.
 When you find yourself writing the sentence that makes the odd thing sound
 intended, stop and check whether it is.
 
@@ -106,22 +106,6 @@ A measurement is the exception, and only as a rule: where a number explains why
 the code has its shape — the walk mode's discriminant order in
 [06-type-design.md](06-type-design.md) — write it as the rule a reader applies
 now, and let the number be the evidence.
-
-**Spell it American.** Prose, comments, docstrings and messages write `-or`,
-`-ize`, `-yze`, `-ter` and `-ense` where British writes `-our`, `-ise`, `-yse`,
-`-tre` and `-ence`, and `artifact`. The names the prose explains are American --
-`unicodedata.normalize`, pytest's `parametrize`, the typing spec -- and one
-spelling keeps a word the same on both sides of a backtick. A name keeps its own
-spelling, this tree's included: a function, a test or a class is renamed with
-the code it names, never by a spelling sweep. A doubled consonant before a
-suffix is left to the writer, since American dictionaries give both `canceled`
-and `cancelled` and GitHub names a job's status with two.
-
-`scripts/docs_lint.py` holds the forms the tree has written, `BRITISH`, over the
-prose `HISTORY` reads, without its exemptions, and outside code spans. The
-changelog is read up to its first released heading: a released section records
-a release as it was published. A message inside a string literal is out of its reach, since a
-string is as often a name; a reviewer applies the rule there.
 
 **One example beats three paragraphs**, and **pair every prohibition with an
 alternative.** "Do not pin the budget" leaves a reader stuck; "do not pin the

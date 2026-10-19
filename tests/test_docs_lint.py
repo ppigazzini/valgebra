@@ -361,14 +361,13 @@ def test_a_comment_is_read_whole_past_an_apostrophe() -> None:
     assert not lint.comments('let s = "it\'s // not a comment";\n').strip()
 
 
-def test_a_british_spelling_is_refused_and_a_name_is_not() -> None:
-    """The rule, its families, and what it leaves to the writer.
+def test_a_british_spelling_is_refused_in_prose_and_in_a_name() -> None:
+    """The rule over every family, in a sentence and in a name.
 
-    A name keeps its own spelling, this tree's included, so a code span is not
-    read; a doubled consonant before a suffix is left alone, as American
-    dictionaries leave it.
+    A name is read a word at a time, so a British word inside an identifier, a
+    code span or a string fails as it does in a sentence.
     """
-    for prose in (
+    for british in (
         "the behaviour of a walk",
         "the neighbouring float",
         "a key normalised on the way in",
@@ -377,33 +376,55 @@ def test_a_british_spelling_is_refused_and_a_name_is_not() -> None:
         "the centre of the range",
         "not a licence to free it",
         "an artefact of the build",
+        "the analogue of a catalogue",
+        "a judgement",
+        "two labelled rows, one modelled",
+        "a job is cancelled at its ceiling",
+        "`fn normalise` reads `-0.0`",
+        "fn build_unrecognised(spec: &Spec)",
+        "class NonNegativeMetres:",
+        'COLOUR = "red"',
     ):
-        assert lint.check_spelling(prose), prose
+        assert lint.check_spelling(british), british
     problems = lint.check_spelling("fine\nthe walk recognises it")
     assert problems
     assert problems[0].startswith("line 2:")
-    for kept in (
-        "`fn normalise` reads `-0.0`",
-        "the normalise_key helper",
-        "a job reported cancelled",
-        "two labelled rows",
-        "the analyses below",
-        "an emphasis on synthesis, as an organism has",
-        "behavior, color, normalize, center, license, artifact",
+
+
+def test_an_american_spelling_and_the_github_status_pass() -> None:
+    """The words the families would catch by accident, and GitHub's own name.
+
+    GitHub Actions spells its status `cancelled`: called, quoted or in an
+    alternation, the word is that name, and the sentence beside it is not.
+    """
+    for american in (
+        "behavior, color, normalize, center, license, artifact, analog",
+        "a judgment, two labeled rows, one modeled, a canceled job",
+        "the analyses below, an emphasis on synthesis, as an organism has",
+        "a cancellation, a controlled walk, a fulfilled promise",
+        "advertise, comprise, exercise, otherwise, premise, surprise",
+        "fn build_unrecognized(spec: &Spec)",
     ):
-        assert not lint.check_spelling(kept), kept
-    spanned = lint.check_spelling("a `long\nnormalise` span\nthen recognised")
-    assert [problem.split(":")[0] for problem in spanned] == ["line 3"], spanned
+        assert not lint.check_spelling(american), american
+    for status in (
+        "if: ${{ !cancelled() }}",
+        'for result in ("failure", "cancelled"):',
+        "a job is reported `cancelled` rather than `failure`",
+        r're.search(r"\b(always|cancelled|success)\(", condition)',
+    ):
+        assert not lint.check_spelling(status), status
+    assert lint.check_spelling("if: ${{ !cancelled() }}  # a cancelled run")
 
 
-def test_the_changelog_is_read_to_its_first_release() -> None:
-    """A released section records a release as published, and is not amended."""
-    text = (
-        "## [Unreleased]\n\n- a table minimised\n\n"
-        "## [0.0.1] - 2026-01-01\n\n- a table minimised\n"
-    )
-    assert len(lint.check_spelling(lint.before_the_releases(text))) == 1
-    assert lint.before_the_releases("nothing released\n") == "nothing released\n"
+def test_every_spelling_exemption_spells_the_words() -> None:
+    """An exemption outlives its reason silently, so it is held to one."""
+    for relative in lint.SPELLING_EXEMPT:
+        path = ROOT / relative
+        assert path.exists(), relative
+        assert lint.check_spelling(path.read_text(encoding="utf-8")), (
+            f"{relative} is exempt from the spelling rule and spells none of "
+            "its words; the exemption has outlived its reason"
+        )
 
 
 def test_every_history_exemption_names_a_file_that_spells_the_words() -> None:
