@@ -112,6 +112,8 @@ _CONSTS = [
     2**53 + 1,
     -(2**63),
     2**63 - 1,
+    -0.0,
+    float("nan"),
 ]
 
 # Hashable scalar specs usable as dict keys and set elements.

@@ -27,7 +27,7 @@ fixed example.
 from typing import Annotated
 
 import annotated_types as at
-from hypothesis import assume, given
+from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import (
@@ -71,38 +71,22 @@ _schemas = st.recursive(_atoms, _compose, max_leaves=6)
 _UNIVERSE = [None, True, False, -1, 0, 1, 5, "", "a", b"x", 1.5, [], [1], {1}, {"k": 1}]
 
 
-def _build(spec: object) -> Validator | None:
-    try:
-        return Validator(spec)
-    except (ValueError, TypeError, NotImplementedError, RecursionError):
-        # Reject an unbuildable spec through assume so Hypothesis counts it toward
-        # the rejection rate rather than silently passing the example.
-        assume(False)
-        return None
-
-
 @given(spec=_schemas)
 # TRUST: The suites check necessary properties, which is weaker than an oracle.
 def test_subtyping_is_reflexive(spec: object) -> None:
-    compiled = _build(spec)
-    if compiled is not None:
-        assert compiled.is_subtype_of(spec)
+    assert Validator(spec).is_subtype_of(spec)
 
 
 @given(spec=_schemas)
 def test_bottom_below_and_top_above(spec: object) -> None:
-    compiled = _build(spec)
-    if compiled is None:
-        return
+    compiled = Validator(spec)
     assert compiled.is_subtype_of(anything)  # s <= top
     assert Validator(nothing).is_subtype_of(spec)  # bottom <= s
 
 
 @given(spec=_schemas)
 def test_double_complement_preserves_membership(spec: object) -> None:
-    compiled = _build(spec)
-    if compiled is None:
-        return
+    compiled = Validator(spec)
     # `complement` cancels a complement where it is built, so `~~s` *is* `s` and
     # comparing the two asks nothing. The follow-up schema is one the fold does
     # not reach: absorption, `s | (s & other)`, which denotes `s` and needs a
@@ -131,10 +115,8 @@ def test_de_morgan_preserves_membership(a: object, b: object) -> None:
     # denote the same set (De Morgan). A non-reflexive law over two *different*
     # schema forms, so an asymmetric defect that reflexivity and self-equivalence
     # cannot see -- one side wrong, the other right -- fails here.
-    left = _build(complement(union(a, b)))
-    right = _build(intersection(complement(a), complement(b)))
-    if left is None or right is None:
-        return
+    left = Validator(complement(union(a, b)))
+    right = Validator(intersection(complement(a), complement(b)))
     for value in _UNIVERSE:
         assert left.is_valid(value) == right.is_valid(value)
 

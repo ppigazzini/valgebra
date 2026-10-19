@@ -14,7 +14,7 @@ from typing import Annotated, Any, Literal, Protocol
 
 import annotated_types as at
 import pytest
-from hypothesis import assume, given
+from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import (
@@ -116,14 +116,8 @@ def test_decision_is_sound_against_membership(
     # Reflexivity and the other necessary properties are asserted in
     # test_necessary_properties.py; recursion reflexivity holes are tracked in
     # test_completeness_ledger.py. This fuzzer holds the decision to membership.
-    try:
-        a, b = _build(sa), _build(sb)
-        left, right = Validator(a), Validator(b)
-    except (ValueError, TypeError, NotImplementedError, RecursionError):
-        # An unbuildable combination is not under test; reject it through assume
-        # so Hypothesis counts it toward the rejection rate rather than passing.
-        assume(False)
-        return
+    a, b = _build(sa), _build(sb)
+    left, right = Validator(a), Validator(b)
     in_a = left.is_valid(v)
     if left.is_subtype_of(b) and in_a:
         assert right.is_valid(v)
@@ -146,10 +140,7 @@ def test_membership_walks_and_paths_agree(sa: object, v: object) -> None:
     # Metamorphic checks needing no oracle: the fast and explaining walks agree,
     # the JSON path matches validating the parsed value, and ensure returns the
     # input unchanged exactly when it is a member.
-    try:
-        compiled = Validator(_build(sa))
-    except (ValueError, TypeError, NotImplementedError, RecursionError):
-        return
+    compiled = Validator(_build(sa))
     member = compiled.is_valid(v)
     try:
         compiled.validate(v)

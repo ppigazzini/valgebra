@@ -175,20 +175,6 @@ def _delete(tree: Path, relative: str) -> None:
     path.unlink()
 
 
-def _move(tree: Path, old: str, new: str) -> None:
-    """Move `old` to `new`, as a file moved without its readers is.
-
-    Both paths go in the plant's `touches`: the repair copies `old` back and
-    unlinks `new`, which the audited tree does not carry.
-    """
-    source, target = tree / old, tree / new
-    if not source.is_file():
-        message = f"the plant did not land: {old} is not a file"
-        raise AssertionError(message)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    source.rename(target)
-
-
 #: A release tag the plant writes on a commit no branch reaches, and the loose
 #: ref it leaves, which `touches` names so the repair deletes it.
 PLANTED_TAG = "v0.0.99"

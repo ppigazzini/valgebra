@@ -45,7 +45,7 @@ from typing import (
 
 import annotated_types as at
 import pytest
-from hypothesis import assume, given
+from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import (
@@ -1571,12 +1571,7 @@ def test_subtype_claims_hold_on_the_universe(left: object, right: object) -> Non
     # The soundness direction of the differential: a claimed subtype accepts no
     # universe value the claimed supertype rejects. A violation is a real
     # unsoundness, not a conservatism.
-    try:
-        compiled = Validator(left)
-    except (ValueError, TypeError, NotImplementedError, RecursionError):
-        # Reject an unbuildable spec through assume so Hypothesis counts it.
-        assume(False)
-        return
+    compiled = Validator(left)
     if compiled.is_subtype_of(right):
         assert _accepted(left) <= _accepted(right)
 
@@ -1585,12 +1580,7 @@ def test_subtype_claims_hold_on_the_universe(left: object, right: object) -> Non
 def test_emptiness_claims_hold_on_the_universe(spec: object) -> None:
     # A schema reported empty accepts nothing in the universe. The converse does
     # not hold over a finite universe, so only this sound direction is asserted.
-    try:
-        compiled = Validator(spec)
-    except (ValueError, TypeError, NotImplementedError, RecursionError):
-        # Reject an unbuildable spec through assume so Hypothesis counts it.
-        assume(False)
-        return
+    compiled = Validator(spec)
     if compiled.is_empty():
         assert not _accepted(spec)
 

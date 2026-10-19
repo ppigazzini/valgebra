@@ -466,11 +466,6 @@ def _admits(schema: Validator, value: Any) -> bool:
     return schema.is_valid(value)
 
 
-def _admits(schema: Validator, value: Any) -> bool:
-    """Membership, asked of the walk, which is the oracle the relations face."""
-    return schema.is_valid(value)
-
-
 def _witnesses(
     subject: Validator, supertype: Validator, corpus: list[Any]
 ) -> list[Any]:
