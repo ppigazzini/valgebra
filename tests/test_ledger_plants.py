@@ -486,6 +486,16 @@ _PYTEST_FORGIVEN = re.compile(
 )
 
 
+def _rename_a_corpus(tree: Path) -> None:
+    """Rename a corpus with its declaration, to a name no pattern knows."""
+    _move(
+        tree,
+        "crates/valgebra-py/src/oracle/interpreter.rs",
+        "crates/valgebra-py/src/oracle/corpus.rs",
+    )
+    _edit(tree, "crates/valgebra-py/src/oracle.rs", "mod interpreter;", "mod corpus;")
+
+
 def _declare_a_target_as_a_module(tree: Path) -> None:
     """Name a new file in the binding's `tests/` as a library module."""
     source = "pub fn planted() -> u8 {\n    1\n}\n"
@@ -2745,19 +2755,20 @@ PLANTS = (
         trips=("test_every_row_carries_all_three_cells",),
     ),
     Plant(
-        # A corpus under a name the pattern does not know: the detector's count
-        # of interpreter corpora is what notices it has gone.
+        # A corpus under a name the pattern does not know, declared as one: the
+        # declaration makes it test code, which the lane then counts as shipped,
+        # and the detector's count of interpreter corpora notices one has gone.
         "tests/test_coverage_scope.py",
         (
             "crates/valgebra-py/src/oracle/interpreter.rs",
             "crates/valgebra-py/src/oracle/corpus.rs",
+            "crates/valgebra-py/src/oracle.rs",
         ),
-        lambda tree: _move(
-            tree,
-            "crates/valgebra-py/src/oracle/interpreter.rs",
-            "crates/valgebra-py/src/oracle/corpus.rs",
+        _rename_a_corpus,
+        trips=(
+            "test_the_tree_has_corpus_files_to_exclude",
+            "test_a_lane_excludes_every_corpus_file_of_the_crate_it_measures",
         ),
-        trips=("test_the_tree_has_corpus_files_to_exclude",),
     ),
     Plant(
         # The binding lane's region floor dropped, leaving the line floor alone.

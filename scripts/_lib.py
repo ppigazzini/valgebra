@@ -1,9 +1,10 @@
 """What every script under `scripts/` says the same way.
 
 The codes a gate answers in, the checkout it sits in, how it reads its command
-line, and how it asks git a question. Each is a rule a script must not restate
-in a dialect of its own: a fourth code, a flag answering to a prefix of its
-name, a git question asked of whichever directory the caller happened to be in.
+line, how it asks git a question, and which Rust file is test code. Each is a
+rule a script must not restate in a dialect of its own: a fourth code, a flag
+answering to a prefix of its name, a git question asked of whichever directory
+the caller happened to be in, a test file told apart by its name.
 
 A script runs as `python scripts/<name>.py`, which puts this directory first on
 the import path, so `import _lib` finds this module from any of them. Whatever
@@ -23,6 +24,7 @@ are different rules, and each is held by a test the other would fail.
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 from pathlib import Path
 
@@ -68,3 +70,47 @@ def git_output(*args: str, cwd: Path) -> str | None:
     except OSError:
         return None
     return done.stdout.strip() if done.returncode == 0 else None
+
+
+#: An attribute that makes the module below it test code: `#[cfg(test)]`, alone
+#: or inside an `all(...)`, as an interpreter corpus is declared.
+_TEST_ONLY = re.compile(r"#\[cfg\((?:all\()?test\b")
+
+
+def declarer(path: Path) -> Path | None:
+    """Name the file that declares the module `path` is, `lib.rs` for a top one.
+
+    A module lives under a crate's `src/`; a file anywhere else is declared by
+    nothing, and is no module.
+    """
+    if "src" not in path.parts[:-1]:
+        return None
+    parent = path.parent
+    if parent.name == "src":
+        root = parent / "lib.rs"
+        return root if root.is_file() and root != path else None
+    for candidate in (parent.with_suffix(".rs"), parent / "mod.rs"):
+        if candidate.is_file() and candidate != path:
+            return candidate
+    return None
+
+
+def is_test_module(path: Path) -> bool:
+    """Whether the file that declares `path` declares it under `#[cfg(test)]`.
+
+    Read from the declaration Rust reads rather than from the file's name:
+    `tests.rs` is a name a shipped module could take, and a corpus could take
+    any other. Every check that tells test code from shipped code asks this,
+    and the coverage lanes, which can only name files by a pattern, are held
+    to what it answers.
+    """
+    found_in = declarer(path)
+    if found_in is None:
+        return False
+    found = re.search(
+        r"((?:^[ \t]*(?:#\[[^\n]*\]|//[^\n]*)[ \t]*\n)*)"
+        rf"^[ \t]*(?:pub(?:\([^)]*\))?\s+)?mod\s+{re.escape(path.stem)}\s*;",
+        found_in.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    return found is not None and _TEST_ONLY.search(found.group(1)) is not None

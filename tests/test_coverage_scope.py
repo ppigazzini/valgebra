@@ -39,7 +39,7 @@ import re
 
 import pytest
 
-from _tree import ROOT, read_workflow, variants
+from _tree import ROOT, load_script, read_workflow, variants
 
 pytestmark = pytest.mark.repository
 
@@ -47,7 +47,9 @@ pytestmark = pytest.mark.repository
 #: The jobs that enforce a coverage floor, and the crate each one measures.
 LANES = {"rust-coverage": "valgebra-core", "binding-coverage": "valgebra-py"}
 
-#: What makes a file test code rather than shipped code.
+#: What makes a file test code rather than shipped code: the `#[cfg(test)]` on
+#: the `mod` that declares it, which `is_test_module` reads for every script
+#: and ledger asking.
 #:
 #: `laws.rs` and `index_laws.rs` are the core's property suites; an
 #: `interpreter.rs` is a binding corpus driving real Python values through a
@@ -63,7 +65,7 @@ LANES = {"rust-coverage": "valgebra-core", "binding-coverage": "valgebra-py"}
 #: code they lift the figure for the code around them, which is the whole defect
 #: this ledger is about; a suite is measured by whether it *kills mutants*, not
 #: by how much of itself it executes.
-CORPUS = re.compile(r"(?:^|/)(?:laws|index_laws|interpreter)\.rs$|tests\.rs$")
+lib = load_script("_lib")
 
 
 def _lane_scripts() -> dict[str, str]:
@@ -104,7 +106,7 @@ def _ignored(lane: str) -> re.Pattern[str]:
 
 
 def _corpus_files() -> set[str]:
-    """Give every corpus file in the tree, as a path from the root.
+    """Give every test file the tree declares, as a path from the root.
 
     Spelled with forward slashes on every platform. The pattern these are
     matched against is the one the lane passes to `cargo llvm-cov`, which is
@@ -116,7 +118,7 @@ def _corpus_files() -> set[str]:
     return {
         path.relative_to(ROOT).as_posix()
         for path in (ROOT / "crates").rglob("*.rs")
-        if CORPUS.search(path.name)
+        if "target" not in path.parts and lib.is_test_module(path)
     }
 
 

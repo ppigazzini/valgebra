@@ -106,7 +106,14 @@ import unicodedata
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
-from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments
+from _lib import (
+    EXIT_CANNOT_RUN,
+    EXIT_FAIL,
+    EXIT_OK,
+    ROOT,
+    arguments,
+    is_test_module,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -772,25 +779,18 @@ def before_the_test_module(text: str) -> str:
 
 
 def test_module_files(sources: list[Path]) -> set[str]:
-    """The `.rs` files some parent module declares under a `#[cfg(test)]`.
+    """The files among `sources` a parent module declares under a `#[cfg(test)]`.
 
     A long test module lives in a sibling file -- `decision.rs` declares
     `#[cfg(test)] mod tests;` and the body is `decision/tests.rs` -- so a file
-    with no `#[cfg(test)]` in it can still be test-only. Read from the
-    declaration rather than from a naming convention, since `tests.rs` is a
-    name a production module could take.
+    with no `#[cfg(test)]` in it can still be test-only. `is_test_module` reads
+    the declaration, which every script and ledger asking the question shares.
     """
-    declared: set[str] = set()
-    for source in sources:
-        text = source.read_text(encoding="utf-8")
-        for name in TEST_MODULE.findall(text):
-            for candidate in (
-                source.parent / f"{name}.rs",
-                source.parent / source.stem / f"{name}.rs",
-            ):
-                if candidate.exists():
-                    declared.add(candidate.relative_to(ROOT).as_posix())
-    return declared
+    return {
+        source.relative_to(ROOT).as_posix()
+        for source in sources
+        if is_test_module(source)
+    }
 
 
 def chosen_constants() -> dict[tuple[str, str], str]:

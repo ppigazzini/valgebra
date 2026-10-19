@@ -718,8 +718,11 @@ def test_a_test_module_declared_with_a_visibility_is_test_only(
     source = tmp_path / "crates" / "core" / "src" / "oracle.rs"
     (source.parent / "oracle").mkdir(parents=True)
     source.write_text("pub fn ask() {}\n\n#[cfg(test)]\npub(crate) mod tests;\n")
-    (source.parent / "oracle" / "tests.rs").write_text("const FIXTURE: usize = 1;\n")
-    assert lint.test_module_files([source]) == {"crates/core/src/oracle/tests.rs"}
+    tests = source.parent / "oracle" / "tests.rs"
+    tests.write_text("const FIXTURE: usize = 1;\n")
+    assert lint.test_module_files([source, tests]) == {
+        "crates/core/src/oracle/tests.rs"
+    }
 
 
 def test_the_zone_table_owns_every_production_file() -> None:

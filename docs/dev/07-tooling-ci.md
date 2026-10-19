@@ -36,7 +36,9 @@ measurement answers for another. `tests/test_script_arguments.py` holds every
 file under `scripts/` to it.
 
 **The codes, the root and the parser are said once**, in `scripts/_lib.py`,
-with `git_output`, which asks git a question of a directory the caller names.
+with `git_output`, which asks git a question of a directory the caller names,
+and `is_test_module`, which reads whether a Rust file is test code from the
+`mod` that declares it.
 A script runs with its own directory first on the import path, so it finds the
 module by name. A test or the benchmarks' conftest loading a script by path
 puts the directory there first, and a test copying a script into a tree of its

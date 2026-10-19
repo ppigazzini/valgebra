@@ -42,13 +42,16 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import ROOT
+from _tree import ROOT, load_script
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 CORE = ROOT / "crates" / "valgebra-core" / "src"
 DESCR = CORE / "descr"
+
+#: The scripts' one reading of which Rust file is test code.
+lib = load_script("_lib")
 
 # This file reads the tree rather than the library: it holds a module graph, and
 # exercises no schema.
@@ -166,7 +169,7 @@ _SUBTYPING = re.compile(
 
 
 def _walk_sources() -> list[Path]:
-    return sorted(path for path in WALK.rglob("*.rs") if path.name != "tests.rs")
+    return sorted(path for path in WALK.rglob("*.rs") if not lib.is_test_module(path))
 
 
 # THEORY: no-arrow-type

@@ -67,6 +67,9 @@ BASELINES = (
 )
 BINDING = ROOT / "crates" / "valgebra-py"
 
+#: The scripts' one reading of which Rust file is test code.
+lib = load_script("_lib")
+
 
 # The binding files inside the sweep: the membership walk, where soundness is
 # decided, the context it carries, and the frontend with the three surfaces
@@ -138,14 +141,15 @@ def _binding_sources() -> set[str]:
     library and never into it. The sweep wrapper that runs the Python suite
     lives there, and a mutation of it would be a mutation of the instrument.
     """
-    test_only = _test_module_files() | _integration_targets()
+    integration = _integration_targets()
     return {
         path
         for path in (
-            str(path.relative_to(ROOT)).replace("\\", "/")
-            for path in BINDING.rglob("*.rs")
+            str(source.relative_to(ROOT)).replace("\\", "/")
+            for source in BINDING.rglob("*.rs")
+            if not lib.is_test_module(source)
         )
-        if path not in test_only
+        if path not in integration
     }
 
 
@@ -162,34 +166,6 @@ def _integration_targets() -> set[str]:
     return {
         str(path.relative_to(ROOT)).replace("\\", "/") for path in tests.rglob("*.rs")
     }
-
-
-def _test_module_files() -> set[str]:
-    """Every `.rs` file some parent module declares under a `#[cfg(test)]`.
-
-    A long test module is a sibling file, declared as `#[cfg(test)] mod tests;`
-    rather than written inline. The file is
-    still test-only -- it is not compiled into the wheel -- and reading the
-    declaration is how that is known from the tree rather than from a naming
-    convention.
-    """
-    declared: set[str] = set()
-    for source in ROOT.rglob("*.rs"):
-        if "target" in source.parts:
-            continue
-        text = source.read_text(encoding="utf-8")
-        for name in re.findall(
-            r"#\[cfg\((?:test|all\(test[^\n]*)\)\]\s*\n"
-            r"(?:pub(?:\([a-z()]+\))? )?mod (\w+);",
-            text,
-        ):
-            for candidate in (
-                source.parent / f"{name}.rs",
-                source.parent / source.stem / f"{name}.rs",
-            ):
-                if candidate.exists():
-                    declared.add(str(candidate.relative_to(ROOT)).replace("\\", "/"))
-    return declared
 
 
 def _matches(glob: str, path: str) -> bool:

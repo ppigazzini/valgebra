@@ -35,9 +35,12 @@ import re
 
 import pytest
 
-from _tree import ROOT
+from _tree import ROOT, load_script
 
 pytestmark = pytest.mark.repository
+
+#: The scripts' one reading of which Rust file is test code.
+lib = load_script("_lib")
 
 #: The coinductive procedure and the rules it is split into. The descriptor is
 #: not under this rule: it holds no hypothesis, so a cache there reverts nothing.
@@ -54,7 +57,7 @@ PROCEDURE = tuple(
         ROOT / "crates" / "valgebra-core" / "src" / "decision.rs",
         *(ROOT / "crates" / "valgebra-core" / "src" / "decision").glob("*.rs"),
     )
-    if not path.name.endswith("tests.rs")
+    if not lib.is_test_module(path)
 )
 
 #: A map declaration, however it is spelled. The key is what makes it a memo:

@@ -52,6 +52,9 @@ _NOT_A_BOUND = re.compile(
 _STUB_BOUND = re.compile(r"^(MAX_[A-Z_]+): int$", re.MULTILINE)
 _MARKER = re.compile(r"#\s*BOUND:\s*([A-Z_]+)")
 
+#: The scripts' one reading of which Rust file is test code.
+lib = load_script("_lib")
+
 #: Bounds no test drives to their edge, each with the reason it is out of
 #: reach. A reason is a sentence about the bound, not a note that nobody got
 #: to it.
@@ -67,13 +70,7 @@ ACCEPTED: dict[str, str] = {
 
 def _test_files() -> list[Path]:
     """Give every file a bound may be named in: the Rust and Python tests."""
-    rust = [
-        path
-        for path in sorted(CRATES.rglob("*.rs"))
-        if path.name.endswith("tests.rs")
-        or path.name in {"laws.rs", "index_laws.rs"}
-        or "interpreter" in path.name
-    ]
+    rust = [path for path in sorted(CRATES.rglob("*.rs")) if lib.is_test_module(path)]
     return [*rust, *sorted((ROOT / "tests").glob("*.py"))]
 
 

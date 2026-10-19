@@ -36,11 +36,17 @@ answer, or answers in a shape the script cannot read.
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
-from _lib import EXIT_CANNOT_RUN, EXIT_OK, arguments, git_output
+from _lib import (
+    EXIT_CANNOT_RUN,
+    EXIT_OK,
+    arguments,
+    declarer,
+    git_output,
+    is_test_module,
+)
 
 #: The checkout this is asked about: the one it is started in, which is the
 #: lane's checkout and, under test, a history built for the question.
@@ -87,43 +93,6 @@ def code_changes(diff: str) -> list[str]:
     return found
 
 
-#: An attribute that makes the module below it test code: `#[cfg(test)]`, alone
-#: or inside an `all(...)`, as an interpreter corpus is declared.
-_TEST_ONLY = re.compile(r"#\[cfg\((?:all\()?test\b")
-
-
-def _declarer(path: Path) -> Path | None:
-    """Name the file that declares the module `path` is, `lib.rs` for a top one.
-
-    A module lives under a crate's `src/`; a file anywhere else is declared by
-    nothing, and is no module.
-    """
-    if "src" not in path.parts[:-1]:
-        return None
-    parent = path.parent
-    if parent.name == "src":
-        root = parent / "lib.rs"
-        return root if root.is_file() and root != path else None
-    for candidate in (parent.with_suffix(".rs"), parent / "mod.rs"):
-        if candidate.is_file() and candidate != path:
-            return candidate
-    return None
-
-
-def is_test_module(path: Path) -> bool:
-    """Whether the file that declares `path` declares it under `#[cfg(test)]`."""
-    declarer = _declarer(path)
-    if declarer is None:
-        return False
-    found = re.search(
-        r"((?:^[ \t]*(?:#\[[^\n]*\]|//[^\n]*)[ \t]*\n)*)"
-        rf"^[ \t]*(?:pub(?:\([^)]*\))?\s+)?mod\s+{re.escape(path.stem)}\s*;",
-        declarer.read_text(encoding="utf-8"),
-        re.MULTILINE,
-    )
-    return found is not None and _TEST_ONLY.search(found.group(1)) is not None
-
-
 def held_code(path: Path) -> list[Path]:
     """Name the code a test module holds, which is what a change to it can move.
 
@@ -131,18 +100,22 @@ def held_code(path: Path) -> list[Path]:
     that is not a test module itself. A suite the crate root declares holds
     the whole crate, and none is named for it.
     """
-    declarer = _declarer(path)
-    if declarer is None or (
-        declarer.parent.name == "src" and path.parent.name == "src"
+    declared_by = declarer(path)
+    if declared_by is None or (
+        declared_by.parent.name == "src" and path.parent.name == "src"
     ):
         return []
-    module = declarer.parent if declarer.name == "mod.rs" else declarer.with_suffix("")
+    module = (
+        declared_by.parent
+        if declared_by.name == "mod.rs"
+        else declared_by.with_suffix("")
+    )
     beneath = sorted(
         found
         for found in module.rglob("*.rs")
-        if found != declarer and not is_test_module(found)
+        if found != declared_by and not is_test_module(found)
     )
-    return [declarer, *beneath]
+    return [declared_by, *beneath]
 
 
 def swept(changed: list[str], checkout: Path) -> list[str]:

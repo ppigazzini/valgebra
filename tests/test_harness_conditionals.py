@@ -30,13 +30,16 @@ import pytest
 
 from _reason import is_a_reason
 from _toml import load
-from _tree import ROOT
+from _tree import ROOT, load_script
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
 
 BINDING = ROOT / "crates" / "valgebra-py"
+
+#: The scripts' one reading of which Rust file is test code.
+lib = load_script("_lib")
 
 # Features whose `cfg` sites are allowed OUTSIDE a test module, each with the
 # reason. Empty: every site of the one feature this crate declares is test-only.
@@ -73,23 +76,11 @@ def _test_module_files() -> set[str]:
     into the wheel -- and reading the declaration is how that is known from the
     tree rather than from a naming convention.
     """
-    declared: set[str] = set()
-    for source in ROOT.rglob("*.rs"):
-        if "target" in source.parts:
-            continue
-        text = source.read_text(encoding="utf-8")
-        for name in re.findall(
-            r"#\[cfg\((?:test|all\(test[^\n]*)\)\]\s*\n"
-            r"(?:pub(?:\([a-z()]+\))? )?mod (\w+);",
-            text,
-        ):
-            for candidate in (
-                source.parent / f"{name}.rs",
-                source.parent / source.stem / f"{name}.rs",
-            ):
-                if candidate.exists():
-                    declared.add(str(candidate.relative_to(ROOT)).replace("\\", "/"))
-    return declared
+    return {
+        str(path.relative_to(ROOT)).replace("\\", "/")
+        for path in ROOT.rglob("*.rs")
+        if "target" not in path.parts and lib.is_test_module(path)
+    }
 
 
 def _inside_test_module(path: str, feature: str) -> bool:

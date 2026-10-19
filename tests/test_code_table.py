@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import ROOT
+from _tree import ROOT, load_script
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -54,6 +54,9 @@ BINDING = ROOT / "crates" / "valgebra-py" / "src"
 TABLE = BINDING / "codes.rs"
 CORE = ROOT / "crates" / "valgebra-core" / "src"
 CORE_TABLE = CORE / "codes.rs"
+
+#: The scripts' one reading of which Rust file is test code.
+lib = load_script("_lib")
 
 #: A code the table declares: a name, and either the string a caller compares
 #: against or the core constant that holds it.
@@ -78,9 +81,7 @@ def _sources() -> list[Path]:
     of the vocabulary rather than a place one is written.
     """
     return [
-        path
-        for path in sorted(BINDING.rglob("*.rs"))
-        if not path.name.endswith(("interpreter.rs", "tests.rs"))
+        path for path in sorted(BINDING.rglob("*.rs")) if not lib.is_test_module(path)
     ]
 
 

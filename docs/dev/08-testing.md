@@ -298,11 +298,15 @@ moving a module moves its seed file to the sibling's path --
 seeds are replayed by nothing. `tests/test_proptest_seeds.py` holds every seed
 file to a property test beside it.
 
-The two ledgers that read the tree know the shape: `tests/test_mutation_scope.py`
-does not ask a test module to be swept, and `tests/test_harness_conditionals.py`
-does not read a feature gate inside one as reaching production. Both find them
-the same way -- by the `#[cfg(test)] mod NAME;` that declares them -- rather than
-by a naming convention.
+Every check that tells a test file from a shipped one asks one predicate,
+`is_test_module` in `scripts/_lib.py`, which reads the declaration the way Rust
+does -- the `#[cfg(test)]` on the `mod NAME;` in the file's parent module --
+rather than a naming convention: `tests.rs` is a name a shipped module could
+take, and a corpus could take any other. So `tests/test_mutation_scope.py` does
+not ask a test module to be swept, and `tests/test_harness_conditionals.py` does
+not read a feature gate inside one as reaching production. The coverage lanes
+take a filename pattern and cannot ask, so `tests/test_coverage_scope.py` holds
+each lane's pattern to the predicate's answer.
 
 ## The binding's own corpora
 
