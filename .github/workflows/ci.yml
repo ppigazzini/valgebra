@@ -13,6 +13,17 @@ on:
     - cron: "0 4 * * *"
   workflow_dispatch:
     inputs:
+      # On unless cleared: the schedule runs `main`'s copy of this file, which
+      # follows the development branch only at a fast-forward, so the dispatch
+      # it makes may come from a copy that sets no input, and that dispatch is
+      # still a night.
+      nightly:
+        description: >-
+          Run the nightly lanes: the mutation sweeps, the fuzzers and the deep
+          laws. A dispatch for a reading clears it, since a night is tens of
+          runner-hours and a reading is one job.
+        type: boolean
+        default: true
       record_compare:
         description: >-
           Record the competitive ratios this run measures and upload them: one
@@ -33,7 +44,11 @@ concurrency:
   # Keyed by event too, so a push to main does not share a group with the
   # scheduled nightly soak (both resolve github.ref to refs/heads/main) and cancel
   # it mid-run. A push to `github_ci` cancels the run of the commit it replaces.
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  # A dispatched night is keyed apart from other dispatches on its branch, so a
+  # dispatch for a reading neither cancels the night nor is cancelled by it.
+  group: >-
+    ${{ github.workflow }}-${{ github.ref }}-${{
+    inputs.nightly && 'nightly' || github.event_name }}
   cancel-in-progress: true
 
 permissions:
@@ -1623,7 +1638,7 @@ jobs:
           esac
           echo "main at $GITHUB_SHA, $BRANCH at ${tip:-no commit}"
           if [ -n "$tip" ]; then
-            gh workflow run ci.yml --repo "$REPO" --ref "$BRANCH"
+            gh workflow run ci.yml --repo "$REPO" --ref "$BRANCH" -f nightly=true
             echo "dispatched=true" >> "$GITHUB_OUTPUT"
           else
             echo "dispatched=false" >> "$GITHUB_OUTPUT"
@@ -1635,7 +1650,7 @@ jobs:
     # manual only, and never a merge gate: it is an early-warning lane.
     needs: nightly-dispatch
     if: >-
-      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      !cancelled() && (inputs.nightly ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
     runs-on: ubuntu-26.04
@@ -1726,7 +1741,7 @@ jobs:
     # lane, and its first red is a seed pinned as a row rather than a revert.
     needs: nightly-dispatch
     if: >-
-      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      !cancelled() && (inputs.nightly ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
     runs-on: ubuntu-26.04
@@ -1777,7 +1792,7 @@ jobs:
     # measurement is a full instrumented rebuild.
     needs: nightly-dispatch
     if: >-
-      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      !cancelled() && (inputs.nightly ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
     runs-on: ubuntu-26.04
@@ -1833,7 +1848,7 @@ jobs:
     # literal, bound and class rules the first never can.
     needs: nightly-dispatch
     if: >-
-      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      !cancelled() && (inputs.nightly ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
     runs-on: ubuntu-26.04
@@ -1992,11 +2007,11 @@ jobs:
 
   nightly-floor-names:
     name: nightly floor names
-    # Dispatchable like the other nightly jobs, so a run started by hand to see
-    # the nightly exercises all of it.
+    # Dispatchable like the other nightly jobs, so a run started by hand with
+    # `nightly` set exercises all of it.
     needs: nightly-dispatch
     if: >-
-      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      !cancelled() && (inputs.nightly ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
     runs-on: ubuntu-26.04
@@ -2036,7 +2051,7 @@ jobs:
     # ratchets once.
     needs: nightly-dispatch
     if: >-
-      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      !cancelled() && (inputs.nightly ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
     runs-on: ubuntu-26.04
@@ -2270,7 +2285,7 @@ jobs:
     name: nightly mutation sweep (walk) ${{ matrix.shard }}
     needs: nightly-dispatch
     if: >-
-      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      !cancelled() && (inputs.nightly ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
     runs-on: ubuntu-26.04
@@ -2453,7 +2468,7 @@ jobs:
     # -- which is a price a merge must never pay.
     needs: nightly-dispatch
     if: >-
-      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      !cancelled() && (inputs.nightly ||
       (github.event_name == 'schedule' &&
       needs['nightly-dispatch'].outputs.dispatched == 'false'))
     runs-on: ubuntu-26.04

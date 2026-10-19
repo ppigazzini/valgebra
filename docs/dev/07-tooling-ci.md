@@ -984,10 +984,11 @@ to `main` runs the workflow too.
 **The nightly runs where development is.** A schedule fires on the default
 branch alone, and a nightly that read `main` alone would read a release
 window's commits after they shipped. So the scheduled run's first job,
-`nightly-dispatch`, dispatches the workflow on `github_ci`, and a dispatch runs
-that branch's own copy of `ci.yml`: a scheduled job checking `github_ci` out
-would run `main`'s copy against the other tree, and a change to the workflow
-on `github_ci` would read as a false red or a skip. The nightly lanes run on
+`nightly-dispatch`, dispatches the workflow on `github_ci` with its `nightly`
+input set, and a dispatch runs that branch's own copy of `ci.yml`: a scheduled
+job checking `github_ci` out would run `main`'s copy against the other tree,
+and a change to the workflow on `github_ci` would read as a false red or a
+skip. The nightly lanes run on
 `main` only where nothing was dispatched, a repository without the branch: two
 full nightlies side by side compete for the runners and double the night, and
 `main`'s tip is a tree the next fast-forward replaces with the one the
@@ -997,6 +998,16 @@ base from `main`'s tip, as any dispatch does (`scripts/change_base.py`), so a
 night also sweeps every file the next release cut will push.
 `tests/test_required_jobs.py` holds the dispatch to the push trigger's other
 branch and every scheduled lane to that reading.
+
+**A dispatch for a reading runs no night.** The nightly lanes read the
+`nightly` input. A dispatch started by hand for a reading -- `record_compare`,
+`pgo_compare` -- clears it and runs the push jobs and the job it asked for, not
+tens of runner-hours of sweeps, fuzzers and deep laws. The input is on unless
+cleared, because the schedule runs `main`'s copy of `ci.yml`, which may predate
+the input on the branch it dispatches, and a dispatch that sets no input is the
+night. The night is a concurrency group of its own, so a dispatch for a reading
+on the same branch neither cancels it nor is cancelled by it.
+`tests/test_required_jobs.py` runs both dispatches.
 
 **The push jobs run on `main`'s night only where nothing was dispatched.** The
 dispatched run reads every push job on the development tree, and on `main`'s

@@ -86,23 +86,29 @@ def test_every_job_is_required_by_the_gate() -> None:
     )
 
 
-#: The runs a workflow sees, as the event and what the dispatcher answered: a
-#: push; a dispatch; a night handed to the development branch, with `main`'s
-#: tip beside it and on it; and a night with no branch to hand it to.
+#: The runs a workflow sees, as the event, what the dispatcher answered and the
+#: inputs a dispatch carries, its defaults filled in as the runner fills them: a
+#: push; a dispatch for a reading, and the night the dispatcher hands on; a
+#: night handed to the development branch, with `main`'s tip beside it and on
+#: it; and a night with no branch to hand it to.
 RUNS = {
-    "a push": ("push", {}),
-    "a dispatch": ("workflow_dispatch", {}),
+    "a push": ("push", {}, {}),
+    "a dispatch": ("workflow_dispatch", {}, {"nightly": False}),
+    "a nightly dispatch": ("workflow_dispatch", {}, {"nightly": True}),
     "a night handed on, main behind": (
         "schedule",
         {"dispatched": "true"},
+        {},
     ),
     "a night handed on, main on the branch": (
         "schedule",
         {"dispatched": "true"},
+        {},
     ),
     "a night with no branch": (
         "schedule",
         {"dispatched": "false"},
+        {},
     ),
 }
 
@@ -121,7 +127,7 @@ def _results(run: str, **planted: str) -> dict[str, dict]:
     job it needs succeeded, as the runner reads one.
     """
     jobs = _jobs()
-    event, answered = RUNS[run]
+    event, answered, inputs = RUNS[run]
     done: dict[str, dict] = {}
     pending = [name for name in jobs if name != GATE]
     while pending:
@@ -131,7 +137,7 @@ def _results(run: str, **planted: str) -> dict[str, dict]:
         pending.remove(name)
         needs = {need: done[need] for need in _needs(jobs[name])}
         condition = str(jobs[name].get("if", ""))
-        context = {"github": {"event_name": event}, "needs": needs, "inputs": {}}
+        context = {"github": {"event_name": event}, "needs": needs, "inputs": inputs}
         runs = bool(evaluate(condition, context)) if condition else True
         if not re.search(r"\b(always|cancelled|success|failure)\(", condition):
             runs = runs and all(need["result"] == "success" for need in needs.values())
@@ -179,7 +185,7 @@ def test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may() -> None:
         name for name, read in _results("a push").items() if read["result"] == "success"
     }
     wrong = []
-    for run, (event, _) in RUNS.items():
+    for run, (event, _, _) in RUNS.items():
         healthy = _results(run)
         if _gate_fails(healthy, event):
             wrong.append(f"{run}: every job did what it should, and the gate fails")
@@ -207,7 +213,7 @@ def test_a_night_handed_to_the_development_branch_runs_no_push_job_here() -> Non
     )
     assert len(push) >= 20, f"only {push} run on a push"
     wrong = []
-    for run, (event, answered) in RUNS.items():
+    for run, (event, answered, _) in RUNS.items():
         results = _results(run)
         handed_on = answered.get("dispatched") == "true"
         for name in push:
@@ -619,6 +625,7 @@ def test_the_nightly_runs_on_the_branch_development_is_on() -> None:
     assert len(dispatching) == 1, "the dispatcher dispatches the workflow once"
     (step,) = dispatching
     assert '--ref "$BRANCH"' in step["run"], step["run"]
+    assert "-f nightly=true" in step["run"], "the dispatcher asks for the night"
     # PyYAML reads the bare key `on` as the boolean it spells in YAML 1.1.
     triggers = workflow.get("on", workflow.get(True))
     pushed = triggers["push"]["branches"]
@@ -652,6 +659,61 @@ def test_the_nightly_runs_on_the_branch_development_is_on() -> None:
         + "; ".join(unread)
         + ". The dispatched run reads every lane on the development tree."
     )
+
+
+def _asked_for(jobs: dict) -> set[str]:
+    """Read which jobs run because a dispatch input other than the night asks."""
+    return {
+        name
+        for name, job in jobs.items()
+        if re.search(r"inputs\.(?!nightly\b)\w+", str(job.get("if", "")))
+    }
+
+
+def test_a_dispatch_for_a_reading_runs_no_night() -> None:
+    """The nightly lanes run on a dispatch unless it clears `nightly`.
+
+    A dispatch started by hand for a reading wants one job, and a night is the
+    full mutation sweeps, the fuzzers and the deep laws: tens of runner-hours.
+    So a nightly lane reads the `nightly` input, and the push jobs run on either
+    dispatch, since the dispatched night reads them too. The input is on unless
+    cleared: the schedule runs `main`'s copy of the workflow, which may set no
+    input on the branch it dispatches, and that dispatch is still the night.
+    """
+    workflow = read_workflow()
+    # PyYAML reads the bare key `on` as the boolean it spells in YAML 1.1.
+    triggers = workflow.get("on", workflow.get(True))
+    nightly_input = triggers["workflow_dispatch"]["inputs"]["nightly"]
+    assert nightly_input["default"] is True, (
+        "a dispatch that sets no input runs no night"
+    )
+    jobs = _jobs()
+    pushed = {
+        name for name, read in _results("a push").items() if read["result"] == "success"
+    }
+    reading, night = _results("a dispatch"), _results("a nightly dispatch")
+    nightly = sorted(
+        name
+        for name in jobs
+        if name not in pushed | {GATE, DISPATCH} | _asked_for(jobs)
+    )
+    assert len(nightly) >= 8, f"only {nightly} read as nightly lanes"
+    wrong = [
+        f"{name} reads {reading[name]['result']} on a dispatch for a reading"
+        for name in nightly
+        if reading[name]["result"] != "skipped"
+    ]
+    wrong += [
+        f"{name} reads {night[name]['result']} on the dispatched night"
+        for name in [*nightly, *sorted(pushed)]
+        if night[name]["result"] != "success"
+    ]
+    wrong += [
+        f"{name} does not run on a dispatch for a reading"
+        for name in sorted(pushed)
+        if reading[name]["result"] != "success"
+    ]
+    assert not wrong, "\n".join(wrong)
 
 
 def _dispatch(tmp_path: Path, listed: str, dispatching: int) -> tuple[int, str]:

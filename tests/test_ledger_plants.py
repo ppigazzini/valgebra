@@ -2952,7 +2952,7 @@ PLANTS = (
             tree,
             ".github/workflows/ci.yml",
             "    needs: nightly-dispatch\n    if: >-\n      !cancelled() && "
-            "(github.event_name == 'workflow_dispatch' ||\n      "
+            "(inputs.nightly ||\n      "
             "(github.event_name == 'schedule' &&\n      "
             "needs['nightly-dispatch'].outputs.dispatched == 'false'))\n"
             "    runs-on: ubuntu-26.04\n    # Six shards",
@@ -3384,14 +3384,30 @@ PLANTS = (
             ".github/workflows/ci.yml",
             "it is an early-warning lane.\n"
             "    needs: nightly-dispatch\n    if: >-\n      !cancelled() && "
-            "(github.event_name == 'workflow_dispatch' ||\n      "
+            "(inputs.nightly ||\n      "
             "(github.event_name == 'schedule' &&\n      "
             "needs['nightly-dispatch'].outputs.dispatched == 'false'))\n",
             "it is an early-warning lane.\n"
-            "    if: github.event_name == 'schedule' || "
-            "github.event_name == 'workflow_dispatch'\n",
+            "    if: github.event_name == 'schedule' || inputs.nightly\n",
         ),
         trips=("test_the_nightly_runs_on_the_branch_development_is_on",),
+    ),
+    Plant(
+        # A nightly lane that runs on every dispatch, so a dispatch for one
+        # reading runs that lane's share of the night beside it.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "it is an early-warning lane.\n"
+            "    needs: nightly-dispatch\n    if: >-\n      !cancelled() && "
+            "(inputs.nightly ||\n",
+            "it is an early-warning lane.\n"
+            "    needs: nightly-dispatch\n    if: >-\n      !cancelled() && "
+            "(github.event_name == 'workflow_dispatch' ||\n",
+        ),
+        trips=("test_a_dispatch_for_a_reading_runs_no_night",),
     ),
     Plant(
         # The trait scanned at an indentation no method has: every question is
