@@ -84,15 +84,14 @@ use super::{Attribute, Clauses, Field, Fields, MapClause, Members, Schema, SeqSh
 /// the joins under it -- and small enough that the tables are a rounding error
 /// beside the schemas they point at.
 ///
-/// **What holds this number is `perf_gate.py --decision`** (measured
-/// 2026-09-14): with the table answering nothing that workload reads **65.31%
-/// higher**, because it asks two relations about a record built twice and the
-/// sharing is what makes the second one free. Eight times the slots moves it
-/// by nothing. The *core* workload is the other side of the trade and not
-/// evidence for this number: it builds trees and drops them, so every probe
-/// there finds a handle whose `Arc` is already gone, and disabling the table
-/// reads it **cheaper**. A little on a pipeline that cannot share, for
-/// sixty-five percent on one that can.
+/// **What holds this number is `perf_gate.py --decision`**: with the table
+/// answering nothing that workload reads higher, because it asks two relations
+/// about a record built twice and the sharing is what makes the second one
+/// free. Eight times the slots moves it by nothing. The *core* workload is the
+/// other side of the trade and not evidence for this number: it builds trees
+/// and drops them, so every probe there finds a handle whose `Arc` is already
+/// gone, and disabling the table reads it **cheaper**. A little on a pipeline
+/// that cannot share, for the whole second relation on one that can.
 const SLOTS: usize = 1024;
 
 /// Entries of a list the hash reads before it stops.
@@ -362,13 +361,13 @@ impl<T: ?Sized> Table<T> {
 //
 // **Nothing called while a table is borrowed may reach back into one.** Each of
 // the five functions below probes and stores under a single borrow -- the probe
-// and the store are one question, and splitting them paid two thread-local
-// lookups and two borrow pairs on the miss path, which is every call in a pass
-// that builds new nodes. What that costs is the rule above: the rejected
-// payload is built and dropped inside the borrow, so a `Drop` on `Schema`,
-// `Field`, `Attribute` or `MapClause` that interned anything would panic on a
-// borrow already held. None does today; each drops handles and nothing else,
-// and any that stops being true has to split its table's access again.
+// and the store are one question, and splitting them would pay two
+// thread-local lookups and two borrow pairs on the miss path, which is every
+// call in a pass that builds new nodes. What that costs is the rule above: the
+// rejected payload is built and dropped inside the borrow, so a `Drop` on
+// `Schema`, `Field`, `Attribute` or `MapClause` that interned anything would
+// panic on a borrow already held. None does: each drops handles and nothing
+// else, and one that interned would have to split its table's access.
 thread_local! {
     static NODES: RefCell<Table<Schema>> = RefCell::new(Table::new());
     static MEMBERS: RefCell<Table<[Schema]>> = RefCell::new(Table::new());

@@ -465,10 +465,10 @@ impl Dfa {
     ///
     /// A pass that signs every state afresh each round until a round changes
     /// nothing reaches the same partition and spends a round per state on a
-    /// chain. A literal is a chain, and one of four thousand bytes took 0.6 s
-    /// to build that way on a release build, which every product keeping the
-    /// chain spent again. `the_halves_cut_where_the_rounds_do` holds the two to
-    /// one partition.
+    /// chain. A literal is a chain, so one of four thousand bytes would sign its
+    /// four thousand states four thousand times, and every product keeping the
+    /// chain would spend that again. `the_halves_cut_where_the_rounds_do` holds
+    /// the two to one partition.
     ///
     /// Each block is queued once, when it is made, and a block is a nonempty
     /// set of states apart from every other, so the queue drains within one

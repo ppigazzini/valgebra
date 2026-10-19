@@ -170,8 +170,8 @@ pub(super) fn keyed_map_subtype(
         //
         // One entry rather than a table: the fields are walked in order, so a
         // repeat is the field before this one. A table of goals over the whole
-        // query was measured beside this and cost the shapes with nothing to
-        // repeat more than it saved the shapes with something.
+        // query costs the shapes with nothing to repeat more than it saves the
+        // shapes with something.
         //
         // The coinductive hypothesis needs no thought here, which is the other
         // reason this is the place for it: the trail is the same at every field
@@ -448,9 +448,8 @@ fn clause_escapes<'b>(
 ///
 /// Every attribute the supertype declares must be one the subtype declares, and
 /// no less narrowly. There is no class in it -- a record denotes every value
-/// carrying its attributes, whatever the value is -- so the nominal question the
-/// old node asked first is now a conjunct of its own, and two records that came
-/// from unrelated classes still relate.
+/// carrying its attributes, whatever the value is -- so a nominal question is a
+/// conjunct of its own, and two records read off unrelated classes relate.
 ///
 /// The rule is set inclusion read off the denotation: an attribute the supertype
 /// does not name constrains nothing, and one it names constrains every value of
@@ -498,8 +497,8 @@ pub(super) fn sorted_by_name<T: Named>(list: &[T]) -> bool {
 /// One walk over a field list, finding each name of another list as it passes.
 ///
 /// Both lists are in name order, so a partner is found by moving forward: no
-/// allocation, and one string compare per field passed. The table this replaces
-/// was built and freed once per side per comparison, and was a fifth of the
+/// allocation, and one string compare per field passed. A name table would be
+/// built and freed once per side per comparison, which is a fifth of the
 /// repeating workload.
 ///
 /// **Unique names are the caller's invariant**, and the order is what makes it

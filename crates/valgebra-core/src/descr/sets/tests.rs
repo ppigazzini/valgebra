@@ -15,11 +15,11 @@ impl Members for IntSet {}
 /// A meet past the build's allowance refuses, and the same meet succeeds
 /// under one that covers it.
 ///
-/// The fourth of the four polarity lattices to be held to this, and the one
-/// that was not charging: the bound above says how wide a result may be, and
-/// the allowance says what reaching one may cost. A product is where a build
-/// multiplies, so a lattice whose product does not charge is one a caller can
-/// spend unbounded time in after every other lattice has refused.
+/// The fourth of the four polarity lattices held to this: the bound above says
+/// how wide a result may be, and the allowance says what reaching one may
+/// cost. A product is where a build multiplies, so a lattice whose product does
+/// not charge is one a caller can spend unbounded time in after every other
+/// lattice has refused.
 #[test]
 fn a_meet_past_the_allowance_refuses() {
     let x = SetLattice::of(IntSet::just(1));

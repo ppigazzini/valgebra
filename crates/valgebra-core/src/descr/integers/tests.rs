@@ -452,12 +452,11 @@ fn equality_is_not_transitive_where_two_periods_cannot_meet() {
 
 /// No three sets are ordered in a cycle.
 ///
-/// The witness a sort of record atoms found, pinned so no seed is asked to
-/// find it twice: read at the period each pair shares, the integers come
-/// before `{-2}`, `{-2}` comes before the multiples of three, and the
-/// integers come *after* them. Nothing is wrong with any one of the three
-/// readings; what is wrong is reading a pair, and an order on the tables
-/// has no pair to read.
+/// A witness pinned so no seed has to draw it: read at the period each pair
+/// shares, the integers come before `{-2}`, `{-2}` comes before the multiples
+/// of three, and the integers come *after* them. Nothing is wrong with any one
+/// of the three readings; what is wrong is reading a pair, and an order on the
+/// tables has no pair to read.
 #[test]
 fn no_three_sets_are_ordered_in_a_cycle() {
     let corpus = [

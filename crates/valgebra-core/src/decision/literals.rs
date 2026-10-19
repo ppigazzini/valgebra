@@ -113,7 +113,8 @@ pub(super) fn finite_set_below(
     // come from `finite_set`, which admits nothing but literals in strictly
     // increasing index order -- so the two orderings agree, and the derived one
     // runs a comparison over the whole variant table where an index is a single
-    // integer compare. It was thirty-eight percent of the proving workload.
+    // integer compare. Searched by the node, it would be thirty-eight percent
+    // of the proving workload.
     //
     // A member that is not a literal cannot occur and is read as missing, which
     // is the conservative direction: the pair loses a proof rather than gaining

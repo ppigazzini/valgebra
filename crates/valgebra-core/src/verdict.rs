@@ -198,10 +198,10 @@ impl Relation {
     /// supertype, every field of a record against its counterpart -- so a
     /// refutation from any one of them is a value of the subject the supertype
     /// rejects, whatever the others answer. Reading the *first* answer that is
-    /// not a proof made that depend on the order the conjuncts happened to be
-    /// in: two records differing only in the order of their fields decided
-    /// differently, one in a microsecond and one in two hundred. A decline is
-    /// not an answer, so it cannot end the fold.
+    /// not a proof would make that depend on the order the conjuncts happen to
+    /// be in: two records differing only in the order of their fields would
+    /// decide differently. A decline is not an answer, so it cannot end the
+    /// fold.
     ///
     /// A `Fails` still ends it, and one rule reaches a `Fails` *through* a
     /// coinductive assumption: `A ⊆ ¬B` is refuted by proving `A ⊆ B` with `A`
@@ -267,8 +267,8 @@ impl Relation {
 ///
 /// The public relations still answer `bool`, because that is what soundness
 /// promises: `Unknown` and `Inhabited` both mean "not proven empty". What the
-/// three values buy is that the difference is now *visible* -- to a test and to
-/// a gate.
+/// three values buy is that the difference is *visible* -- to a test and to a
+/// gate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
     /// Proven to admit no value.

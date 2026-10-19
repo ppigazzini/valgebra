@@ -46,10 +46,10 @@ impl Schema {
         }
         // Two sets of literals are compared as *sets*. The recursion below is a
         // member-by-member walk, so a union of literals against another is
-        // quadratic in the oracle: two twenty-thousand-member unions were four
-        // hundred million calls into the bindings, and six seconds. The oracle
-        // can answer the whole question at once where it holds the constants,
-        // and declines -- leaving the walk to run -- where it cannot.
+        // quadratic in the oracle: two twenty-thousand-member unions would be
+        // four hundred million calls into the bindings. The oracle can answer
+        // the whole question at once where it holds the constants, and declines
+        // -- leaving the walk to run -- where it cannot.
         // Each table is read only where the one before it answered: a tuple of
         // the two builds both, and the second is wasted whenever the first says
         // this pair is not two tables of constants.

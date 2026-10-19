@@ -547,8 +547,8 @@ impl<G: Guard> MapAtom<G> {
             // one reaches every key of the part -- the exclusion set included,
             // which is the one group the want says nothing about. Naming each of
             // them takes it back out of the default's reach. Without this, `¬¬A`
-            // came out *smaller* than `A`: the record `{a: int}` complemented
-            // twice forbade the key it is about.
+            // would come out *smaller* than `A`: the record `{a: int}`
+            // complemented twice would forbid the key it is about.
             for label in &want.besides {
                 if key_slot(Some(label.kind())) == Some(want.slot) {
                     atom.labels.entry(label.clone()).or_insert_with(Field::top);

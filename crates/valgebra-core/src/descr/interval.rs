@@ -24,8 +24,8 @@ use core::cmp::{max, min};
 /// arrives as an `i64`, and complementing a span needs the integer just outside
 /// it: the complement of `Ge(i64::MIN)` begins at `i64::MIN - 1`, which is a
 /// Python integer and not an `i64`. Naming the ends in the same width as the
-/// bounds left that gap unrepresentable, and the complement dropped it -- so
-/// `int` was decided below `Annotated[int, Ge(-2**63)]`, which `-2**63 - 1`
+/// bounds would leave that gap unrepresentable, and the complement would drop
+/// it -- deciding `int` below `Annotated[int, Ge(-2**63)]`, which `-2**63 - 1`
 /// refutes. One step of headroom on each side is all the operations need: a
 /// complement moves a boundary by one and moves it back, and a union or a meet
 /// only ever picks a boundary one of its operands already carries.

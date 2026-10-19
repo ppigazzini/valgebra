@@ -883,9 +883,9 @@ impl Descr {
     /// Eleven empty components, for a result to be written into slot by slot.
     ///
     /// An empty union allocates nothing, so this is the cheap starting point
-    /// for the two operations that produce every component: each was cloning
-    /// the eleven line lists of one operand to overwrite every one of them,
-    /// and the clones were the largest leaf of the lowering.
+    /// for the two operations that produce every component: cloning the eleven
+    /// line lists of one operand to overwrite every one of them would make the
+    /// clones the largest leaf of the lowering.
     fn no_lines() -> [Lines; Kind::ALL.len()] {
         core::array::from_fn(|_| Lines::bottom())
     }
@@ -1104,9 +1104,9 @@ fn idempotent(left: &Arc<Descr>, right: &Arc<Descr>) -> Option<Arc<Descr>> {
 /// A value, at the resolution the descriptor distinguishes.
 ///
 /// Not a Python object: the core cannot see one. It is the *questions* a
-/// descriptor can currently answer about a value -- which kind it belongs to,
-/// and, where the kind's component distinguishes its values, which value it is.
-/// Each commit that makes a component exact widens this alongside it.
+/// descriptor can answer about a value -- which kind it belongs to, and, where
+/// the kind's component distinguishes its values, which value it is. A
+/// component made exact widens this alongside it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Value {
     /// The kind, or `None` for a value of no listed kind.

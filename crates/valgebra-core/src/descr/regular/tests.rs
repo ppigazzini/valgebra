@@ -637,7 +637,7 @@ fn a_length_bound_counts_the_characters_a_str_holds() {
     assert!(at_most_one.holds(b"\xed\xa0\x80"));
     assert!(!at_most_one.holds(b"\xed\xa0\x80\xed\xa0\x80"), "two");
     assert!(!one_or_more.holds(b""));
-    // And the ordinary characters are counted as they were.
+    // And an ordinary character counts as one.
     assert!(at_most_one.holds("\u{1f600}".as_bytes()));
     assert!(!at_most_one.holds("ab".as_bytes()));
     assert!(
@@ -819,11 +819,9 @@ fn a_cut_moves_the_smaller_part() {
 }
 
 /// A word is a chain of states, which is the table a refinement by rounds
-/// spends a round per state on: four thousand bytes took 0.6 s that way on a
-/// release build and 4.7 s on a debug one, four times as long at each
-/// doubling, so a hundred thousand would take about six minutes there and
-/// fifty here. Cut by halves, the chain minimises, and holds its word and
-/// neither neighbour.
+/// spends a round per state on, so that refinement's cost grows with the
+/// square of the word's length. Cut by halves, the chain minimises, and holds
+/// its word and neither neighbour.
 ///
 /// `RegularSet::word` refuses a word this long, since the state bound holds
 /// its table before it is built, so the chain is built here past the

@@ -313,13 +313,12 @@ impl Class {
 
     /// A class deriving from nothing and carrying the layout `layout` names.
     ///
-    /// Named for the half that decides disjointness. This was `root`, which read
-    /// as a statement about *derivation* -- and the derivation is the half that
-    /// decides nothing here, since a class deriving from nothing is disjoint
-    /// from nothing on that ground alone. What made two such classes disjoint
-    /// was the layout the old constructor quietly set to the id, so two calls
-    /// with different ids meant "these can share no value" without ever saying
-    /// so.
+    /// Named for the half that decides disjointness. A name about *derivation*,
+    /// such as `root`, would name the half that decides nothing here, since a
+    /// class deriving from nothing is disjoint from nothing on that ground
+    /// alone. What makes two such classes disjoint is the layout, and a
+    /// constructor that set it to the id in silence would make two calls with
+    /// different ids mean "these can share no value" without ever saying so.
     #[must_use]
     pub fn laid_out(id: u32, layout: u32) -> Class {
         Class::new(id, Some(layout), &[])

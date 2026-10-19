@@ -163,9 +163,7 @@ fn depth_descends_every_container_arm() {
     assert_eq!(Schema::set(Schema::Int).depth(), 2);
     assert_eq!(Schema::frozen_set(Schema::Int).depth(), 2);
     // A sequence is one level, whichever shape it holds: the elements sit
-    // directly in the shape, so reaching one is a single descent. While the
-    // body was a regular expression the constructors above an element were
-    // levels of their own, and the same three shapes measured 1, 3 and 4.
+    // directly in the shape, so reaching one is a single descent.
     assert_eq!(Schema::list(SeqShape::fixed([])).depth(), 1);
     assert_eq!(Schema::list(SeqShape::fixed([Schema::Int])).depth(), 2);
     assert_eq!(Schema::list(SeqShape::homogeneous(Schema::Int)).depth(), 2);
@@ -456,10 +454,11 @@ fn location_renders_keys_indices_and_their_mix() {
 
 /// A key that is not a bare name is written as a subscript of its quoted text.
 ///
-/// Bare, the key `"a.b"` read as the path `a` then `b`, `"[0]"` as the index 0,
-/// the empty key as nothing at all, and a key holding a newline broke the
-/// one-line message across two. Each row is a path that would collide with
-/// another, or leave its line, written bare, and the spelling it has.
+/// Bare, the key `"a.b"` would read as the path `a` then `b`, `"[0]"` as the
+/// index 0, the empty key as nothing at all, and a key holding a newline would
+/// break the one-line message across two. Each row is a path that would
+/// collide with another, or leave its line, written bare, and the spelling it
+/// has.
 #[test]
 fn a_key_that_is_not_a_bare_name_is_quoted_in_the_location() {
     let at = |path: Vec<PathSegment>| {
@@ -1036,8 +1035,8 @@ fn the_nullary_operations_are_their_identities() {
 /// The rebuilding walk and the reading traversal describe the same child set.
 /// `map_children` reconstructs a node and `children` reads it, so nothing but
 /// this holds one to the other when a variant gains a child schema -- and a
-/// measure that reads a different child set than the map writes is how two
-/// size measures came to disagree about a sequence.
+/// measure that reads a different child set than the map writes makes two size
+/// measures disagree.
 #[test]
 fn the_functor_and_the_traversal_describe_the_same_children() {
     for schema in every_variant() {
@@ -1071,8 +1070,8 @@ fn both_size_measures_read_the_shared_traversal() {
 
 /// The guard is a two-element lattice in which crossing a structural
 /// constructor absorbs: nothing below one is unguarded, however deeply it
-/// nests. The absorbing element was stated in a doc comment and threaded by
-/// hand through every structural arm.
+/// nests. The absorbing element is `join`'s, so no structural arm states it by
+/// hand.
 #[test]
 fn the_guard_join_absorbs_at_yes() {
     assert_eq!(Guarded::No.join(Guarded::No), Guarded::No);
@@ -1860,9 +1859,10 @@ fn a_map_keeps_a_clause_that_is_not_the_catch_all() {
 ///
 /// `expected` is the word a failure message puts after "expected", and
 /// `error_code` is the string a caller branches on. Both are total over the
-/// node set and both are read by the binding, so the core's own suite never
-/// called either for most variants -- the labels were held by the Python side
-/// alone, where a wrong one reads as a message somebody will fix later.
+/// node set and both are read by the binding, so without this the core's own
+/// suite would call neither for most variants -- the labels would be held by
+/// the Python side alone, where a wrong one reads as a message somebody will
+/// fix later.
 ///
 /// Held here as a table over `every_variant`, which is the list the traversal
 /// and the functor are already held to: a variant added to the enum arrives

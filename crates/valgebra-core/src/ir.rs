@@ -284,11 +284,11 @@ impl DefIx {
 /// another's pools.
 ///
 /// The constants pool combines in two ways -- appended, or interned so
-/// identity-shared constants collapse -- and the definitions table in one. The
-/// two ways were two whole structural walks over the IR, identical but for the
-/// leaf action, so a payload site reached by one and missed by the other was a
-/// wrong index the compiler could not see. Naming the difference leaves one walk
-/// and puts the difference at the leaf.
+/// identity-shared constants collapse -- and the definitions table in one. Two
+/// whole structural walks over the IR, identical but for the leaf action, would
+/// make a payload site reached by one and missed by the other a wrong index the
+/// compiler cannot see. Naming the difference leaves one walk and puts the
+/// difference at the leaf.
 #[derive(Debug, Clone, Copy)]
 enum Remap<'a> {
     /// The second pool is appended to the first: every pool index moves along by
@@ -360,7 +360,8 @@ impl Guarded {
     ///
     /// The absorbing element is why the guardedness check answers what it does --
     /// only the arm demanding [`No`](Guarded::No) can report an unguarded
-    /// occurrence -- and it was threaded by hand through every structural arm.
+    /// occurrence -- and this is the one place it is stated, rather than in
+    /// every structural arm.
     #[must_use]
     pub const fn join(self, other: Guarded) -> Guarded {
         match (self, other) {
@@ -410,8 +411,8 @@ pub enum PathSegment {
 
 /// The clause list an open record carries, allocated once for the process.
 ///
-/// Every open record's catch-all is the same pair -- any key, any value -- and
-/// every record built or reopened was allocating its own copy of it. A shared
+/// Every open record's catch-all is the same pair -- any key, any value -- so
+/// every record built or reopened would otherwise allocate its own copy. A shared
 /// list makes the carry a refcount bump, which is what sharing the list is for;
 /// the same goes for the empty lists a closed record and a fieldless one hold.
 fn open_clauses() -> Clauses {
@@ -715,11 +716,11 @@ fn with_field_buffer<R>(build: impl FnOnce(&mut Vec<Field>) -> R) -> R {
 ///
 /// A join or a meet is assembled in a growable buffer -- members flattened in,
 /// then ordered and deduplicated -- and the finished list is copied into the
-/// shared slice the node holds. Allocating that buffer per construction was the
+/// shared slice the node holds. Allocating that buffer per construction is the
 /// price of the shared slice, and it is a price nothing collects: the buffer is
 /// dead the moment the node exists. Pooling it per thread makes the buffer free
-/// after the first use and leaves one allocation per node, which is what the
-/// owned `Vec` cost before the members were shared.
+/// after the first use and leaves one allocation per node, which is what an
+/// owned `Vec` would cost.
 ///
 /// The pool is a stack rather than a single spare because construction nests
 /// deeply -- a member is built while the join holding it is being assembled --
@@ -1522,12 +1523,11 @@ pub struct Field {
     ///
     /// A field name is written once, when the frontend reads the annotation,
     /// and never edited; every pass over a schema afterwards rebuilds the tree
-    /// and carries the name across unchanged. Owning it outright made each of
-    /// those rebuilds allocate and copy the name again, and a pass over a wide
-    /// record does that once per field: the name copies were the single largest
-    /// source of allocations in the core, ahead of the nodes themselves. A
-    /// shared pointer makes the carry a refcount bump, and it is atomic because
-    /// a validator is shared across threads on a free-threaded interpreter.
+    /// and carries the name across unchanged. Owning it outright would make each
+    /// of those rebuilds allocate and copy the name again, once per field of a
+    /// wide record. A shared pointer makes the carry a refcount bump, and it is
+    /// atomic because a validator is shared across threads on a free-threaded
+    /// interpreter.
     ///
     /// Comparison, ordering and hashing read *through* to the string, so a name
     /// is still a name: two fields with the same spelling are equal whether or
@@ -1543,9 +1543,9 @@ impl Field {
     /// This field with its schema mapped through `f`, keeping its name and its
     /// required-ness.
     ///
-    /// The three-line struct literal that spells this out was written at every
-    /// pass over a field list, and it is the one place a pass could drop a
-    /// field's required-ness by rebuilding it from the wrong parts.
+    /// Every pass over a field list rebuilds its fields, and a struct literal
+    /// spelled out in each pass is one more place to drop a field's
+    /// required-ness by rebuilding it from the wrong parts.
     pub(crate) fn with_schema(&self, schema: Schema) -> Field {
         Field {
             name: Arc::clone(&self.name),

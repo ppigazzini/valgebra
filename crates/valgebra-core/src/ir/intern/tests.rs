@@ -201,8 +201,8 @@ fn parted_pair(make: impl Fn(usize) -> Schema) -> (Schema, Schema) {
 /// nesting around it collide, interning the leaf evicts the nesting and the
 /// second build shares nothing -- which is the direct-mapped table doing
 /// exactly what [`SLOTS`] says it does, and not the sharing the rows below
-/// are about. Written with one fixed leaf, those rows failed about one run
-/// in a thousand, which is a red lane nobody can reproduce.
+/// are about. With one fixed leaf those rows would fail on the rare run where
+/// the two collide, which is a red lane nobody can reproduce.
 ///
 /// So the leaf is chosen rather than fixed: the first that lands clear of
 /// its own nesting, searched the way [`parted_pair`] searches.
@@ -210,10 +210,9 @@ fn parted_pair(make: impl Fn(usize) -> Schema) -> (Schema, Schema) {
 /// **The slot is read off the first build, not off a probe.** A nesting may
 /// carry a list of its own -- a sequence's prefix -- and a list built only to
 /// read a slot dies with the probe, so the first build allocates another at
-/// another address and hashes to another slot. Read that way the check never
-/// saw the slot the sequence rows land in: the probe's slot and the build's
-/// disagreed on every run measured, and a Windows lane found the leaf in the
-/// build's.
+/// another address and hashes to another slot. Read that way the check would
+/// never see the slot the sequence rows land in: the probe's slot and the
+/// build's disagree, and the leaf can land in the build's.
 fn nesting_built_twice(wrap: &dyn Fn(Arc<Schema>) -> Schema) -> (Arc<Schema>, Arc<Schema>) {
     for leaf in [
         Schema::Bytes,

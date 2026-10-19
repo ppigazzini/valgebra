@@ -156,7 +156,7 @@ fn sets_are_canonical(schema: &Schema) -> bool {
 /// a meet's members are a set and a remap that renumbers them puts them back
 /// in canonical order -- so two indices that were neighbours may not be after.
 /// The laws below ask whether every index moved and by how much, which the
-/// set answers as well as the sequence did: an index that stood still keeps
+/// set answers as well as the sequence would: an index that stood still keeps
 /// a value the image of a shift by one or more does not hold.
 fn index_sets(schema: &Schema) -> (Vec<usize>, Vec<usize>) {
     let (mut pool, mut defs) = (Vec::new(), Vec::new());

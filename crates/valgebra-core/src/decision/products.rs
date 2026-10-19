@@ -52,7 +52,7 @@ pub(super) fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
 /// from it because narrowing only makes a product easier to cover:
 /// `Phi(P, [B, ..R]) = Phi(P, R)`, exactly. Without the drop the recursion
 /// narrows by every branch at every position, arity to the power of the branch
-/// count, and `tuple[K, K]` against the twenty-five pairs of a five-kind `K` ran
+/// count, and `tuple[K, K]` against the twenty-five pairs of a five-kind `K` runs
 /// out of budget on an inclusion that holds. A branch is dropped only on a
 /// *proof* that the two share nothing; one merely not shown to overlap stays.
 ///

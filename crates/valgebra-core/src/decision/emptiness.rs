@@ -289,10 +289,9 @@ impl Schema {
                     // A member that is not proven empty and an opaque region are
                     // both absorbing: no later member can make the union empty,
                     // and none can make the region known. The stop is on "not
-                    // proven empty" rather than "proven inhabited", which is
-                    // where the old two-valued fold stopped -- reading further to
-                    // strengthen an `Unknown` into an `Inhabited` would spend
-                    // budget on a question the caller does not ask.
+                    // proven empty" rather than "proven inhabited": reading
+                    // further to strengthen an `Unknown` into an `Inhabited`
+                    // would spend budget on a question the caller does not ask.
                     if verdict != Verdict::Empty && region.is_absorbing() {
                         break;
                     }
@@ -347,7 +346,7 @@ impl Schema {
             // set disjoint from itself is the empty one, and a set that shares
             // a value with itself has a value. The oracle declines for a type
             // whose equality it does not trust, and the literal stays unknown
-            // there, which is where it was for every constant before.
+            // there.
             Schema::Literal(constant) => (
                 match cx.oracle.literals_disjoint(*constant, *constant) {
                     Some(true) => Verdict::Empty,
@@ -367,8 +366,8 @@ impl Schema {
             // it lowers the same class to an atom holding an object, and every
             // refutation this library makes about a class rests on that. A
             // class no value can instantiate is where the assumption is wrong,
-            // and it was already wrong there -- the descriptor was making the
-            // claim and the rules were paying to defer to it.
+            // and it is as wrong in the descriptor, which makes the same claim:
+            // answering here spares the rules the cost of deferring to it.
             //
             // A class with a hooked metaclass is not a set here, and stays
             // unknown as it is everywhere else.
@@ -491,10 +490,10 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
 /// and `Refine(B, C) ∧ ¬Refine(B', C)` is `B ∧ C ∧ ¬B'`, empty where `C ⊆ str
 /// ⊆ B'`. The spelling check beside it reads `Refine(str, C)` and
 /// `Refine(Anything, C)` as two sets, while the set reading lowers both to the
-/// same language, so a union of one and the other's complement was the
-/// universe to the set reading and short of it to the rules. The constraints
-/// are read as a set first: a predicate among them may answer the two
-/// occurrences differently.
+/// same language, so without this a union of one and the other's complement
+/// would be the universe to the set reading and short of it to the rules. The
+/// constraints are read as a set first: a predicate among them may answer the
+/// two occurrences differently.
 fn has_a_pattern_and_its_complement(members: &[Schema], cx: &mut Cx<'_>) -> bool {
     members.iter().any(|member| {
         let Schema::Complement(inner) = member else {
@@ -617,7 +616,7 @@ thread_local! {
     /// other live budget has. Held here rather than on the budget or the
     /// query's [`Cx`], beside `visiting`: a list on either is built and dropped
     /// by every query, and this one is reached only where a meet is unfolded.
-    /// On the context its teardown read 10.6% more instructions on the
+    /// On the context its teardown would read 10.6% more instructions on the
     /// decision workload, whose queries take a few hundred each.
     static OPEN_MEETS: RefCell<Vec<(usize, Vec<Schema>)>> = const { RefCell::new(Vec::new()) };
 }
@@ -688,7 +687,7 @@ fn a_direct_instance_carries(class: ClassIx, fields: &[Attribute], cx: &Cx<'_>) 
 /// inhabited when its fields are -- and the meet above says it in the
 /// vocabulary the structural procedure uses. Neither member's region says
 /// anything, so without this the meet of two opaque halves is opaque, and every
-/// refutation about a dataclass was dropped by the guard that believes one.
+/// refutation about a dataclass would be dropped by the guard that believes one.
 ///
 /// **The witness is a *direct* instance of the class**, carrying whatever the
 /// fields admit: `type(v) is C`, so nothing is asked about which classes derive
@@ -700,9 +699,9 @@ fn a_direct_instance_carries(class: ClassIx, fields: &[Attribute], cx: &Cx<'_>) 
 ///
 /// The class and the record's fields come back with the answer because the
 /// callers want them: one reads the class out of the shape, and the meet's
-/// reading asks whether the class carries the fields. A guard that returned a
-/// `bool` made each search for what the match had already found -- a search
-/// that could not fail, and whose failure arm no input reached.
+/// reading asks whether the class carries the fields. A guard returning a
+/// `bool` would make each search for what the match has already found -- a
+/// search that cannot fail, and whose failure arm no input reaches.
 pub(super) fn class_with_attributes(members: &[Schema]) -> Option<(ClassIx, &[Attribute])> {
     match members {
         [Schema::Instance(class), Schema::AttrRecord { fields }]

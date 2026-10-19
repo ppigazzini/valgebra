@@ -190,10 +190,11 @@ fn a_residue_class_at_the_bottom_of_the_range_keeps_its_members() {
 ///
 /// The bounds a caller writes are `i64`, and the integers are not: `Ge(-2**63)`
 /// refuses `-2**63 - 1`, which is a Python integer. Naming a span's ends in the
-/// bounds' own width left that integer nowhere to go, so the complement of the
-/// half-line came out empty -- which reads as "every integer is at least
-/// `-2**63`" and proves an inclusion a value refutes. The ends are wider than
-/// the bounds for this, and one step of headroom is all the operations ask for.
+/// bounds' own width would leave that integer nowhere to go, so the complement
+/// of the half-line would come out empty -- which reads as "every integer is
+/// at least `-2**63`" and proves an inclusion a value refutes. The ends are
+/// wider than the bounds for this, and one step of headroom is all the
+/// operations ask for.
 #[test]
 fn a_half_line_at_the_end_of_the_bounds_keeps_its_complement() {
     let from_the_bottom = IntervalSet::between(Some(i64::MIN), None);

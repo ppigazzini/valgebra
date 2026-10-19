@@ -63,7 +63,7 @@ pub use crate::oracle::{LeafRelations, NoLeafRelations};
 /// -- once for each goal that reaches it.
 ///
 /// **A memo is mostly not what would lower it.** Counted by
-/// `decision::goal_tests` over the older workloads' shapes and over a record of
+/// `decision::goal_tests` over the other workloads' shapes and over a record of
 /// thirty-two fields sharing one inner schema, the goals a query *repeats*
 /// number zero: the trail absorbs recursion, and the field and position caches
 /// absorb the shape where one goal is asked once per field.
@@ -315,8 +315,8 @@ impl Schema {
     /// A complement *directly* under a complement is not on that list and cannot
     /// be: [`Schema::complement`] folds `¬¬X` to `X` whichever schema it is
     /// given, so the shape reaches a comparison only from a term built without
-    /// the constructors -- which the fuzz target does, and which is where the
-    /// bound on a universal subject was found missing.
+    /// the constructors -- which the fuzz target does, and which is what the
+    /// bound on a universal subject is for.
     ///
     /// The decision is bounded twice over: an adversarial schema that would take
     /// more than a fixed number of steps stops, and a descriptor too costly to
@@ -534,7 +534,7 @@ impl Schema {
         // the same union with a set beside it, which the fast reading declines
         // because it stops on the set and a member behind it cannot reopen the
         // answer -- so the same three members read as the universe in one order
-        // and as unknown in another. A fuzz run found the pair that shows it.
+        // and as unknown in another.
         //
         // Reading on is what the fast fold cannot afford: it is asked of every
         // pair, and a union of a thousand literals is a thousand opaque members
@@ -616,10 +616,10 @@ impl Schema {
         // Built through the meet constructor rather than as a raw node: the
         // emptiness rule that decides most pairs compares the *members* of one
         // intersection pairwise, and a member that is itself an intersection
-        // hides its own members from it. `tuple[int, str]` against
-        // `dict[str, int] & ~{"a": int}` was the shape that showed it -- the
-        // tuple and the dict never met, so `A <= ~B` declined for a pair whose
-        // meet `is_empty` decides, and the two relations disagreed about one
+        // hides its own members from it. Asked of `tuple[int, str]` against
+        // `dict[str, int] & ~{"a": int}` as a raw node, the tuple and the dict
+        // would never meet, so `A <= ~B` would decline for a pair whose meet
+        // `is_empty` decides, and the two relations would disagree about one
         // question asked two ways.
         Schema::meet_within([self.clone(), other.clone()], cx.defs).is_empty_rec(cx)
     }
@@ -718,9 +718,9 @@ impl Schema {
         // A branch the subject shares no value with decides nothing about the
         // inclusion: `A ⊆ X ∪ Y` with `A ∩ X = ∅` is `A ⊆ Y`. Dropping such a
         // branch is what lets a *refutation* out -- the rules refute against a
-        // single supertype and have no arm that refutes against a union, so a
-        // chain of records beside a `None` branch came back undecided where the
-        // record branch alone refutes.
+        // single supertype and have no arm that refutes against a union, so
+        // without it a chain of records beside a `None` branch is undecided
+        // where the record branch alone refutes.
         //
         // Sound in the direction that matters here, which is the one the page's
         // three facts cover: the narrowed union is a subset of the original, so
@@ -745,8 +745,8 @@ impl Schema {
         // union in the language. Measured on the relation matrix: 36% of the
         // decision path asked of every union against 0.14% asked of the unions
         // a branch refutes. Where it leaves a pair undecided the set
-        // representation is asked next, which is the route that pair was taking
-        // before any branch was dropped.
+        // representation is asked next, which is the route that pair takes
+        // where no branch is dropped.
         if refuted {
             for full in [false, true] {
                 let answer = self.below_the_branches_it_can_meet(members, full, cx);
@@ -920,8 +920,8 @@ impl Schema {
     ///
     /// Split from its caller because the two lattice bounds around it are asked
     /// at different points and the whole read past what one function may be.
-    /// No `#[inline]`: one was tried and moved no workload, and the compiler is
-    /// already free to within the crate.
+    /// No `#[inline]`: it moves no workload, since the compiler is already free
+    /// to inline within the crate.
     fn subtype_by_shape(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
         match (self, other) {
             // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z; A ⊆ (Y ∩ Z) iff A ⊆ Y and A ⊆ Z.
@@ -950,11 +950,11 @@ impl Schema {
             // The constructors fold this away and the frontend never builds
             // one, so the node arrives only from a term built by hand -- which
             // the fuzz target does. Without these two arms the two spellings
-            // were decided differently: `Literal[1]` is below the complement of
-            // an empty sequence, and was not below the same complement wrapped
-            // in a constraint-free refinement, although the wrapper narrows
-            // nothing. A rule that reads the wrapper and not what it says is a
-            // rule about the spelling.
+            // would be decided differently: `Literal[1]` is below the
+            // complement of an empty sequence, and would not be below the same
+            // complement wrapped in a constraint-free refinement, although the
+            // wrapper narrows nothing. A rule that reads the wrapper and not
+            // what it says is a rule about the spelling.
             (Schema::Refine { base, constraints }, _) if constraints.is_empty() => {
                 base.is_subtype_rec(other, cx)
             }
@@ -1087,8 +1087,8 @@ impl Schema {
     /// *subject* is empty. It is asked last rather than first because a proof
     /// stands without it and a refutation is read against that same emptiness
     /// by [`witnessed`](Self::witnessed) on the way out -- so asking first
-    /// walked the subject on every pair the rules were about to decide anyway,
-    /// which is a sixth of the repeating workload.
+    /// would walk the subject on every pair the rules are about to decide
+    /// anyway, which is a sixth of the repeating workload.
     ///
     /// The answer is identical either way. Both readings are sound, and an
     /// empty subject is below everything whichever of them says so.

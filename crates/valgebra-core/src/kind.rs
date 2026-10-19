@@ -37,12 +37,12 @@ use crate::verdict::Verdict;
 /// schema empty. So `str` earns a region and `list[int]` does not: a list schema
 /// is a proper part of the lists, and the fold keeps it opaque.
 ///
-/// **It is a set, and its operations are the set's.** The bits were an
-/// `Option<u8>` combined at each call site with `|`, `&`, `!`, `|=`, and `<<`,
-/// where "did this schema's regions cancel" read as `== Some(0)` and "is every
-/// region of this one also a region of that" read as `a & !b == 0`. Naming the
-/// operations puts each of those decisions in one place with one test, and takes
-/// the raw operators out of the fold entirely.
+/// **It is a set, and its operations are the set's.** An `Option<u8>` combined
+/// at each call site with `|`, `&`, `!`, `|=`, and `<<` would spell "did this
+/// schema's regions cancel" as `== Some(0)` and "is every region of this one
+/// also a region of that" as `a & !b == 0`. Naming the operations puts each of those
+/// decisions in one place with one test, and keeps the raw operators out of the
+/// fold entirely.
 ///
 /// 6 scalar regions plus the non-scalar region is 7 of `u8`'s 8 bits. The
 /// representation is sized to the partition, so an 8th region still fits and a
@@ -121,9 +121,9 @@ impl Regions {
     /// Every region in either set, opaque if either side is.
     ///
     /// A member naming every region would settle a union whatever the others
-    /// are, and saying so here was tried: it makes the two folds that walk a
-    /// union disagree, because one stops at the first opaque member and the
-    /// other does not. Reading on instead of stopping costs a recursive region
+    /// are, and saying so here would make the two folds that walk a union
+    /// disagree, because one stops at the first opaque member and the other does
+    /// not. Reading on instead of stopping costs a recursive region
     /// walk per member and half again the decision budget. So the accumulator
     /// stays opaque once any member is, and a universe spelled with an opaque
     /// member beside `Anything` is left undecided rather than paid for.

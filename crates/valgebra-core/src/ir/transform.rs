@@ -273,13 +273,13 @@ impl Schema {
     /// This schema with its references unfolded, and the cut replaced by the
     /// bound the position makes sound.
     ///
-    /// A set representation holds no cycle, so a recursive schema could not be
-    /// lowered at all and every relation over one was left to the structural
-    /// rules -- including relations a single unfolding settles, like a meet with
-    /// a kind the body never admits. Unfolding `unfolds` times and putting a
-    /// *bound* where the reference would have been gives a schema the descriptor
-    /// can hold and an answer that still holds of the original, provided the
-    /// bound is chosen for the position.
+    /// A set representation holds no cycle, so without this a recursive schema
+    /// could not be lowered at all and every relation over one would be left to
+    /// the structural rules -- including relations a single unfolding settles,
+    /// like a meet with a kind the body never admits. Unfolding `unfolds` times
+    /// and putting a *bound* where the reference would have been gives a schema
+    /// the descriptor can hold and an answer that still holds of the original,
+    /// provided the bound is chosen for the position.
     ///
     /// [`Polarity`] says which. Widening cuts to the top, so the result denotes
     /// a superset: proving *that* empty proves the original empty. Narrowing --
@@ -442,8 +442,8 @@ impl Schema {
     /// The same rebuild, answering `None` where no index below this node moves.
     ///
     /// Combining two validators shifts one side's indices and leaves the
-    /// other's where they are, so half of every composition was rebuilding a
-    /// whole tree to arrive at the tree it started from. An index that does not
+    /// other's where they are, so a rebuild of both would spend half of every
+    /// composition arriving at the tree it started from. An index that does not
     /// move says so, and a node all of whose children said so is returned as
     /// the handle the caller already held.
     fn remapped_where_moved(&self, remap: Remap<'_>) -> Option<Schema> {
@@ -685,9 +685,10 @@ impl Constraint {
 /// A fold can leave a definition behind: `json | ~json` is the top and carries
 /// the fixpoint's body no reference names any more. Dead weight in itself, and
 /// worse than that for equality -- the definitions are part of what two
-/// validators are compared on, so the top built that way was not the top built
-/// any other way. Two schemas differ when their *reachable* definitions differ,
-/// which is what this makes true by leaving nothing else.
+/// validators are compared on, so the top built that way would not be the top
+/// built any other way if it were kept. Two schemas differ when their
+/// *reachable* definitions differ, which is what this makes true by leaving
+/// nothing else.
 ///
 /// The traversal is the reachability of a graph whose edges are `Ref` nodes:
 /// what the schema names, what those name, and no further.

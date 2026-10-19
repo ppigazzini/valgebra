@@ -152,8 +152,7 @@ impl<G: Guard> Atom<G> {
         // Two classes left in `is_a` are incomparable, because [`Atom::tidy`]
         // drops one that another derives from -- so counting them is the whole
         // question. Re-testing the order here would be asking what tidying has
-        // already answered, and the mutation sweep says as much: neither guard
-        // can be made to change an answer.
+        // already answered: neither guard can change an answer.
         let unrelated = self.is_a.len() > 1;
         let fields = Verdict::every(self.fields.values().map(Field::emptiness));
         if unrelated && fields != Verdict::Empty {

@@ -97,7 +97,7 @@ impl Constants for NoConstants {}
 /// this one carries a work budget too.
 ///
 /// A refusal past the bound is the same refusal as for a form with nowhere to
-/// land, and it reaches the same place: the caller decides the old way. It is a
+/// land, and it reaches the same place: the caller decides by the rules. It is a
 /// bound on the *lowering*, not on the algebra -- the components have their own,
 /// and those are limits of what they can represent rather than of what they will
 /// spend.
@@ -173,7 +173,7 @@ pub fn lower_unfolded(
     // schema that carries no fixpoint at all -- which is almost all of them, and
     // all of the ones on the workload the decision budget is measured over. The
     // walk that follows costs a pass over the tree, and paying it per relation
-    // for a schema with no definitions was ten percent of that workload.
+    // for a schema with no definitions would be ten percent of that workload.
     if definitions.is_empty() || !schema.has_reference() {
         return lower(schema, pool);
     }
@@ -235,7 +235,7 @@ impl Bounds {
 /// record nested eight deep spends 22,806, and a union of four records nested
 /// three deep minus a union of its siblings spends 170,597.
 ///
-/// On the shapes reachable today [`DEPTH`] refuses first for anything deep, so
+/// On the shapes measured above, [`DEPTH`] refuses first for anything deep, so
 /// this number stops a build only where a shape is shallow and wide -- which is
 /// the one nesting cannot catch, and what it is kept for.
 ///

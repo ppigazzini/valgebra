@@ -153,9 +153,9 @@ fn a_reference_is_not_a_set_the_fold_may_cancel() {
 /// because each is a separate line of the walk: the resolution, and the
 /// revisit.
 ///
-/// Without this the walk's recursive half ran in production -- the
+/// Without this the walk's recursive half would run in production -- the
 /// constructors pass their definitions -- and in no test, so the reading the
-/// doc comment states was held by nothing.
+/// doc comment states would be held by nothing.
 #[test]
 fn a_reference_the_definitions_resolve_is_read_at_its_fixpoint() {
     // `t = int | list[t]`: the body names the reference, so the walk reaches

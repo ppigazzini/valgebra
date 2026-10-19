@@ -71,8 +71,8 @@ fn a_labelled_key_witnesses_a_wanted_key() {
 /// `¬A` names the ways to fail `A`, and one of them is "no key of this part,
 /// other than the ones `A` names, maps anywhere". Negating *that* tightens
 /// the part's default -- which governs every key the atom does not name, the
-/// excluded ones included, so the record `{a: int}` came back forbidding the
-/// key it is about and `¬¬A` was empty.
+/// excluded ones included, so tightened wholesale it would leave the record
+/// `{a: int}` forbidding the key it is about, and `¬¬A` empty.
 ///
 /// Checked against a value as well as against the verdict, because an atom
 /// set that is merely spelled differently is fine and one that holds
@@ -94,8 +94,8 @@ fn complementing_twice_gives_the_dicts_back() {
     );
     assert!(!twice.holds(&[at("a", 1), at("b", 1)]));
     // And the meet with a mapping that admits the same dict is inhabited,
-    // which is the relation the unsoundness was found through: `dict[str,
-    // int]` was decided a subtype of `¬{a: int}`.
+    // which is the relation an empty `¬¬A` gets wrong: `dict[str, int]` would
+    // be decided a subtype of `¬{a: int}`.
     let mapping = MapLattice::keyed(Kind::Str, IntSet::just(1));
     assert_eq!(
         mapping.intersect(&twice).expect("a meet").emptiness(),
@@ -867,7 +867,7 @@ proptest! {
     /// `a ∧ ¬(b ∨ c)` and `a ∧ ¬b ∧ ¬c` are one set by De Morgan. The laws
     /// above hold each spelling against the dicts *separately*; this holds the
     /// two against each other, which is what the meet against a negated side
-    /// has to preserve now that it removes one factor at a time rather than
+    /// has to preserve, since it removes one factor at a time rather than
     /// rebuilding the union first.
     ///
     /// Two claims, and the second is the one membership cannot make. The
@@ -883,7 +883,7 @@ proptest! {
     /// one spelling before the other, whichever way round the factors go. What
     /// the meet guarantees is that no spelling is harder *by construction*,
     /// which is what `a_meet_with_a_negated_union_answers_as_the_spelled_out_meet`
-    /// pins on the shape that showed it.
+    /// pins on one shape.
     #[test]
     fn the_verdict_is_stable_under_de_morgan(
         a in lattice(),
@@ -1165,8 +1165,8 @@ fn evens_twice_and_a_set_between() -> (IntSet, IntSet, IntSet) {
 
 /// A union of map atoms holds an atom once, however its guard is spelled.
 ///
-/// Two atoms equal as sets of dicts sorted apart, with a third between them,
-/// were both kept by a dedup of neighbours: a summand of width toward
+/// Two atoms equal as sets of dicts can sort apart, with a third between them,
+/// and a dedup of neighbours would keep both: a summand of width toward
 /// [`MAX_ATOMS`] that holds no dict the other does not.
 #[test]
 fn a_union_holds_an_atom_once_whatever_its_guard_spells() {

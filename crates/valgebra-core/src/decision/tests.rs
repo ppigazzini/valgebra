@@ -23,12 +23,12 @@ fn structural(sub: &Schema, sup: &Schema) -> bool {
 
 /// Every set is below the universe, however the universe is spelled.
 ///
-/// A refinement with no constraint denotes exactly its base, and until it
-/// said so the two spellings were decided differently: `Anything` reached
-/// `Refine { base: Anything }` through the refinement rule, and the gradual
-/// `Any` reached `Anything` through the region bound but not the refinement,
-/// because only a region set carries that bound. The fuzzer found it as a
-/// union holding both.
+/// A refinement with no constraint denotes exactly its base, and a procedure
+/// that did not say so would decide the two spellings differently: `Anything`
+/// reaches `Refine { base: Anything }` through the refinement rule, and the
+/// gradual `Any` would reach `Anything` through the region bound but not the
+/// refinement, because only a region set carries that bound. A union holding
+/// both shows it.
 #[test]
 fn every_set_is_below_the_universe_however_it_is_spelled() {
     let bare = Schema::Refine {
@@ -66,10 +66,10 @@ fn every_set_is_below_the_universe_however_it_is_spelled() {
 /// The unresolved reference names a set this query cannot read, so the rule
 /// that unfolds the subject has nothing to unfold -- and the rule that unfolds
 /// the supertype needs nothing read: every set is below the universe. The set
-/// reading decided the pair alone and missed it beside a literal, which the
-/// pool has to lower and `NoLeafRelations` cannot, so the union came back
-/// undecided while the complement of its supertype was proven empty. The
-/// nightly fuzzer drew the union.
+/// reading decides the pair alone and misses it beside a literal, which the
+/// pool has to lower and `NoLeafRelations` cannot, so left to that reading the
+/// union would be undecided while the complement of its supertype is proven
+/// empty.
 #[test]
 fn an_unresolved_reference_is_below_a_reference_to_the_universe() {
     let defs = [Schema::Int, Schema::ANYTHING];
@@ -119,8 +119,8 @@ fn an_unresolved_reference_is_below_a_reference_to_the_universe() {
 ///
 /// The constructors fold such a node away and the frontend builds one for no
 /// annotation, so the node arrives only from a term built by hand -- which the
-/// fuzz target does, and that is where the two spellings were first seen
-/// deciding differently.
+/// fuzz target does, and that is where the two spellings can decide
+/// differently.
 #[test]
 fn a_refinement_with_no_constraint_is_decided_as_its_base_on_either_side() {
     let rules = |sub: &Schema, sup: &Schema| {
@@ -234,8 +234,8 @@ fn a_refinement_with_no_constraint_earns_the_regions_of_its_base() {
 /// node whose own arms are held by whatever the *other* member decided, which
 /// is the shape of a rule that confirms itself.
 ///
-/// Splitting the class from the record was done so each half is a set the rules
-/// already know. This asks the record half what it knows: a proof, a refutation
+/// The class and the record are split so each half is a set the rules already
+/// know. This asks the record half what it knows: a proof, a refutation
 /// standing on a value, or a decline -- one of the three per pair, and the
 /// decline named rather than left as a row nobody wrote.
 #[test]
@@ -323,16 +323,15 @@ fn an_attribute_record_relates_to_every_other_node() {
 /// A union covers the universe whatever sits beside the pair that covers it,
 /// and in whatever order the members are written.
 ///
-/// The sibling of the row above, and the same fuzz target found it: `~bool |
-/// bool` is the universe, and the region fold read the same three members as
-/// the universe or as unknown according to where the opaque one fell, because
-/// it stopped at the first member the partition cannot read and nothing behind
-/// that member could reopen the answer. A set of bytes is such a member.
+/// The sibling of the row above: `~bool | bool` is the universe, and a region
+/// fold that stops at the first member the partition cannot read reads the
+/// same three members as the universe or as unknown according to where the
+/// opaque one falls, since nothing behind that member can reopen the answer. A
+/// set of bytes is such a member.
 ///
-/// The subject is the one the fuzzer drew, and it matters: it carries a length
-/// bound over an `int` base, which is a refinement the descriptor refuses to
-/// lower, so the second decider cannot answer the pair either and the rules are
-/// the whole of the answer.
+/// The subject matters: it carries a length bound over an `int` base, which is
+/// a refinement the descriptor refuses to lower, so the second decider cannot
+/// answer the pair either and the rules are the whole of the answer.
 #[test]
 fn a_union_covers_the_universe_behind_a_member_the_partition_cannot_read() {
     let opaque = Schema::Coll {
@@ -382,9 +381,8 @@ fn a_union_covers_the_universe_behind_a_member_the_partition_cannot_read() {
     // for a meet on the right asks each member on its own, so each reaches the
     // union reading above by itself. A **complement** covers it only when the
     // schema under it holds no value, which is the question the complement
-    // rule already asks. Arms for the two were written and deleted: nothing
-    // could tell either from its own deletion, and these two rows are what
-    // says why.
+    // rule already asks. An arm for either would be one nothing can tell from
+    // its own deletion, and these two rows are what says why.
     let cannot_hold = Schema::Intersection(vec![opaque.clone(), Schema::Bool, Schema::Str].into());
     // And a union that covers the universe *inside* another union, which the
     // outer one's own members do not cover between them: the member that
@@ -835,9 +833,9 @@ proptest! {
     /// stops at the first member the partition cannot read, so `list | object`
     /// covers the universe and folds to an unknown region. Pinning the
     /// complement's emptiness to that fold instead would pin it to the stop,
-    /// and a subject denoting nothing would not be below everything -- which is
-    /// what the nightly fuzzer found. Both directions are asserted, so the
-    /// verdict can neither fall behind the reading nor run ahead of it.
+    /// and a subject denoting nothing would not be below everything. Both
+    /// directions are asserted, so the verdict can neither fall behind the
+    /// reading nor run ahead of it.
     #[test]
     fn covering_the_universe_is_the_complement_being_empty(s in schema()) {
         let budget = Budget::new(DECISION_BUDGET);
@@ -1416,10 +1414,10 @@ fn empty_by_the_rules_under(schema: &Schema, oracle: &dyn LeafRelations) -> bool
 /// A refinement carrying no constraint denotes exactly its base, and both
 /// halves of the procedure read it that way.
 ///
-/// Without it the universe had two spellings that decided differently:
+/// Without it the universe would have two spellings that decide differently:
 /// `anything` is below `Refine { base: anything }` through the refinement
-/// arm, and the gradual `Any` is below `anything`, but was not below the
-/// refinement -- because only a region set says so. A fuzzer found it.
+/// arm, and the gradual `Any` is below `anything`, but would not be below the
+/// refinement -- because only a region set says so.
 #[test]
 fn the_rules_read_a_refinement_with_no_constraint_as_its_base() {
     let bare = |base| Schema::Refine {
@@ -1710,12 +1708,12 @@ impl LeafRelations for Kinded {
 /// such a class to an atom holding an object, and every refutation this
 /// library makes about a class rests on that -- `A` below `B`, for two classes
 /// neither deriving from the other, is reported `not_subset` because the
-/// difference is read as holding a value. The rules declined to say it and
-/// deferred to the sets, which cost three orders of magnitude for an answer the
-/// library had already committed to.
+/// difference is read as holding a value. Declining to say it and deferring to
+/// the sets would cost three orders of magnitude for an answer the library has
+/// already committed to.
 ///
 /// A class no value can instantiate is where the assumption is wrong, and it
-/// was wrong there before: what changes is which decider says it.
+/// is as wrong in the sets: the reading changes only which decider says it.
 #[test]
 fn a_class_the_oracle_reads_as_a_set_has_a_value() {
     /// An oracle that reads class zero and declines class one, which is what
@@ -1746,7 +1744,7 @@ fn a_class_the_oracle_reads_as_a_set_has_a_value() {
     assert_eq!(read.verdict(), Verdict::Unknown);
 
     // What the reading buys: the oracle refutes the pair, and the refutation is
-    // now believed rather than handed to the set representation.
+    // believed rather than handed to the set representation.
     let relation = |sub: &Schema, sup: &Schema, oracle: &dyn LeafRelations| {
         let budget = Budget::new(DECISION_BUDGET);
         sub.subtype_relation(sup, oracle, &[], &budget)
@@ -1896,11 +1894,11 @@ impl LeafRelations for Sets {
 /// Two sets of literals are one question, and both sets reach the oracle whole.
 ///
 /// The member walk asks once per pair, which is quadratic across the binding
-/// boundary: two twenty-thousand-member unions were four hundred million calls.
-/// So where both sides are nothing but literals the constants are gathered and
-/// handed over together. Both halves of that are asserted, because the verdict
-/// alone cannot tell the two readings apart -- they agree, which is the point
-/// -- and what the optimisation *is* is which question gets asked.
+/// boundary: two twenty-thousand-member unions would be four hundred million
+/// calls. So where both sides are nothing but literals the constants are
+/// gathered and handed over together. Both halves of that are asserted, because
+/// the verdict alone cannot tell the two readings apart -- they agree, which is
+/// the point -- and what the optimisation *is* is which question gets asked.
 #[test]
 fn two_sets_of_literals_are_asked_as_sets() {
     let lit = |i: usize| Schema::Literal(ConstIx::new(i));
@@ -2375,7 +2373,7 @@ fn a_collection_is_inhabited_by_its_empty_value() {
 
 /// An attribute record carries no class, so its fields decide inhabitation
 /// as well as emptiness: an object carrying one witness per attribute is a
-/// value of it. The class half is the opaque one, and it is now a separate
+/// value of it. The class half is the opaque one, and it is a separate
 /// conjunct that only the meet is unknown about.
 #[test]
 fn an_attribute_record_is_inhabited_by_its_fields() {
@@ -3393,8 +3391,9 @@ fn a_clause_answers_for_an_optional_field_only_where_its_key_admits_the_name() {
 /// A decline is not an answer: a pair the arm could not settle has had no rule,
 /// and what a pair with no rule is worth is the reading at the end of the match
 /// -- two sets that share no value, then the oracle, then the supertype's own
-/// shape. An arm that ended the match instead kept its pair from all three, and
-/// the set representation was asked what a discriminant already decides.
+/// shape. An arm that ended the match instead would keep its pair from all
+/// three, and the set representation would be asked what a discriminant
+/// already decides.
 #[test]
 fn an_arm_that_declines_hands_the_pair_to_the_reading_below() {
     let relation = |sub: &Schema, sup: &Schema| {
@@ -3554,8 +3553,8 @@ fn the_oracle_answers_a_refinement_before_its_base_is_read() {
 /// compared to a tuple position by position, a mapping not to either -- so the
 /// pair reaches the end of the match, where disjointness answers it: every
 /// value of the subject is outside the supertype. Without that reading the
-/// pair went unproven and the set representation was asked to lower both
-/// sides.
+/// pair would go unproven and the set representation would be asked to lower
+/// both sides.
 #[test]
 fn a_pair_that_shares_no_value_is_refuted() {
     let relation = |sub: &Schema, sup: &Schema| {
@@ -3697,10 +3696,10 @@ fn the_rules_refute_prove_and_decline_these() {
 /// A subject disjoint from a meet is below that meet's complement.
 ///
 /// `A <= ~B` and `A & B = {}` are one question asked two ways, and the rules
-/// answered them differently: the meet this rule builds held `B` as a nested
-/// intersection, and the emptiness rule that decides most meets compares the
-/// members of *one* intersection pairwise, so a tuple and the dict inside the
-/// nested meet were never compared. Built through the meet constructor, the
+/// answer them alike only if the meet this rule builds is flat: the emptiness
+/// rule that decides most meets compares the members of *one* intersection
+/// pairwise, so with `B` held as a nested intersection a tuple and the dict
+/// inside it would never be compared. Built through the meet constructor, the
 /// members are flattened into one list and the pair meets.
 #[test]
 fn a_subject_disjoint_from_a_meet_is_below_its_complement() {
@@ -4119,12 +4118,13 @@ fn the_position_cache_reads_both_halves_of_the_goal() {
 /// Two records differing only in the order of their fields decide alike.
 ///
 /// The conjunction over a record's fields is a fold, and reading the first
-/// answer that is not a proof made the pair's answer depend on which field the
-/// canonical order happened to put first: a field the rules decline, sorted
-/// ahead of the refutation, ended the fold at *unknown* and sent the pair to
-/// the set representation. The refutation was the same one either way -- a
-/// required key the subject does not declare -- so the two orders differed in
-/// cost by two orders of magnitude and, at the boundary, in nothing else.
+/// answer that is not a proof would make the pair's answer depend on which
+/// field the canonical order happens to put first: a field the rules decline,
+/// sorted ahead of the refutation, would end the fold at *unknown* and send the
+/// pair to the set representation. The refutation is the same one either way
+/// -- a required key the subject does not declare -- so the two orders would
+/// differ in cost by two orders of magnitude and, at the boundary, in nothing
+/// else.
 ///
 /// The subject here declares no required field, so it holds a value shallowly
 /// and the guard believes what the fold reports. With the fold reading the
@@ -4215,8 +4215,8 @@ fn a_region_outside_a_kind_bound_refutes() {
 ///
 /// A reference denotes exactly its definition, so a definition holding a value
 /// the union rejects names a value of the reference outside it. The arm for a
-/// non-union supertype reads the reduction that way already; the union arm
-/// read it for its proof alone and dropped the refutation, which cost every
+/// non-union supertype reads the reduction that way, and so does the union
+/// arm: reading it for its proof alone would drop the refutation and cost every
 /// recursive schema against a scalar union a trip to the set representation.
 ///
 /// The refutation cannot come from the coinductive hypothesis: a goal on the
@@ -5484,8 +5484,8 @@ fn two_fixed_lengths_that_differ_are_refuted() {
 /// A refinement pair the constraint rule cannot prove is read on, not dropped.
 ///
 /// [`refinement_subtype`] only ever proves: it reduces to `Relation::proven`,
-/// which is `Holds` or `Unknown` and never `Fails`. The arm returned it
-/// directly, so a refinement on *both* sides was the one pair kept from the
+/// which is `Holds` or `Unknown` and never `Fails`. An arm returning it
+/// directly would make a refinement on *both* sides the one pair kept from the
 /// reading every other pair reaches -- a refinement against a non-refinement
 /// already gets it, and that reading has a branch written for a refinement
 /// supertype.
@@ -6538,9 +6538,9 @@ fn a_product_is_below_its_corners_and_refuted_by_a_missing_one() {
         Relation::Fails
     );
     // No corner at all: the union of none is the empty set, and a product with
-    // a value is outside it. The law over drawn pairs found this one declined.
-    // Read by the rules alone, since the set representation refutes it as well
-    // and would answer for a rule that declined.
+    // a value is outside it. Read by the rules alone, since the set
+    // representation refutes it as well and would answer for a rule that
+    // declined.
     let (product, _) = product_and_corners(5, 0);
     assert_eq!(
         product.subtype_relation(

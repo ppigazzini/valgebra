@@ -421,7 +421,7 @@ fn corpus() -> Vec<Schema> {
 /// The descriptor and the procedure agree about emptiness wherever both
 /// decide it.
 ///
-/// The check the whole milestone is for: two representations of one meaning,
+/// The check the descriptor is built for: two representations of one meaning,
 /// asked the same question. Neither is taken as the oracle -- each has
 /// answers the other lacks, so the claim is only that they never *contradict*
 /// each other, and a proof from one is never met by the opposite proof from
@@ -727,7 +727,7 @@ fn a_length_bound_on_a_base_with_no_words_refuses() {
 /// nesting, and each is asserted in both directions -- a bound that only
 /// ever refuses would pass half of this.
 ///
-/// Refusing is safe, because the caller decides the old way.
+/// Refusing is safe, because the caller then decides by the rules.
 #[test]
 fn a_schema_past_a_bound_refuses() {
     let pool = empty_pool();
@@ -919,8 +919,8 @@ fn an_attribute_record_lowers_to_the_values_carrying_it() {
     assert!(lower(&empty, &pool).expect("it lowers").is_empty());
 }
 
-/// A map lowers to the atom its keys spell, and the three rows the report
-/// lists as undecided fall out of the semantic `dom`.
+/// A map lowers to the atom its keys spell, and three spellings of one empty
+/// map fall out of the semantic `dom`.
 ///
 /// A label whose type its part's default already gives it says nothing, and
 /// the atom drops it -- so a key that must be absent from a closed record
@@ -1807,8 +1807,8 @@ proptest! {
     /// bound or a pattern also holds the builtin's subclasses -- an `int`
     /// subclass a schema names, and one none does. A proof admits no value of
     /// the subject outside the supertype, and a refutation has one. Read with
-    /// the literal as the kind's value, a bound at 5 and 5 was proved equal to
-    /// `Literal[5]`, and the subclass's 5 is outside the one and inside the
+    /// the literal as the kind's value, a bound at 5 and 5 would be proved equal
+    /// to `Literal[5]`, and the subclass's 5 is outside the one and inside the
     /// other.
     #[test]
     fn a_literal_is_read_at_its_exact_type(a in scalar_schema(), b in scalar_schema()) {
@@ -1976,10 +1976,11 @@ proptest! {
     ///
     /// The label `"a"` holds a `str` subclass's key equal to `"a"`, which a
     /// record's field admits and `Literal["a"]` does not, so a proof over the
-    /// label on the side a difference narrows stood on nothing: `{"a": int}`
-    /// was proved below `dict[Literal["a"], int]`, and `{MyStr("a"): 1}` is in
-    /// the one and not the other. The universe holds each name at either key,
-    /// and every answer the sets give is held to it, emptiness included.
+    /// label on the side a difference narrows would stand on nothing:
+    /// `{"a": int}` would be proved below `dict[Literal["a"], int]`, and
+    /// `{MyStr("a"): 1}` is in the one and not the other. The universe holds
+    /// each name at either key, and every answer the sets give is held to it,
+    /// emptiness included.
     #[test]
     fn a_literal_key_proves_only_where_its_label_widens(a in map_schema(), b in map_schema()) {
         let pool = Pool(vec![

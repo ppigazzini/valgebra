@@ -22,8 +22,9 @@ impl Violation {
     /// A string key that reads as a bare name is written as one. Any other --
     /// empty, or holding a `.`, a bracket, whitespace or a control character --
     /// is written as a subscript of its [`quoted`] text, `name['a.b']`: bare,
-    /// the key `"a.b"` read as the path `a` then `b`, `"[0]"` as the index 0,
-    /// and a key holding a newline broke the one-line message across two.
+    /// the key `"a.b"` would read as the path `a` then `b`, `"[0]"` as the index
+    /// 0, and a key holding a newline would break the one-line message across
+    /// two.
     #[must_use]
     pub fn location(&self) -> String {
         let mut out = String::new();

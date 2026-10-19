@@ -5,15 +5,14 @@
 //! literal table, a complement of a scalar and a nesting. None of them holds a
 //! refinement, a sequence read as a star, a complement against a class, a
 //! dataclass against a union, or a reference on the supertype's side -- so a
-//! week of readings that cut the relation matrix's slow set from 4.14 ms to
-//! 0.68 moved every one of those four workloads by 0.00%. A gate that cannot
-//! see a change cannot hold the next one.
+//! change to the readings that decide the relation matrix's slow set moves none
+//! of them. A gate that cannot see a change cannot hold it.
 //!
-//! **This workload is a floor, not evidence.** It was written after the
-//! readings it exercises, so its first recorded count is a baseline the *next*
-//! change is held to and says nothing about the ones already landed -- a
-//! workload chosen to make a delta match a win is not a measurement. The number
-//! to compare against is `--against <rev>`, which builds both sides.
+//! **This workload is a floor, not evidence.** Its recorded count is a baseline
+//! the *next* change is held to and says nothing about the readings it
+//! exercises -- a workload chosen to make a delta match a win is not a
+//! measurement. The number to compare against is `--against <rev>`, which
+//! builds both sides.
 //!
 //! The corpus is the matrix's own slow set, with the pairs named for what makes
 //! each expensive rather than for the answer. Keep it and `ITERATIONS` fixed;
@@ -24,14 +23,12 @@
 //! declined -- and a sum of zero stays zero however badly the procedure breaks,
 //! which is a guard that guards nothing.
 //!
-//! Both halves of that were measured rather than assumed, and the first attempt
-//! got both wrong. Written against `NoLeafRelations` -- which declines every
-//! class question -- `outside_every_kind` and the complement's kind search
-//! could never fire, so the workload carried their cost and none of their
-//! saving: deleting the union distribution read **0.15% faster**, and the
-//! checksum did not move. With the oracle below answering as the bindings do
-//! for a plain class, the same deletion moves the checksum from 68,000 to
-//! 60,000 and the recorded count is 226M rather than 645M.
+//! Both halves of that rest on the oracle. Against `NoLeafRelations` -- which
+//! declines every class question -- `outside_every_kind` and the complement's
+//! kind search could never fire, so the workload would carry their cost and
+//! none of their saving: deleting the union distribution would only lower the
+//! count, and the checksum would not move. With the oracle below answering as
+//! the bindings do for a plain class, the same deletion moves the checksum.
 //!
 //! So on this corpus these readings buy completeness and not only speed: four
 //! pairs per iteration fall from refuted to undecided when one is removed,
@@ -52,9 +49,9 @@ use valgebra_core::{
 /// `NoLeafRelations` declines every one of these, and declining is what the
 /// class readings here are *for*: with it in place `outside_every_kind` and the
 /// complement's kind search can never fire, so the workload would carry their
-/// cost and none of their saving. Measured that way it read 0.15% **faster**
-/// with the union distribution deleted, which is the shape of a workload that
-/// exercises nothing.
+/// cost and none of their saving. Deleting the union distribution would then
+/// only lower the count, which is the shape of a workload that exercises
+/// nothing.
 struct PlainClasses;
 
 impl valgebra_core::descr::lower::Constants for PlainClasses {}

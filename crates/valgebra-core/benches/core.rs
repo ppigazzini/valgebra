@@ -79,10 +79,8 @@ fn bench_with_records_open(c: &mut Criterion) {
 /// the decision procedure has to be measured against.
 ///
 /// A decision on these costs tens of nanoseconds, so per-call setup a wider
-/// schema would amortize is paid here in full and repays nothing. That is the
-/// finding a previous effort recorded after building five commits of
-/// memoization and reverting all of it, and this harness is what holds a future
-/// one to it.
+/// schema would amortize is paid here in full and repays nothing. Memoization
+/// is such setup, and this harness is what holds a proposal to add it to that.
 fn bench_decision(c: &mut Criterion) {
     let scalar = Schema::Bool;
     let scalar_sup = Schema::union([Schema::Int, Schema::Str]);
@@ -191,8 +189,8 @@ fn bench_lowering(c: &mut Criterion) {
     }
 
     // Breadth multiplies too: a union of records minus a union of its siblings
-    // is the shape that spent a third of a second and then refused because the
-    // result was too wide.
+    // builds the whole difference and then refuses because the result is too
+    // wide.
     let members: Vec<Schema> = (0..4).map(|_| nested_records(3)).collect();
     let whole = Schema::Union(members.clone().into());
     let siblings = Schema::Union(members.into_iter().skip(1).collect::<Vec<_>>().into());

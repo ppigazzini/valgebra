@@ -264,8 +264,8 @@ fn tree_defs() -> Vec<Schema> {
 /// no repeats for every query, which reads exactly like a procedure that
 /// repeats nothing -- so what is asserted here is that goals arrive at all.
 /// Stated as `asked` rather than as `repeated` on purpose: a shape that repeats
-/// today may stop, and a control that went away with it would leave every
-/// number below unwitnessed.
+/// may stop under a change to the rules, and a control that went away with it
+/// would leave every number below unwitnessed.
 #[test]
 fn the_counter_sees_the_goals_a_query_asks() {
     let narrow = list_of(list_of(Schema::Int));
@@ -539,7 +539,7 @@ fn corners(kinds: &[Schema], missing: usize) -> (Schema, Schema) {
     (pair(&any, &any), Schema::union(products))
 }
 
-/// The shapes the budget was measured over, the recursive pairs the trail is
+/// The shapes the budget is measured over, the recursive pairs the trail is
 /// for, and the product rule's split, each with the definitions it reads.
 fn measured_pairs() -> Vec<(Schema, Schema, Vec<Schema>)> {
     let element = nested_lists(2, Schema::Int);
@@ -660,16 +660,14 @@ fn the_goals_a_query_asks_are_pairs_of_the_subterms() {
 /// The longest trail any recursive shape in hand builds is three pairs.
 ///
 /// The deviation's cost is a scan over the trail at every recursive goal, and
-/// the sentence that bounds the cost was a measurement taken once over the
-/// relation matrix -- two pairs -- and written into prose. It is a number the
-/// recorder reads: every recursive pair the counter's shapes carry, and the
-/// pairs the fixpoint laws are written over, are asked with the trail's depth
-/// recorded, and the deepest is the figure the page states. The first run of
-/// this row found the matrix's figure short by one: a list over a reference
-/// against a union holding that reference unfolds the reference on both
-/// sides and once more under the list, which is three. A shape whose trail
-/// grows past it fails here by name, which is what turns the sentence into a
-/// claim the tree holds.
+/// the sentence that bounds the cost is a number the recorder reads: every
+/// recursive pair the counter's shapes carry, and the pairs the fixpoint laws
+/// are written over, are asked with the trail's depth recorded, and the
+/// deepest is the figure the page states. The relation matrix alone reaches
+/// two; a list over a reference against a union holding that reference
+/// unfolds the reference on both sides and once more under the list, which is
+/// three. A shape whose trail grows past it fails here by name, which is what
+/// turns the sentence into a claim the tree holds.
 #[test]
 fn the_longest_trail_any_recursive_shape_builds_is_three_pairs() {
     let tree = tree_defs();
@@ -799,7 +797,7 @@ mod drawn {
         /// subterms, and number no more than its subterm pairs, over drawn
         /// definitions.
         ///
-        /// The chosen pairs above hold both on the shapes the budget was
+        /// The chosen pairs above hold both on the shapes the budget is
         /// measured over; this holds them on whatever the recursive fragment
         /// draws, references into drawn definitions included, so a rule that
         /// starts building goals past the closure is caught on a shape nobody

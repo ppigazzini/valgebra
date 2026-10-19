@@ -40,14 +40,14 @@ fn a_guard_met_with_itself_is_shared_rather_than_rebuilt() {
 /// This is the property the nesting rests on. A `Descr` is one component per
 /// kind stored inline, so it is the same size whatever it describes; an edge
 /// holding one *by value* is that size again, and an edge's guard has its own
-/// automaton with its own edges. Held that way the size multiplied through
-/// the levels rather than adding, and a clone deep-copied every level --
-/// which is what a product of two automata does to their guards, once per
+/// automaton with its own edges. Held that way the size would multiply
+/// through the levels rather than add, and a clone would deep-copy every level
+/// -- which is what a product of two automata does to their guards, once per
 /// pair of states.
 ///
-/// Pinned by size because size is what regressed: a guard stored by value
-/// again would pass every behavioural law in this file and bring the growth
-/// back with it.
+/// Pinned by size because size is what a guard stored by value changes: it
+/// would pass every behavioural law in this file and bring the growth with
+/// it.
 #[test]
 fn an_edge_holds_its_guard_by_handle() {
     assert_eq!(size_of::<Arc<Descr>>(), size_of::<usize>());
@@ -116,7 +116,7 @@ fn a_kind_past_its_line_bound_refuses() {
     assert!(wide.combine(&line(-1), Op::Union, slot).is_none());
 }
 
-/// Every value the descriptor can currently tell apart.
+/// Every value the descriptor can tell apart.
 ///
 /// One per coarse kind, both booleans, and one of no listed kind. A law is
 /// checked by asking every descriptor about every one of these, which is
@@ -440,7 +440,7 @@ proptest! {
     }
 }
 
-/// The distinction row 9 of the report asks for.
+/// A meet of two powersets is a powerset, not the empty set.
 ///
 /// `set[int] & set[str]` is not empty and is not either operand: a meet of
 /// two powersets is the powerset of the meet, so it holds exactly the sets
@@ -917,11 +917,11 @@ fn a_class_meets_an_attribute_in_one_object() {
     );
 }
 
-/// The record the report calls carrier-free: a set of values fixed by the
-/// attributes alone, with no class in it.
+/// The carrier-free record: a set of values fixed by the attributes alone,
+/// with no class in it.
 ///
 /// A dataclass `D(x: int)` is the meet of a class and this record -- which is
-/// what the IR now spells, `Instance(D) ∧ AttrRecord` -- and the record on
+/// what the IR spells, `Instance(D) ∧ AttrRecord` -- and the record on
 /// its own is the half that makes the complement representable, because the
 /// complement of an attribute constraint is another one.
 #[test]
@@ -1194,9 +1194,9 @@ fn descr_with_sets() -> impl Strategy<Value = Descr> {
         // cannot reach between them -- a label leaves every other key free
         // and `keys_among` names no key -- and the one whose complement is
         // hardest, because closing is what puts a negative constraint on
-        // every part at once. A record complemented twice came back
-        // forbidding the key it is about, and no law here saw it in twenty
-        // thousand draws until this leaf existed.
+        // every part at once. A record complemented twice can come back
+        // forbidding the key it is about, and only a leaf like this one draws
+        // it.
         3 => (
             proptest::collection::vec(
                 (prop_oneof![Just("a"), Just("b")], descr(), proptest::bool::ANY),
@@ -1407,12 +1407,12 @@ fn a_coarse_component_combines_as_a_boolean() {
     );
 }
 
-/// The map rows the report calls undecided, decided.
+/// Two maps that disagree about a key, decided.
 ///
 /// `{"a": int}` and `dict[str, str]` share no dict, because the key `a` must
-/// map into both and nothing does. The old component was coarse -- every dict
-/// or none -- so it could not tell one map from another at all, and the two
-/// met in "some dict".
+/// map into both and nothing does. A coarse component -- every dict or none --
+/// could not tell one map from another at all, and the two would meet in "some
+/// dict".
 #[test]
 fn two_maps_that_disagree_about_a_key_share_no_dict() {
     const A_STR: &[(Value, Value)] =
@@ -1439,9 +1439,9 @@ fn two_maps_that_disagree_about_a_key_share_no_dict() {
 /// A label's type distributes over the union: a map whose `a` is an `int` or
 /// a `str` is one of the two maps that say which.
 ///
-/// The row the report lists as `{"a": int|str} ≤ {"a": int} ∨ {"a": str}`.
-/// It holds because the atom is a *function* on the labels -- the union
-/// splits at the one label rather than having to be searched for.
+/// So `{"a": int|str} ≤ {"a": int} ∨ {"a": str}` holds, because the atom is a
+/// *function* on the labels -- the union splits at the one label rather than
+/// having to be searched for.
 #[test]
 fn a_label_of_a_union_is_the_union_of_the_labels() {
     let ints = Descr::of_kind(Kind::Int);

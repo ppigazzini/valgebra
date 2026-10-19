@@ -9,9 +9,8 @@
 //! is the *format* and a walk would tie the corpus to which failures a schema
 //! can reach. The cost is that a row's code is a string this file chose: one
 //! that was renamed, or never existed, renders perfectly and pins a format for
-//! a failure no caller can meet. It happened -- `extra_key` sat here while the
-//! walk wrote `extra_forbidden` -- so `tests/test_use_case_ledger.py` reads
-//! these codes against the ones the tree emits.
+//! a failure no caller can meet, so `tests/test_use_case_ledger.py` reads these
+//! codes against the ones the tree emits.
 
 use valgebra_core::{PathSegment, Violation};
 

@@ -96,7 +96,7 @@ fn set_schema() -> impl Strategy<Value = Schema> {
 /// must attack.
 ///
 /// Named rather than waited for. The generators draw every piece of it, and the
-/// laws holding the two deciders to one answer went many reports without
+/// laws holding the two deciders to one answer can run many times without
 /// drawing the combination.
 fn without_a_value() -> impl Strategy<Value = Schema> {
     (0usize..2).prop_map(|which| {
@@ -140,11 +140,11 @@ fn carriers() -> Vec<fn(Schema) -> Schema> {
 /// the length-bounded refinements that denote the same sets a different way.
 ///
 /// [`schema`] is the corpus the laws above are written over, and it reaches no
-/// rule that looks at a shape. That is where the two deciders can disagree: the
-/// arm reducing a refinement to its base answered a refutation it had no grounds
-/// for -- a list of at most zero elements is the empty list, and its base is
-/// nowhere near it -- and no pair drawn from atoms and connectives would have
-/// shown it. The laws are left over the fragment they were written for, because
+/// rule that looks at a shape. That is where the two deciders can disagree: an
+/// arm reducing a refinement to its base can answer a refutation it has no
+/// grounds for -- a list of at most zero elements is the empty list, and its
+/// base is nowhere near it -- and no pair drawn from atoms and connectives would
+/// show it. The laws are left over the fragment they were written for, because
 /// their claim is structural equality of the normal form construction builds
 /// and a sequence is ordered into a normal form differently; the claim here is
 /// about answers.
@@ -271,7 +271,7 @@ fn class_with_record() -> impl Strategy<Value = (usize, Vec<Attribute>)> {
 /// Python -- where a class becomes a kind, a constant becomes a value, and two
 /// literals become disjoint or not. So the one question this pair of properties
 /// exists to ask, whether the rules and the set representation ever contradict
-/// each other, was asked only where neither of them could look anything up.
+/// each other, would be asked only where neither of them can look anything up.
 ///
 /// The two halves are consistent *by construction* rather than by agreement
 /// between hand-written tables: `leaf_subtype` answers about a pair of
@@ -1640,8 +1640,7 @@ fn decides_complement_subtyping_contravariantly() {
     // ¬A ⊆ ¬B iff B ⊆ A: ¬int ⊆ ¬bool because bool ⊆ int.
     assert!(not(Schema::Int).is_subtype_of(&not(Schema::Bool)));
     assert!(!not(Schema::Bool).is_subtype_of(&not(Schema::Int)));
-    // Reflexivity holds for a complement (regression: it failed before this
-    // rule existed).
+    // Reflexivity holds for a complement.
     assert!(not(Schema::Int).is_subtype_of(&not(Schema::Int)));
     assert!(
         not(Schema::Literal(ConstIx::new(0))).is_subtype_of(&not(Schema::Literal(ConstIx::new(0))))
@@ -2203,7 +2202,7 @@ proptest! {
     /// atoms. `Nothing ≤ b` and `a ≤ Anything` are the cases everything
     /// else already asserted, and asserting only those is a rule confirming
     /// itself: a schema that denotes the empty set without being spelled
-    /// `Nothing` was never the subject. This generator produces such schemas
+    /// `Nothing` is never the subject. This generator produces such schemas
     /// constantly -- a cancelling intersection is two leaves away.
     ///
     /// This is a COMPLETENESS assertion, which the procedure does not make
@@ -2291,7 +2290,7 @@ proptest! {
     /// nothing from the subject -- every set is below the universe, one nobody
     /// can read included. The premise is a proof of emptiness under the same
     /// table, so the conclusion is the completeness claim the fuzz target
-    /// asserts of every pair it draws, where it found the reference declined.
+    /// asserts of every pair it draws, and a declined reference fails it.
     #[test]
     fn a_reference_to_the_universe_bounds_a_subject_no_table_resolves(
         a in a_subject_holding_a_reference_nothing_resolves(),
@@ -2537,7 +2536,7 @@ proptest! {
                     value, left, right
                 );
                 // And building moves no value of either, which is the
-                // property the structural form was standing in for.
+                // property the structural form stands in for.
                 prop_assert_eq!(held, member_full(&built(&left), value, &pool));
                 prop_assert_eq!(held, member_full(&built(&right), value, &pool));
             }
@@ -2679,9 +2678,9 @@ fn intersection_of_unions_tower(depth: usize, leaf: Schema) -> Schema {
 ///
 /// This is the whole point of the third value. `is_empty` answering `false`
 /// covers a schema proven to admit values and a schema the work bound
-/// stopped, and nothing outside the procedure could tell them apart -- so a
-/// budget hit at a realistic size read as a confident answer. It reads as
-/// `Unknown` now, and this fails if it ever reads as either proof.
+/// stopped, and nothing outside the procedure can tell them apart -- so a
+/// budget hit at a realistic size would read as a confident answer. It reads
+/// as `Unknown`, and this fails if it ever reads as either proof.
 #[test]
 fn an_exhausted_budget_proves_nothing_in_either_direction() {
     // Proven, both ways, on the fragment the regions decide exactly.
@@ -3371,15 +3370,15 @@ fn boundary_values(schemas: &[&Schema]) -> Vec<Obj> {
 /// The values in order, each kept the first time it is seen.
 ///
 /// Read before a cap, because a cap spent on a value the list already holds
-/// buys nothing and costs the value behind it. The universe's cap has always
-/// been read this way; a *node's* cap needs it for the same reason and at a
-/// shape where it decides the answer. `candidates` round-robins three sources
-/// that overlap by construction -- the pool the inherited values are strided
-/// from already holds the node's own -- so a variadic tuple over the top spent
+/// buys nothing and costs the value behind it. The universe's cap is read this
+/// way, and a *node's* cap needs it for the same reason and at a shape where it
+/// decides the answer. `candidates` round-robins three sources that overlap by
+/// construction -- the pool the inherited values are strided from already
+/// holds the node's own -- so without it a variadic tuple over the top spends
 /// four of its first twenty on one repeated single-element tuple, and the
-/// tuple holding a `bool` fell past the quarter-cap. That is the value which
+/// tuple holding a `bool` falls past the quarter-cap. That is the value which
 /// separates the shape from a tuple over the complement of `bool`, and a
-/// refutation between the two then had no witness in the universe.
+/// refutation between the two would then have no witness in the universe.
 ///
 /// Compared rather than rendered to a key. A key per value is what the
 /// universe could afford at one call; this is read once per node, and a node
@@ -3407,9 +3406,9 @@ fn deduplicated(values: Vec<Obj>) -> Vec<Obj> {
 /// from `b`, and the witness is one schema's head beside the other's tail -- a
 /// combination neither builds.
 ///
-/// `list[not None, X] <= list[not tuple[Any, Float], Y]` is the shape that
-/// found this. It is refuted, because a two-element tuple ending in a float is
-/// not `None` and is not outside `tuple[Any, Float]`. The universe held
+/// `list[not None, X] <= list[not tuple[Any, Float], Y]` is such a pair. It is
+/// refuted, because a two-element tuple ending in a float is not `None` and is
+/// not outside `tuple[Any, Float]`. Built per schema, the universe holds
 /// `[that tuple, None]` from the right schema and `[a small tuple, an int]`
 /// from the left, and never `[that tuple, an int]`, which is the value under
 /// the refutation.
@@ -3603,8 +3602,8 @@ fn bounded_widths(schemas: &[&Schema]) -> Vec<(SeqKind, usize)> {
 /// least three below `¬tuple[*None]` is refuted by `(None, None, None)`, and
 /// that value is one the crossing builds -- the subject's width, filled from
 /// the other schema's element -- if it sees the two shapes at all. Read off
-/// the top node alone, it saw neither: one sits under a refinement and the
-/// other under a complement, and the pair went uncrossed while both were in
+/// the top node alone, it would see neither: one sits under a refinement and
+/// the other under a complement, and the pair would go uncrossed with both in
 /// plain sight. So a wrapper is looked through, and the members of a union or
 /// meet are each looked at. Elements are not: a sequence *inside* a position
 /// is [`crossed_position`]'s.
@@ -3655,12 +3654,12 @@ fn widths_named_by(schema: &Schema, out: &mut Vec<(SeqKind, usize)>) {
 /// complement excludes, and every part of that is a value some node of the
 /// pair already names.
 ///
-/// The universe held none of them, and for two reasons that are one reason. A
-/// scalar sat behind twelve sized containers in the one-per-kind probes, and a
-/// repeated single-element tuple took four of the first twenty places in a
-/// candidate list, so the quarter-cap a position reads through was spent
-/// before either reached the tuple. A cap spent on what it did not need to buy
-/// is what this asserts against; the two values are how it showed.
+/// A universe can miss all of them for one reason with two faces: a scalar
+/// placed behind twelve sized containers in the one-per-kind probes, or one
+/// single-element tuple repeated over four of the first twenty places of a
+/// candidate list, spends the quarter-cap a position reads through before the
+/// tuple is reached. A cap spent on what it does not need to buy is what this
+/// asserts against.
 #[test]
 fn the_universe_separates_a_pair_inside_a_shape() {
     let pool = const_pool();
@@ -3718,8 +3717,8 @@ fn the_universe_separates_a_pair_inside_a_shape() {
 /// The flat crossing builds neither half of it. A value of the *other*
 /// schema's tuple is not a tuple of the subject's shape at all, and the
 /// subject's own tuple is filled from its own positions, where a cap divided
-/// by the width and again by the depth reached five kinds of the ten and
-/// `float` was not among them. That is what [`crossed_position`] is for.
+/// by the width and again by the depth reaches five kinds of the ten and need
+/// not reach `float`. That is what [`crossed_position`] is for.
 ///
 /// Held as drawn, with the reference at the second position: it unfolds into a
 /// large schema, and crowding the caps is part of what the pair exercises.
@@ -3773,13 +3772,12 @@ fn the_universe_separates_a_pair_inside_a_position() {
 /// ...], t]` because a dict of `M` with an entry is not the empty one, and the
 /// witness is a list whose head is `({"a": 1.0},)`.
 ///
-/// The crossing stopped at a shape with a tail, as having no fixed width to
-/// fill, and the subject's own tuple carried the map that separates them
-/// behind the empty one and the non-members of `M`'s first clause, which
-/// admits no value. The quarter-cap a position reads through cut it. The pair
-/// came out of the nightly lane at eight thousand cases, held as drawn: the
-/// clause admitting no value ahead of the one that admits floats is what
-/// crowds the caps.
+/// A crossing that stops at a shape with a tail, as having no fixed width to
+/// fill, leaves the map that separates them to the subject's own tuple, behind
+/// the empty one and the non-members of `M`'s first clause, which admits no
+/// value -- and there the quarter-cap a position reads through cuts it. The
+/// pair is held as drawn: the clause admitting no value ahead of the one that
+/// admits floats is what crowds the caps.
 #[test]
 fn the_universe_separates_a_pair_at_the_tail_of_a_position() {
     let pool = const_pool();
@@ -3835,9 +3833,8 @@ fn the_universe_separates_a_pair_at_the_tail_of_a_position() {
 /// of three `None`s satisfies the bound and is exactly what the complement
 /// excludes. The crossing builds that value -- a width the bound names, filled
 /// from the other schema's element -- when it sees the two shapes, and read
-/// off the top node alone it saw neither: the subject is a refinement over its
-/// tuple and the other schema a complement over its own. The pair came out of
-/// the nightly lane at eight thousand cases.
+/// off the top node alone it would see neither: the subject is a refinement
+/// over its tuple and the other schema a complement over its own.
 #[test]
 fn the_universe_separates_a_pair_spelled_through_a_wrapper() {
     let pool = const_pool();
@@ -3876,11 +3873,11 @@ fn the_universe_separates_a_pair_spelled_through_a_wrapper() {
 /// all, because every list of floats the universe spells is a value of the
 /// fixpoint too.
 ///
-/// The universe held sixty-four values of the union and not one map. A node's
-/// cap was read off the branches **concatenated**, so the sequence branch spent
-/// it before the record branch contributed anything, and the record's own
-/// edges -- which lead with exactly the witness -- never reached the universe.
-/// The record spent part of its own cap twice over the same map, which is the
+/// A node's cap read off the branches **concatenated** lets the sequence
+/// branch spend it before the record branch contributes anything, so the
+/// universe holds sixty-four values of the union and not one map, and the
+/// record's own edges -- which lead with exactly the witness -- never reach
+/// it. A record spending part of its own cap twice over the same map is the
 /// second half of the same cause.
 #[test]
 fn a_union_contributes_a_value_of_every_branch() {
@@ -4267,16 +4264,16 @@ fn a_member(schema: &Schema, fuel: usize) -> Option<Obj> {
 /// One per kind at each small width, so a container of a schema and a container
 /// of its complement are told apart by an element that belongs to one of them.
 ///
-/// Three kinds were missing outright, and a position excluding tuples is
-/// separated only by a tuple: a refutation about such a position read as "no
-/// value refutes it" while the value existed. The widths matter one step in,
-/// because an empty tuple is outside `tuple[Any, Any]` as surely as an integer
-/// is.
+/// A kind missing here leaves a position excluding it unseparated -- a
+/// position excluding tuples is separated only by a tuple -- and a refutation
+/// about such a position reads as "no value refutes it" while the value
+/// exists. The widths matter one step in, because an empty tuple is outside
+/// `tuple[Any, Any]` as surely as an integer is.
 fn probes() -> Vec<Obj> {
     // Round-robin over the two groups, for the reason [`interleaved`] gives: a
     // cap read over a concatenation spends itself on whichever came first.
     //
-    // The sized containers ran ahead of the scalars, on the argument that a
+    // Sized containers ahead of the scalars would rest on the argument that a
     // scalar is separated by a value `kind_edges` already holds and a
     // two-element tuple is not. That holds of a position at the top and fails
     // of one inside a shape: `kind_edges` carrying `None` does not put
@@ -4375,10 +4372,10 @@ fn edges_of(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
             // Round-robin rather than concatenated, for the reason
             // `boundary_values` reads its own sources that way: a cap taken off
             // a concatenation is spent on whichever branch came first. A union
-            // of a sequence beside a record contributed sixty-four lists and no
-            // map, and the map was the only value that told the union from a
-            // fixpoint over lists -- so the refutation had no witness and the
-            // branch that held one had not been asked.
+            // of a sequence beside a record would contribute sixty-four lists
+            // and no map, and the map is the only value that tells the union
+            // from a fixpoint over lists -- so the refutation would have no
+            // witness and the branch that holds one would not be asked.
             let branches: Vec<Vec<Obj>> =
                 members.iter().map(|member| edges_of(member, out)).collect();
             mine.extend(interleaved(&branches));
@@ -5087,11 +5084,11 @@ proptest! {
     ///
     /// The scalar-and-set property elsewhere in this crate checks the same
     /// statement over a fragment with no sequence, record, refinement or
-    /// literal in it, so every structural rule the decision procedure has was
-    /// held only by hand-written examples. Soundness is the one property this
-    /// library promises without qualification, and it is the direction a
-    /// generator can attack: an accept is a claim about every value, and a
-    /// counterexample is a single one.
+    /// literal in it, so without this every structural rule the decision
+    /// procedure has would be held only by hand-written examples. Soundness is
+    /// the one property this library promises without qualification, and it is
+    /// the direction a generator can attack: an accept is a claim about every
+    /// value, and a counterexample is a single one.
     #[test]
     fn subtyping_is_sound_over_the_structural_fragment(
         a in decidable_schema(),
@@ -5129,8 +5126,8 @@ proptest! {
     /// is the record of their fields, and closing the meet closes each record
     /// on its own, to two records no dict belongs to both of --
     /// `test_a_meet_of_open_records_closes_apart_from_its_record` carries it.
-    /// This law once held every pair the draw decided equal to the same, and
-    /// that pair is the one it never drew.
+    /// Held over every pair the draw decides equal, the law would be false on
+    /// that pair, which the draw does not reach.
     ///
     /// The respelling is **absorption**, `a | (a & b)`, and the choice is the
     /// whole worth of the law: `a | (a & a)` reads like a respelling and is
@@ -5361,12 +5358,13 @@ proptest! {
     /// A proof over a fixpoint has no witness against it either.
     ///
     /// The property above draws from a fragment with no reference in it, so
-    /// every recursive pair the procedure accepts was held by hand-written
-    /// examples. That is the fragment where an accept is *hardest* to earn:
-    /// the rules assume the goal, unfold, and discharge it coinductively, so a
-    /// proof rests on an assumption rather than on a finished derivation. An
-    /// assumption discharged wrongly is an accept over a set that does not
-    /// contain the other, which is unsoundness a caller reads as `subset`.
+    /// without this every recursive pair the procedure accepts would be held by
+    /// hand-written examples. That is the fragment where an accept is *hardest*
+    /// to earn: the rules assume the goal, unfold, and discharge it
+    /// coinductively, so a proof rests on an assumption rather than on a
+    /// finished derivation. An assumption discharged wrongly is an accept over a
+    /// set that does not contain the other, which is unsoundness a caller reads
+    /// as `subset`.
     ///
     /// The bodies are drawn rather than fixed, and the definitions table
     /// carries a **negative** occurrence -- a reference under a complement --
@@ -5940,8 +5938,8 @@ proptest! {
     /// schemas, and a law drawing two cannot state it: the folds that carry a
     /// refutation up are exactly where a wrong one would enter, and each of
     /// them is antisymmetric and agrees with equality while still admitting a
-    /// cycle. The order over the integer sets was one such fold, and a sort of
-    /// guards found the cycle a pair could not.
+    /// cycle. The order over the integer sets is one such fold, and a cycle
+    /// there shows in a sort of guards and in no pair.
     ///
     /// Only the decided corners are asserted. A decline says nothing, so a
     /// pair the rules leave unknown constrains nothing here.
@@ -6272,10 +6270,10 @@ fn nesting(value: &Obj) -> usize {
 /// `list[bool, D1]` against `D0`, where `D0 = {"b": ¬bytes} | list[D1]` and
 /// `D1 = list[None] | bytes | bool | list[D1]`, is an inclusion: both elements
 /// are values of `D1`, so the list is one of `list[D1]`. The reference `D0`
-/// costs the oracle an unfolding the subject's `D1` does not, and read at one
-/// depth the universe held a list of `D1` nested as deep as the subject's
-/// unfolding reaches, which the other side's had cut to nothing -- a
-/// counterexample of the oracle's making. The pair came out of the push lane.
+/// costs the oracle an unfolding the subject's `D1` does not, so read at one
+/// depth a list of `D1` nested as deep as the subject's unfolding reaches is
+/// one the other side's unfolding has cut to nothing -- a counterexample of
+/// the oracle's making.
 #[test]
 fn a_value_one_unfolding_reaches_is_read_by_the_other() {
     let d1 = Schema::Ref(DefIx::new(1));
@@ -6325,10 +6323,10 @@ fn a_value_one_unfolding_reaches_is_read_by_the_other() {
 /// inclusion: the first element is a list of two values that are not lists,
 /// so one of `list[¬D1]`, and the second is a `D1`. The complement in `D1`
 /// reads the reference it cuts as the top, whose edges are the pool's deepest
-/// lists, and the universe held a list of `D1` nested seven deep. Read at the
+/// lists, so the universe holds a list of `D1` nested seven deep. Read at the
 /// depth the values were drawn at, `D0` spends an unfolding before it reaches
-/// `D1` and so cut at a different list from the subject, and the two readings
-/// parted on a value of both. The pair came out of the push lane.
+/// `D1` and so cuts at a different list from the subject, and the two readings
+/// part on a value of both.
 #[test]
 fn a_value_deeper_than_its_unfolding_is_read_at_its_depth() {
     let d1 = Schema::Ref(DefIx::new(1));
