@@ -359,7 +359,7 @@ NOTES_STEPS = (
 #: relation matrix passes this script with every step green. The lane is
 #: right to be excused: it also wants a profiled wheel, a second interpreter
 #: and a system package installed with `sudo`. The *comparison* wants none of
-#: those, and it runs here in three minutes.
+#: those: two builds of one workload, in the clone that keeps the history.
 #:
 #: One mode: `--decision-matrix`, the relation matrix whose shapes reach the
 #: set representation. `--decision-sets` and `--decision-lengths` reach it too,
@@ -433,18 +433,21 @@ def perf_plan() -> tuple[list[tuple[str, str, str]], list[str]]:
     return runs, []
 
 
-def perf_failures() -> list[str]:
-    """Run the instruction gate, in the tree that has the history it needs.
+def perf_failures(tree: Path) -> list[str]:
+    """Run the instruction gate in `tree`, and give back what failed.
 
-    The caller's tree rather than the shallow clone, for the reason the notes
-    steps use it: the clone carries one commit, and a comparison against a
-    base needs the base to be there.
+    The gate measures the checkout it runs in as the change, so `tree` is the
+    clone that keeps the history: it holds `HEAD` as committed, as every other
+    step reads it, and the base beside it. The caller's tree would add whatever
+    is not committed. The base is named in the caller's tree, where `origin`
+    is the remote the lane's rule reads; it is an ancestor of `HEAD`, so the
+    clone has it.
     """
     runs, _ = perf_plan()
     return [
         f"{job}: {name}"
         for job, name, command in runs
-        if not run_step(f"{job}: {name}", command, ROOT, runner_environment())
+        if not run_step(f"{job}: {name}", command, tree, runner_environment())
     ]
 
 
@@ -917,6 +920,7 @@ def main() -> int:
         # clones live in, and it is `None` exactly when `--here` gave the
         # caller's tree instead -- so asking for it is the same condition as
         # asking for `--here`, and it is the one that also says where to clone.
+        deep = ROOT
         if holder is not None:
             deep = deep_clone(holder)
             failures += [
@@ -928,8 +932,9 @@ def main() -> int:
         failures += notes_failures()
         # And the instruction gate, which the bench lane owns and which wants
         # only a comparison of two builds -- not the wheel, the interpreter or
-        # the system package the rest of that lane does.
-        failures += perf_failures()
+        # the system package the rest of that lane does -- in the clone that
+        # keeps the history, or in the caller's tree under `--here`.
+        failures += perf_failures(deep)
         # And the release the suite is read on rather than written on. This runs
         # in the same tree as the plan: what makes it a second lane is the
         # environment, not the checkout.

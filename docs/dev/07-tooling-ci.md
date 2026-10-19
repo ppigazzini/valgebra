@@ -79,9 +79,12 @@ system package installed with `sudo`, so every step of it but the sync is
 excused -- and the *comparison* it carries wants none of those. Two builds of
 one workload, measured against the base by the lane's own rule (the merge base
 with the remote-tracking branch, or `HEAD`'s parent where that merge base is
-`HEAD` itself; `perf_base` in `scripts/gate.py`), is three minutes in the caller's
-tree, and the tree is where it has to run: the shallow clone holds one commit
-and a comparison needs the other. Excused with the rest of the lane, a change
+`HEAD` itself; `perf_base` in `scripts/gate.py`), and it runs in the clone that
+keeps the history. `perf_gate.py` measures the checkout it runs in as the
+change, so the caller's tree would add what is not committed, and the shallow
+clone does not hold the base; under `--here` the caller's tree is the tree
+every step reads. The base is named in the caller's tree, where `origin` is the
+remote. Excused with the rest of the lane, a change
 that reads sound and costs **seventy-one times** the instructions on the
 relation matrix would pass this script green. One mode runs, `--decision-matrix`
 (`PERF_STEPS` in `scripts/gate.py`), the relation matrix whose shapes reach the

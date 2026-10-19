@@ -778,6 +778,43 @@ def test_the_instruction_gate_measures_against_an_ancestor(tmp_path: Path) -> No
     )
 
 
+@pytest.mark.parametrize("here", [False, True])
+def test_the_instruction_gate_measures_the_commit_the_gate_reads(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, here: bool
+) -> None:
+    """The instruction step runs in the clone that keeps the history.
+
+    `perf_gate.py` measures the checkout it runs in as the change. Every other
+    step reads `HEAD` as committed, and in the caller's tree this one read what
+    was not committed beside it. Under `--here` the caller's tree is the tree
+    every step reads, this one included.
+    """
+    ran: list[tuple[str, Path]] = []
+
+    def step(name: str, _command: str, cwd: Path, *_args: object) -> bool:
+        ran.append((name, cwd))
+        return True
+
+    monkeypatch.setattr(sys, "argv", ["gate.py", *(["--here"] if here else [])])
+    monkeypatch.setattr(gate, "workflow", lambda: {"jobs": {}})
+    monkeypatch.setattr(gate, "required_jobs", lambda _spec: [])
+    monkeypatch.setattr(gate, "build_plan", lambda _spec, _jobs: ([], []))
+    monkeypatch.setattr(gate, "shallow_clone", lambda into: into / "tree")
+    monkeypatch.setattr(gate, "deep_clone", lambda into: into / "deep")
+    monkeypatch.setattr(gate, "fetched", lambda _plan, _tree: True)
+    monkeypatch.setattr(gate, "notes_failures", list)
+    monkeypatch.setattr(gate, "floor_steps", tuple)
+    monkeypatch.setattr(gate, "report_what_was_not_run", lambda **_: None)
+    monkeypatch.setattr(gate, "perf_plan", lambda: ([("job", "perf", "true")], []))
+    monkeypatch.setattr(gate, "run_step", step)
+    assert gate.main() == gate.EXIT_OK
+    measured = [cwd for name, cwd in ran if name == "job: perf"]
+    if here:
+        assert measured == [gate.ROOT], ran
+    else:
+        assert [cwd.name for cwd in measured] == ["deep"], ran
+
+
 def test_a_clone_that_does_not_land_is_could_not_run(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

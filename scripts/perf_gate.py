@@ -187,15 +187,16 @@ class Measurement:
 
 
 def _cargo(args: list[str], root: Path, target: Path | None) -> None:
-    """Run cargo in `root`, writing to `target` where one is given.
+    """Run cargo in `root`, writing to `target`, or to `root`'s own `target`.
 
     A comparison run builds a second checkout, and the two builds must not share
     an output directory: cargo would rebuild the whole workspace each way and the
     second measurement would be of a binary the first run had already replaced.
+    The directory is always named, because `measure_mode` reads the binary from
+    it: a `CARGO_TARGET_DIR` in the caller's environment would send the build
+    elsewhere and leave an older binary there to be measured as the change.
     """
-    env = None
-    if target is not None:
-        env = {**os.environ, "CARGO_TARGET_DIR": str(target)}
+    env = {**os.environ, "CARGO_TARGET_DIR": str(target or root / "target")}
     subprocess.run(["cargo", *args], cwd=root, check=True, env=env)
 
 

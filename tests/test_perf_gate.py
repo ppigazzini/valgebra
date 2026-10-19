@@ -256,6 +256,35 @@ def test_a_binding_shape_is_compared_by_what_one_iteration_folds(
     assert read.irefs == 1000 * (hi - lo)
 
 
+def test_the_head_is_measured_where_it_was_built(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A `CARGO_TARGET_DIR` the caller set sends neither the build nor the read.
+
+    The binary is read from the checkout's own `target`, so the build has to
+    write there. Built where the caller's variable pointed, the head left an
+    older binary in `target` to be measured as the change.
+    """
+    monkeypatch.setenv("CARGO_TARGET_DIR", str(tmp_path / "elsewhere"))
+    built: list[str] = []
+    read: list[Path] = []
+
+    def cargo(argv: list[str], **kwargs: object) -> None:
+        env = kwargs["env"]
+        assert isinstance(env, dict)
+        built.append(env["CARGO_TARGET_DIR"])
+
+    def measure(binary: Path, *_args: object, **_kwargs: object) -> object:
+        read.append(binary)
+        return gate.Measurement(irefs=1, checksum=1)
+
+    monkeypatch.setattr(gate.subprocess, "run", cargo)
+    monkeypatch.setattr(gate, "measure", measure)
+    gate.measure_mode("decision-matrix", tmp_path)
+    assert built == [str(tmp_path / "target")]
+    assert read[0].is_relative_to(tmp_path / "target"), read
+
+
 def test_an_unreadable_instruction_count_is_not_a_pass() -> None:
     with pytest.raises(SystemExit) as excinfo:
         gate.parse_measurement("checksum=1\n", "cachegrind died before its banner")

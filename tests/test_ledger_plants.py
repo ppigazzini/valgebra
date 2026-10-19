@@ -996,6 +996,20 @@ PLANTS = (
         ),
         trips=("test_the_gate_builds_the_floor_interpreter_the_matrix_names",),
     ),
+    # The instruction step measures the checkout it runs in as the change. Run
+    # in the caller's tree, it reads what is not committed beside `HEAD`, and
+    # every other step of the gate reads `HEAD` alone.
+    Plant(
+        "tests/test_local_gate.py",
+        ("scripts/gate.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/gate.py",
+            "failures += perf_failures(deep)",
+            "failures += perf_failures(ROOT)",
+        ),
+        trips=("test_the_instruction_gate_measures_the_commit_the_gate_reads",),
+    ),
     # The other half of the same claim, and the half a reader acts on: the leg
     # that takes the history says so in its name. Pointed at a leg that does not
     # take it, the name is still there and still specific -- and it names the
