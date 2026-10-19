@@ -207,9 +207,15 @@ what to do instead.
   source does not enter this tree; they are design references only. Pull any
   comparison oracle in as a pinned dev dependency rather than copying it.
 
-- **Use plain names that don't shadow builtins.** Names like `compile`,
-  `filter`, `time`, and `date` clash with Python builtins; the public API
-  must not reuse them.
+- **Use plain names that shadow none of a caller's.** An export is not named
+  for a builtin (`compile`, `filter`) or for a standard-library name a caller
+  imports bare (`time`, `date`), since `from valgebra import *` would shadow
+  it; name it for the set it builds, as `union` and `instance_of` are. ruff's
+  flake8-builtins rules, which `select = ["ALL"]` turns on, refuse the builtin
+  half over the package and its stub: an export (A001, A004) and a parameter
+  (A002). The standard-library half is a reviewer's. A method may carry its
+  domain's word, as `Validator.open` and `close` do: attribute lookup reads no
+  caller's name, and open and closed are the record kinds the theory names.
 
 - **Write American English, names included.** `behavior`, `normalize`,
   `color`, `analyze`, `labeled`, `canceled`: in prose, comments, messages,
