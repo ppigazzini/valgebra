@@ -1235,7 +1235,10 @@ halves over every workflow, the Pages deploy included. A build of the extension
 that does not run through the lock -- the build action, which resolves the
 build requirement against a manifest it fetches on the day, and the PyPy lane's
 own venv -- names the maturin the lock resolves, and the same file holds each to
-it. Dependabot proposes a release seven days
+it. Every cargo build a lane runs passes `--locked`, so the lane, and `cargo
+deny` with it, reads the `Cargo.lock` that was committed rather than one a
+stale manifest rewrote; `cargo fuzz` takes no `--locked`, so the fuzz lane runs
+its locked harness test before it builds the targets. Dependabot proposes a release seven days
 after it is published, so a version pulled in its first week never reaches a
 pull request, and `zizmor` audits the whole of `.github/`, where that setting
 lives.

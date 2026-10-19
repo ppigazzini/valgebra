@@ -149,11 +149,11 @@ STANDINS: dict[str, tuple[str, str]] = {}
 NETWORK = {
     "Audit the workspace dependency tree": (
         "cargo deny fetch all",
-        "cargo deny --offline check",
+        "cargo deny --locked --offline check",
     ),
     "Audit the fuzz workspace dependency tree": (
         "cargo deny --manifest-path fuzz/Cargo.toml fetch all",
-        "cargo deny --manifest-path fuzz/Cargo.toml --offline check",
+        "cargo deny --locked --manifest-path fuzz/Cargo.toml --offline check",
     ),
 }
 

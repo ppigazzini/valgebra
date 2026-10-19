@@ -228,7 +228,7 @@ jobs:
       - name: Build the rustdoc, denying warnings
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --workspace --no-deps
+        run: cargo doc --locked --workspace --no-deps
       # The same check over the private items, which are most of the prose:
       # the walk, the decider and the builders are crate-private, and the build
       # above renders none of them, so a link in their docs to an item that
@@ -239,7 +239,7 @@ jobs:
       - name: Build the private-item rustdoc, denying warnings
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --workspace --no-deps --document-private-items
+        run: cargo doc --locked --workspace --no-deps --document-private-items
 
   rust-coverage:
     name: rust coverage
@@ -374,7 +374,7 @@ jobs:
           export PATH="$(dirname "$PYO3_PYTHON"):$PATH"
           libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           LD_LIBRARY_PATH="$libdir:$LD_LIBRARY_PATH" \
-            cargo test -p valgebra-py --features interpreter-tests
+            cargo test --locked -p valgebra-py --features interpreter-tests
           # Scope the floor to the binding crate: the instrumented build also
           # covers valgebra-core (the .so links it), but the core has its own
           # coverage lane, so including it here would dilute the binding number.
@@ -577,7 +577,7 @@ jobs:
           libdir="$("$PYO3_PYTHON" -c \
             'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           PYTHONHOME="$base" LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}" \
-            timeout 300 cargo test -p valgebra-py --features interpreter-tests
+            timeout 300 cargo test --locked -p valgebra-py --features interpreter-tests
       # Coverage over the Python package surface is gated at 100% (configured in
       # pyproject.toml); the compiled extension's coverage is the separate
       # binding-coverage lane.
@@ -2647,18 +2647,20 @@ jobs:
       - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-fuzz@0.13.2
-      - name: Build the fuzz targets
-        # Force the host (gnu) target: the prebuilt cargo-fuzz is a musl-static
-        # binary and defaults the fuzz target to its own musl triple, which is not
-        # installed and is incompatible with the ASAN static-libc check.
-        run: cargo +${{ env.FUZZ_NIGHTLY }} fuzz build --target x86_64-unknown-linux-gnu
       - name: Test the fuzz harness
         # The generator's invariant laws (records carry unique field names, the
         # caller invariant the decision procedures assert) are unit-tested here so
         # a generator regression fails the merge instead of waiting for the
         # scheduled soak. `--lib` skips the `#![no_main]` libFuzzer binaries, which
-        # link only under the fuzzer driver.
-        run: cargo +${{ env.FUZZ_NIGHTLY }} test --manifest-path fuzz/Cargo.toml --lib
+        # link only under the fuzzer driver. First, and `--locked`, because
+        # `cargo fuzz` takes no `--locked`: a build before this step would rewrite
+        # a stale lock and the step would read the rewrite.
+        run: cargo +${{ env.FUZZ_NIGHTLY }} test --locked --manifest-path fuzz/Cargo.toml --lib
+      - name: Build the fuzz targets
+        # Force the host (gnu) target: the prebuilt cargo-fuzz is a musl-static
+        # binary and defaults the fuzz target to its own musl triple, which is not
+        # installed and is incompatible with the ASAN static-libc check.
+        run: cargo +${{ env.FUZZ_NIGHTLY }} fuzz build --target x86_64-unknown-linux-gnu
 
   cargo-deny:
     name: cargo deny
@@ -2681,9 +2683,9 @@ jobs:
         with:
           tool: cargo-deny@0.20.2
       - name: Audit the workspace dependency tree
-        run: cargo deny check
+        run: cargo deny --locked check
       - name: Audit the fuzz workspace dependency tree
-        run: cargo deny --manifest-path fuzz/Cargo.toml check
+        run: cargo deny --locked --manifest-path fuzz/Cargo.toml check
 
   pip-audit:
     name: pip audit

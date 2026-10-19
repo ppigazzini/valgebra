@@ -14,7 +14,13 @@ it fetches on the day, and `pip install maturin` takes the newest. Each names
 the version `uv.lock` resolves, so a wheel is built by the maturin the lanes
 tested rather than by whichever is newest when it runs.
 
-LEDGER: every sync and every maturin is the lock's, and every run runs on the sync
+Cargo has a lock of its own, and a build without `--locked` rewrites one that no
+longer matches the manifests where a build with it refuses: the lane then
+tests, and `cargo deny` audits, a resolution nobody committed. So every cargo
+command a workflow runs that resolves the graph to build passes it; `cargo
+fuzz` and `cargo mutants` take no `--locked` and are not read.
+
+LEDGER: every sync, cargo build and maturin reads the lock; every run runs on the sync
 """
 
 from __future__ import annotations
@@ -119,3 +125,38 @@ def test_every_maturin_fetched_past_the_lock_is_the_locks() -> None:
         f"{job}: maturin {version}" for job, version in fetched if version != locked
     ]
     assert not wrong, f"a maturin past the lock, which resolves {locked}: {wrong}"
+
+
+#: A cargo command that resolves the dependency graph, with the rest of its
+#: line. `cargo fuzz` and `cargo mutants` take no `--locked` and are not read.
+CARGO_BUILD = re.compile(
+    r"\bcargo\s+(?:\+(?:\$\{\{[^}]*\}\}|\S+)\s+)?"
+    r"(build|check|clippy|doc|test|run|deny|llvm-cov)\b([^;&|\n]*)"
+)
+
+#: The `cargo llvm-cov` subcommands that read a profile or print the
+#: environment, and build nothing.
+BUILDS_NOTHING = frozenset({"clean", "report", "show-env"})
+
+
+def test_every_cargo_build_reads_the_lock() -> None:
+    builds = []
+    for job, body in _jobs():
+        for step in body.get("steps", []):
+            text = str(step.get("run", "")).replace("\\\n", " ")
+            for line in text.splitlines():
+                if line.lstrip().startswith("#"):
+                    continue
+                for found in CARGO_BUILD.finditer(line):
+                    tool, rest = found.groups()
+                    words = rest.split()
+                    if tool == "llvm-cov" and words and words[0] in BUILDS_NOTHING:
+                        continue
+                    builds.append((job, " ".join(found.group(0).split()), rest))
+    # The scan is the detector: the lint, test, MSRV, doc, coverage, deny and
+    # fuzz harness lanes all build.
+    assert len(builds) >= 10, f"the scan found {builds}"
+    unlocked = [
+        f"{job}: {command}" for job, command, rest in builds if "--locked" not in rest
+    ]
+    assert not unlocked, f"a cargo build that may rewrite the lock: {unlocked}"

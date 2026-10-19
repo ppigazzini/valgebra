@@ -67,10 +67,6 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
-      # The fuzz crate is a detached workspace, so the clippy hook above does not
-      # reach it and a change to the core's public types compiles cleanly here
-      # while breaking the fuzz lane. Checked, not clippy-linted: its own lane
-      # lints it under the nightly it needs.
       # `ty` runs in the merge gate and in `scripts/gate.py`, neither of which a
       # commit passes through, so a type error in this repository's own gate
       # script reaches a push before anything reads it. It is a second of wall
@@ -82,18 +78,24 @@ repos:
         language: system
         types_or: [python, pyi]
         pass_filenames: false
+      # On every commit, whatever it touches: the lint reads the comments of
+      # the sources, the paths the zone table names and every tracked file the
+      # internal-surface rule covers, in under a second.
       - id: docs-lint
         name: docs lint
         entry: python3 scripts/docs_lint.py
         language: system
-        types: [markdown]
         pass_filenames: false
+      # The fuzz crate is a detached workspace, so the clippy hooks above do not
+      # reach it and a change to the core's public types compiles cleanly there
+      # while breaking the fuzz lane. This compiles it; no hook or lane lints
+      # it. `--all-targets`, because the fuzz crate carries its own tests and CI
+      # runs them: a plain `check` compiles the library and leaves the test
+      # target for the lane to discover. `--locked`, as the clippy hooks are, so
+      # the hook reads the lock the lane reads.
       - id: cargo-check-fuzz
-        # `--all-targets`, because the fuzz crate carries its own tests and CI
-        # runs them: a plain `check` compiles the library and leaves the test
-        # target for the lane to discover.
         name: cargo check (detached fuzz workspace)
-        entry: cargo check --manifest-path fuzz/Cargo.toml --all-targets
+        entry: cargo check --locked --manifest-path fuzz/Cargo.toml --all-targets
         language: system
         types: [rust]
         pass_filenames: false

@@ -194,7 +194,7 @@ for and misses the other. The ledgers:
 | `tests/test_refusals_ledger.py` | every refusal on the architecture page names a test that holds it, every holder beside them is named by one, and the modules that import each other are the cycles it admits |
 | `tests/test_memo_placement.py` | every table keyed by a goal in the coinductive procedure says how it reverts |
 | `tests/test_workflow_actions.py` | every toolchain a workflow installs comes from the rustup wrapper |
-| `tests/test_workflow_syncs.py` | every sync and every maturin is the lock's, and every run runs on the sync |
+| `tests/test_workflow_syncs.py` | every sync, cargo build and maturin reads the lock; every run runs on the sync |
 | `tests/test_ledger_plants.py` | every ledger fails on the defect it exists to catch |
 
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds

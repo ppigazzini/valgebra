@@ -2288,7 +2288,8 @@ PLANTS = (
             "STANDINS: dict[str, tuple[str, str]] = {\n"
             '    "Measure binding coverage via the Python suite and Rust unit tests"'
             ": (\n"
-            '        "cargo test -p valgebra-py --features interpreter-tests",\n'
+            '        "cargo test --locked -p valgebra-py"'
+            ' " --features interpreter-tests",\n'
             '        "the coverage figure",\n'
             "    ),\n"
             "}",
@@ -2388,8 +2389,10 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "timeout 300 cargo test -p valgebra-py --features interpreter-tests",
-            "timeout 300 cargo test -p valgebra-py --features interpreter-test",
+            "timeout 300 cargo test --locked -p valgebra-py"
+            " --features interpreter-tests",
+            "timeout 300 cargo test --locked -p valgebra-py"
+            " --features interpreter-test",
         ),
         trips=("test_the_interpreter_backed_binding_tests_are_in_the_plan",),
     ),
@@ -3659,6 +3662,18 @@ PLANTS = (
             "      - run: uv run maturin develop --uv",
         ),
         trips=("test_every_run_in_a_checkout_runs_on_what_the_job_installed",),
+    ),
+    Plant(
+        # The documentation lane building past a stale lock, which rewrites it.
+        "tests/test_workflow_syncs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "        run: cargo doc --locked --workspace --no-deps\n",
+            "        run: cargo doc --workspace --no-deps\n",
+        ),
+        trips=("test_every_cargo_build_reads_the_lock",),
     ),
     Plant(
         # The PyPy lane's venv taking whichever maturin is newest.
