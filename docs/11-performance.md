@@ -245,7 +245,7 @@ uv run --no-sync --group bench python scripts/compare_gate.py
 ```
 
 That script owns the per-shape ratio **ceilings** (`scripts/perf_compare.json`)
--- what the project claims it stays under rather than what it once measured --
+-- what the project claims it stays under rather than a recorded measurement --
 and the table below is the absolute record. The two estimators can part by a
 quarter of a multiplier — a minimum sits below a median by however much the run
 was disturbed, and the 3.14 results below read both — so read a cell here
@@ -736,7 +736,7 @@ program that builds validators per request, and to no validation call.
 - **The probe is the floor for this shape.** Profiled under callgrind on CPython
   3.12, fifty probes of a fifty-field record are about 143 instructions each and
   64% of the accepting call. Iterating the dict once and resolving each key by
-  name instead was measured and is 47.9% dearer: an iteration step increments
+  name instead measures 47.9% dearer: an iteration step increments
   two reference counts, casts and decodes the key and hashes it, where a probe
   on an interned key carries its hash already.
 - **Interned keys meet on a pointer, and Python interns most of them.** A dict

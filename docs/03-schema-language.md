@@ -43,8 +43,8 @@ of them builds, and not for one reason:
 - `Iterable[T]` cannot be checked: reading its elements consumes an iterator,
   and a check that consumed one would change the value it was asked about.
 - `Set[T]`, `deque[T]` and `OrderedDict[K, V]` are **unbuilt**: nothing refuses
-  them and nothing builds them. Today writing one costs a `NotImplementedError`
-  at build, and the paragraphs below say what to write instead.
+  them and nothing builds them. Writing one costs a `NotImplementedError` at
+  build, and the paragraphs below say what to write instead.
 
 `type[T]` is refused as well, and is a different question: it constrains a value
 that is itself a class, where every form above constrains a container's

@@ -108,16 +108,16 @@ less than it claims while staying green.
 **What the clone models, the environment does not.** A step gets the caller's
 environment plus the job's and the step's own `env:`, and the runner's own
 absences are not modelled by that -- so a variable a developer's terminal sets
-reaches a step that a lane runs with it unset. One of them gave a false red:
-`FORCE_COLOR` overrides a tool's terminal check, `uv export` wrote escape codes
-into the requirements file it generates, and `pip-audit` refused the file
+reaches a step that a lane runs with it unset. One of them gives a false red:
+`FORCE_COLOR` overrides a tool's terminal check, so `uv export` writes escape
+codes into the requirements file it generates, and `pip-audit` refuses the file
 against a dependency tree with no advisory in it. The two variables whose only
 purpose is that override are dropped (`runner_environment`), and so is
 `VIRTUAL_ENV`, which `uv run` sets for the gate it launches: in the clone it
 sends a step's `uv pip install` to the caller's venv while `uv run` reads the
-clone's, so the wheel the profile comparison times was installed where the
-timing step could not import it, and the caller's venv kept a wheel built from
-a clone of `HEAD`. Without it, `uv pip` finds the clone's `.venv` from the
+clone's, so the wheel the profile comparison times is installed where the
+timing step cannot import it, and the caller's venv keeps a wheel built from a
+clone of `HEAD`. Without it, `uv pip` finds the clone's `.venv` from the
 working directory, as a runner's step does. The venv's `bin` leaves `PATH` with
 it, and the clone runs the lane's own sync and build rather than excusing them,
 because every later step runs under `uv run --no-sync`: with neither, a clone
@@ -152,14 +152,14 @@ interpreter* is answered by a rule rather than by the gate; the rest are
 differences a local gate cannot remove, and naming them is what keeps a green
 local run from being read as a promise it never made.
 
-Naming them carries an obligation the other way, and the wheel lane is what
-taught it: a job on that closing line went red within two minutes of a push, on
-a `docker pull` that answered `504`, and the only thing that could have noticed
-is a person reading the badge. A green gate followed by a red lane it named is
-the expected shape, not an anomaly — so a lane the gate does not reach is read
-after the push and its verdict reported, with a re-run, a fix, or a stated
-reason it is not the tree's. The list exists to say what a green run did not
-check; leaving the check undone afterwards spends the list on nothing.
+Naming them carries an obligation the other way: a job on that closing line
+can go red within two minutes of a push, on a `docker pull` that answers `504`,
+and the only thing that notices is a person reading the badge. A green gate
+followed by a red lane it named is the expected shape, not an anomaly — so a
+lane the gate does not reach is read after the push and its verdict reported,
+with a re-run, a fix, or a stated reason it is not the tree's. The list exists
+to say what a green run did not check; leaving the check undone afterwards
+spends the list on nothing.
 
 **The fourth row is the one to read twice.** It is not a
 setting a developer chose: it is an *absence* on the runner that is a presence
@@ -220,7 +220,7 @@ the packaging config rather than typed — so the check reads the whole row, for
 the script's path rather than its name, since one script's name can be part of
 another's (`gate.py`, `perf_gate.py`).
 
-One line in it is easy to miss and is the reason a lane went red: **the fuzz
+One line in it is easy to miss, and missing it turns a lane red: **the fuzz
 crate is a detached workspace**. libFuzzer needs a nightly toolchain, and making
 it a workspace member would put nightly on every stable gate's path, so
 `cargo check --workspace` does not reach it. A change to the core's public types
@@ -326,46 +326,43 @@ gate only catches what it exercises, and the wheel a release ships:
   as a `TypedDict` of refined integers, compiling a fifty-field dataclass or a
   fifty-member protocol, relating two dataclasses, explaining a failure in a
   record or accepting one in the same mode, and explaining a refused list. The
-  walk is the shipped
-  hot path neither pure-Rust workload reaches; schema construction grew twelve
-  percent over a release cycle while only the walk was counted, and an open
-  record can read a third dearer than a closed one while only the closed one
-  is. Each shape builds what it reads outside its loop: formatting its names and
-  filling a dict per iteration would be most of a build shape's count.
+  walk is the shipped hot path neither pure-Rust workload reaches; a count of
+  the walk does not see schema construction, and a count of a closed record
+  does not see an open one, which can read a third dearer. Each shape builds what it reads outside its loop: formatting its names
+  and filling a dict per iteration would be most of a build shape's count.
 
-  **One accepting JSON shape measured every JSON change**, and the paths a
-  change could lose on had no count: the reject a fast walk stops at, the union
-  that reads a parsed object once per branch, the clause that reads a key rather
-  than a field, the reference on the parsed path, the length bound that counts
-  a parsed object's keys. So did one walk over plain
-  kinds measure the walk: a refined element reads its bound on every check,
-  sixteen times the instructions of an element that only has a kind.
+  **One accepting JSON shape cannot measure every JSON change**: the paths a
+  change can lose on need counts of their own -- the reject a fast walk stops
+  at, the union that reads a parsed object once per branch, the clause that
+  reads a key rather than a field, the reference on the parsed path, the length
+  bound that counts a parsed object's keys. Nor does one walk over plain kinds
+  measure the walk: a refined element reads its bound on every check, sixteen
+  times the instructions of an element that only has a kind.
 
-  The later shapes are there because the earlier ones could not see repairs
-  worth a third, three quarters, and six percent of what they touched. **A dict of bare type
+  Each shape below counts a cost the others cannot see. **A dict of bare type
   objects is not what the frontend costs**: an annotation with any depth is
   read through `get_type_hints`, asked per field whether a qualifier states its
   required-ness, and asked per marker for four bound names it probably does not
-  carry -- and none of that had a count. **A record walk over a dict the
-  caller wrote as a literal is not the walk over one built with f-strings**
+  carry -- and no other shape counts any of that. **A record walk over a dict
+  the caller wrote as a literal is not the walk over one built with f-strings**
   either: the probe compares by pointer where both sides are interned, which is
   28% of the call, and the shape that walks non-interned keys moves by a
   percent when the validator's own side stops interning -- inside the relative
   gate's ceiling, and therefore invisible. **And a class is not a dict**: a
   dataclass is the one class form whose compile asks the standard library a
-  question, and putting the `dataclasses` import back at the top of the
-  frontend cost a build that compiles none of them 6.45% -- found with a
-  profiler, because no shape here would move. **And a subclass is not its
-  base**: the walk cannot trust the C length accessor for a `tuple` subclass,
-  because `cpyext` answers it through the object's own `__len__` -- but it can
-  trust it for one that *inherits* the base's slot, which is every
-  `NamedTuple`. Telling those apart by "is this exactly a tuple" copied every
-  `NamedTuple` and cost 100 ns against a plain tuple's 57 on CPython 3.14,
-  under every green lane. The repair's own mutant decides the same things for
-  every ordinary type -- the copy holds the same elements -- and only a
-  metaclass that raises when asked for `__len__` tells the two apart, which is
-  the test that kills it. What the line buys is the cost, and this count holds
-  that: reverting the line reads +171.65%.
+  question, and importing `dataclasses` at the top of the frontend would cost
+  a build that compiles none of them 6.45%, which no other shape here moves.
+  **And a subclass is not its base**: the walk cannot trust the C length
+  accessor for a `tuple` subclass, because `cpyext` answers it through the
+  object's own `__len__` -- but it can trust it for one that *inherits* the
+  base's slot, which is every `NamedTuple`. Telling those apart by "is this
+  exactly a tuple" would copy every `NamedTuple`, at 100 ns against a plain
+  tuple's 57 on CPython 3.14, under every green lane. That exact-tuple check is
+  the reading's own mutant: it decides the same things for every ordinary type
+  -- the copy holds the same elements -- and only a metaclass that raises when
+  asked for `__len__` tells the two apart, which is the test that kills it.
+  What the reading buys is the cost, and this count holds that: the exact-tuple
+  check reads +171.65%.
 
   **And a shape that wins by a wide margin measures nothing.** The JSON
   document is the comparison gate's closest race, and its ratio moves by a tenth
@@ -374,7 +371,7 @@ gate only catches what it exercises, and the wheel a release ships:
   competitive ratio, below, records as the reason the recorded block exists at
   all. `--binding-json` is that shape's deterministic twin, over the same two
   hundred records read against the same `list[JsonRecord]`. Most of what it
-  counts is not this crate's: profiled at `9700181`, about 55% of a call is
+  counts is not this crate's: under callgrind, about 55% of a call is
   `jiter` building the value tree and 14% is dropping it, with the walk in the
   remaining third — and `pydantic-core` parses to the same `jiter` tree before
   it validates, so the two thirds is the floor both libraries stand on and the
@@ -385,11 +382,11 @@ gate only catches what it exercises, and the wheel a release ships:
   **And a relation is not a decision workload.** The decision shapes relate
   classes that are identities with nothing behind them, so what the
   bindings read off a real class -- the namespaces of its `__mro__`, which a
-  refutation about the class stands on -- had no count. Read whole for every
-  class of every query, with `object`'s namespace among them and a `hasattr`
-  per value, it made one relation between two dataclasses six times dearer on
-  3.14 and twenty-two times on 3.12, with every gate green. `--binding-relation`
-  relates two of them through `relation_to`.
+  refutation about the class stands on -- has no count there. Read whole for
+  every class of every query, with `object`'s namespace among them and a
+  `hasattr` per value, it would make one relation between two dataclasses six
+  times dearer on 3.14 and twenty-two times on 3.12, with every other gate
+  green. `--binding-relation` relates two of them through `relation_to`.
 
   **And a compiled pattern is not a comparison.** Every other refinement costs
   an operator; a pattern costs a compiled object, built once when the
@@ -409,7 +406,7 @@ gate only catches what it exercises, and the wheel a release ships:
   from a snapshot of its tree unpacked into one directory and built into one
   emptied target, because the directory a profiled build runs in moves the
   layout of a loop the training does not reach: a source path one character
-  longer moved the untrained JSON document by a tenth. Each shape is
+  longer moves the untrained JSON document by a tenth. Each shape is
   `compare_gate.py --count` calling its valgebra half, in an environment that
   holds the wheel and nothing else, as the difference of two call counts. Two
   builds of one tree read every shape to the same instruction; with the nested
@@ -482,7 +479,7 @@ verdict:
 - **The environment is the gate's, not the caller's.** A process's environment
   block is copied onto its stack at start-up and, by an embedded interpreter,
   onto its heap, so its size moves a count on its own: a pure-Rust shape, which
-  is not differenced, read 2.97% apart between a login shell and `uv run`.
+  is not differenced, reads 2.97% apart between a login shell and `uv run`.
   `workload_environment` in `perf_gate.py` passes a workload the loader path,
   `PYTHONHOME` and `VALGRIND_LIB` where the caller has them, and the fixed seed,
   and nothing else; valgrind is resolved to an absolute path first. The same
@@ -495,8 +492,8 @@ verdict:
   bytecode beside the source, so on a fresh interpreter the first run pays a
   compile its partner reads back. `settle_the_heap` imports `ctypes`, nothing
   else in the bench job does, and the job installs its interpreter fresh: the
-  first walk the gate measured read a third dearer than the same binary run
-  again, on whichever side came first. `workload_environment` sets
+  first walk the gate measures reads a third dearer than the same binary run
+  again, on whichever side comes first. `workload_environment` sets
   `PYTHONDONTWRITEBYTECODE=1`, so both runs compile or both read. Before the
   two, `warm_the_interpreter` runs the shape once uncounted, and that run may
   write: without it the side measured first reads a colder cache than the side
@@ -517,13 +514,14 @@ verdict:
   from the top chunk or first consolidates every small chunk the previous
   iteration freed follows from where the setup's long-lived blocks landed. The
   size of the process environment moves that, and so does any change to what
-  runs before the loop -- a change to the *build* path moved the JSON shape by
-  nine percent while its loop executed the same instructions. `settle_the_heap`
-  in `crates/valgebra-py/src/workload.rs` calls `malloc_trim(0)` before every
-  shape's loop, which took the JSON and recursive shapes from 8.2% and 7.2%
-  apart between two environments to 0.06% and 0.36%. Trimming does not reach
-  what the *binary's* layout decides: one commit built in two directories read
-  the JSON shape 458M and 528M, all of it in `malloc_consolidate`, and the
+  runs before the loop -- a change to the *build* path can move the JSON shape
+  by nine percent while its loop executes the same instructions.
+  `settle_the_heap` in `crates/valgebra-py/src/workload.rs` calls
+  `malloc_trim(0)` before every shape's loop: without it the JSON and recursive
+  shapes read 8.2% and 7.2% apart between two environments, and with it 0.06%
+  and 0.36%. Trimming does not reach what the *binary's* layout decides: one
+  commit built in two directories reads the JSON shape 458M and 528M, all of it
+  in `malloc_consolidate`, and the
   merge gate builds its base in a directory of its own. So every measurement
   runs with `GLIBC_TUNABLES=glibc.malloc.mxfast=0` (`MALLOC_TUNABLES` in
   `perf_gate.py`), which turns off the fastbins that consolidation empties,
@@ -621,9 +619,9 @@ Changing a ceiling is an edit with an argument in its commit message.
 It is also the one gate that times the wheel the release ships, and
 `perf_gate.py --profiled` counts its shapes there. The rest of `perf_gate.py`
 builds without a profile, so a change the profile lays out differently is
-invisible to it: a list arm that grew by one branch read 0.9% in its
-instruction count and 64% in this gate's `deep_nesting`, because the training
-workload held no counts for the loop the branch moved out of the walk.
+invisible to it: a list arm one branch longer can read 0.9% in its instruction
+count and 64% in this gate's `deep_nesting`, where the training workload holds
+no counts for the loop the branch moves out of the walk.
 
 **A ceiling a shape passes by a wide margin stops measuring it**, which is why a
 claim is not the whole of the file. The JSON document's ratio moves by a tenth
@@ -889,7 +887,7 @@ line in `timeout.txt` stops the gate at exit 2, the code for a run that could
 not measure, with the mutant named; only `missed.txt` reaches the ratchet. The
 two are repaired in opposite directions -- a survivor wants a test, a timeout
 wants a budget, a seed or a bound on what the tests shrink -- and folding them
-together let `--update` write an overloaded runner into a baseline as a
+together would let `--update` write an overloaded runner into a baseline as a
 permanent excuse for a mutant nobody judged.
 
 **The third sweep runs the Python suite per mutant.** Seven files of the
@@ -1287,12 +1285,12 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
   `cargo llvm-cov` merges the profile against every instrumented object the
   directory holds, and an object built from an earlier tree contributes a
   mapping with zero counts for every function whose body has changed since. The
-  result reads as unexecuted code and is not: on one machine `decision.rs`
-  reported half its regions covered, with seven hundred of them landing on doc
-  comments, blank lines and `use` items, while a fresh `CARGO_TARGET_DIR` on the
-  same toolchain read the same file at 99.45% and the lane total at 97.34%.
-  The tell is the report's function list, which named four copies of the crate
-  in the shared run and two in the clean one.
+  result reads as unexecuted code and is not: a shared directory can report
+  `decision.rs` half covered, with hundreds of its regions landing on doc
+  comments, blank lines and `use` items, where a fresh `CARGO_TARGET_DIR` on the
+  same toolchain reads the file nearly whole. The tell is the report's function
+  list, which names more copies of the crate in a shared run than in a clean
+  one.
 
     So each lane cleans before it measures, and a figure taken by hand is taken
     the same way. The binding lane has the same trap one layer down: `maturin

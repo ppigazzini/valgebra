@@ -259,8 +259,8 @@ Moving a branch earlier is a behaviour change, not a refactor. `Any` above the
 type branch is the sharp one. Steps 6 and 7 are the moves that are not, and the
 argument is what makes them safe: an exact builtin scalar's type carries no
 `__metadata__` or `__supertype__`, `get_origin` answers `None` for it, and it is
-no container and no special form, so every arm before the fallthrough passed it
-there; a validator has no subclass and matches no arm before its own. Taken
+no container and no special form, so every arm before the fallthrough lets it
+through; a validator has no subclass and matches no arm before its own. Taken
 last, each pays an attribute read, a call into `typing` and a dozen tests
 first, which measures at three quarters of compiling a two-thousand-constant
 `Literal` and two thirds of a `union` of five hundred validators.

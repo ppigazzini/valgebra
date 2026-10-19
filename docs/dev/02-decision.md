@@ -695,9 +695,9 @@ What the numbers say, and where to read them. `cargo bench --bench core` is the
 harness: the `lower_nested_records_depth*` rows grow from under a microsecond at
 no nesting to milliseconds at six levels, which is the exponential the nesting
 bound catches, and `lower_sibling_union_difference_unheld` against its `_held`
-sibling is what the bound saves on one shape. On the shapes reachable today the
-nesting bound refuses before the work allowance does, so the allowance is what
-remains for a schema that is shallow and wide.
+sibling is what the bound saves on one shape. On the nested shapes those rows
+build, the nesting bound refuses before the work allowance does, so the
+allowance is what remains for a schema that is shallow and wide.
 
 **Building a set costs about three orders of magnitude more than a rule that
 already answers**, which is the whole reason the rules are asked first and the
@@ -736,8 +736,8 @@ work exponential in its depth unless a goal already decided can be recognised
 when it comes back — and recognising one cheaply needs *identity*, not structure.
 The IR gives that: two subtrees built alike are one allocation
 ([01-schema-ir.md](01-schema-ir.md)), so a goal is named by a pair of pointers
-and a memo over goals has the cheap key it wants. What a memo does not yet have
-is its soundness argument, and that is not about keys: an answer reached under
+and a memo over goals has the cheap key it wants. What a memo lacks is its
+soundness argument, and that is not about keys: an answer reached under
 the coinductive hypothesis the trail carries is not an answer without it, so
 what may be remembered is a goal decided with an empty trail and nothing else.
 The procedure bounds its own work with a counter, threaded through a whole
@@ -759,9 +759,9 @@ being resolved. A debug assertion on every goal holds that, and
 `a_query_gives_its_stacks_back_as_it_was_given_them` holds both stacks to coming
 back as they were given, over drawn schemas and definitions. The meets the
 emptiness recursion unfolds a reference into stay on a thread-local list keyed
-by the query's budget: a list on the context is built and dropped by every
-query, and that teardown read 10.6% more instructions on the decision workload
-for a list only an unfolded meet reaches.
+by the query's budget: a list on the context would be built and dropped by
+every query, a teardown that reads 10.6% more instructions on the decision
+workload for a list only an unfolded meet reaches.
 
 One shape needs neither the memo nor the counter. A union of nothing but
 literals denotes a **finite set of values**, and inclusion between two finite
@@ -776,10 +776,10 @@ one schema, or a tuple whose positions do, asks the *same goal* once per field
 or position -- in one loop, in order, so the repeat is the entry before this
 one. Each of those two rules remembers the last pair it was asked and the
 answer it gave, which is a memo of one entry where a table over the whole query
-would be. That is not an accident of size: a table was measured against a
-workload whose goals repeat and two whose goals do not, in four designs, and
-every one of them charged the queries with nothing to remember more than it
-saved the queries with something.
+would be. That is not an accident of size: measured against a workload whose
+goals repeat and two whose goals do not, each of four table designs charges the
+queries with nothing to remember more than it saves the queries with
+something.
 
 **A memo is not what the workloads miss.** Counted over the three decision
 workloads and over a DAG of thirty-two fields sharing one interned inner record,

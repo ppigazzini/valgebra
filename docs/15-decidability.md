@@ -119,8 +119,8 @@ answers `"undecided"`.
   | an `Enum` with no members | a member of a subclass, since a memberless enum can still be subclassed |
   | `IntEnum`, `StrEnum` | nothing new, but its members equal the values behind them, so two of them are not two values |
 
-  Each stays the `isinstance` atom it was, which is sound for every enumeration
-  and merely less complete.
+  Each stays an `isinstance` atom, which is sound for every enumeration and
+  merely less complete.
 - **Divisibility between two moduli**, where it holds. Every multiple of `a` is
   a multiple of `b` when `b` divides `a`, so the two steps settle the inclusion
   between them and the size of either is beside the point: `MultipleOf(5000)`

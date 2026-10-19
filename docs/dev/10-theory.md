@@ -399,14 +399,14 @@ HELD-BY: test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_
 Subtyping".** **[PLANNED: the-exact-decision]** — and planned means unstarted. The paper translates
 the relation into a tree logic and decides satisfiability there, which is a
 *replacement* for `decision.rs` rather than a widening of it, so nothing in the
-tree is a partial version of it. What the citation buys today is the knowledge
+tree is a partial version of it. What the citation buys is the knowledge
 that the relation is decidable in EXPTIME, and that is a statement about the
 relation rather than a budget an implementation can be held to.
 
 **A goal memo is not the missing piece, on every shape but one.**
 Interning is in the tree — `crates/valgebra-core/src/ir/intern.rs` shares the
 nodes of two schemas built alike — and it is the identity a table over goals
-would need for its key, which is why it read as half of one. The goals a query
+would need for its key, which is why it reads as half of one. The goals a query
 *repeats* are **counted** rather than argued: `decision::goal_tests` records
 each goal where the recursion is asked it, which is past the caches that answer
 a repeat without asking, and reports how many asks were of a pair already asked.

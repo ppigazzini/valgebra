@@ -448,7 +448,7 @@ assert Validator(Annotated[str, Regex(r"[0-9]{4}")]).is_valid("2026")
 
 This is the shape that reaches production: a timestamp, an identifier or a
 version pattern written with `\d` admits strings the parser downstream rejects,
-and every engine involved agreed the pattern was fine.
+and every engine involved agrees the pattern is fine.
 
 
 A bound against `nan` is rejected with a `ValueError`, and so is

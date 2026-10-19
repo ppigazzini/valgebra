@@ -193,12 +193,12 @@ a value found: the level is `Open`, the pair is already on the trail (`Cycle`, a
 value that contains itself), or the trail stands at `MAX_RECURSION_DEPTH`
 (`Full`) and no level was opened.
 
-**The discriminant order of `WalkMode` is load-bearing.** Written naively the
-sealed mode measured 2.6% *worse* than the two booleans it replaced, because
-neither predicate the walk asks per node compiled to a single comparison. Ordered
-so that explaining is "at most `ExplainFailFast`" and stopping at the first
-failure is "at least" it, the same three variants measure 1.4% *better*. The type
-was not the variable; the discriminant assignment was. A test pins both
+**The discriminant order of `WalkMode` is load-bearing.** Ordered naively, the
+sealed mode measures 2.6% *worse* than two booleans in its place, because neither
+predicate the walk asks per node compiles to a single comparison. Ordered so that
+explaining is "at most `ExplainFailFast`" and stopping at the first failure is
+"at least" it, the same three variants measure 1.4% *better*. The type is not
+the variable; the discriminant assignment is. A test pins both
 predicates over every variant so a reordering fails rather than silently costing.
 
 ### The guards and the vocabulary

@@ -544,15 +544,15 @@ search over the source can see and is satisfied by a call whose result nothing
 reads. It is *asserted* when it appears inside an `assert` or a
 `pytest.raises`, which is the suite saying what the cell answers. Reporting
 only the first counts a name the suite never asks a question about, which is
-the half a mention count cannot see; the two figures are equal today, and they
-are printed apart so the day they part is a day the page shows it.
+the half a mention count cannot see; the two figures are printed apart, so the
+day they part is a day the page shows it.
 
 **And a cell is read by its receiver, not by its word.** A method is a call on
 a receiver, an attribute is a read off one, and a read off the name a
 `pytest.raises` block binds is pytest's exception rather than the cell: the
 word `value` is on every line that catches an error and names
 `ValidationError.value` on almost none of them, and a search over words
-reported the attribute as asserted by the whole suite. The reading is the
+would report the attribute as asserted by the whole suite. The reading is the
 syntax tree's, so `caught.value.code` counts `code` and not `value`.
 
 Every empty cell is a **code**, and splitting the figure is what makes that
@@ -566,8 +566,8 @@ figures and `tests/test_use_case_ledger.py` holds this table to them, so the
 page is what fails on the commit that adds a name -- where an approximation of
 the two figures added together could not fail at all. What the *ledger* holds is
 still a floor rather than a count: the universe grows with the tree, and a test
-pinning today's total would fail on the commit that adds a name rather than on
-the one that leaves it unreached.
+pinning the total would fail on the commit that adds a name rather than on the
+one that leaves it unreached.
 
 **The outcomes a method documents are a product of their own.**
 `tests/test_surface_outcomes.py` reads the binding's `Raises:` blocks — every
@@ -592,7 +592,7 @@ mentions, which is the state every one of them starts in.
 **The denotation oracle reads every case at the boundaries.** It pairs a drawn
 schema with an independent predicate and checks a drawn value, and a boundary
 reached only by the draw is one the suite reaches on some runs and not others:
-measured over six hundred draws, three of five boundary kinds never appeared. So
+over six hundred draws, three of five boundary kinds never appear. So
 each case is checked against a fixed spread as well -- `nan`, the infinities,
 `-0.0`, the ends of the integer carriers, a newline in text and in bytes -- and
 a disagreement about one of those is a failure rather than a flake.
@@ -775,10 +775,10 @@ files the tree has, in both directions.
 **A coverage figure read from a shared target directory is not the lane's, and
 the difference can be one file.** `cargo llvm-cov` merges the profile against
 every instrumented object the directory holds, and an object built from an
-earlier tree maps zero counts onto code whose body has changed since: on one
-machine `decision.rs` read about half its regions covered, with seven hundred
-of them landing on doc-comment lines, blank lines and `use` items -- lines no
-program executes -- where a fresh `CARGO_TARGET_DIR` read the same file at 99%.
+earlier tree maps zero counts onto code whose body has changed since: a shared
+directory can read `decision.rs` about half covered, with hundreds of its
+regions landing on doc-comment lines, blank lines and `use` items -- lines no
+program executes -- where a fresh `CARGO_TARGET_DIR` reads the same file at 99%.
 Each lane runs `cargo llvm-cov clean --workspace` before it measures
 (`.github/workflows/ci.yml`), and a figure taken by hand is taken in a fresh
 `CARGO_TARGET_DIR`; [07-tooling-ci.md](07-tooling-ci.md) names the tell.

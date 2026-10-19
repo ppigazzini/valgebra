@@ -182,7 +182,7 @@ constructor. Beyond the admission test, two costs specific to this one:
 spelling: the node is in the closure — `AttrRecord` denotes exactly "any object
 whose `.a` is an `int`" — and the frontend builds a protocol as the record of
 its members with no class beside it ([03-frontend.md](03-frontend.md), "What a
-class declares"). No node was added for it, and no combinator: the annotation
+class declares"). A protocol adds no node and no combinator: the annotation
 form the typing spec gives for "an object with these attributes" is the
 spelling, which is the surface rule.
 
@@ -567,7 +567,7 @@ the kind's component: each component is a small union of lines
 `structure ∧ classes ∧ attrs`, complemented as a DNF inside the kind, and a
 class beside a builtin kind is one more line of that kind.
 
-The two other shapes were weighed and fail one test each. A DNF over the whole
+The two other shapes fail one test each. A DNF over the whole
 descriptor loses the kind partition — every operation becomes a DNF operation
 over every kind, and the cheap disjointness across kinds, which is most of what
 the partition buys, goes with it. Scoping classes to the `other` kind fails the value it was built for: a dataclass
@@ -663,7 +663,7 @@ in a set it is not in.
 
 `a ≤ b` is `a ∧ ¬b = ∅`, and the descriptor answers that question for schemas the
 decision procedure declines. Whether it may be *asked* is a cost question, and
-the cost was measured on the shapes the two disagree about.
+the cost is measured on the shapes the two disagree about.
 
 The wins are cheap and the costs are exponential in nesting depth, both measured
 by `cargo bench --bench core`; [02-decision.md](02-decision.md) names the rows
