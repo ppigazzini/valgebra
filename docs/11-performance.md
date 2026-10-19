@@ -322,20 +322,22 @@ what the project claims of that build is what that build can hold.
 ### Threads on the free-threaded build
 
 A `Validator` is immutable, so every thread can share one. What decides how
-the free-threaded build scales is what the **values** the threads check share.
-Measured on CPython 3.14.6t with a release build, eight threads on a
-sixteen-thread machine, each checking its value forty times, as the work the
-eight finish against what one thread finishes in the same time:
+the free-threaded build scales is what the **values** the threads check share,
+and the walk's reading of a container says how. A list, a dict and a set are
+read under that container's own lock (`with_critical_section` in
+`crates/valgebra-py/src/check/walk/`), and a list hands out each element as an
+owned reference, whose count the free-threaded build writes on the element
+itself:
 
-| What the eight threads check | Throughput, against one thread |
+| What the threads check | How it scales |
 | --- | --- |
-| one value, shared | 0.72x to 0.78x over five shapes: the walk takes each container's lock to read it, so the threads take turns |
-| a `copy.deepcopy` each, which shares the elements | 1.4x for a `list[int]`, whose every element's reference count all eight write; 2.3x to 4.9x for a dict, a list of records and a list of unions |
-| a `list[int]` each, of its own `int` objects | 4.6x to 5.3x |
-| a JSON document each, parsed from one shared string | 3.5x to 6.1x |
+| one value, shared | not with the threads: they take turns on the lock of every list, dict and set they share |
+| a `copy.deepcopy` each | with the threads, less the more elements the copies share: `deepcopy` returns an immutable element such as an `int` as it is, so every thread reading it out of its list writes that element's count |
+| a value each, of its own objects | with the threads |
+| a JSON document each, parsed from one shared string | with the threads, but for the interned-string cache the parser draws on, which one lock guards |
 
 So a server checking each request's own payload scales with its threads, and
-eight threads checking one shared structure do less than one would. The
+threads checking one shared structure do not. The
 [installation page](00-installation.md#free-threaded-cpython) says what to do
 about the second.
 
