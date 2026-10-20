@@ -241,15 +241,6 @@ impl WalkState {
         }
     }
 
-    /// The fatal interpreter signal the walk recorded, taken by the entry point
-    /// that re-raises it.
-    pub(crate) fn into_fatal(mut self) -> Option<PyErr> {
-        if !self.signals.fatal_seen.get() {
-            return None;
-        }
-        self.rare.0.get_mut().take().and_then(|rare| rare.fatal)
-    }
-
     /// Record `err` as the walk's fatal signal, unless one is recorded already:
     /// the first is the one raised. Mirrored into the cheap flag the per-node
     /// short-circuit reads.
@@ -264,8 +255,18 @@ impl WalkState {
         self.signals.fatal_seen.set(true);
     }
 
-    /// Take the fatal signal the walk recorded, leaving none.
+    /// Take the fatal signal the walk recorded, leaving none: what the entry
+    /// point re-raises.
+    ///
+    /// By reference, at an entry point as inside a walk: the walk's context
+    /// holds the state's address, so a method taking the state by value is a
+    /// move the compiler cannot elide, every word of it copied at the end of
+    /// every membership test. A walk that met no signal pays the flag tested
+    /// first and nothing else.
     pub(crate) fn take_fatal(&self) -> Option<PyErr> {
+        if !self.signals.fatal_seen.get() {
+            return None;
+        }
         self.rare
             .0
             .borrow_mut()

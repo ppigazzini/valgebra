@@ -86,14 +86,14 @@ fn the_ceiling_admits_its_own_number_of_levels_and_no_more() {
 #[test]
 fn the_recorded_signal_leaves_with_the_state() {
     assert!(
-        WalkState::new().into_fatal().is_none(),
+        WalkState::new().take_fatal().is_none(),
         "a walk that saw no signal carries none out"
     );
     let state = WalkState::new();
     state.keep_fatal(PyKeyboardInterrupt::new_err("stop"));
     state.signals.fatal_seen.set(true);
     assert!(
-        state.into_fatal().is_some(),
+        state.take_fatal().is_some(),
         "the signal must reach the entry point that re-raises it"
     );
 }

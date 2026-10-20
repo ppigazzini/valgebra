@@ -269,14 +269,14 @@ against the same cell, not against the gate's output.
 ### The cheapest door, and where the floor is
 
 `x in v` is `v.is_valid(x)` through the container protocol, and it is the
-cheaper call: **20 ns against 25 ns** for a scalar on the machine above, the
+cheaper call: **16 ns against 22 ns** for a scalar on the machine above, the
 best of fifteen `timeit` repeats of a million calls, because the interpreter
 reaches a container slot directly and a method by its call protocol. Neither
 number is the check. `Validator(anything).is_valid(1)` -- the schema that
-answers `True` without looking -- costs 24 ns, so the *walk* for an `int` is a
-nanosecond or two and everything else is the boundary a Python call crosses.
+answers `True` without looking -- costs 20 ns, so the *walk* for an `int` is about
+a nanosecond and everything else is the boundary a Python call crosses.
 For reference on the same run, `isinstance(1, int)` is 13 ns and a call to an
-empty one-argument Python function is 15 ns.
+empty one-argument Python function is 16 ns.
 
 Read that as the floor it is: a per-call check cannot be much cheaper than a
 Python call, and the way to spend less is to make fewer calls -- validate the
@@ -316,7 +316,7 @@ the free-threaded build:
 | `list[int]`, 10,000 elements | 0.162 | 0.108 | 0.139 |
 | Closed record, 50 int fields | 0.226 | 0.230 | 0.274 |
 | Nested `list[...]`, depth 25 | 0.122 | 0.111 | 0.228 |
-| One `int` | 0.207 | 0.199 | 0.206 |
+| One `int` | 0.187 | 0.181 | 0.202 |
 
 The **element** is what moves, not the check. A list hands out each of its items
 as an owned reference — a count written on the object when the handle is made
@@ -402,8 +402,8 @@ exception.
 
 The scalar shape is absent from the table because it sits near timer resolution,
 and most of it is the call rather than the check, as the floor above shows: on
-CPython 3.14 the competitive gate measures it at a 39.2 ns median over eighteen
-runs, between 38.3 and 44.2 ns, around 5.0x. That gate measures it; this record
+CPython 3.14 the competitive gate measures it at a 36.3 ns median over eighteen
+runs, between 36.0 and 41.0 ns, around 5.5x. That gate measures it; this record
 does not.
 
 Core micro-benchmarks (criterion, release+LTO, indicative single run):

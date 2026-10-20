@@ -90,8 +90,8 @@ fn definition_is_open(token: u64) -> bool {
 
 /// Turn a membership walk's outcome into a Python result: re-raise a fatal
 /// interpreter signal the walk recorded, otherwise report the membership verdict.
-fn reraise_fatal(state: WalkState, ok: bool) -> PyResult<bool> {
-    match state.into_fatal() {
+fn reraise_fatal(state: &WalkState, ok: bool) -> PyResult<bool> {
+    match state.take_fatal() {
         Some(err) => Err(err),
         None => Ok(ok),
     }
@@ -365,7 +365,7 @@ impl Validator {
             &Value::Json(py, &json),
             &mut Unwritten::default().frame(self.context(py, &state, WalkMode::Fast)),
         );
-        reraise_fatal(state, ok)
+        reraise_fatal(&state, ok)
     }
 }
 
@@ -480,7 +480,7 @@ impl Validator {
                 self.context(obj.py(), &state, WalkMode::explaining(fail_fast)),
             ),
         );
-        if let Some(err) = state.into_fatal() {
+        if let Some(err) = state.take_fatal() {
             return Err(err);
         }
         if ok {
@@ -515,7 +515,7 @@ impl Validator {
             &Value::Py(obj),
             &mut Unwritten::default().frame(self.context(obj.py(), &state, WalkMode::Fast)),
         );
-        reraise_fatal(state, ok)
+        reraise_fatal(&state, ok)
     }
 
     /// Validate `obj` and return it unchanged.
