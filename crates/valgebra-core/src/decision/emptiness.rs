@@ -78,7 +78,7 @@ impl Schema {
         // like a proof of emptiness: a value of the schema is a value of it,
         // whatever a second reading would say, so the descriptor is not asked
         // to overturn what it cannot. Reading the bool instead of the verdict
-        // asked it on every inhabited schema, and lowering one determinises
+        // asked it on every inhabited schema, and lowering one determinizes
         // automata and takes products -- a third of the decision workload,
         // spent on a question already answered.
         match self.verdict_rec(&mut Cx::new(oracle, defs, &Budget::new(DECISION_BUDGET))) {
@@ -91,7 +91,7 @@ impl Schema {
     /// Whether the descriptor proves this schema admits no value.
     ///
     /// Asked **after** the structural rules and only where they decline, which
-    /// is the ordering the cost forces: building a descriptor determinises
+    /// is the ordering the cost forces: building a descriptor determinizes
     /// automata and takes products, and beside a verdict the rules already
     /// reached that work is discarded. Since it can only turn a `false` into a
     /// `true`, both orders give the same answers and only one is affordable.

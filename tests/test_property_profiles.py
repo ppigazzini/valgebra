@@ -2,7 +2,7 @@
 
 A profile is read in the environment it runs in, and a runner sets ``CI``, which
 makes Hypothesis's own ``ci`` settings the default a registered profile inherits:
-derandomised, no database. A deep profile that inherits them asks the same
+derandomized, no database. A deep profile that inherits them asks the same
 examples every night. So the profiles are read here in a child interpreter with
 ``CI`` set, where the inheritance happens, rather than in this one, where it may
 not.
@@ -66,10 +66,10 @@ def test_the_nightly_profile_draws_at_random_and_keeps_its_failures() -> None:
 
 @pytest.mark.parametrize("profile", ["ci", "dev"])
 def test_a_merge_gate_profile_is_the_same_red_on_a_rerun(profile: str) -> None:
-    """The ``ci`` profile is derandomised on purpose; ``dev`` keeps the default.
+    """The ``ci`` profile is derandomized on purpose; ``dev`` keeps the default.
 
     ``dev`` is asked too, because it is what runs when a caller sets no profile,
-    and on a runner it inherits Hypothesis's own derandomised ``ci`` settings.
+    and on a runner it inherits Hypothesis's own derandomized ``ci`` settings.
     """
     selected = _selected(profile)
     assert selected["derandomize"] is True
@@ -112,7 +112,7 @@ def test_the_nightly_lane_hands_its_database_back_each_night() -> None:
 def test_every_property_file_runs_under_the_nightly_profile() -> None:
     """A property only the merge gate draws asks the same examples forever.
 
-    The ``ci`` profile is derandomised: its draw is a function of the test's
+    The ``ci`` profile is derandomized: its draw is a function of the test's
     source, so every push asks the same examples until the test is edited. Only
     the nightly lane draws at random, and only in the files its deep suite
     names. A file left off that list draws the same examples on every push and

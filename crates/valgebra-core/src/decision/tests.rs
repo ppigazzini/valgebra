@@ -3970,7 +3970,7 @@ fn a_constant_that_does_not_equal_itself_denotes_no_value() {
 /// The descriptor is the second reading of one question, asked where the rules
 /// reach neither answer. A proof of inhabitation is an answer: a value of the
 /// schema is a value of it, and a sound second reading cannot say otherwise --
-/// so asking is work that cannot change a verdict, and a lowering determinises
+/// so asking is work that cannot change a verdict, and a lowering determinizes
 /// automata and takes products to do it.
 ///
 /// The instrument is the pool: a lowering reads every constant it meets, so a

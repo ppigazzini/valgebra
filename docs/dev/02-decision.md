@@ -23,7 +23,7 @@ at the crate root below them, the questions only the bindings can answer. The
 rules answer first, and the descriptor answers where they decline -- where they
 *decline*, not where they say no: a schema the rules prove inhabited is not
 lowered, because a sound second reading cannot overturn a proof, and lowering
-one would determinise automata and take products to reach the answer the rules
+one would determinize automata and take products to reach the answer the rules
 gave.
 
 That ordering is not a second opinion. Both are asked the same question, both

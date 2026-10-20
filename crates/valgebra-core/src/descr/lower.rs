@@ -80,7 +80,7 @@ pub trait Constants {
 /// The nodes this will lower before refusing.
 ///
 /// A schema is a tree the caller writes, and lowering both recurses over it and
-/// *builds* at every node -- a sequence node determinises an automaton, a set
+/// *builds* at every node -- a sequence node determinizes an automaton, a set
 /// node takes a powerset. Without a bound a deep enough schema exhausts the
 /// stack and a wide one exhausts the clock, which is why the procedure beside
 /// this one carries a work budget too.

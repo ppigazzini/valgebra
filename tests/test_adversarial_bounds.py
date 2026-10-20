@@ -891,7 +891,7 @@ def test_a_class_named_from_many_places_is_refused_before_it_is_built() -> None:
     assert int(result.stdout) < 100 * 1024 * 1024 // unit, result.stdout
 
 
-def test_a_pattern_whose_determinisation_explodes_answers_in_bounded_time() -> None:
+def test_a_pattern_whose_determinization_explodes_answers_in_bounded_time() -> None:
     """A subtype question must not be a way to exhaust the process's memory.
 
     `(a|b)*a(a|b){k}` doubles its DFA states for every `k`: the automaton has to

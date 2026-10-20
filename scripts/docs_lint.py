@@ -224,9 +224,9 @@ def _site_slug(text: str) -> str:
 
 
 @functools.cache
-def _anchors(path: Path, flavour: str) -> frozenset[str]:
+def _anchors(path: Path, renderer: str) -> frozenset[str]:
     """Give the anchors a page's headings render to, repeats numbered as each does."""
-    slug, suffix = (_github_slug, "-") if flavour == "github" else (_site_slug, "_")
+    slug, suffix = (_github_slug, "-") if renderer == "github" else (_site_slug, "_")
     seen: dict[str, int] = {}
     anchors = set()
     for text in _heading_texts(path):
@@ -277,10 +277,10 @@ def check_links(path: Path, text: str) -> list[str]:
             continue
         if not anchor or page.suffix != ".md":
             continue
-        flavours = ["github"]
+        renderers = ["github"]
         if _on_the_site(path) and _on_the_site(page):
-            flavours.append("site")
-        missing = [f for f in flavours if anchor not in _anchors(page, f)]
+            renderers.append("site")
+        missing = [f for f in renderers if anchor not in _anchors(page, f)]
         if missing:
             problems.append(
                 f"dead anchor {target!r} under {' and '.join(missing)} slugs"
@@ -525,9 +525,9 @@ BRITISH = re.compile(
     r"(?:behavio|colo|endeavo|favo|flavo|harbo|hono|humo|labo|neighbo|rumo"
     r"|vapo)ur(?:s|ed|ing|er|ers|al|ally|able|ably|ite|ites|ful|less|hood)?"
     r"|(?:amorti|authori|canonicali|capitali|categori|characteri|customi"
-    r"|emphasi|finali|formali|generali|initiali|lineari|locali|materiali|maximi"
+    r"|determini|emphasi|finali|formali|generali|initiali|lineari|locali|materiali|maximi"
     r"|memoi|minimi|moderni|normali|optimi|organi|parameteri|parametri"
-    r"|prioriti|rationali|reali|recogni|saniti|seriali|speciali|stabili"
+    r"|parenthesi|prioriti|randomi|rationali|reali|recogni|saniti|seriali|speciali|stabili"
     r"|standardi|summari|symboli|synthesi|tokeni|utili|vectori|visuali)"
     r"s(?:e|es|ed|er|ers|ing|ation|ations|able)"
     r"|(?:analy|cataly|paraly)s(?:e|ed|er|ers|ing)"

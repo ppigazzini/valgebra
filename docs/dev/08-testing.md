@@ -464,9 +464,9 @@ workflow and `tests/conftest.py` — read them there.
 the bound. Every job carries one.
 
 **`ci` and `nightly` name their own randomness; `dev` inherits it.** On a
-runner Hypothesis makes its own `ci` settings -- derandomised, no database --
+runner Hypothesis makes its own `ci` settings -- derandomized, no database --
 the default a registered profile inherits, so a deep profile that names neither
-replays the same examples every night. `ci` is derandomised on purpose, so a red merge gate is the same red on a
+replays the same examples every night. `ci` is derandomized on purpose, so a red merge gate is the same red on a
 re-run; `nightly` draws at random and keeps what fails in `.hypothesis/examples`,
 which the nightly lane restores before its deep suite and saves after it, red or
 green, so a kept failure is replayed first on the next night; a red night also

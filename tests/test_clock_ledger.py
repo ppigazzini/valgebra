@@ -9,7 +9,7 @@ reasons that have nothing to do with the code".
 Each survives for a reason, and the reason is that no counter in this tree
 measures what it measures: two count work the decision's own step counter does
 not see, because the cost they pin is oracle calls and rendered strings rather
-than decision steps, and the third pins a determinisation that really is a
+than decision steps, and the third pins a determinization that really is a
 question about time. Each reads the fastest of several runs, which is the
 estimator a loaded machine cannot spoil -- another process steals time from a
 reading and never gives any back.
@@ -38,7 +38,7 @@ CLOCK = re.compile(r"\b(?:perf_counter|monotonic|process_time)\s*\(")
 
 _EQUIVALENCE = "test_equivalence.py::test_two_wide_literal_sets"
 _DEEP_VALUE = "test_adversarial_bounds.py::test_explaining_a_deep_value"
-_PATTERN = "test_adversarial_bounds.py::test_a_pattern_whose_determinisation"
+_PATTERN = "test_adversarial_bounds.py::test_a_pattern_whose_determinization"
 
 #: The tests that may read one, by the prefix that names them, each with why no
 #: counter in this tree replaces it.
@@ -53,7 +53,7 @@ ARGUED = {
         "in this tree reports"
     ),
     _PATTERN: (
-        "the bound really is about time: a determinisation that explodes is one "
+        "the bound really is about time: a determinization that explodes is one "
         "that does not finish, and finishing is the property"
     ),
 }

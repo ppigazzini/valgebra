@@ -2494,7 +2494,7 @@ each is written out below.
   objects it owns, and can be weakly referenced, so a registry keyed by schema
   can be a `WeakValueDictionary` and let its entries go.
 
-- A relation over a pattern whose determinisation is exponential refuses instead
+- A relation over a pattern whose determinization is exponential refuses instead
   of exhausting memory. `Annotated[str, Regex("(a|b)*a(a|b){20}")]` against
   `Regex("(a|b)*")` spent six seconds and 668 MB, and two more repetitions
   aborted the process on a four-gigabyte allocation: the automaton bound was

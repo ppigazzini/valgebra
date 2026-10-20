@@ -26,10 +26,10 @@
 //!
 //! The automaton comes from `regex-automata`, which the binding's `regex`
 //! already depends on, so the core shares a version rather than adding a
-//! dependency. What is taken from it is the *parser and determiniser* for one
+//! dependency. What is taken from it is the *parser and determinizer* for one
 //! pattern; the three set operations and the emptiness decision are here,
 //! because the crate builds automata for searching and offers no complement.
-//! The determiniser is asked for every match rather than for the one a search
+//! The determinizer is asked for every match rather than for the one a search
 //! prefers, since a set of words has no preference among its members.
 
 use regex_automata::dfa::{Automaton, dense};
@@ -56,7 +56,7 @@ use super::automaton::{Reached, canonical_order, chain_fits, reaches};
 /// at `k = 15` the builder makes a table of 65,536 states, sixteen times
 /// `MAX_STATES`, which `Dfa::from_automaton` then refuses; at 16 the subset
 /// construction's scratch passes the limit first. Without it, a pattern whose
-/// determinisation is exponential passes right through `MAX_STATES` because
+/// determinization is exponential passes right through `MAX_STATES` because
 /// it never reaches the check.
 ///
 /// Both limits are set: `determinize_size_limit` bounds the scratch space the
@@ -888,7 +888,7 @@ impl RegularSet {
     ///
     /// The size limits are the load-bearing part. `MAX_STATES` is checked in
     /// `Dfa::from_automaton`, which runs *after* `regex-automata` has built
-    /// the complete dense table -- so a pattern whose determinisation is
+    /// the complete dense table -- so a pattern whose determinization is
     /// exponential allocated gigabytes and then refused, or aborted the process
     /// trying. `(a|b)*a(a|b){k}` is the family: every `k` doubles the states,
     /// and at 20 the build reached 668 MB before valgebra saw a single state.

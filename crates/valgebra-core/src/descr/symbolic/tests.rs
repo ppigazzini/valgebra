@@ -401,7 +401,7 @@ fn the_merge_starts_from_three_distances() {
 ///
 /// Each state of the product is a pair of states, so the machine is where a
 /// build multiplies hardest -- and the allowance is charged per new pair,
-/// which is what makes a determinisation stop while it is still cheap. Both
+/// which is what makes a determinization stop while it is still cheap. Both
 /// directions, because an allowance that only ever refuses would pass half
 /// of this.
 #[test]

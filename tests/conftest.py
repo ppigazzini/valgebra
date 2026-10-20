@@ -5,7 +5,7 @@ Three property-test profiles select the example budget by the
 
 - ``dev`` (default, local): the fast budget for an edit-test loop.
 - ``ci`` (pull requests): a wider budget that still finishes a merge gate, drawn
-  derandomised so a red merge gate is the same red on a re-run.
+  derandomized so a red merge gate is the same red on a re-run.
 - ``nightly`` (scheduled): the deep budget that hunts the long tail, drawn at
   random with a database, so each night asks examples the last one did not and
   a failure is kept for the replay.
@@ -13,7 +13,7 @@ Three property-test profiles select the example budget by the
 ``ci`` and ``nightly`` say ``derandomize`` and ``database`` themselves rather
 than inheriting them; ``dev`` names neither, so on a runner it inherits both.
 Hypothesis reads ``CI`` from the environment and makes its own ``ci``
-profile the default a registration inherits from, which is derandomised with no
+profile the default a registration inherits from, which is derandomized with no
 database: a ``nightly`` that named neither replayed the same examples every
 night on a runner and hunted nothing.
 

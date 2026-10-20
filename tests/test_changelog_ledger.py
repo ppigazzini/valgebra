@@ -272,7 +272,7 @@ def test_the_leg_that_takes_the_history_says_so_in_its_name() -> None:
 #: the workflow's own `FLOOR`, so a floor that moves moves this reading too.
 FLOOR = str(read_workflow()["env"]["FLOOR"])
 
-#: A workflow expression of the one shape this ledger reads: a parenthesised
+#: A workflow expression of the one shape this ledger reads: a parenthesized
 #: conjunction of `lhs == rhs` tests choosing between two quoted results.
 _TERNARY = re.compile(
     r"\$\{\{\s*\((?P<cond>.+?)\)\s*&&\s*'(?P<then>[^']*)'"

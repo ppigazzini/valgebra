@@ -1097,7 +1097,7 @@ const BY_VALUES: Algebra<Descr> = Algebra {
 
 /// The word descriptors the generator draws from, built once.
 ///
-/// A pattern's automaton is determinised and minimized, which is far more
+/// A pattern's automaton is determinized and minimized, which is far more
 /// work than drawing a number: built per draw it dominates the suite, and
 /// proptest's shrinking -- thousands of draws over one failure -- turns a
 /// caught mutation into a run that does not finish.

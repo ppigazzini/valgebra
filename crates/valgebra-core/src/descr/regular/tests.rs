@@ -338,7 +338,7 @@ proptest! {
     }
 
     /// A word's table is the table its escaped pattern lowers to: the chain
-    /// built here and the automaton `regex-automata` determinises are one
+    /// built here and the automaton `regex-automata` determinizes are one
     /// language, so the two minimal, canonically numbered tables are equal.
     #[test]
     fn a_word_is_the_language_its_escaped_pattern_spells(
@@ -491,7 +491,7 @@ fn a_length_bound_counts_the_alphabet_symbols() {
     assert!(impossible.is_empty());
 }
 
-/// A pattern whose determinisation is exponential refuses at the builder,
+/// A pattern whose determinization is exponential refuses at the builder,
 /// not after it.
 ///
 /// `(a|b)*a(a|b){k}` doubles its DFA states for every `k`: the automaton
@@ -505,7 +505,7 @@ fn a_length_bound_counts_the_alphabet_symbols() {
 /// The small `k` still answers, so the bound is not a blanket refusal of
 /// the shape.
 #[test]
-fn a_pattern_whose_determinisation_explodes_refuses_at_the_builder() {
+fn a_pattern_whose_determinization_explodes_refuses_at_the_builder() {
     let family = |k: u32| format!("(a|b)*a(a|b){{{k}}}");
     assert!(RegularSet::pattern(&family(4), Alphabet::Text).is_some());
     for k in [24, 40, 64] {
@@ -514,7 +514,7 @@ fn a_pattern_whose_determinisation_explodes_refuses_at_the_builder() {
             "k = {k} must refuse rather than allocate"
         );
     }
-    // A long pattern that stays small determinised is unaffected: the limit
+    // A long pattern that stays small determinized is unaffected: the limit
     // is on the table, not on the source.
     assert!(RegularSet::pattern(&"a".repeat(2000), Alphabet::Text).is_some());
 }
