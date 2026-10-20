@@ -328,6 +328,10 @@ def _json_documents() -> None:
     refused = [*records[:100], {**records[100], "id": "x"}, *records[101:]]
     document = Validator(list[JsonRecord])
     _run(document.is_valid_json, [json.dumps(records), json.dumps(refused)], 400)
+    # Not `load`, whose builder no other call here takes: trained on these
+    # records, the profile lays the general list scan out for long lists, and
+    # the list nested twenty-five deep pays for it at every level, 3.5 to 7%
+    # more instructions on the profiled wheel, past what its gate allows.
 
     # A reference on the JSON path: twenty trees twelve deep, each a pair of a
     # subtree and an integer, against the schema that names itself -- whose
@@ -376,8 +380,19 @@ def _mappings() -> None:
     _run(mapping.is_valid, [big_map, {**big_map, "bad": "x"}], 1500)
 
 
+def _membership(validator: Validator, samples: Sequence[object], rounds: int) -> int:
+    # The container door, `value in validator`, reaches the check through a
+    # slot of its own, and the build inlines a copy of the check there: a copy
+    # the profile never enters is laid out by chance, as every other reading is.
+    found = 0
+    for _ in range(rounds):
+        for value in samples:
+            found += value in validator
+    return found
+
+
 def _scalars() -> None:
-    # Scalars across the type lattice.
+    # Scalars across the type lattice, through the method and the operator.
     scalars: list[tuple[object, object, object]] = [
         (int, 7, "x"),
         (str, "s", 7),
@@ -385,7 +400,9 @@ def _scalars() -> None:
         (bytes, b"x", "x"),
     ]
     for schema, ok, bad in scalars:
-        _run(Validator(schema).is_valid, [ok, bad], 12000)
+        validator = Validator(schema)
+        _run(validator.is_valid, [ok, bad], 12000)
+        _membership(validator, [ok, bad], 12000)
 
 
 def main(argv: list[str]) -> None:

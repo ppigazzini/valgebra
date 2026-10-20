@@ -196,6 +196,18 @@ the readers for literals and classes move the PGO wheel's walk of a nested list
 by 6% in instructions. The workload reads a list of each kind, which takes that
 to 3%.
 
+And for a door the workload never calls. `x in v` reaches the check through a
+slot of its own, into which the build inlines a copy of it; untrained, that copy
+took a mispredicted branch on every call and read 13% slower, and the workload
+calls it at no cost to any shape the profiled gate counts. `load` parses into
+Python objects through a builder no other call takes, and it is left untrained,
+where it reads 49% slower than a build trained on it, on the comparison gate's
+document and through `validate_json` alike, which parses the same way. That is a
+trade the gate refuses: trained on a document of records, at every weight tried,
+the profile lays the general list scan out for long lists, and the list nested
+twenty-five deep, one element a level, reads 3.5 to 7% more instructions on the
+profiled wheel and 2.5% more time.
+
 **What the matrix does with the reading.** `--pgo` ships on five targets, and
 that is a claim about those boxes rather than a default. Where the lane reads a
 gain on the shapes the release serves, the matrix keeps `pgo: true` and this
@@ -257,7 +269,7 @@ against the same cell, not against the gate's output.
 ### The cheapest door, and where the floor is
 
 `x in v` is `v.is_valid(x)` through the container protocol, and it is the
-cheaper call: **23 ns against 25 ns** for a scalar on the machine above, the
+cheaper call: **20 ns against 25 ns** for a scalar on the machine above, the
 best of fifteen `timeit` repeats of a million calls, because the interpreter
 reaches a container slot directly and a method by its call protocol. Neither
 number is the check. `Validator(anything).is_valid(1)` -- the schema that
