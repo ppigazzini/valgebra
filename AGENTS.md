@@ -9,7 +9,8 @@ It is not a faster pydantic. pydantic and msgspec own parse-and-ingest; valgebra
 owns check-and-contract. Keep that framing in code, docs, and commits.
 
 **The algebra is minimal, and that is the definition rather than a preference.**
-The node set is a **generating set plus named representatives**: a generator
+The node set is a **generating set plus named representatives** (beside the two
+build markers, `Ref` and `SelfRef`, which denote no set of their own): a generator
 denotes a set no combination of the others reaches, and a representative denotes
 one they do reach, kept because the normal form has to name it — `A & ~A` folds
 to *something*, and `Nothing` is what it folds to. A proposed node is one of
@@ -82,11 +83,8 @@ uv run --no-sync ty check
 uv run --no-sync pytest
 ```
 
-**`--no-sync` is not a nicety.** A bare `uv run` re-resolves the environment
-first, and that uninstalls the editable build `maturin develop` put there and
-replaces it with the wheel from the lock. Every command after it then tests a
-different module from the one just built, which reads as a change that did
-nothing. Sync deliberately -- `uv sync --locked` -- and build after it.
+**Every `uv run` carries `--no-sync`**, and [The gate](CONTRIBUTING.md#the-gate)
+says why. Sync deliberately -- `uv sync --locked` -- and build after it.
 
 **Locally, run the tests in scope, never the whole suite.** While a change is
 made, `pytest` runs the files that test what it touches -- the suite of the
@@ -225,7 +223,8 @@ what to do instead.
   rename costs the push sweep is reported, never a reason to keep it. The one
   spelling kept is a name another system owns: GitHub Actions' job status
   `cancelled`. `scripts/docs_lint.py` refuses a British word anywhere in a
-  tracked file, a name read a word at a time.
+  tracked file but the lint and its test, which spell the words to forbid them,
+  a name read a word at a time.
 
 - **Lead every example with the typing-annotation form.** Show a valgebra
   combinator only for what annotations cannot express. Examples run as written

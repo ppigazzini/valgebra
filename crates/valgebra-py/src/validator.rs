@@ -673,9 +673,10 @@ impl Validator {
     /// `other` is any schema spec or compiled validator. The decision is sound:
     /// `True` only when the inclusion provably holds (`bool` is a subtype of
     /// `int`, `list[bool]` of `list[int]`, a recursive schema of a wider one, a
-    /// class of a base class). For the forms it cannot decide — an alternation of
-    /// sequence shapes, or a leaf relation the oracle declines — it returns
-    /// `False` rather than a relation it cannot justify. The decision is bounded by
+    /// class of a base class). For the forms it cannot decide — a predicate, a
+    /// leaf relation the oracle declines, a schema past the set
+    /// representation's bounds — it returns `False` rather than a relation it
+    /// cannot justify. The decision is bounded by
     /// a budget of decision steps, so on a deeply nested adversarial schema a
     /// `False` can mean "not proven a subtype within the bound"; a real schema
     /// decides far inside the bound. The budget counts steps, not time.
@@ -723,9 +724,9 @@ impl Validator {
     /// `other`. Where a class is the subject, that rests on the class holding an
     /// instance, which is the one assumption the decidability page records.
     /// `"undecided"` is neither, and the schemas it happens for are the
-    /// conservative boundary that page describes -- an alternation of sequence
-    /// shapes, a leaf relation the oracle declines, a query that spends its
-    /// budget of decision steps.
+    /// conservative boundary that page describes -- a predicate, a leaf
+    /// relation the oracle declines, a schema past the set representation's
+    /// bounds, a query that spends its budget of decision steps.
     ///
     /// What `"subset"` proves is inclusion between two sets of values, not a
     /// static checker's assignability, which is a relation between
@@ -898,9 +899,11 @@ impl Validator {
     /// Close every record and mapping in the schema: a key no clause claims is
     /// refused, throughout, including inside recursive definitions.
     ///
-    /// Returns a new validator; this one is unchanged. A clause keeps what it
-    /// says, typed or `anything`: a record with no clause admits only its
-    /// declared keys, `{"a": int, str: int}` closed still admits a `str` key
+    /// Returns a new validator; this one is unchanged. A clause short of every
+    /// value keeps what it says, and so does a `str: anything` clause beside
+    /// declared fields; the clauses admitting every value close as one clause,
+    /// so `{str: anything, complement(str): anything}` closes to `{}`. A record
+    /// with no clause admits only its declared keys, `{"a": int, str: int}` closed still admits a `str` key
     /// mapped to an `int`, and `Validator(dict[str, int]).close()` is the
     /// mapping it was asked of.
     ///

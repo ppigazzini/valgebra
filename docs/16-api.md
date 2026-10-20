@@ -27,9 +27,9 @@ validator (`Validator.open`/`close`), documented above.
 What `open` and `close` move is the **key-type region no clause claims**:
 opening frees it and closing refuses it, and neither touches a region a clause
 already claims. A clause short of every value claims its keys; the clauses
-admitting every value are read as one clause over the union of their keys, of
-which the part over keys another clause claims stays and the rest is the
-region, so `{str: anything, complement(str): anything}` closes to `{}` as
+admitting every value are read as one clause over the union of their keys, and
+where that clause covers every key the others leave over, its part over keys
+another clause claims stays and the rest is the region, so `{str: anything, complement(str): anything}` closes to `{}` as
 `dict[anything, anything]` does. A closed record claims none, which is why
 opening one admits every key its fields do not name. A `dict[str, int]` claims the `str` region, so
 opening it keeps `str` keys mapping to integers and frees the rest, and an open
@@ -83,8 +83,8 @@ between two dicts is Python's merge, and a key and a constant by Python's own
 prints and read back. A refinement marker prints by its bare name, `Ge(0)` rather than
 `at.Ge(0)`, so that session imports each marker by name, as
 `from annotated_types import Ge` does, rather than through the
-`import annotated_types as at` these pages write. Seven things it cannot render
-as an expression, and two of them read back quietly: a
+`import annotated_types as at` these pages write. Eight things it cannot render
+as an expression, and three of them read back quietly: a
 **class**, which is an object rather than syntax and appears as its name -- or
 as `instance_of(Name)` where it stands alone and its name would read back as
 the class met with the fields it declares; a
@@ -106,10 +106,14 @@ every trailing `?` as optional, so `TypedDict("TD", {"a?": int})` renders
 `{'a?': int, str: anything}`, which reads back as a record whose `a` is
 optional -- a different schema, with nothing to say so; a **class met with a
 declaration it did not make**, the second quiet one:
-`intersection(MyTuple, tuple[int, str])` prints as `MyTuple`, and
-`intersection(Plain, P)` for a protocol `P` as `Plain`, because a `NamedTuple`
-and a dataclass are built as exactly that meet and the schema does not record
-whether the shape or the record was the class's own declaration;
+`intersection(MyTuple, tuple[int, str])` prints as `MyTuple`,
+`intersection(list[int], Plain)` as `Plain`, and `intersection(Plain, P)` for a
+protocol `P` as `Plain`, because a `NamedTuple` and a dataclass are built as
+exactly that meet and the schema does not record whether the shape or the
+record was the class's own declaration; a **union or meet of two `recursive`
+definitions**, the third quiet one: it prints its definitions in one order
+whichever order built it, so `union(r2, r1)` reads back as `union(r1, r2)`,
+equivalent and unequal under `==`;
 and a **schema past the renderer's own depth bound**, which gives up and prints
 `<...>`. The bound is
 within reach: no *single* annotation can be written deep enough, since the

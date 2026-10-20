@@ -44,8 +44,7 @@ aarch64) gets a wheel for each interpreter its build image carries, the set
 `UNNAMED` in `tests/test_release_matrix.py` records for each musllinux row; an
 Alpine CPython the image does not carry installs from the source distribution.
 Free-threaded support
-starts at 3.14t; the earlier 3.13 free-threaded build is not a target
-([below](#free-threaded-cpython)).
+starts at 3.14t; the earlier 3.13 free-threaded build is not a target.
 
 ## From source
 
@@ -107,7 +106,7 @@ extension is shown and never frees it, so a class is kept alive from the first
 validator that reads it, whatever that validator does afterwards. A long-running
 process that compiles a schema over a *throwaway* class per request grows there
 and does not on CPython. Nothing in valgebra can change this, and the suite's
-three lifetime cases say so on PyPy rather than claiming to pass.
+four lifetime cases say so on PyPy rather than claiming to pass.
 
 And one call CPython refuses, PyPy answers. `object.__new__(Validator)` makes a
 validator whose schema was never compiled, which on PyPy 8.0 admits every
@@ -119,10 +118,10 @@ validator by calling `Validator`.
 
 On a free-threaded interpreter a validator is immutable and shares no mutable
 walk state, so object validation runs in parallel with the interpreter lock
-disabled. The JSON path is the one exception: its string parser draws on a
-process-wide interned-string cache guarded by a lock, so concurrent
-`validate_json`/`load` calls serialize briefly on that cache even though the walk
-itself does not.
+disabled. The JSON path takes one lock: its string parser takes an
+interned-string cache from a pool behind a lock and puts it back after the
+parse, so concurrent `validate_json`/`load` calls contend only on that hand-off,
+and neither the parse nor the walk holds it.
 
 Three things read differently there:
 

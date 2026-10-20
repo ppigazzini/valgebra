@@ -193,8 +193,9 @@ who has never seen it.
 python scripts/docs_lint.py
 ```
 
-It reads every tracked Markdown file and fails on the mechanical half of
-documentation rot: a dead internal link, a named path that does not exist, a
+It reads every tracked Markdown file with every rule, and every tracked file for
+a reference into the untracked surface, a history word in a comment and a British
+spelling, and fails on the mechanical half of documentation rot: a dead internal link, a named path that does not exist, a
 reference into the untracked surface, a gate's number quoted in prose, and a
 hand-written index that disagrees with the tree in either direction, among
 others. The script's own docstring holds every rule — a second copy here would

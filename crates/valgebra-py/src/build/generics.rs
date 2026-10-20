@@ -133,8 +133,9 @@ pub(super) fn build_parametrized(
         return build_type_argument(&single_arg(args, alias, QUALIFIER_INSTEAD)?, lits, defs);
     }
     // A generic PEP 695 alias applied to its arguments, `Pair[int]`: the body
-    // with the arguments substituted. Asked last, since no other origin here is
-    // an alias and an alias costs an instance check per spelling.
+    // with the arguments substituted. The last origin that builds, since no
+    // other origin here is an alias and an alias costs an instance check per
+    // spelling; only the refusal of an unpacked origin is asked after it.
     if is_type_alias(origin)? {
         return build_applied_alias(origin, args, alias, lits, defs);
     }

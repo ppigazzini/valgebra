@@ -285,9 +285,10 @@ them asks the ceiling about an intermediate nobody wanted.
 `descr/lower.rs` is the map from a term to a set, and the two live side by side
 rather than one replacing the other: the walk decides membership, and the
 descriptor is what the algebra reasons in. So the descriptor's own membership --
-`Value`, `Descr::admits` and each component's `holds` -- compiles under
-`cfg(test)` alone: no relation asks whether a value is a member, and the laws
-hold every operation to it. The components are crate-private, so a part no
+`Value`, `Descr::admits` and the `holds` of every component but the boolean,
+integer and interval sets -- compiles under `cfg(test)` alone: no relation asks
+whether a value is a member, and the laws hold every operation to it. Those
+three ship because lowering asks which values a set holds. The components are crate-private, so a part no
 relation reaches is dead code the compiler reports.
 
 ## Why every rule stays
@@ -388,10 +389,11 @@ for either is indistinguishable from its own deletion, which the mutation sweep
 reads as a survivor.
 
 The constructors do not take the complete reading. `Schema::union_within` in
-`ir.rs` folds a union to `anything` only where it carries a member beside that
-member's own complement (`has_complementary_pair_within`), so a union whose
-readable members cover every region between them stays a union: `int | str |
-list[int] | ~(int | str)` is spelled and kept, the fast reading stops at the
+`ir.rs` folds a union to `anything` only where it carries a complement beside
+its inner schema, or beside every member of the union under it
+(`has_complementary_pair_within`), so a union whose readable members cover every
+region between them stays a union: `int | str | list[int] | (~int & ~str)` is
+spelled and kept, the fast reading stops at the
 list, and the complete reading is what decides it -- as it decides the terms the
 fuzz target builds by hand.
 
@@ -567,7 +569,7 @@ the descriptor, which settles what kinds a body admits and not what a fixpoint
 equals.
 
 `tests/test_completeness_probe.py` measures the gap over the survey corpus and
-holds it at **three pairs**, each carrying a fixpoint. That is a ratchet rather
+holds it to the count recorded there, each pair carrying a fixpoint. That is a ratchet rather
 than a target: a change making either route less complete widens it, and a
 disagreement over anything but a fixpoint is a new fact that fails on arrival.
 The same test checks the emptiness route for soundness against the value

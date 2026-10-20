@@ -121,10 +121,9 @@ A bound is the row to read twice, because it is the only marker whose answer
 depends on **both** values. `Annotated[set[int], Ge(0)]` is refused although a
 set has an order of its own, because a set and an integer do not compare;
 `Annotated[set[int], Ge({1})]` is the same base narrowed by a bound its values
-can be asked about, and it admits the supersets of `{1}`. A complex bound is
-the one the build does not refuse: no integer orders against it or is a
-multiple of it, so `Annotated[int, Ge(1j)]` and `Annotated[int, MultipleOf(1j)]`
-build and admit nothing.
+can be asked about, and it admits the supersets of `{1}`. A complex bound or
+step is refused with a `ValueError` when the validator is built: no value
+orders against a complex number or is a multiple of one.
 
 A marker put to a base outside its row is refused when the validator is built,
 for the reason above: the check would raise at every value, the walk reads a
@@ -387,17 +386,17 @@ starts a comment at the `#`. So under verbose mode -- `re.VERBOSE`, `(?x)`, or
 it. Escape it as `\ ` or `\#` to mean it, which both engines read as a member.
 
 Three escapes part the two outside a class. `\<` and `\>` are the start and the
-end of a word here and the characters `<` and `>` to `re`, so `\<b\>` admits
-`"b"` here and `"<b>"` there; `\b{start}` is a named word boundary here and, to
+end of a word here and the characters `<` and `>` to `re`, so `\<b\>` would
+admit `"b"` here and admits `"<b>"` there; `\b{start}` is a named word boundary here and, to
 `re`, a boundary followed by the text `{start}`. Each raises a `ValueError`
 naming what it asserts here. Write `<`, `>` or `\{` for what `re` reads, or `\b`
 for a word boundary in both.
 
 Two quantifier spellings part them the same way. A `+` after a quantifier
 makes it possessive to `re` from Python 3.11, and repeats the quantified item
-again here, so `a?+` refuses `"aa"` there and admits it here. And this engine
-reads a count with whitespace in its braces as the count -- `a{1, 3}` admits
-`"aa"` -- where `re` reads a brace that is not exactly a count as text, and
+again here, so `a?+` refuses `"aa"` there and would admit it here. And this
+engine reads a count with whitespace in its braces as the count -- `a{1, 3}`
+would admit `"aa"` -- where `re` reads a brace that is not exactly a count as text, and
 admits `"a{1, 3}"`; in verbose mode it skips a comment there too. Each raises
 a `ValueError` naming it. This engine has no possessive quantifier: write
 `(?:a?)+` to repeat the quantified item. Write a count without whitespace, or

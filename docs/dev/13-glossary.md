@@ -24,7 +24,7 @@ that defines it -- so a rename dates the entry.
 | **pool** | the validator's `Vec<Py<PyAny>>` (`Validator::literals` in `crates/valgebra-py/src/validator.rs`), holding four kinds of object addressed by four index types ([06-type-design.md](06-type-design.md)) |
 | **definition** | an entry in the validator's definitions table (`Validator::definitions` in `crates/valgebra-py/src/validator.rs`); the target of a `Ref` back edge, produced by `recursive` |
 | **contractive** | a recursive definition whose every self-reference sits under a structural constructor. `Schema::occurs_unguarded_under` in `crates/valgebra-core/src/ir.rs` decides it over the whole definitions table |
-| **the walk** | `member` in `crates/valgebra-py/src/check/walk.rs`, with the leaf arms in `walk/scalar.rs` and the container arms in `walk/record.rs` and `walk/sequence.rs`. There is one, and it serves both input paths and all three modes |
+| **the walk** | `member` in `crates/valgebra-py/src/check/walk.rs`, with the leaf arms in `walk/scalar.rs` and the container arms in `walk/record.rs` and `walk/sequence.rs`. There is one, and it serves both input paths and every mode `WalkMode` names |
 | **the trail** | `Trail` in `crates/valgebra-py/src/check/ctx.rs`: the `(value, definition)` pairs the walk is inside, innermost last. A level enters its pair before walking the definition and leaves it after, so a value reached from inside itself meets its own pair and is refused as cyclic |
 | **violation** | the structured failure: a stable code, a path, an expected label and a value summary. `Violation` in `crates/valgebra-core/src/violation.rs` ([05-errors.md](05-errors.md)) |
 

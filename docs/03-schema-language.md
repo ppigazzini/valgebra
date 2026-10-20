@@ -89,8 +89,9 @@ instance: write `float | int` for the set a checker accepts there.
 ## `Any` versus `object`
 
 Both are the **top** of the lattice (`anything`): every value. They build the
-same schema, and the only difference is the one `repr` gives back, which is what
-you wrote ([the algebra](04-algebra.md#any-versus-anything)).
+same schema, and the only difference is the one `repr` gives back: `Any` prints
+as `Any`, and `object` as `anything` ([the
+algebra](04-algebra.md#any-versus-anything)).
 
 ```python
 from typing import Any
@@ -243,7 +244,9 @@ else there. Any other constant, a `float` or an instance, is written bare:
 ([static checkers](18-static-checking.md)). A tuple is one exception: a bare
 tuple, a named tuple's value included, is refused as a tuple literal, which
 `(int, str)` would read as a shape and a constant alike, and the constant
-`(1, 2)` is written `tuple[Literal[1], Literal[2]]`. A callable is the other:
+`(1, 2)` is written `tuple[Literal[1], Literal[2]]`. A set and a frozen set are
+refused the same way, as the container literal each would also read as. A
+callable is the last:
 written bare it is refused ([below](#anything-unrecognized-is-a-literal)), and
 the constant is `Literal[fn]`, which reads at run time and which a static
 checker refuses.
@@ -482,7 +485,7 @@ assert Validator(Query).is_valid({"page?": 1})
 assert not Validator(Query).is_valid({})  # required
 ```
 
-That is the form whose `repr` reads back quietly as a different schema: it
+It is one of the forms whose `repr` reads back quietly as a different schema: it
 renders as `{'page?': int, str: anything}`, which reads back as the optional key
 `page` ([boundaries](17-boundaries.md), and [stable repr](#stable-repr) below).
 
@@ -510,11 +513,10 @@ only the key-types beside it.
 
 They apply at any depth -- a record a mapping maps its keys to, and inside a
 recursive definition. They are projections rather than inverses: applying
-either twice gives the set it gave the first time, though a second `open` may
-drop a name the first one's catch-all made redundant, so the term can differ by
+either twice gives the set it gave the first time, though a second `open` or
+`close` may drop a name the first one made redundant, so the term can differ by
 `==`. And `close` after `open` is **at most** `close` -- it returns the regions
-`open` freed wherever opening leaves the term's own names and clauses standing,
-which is everywhere but the two shapes below.
+`open` freed everywhere but the two shapes below.
 
 Both rewrite the records a schema *writes*, not the set it denotes, so two
 spellings of one set can close apart. Close the records, not their meet: a meet
@@ -556,10 +558,12 @@ assert beside_a_field.open().is_valid({"name": "Ada", 7: "free"})
 assert not beside_a_field.open().is_valid({"name": "Ada", "count": "not an int"})
 ```
 
-Where it is not a round trip, the reason is that `open` **normalizes**, and
-both normalizations are forced. A declared name admitting everything says what
-the catch-all an opening writes already says, so it goes -- and it has to, or
-`{"a?": anything}` and `{}`, one set once opened, would close to two. Two
+Where it is not a round trip, the reason is that the transforms **normalize**,
+and both normalizations are forced. Each drops a declared name that says what
+its record already says of the keys it does not name: `open` writes the
+catch-all beside `{"a?": anything}`, and the `close` after it drops the name --
+and it has to, or `{"a?": anything}` and `{}`, one set once opened, would close
+to two. Two
 clauses carrying one value are one clause over the union of their keys, so
 opening `dict[str, anything]` gives a single clause over every key -- and that
 has to be so too: where the keys claimed hold a literal, the long spelling is
@@ -1016,8 +1020,9 @@ no such footgun.
     [`recursive`](06-recursion.md), which ties the fixpoint explicitly.
 
 !!! note "Bare classes, callables, and the runtime boundary"
-    A bare class is an `isinstance` check: `Validator(complex)` admits any
-    `complex`, and any user class admits its instances. `Callable` (and
+    A class the tables above do not read by its declaration is an `isinstance`
+    check: `Validator(complex)` admits any `complex`, and a plain user class
+    admits its instances. `Callable` (and
     `Callable[...]`) checks only that the value is callable — the argument and
     return types cannot be inspected at runtime, so they are not enforced. `Any`
     is admitted unchecked. Everything else is decided structurally: a `list[int]`
@@ -1092,12 +1097,13 @@ It is a **rendering**, not a serialization. A few forms cannot be written as an
 expression and do not read back, and [the API page](16-api.md) owns the list,
 each with the reason. A schema deeper than the renderer's own bound prints
 `<...>`, a mark chosen to be a syntax error, so a render that lost something
-cannot be read back as a schema that kept it. Two read back quietly as a
+cannot be read back as a schema that kept it. Three read back quietly as a
 different schema: a key whose name ends in `?`, which
 `TypedDict("TD", {"a?": int})` declares required and which renders as
 `{'a?': int, str: anything}`, the spelling of an optional `a`
-([above](#a-key-name-that-ends-in-a-question-mark)); and a class met with a
-declaration it did not make -- a tuple shape, or a protocol's record -- which
-prints as the class's name. Do not parse a repr to
+([above](#a-key-name-that-ends-in-a-question-mark)); a class met with a
+declaration it did not make -- a sequence shape, or a protocol's record -- which
+prints as the class's name; and a union or meet of two `recursive` definitions,
+which prints them in one order whichever order built it. Do not parse a repr to
 recover structure — see [inspection](09-inspection.md) for asking a schema
 questions instead.

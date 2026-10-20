@@ -175,8 +175,9 @@ four answers are derived, so both deciders read one function.
 
 ### The modes
 
-`WalkMode` is `Explain`, `ExplainFailFast`, `Fast` — three states where a pair of
-booleans admitted four. `Guarded` and `Openness` name what a positional `bool`
+`WalkMode` is `Explain`, `ExplainFailFast`, `Fast` and `Settle`, the fast mode a
+complement's inner walk reads in Kleene's strong logic; the pair of booleans the
+first three replace admitted a combination no caller means. `Guarded` and `Openness` name what a positional `bool`
 would carry at the guardedness check and the record constructor. `SeqArity` is
 `Exactly(n)` or `AtLeast(n)`, so the schema's arity is one argument rather than a
 length and a flag beside the value's own length.
@@ -197,7 +198,8 @@ value that contains itself), or the trail stands at `MAX_RECURSION_DEPTH`
 sealed mode measures 2.6% *worse* than two booleans in its place, because neither
 predicate the walk asks per node compiles to a single comparison. Ordered so that
 explaining is "at most `ExplainFailFast`" and stopping at the first failure is
-"at least" it, the same three variants measure 1.4% *better*. The type is not
+"at least" it, the variants measure 1.4% *better*, and `Settle`, placed last,
+reads as `Fast` to both predicates. The type is not
 the variable; the discriminant assignment is. A test pins both
 predicates over every variant so a reordering fails rather than silently costing.
 

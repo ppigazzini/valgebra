@@ -205,7 +205,8 @@ answer of its own, or a repair to a change not yet released.
   order their renderings sort in, as a union's literals did, so a union of
   classes written `Dog | Cat` prints `Cat | Dog`. The members of different
   kinds keep the order they had, and every rendering reads back as the schema
-  it came from.
+  it came from but for a union or a meet of two `recursive` definitions, which
+  prints them in one order whichever order built it.
 - **A required key or a repeated element refutes beside a field the rules
   cannot read.** `{"a?": X} <= {"a": Y}` answered `undecided` wherever the
   field's types were ones no rule reads, such as two predicate refinements,

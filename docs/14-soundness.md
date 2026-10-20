@@ -105,9 +105,10 @@ stop admits a value, and it is where the walk is not exact: a list nested past
 the bound is a member of a recursive `S` and refused by it. `complement(S)`
 refuses it too, because the `Complement` row above reads *the walk of `A`
 finished and refused*, and a stopped walk did not. So the walk computes
-`x ∈ ⟦S⟧` on every value it finishes, and a value it stops on is refused by a
-schema and its complement alike ([the error
-model](08-error-model.md#unions-report-the-closest-branch)).
+`x ∈ ⟦S⟧` on every value it finishes, and a value on which it decides nothing,
+only stopping, is refused by a schema and its complement alike: a part that
+refuses, or a branch that admits, decides the walk whatever a part beside it
+stopped on ([the error model](08-error-model.md#unions-report-the-closest-branch)).
 
 ## Why construction preserves meaning
 

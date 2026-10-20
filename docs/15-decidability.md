@@ -305,9 +305,9 @@ answers `"undecided"`.
   `denotes_a_set_within` in `crates/valgebra-core/src/oracle.rs` reads a class
   as a set only on the oracle's word. A plain class denotes a set all the same,
   and the law holds of it: `intersection(C, complement(C))` keeps its spelling
-  and `is_empty()` decides it `True`. A union that covers the universe without
-  such a pair — `int | str | ~(int | str)` — stays a union as well, and
-  `is_equivalent(anything)` decides it.
+  and `is_empty()` decides it `True`. A union holding a union beside that
+  union's complement folds too, since construction reads the flattened
+  members: `int | str | ~(int | str)` **is** `anything`.
   The decision procedure has no rule for a folded shape and never meets one
   built this way. A shape the folds do not reach is the relations' to decide.
 

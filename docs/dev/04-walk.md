@@ -4,7 +4,7 @@
 schema's set. It is where soundness is decided, and it is the file to read first
 when an accept looks wrong.
 
-## One walk, two input paths, three modes
+## One walk, two input paths, four modes
 
 There is **one** `member` function, parameterized by mode rather than a fast one
 and an explaining one side by side. Two walks drift, and the defect that follows
@@ -59,10 +59,12 @@ values of a document that turns out malformed, or on a key the document repeats
 | `Fast` | membership only: no violation or path built, every composite short-circuits; storage a reading needs for itself is allocated where the reading says why |
 | `Explain` | a violation for each independent failure — every field, element and entry |
 | `ExplainFailFast` | the first violation only |
+| `Settle` | membership only, for a complement's inner walk: a stop answers `true` with its code in the stop cell, read in Kleene's strong logic |
 
-Three modes, and the type says three. A pair of independent booleans would admit
-a fourth combination -- fail-fast without explaining -- that means nothing, and
-the type leaves it unnameable. The
+Four modes, and the type says four: the three a caller asks for, and `Settle`,
+which only a complement's inner walk runs in. The pair of independent booleans
+the first three replace would admit a combination -- fail-fast without
+explaining -- that means nothing, and the type leaves it unnameable. The
 discriminants are ordered so both predicates the walk asks per node are a single
 comparison, and a test pins both over every variant — that order is load-bearing
 and measured, not cosmetic ([06-type-design.md](06-type-design.md)).

@@ -127,8 +127,8 @@ syntax, so a set that syntax can express and valgebra cannot is a completeness
 gap, while a set only a bespoke combinator could name is not. Whoever owns the
 algebra decides where that line sits; a page here records the decision, and
 [10-theory.md](10-theory.md) already shows the form such a decision takes — the
-map clauses are unordered where the paper's are ordered, written down as "a
-deliberate narrowing".
+map clauses are unordered where the paper's are ordered, written down as the
+deviation `clauses-are-unordered`.
 
 ### What does not count as evidence
 
@@ -451,11 +451,14 @@ alike from different pools compare equal only if what the indices *name* is
 equal. It is one of the binding's swept surfaces, and it decides `==` and
 nothing else -- `is_equivalent` is the decision procedure, a different question
 with a different answer, and [04-algebra.md](../04-algebra.md) is about why.
-A union's members, a map's clauses and a refinement's constraints are matched as
-the sets they are, each taking the first untaken equal member of the other list;
-the search starts where the untaken members begin, so two validators built alike
-compare in one pass, and `the_search_asks_what_a_search_from_the_front_asks`
-holds it to a search from the front. The digest `__hash__` reads is kept on the
+A union's or a meet's members, a map's clauses and a refinement's constraints
+are matched as the sets they are. Members are matched in place up to the first
+one out of place, and each after it among the other side's members that hash
+alike, so two validators built alike compare in one pass and two spellings of a
+wide `Literal` in one comparison a member; a map's clauses and a refinement's
+constraints by a search from the front, and
+`the_search_asks_what_a_search_from_the_front_asks` holds the bucketed search
+to it. The digest `__hash__` reads is kept on the
 validator once computed.
 
 **Both sides or neither.** A law folded in `union` and left standing in
@@ -573,7 +576,8 @@ over every kind, and the cheap disjointness across kinds, which is most of what
 the partition buys, goes with it. Scoping classes to the `other` kind fails the value it was built for: a dataclass
 that subclasses `int` has an integer kind and a class, and a component that
 cannot hold both is one that cannot decide it. Per-kind lines keep the
-partition, split a line's complement into at most three atoms, and are the
+partition, split a line's complement into two lines -- the structure's
+complement, and the kind met with the objects' complement -- and are the
 shape the record atom already has, so the code exists once.
 
 Its one precondition holds: guards are held by handle, so a component may be a
@@ -630,7 +634,8 @@ carries.
 
 A class answers as a snapshot, `Class` in
 `crates/valgebra-core/src/descr/classes.rs`: an id, the ids of the classes its
-`__mro__` lists, a layout tag, and the kind that layout confines an instance to.
+`__mro__` lists, a layout tag, the kind that layout confines an instance to, and
+what a direct instance can carry (`Attributes`).
 The snapshot is taken once, at lowering, rather than by asking `issubclass`
 again later, because `abc.ABC.register` rewrites the subclass
 relation after a schema is built and a relation that moves is not an order to

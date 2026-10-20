@@ -20,7 +20,7 @@ use crate::codes::Code;
 /// [`WalkState`], and the walk mode.
 ///
 /// Seven words: the pool and the definitions, and one reference each to the
-/// index's four tables and to the state's four cells. A table or a cell lies at
+/// index's five tables and to the state's four cells. A table or a cell lies at
 /// a fixed offset of what is referred to, so reaching one costs the address and
 /// a load, which is what a reference of its own would cost, and a level that
 /// hands the context on by value copies seven words rather than a reference per

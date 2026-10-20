@@ -316,7 +316,9 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    of each declared field, so a value of the right class with a field of the
    wrong type is not a member. `instance_of` is this step with the declaration
    left unread (`build_instances` in `build/classes.rs`): the class's atom for
-   these two, and for every other class the node this step builds. A field
+   these two, a `TypeError` for a `TypedDict` or a `Protocol`, whose values are
+   not instances of the class, and for every other class the node this step
+   builds. A field
    hint `Final[T]` is read as `T` (`field_hint`): the typing spec makes it a
    dataclass field holding a `T`, and `Final` says the name is not rebound.
    `Annotated[Final[T], m]` is read as `Annotated[T, m]`, since `Annotated`
@@ -449,7 +451,8 @@ itself, which no schema reads. The arm sits after every container, union,
 never matches, so a form that builds never reaches it.
 
 **A generic alias applied is its body with the arguments in place.** The last
-origin asked is a PEP 695 alias, `typing`'s or `typing_extensions`'
+origin that builds is a PEP 695 alias, and only the refusal of an `Unpack`
+origin is asked after it, `typing`'s or `typing_extensions`'
 (`build_applied_alias` in `build.rs`), so a form any other arm reads pays
 nothing for it. The runtime keeps the alias, its parameters and its body, and
 checks none of them: `Pair[int, str]` builds. So the arm refuses a parameter

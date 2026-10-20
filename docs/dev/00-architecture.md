@@ -186,9 +186,11 @@ result is wrapped in a `Validator`, which never changes after it is built.
 **Validate fast.** Each call crosses into Rust once. The value -- a Python object
 or a JSON document -- is presented through one `Value`
 (`crates/valgebra-py/src/input.rs`), and one membership walk
-(`crates/valgebra-py/src/check/walk.rs`) decides it, in one of three modes: a
-*fast* mode that returns a bool and allocates nothing but what a measured
-reading pays for ([04-walk.md](04-walk.md)), an *explain* mode that builds a
+(`crates/valgebra-py/src/check/walk.rs`) decides it, in one of four modes: a
+*fast* mode that returns a bool and allocates only the storage a reading or the
+walk's memo says it needs, each at its site ([04-walk.md](04-walk.md)); a
+*settle* mode, the fast mode a complement's inner walk runs in, where a stop is
+a third value read in Kleene's strong logic; an *explain* mode that builds a
 `Violation` with the path, the expected label and a value summary for each
 independent failure, and a *fail-fast* explain mode that builds the first. A
 `Violation` becomes the `ValidationError` (`crates/valgebra-py/src/errors.rs`)
@@ -325,7 +327,7 @@ table's length is outside the scan: it is the table's size, in one place.
 | `crates/valgebra-py/src/validator.rs` | `MAX_SCHEMA_NODES` | `100_000` | shape | a schema that is shallow and exponentially wide, combined in a loop or read from an annotation whose shared parts multiply, which the frontend refuses as it reads | `tests/test_adversarial_bounds.py`, `crates/valgebra-py/src/build/tests.rs` |
 | `crates/valgebra-py/src/build.rs` | `MAX_BUILD_DEPTH` | `crate::validator::MAX_SCHEMA_DEPTH + 1` | shape | the frontend descending past what `checked` will accept, so the schema past the bound is built and refused by name | `tests/test_adversarial_bounds.py` |
 | `crates/valgebra-py/src/build/classes.rs` | `MAX_ANNOTATION_DEPTH` | `64` | shape | the walk that decides whether a class's annotations can be read as written overflowing the stack on a nested alias; past it the reading declines and `get_type_hints` answers | `annotations_as_written_are_the_hints_get_type_hints_returns` in `crates/valgebra-py/src/build/tests.rs` |
-| `crates/valgebra-py/src/build/generics.rs` | `MAX_QUALIFIER_DEPTH` | `8` | shape | a dict-literal field whose `Annotated` or `ReadOnly` wrapper names itself as what it wraps, so reading through it for a `NotRequired` never ends; past it the field is built, and the build's depth guard refuses it | `test_a_field_wrapping_itself_is_refused_by_depth` in `tests/test_records.py` |
+| `crates/valgebra-py/src/build/generics.rs` | `MAX_QUALIFIER_DEPTH` | `8` | shape | a dict-literal field whose `Annotated` or `ReadOnly` wrapper names itself as what it wraps, so reading through it for a `Required` or `NotRequired`, which the literal refuses, never ends; past it the field is built, and the build's depth guard refuses it | `test_a_field_wrapping_itself_is_refused_by_depth` in `tests/test_records.py` |
 | `crates/valgebra-py/src/build/refine.rs` | `MAX_MARKER_TYPES` | `256` | shape | the per-type cache of which attributes a refinement marker carries growing with a program that builds a marker class per call, since a cache entry keeps its type alive | `tests/test_adversarial_bounds.py` |
 | `crates/valgebra-py/src/build/refine.rs` | `MAX_GROUPING_DEPTH` | `8` | shape | a marker that stands for the constraints it yields answering with itself, so following it runs off the stack | `tests/test_frontend_forms.py` |
 | `crates/valgebra-py/src/render.rs` | `MAX_RENDER_DEPTH` | `200` | shape | `repr` overflowing the stack on a chain of definitions | `tests/test_adversarial_bounds.py`, and `tests/test_repr.py` at the step across it |

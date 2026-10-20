@@ -226,9 +226,9 @@ walked whole, the same branch is chosen, and all of its failures are reported;
 A branch the walk could not answer for keeps its own report rather than the
 summary. `recursion_limit`, `recursion_loop`, `mutated_during_validation` and
 `predicate_error` each say the *walk* stopped rather than that the value is
-outside a set, and each of them fails at the union's own location — so the
-progress rule would count it as no progress and the summary would drop the one
-sentence saying what to do about it.
+outside a set, and one can fail at the union's own location -- a predicate that
+raised on the branch's own value -- where the progress rule would count it as no
+progress and the summary would drop the one sentence saying what to do about it.
 
 A `complement` reads the four the same way. A walk of its inner schema that
 stopped has not said the value is outside that schema, so the complement does
@@ -514,8 +514,9 @@ that is itself a union contributes its own members, so the label count and the
 branch count are not the same number. See [resource limits](10-limits.md).
 
 **`expected` describes the schema as built, not a canonical name for the set.**
-`int | str`, `str | int` and `~(~int & ~str)` denote one set and read
-differently, in the same way `repr` renders the schema that was built. Read
+`int | str` and `~(~int & ~str)` denote one set and read differently, `one
+of: int, str` and `not (not int and not str)`, in the same way `repr` renders
+the schema that was built. Read
 `expected` to see what was asked for; use [`is_equivalent`](04-algebra.md) to ask
 whether two schemas mean the same thing.
 

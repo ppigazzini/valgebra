@@ -928,11 +928,11 @@ would report a value nobody has. **[DEVIATION: a-class-is-what-can-be-read]**
 
 HELD-BY: an_attribute_record_relates_to_every_other_node, a_class_met_with_its_attributes_has_a_value_when_its_fields_do, a_refutation_about_a_class_and_its_record_stands_on_an_instance_it_permits
 
-Two departures are closed and kept here so they are not rediscovered: the
-gradual atom, which is the top spelled rather than a node beside `Int`
-([above](#gradual-typing)); and the necessary-property suite, which is named for
-what all six of its properties are and names the two that are also metamorphic
-relations.
+Two places agree with their sources and are named so a reader does not take
+them for departures: the gradual atom, which is the top spelled rather than a
+node beside `Int` ([above](#gradual-typing)); and the necessary-property suite,
+which is named for what all six of its properties are and names the two that are
+also metamorphic relations.
 
 **The descriptor's lattice laws are checked one kind at a time.** The word
 automata, the integer sets, the floats, the sequences, the sets, the dicts, the

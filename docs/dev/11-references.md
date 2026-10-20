@@ -80,8 +80,8 @@ is where they are applied.
   `DefIx` by hand.
 - **Wlaschin, "Designing with types: making illegal states unrepresentable"** —
   <https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/>.
-  The sealed walk mode: three states, where a pair of booleans would admit a
-  fourth that means nothing.
+  The sealed walk mode: four states in one ordered enum, where a pair of
+  booleans would admit a combination that means nothing.
 - **King, "Parse, Don't Validate"** —
   <https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/>. The
   frontend is a parser from annotations into the IR, and the indices it mints are
@@ -121,6 +121,8 @@ proptest; cachegrind
 
 Read the pins from the files that own them, not from prose: `Cargo.toml` for the
 Rust edition and MSRV, `pyproject.toml` for the supported Python range and the
-pinned tool versions, and `.github/workflows/ci.yml` for the interpreter matrix
-and the nightly the fuzz lane uses. A pin quoted in prose goes stale the
+tools' floors, `uv.lock` for the Python tools' versions, `.github/workflows/`
+and `.github/actions/` for the Rust tools, zizmor, uv and maturin, and
+`.github/workflows/ci.yml` for the interpreter matrix and the nightly the fuzz
+lane uses. A pin quoted in prose goes stale the
 release it moves.

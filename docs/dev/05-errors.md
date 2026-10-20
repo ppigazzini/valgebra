@@ -96,8 +96,10 @@ validator's own index spaces and shares no type with them
 `validate` takes `fail_fast`. False aggregates a violation for each independent
 failure — every record field, sequence element and mapping entry — and true stops
 at the first. The walk carries that as a mode rather than a flag
-([04-walk.md](04-walk.md)), so the mode is a fact about the whole walk and cannot
-change mid-traversal.
+([04-walk.md](04-walk.md)): the caller's choice between every failure and the
+first holds for the whole call, and a sub-walk that reports nothing -- a union's
+branch, a complement's inner walk -- runs in the fast or settling mode beneath
+it.
 
 Independent means what it says: two bad fields of one record are two violations,
 and a bad field of a bad element is one, because the walk stops descending where
@@ -112,7 +114,7 @@ in the meet's turn, so the report carries the elements' violations beside it.
 ## Rendering a schema back to an annotation
 
 `render` produces the annotation that would compile to the schema, and it is what
-`repr(validator)` shows. Two properties it must keep:
+`repr(validator)` shows. Three properties it must keep:
 
 - **It terminates on a recursive schema.** A back edge shows as the parameter
   of the `recursive` lambda that bound it, so the form is finite and reads back

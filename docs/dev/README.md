@@ -32,8 +32,7 @@ the tree; this table says what each page is about.
 ## Docs are part of the change, not after it
 
 Each page is a live claim about code someone is about to touch. Change a zone,
-fix its page **in the same commit**: a doc is wrong from the moment the code
-lands, and nobody knows which claim broke better than the person who broke it.
+fix its page **in the same commit**; [12-writing.md](12-writing.md) says why.
 
 ```bash
 python scripts/docs_lint.py
@@ -55,8 +54,4 @@ and [12-writing.md](12-writing.md) names the three classes it cannot reach.
   engineering contract, the operator prompt, the milestone backlog, and
   user-requested analyses.
 
-Do not converge them. A shipped page must not carry campaign history, and an
-untracked note must not be the only place a shipped fact lives. No shipped file
-may name the untracked area's location either — `scripts/docs_lint.py` sweeps
-every tracked file for it, because the reference dangles for every reader but its
-author.
+[12-writing.md](12-writing.md) owns how the two are kept apart.

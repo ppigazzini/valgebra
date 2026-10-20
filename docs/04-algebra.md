@@ -66,8 +66,10 @@ The verdict is Boolean on every value the walk finishes. A walk can stop
 instead: past the depth bound (`recursion_limit`), on a value that contains
 itself (`recursion_loop`), at a predicate that raised (`predicate_error`), or on
 a container changed under it (`mutated_during_validation`). A stop is no verdict,
-and a value the walk of `S` stops on is refused by `S` and by `complement(S)`
-alike, since a complement admits only what its inner walk decided is outside
+and a value on which the walk of `S` decides nothing, only stopping, is refused
+by `S` and by `complement(S)` alike, since a complement admits only what its
+inner walk decided is outside; a part that refuses decides, so `complement(list[S])`
+admits a list holding a value outside `S` beside one the walk stopped on
 ([the error model](08-error-model.md#unions-report-the-closest-branch)). The laws
 hold of the sets, and of the walk on every value it finishes. On a stopped value
 the spelling shows: for a recursive `S`, `union(S, complement(S))` folds to
@@ -449,9 +451,10 @@ assert union(bool, int) != Validator(int)  # different shape
 ```
 
 The other side of a comparison is any schema spec or compiled validator. These
-decisions are **sound**: a `True` is always correct, and a `False` (or a
-"not empty") is either a genuine non-relation or a relation valgebra does not yet
-prove — never a wrong answer. They decide a wide fragment — the scalar Boolean
+decisions are **sound** relative to [the trust
+base](14-soundness.md#what-this-argument-assumes): a `True` holds of every value
+that base admits, and a `False` (or a "not empty") is either a genuine
+non-relation or a relation valgebra does not yet prove. They decide a wide fragment — the scalar Boolean
 algebra, class and literal inclusion, refinements with bound and length
 constraints, prefix-and-tail sequences, sets and frozensets, records and
 mappings (including multi-clause mixed maps, a closed record against a catch-all

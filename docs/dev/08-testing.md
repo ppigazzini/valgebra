@@ -698,9 +698,9 @@ passes on 800 KiB, since uv's Windows interpreter reserves 2,000,000 bytes.
 **Adequacy is measured per harness, and every file has one.** Two of the three
 sweeps run `cargo test`, so a survivor of either is a gap in the *Rust* corpus:
 that is the reason a swept binding file carries a corpus of its own. The seven
-files the extension is the only caller of carry none, and a `cargo test` sweep
-over them measures the harness rather than the tests -- every mutant survives,
-whatever the Python suite does.
+files the extension is the only caller of carry no corpus -- `errors.rs` and
+`validator.rs` hold a few unit rows of their own -- so a `cargo test` sweep over
+them measures the harness more than the tests, whatever the Python suite does.
 
 The third sweep is those seven files, with a test command that loads the
 extension. `crates/valgebra-py/tests/pytest_sweep.rs` rebuilds it from the

@@ -66,8 +66,8 @@ runs out of the workflow -- `SCHEDULED_ONLY` drops the nightly jobs and
 `RUNNER_ONLY_JOBS` the ones left out whole -- and runs them in a fresh
 **shallow clone of `HEAD` with no tags**, which is what `actions/checkout`
 produces and what a developer's clone is not. A step that needs a runner
-(valgrind, a base built beside the head, a mutation sweep, a second operating
-system, the bench lane's optimized wheel) is named in `NEEDS_A_RUNNER` with the
+(valgrind, a base built beside the head, a mutation sweep, the bench lane's
+optimized wheel) is named in `NEEDS_A_RUNNER` with the
 reason instead, and `tests/test_local_gate.py` holds that list to the workflow
 in both directions. `scripts/gate.py --list` prints the plan: which steps of
 each job run and which are named. The `pgo-compare` job is in it whole, its
@@ -488,8 +488,8 @@ verdict:
   onto its heap, so its size moves a count on its own: a pure-Rust shape, which
   is not differenced, reads 2.97% apart between a login shell and `uv run`.
   `workload_environment` in `perf_gate.py` passes a workload the loader path,
-  `PYTHONHOME` and `VALGRIND_LIB` where the caller has them, and the fixed seed,
-  and nothing else; valgrind is resolved to an absolute path first. The same
+  `PYTHONHOME` and `VALGRIND_LIB` where the caller has them, and sets the fixed
+  seed, the allocator tunable and `PYTHONDONTWRITEBYTECODE`, and nothing else; valgrind is resolved to an absolute path first. The same
   binary then reads the same count from any shell. `--update` writes the
   valgrind and C library a count was recorded with under `measured_with` in
   `scripts/perf_budget.json`, since both move a count with the tree unchanged.
@@ -778,10 +778,10 @@ which both binding sweeps read: the membership walk with the context it
 carries and the precompute it reads, the `Value` both input paths run over, the
 frontend and the four surfaces beside it, equality, the oracle and the failure
 codes — and the files the shipped extension is the only caller of.
-`scripts/mutation_gate.py` fails in **four** directions — a survivor the
+`scripts/mutation_gate.py` fails in **five** directions — a survivor the
 baseline does not accept, an accepted entry that no mutant answers to, an
-accepted entry naming a file the tree does not track, and an accepted note
-naming no survivor in the baseline. The second keeps the accepted set honest: an
+accepted entry naming a file the tree does not track, an accepted note naming no
+survivor in the baseline, and an accepted survivor carrying no note. The second keeps the accepted set honest: an
 accepted hole the tree does not have silently re-accepts a future survivor with
 the same identity. The third is about the key rather than the entry: a baseline
 keyed by path goes stale when the path moves, and splitting one module into
@@ -1037,9 +1037,10 @@ jobs too, allowing one answer more from them than from the others — `skipped`,
 which is what a push gives a job it does not run — and refusing everything
 else. On a night handed to the development branch the push jobs answer
 `skipped` and nothing else, since one that ran read `main`'s tip.
-`tests/test_required_jobs.py` evaluates the gate's condition on five runs -- a
-push, a dispatch, a night handed on with `main` behind the branch and with
-`main` on it, and a night with no branch -- each job's result planted in turn,
+`tests/test_required_jobs.py` evaluates the gate's condition on every run its
+`RUNS` table names -- a push, a dispatch for a reading, a nightly dispatch, a
+night handed on with `main` behind the branch and with `main` on it, and a night
+with no branch -- each job's result planted in turn,
 and runs the dispatcher's step with `git` and `gh` stood in.
 
 **Every supported interpreter runs on every event.** The release ships a wheel
