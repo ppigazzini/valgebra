@@ -13,51 +13,32 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: a pattern is a set of strings in the relations, whatever its base
-- fix: the universe bound reads a union nested in a union as its members -- internal
-- fix: a definition two branches read at one value is walked once
-- fix: an error's text and a value's summary are read from storage
-- fix: a signal while the special forms are first read is raised
-- fix: a relation raises a signal its class readings meet
-- fix: pickling an error leaves the error untouched
-- fix: an integer key past the digit limit reaches the path as an integer
-- fix: a tuple reads what an unpacked tuple splices as its own arguments
-- fix: a dict literal refuses a TypedDict presence qualifier on a field
-- fix: a type alias of an Annotated alias in metadata is refused
-- fix: a possessive quantifier and a spaced count are refused in a pattern
-- fix: instance_of(typing.Any) is the top whatever is imported
-- fix: a dataclass field reads Final under Annotated
-- fix: a protocol's cached property holds its return type
-- fix: a Regex marker pickles and refuses a pattern that is not text
-- fix: the complement laws read a union or a meet flattened into the list
-- fix: close after open takes out only the region open freed
-- fix: the contractivity check enters each definition once
-- fix: a complement is below the complement of an empty refinement
-- fix: a constant prints whole in a repr
-- fix: a literal that would read back as a builtin's is refused in a repr
-- fix: a recursive repr binds a name its body does not print
-- fix: the pickle refusal sends a reader to the forms repr cannot spell
-- fix: every reading of a record resolves a key as the dict does
-- fix: a set reports its failures in the order everything they say fixes
-- fix: two spellings of one schema fold to one when composed
-- fix: one schema prints one way, whatever order its sets were written in
-- fix: a union of map atoms holds each atom once -- internal
-- fix: a conjunct refutes beside one the rules decline
-- fix: a complement admits no member at the walk's bound
-- fix: a complement reads its inner walk in Kleene's strong logic
-- fix: a map atom wanting a key past the partition proves nothing -- internal
-- fix: the clauses admitting every value close as one clause
-- fix: a bound or a step Python cannot apply is refused
-- fix: the state bound holds every automaton as it is built
-- fix: two spellings of a wide union compare in one pass
-- fix: a refused union renders only the labels it names
-- fix: a wide record whose clause reads keys reads a JSON object in one pass
-- fix: a complement names the set it excludes
-- fix: a record's name survives open or close by what it says alone
-- fix: a missing key or attribute is spelled as repr spells it
-- fix: two numberings of one set of definitions are one schema
-
 -->
+
+## [0.0.19] - 2026-10-20
+
+A release of repairs: thirty-two fixes and eight security fixes, and nothing
+added or removed. Eight answers were wrong in a way `SECURITY.md` scopes as a
+vulnerability -- one wrong `subset` proof, six shapes that admitted a value
+outside the schema's set, and a walk exponential in a JSON document's depth --
+and each entry under Security names the releases it reached. Upgrade from any
+of them.
+
+The breaks are refusals, each of a spelling that built a validator reading
+another set than the one written: `Required` or `NotRequired` on a field of a
+dict literal, a `type` alias of an `Annotated` alias in metadata, a possessive
+quantifier or a spaced count in a pattern, a `...` after an unpacked tuple or
+an unpacked tuple outside a tuple's arguments, a complex bound or step, and a
+`Decimal` step over a float base. A `Regex` of anything but text raises when
+the marker is made. Answers move where they were wrong: a complement reads its
+inner walk in Kleene's strong logic, `close` reads the clauses admitting every
+value as one, and a conjunct refutes beside one the rules decline. A `repr`
+reads back as the schema it came from but for the forms the API reference
+lists, a complement's `expected` names the set it excludes, a missing key is
+spelled as the path spells it, and a set reports its failures in an order the
+value fixes. Five costs that grew faster than a schema or a value -- a wide
+union's `==`, a refused union's labels, a wide record over JSON, a long literal
+in a relation, and a chain of definitions -- grow no faster than it.
 
 ### Fixed
 
@@ -3007,7 +2988,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.18...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.19...HEAD
+[0.0.19]: https://github.com/ppigazzini/valgebra/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/ppigazzini/valgebra/compare/v0.0.17...v0.0.18
 [0.0.17]: https://github.com/ppigazzini/valgebra/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/ppigazzini/valgebra/compare/v0.0.15...v0.0.16
