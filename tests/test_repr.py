@@ -133,6 +133,12 @@ ROUNDTRIP_SCHEMAS = [
     recursive(lambda t: int | list[t]),  # ty: ignore[invalid-type-form]
     Validator({"name": str}).open(),
     recursive(lambda t: {"value": int, "left?": t}),
+    # Two definitions, written in the order that does not print first: the
+    # repr orders them by their renderings, and reads back as this schema.
+    union(
+        recursive(lambda t: {"n": t, "v": int}),
+        recursive(lambda t: int | list[t]),  # ty: ignore[invalid-type-form]
+    ),
     # The package's own marker. It renders as a call and the call rebuilds it,
     # so it belongs in this list rather than beside the two exclusions -- and
     # the namespace below has to carry the name, or a repr a caller reads is
@@ -480,6 +486,9 @@ def test_repr_round_trips_through_eval(schema: object) -> None:
     rendered = repr(Validator(schema))
     rebuilt = Validator(eval(rendered, dict(_ROUNDTRIP_NS)))  # noqa: S307
     assert repr(rebuilt) == rendered
+    # And it is the schema it came from: a repr that reordered something whose
+    # order `==` reads would print a fixpoint and rebuild another schema.
+    assert rebuilt == Validator(schema)
     # The fixpoint alone would pass for a wrong-but-stable repr; require the
     # reconstructed validator to accept exactly the same values as the original,
     # so the printed form preserves meaning, not just its own shape.

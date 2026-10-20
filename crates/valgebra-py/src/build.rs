@@ -258,8 +258,29 @@ fn tie_alias(
              self-reference under a list, tuple, set, dict, record, or object",
         ));
     }
+    // A definition the table already holds is that definition: `type A = int |
+    // list[A]` beside a `B` spelled alike, or `A` built twice in one schema, is
+    // one definition and not two, which `A | B` would keep as two members. An
+    // inner fixpoint naming this one is never dropped by it: it was built while
+    // this one was open, so it is newer than every definition held before, and
+    // the body naming it equals none of those.
+    if let Some(held) = held_already(&resolved, ref_id, defs) {
+        return Ok(Schema::Ref(held));
+    }
     defs.push(resolved);
     Ok(Schema::Ref(ref_id))
+}
+
+/// The definition of `defs` that `body`, about to be added at `at`, is: the
+/// one it equals once its references to itself name that one instead.
+fn held_already(body: &Schema, at: DefIx, defs: &[Schema]) -> Option<DefIx> {
+    let mut table = vec![None; at.get() + 1];
+    (0..defs.len()).map(DefIx::new).find(|&held| {
+        if let Some(own) = table.get_mut(at.get()) {
+            *own = Some(held);
+        }
+        defs.get(held.get()) == Some(&body.renumbered(&table))
+    })
 }
 
 /// Whether `obj` is a PEP 695 alias, `typing`'s or `typing_extensions`'.
@@ -1181,8 +1202,28 @@ fn compose(py: Python<'_>, inner: &Validator, lits: &mut Pool, defs: &mut Vec<Sc
             .map(|o| lits.intern(o.bind(py)))
             .collect(),
     };
-    let offset = DefShift::new(place_definitions(&inner.definitions, &lit_map, defs));
-    inner.schema.reindexed(&lit_map, offset)
+    match place_definitions(&inner.definitions, &lit_map, defs) {
+        Placed::Shifted(offset) => inner.schema.reindexed(&lit_map, DefShift::new(offset)),
+        Placed::Renamed(table) => inner
+            .schema
+            .reindexed(&lit_map, DefShift::new(0))
+            .renumbered(&table),
+    }
+}
+
+/// Where a merged validator's definitions went.
+///
+/// Two answers rather than a table for both, because the common one is read
+/// by a single pass: a block found where it already is, or appended whole,
+/// sits at an offset past the indices it was built with, and one shift moves
+/// every reference to it in the pass that moves the constants. A table is
+/// what a placement that paired some definitions and appended others needs,
+/// and it costs a second pass over the tree.
+enum Placed {
+    /// Every definition `offset` past its own index.
+    Shifted(usize),
+    /// Each definition at the index the table gives it.
+    Renamed(Vec<Option<DefIx>>),
 }
 
 /// An object [`build_schema`] has no other reading for: a literal of itself,
@@ -1358,24 +1399,35 @@ pub(crate) fn combine(
     Validator::checked(schema, literals.into_items(), definitions)
 }
 
-/// Where a merged validator's definitions live in the target list.
+/// Where a merged validator's definitions live in the target list: the index
+/// each one has there.
 ///
-/// Appended, unless the same definitions are already there -- in which case the
-/// offset they are already at is returned and nothing is added. That is what
-/// makes a recursive schema equal to itself once combined: without it,
+/// A definition the target already holds, up to a renaming of the definitions,
+/// is that definition, and the rest are appended. That is what makes a
+/// recursive schema equal to itself once combined: without it,
 /// `intersection(json, complement(json))` copies one definition twice, the two
 /// occurrences become `Ref(0)` and `Ref(1)`, and the fold that cancels a schema
 /// against its own complement compares terms and sees two. Every law about a
 /// recursive schema failed on that, including the one a reader tries first.
 ///
-/// The whole block is matched rather than one definition at a time, because a
-/// definition's body names its siblings by index: a block is self-consistent
-/// only at the offset it was built for, so it is shifted to each candidate
-/// offset and compared there. Quadratic in the definition count, which
+/// The whole block is looked for first, at each offset it could sit at,
+/// shifted there: a definition's body names its siblings by index, so a block
+/// is self-consistent only at the offset it was built for. That finds every
+/// validator composed with itself or with one it was built from, comparing
+/// each body once and none inside another.
+///
+/// Where no offset holds it, each definition is looked for up to a renaming,
+/// because a table is numbered in the order construction met its definitions:
+/// `union(r1, r2)` and `union(r2, r1)` hold one pair of definitions in two
+/// orders, and the second sits at no offset of the first, so `ab | ba` kept
+/// four members and `ab | ~ba` stood unfolded beside an `ab` equal to `ba`. The
+/// pairing is [`crate::equality::placement`], the comparison `==` reads
+/// definitions by, with constants read by slot; what it does not pair is
+/// appended. Both searches are quadratic in the definition count, which
 /// `MAX_DEFINITIONS` holds at 128, and paid once per merged validator.
-fn place_definitions(inner: &[Schema], lit_map: &[usize], defs: &mut Vec<Schema>) -> usize {
+fn place_definitions(inner: &[Schema], lit_map: &[usize], defs: &mut Vec<Schema>) -> Placed {
     if inner.is_empty() {
-        return defs.len();
+        return Placed::Shifted(defs.len());
     }
     let at_offset = |start: usize| -> Vec<Schema> {
         inner
@@ -1384,13 +1436,41 @@ fn place_definitions(inner: &[Schema], lit_map: &[usize], defs: &mut Vec<Schema>
             .collect()
     };
     for start in 0..=defs.len().saturating_sub(inner.len()) {
-        if defs.get(start..start + inner.len()) == Some(at_offset(start).as_slice()) {
-            return start;
+        if let Some(held) = defs.get(start..start + inner.len())
+            && held == at_offset(start).as_slice()
+        {
+            return Placed::Shifted(start);
+        }
+    }
+    if !defs.is_empty() {
+        let interned: Vec<Schema> = inner
+            .iter()
+            .map(|definition| definition.reindexed(lit_map, DefShift::new(0)))
+            .collect();
+        let paired = crate::equality::placement(&interned, defs);
+        if paired.iter().any(Option::is_some) {
+            let mut next = defs.len();
+            let table: Vec<Option<DefIx>> = paired
+                .iter()
+                .map(|found| {
+                    Some(DefIx::new(found.unwrap_or_else(|| {
+                        let at = next;
+                        next += 1;
+                        at
+                    })))
+                })
+                .collect();
+            for (body, found) in interned.iter().zip(&paired) {
+                if found.is_none() {
+                    defs.push(body.renumbered(&table));
+                }
+            }
+            return Placed::Renamed(table);
         }
     }
     let start = defs.len();
     defs.extend(at_offset(start));
-    start
+    Placed::Shifted(start)
 }
 
 /// What two pooled objects have to agree on to be one constant.

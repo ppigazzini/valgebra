@@ -448,7 +448,14 @@ The code that decides it is `crates/valgebra-py/src/equality.rs`, which reads
 two validators through their constant pools rather than slot for slot: a pool
 index means nothing outside the validator holding it, so two schemas spelled
 alike from different pools compare equal only if what the indices *name* is
-equal. It is one of the binding's swept surfaces, and it decides `==` and
+equal. A definition index is read the same way: a reference is compared through
+the definition it names, and the two tables' definitions are paired one to one
+as the comparison meets them, so two tables numbering one set of definitions in
+two orders hold one schema -- equality up to a renaming of the binders, the
+equality any term language with binders has. Composing two validators places
+the second's definitions by the same pairing (`place_definitions` in
+`crates/valgebra-py/src/build.rs`), so a definition the first already holds is
+that definition rather than a copy the folds would read as another term. It is one of the binding's swept surfaces, and it decides `==` and
 nothing else -- `is_equivalent` is the decision procedure, a different question
 with a different answer, and [04-algebra.md](../04-algebra.md) is about why.
 A union's or a meet's members, a map's clauses and a refinement's constraints

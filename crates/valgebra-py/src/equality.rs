@@ -8,6 +8,18 @@
 //! here reads *through* the slots to the values, and matches a union's members
 //! and a refinement's constraints as the sets they are rather than as lists.
 //!
+//! A reference is the same accident one level up. A `Ref` names a recursive
+//! definition by its index in the validator's table, and the table is numbered
+//! in the order construction met the definitions, so `union(r1, r2)` and
+//! `union(r2, r1)`, or a record whose two recursive fields were written in
+//! either order, hold one schema under two numberings. A reference is read
+//! through to the definition it names, and the comparison pairs the two
+//! tables' definitions one to one ([`Renaming`]): equality up to a renaming of
+//! the definitions, which is the equality terms with binders have everywhere
+//! else -- a `recursive` definition binds its back edge, and the index is the
+//! binder's name. Composing two validators places one's definitions in the
+//! other's table by the same pairing ([`placement`]).
+//!
 //! What this does **not** do is decide anything. Two schemas that denote one set
 //! by a theorem -- `int | ~int` and `anything`, a record and a mapping that
 //! admit the same dicts -- are not equal here, and `is_equivalent` is the
@@ -19,6 +31,7 @@
 //! digest; a fatal signal propagates, as it does from every other question
 //! valgebra asks of user code.
 
+use std::cell::{Cell, RefCell};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -34,11 +47,22 @@ pub(crate) struct Side<'a> {
     pub(crate) pool: &'a [Py<PyAny>],
 }
 
-/// Whether two compiled schemas are the same schema, modulo their pools.
+/// Whether two compiled schemas are the same schema, modulo their pools and
+/// the numbering of their definitions.
 ///
-/// The definition lists are compared alongside, pairwise: a `Ref` names a
-/// definition by index, so two schemas whose bodies differ are different even
-/// where the referring node is identical.
+/// The definitions are compared where a reference reaches them, not as two
+/// lists zipped by index: a definition no reference reaches denotes nothing
+/// the schema does, and the validator drops it at construction
+/// (`valgebra_core::pruned`), so the ones a comparison of the two trees pairs
+/// are all there are.
+///
+/// Two tables in one order are read first, each definition against the one
+/// at its own index: the renaming is the identity, every reference meets its
+/// pair already made, and no body is compared inside another, so the reading
+/// is as deep as one tree and as long as the two. Only where that fails is a
+/// renaming searched for: the definitions are paired as composition places
+/// them ([`Comparison::pair_definitions`]), every one of them or none, and the
+/// two trees compared under the pairing.
 pub(crate) fn schemas_equal(
     py: Python<'_>,
     left_schema: &Schema,
@@ -46,11 +70,363 @@ pub(crate) fn schemas_equal(
     right_schema: &Schema,
     right: &Side<'_>,
 ) -> PyResult<bool> {
-    Ok(left.definitions.len() == right.definitions.len()
-        && equal(py, left_schema, left, right_schema, right)?
-        && every(left.definitions.iter().zip(right.definitions), |(a, b)| {
-            equal(py, a, left, b, right)
-        })?)
+    let comparison = |renaming: Renaming| Comparison {
+        constants: Constants::ByValue(py),
+        left,
+        right,
+        searching: !renaming.identity,
+        renaming: RefCell::new(renaming),
+        depth: Cell::new(0),
+        steps: Cell::new(0),
+    };
+    if let Some(identity) = Renaming::identity(left, right) {
+        let in_order = comparison(identity);
+        if equal(&in_order, left_schema, right_schema)?
+            && every(left.definitions.iter().zip(right.definitions), |(a, b)| {
+                equal(&in_order, a, b)
+            })?
+        {
+            return Ok(true);
+        }
+    }
+    // With fewer than two definitions the identity is the only renaming, and
+    // it has answered.
+    if left.definitions.len() < 2 {
+        return Ok(false);
+    }
+    // A renaming pairs every definition, so two tables of different lengths
+    // have none.
+    if left.definitions.len() != right.definitions.len() {
+        return Ok(false);
+    }
+    if !same_bodies(py, left, right)? {
+        return Ok(false);
+    }
+    let search = comparison(Renaming::between(left, right));
+    search.pair_definitions()?;
+    if search.renaming.borrow().to_right.contains(&None) {
+        return Ok(false);
+    }
+    equal(&search, left_schema, right_schema)
+}
+
+/// Whether the two tables' bodies agree as multisets, each digested with its
+/// references read as references and nothing more.
+///
+/// What any renaming needs: it pairs every definition with one whose body is
+/// the same up to the references in it, which such a digest cannot see, and
+/// the tables hold no definition a reference does not reach. Two tables that
+/// fail this have no renaming to search for, so the search is not run.
+fn same_bodies(py: Python<'_>, left: &Side<'_>, right: &Side<'_>) -> PyResult<bool> {
+    let digests = |side: &Side<'_>| -> PyResult<Vec<u64>> {
+        let bodies = Side {
+            definitions: &[],
+            pool: side.pool,
+        };
+        let mut digests = side
+            .definitions
+            .iter()
+            .map(|body| {
+                let mut hasher = DefaultHasher::new();
+                hash_shape(py, body, &bodies, &mut hasher)?;
+                Ok(hasher.finish())
+            })
+            .collect::<PyResult<Vec<u64>>>()?;
+        digests.sort_unstable();
+        Ok(digests)
+    };
+    Ok(digests(left)? == digests(right)?)
+}
+
+/// Which definition of `target` each definition of `inner` is, up to a
+/// renaming of the definitions, where `target` holds one.
+///
+/// Both tables index one pool -- `inner` has been interned into it -- so a
+/// constant is read by its slot, the rule composition interns by, and nothing
+/// here runs Python. Each definition of `inner` is paired with the first
+/// definition of `target` it equals, and a pairing carries the definitions its
+/// body names with it, so what is paired is closed under reference: a
+/// definition left unpaired is one to append, and its body may name a paired
+/// one.
+pub(crate) fn placement(inner: &[Schema], target: &[Schema]) -> Vec<Option<usize>> {
+    let (inner_side, target_side) = (
+        Side {
+            definitions: inner,
+            pool: &[],
+        },
+        Side {
+            definitions: target,
+            pool: &[],
+        },
+    );
+    let comparison = Comparison {
+        constants: Constants::BySlot,
+        left: &inner_side,
+        right: &target_side,
+        renaming: RefCell::new(Renaming::between(&inner_side, &target_side)),
+        depth: Cell::new(0),
+        steps: Cell::new(0),
+        searching: true,
+    };
+    // Reading constants by slot raises nothing, so an error cannot arrive;
+    // were one to, the definitions left unpaired would be appended.
+    let _paired = comparison.pair_definitions();
+    comparison.renaming.into_inner().to_right
+}
+
+/// How a comparison reads the constant behind a pool slot.
+enum Constants<'py> {
+    /// Through the slot to the object, compared the way a literal reads one:
+    /// the two sides index two pools, and `==` asks this.
+    ByValue(Python<'py>),
+    /// By the slot alone: the two sides index one pool, which holds one slot
+    /// per constant by the rule composition interns by.
+    BySlot,
+}
+
+/// One comparison: how it reads constants, the two sides, and the definitions
+/// it has paired so far.
+struct Comparison<'a, 'py> {
+    constants: Constants<'py>,
+    left: &'a Side<'a>,
+    right: &'a Side<'a>,
+    renaming: RefCell<Renaming>,
+    /// How many levels of [`equal`] are open, held under
+    /// [`MAX_COMPARISON_DEPTH`].
+    depth: Cell<usize>,
+    /// How many levels it has opened in all, held under
+    /// [`MAX_COMPARISON_STEPS`].
+    steps: Cell<usize>,
+    /// Whether it makes pairs. The reading in one order makes none -- every
+    /// reference meets its pair at its own index -- so it follows no reference
+    /// into a body, is as deep as one tree, and has nothing to take back: it
+    /// keeps neither the counts the two bounds read nor a mark per candidate.
+    searching: bool,
+}
+
+/// The most levels of [`equal`] one comparison holds open at once.
+///
+/// A level is a native stack frame, and a reference that meets a definition
+/// not yet paired compares that definition's body inside the frame that met
+/// it, so the levels a comparison needs are the bodies such references reach,
+/// added up: a tower of a hundred fixpoints, each naming the one around it and
+/// nesting a hundred levels, asks ten thousand, which neither construction
+/// bound caps on its own. Past the bound the comparison answers no -- two
+/// schemas, the direction `==` errs in, and a definition composition appends
+/// rather than places -- where it would otherwise overflow the thread it runs
+/// on.
+///
+/// What it costs is measured on the wheel that ships: held at the bound through
+/// a union at every level, the deepest frame chain a level takes, the `CPython`
+/// 3.14 profile-guided wheel's comparison runs on a 462 KiB thread and not on
+/// less, inside the 1 MiB that is the least stack any thread `CPython` creates
+/// has (`test_a_comparison_fits_the_documented_stack`).
+const MAX_COMPARISON_DEPTH: usize = 384;
+
+/// The most levels of [`equal`] one comparison opens in all.
+///
+/// Matching a set's members tries a member against every candidate its digest
+/// does not tell apart, and the digest reads a reference's definition one level
+/// deep, so members that part only past a reference are each tried in turn,
+/// every try a comparison of its own; nested, the tries multiply. Two equal
+/// schemas read member by member open a level per node of each tree and each
+/// definition, which the validator's node bound caps a side, so the bound is
+/// four times that one -- room for every such reading -- and stops a search
+/// that has spent it, answering no as the depth bound does. Written as a
+/// number because the validator reads this module, and asserted against its
+/// bound there.
+pub(crate) const MAX_COMPARISON_STEPS: usize = 400_000;
+
+/// One open level of a comparison, closed when dropped; a comparison that
+/// makes no pairs counts none.
+struct Level<'a>(Option<&'a Cell<usize>>);
+
+impl Drop for Level<'_> {
+    fn drop(&mut self) {
+        if let Some(depth) = self.0 {
+            depth.set(depth.get().saturating_sub(1));
+        }
+    }
+}
+
+impl Comparison<'_, '_> {
+    /// Open a level, or refuse where [`MAX_COMPARISON_DEPTH`] are open or
+    /// [`MAX_COMPARISON_STEPS`] have been.
+    fn descend(&self) -> Option<Level<'_>> {
+        if !self.searching {
+            return Some(Level(None));
+        }
+        let (depth, steps) = (self.depth.get(), self.steps.get());
+        if depth >= MAX_COMPARISON_DEPTH || steps >= MAX_COMPARISON_STEPS {
+            return None;
+        }
+        self.depth.set(depth + 1);
+        self.steps.set(steps + 1);
+        Some(Level(Some(&self.depth)))
+    }
+
+    /// Whether the left side's slot `a` and the right side's slot `b` name one
+    /// constant.
+    fn same_constant(&self, a: usize, b: usize) -> PyResult<bool> {
+        match self.constants {
+            Constants::ByValue(py) => {
+                objects_equal(py, self.left.pool.get(a), self.right.pool.get(b))
+            }
+            Constants::BySlot => Ok(a == b),
+        }
+    }
+
+    /// Pair each left definition, in the order its table holds them, with the
+    /// first free right definition it equals under the pairs made so far.
+    ///
+    /// The order is the one construction numbers a table in: a definition
+    /// takes its index once its body is built, after every definition the body
+    /// built, so a body names lower indices -- paired already -- and meets the
+    /// higher ones only where an inner fixpoint names an outer one. A body is
+    /// then read once and not inside another, which is what keeps a chain of
+    /// definitions from adding its bodies' depths up; where a reference does
+    /// meet one unpaired, its body is read where it is met, under the bounds
+    /// [`MAX_COMPARISON_DEPTH`] and [`MAX_COMPARISON_STEPS`] set.
+    ///
+    /// The first it equals, not the one a later reading needs: in a table
+    /// holding two definitions equal to each other up to a renaming, the
+    /// pairing can take the other, and the answer is no, the direction `==`
+    /// errs in. Construction leaves no such pair but where an alias's inner
+    /// fixpoint names the alias: composing places the second definition on the
+    /// first, and an alias definition already held is not added again.
+    fn pair_definitions(&self) -> PyResult<()> {
+        for definition in 0..self.left.definitions.len() {
+            if !matches!(self.renaming.borrow().to_right.get(definition), Some(None)) {
+                continue;
+            }
+            for candidate in 0..self.right.definitions.len() {
+                let free = matches!(self.renaming.borrow().to_left.get(candidate), Some(None));
+                if free && self.attempt_references(definition, candidate)? {
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// [`references_equal`], taking back what a refusal paired, as
+    /// [`attempt`](Self::attempt) does.
+    fn attempt_references(&self, a: usize, b: usize) -> PyResult<bool> {
+        let mark = self.renaming.borrow().paired.len();
+        let matched = references_equal(self, a, b)?;
+        if !matched {
+            self.renaming.borrow_mut().undo_to(mark);
+        }
+        Ok(matched)
+    }
+
+    /// [`equal`], taking back every pair of definitions it made when it
+    /// answers no: what a candidate that failed to match leaves behind must
+    /// not decide what the next candidate may pair.
+    fn attempt(&self, a: &Schema, b: &Schema) -> PyResult<bool> {
+        if !self.searching {
+            return equal(self, a, b);
+        }
+        let mark = self.renaming.borrow().paired.len();
+        let matched = equal(self, a, b)?;
+        if !matched {
+            self.renaming.borrow_mut().undo_to(mark);
+        }
+        Ok(matched)
+    }
+}
+
+/// Which right definition each left definition stands for, and back.
+///
+/// The pairing is one to one, so the renaming it states is a renaming, and two
+/// definitions on one side never stand for one on the other. A pair is made
+/// the first time a reference meets one, *before* the two bodies are compared,
+/// which is what ends a cycle: the back edge inside a body meets the pair that
+/// is being compared and answers yes, the coinductive reading of a recursive
+/// definition. Kept in the order made, so a failed candidate's pairs can be
+/// taken back ([`Comparison::attempt`]).
+struct Renaming {
+    /// Whether this is the identity, which pairs each index with itself and
+    /// holds no table for it.
+    identity: bool,
+    to_right: Vec<Option<usize>>,
+    to_left: Vec<Option<usize>>,
+    paired: Vec<usize>,
+}
+
+/// What meeting a pair of references found.
+enum Paired {
+    /// The two were paired already: the same definition under the renaming.
+    Before,
+    /// The two are paired now, and their bodies are to be compared.
+    Now,
+    /// One of the two stands for another definition, so they are not one.
+    Apart,
+}
+
+impl Renaming {
+    fn between(left: &Side<'_>, right: &Side<'_>) -> Self {
+        Self {
+            identity: false,
+            to_right: vec![None; left.definitions.len()],
+            to_left: vec![None; right.definitions.len()],
+            paired: Vec::new(),
+        }
+    }
+
+    /// Every definition paired with the one at its own index, where the two
+    /// tables are as long.
+    fn identity(left: &Side<'_>, right: &Side<'_>) -> Option<Self> {
+        (left.definitions.len() == right.definitions.len()).then(|| Self {
+            identity: true,
+            to_right: Vec::new(),
+            to_left: Vec::new(),
+            paired: Vec::new(),
+        })
+    }
+
+    fn pair(&mut self, left: usize, right: usize) -> Paired {
+        if self.identity {
+            return if left == right {
+                Paired::Before
+            } else {
+                Paired::Apart
+            };
+        }
+        let (Some(to_right), Some(to_left)) = (self.to_right.get(left), self.to_left.get(right))
+        else {
+            // An index past its table names a definition the schema does not
+            // have, which the frontend could not have built.
+            return Paired::Apart;
+        };
+        match (*to_right, *to_left) {
+            (Some(paired), _) if paired == right => Paired::Before,
+            (None, None) => {
+                set(&mut self.to_right, left, Some(right));
+                set(&mut self.to_left, right, Some(left));
+                self.paired.push(left);
+                Paired::Now
+            }
+            _ => Paired::Apart,
+        }
+    }
+
+    /// Take back every pair made after the first `mark`.
+    fn undo_to(&mut self, mark: usize) {
+        for left in self.paired.drain(mark..) {
+            let right = self.to_right.get_mut(left).and_then(Option::take);
+            if let Some(right) = right {
+                set(&mut self.to_left, right, None);
+            }
+        }
+    }
+}
+
+/// Write `value` at `at`, where the table has the slot.
+fn set(table: &mut [Option<usize>], at: usize, value: Option<usize>) {
+    if let Some(slot) = table.get_mut(at) {
+        *slot = value;
+    }
 }
 
 /// Whether `test` holds of every item, stopping at the first it fails or raises.
@@ -156,92 +532,94 @@ fn same_multiset<T>(
 /// Two validators built the same way hold their members in one order, which
 /// is the common case and needs no digest: the members are matched in place
 /// first, and only those past the first one out of place are digested.
-fn same_members(
-    py: Python<'_>,
-    members: &[Schema],
-    left: &Side<'_>,
-    others: &[Schema],
-    right: &Side<'_>,
-) -> PyResult<bool> {
+fn same_members(cx: &Comparison<'_, '_>, members: &[Schema], others: &[Schema]) -> PyResult<bool> {
     if members.len() != others.len() {
         return Ok(false);
     }
     let mut alike = members.len();
     for (at, (member, other)) in members.iter().zip(others).enumerate() {
-        if !equal(py, member, left, other, right)? {
+        if !cx.attempt(member, other)? {
             alike = at;
             break;
         }
     }
+    let (rest, other_rest) = (
+        members.get(alike..).unwrap_or_default(),
+        others.get(alike..).unwrap_or_default(),
+    );
+    // The pair the pass above refused is refused again unread: the attempt took
+    // back what it paired, so a second reading starts where the first did and
+    // answers what it did. Read again, a refusal past a reference -- where a
+    // digest no longer tells two members apart -- is read twice at every level
+    // of nesting above it, which is exponential in the nesting.
+    let refused = (rest.first(), other_rest.first());
+    let attempt = |a: &Schema, b: &Schema| {
+        if let (Some(member), Some(other)) = refused
+            && std::ptr::eq(a, member)
+            && std::ptr::eq(b, other)
+        {
+            return Ok(false);
+        }
+        cx.attempt(a, b)
+    };
+    // A digest reads each constant's own hash, which is Python's to answer; a
+    // comparison by slot reads none, and searches from the front.
+    let Constants::ByValue(py) = cx.constants else {
+        return same_multiset(rest, other_rest, attempt);
+    };
     let digest = |member: &Schema, side: &Side<'_>| {
         let mut hasher = DefaultHasher::new();
-        hash_shape(py, member, side.pool, &mut hasher)?;
+        hash_shape(py, member, side, &mut hasher)?;
         Ok(hasher.finish())
     };
     same_multiset_by(
-        members.get(alike..).unwrap_or_default(),
-        others.get(alike..).unwrap_or_default(),
-        |a, b| equal(py, a, left, b, right),
-        |member| digest(member, left),
-        |member| digest(member, right),
+        rest,
+        other_rest,
+        attempt,
+        |member| digest(member, cx.left),
+        |member| digest(member, cx.right),
     )
 }
 
-fn fields_equal(
-    py: Python<'_>,
-    a: &[Field],
-    left: &Side<'_>,
-    b: &[Field],
-    right: &Side<'_>,
-) -> PyResult<bool> {
+fn fields_equal(cx: &Comparison<'_, '_>, a: &[Field], b: &[Field]) -> PyResult<bool> {
     // Ordered rather than matched: construction sorts a record's fields by name,
     // which is a key no pool slot reaches, so two equal records are already in
     // the same order.
     Ok(a.len() == b.len()
         && every(a.iter().zip(b), |(x, y)| {
-            Ok(x.name == y.name
-                && x.required == y.required
-                && equal(py, &x.schema, left, &y.schema, right)?)
+            Ok(x.name == y.name && x.required == y.required && equal(cx, &x.schema, &y.schema)?)
         })?)
 }
 
-fn attributes_equal(
-    py: Python<'_>,
-    a: &[Attribute],
-    left: &Side<'_>,
-    b: &[Attribute],
-    right: &Side<'_>,
-) -> PyResult<bool> {
+fn attributes_equal(cx: &Comparison<'_, '_>, a: &[Attribute], b: &[Attribute]) -> PyResult<bool> {
     // Ordered, for the reason a record's fields are.
     Ok(a.len() == b.len()
         && every(a.iter().zip(b), |(x, y)| {
-            Ok(x.name == y.name && equal(py, &x.schema, left, &y.schema, right)?)
+            Ok(x.name == y.name && equal(cx, &x.schema, &y.schema)?)
         })?)
 }
 
-fn clause_equal(
-    py: Python<'_>,
-    a: &MapClause,
-    left: &Side<'_>,
-    b: &MapClause,
-    right: &Side<'_>,
-) -> PyResult<bool> {
-    Ok(equal(py, &a.key, left, &b.key, right)? && equal(py, &a.value, left, &b.value, right)?)
+/// Whether two clauses are one, taking back the definitions a refusal paired,
+/// as [`Comparison::attempt`] does: a clause is a candidate in a search.
+fn clause_equal(cx: &Comparison<'_, '_>, a: &MapClause, b: &MapClause) -> PyResult<bool> {
+    if !cx.searching {
+        return Ok(equal(cx, &a.key, &b.key)? && equal(cx, &a.value, &b.value)?);
+    }
+    let mark = cx.renaming.borrow().paired.len();
+    let matched = equal(cx, &a.key, &b.key)? && equal(cx, &a.value, &b.value)?;
+    if !matched {
+        cx.renaming.borrow_mut().undo_to(mark);
+    }
+    Ok(matched)
 }
 
-fn constraint_equal(
-    py: Python<'_>,
-    a: &Constraint,
-    left: &Side<'_>,
-    b: &Constraint,
-    right: &Side<'_>,
-) -> PyResult<bool> {
+fn constraint_equal(cx: &Comparison<'_, '_>, a: &Constraint, b: &Constraint) -> PyResult<bool> {
     // The discriminants agree before anything is read: `Ge(0)` and `Le(0)` name
     // one constant and bound nothing alike.
     if core::mem::discriminant(a) != core::mem::discriminant(b) {
         return Ok(false);
     }
-    let pooled = |i: usize, j: usize| objects_equal(py, left.pool.get(i), right.pool.get(j));
+    let pooled = |i: usize, j: usize| cx.same_constant(i, j);
     match (a, b) {
         (Constraint::Ge(i), Constraint::Ge(j))
         | (Constraint::Gt(i), Constraint::Gt(j))
@@ -255,28 +633,34 @@ fn constraint_equal(
     }
 }
 
+/// Whether two references name one definition: read through the index to the
+/// definition the first time the pair meets, and by the pairing after.
+fn references_equal(cx: &Comparison<'_, '_>, a: usize, b: usize) -> PyResult<bool> {
+    let met = cx.renaming.borrow_mut().pair(a, b);
+    Ok(match met {
+        Paired::Before => true,
+        Paired::Apart => false,
+        Paired::Now => match (cx.left.definitions.get(a), cx.right.definitions.get(b)) {
+            (Some(x), Some(y)) => equal(cx, x, y)?,
+            _ => false,
+        },
+    })
+}
+
 /// The comparison itself, one node at a time.
-fn equal(
-    py: Python<'_>,
-    left_schema: &Schema,
-    left: &Side<'_>,
-    right_schema: &Schema,
-    right: &Side<'_>,
-) -> PyResult<bool> {
-    let recur = |a: &Schema, b: &Schema| equal(py, a, left, b, right);
+fn equal(cx: &Comparison<'_, '_>, left_schema: &Schema, right_schema: &Schema) -> PyResult<bool> {
+    let Some(_level) = cx.descend() else {
+        return Ok(false);
+    };
+    let recur = |a: &Schema, b: &Schema| equal(cx, a, b);
     Ok(match (left_schema, right_schema) {
         // The pooled leaves: read through the slot to the object it names.
-        (Schema::Literal(a), Schema::Literal(b)) => {
-            objects_equal(py, left.pool.get(a.get()), right.pool.get(b.get()))?
-        }
-        (Schema::Instance(a), Schema::Instance(b)) => {
-            objects_equal(py, left.pool.get(a.get()), right.pool.get(b.get()))?
-        }
+        (Schema::Literal(a), Schema::Literal(b)) => cx.same_constant(a.get(), b.get())?,
+        (Schema::Instance(a), Schema::Instance(b)) => cx.same_constant(a.get(), b.get())?,
+        (Schema::Ref(a), Schema::Ref(b)) => references_equal(cx, a.get(), b.get())?,
         // The set-shaped lists: matched rather than zipped.
         (Schema::Union(a), Schema::Union(b))
-        | (Schema::Intersection(a), Schema::Intersection(b)) => {
-            same_members(py, a, left, b, right)?
-        }
+        | (Schema::Intersection(a), Schema::Intersection(b)) => same_members(cx, a, b)?,
         (Schema::Complement(a), Schema::Complement(b)) => recur(a, b)?,
         (
             Schema::Coll {
@@ -318,13 +702,11 @@ fn equal(
                 defaults: b_defaults,
             },
         ) => {
-            fields_equal(py, a_fields, left, b_fields, right)?
-                && same_multiset(a_defaults, b_defaults, |x, y| {
-                    clause_equal(py, x, left, y, right)
-                })?
+            fields_equal(cx, a_fields, b_fields)?
+                && same_multiset(a_defaults, b_defaults, |x, y| clause_equal(cx, x, y))?
         }
         (Schema::AttrRecord { fields: a }, Schema::AttrRecord { fields: b }) => {
-            attributes_equal(py, a, left, b, right)?
+            attributes_equal(cx, a, b)?
         }
         (
             Schema::Refine {
@@ -335,14 +717,11 @@ fn equal(
                 base: b_base,
                 constraints: b,
             },
-        ) => {
-            recur(a_base, b_base)?
-                && same_multiset(a, b, |x, y| constraint_equal(py, x, left, y, right))?
-        }
-        // What carries no pool slot and no set-shaped list: the derived
-        // comparison is the whole of it -- the scalars, the two bounds, and the
-        // two reference forms -- and it answers `false` against another
-        // variant. Named rather than caught by `(a, b)`, so a variant that
+        ) => recur(a_base, b_base)? && same_multiset(a, b, |x, y| constraint_equal(cx, x, y))?,
+        // What carries no pool slot, no definition index and no set-shaped
+        // list: the derived comparison is the whole of it -- the scalars, the
+        // two bounds, and the build-time marker -- and it answers `false`
+        // against another variant. Named rather than caught by `(a, b)`, so a variant that
         // carries a slot is a compile error here: the derived comparison reads
         // a slot's index, and two pools hold one constant at two indices.
         (
@@ -354,7 +733,6 @@ fn equal(
             | Schema::Float
             | Schema::Str
             | Schema::Bytes
-            | Schema::Ref(_)
             | Schema::SelfRef(_)),
             b,
         ) => a == b,
@@ -362,6 +740,7 @@ fn equal(
         (
             Schema::Literal(_)
             | Schema::Instance(_)
+            | Schema::Ref(_)
             | Schema::Union(_)
             | Schema::Intersection(_)
             | Schema::Complement(_)
@@ -414,14 +793,16 @@ fn hash_constant<H: Hasher>(
 ///
 /// The companion of [`schemas_equal`]: every node equality separates is a node
 /// this may separate, and the two are consistent where the constants behave.
-/// What it does *not* read is the slot index -- that is construction order, and
-/// two spellings of one schema pool their constants in different slots.
+/// What it does *not* read is a slot index or a definition index -- both are
+/// construction order, and two spellings of one schema pool their constants in
+/// different slots and number their definitions apart.
 pub(crate) fn hash_shape<H: Hasher>(
     py: Python<'_>,
     schema: &Schema,
-    pool: &[Py<PyAny>],
+    side: &Side<'_>,
     hasher: &mut H,
 ) -> PyResult<()> {
+    let pool = side.pool;
     core::mem::discriminant(schema).hash(hasher);
     match schema {
         // The lists whose order is not part of the schema fold commutatively,
@@ -429,36 +810,36 @@ pub(crate) fn hash_shape<H: Hasher>(
         Schema::Union(members) | Schema::Intersection(members) => {
             members.len().hash(hasher);
             unordered(members, hasher, |member, one| {
-                hash_shape(py, member, pool, one)
+                hash_shape(py, member, side, one)
             })?;
         }
-        Schema::Complement(inner) => hash_shape(py, inner, pool, hasher)?,
+        Schema::Complement(inner) => hash_shape(py, inner, side, hasher)?,
         Schema::Coll { container, element } => {
             container.hash(hasher);
-            hash_shape(py, element, pool, hasher)?;
+            hash_shape(py, element, side, hasher)?;
         }
         Schema::Seq { container, shape } => {
             container.hash(hasher);
             shape.prefix.len().hash(hasher);
             for element in shape.prefix.iter() {
-                hash_shape(py, element, pool, hasher)?;
+                hash_shape(py, element, side, hasher)?;
             }
             shape.tail.is_some().hash(hasher);
             if let Some(tail) = &shape.tail {
-                hash_shape(py, tail, pool, hasher)?;
+                hash_shape(py, tail, side, hasher)?;
             }
         }
         Schema::KeyedMap { fields, defaults } => {
-            hash_fields(py, fields, pool, hasher)?;
+            hash_fields(py, fields, side, hasher)?;
             defaults.len().hash(hasher);
             unordered(defaults, hasher, |clause, one| {
-                hash_shape(py, &clause.key, pool, one)?;
-                hash_shape(py, &clause.value, pool, one)
+                hash_shape(py, &clause.key, side, one)?;
+                hash_shape(py, &clause.value, side, one)
             })?;
         }
-        Schema::AttrRecord { fields } => hash_attributes(py, fields, pool, hasher)?,
+        Schema::AttrRecord { fields } => hash_attributes(py, fields, side, hasher)?,
         Schema::Refine { base, constraints } => {
-            hash_shape(py, base, pool, hasher)?;
+            hash_shape(py, base, side, hasher)?;
             constraints.len().hash(hasher);
             unordered(constraints, hasher, |constraint, one| {
                 core::mem::discriminant(constraint).hash(one);
@@ -479,7 +860,18 @@ pub(crate) fn hash_shape<H: Hasher>(
                 Ok(())
             })?;
         }
-        Schema::Ref(index) => index.hash(hasher),
+        // A reference by the definition it names, read one level deep: the
+        // body's own references stop there, which keeps the digest finite on a
+        // cycle and blind to a numbering equality reads through.
+        Schema::Ref(index) => {
+            if let Some(body) = side.definitions.get(index.get()) {
+                let shallow = Side {
+                    definitions: &[],
+                    pool,
+                };
+                hash_shape(py, body, &shallow, hasher)?;
+            }
+        }
         // The pooled leaves: the constant behind the slot, not the slot.
         Schema::Literal(index) => hash_constant(py, index.get(), pool, hasher)?,
         Schema::Instance(index) => hash_constant(py, index.get(), pool, hasher)?,
@@ -503,7 +895,7 @@ pub(crate) fn hash_shape<H: Hasher>(
 fn hash_fields<H: Hasher>(
     py: Python<'_>,
     fields: &[Field],
-    pool: &[Py<PyAny>],
+    side: &Side<'_>,
     hasher: &mut H,
 ) -> PyResult<()> {
     // Ordered, because construction orders them by name.
@@ -511,7 +903,7 @@ fn hash_fields<H: Hasher>(
     for field in fields {
         field.name.hash(hasher);
         field.required.hash(hasher);
-        hash_shape(py, &field.schema, pool, hasher)?;
+        hash_shape(py, &field.schema, side, hasher)?;
     }
     Ok(())
 }
@@ -519,14 +911,14 @@ fn hash_fields<H: Hasher>(
 fn hash_attributes<H: Hasher>(
     py: Python<'_>,
     attributes: &[Attribute],
-    pool: &[Py<PyAny>],
+    side: &Side<'_>,
     hasher: &mut H,
 ) -> PyResult<()> {
     // Ordered, for the reason a record's fields are.
     attributes.len().hash(hasher);
     for attribute in attributes {
         attribute.name.hash(hasher);
-        hash_shape(py, &attribute.schema, pool, hasher)?;
+        hash_shape(py, &attribute.schema, side, hasher)?;
     }
     Ok(())
 }

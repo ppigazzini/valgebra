@@ -1097,13 +1097,12 @@ It is a **rendering**, not a serialization. A few forms cannot be written as an
 expression and do not read back, and [the API page](16-api.md) owns the list,
 each with the reason. A schema deeper than the renderer's own bound prints
 `<...>`, a mark chosen to be a syntax error, so a render that lost something
-cannot be read back as a schema that kept it. Three read back quietly as a
+cannot be read back as a schema that kept it. Two read back quietly as a
 different schema: a key whose name ends in `?`, which
 `TypedDict("TD", {"a?": int})` declares required and which renders as
 `{'a?': int, str: anything}`, the spelling of an optional `a`
-([above](#a-key-name-that-ends-in-a-question-mark)); a class met with a
+([above](#a-key-name-that-ends-in-a-question-mark)); and a class met with a
 declaration it did not make -- a sequence shape, or a protocol's record -- which
-prints as the class's name; and a union or meet of two `recursive` definitions,
-which prints them in one order whichever order built it. Do not parse a repr to
+prints as the class's name. Do not parse a repr to
 recover structure — see [inspection](09-inspection.md) for asking a schema
 questions instead.

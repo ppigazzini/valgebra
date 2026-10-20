@@ -17,6 +17,12 @@ order and cannot be sorted away. Composing two validators renumbers one side's
 slots, and every set it renumbers is put back in the order construction gives
 it, so a union of two spellings compares the terms it would have built from one.
 
+A recursive definition's index in its table is construction order too, one
+level up: `==` reads a reference through to the definition it names, pairing
+the two tables' definitions one to one, and composing two validators finds a
+definition the target already holds under that pairing rather than appending a
+copy.
+
 What this is not is a decision. `int | ~int` and `anything` denote one set and
 are not equal here; `is_equivalent` is the question for that, and the pair below
 that asserts it stays separate is the one that says so.
@@ -70,6 +76,12 @@ def _is_even(value: int) -> bool:
 def _is_odd(value: int) -> bool:
     """Give a second callable, for the row that says two predicates are two."""
     return value % 2 == 1
+
+
+# Two recursive schemas, for the rows that build their definitions in two
+# orders: each spelling numbers its definitions in the order it meets them.
+_NESTED = recursive(lambda t: union(None, [t]))
+_CHAIN = recursive(lambda t: union(int, {"n": t}))
 
 
 # Pairs that are one schema written two ways. Each row is a set, and the two
@@ -142,6 +154,20 @@ SAME = [
         intersection(_Point, complement(Literal[1]), complement(Literal[2])),
         intersection(_Point, complement(Literal[2]), complement(Literal[1])),
     ),
+    # Each spelling numbers its definitions in the order it meets them, so the
+    # pairs below hold one pair of definitions in two orders.
+    ("recursive members of a union", union(_NESTED, _CHAIN), union(_CHAIN, _NESTED)),
+    (
+        "recursive members of a meet",
+        intersection(_NESTED, _CHAIN),
+        intersection(_CHAIN, _NESTED),
+    ),
+    ("recursive fields", {"a": _NESTED, "b": _CHAIN}, {"b": _CHAIN, "a": _NESTED}),
+    (
+        "recursive members inside a list",
+        [union(_NESTED, _CHAIN)],
+        [union(_CHAIN, _NESTED)],
+    ),
 ]
 
 # Pairs that are *not* one schema, so the reading above cannot be doing it by
@@ -165,6 +191,13 @@ DIFFERENT = [
     ("a sequence is ordered", tuple[int, str], tuple[str, int]),
     ("the container", list[int], set[int]),
     ("a clause's value", {str: int}, {str: str}),
+    # Reading a reference through its index is reading it: the fields name
+    # the two definitions the other way round.
+    (
+        "recursive fields swapped",
+        {"a": _NESTED, "b": _CHAIN},
+        {"a": _CHAIN, "b": _NESTED},
+    ),
 ]
 
 
@@ -214,8 +247,19 @@ SWAPPED_SLOTS = [
 ]
 
 
+# Pairs whose two spellings number one pair of definitions in two orders.
+# Composing them places the second side's definitions in the first's table,
+# which finds each where it already is rather than appending a copy.
+SWAPPED_DEFINITIONS = [
+    ("recursive members", union(_NESTED, _CHAIN), union(_CHAIN, _NESTED)),
+    ("recursive fields", {"a": _NESTED, "b": _CHAIN}, {"b": _CHAIN, "a": _NESTED}),
+]
+
+
 @pytest.mark.parametrize(
-    ("name", "left", "right"), SWAPPED_SLOTS, ids=[row[0] for row in SWAPPED_SLOTS]
+    ("name", "left", "right"),
+    SWAPPED_SLOTS + SWAPPED_DEFINITIONS,
+    ids=[row[0] for row in SWAPPED_SLOTS + SWAPPED_DEFINITIONS],
 )
 def test_a_composition_folds_what_construction_folds(
     name: str, left: object, right: object

@@ -576,6 +576,53 @@ def test_a_relation_fits_the_documented_stack() -> None:
     ], result.stderr
 
 
+def test_a_comparison_fits_the_documented_stack() -> None:
+    """`==` over two definition tables numbered apart runs on a 1 MiB thread.
+
+    Two tables in one order are read index for index, as deep as one tree.
+    Numbered apart, the definitions are paired in the order construction
+    numbered them, and a body is read inside another only where a definition
+    names one it is nested in: a tower of fixpoints each naming the one around
+    it adds its bodies' depths up. Four levels of sixty unions are under the
+    comparison's bound and equal; eight ask more levels than it holds open,
+    which it answers as two schemas rather than by overflowing, and composing
+    that pair appends what it could not place. A tower written in one order
+    reads index for index, at any height.
+    """
+    result = _on_a_thread(
+        """
+        from typing import Literal
+
+        from valgebra import recursive, union
+
+        def tower(kind, levels, depth):
+            def make(k, outer):
+                def body(t):
+                    below = kind if k == levels - 1 else make(k + 1, t)
+                    inner = union(below, [t] if outer is None else [outer, t])
+                    for i in range(depth):
+                        inner = union(Literal[k, i], [inner])
+                    return inner
+                return recursive(body)
+            return make(0, None)
+
+        def run():
+            for levels in (4, 8):
+                ints, words = tower(int, levels, 60), tower(str, levels, 60)
+                first, second = union(ints, words), union(words, ints)
+                same_hash = hash(first) == hash(second)
+                print(first == second, same_hash, union(first, second) == first)
+            print(tower(int, 8, 60) == tower(int, 8, 60))
+        """
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "True True True",
+        "False True False",
+        "True",
+    ], result.stderr
+
+
 def test_a_recursive_value_at_the_unfolding_bound_still_validates() -> None:
     # The walk bound sits above what the published unfolding bound asks of a
     # linked list, so bounding the descent refuses only the shapes that would

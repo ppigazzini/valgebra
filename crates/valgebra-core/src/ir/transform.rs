@@ -330,8 +330,11 @@ impl Schema {
     ///
     /// An index the table drops cannot be reached from a schema this is called
     /// on -- that is what made it droppable -- so it is left as it stands rather
-    /// than guessed at.
-    fn renumbered(&self, table: &[Option<DefIx>]) -> Schema {
+    /// than guessed at. A set is sorted and deduplicated again where an index
+    /// in it moved, so a table that sends no two indices to one keeps every set
+    /// canonical (`a_renumbered_set_is_canonical`).
+    #[must_use]
+    pub fn renumbered(&self, table: &[Option<DefIx>]) -> Schema {
         if let Schema::Ref(index) = self {
             return match table.get(index.get()).copied().flatten() {
                 Some(moved) => Schema::Ref(moved),

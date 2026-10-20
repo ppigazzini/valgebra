@@ -51,6 +51,11 @@ pub(crate) const MAX_DEFINITIONS: usize = 128;
 /// whose sizes already sum past it is rejected, so the doubling stops early
 /// rather than exhausting memory.
 pub(crate) const MAX_SCHEMA_NODES: usize = 100_000;
+
+// The comparison's step bound is four times this one, written as a number in
+// `equality.rs` because this module reads that one.
+const _: () = assert!(crate::equality::MAX_COMPARISON_STEPS == 4 * MAX_SCHEMA_NODES);
+
 thread_local! {
     /// The self-reference tokens of the `recursive` definitions being built on
     /// this thread, innermost last.
@@ -941,11 +946,12 @@ impl Validator {
     /// trees, recursive definitions, and pooled constants all match, after the
     /// lattice laws construction settles. So `union(int, str)` equals
     /// `union(str, int)`, and `union(int, complement(int))` equals `anything`.
-    /// Past the laws it is *syntactic*: `union(bool, int)` is not `int`, since a
-    /// containment rewrites one into the other and no law does, and a union of
-    /// two `recursive` schemas carries their definitions in the order it was
-    /// written. `is_equivalent` compares the sets two schemas denote, whatever
-    /// their shape.
+    /// The order `recursive` definitions were met in is not a difference
+    /// either: a reference is read through to the definition it names, so
+    /// `union(r1, r2)` equals `union(r2, r1)`. Past the laws it is *syntactic*:
+    /// `union(bool, int)` is not `int`, since a containment rewrites one into
+    /// the other and no law does. `is_equivalent` compares the sets two schemas
+    /// denote, whatever their shape.
     ///
     /// A pooled constant is compared the way a literal reads one: same type and
     /// equal. Python's `==` runs across types, so equality alone makes
@@ -1000,16 +1006,16 @@ impl Validator {
     /// digest reads every constant. A fatal signal raised while computing it
     /// propagates, and nothing is kept.
     fn __hash__(&self, py: Python<'_>) -> PyResult<u64> {
-        use std::hash::{Hash, Hasher};
+        use std::hash::Hasher;
         if let Some(&digest) = self.hash.get() {
             return Ok(digest);
         }
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        crate::equality::hash_shape(py, &self.schema, &self.literals, &mut hasher)?;
-        self.definitions.len().hash(&mut hasher);
-        for definition in &self.definitions {
-            crate::equality::hash_shape(py, definition, &self.literals, &mut hasher)?;
-        }
+        let side = crate::equality::Side {
+            definitions: &self.definitions,
+            pool: &self.literals,
+        };
+        crate::equality::hash_shape(py, &self.schema, &side, &mut hasher)?;
         Ok(*self.hash.get_or_init(|| hasher.finish()))
     }
 }

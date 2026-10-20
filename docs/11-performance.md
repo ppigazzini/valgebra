@@ -994,8 +994,14 @@ keys of its own pool from the first relation it is a side of, so asking about a
 pair again reads neither pool. Relating two tables of ten thousand codes costs
 5.4 million instructions that way, 2.3 million of them the rules' own answer;
 reading the keys afresh for each question costs 15.0 million. Two validators
-built alike compare equal in one pass over their members, and a validator keeps
-its hash once computed, as a `frozenset` does.
+built alike compare equal in one pass over their members and their recursive
+definitions, each definition against the one at its own index. Two whose
+definitions were numbered apart take a second reading only where each holds two
+definitions or more and their bodies agree as multisets, and that reading pairs
+the definitions in the order construction numbered them before the trees are
+read, so each body is read once (`schemas_equal` in
+`crates/valgebra-py/src/equality.rs`). A validator keeps its hash once
+computed, as a `frozenset` does.
 
 **A refutation about a class reads the class.** It stands on a direct instance
 of the class, and what that instance can carry is read off the namespaces of
@@ -1028,6 +1034,12 @@ nothing behind them; `--binding-relation` relates two dataclasses through
 - **A transform hands back what it was given when nothing changed**, so opening
   a schema that holds no record, or shifting the half of a composition whose
   indices do not move, returns the caller's own handle.
+- **A composition moves the incoming half in one pass.** Its definitions are
+  found as a block where the table already holds them, or appended whole, and
+  either way one shift moves every reference to them in the pass that moves
+  its constants; only a placement that finds some of them and appends the rest
+  renumbers the tree a second time (`place_definitions` in
+  `crates/valgebra-py/src/build.rs`).
 - **A node built twice is one node.** A member list, field list, clause list or
   child built twice is one handle, held in a per-thread, direct-mapped table of
   weak references (`crates/valgebra-core/src/ir/intern.rs`). Sharing is

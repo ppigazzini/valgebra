@@ -262,13 +262,12 @@ record from its Python spelling is one of the shapes
 `scripts/perf_budget.json` owns the figure. `repr(validator)` gives an
 expression that rebuilds the schema, except for the forms
 [the API reference](16-api.md#operators-on-a-validator) lists, and the
-refusal says so. Three of them rebuild quietly: a **required record key whose
+refusal says so. Two of them rebuild quietly: a **required record key whose
 name ends in `?`**, which the dict literal cannot spell because every trailing
 `?` there marks the key optional ([schema language](03-schema-language.md)), so
-it rebuilds into the optional key; a **class met with a declaration it did not
-make**, which prints as the class's name and rebuilds as the class with its
-own; and a **union or meet of two `recursive` definitions**, which prints them
-in one order and rebuilds in that order. A schema carrying any of them is a
+it rebuilds into the optional key; and a **class met with a declaration it did
+not make**, which prints as the class's name and rebuilds as the class with its
+own. A schema carrying any of them is a
 schema to send as itself rather than as its `repr`.
 
 ```python

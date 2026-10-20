@@ -25,7 +25,11 @@ fn schemas_equal(
 
 /// [`super::hash_shape`] over constants that hash without raising.
 fn hash_shape<H: Hasher>(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], hasher: &mut H) {
-    super::hash_shape(py, schema, pool, hasher).expect("no constant here raises");
+    let side = Side {
+        definitions: &[],
+        pool,
+    };
+    super::hash_shape(py, schema, &side, hasher).expect("no constant here raises");
 }
 
 /// Build a schema from an annotation, with the pool it indexes.
@@ -379,6 +383,195 @@ fn a_record_and_a_definition_are_read_through_the_pool_too() {
     });
 }
 
+/// `kind | list[Ref(next)]`: a body naming a definition by its index.
+fn naming(kind: Schema, next: usize) -> Schema {
+    Schema::union([
+        kind,
+        Schema::list(valgebra_core::SeqShape::homogeneous(Schema::Ref(
+            valgebra_core::DefIx::new(next),
+        ))),
+    ])
+}
+
+/// Whether two schemas over two tables are one, with no pool.
+fn same_over(left: &Schema, left_table: &[Schema], right: &Schema, right_table: &[Schema]) -> bool {
+    Python::attach(|py| {
+        let side = |definitions| Side {
+            definitions,
+            pool: &[],
+        };
+        schemas_equal(py, left, &side(left_table), right, &side(right_table))
+    })
+}
+
+/// A definition's index is the order construction met it, so two tables
+/// holding one pair of definitions in two orders hold one schema. The first
+/// member of each union meets the other's first and pairs them, which their
+/// bodies refuse; the pair is taken back, or the right one could not be made.
+#[test]
+fn a_reference_is_read_through_the_number_its_table_gave_it() {
+    let reference = |index| Schema::Ref(valgebra_core::DefIx::new(index));
+    let both = Schema::Union(vec![reference(0), reference(1)].into());
+    let first = [naming(Schema::Int, 0), naming(Schema::Str, 1)];
+    let swapped = [naming(Schema::Str, 0), naming(Schema::Int, 1)];
+    assert!(same_over(&both, &first, &both, &swapped));
+    // A cycle through two definitions closes on the pair it began with.
+    let crossed = [naming(Schema::Int, 1), naming(Schema::Str, 0)];
+    let crossed_back = [naming(Schema::Str, 1), naming(Schema::Int, 0)];
+    assert!(same_over(
+        &reference(0),
+        &crossed,
+        &reference(1),
+        &crossed_back
+    ));
+    // And reading through is reading: a body that differs is a difference.
+    let other = [naming(Schema::Int, 0), naming(Schema::Bytes, 1)];
+    assert!(!same_over(&both, &first, &both, &other));
+    assert!(!same_over(
+        &reference(0),
+        &crossed,
+        &reference(0),
+        &crossed_back
+    ));
+    // Inside a body, where the definitions a member names are not paired yet:
+    // each side's first list member meets the other's and pairs what they name,
+    // which their bodies refuse, and that pair is taken back for the right one.
+    let lists = |first: usize, second: usize| {
+        Schema::union([
+            Schema::list(valgebra_core::SeqShape::homogeneous(reference(first))),
+            Schema::list(valgebra_core::SeqShape::homogeneous(reference(second))),
+        ])
+    };
+    let holding = [lists(1, 2), naming(Schema::Int, 1), naming(Schema::Str, 2)];
+    let holding_swapped = [lists(1, 2), naming(Schema::Str, 1), naming(Schema::Int, 2)];
+    assert!(same_over(
+        &reference(0),
+        &holding,
+        &reference(0),
+        &holding_swapped
+    ));
+}
+
+/// A map's clause is a candidate in a search, so what a refused clause paired
+/// is taken back with it: the first clause on each side meets the other's
+/// first, pairs their keys' definitions and is refused, and the clause that
+/// matches pairs the first definition with the second.
+#[test]
+fn a_refused_clause_takes_back_what_it_paired() {
+    let reference = |index| Schema::Ref(valgebra_core::DefIx::new(index));
+    let clauses = |first: Schema, second: Schema| {
+        Schema::keyed_map(
+            vec![],
+            vec![
+                MapClause {
+                    key: reference(0),
+                    value: first,
+                },
+                MapClause {
+                    key: reference(1),
+                    value: second,
+                },
+            ],
+        )
+    };
+    let first = [naming(Schema::Int, 0), naming(Schema::Str, 1)];
+    let swapped = [naming(Schema::Str, 0), naming(Schema::Int, 1)];
+    assert!(same_over(
+        &clauses(Schema::Int, Schema::Str),
+        &first,
+        &clauses(Schema::Str, Schema::Int),
+        &swapped,
+    ));
+    // A clause is both halves in a search as out of one: a clause whose key
+    // meets its pair and whose value does not is refused.
+    assert!(!same_over(
+        &clauses(Schema::Int, Schema::Str),
+        &first,
+        &clauses(Schema::Str, Schema::Str),
+        &swapped,
+    ));
+    // And inside a body, where the keys' definitions are not paired yet.
+    let keyed = |first: Schema, second: Schema| {
+        Schema::keyed_map(
+            vec![],
+            vec![
+                MapClause {
+                    key: reference(1),
+                    value: first,
+                },
+                MapClause {
+                    key: reference(2),
+                    value: second,
+                },
+            ],
+        )
+    };
+    let holding = [
+        keyed(Schema::Int, Schema::Str),
+        naming(Schema::Int, 1),
+        naming(Schema::Str, 2),
+    ];
+    let holding_swapped = [
+        keyed(Schema::Str, Schema::Int),
+        naming(Schema::Str, 1),
+        naming(Schema::Int, 2),
+    ];
+    assert!(same_over(
+        &reference(0),
+        &holding,
+        &reference(0),
+        &holding_swapped
+    ));
+}
+
+/// Two tables whose bodies disagree as multisets have no renaming to search
+/// for: the bodies are digested with their references read as references,
+/// so a permutation agrees and a body of another shape does not.
+#[test]
+fn a_renaming_needs_the_bodies_to_agree() {
+    Python::attach(|py| {
+        let side = |definitions| Side {
+            definitions,
+            pool: &[],
+        };
+        let first = [naming(Schema::Int, 0), naming(Schema::Str, 1)];
+        let swapped = [naming(Schema::Str, 0), naming(Schema::Int, 1)];
+        let other = [naming(Schema::Int, 0), naming(Schema::Bytes, 1)];
+        let agree = |a, b| super::same_bodies(py, &side(a), &side(b)).expect("no constant");
+        assert!(agree(&first, &swapped));
+        assert!(!agree(&first, &other));
+        assert!(!agree(&first, &first[..1]));
+    });
+}
+
+/// The pairing is one to one: two definitions on one side never stand for one
+/// on the other, though each alone equals it, so a renaming is a renaming.
+#[test]
+fn two_definitions_never_stand_for_one() {
+    let reference = |index| Schema::Ref(valgebra_core::DefIx::new(index));
+    let record = |x: usize, y: usize| {
+        Schema::record(
+            vec![
+                Field {
+                    name: "x".into(),
+                    required: true,
+                    schema: reference(x),
+                },
+                Field {
+                    name: "y".into(),
+                    required: true,
+                    schema: reference(y),
+                },
+            ],
+            valgebra_core::Openness::Closed,
+        )
+    };
+    let twice = [naming(Schema::Int, 0), naming(Schema::Int, 1)];
+    let once = [naming(Schema::Int, 0)];
+    assert!(!same_over(&record(0, 1), &twice, &record(0, 0), &once));
+    assert!(!same_over(&record(0, 0), &once, &record(0, 1), &twice));
+}
+
 /// The hash reads the *constant*, never the slot it sits in, and never the
 /// order of a list whose order is not part of the schema.
 #[test]
@@ -424,12 +617,27 @@ fn the_hash_is_blind_to_the_slot_and_to_the_order() {
             digest(&Schema::set(Schema::Int), &[]),
             digest(&Schema::set(Schema::Str), &[])
         );
-        // A reference names a definition, and two references to different ones
-        // are different shapes.
-        assert_ne!(
-            digest(&Schema::Ref(valgebra_core::DefIx::new(0)), &[]),
-            digest(&Schema::Ref(valgebra_core::DefIx::new(1)), &[])
-        );
+        // A reference hashes as the definition it names, never by its index: two
+        // tables numbering one definition apart hash it alike, and two
+        // references to different definitions hash apart.
+        let through = |index: usize, definitions: &[Schema]| {
+            let mut hasher = DefaultHasher::new();
+            let side = Side {
+                definitions,
+                pool: &[],
+            };
+            super::hash_shape(
+                py,
+                &Schema::Ref(valgebra_core::DefIx::new(index)),
+                &side,
+                &mut hasher,
+            )
+            .expect("no constant here raises");
+            hasher.finish()
+        };
+        let table = [Schema::Int, Schema::Str];
+        assert_eq!(through(0, &table), through(1, &[Schema::Str, Schema::Int]));
+        assert_ne!(through(0, &table), through(1, &table));
         // An attribute record's attributes are its shape: a name and a schema
         // each.
         let attributes = |name: &str, schema: Schema| {
@@ -574,7 +782,11 @@ fn a_fatal_signal_from_a_constant_propagates_and_an_ordinary_one_folds() {
         };
         let digest = |pool: &[Py<PyAny>]| {
             let mut hasher = DefaultHasher::new();
-            super::hash_shape(py, &literal, pool, &mut hasher).map(|()| hasher.finish())
+            let side = Side {
+                definitions: &[],
+                pool,
+            };
+            super::hash_shape(py, &literal, &side, &mut hasher).map(|()| hasher.finish())
         };
 
         let (left, right) = (loud("KeyboardInterrupt()"), loud("KeyboardInterrupt()"));

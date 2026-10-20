@@ -149,6 +149,24 @@ fn built(py: Python<'_>, expression: &str) -> PyResult<String> {
     render(py, &schema, pool.items(), &defs)
 }
 
+/// Two aliases spelled alike name one definition, so a union of them is one
+/// member, as a union of one schema with itself is.
+#[test]
+fn an_alias_definition_already_held_is_that_definition() {
+    Python::attach(|py| {
+        if !Since(12).met(py) {
+            return;
+        }
+        let joined = "(lambda ns: (exec('type Left = int | list[Left]\\n\
+                      type Right = int | list[Right]', ns), \
+                      ns['Left'] | ns['Right'])[1])({})";
+        assert_eq!(
+            built(py, joined).expect("the union builds"),
+            "recursive(lambda X: int | list[X])"
+        );
+    });
+}
+
 /// Every spelling the frontend dispatches on, and the schema it must reach.
 ///
 /// One row per arm rather than per feature: a mutant that folds two arms

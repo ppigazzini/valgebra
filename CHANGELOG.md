@@ -55,6 +55,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a complement names the set it excludes
 - fix: a record's name survives open or close by what it says alone
 - fix: a missing key or attribute is spelled as repr spells it
+- fix: two numberings of one set of definitions are one schema
 
 -->
 
@@ -195,6 +196,26 @@ answer of its own, or a repair to a change not yet released.
   send two of them past each other, and a refinement's constraints and a map's
   clauses kept the order they held. Each set a composition renumbers is put
   back in the order construction gives it.
+- **Two spellings that meet their recursive definitions in two orders are one
+  schema.** A validator numbers its `recursive` definitions in the order
+  construction meets them, and `==` and `hash` read a reference by that
+  number: `union(r1, r2)` and `union(r2, r1)`, a record `{"a": r1, "b": r2}`
+  against its fields written the other way round, and every schema holding
+  either compared unequal and hashed apart, though `is_equivalent` called them
+  one set and `repr` printed them alike, so the second spelling's `repr` read
+  back as the first and not as itself. Composing the two kept a copy of each
+  definition: `ab | ba` held four members, and `ab | ~ba` stood unfolded beside
+  an `ab` equal to `ba`. In 0.0.10 through 0.0.18, where the algebra page gave
+  the order of a set's members as no difference; 0.0.17 and 0.0.18 called the
+  union two schemas, and the record was never one. Two PEP 695 aliases spelled
+  alike were two definitions too, in 0.0.10 through 0.0.18: `A | B` held two
+  members and did not equal `A`. A reference is read through to the
+  definition it names, the two tables' definitions paired one to one in the
+  order construction numbered them; composing finds a definition the target
+  already holds under that pairing rather than appending a copy, and an alias
+  definition the table already holds is that definition. A comparison that
+  would need more than the depth or the steps the limits page states answers
+  no, as it did.
 - **One schema prints one way, whatever order its sets were written in.** A
   union's literals printed in one order however they were written, and every
   other set printed in the order its constants or classes were first named:
@@ -205,8 +226,7 @@ answer of its own, or a repair to a change not yet released.
   order their renderings sort in, as a union's literals did, so a union of
   classes written `Dog | Cat` prints `Cat | Dog`. The members of different
   kinds keep the order they had, and every rendering reads back as the schema
-  it came from but for a union or a meet of two `recursive` definitions, which
-  prints them in one order whichever order built it.
+  it came from.
 - **A required key or a repeated element refutes beside a field the rules
   cannot read.** `{"a?": X} <= {"a": Y}` answered `undecided` wherever the
   field's types were ones no rule reads, such as two predicate refinements,

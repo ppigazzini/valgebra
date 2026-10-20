@@ -239,8 +239,11 @@ symmetry:
    enum, a protocol. Taken before the typing introspection below because a type
    never has a typing origin, so this skips a `get_origin` call per scalar node.
 6. **An exact `bool`, `int`, `float`, `str` or `bytes`** — a literal of itself.
-7. **An already-compiled validator**, whose pool is interned into this one.
-   Both after the type branch, because a record's fields are types and a type
+7. **An already-compiled validator**, whose pool is interned into this one and
+   whose definitions are placed in this one's table: a definition the table
+   already holds, up to a renaming of the definitions, is that definition
+   (`place_definitions` in `build.rs`), and the rest are appended. Both after
+   the type branch, because a record's fields are types and a type
    is answered there for a flag test.
 8. `Annotated[T, ...]` — the refinement metadata.
 9. Anything with a typing origin — `list[int]`, `dict[K, V]`, `tuple[...]`,

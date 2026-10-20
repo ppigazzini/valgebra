@@ -115,6 +115,17 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   without the bound each would outrun the stack. A level costs about 1 KiB on the
   shipped wheels, so the deepest relation fits in half of a 1 MiB thread, and
   the release smoke runs it there.
+- **Comparison depth.** `==` reads two definition tables numbered in one order
+  index for index, as deep as one tree. Numbered apart, it pairs the
+  definitions in the order construction numbered them and reads a body inside
+  another only where a definition names one it is nested in, so a tower of
+  fixpoints each naming the one around it adds up its bodies' depths. It holds
+  at most 384 levels open and opens at most four times the node bound in all,
+  and past either answers `False` -- two schemas, the direction it errs in --
+  where `is_equivalent` still answers the set question. Composing two such
+  validators appends what it could not place, so their union holds both copies.
+  Held at the bound, a comparison takes about 460 KiB of stack on the shipped
+  wheels, inside a 1 MiB thread.
 - **Self-reference.** A value that contains itself is caught by an
   object-identity guard and fails with `recursion_loop` rather than looping
   forever.

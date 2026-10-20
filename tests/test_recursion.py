@@ -333,6 +333,21 @@ def test_two_aliases_may_name_each_other() -> None:
     assert not branch.is_valid([1, "x"])
 
 
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="PEP 695 type aliases")
+def test_two_aliases_spelled_alike_are_one_definition() -> None:
+    # Each alias binds a fixpoint of its own, and two that spell one body name
+    # one definition, so a union of them is one member, as a union of one
+    # schema with itself is; and one alias read twice in a schema is one
+    # definition, as it is when the two reads are composed.
+    source = "type Left = int | list[Left]\ntype Right = int | list[Right]"
+    left, right = _alias(source, "Left"), _alias(source, "Right")
+    joined = Validator(left | right)  # ty: ignore[unsupported-operator]
+    assert joined == Validator(left)
+    assert repr(joined) == "recursive(lambda X: int | list[X])"
+    twice = Validator(list[left] | dict[str, left])  # ty: ignore[invalid-type-form]
+    assert twice == union(list[left], dict[str, left])  # ty: ignore[invalid-type-form]
+
+
 def test_a_fixpoint_is_decided_against_the_kinds_its_body_admits() -> None:
     """A meet with a kind the body never names is empty, and provably so.
 

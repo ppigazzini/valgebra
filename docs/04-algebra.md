@@ -362,22 +362,26 @@ assert intersection(int, Validator(anything)) == Validator(int)  # dually
 assert intersection(int, complement(int)) == Validator(nothing)  # the complement law
 ```
 
-What `==` does not see is a relation that needs a *containment*: `bool` is below
-`int`, so `union(bool, int)` denotes the set `int` does, and no law rewrites one
-into the other. Nor does it see past the order recursive definitions were added
-in: a union of two `recursive` schemas carries both definitions in a table, in
-the order the union was written, so `union(r1, r2)` and `union(r2, r1)` are one
-set and two schemas by `==` and by `hash`. Ask `is_equivalent` "do these mean
-the same set?" and `==` "are these the same schema?".
+A recursive schema's definitions sit in a table, numbered in the order
+construction met them, and `==` reads a reference through to the definition it
+names rather than by its number -- a `recursive` definition binds its back edge,
+and a number is that binder's name. So the order two recursive schemas are
+written in is no more a difference than the order of two classes:
 
 ```python
-from valgebra import recursive, union
+from valgebra import Validator, recursive, union
 
 r1 = recursive(lambda t: union(int, [t, ...]))
 r2 = recursive(lambda t: union(str, {"next": t}))
-assert union(r1, r2).is_equivalent(union(r2, r1))
-assert union(r1, r2) != union(r2, r1)  # the definitions are in another order
+assert union(r1, r2) == union(r2, r1)
+assert Validator({"a": r1, "b": r2}) == Validator({"b": r2, "a": r1})
+assert union(union(r1, r2), union(r2, r1)) == union(r1, r2)  # one pair, not two
 ```
+
+What `==` does not see is a relation that needs a *containment*: `bool` is below
+`int`, so `union(bool, int)` denotes the set `int` does, and no law rewrites one
+into the other. Ask `is_equivalent` "do these mean the same set?" and `==` "are
+these the same schema?".
 
 ```python
 from valgebra import Validator, union

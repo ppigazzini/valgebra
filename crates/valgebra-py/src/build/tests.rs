@@ -29,34 +29,146 @@ fn intern_deduplicates_by_identity() {
     });
 }
 
-/// A definition block is placed once: a block already present at some offset
-/// is reused at that offset, shifted references included, and a new one is
-/// appended at the end.
+/// Where [`place_definitions`] put each definition, read as a table.
+fn place(inner: &[Schema], lit_map: &[usize], defs: &mut Vec<Schema>) -> Vec<Option<DefIx>> {
+    match place_definitions(inner, lit_map, defs) {
+        Placed::Shifted(offset) => (offset..offset + inner.len())
+            .map(|at| Some(DefIx::new(at)))
+            .collect(),
+        Placed::Renamed(table) => table,
+    }
+}
+
+/// A definition is placed once: one the list already holds, up to a renaming
+/// of the definitions, is reused where it is, its references moved with it,
+/// and a new one is appended.
 #[test]
-fn a_definition_block_is_placed_once() {
-    let body = |index: usize| {
+fn a_definition_is_placed_once() {
+    let placed = |at: &[usize]| -> Vec<Option<DefIx>> {
+        at.iter().map(|&index| Some(DefIx::new(index))).collect()
+    };
+    // `kind | list[Ref(next)]`: a body that names a definition by index.
+    let body = |kind: Schema, next: usize| {
         Schema::union([
-            Schema::Int,
-            Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(index)))),
+            kind,
+            Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(next)))),
         ])
     };
     let mut defs = Vec::new();
 
-    // Into an empty list: offset zero.
-    assert_eq!(place_definitions(&[Schema::Str], &[], &mut defs), 0);
+    // Into an empty list: where it starts.
+    assert_eq!(place(&[Schema::Str], &[], &mut defs), placed(&[0]));
     assert_eq!(defs, vec![Schema::Str]);
 
-    // A block whose body names itself is shifted to the offset it lands at.
-    assert_eq!(place_definitions(&[body(0)], &[], &mut defs), 1);
-    assert_eq!(defs, vec![Schema::Str, body(1)]);
+    // A body that names itself is renumbered to the index it lands at.
+    let own = body(Schema::Int, 0);
+    assert_eq!(
+        place(core::slice::from_ref(&own), &[], &mut defs),
+        placed(&[1])
+    );
+    assert_eq!(defs, vec![Schema::Str, body(Schema::Int, 1)]);
 
-    // The same block again is found where it already is, and nothing grows.
-    assert_eq!(place_definitions(&[body(0)], &[], &mut defs), 1);
+    // The same definition again is found where it already is.
+    assert_eq!(place(&[own], &[], &mut defs), placed(&[1]));
     assert_eq!(defs.len(), 2);
 
-    // A block that matches nowhere is appended after the last one.
-    assert_eq!(place_definitions(&[Schema::Bytes], &[], &mut defs), 2);
-    assert_eq!(defs, vec![Schema::Str, body(1), Schema::Bytes]);
+    // A definition that matches nowhere is appended after the last one.
+    assert_eq!(place(&[Schema::Bytes], &[], &mut defs), placed(&[2]));
+    assert_eq!(defs, vec![Schema::Str, body(Schema::Int, 1), Schema::Bytes]);
+
+    // Two definitions naming each other, then the same two in the other order:
+    // the second block is the first under a renaming, and nothing grows.
+    let pair = [body(Schema::Int, 1), body(Schema::Bytes, 0)];
+    assert_eq!(place(&pair, &[], &mut defs), placed(&[3, 4]));
+    let swapped = [body(Schema::Bytes, 1), body(Schema::Int, 0)];
+    assert_eq!(place(&swapped, &[], &mut defs), placed(&[4, 3]));
+    assert_eq!(defs.len(), 5);
+
+    // A block one of whose definitions is present places that one where it is
+    // and appends the other, renumbered to name it.
+    let half = [body(Schema::Int, 0), body(Schema::Float, 0)];
+    assert_eq!(place(&half, &[], &mut defs), placed(&[1, 5]));
+    assert_eq!(defs.get(5), Some(&body(Schema::Float, 1)));
+
+    // Two it lacks are appended one after the other, each renumbered to name
+    // the index the other lands at.
+    let mostly_new = [
+        body(Schema::Int, 0),
+        body(Schema::NoneType, 2),
+        body(Schema::Bool, 1),
+    ];
+    let mut grown = defs.clone();
+    assert_eq!(place(&mostly_new, &[], &mut grown), placed(&[1, 6, 7]));
+    assert_eq!(
+        grown.get(6..),
+        Some(&[body(Schema::NoneType, 7), body(Schema::Bool, 6)][..])
+    );
+
+    // A constant is read by the slot it is interned to: one the list's
+    // definition names is that definition, and another is a new one.
+    let literal = |slot: usize| Schema::Literal(ConstIx::new(slot));
+    let holding = body(literal(0), 0);
+    assert_eq!(
+        place(core::slice::from_ref(&holding), &[3], &mut defs),
+        placed(&[6])
+    );
+    assert_eq!(defs.get(6), Some(&body(literal(3), 6)));
+    assert_eq!(
+        place(core::slice::from_ref(&holding), &[3], &mut defs),
+        placed(&[6])
+    );
+    assert_eq!(place(&[holding], &[4], &mut defs), placed(&[7]));
+}
+
+/// A block the list already holds is found at its offset without reading one
+/// body inside another. A tower whose definitions each name the next, nested
+/// past what a comparison holds open, is found where it is; looked for one
+/// definition at a time, it would be refused at the depth bound and copied.
+#[test]
+fn a_block_already_held_is_found_at_its_offset() {
+    let nested = |next: usize| {
+        let mut body = Schema::Ref(DefIx::new(next));
+        for _ in 0..130 {
+            body = Schema::list(SeqShape::homogeneous(body));
+        }
+        body
+    };
+    let tower: Vec<Schema> = (0..4).map(|at| nested((at + 1) % 4)).collect();
+    let placed = |start: usize| -> Vec<Option<DefIx>> {
+        (start..start + 4).map(|at| Some(DefIx::new(at))).collect()
+    };
+    let mut defs = Vec::new();
+    assert_eq!(place(&tower, &[], &mut defs), placed(0));
+    assert_eq!(place(&tower, &[], &mut defs), placed(0));
+    assert_eq!(defs.len(), 4);
+    let mut shifted = vec![Schema::Str];
+    assert_eq!(place(&tower, &[], &mut shifted), placed(1));
+    assert_eq!(place(&tower, &[], &mut shifted), placed(1));
+    assert_eq!(shifted.len(), 5);
+}
+
+/// A body about to be added is the held definition it equals once its
+/// references to itself name that one, and none where no held one is.
+#[test]
+fn a_body_already_held_is_found_under_its_own_name() {
+    let body = |kind: Schema, next: usize| {
+        Schema::union([
+            kind,
+            Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(next)))),
+        ])
+    };
+    let defs = [Schema::Str, body(Schema::Int, 1), body(Schema::Bytes, 2)];
+    let at = DefIx::new(defs.len());
+    assert_eq!(
+        held_already(&body(Schema::Int, 3), at, &defs),
+        Some(DefIx::new(1))
+    );
+    assert_eq!(
+        held_already(&body(Schema::Bytes, 3), at, &defs),
+        Some(DefIx::new(2))
+    );
+    assert_eq!(held_already(&body(Schema::Float, 3), at, &defs), None);
+    assert_eq!(held_already(&Schema::Str, at, &defs), Some(DefIx::new(0)));
 }
 
 /// The variant a node is, by the name the enum gives it.

@@ -65,8 +65,8 @@ the dunder behind a type slot and that is what introspection would show.
 | --- | --- | --- |
 | `obj in validator` | `__contains__` | Membership: the operator form of `is_valid`, so a check reads as the set test it is. |
 | `a \| b` | `__or__`, `__ror__` | The union of the two schemas. `\|` is the operator typing already uses for a union; intersection and complement have no typing operator and stay named calls. The reflected form is what makes `None \| validator` work. |
-| `a == b` | `__eq__` | Equality of the **normal form**: the schema trees, recursive definitions, and pooled constants all match, after the lattice laws construction settles — so a difference of member order, of a repeat, or of an identity is not one, except the order a union adds `recursive` definitions in: `union(r1, r2)` and `union(r2, r1)` are two schemas ([the algebra page](04-algebra.md#subtyping-equivalence-and-emptiness)). Ask `is_equivalent` for the semantic question — whether two schemas denote the same set, which needs a containment rather than a law. |
-| `hash(validator)` | `__hash__` | Consistent with `==`, so a validator is a dict key or a set member. It digests the schema shape, the definitions and each pooled constant's own hash, so `Literal[1]` and `Literal[2]` hash apart; a constant with no hash contributes nothing, so an unhashable constant cannot break it. Computed once and kept, as a `frozenset` keeps its hash. |
+| `a == b` | `__eq__` | Equality of the **normal form**: the schema trees, recursive definitions, and pooled constants all match, after the lattice laws construction settles — so a difference of member order, of a repeat, or of an identity is not one, and neither is the order the `recursive` definitions were met in: a reference is read through to the definition it names ([the algebra page](04-algebra.md#subtyping-equivalence-and-emptiness)). Ask `is_equivalent` for the semantic question — whether two schemas denote the same set, which needs a containment rather than a law. |
+| `hash(validator)` | `__hash__` | Consistent with `==`, so a validator is a dict key or a set member. It digests the schema shape, each definition a reference names, and each pooled constant's own hash, so `Literal[1]` and `Literal[2]` hash apart; a constant with no hash contributes nothing, so an unhashable constant cannot break it. Computed once and kept, as a `frozenset` keeps its hash. |
 | `repr(validator)` | `__repr__` | A rendering of the schema as an expression that builds it. |
 
 `copy.copy` and `copy.deepcopy` both return an equivalent validator; a validator
@@ -83,8 +83,8 @@ between two dicts is Python's merge, and a key and a constant by Python's own
 prints and read back. A refinement marker prints by its bare name, `Ge(0)` rather than
 `at.Ge(0)`, so that session imports each marker by name, as
 `from annotated_types import Ge` does, rather than through the
-`import annotated_types as at` these pages write. Eight things it cannot render
-as an expression, and three of them read back quietly: a
+`import annotated_types as at` these pages write. Seven things it cannot render
+as an expression, and two of them read back quietly: a
 **class**, which is an object rather than syntax and appears as its name -- or
 as `instance_of(Name)` where it stands alone and its name would read back as
 the class met with the fields it declares; a
@@ -110,10 +110,7 @@ declaration it did not make**, the second quiet one:
 `intersection(list[int], Plain)` as `Plain`, and `intersection(Plain, P)` for a
 protocol `P` as `Plain`, because a `NamedTuple` and a dataclass are built as
 exactly that meet and the schema does not record whether the shape or the
-record was the class's own declaration; a **union or meet of two `recursive`
-definitions**, the third quiet one: it prints its definitions in one order
-whichever order built it, so `union(r2, r1)` reads back as `union(r1, r2)`,
-equivalent and unequal under `==`;
+record was the class's own declaration;
 and a **schema past the renderer's own depth bound**, which gives up and prints
 `<...>`. The bound is
 within reach: no *single* annotation can be written deep enough, since the

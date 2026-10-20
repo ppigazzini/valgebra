@@ -129,3 +129,56 @@ fn a_permutation_is_one_pass_under_a_digest_that_separates_the_members() {
     assert!(matched.expect("nothing raises"));
     assert_eq!(SCANNED.with(Cell::get), items.len());
 }
+
+/// A comparison of two tables with no pool, reading constants by slot.
+fn comparison<'a>(left: &'a Side<'a>, right: &'a Side<'a>) -> Comparison<'a, 'static> {
+    Comparison {
+        constants: Constants::BySlot,
+        left,
+        right,
+        renaming: RefCell::new(Renaming::between(left, right)),
+        depth: Cell::new(0),
+        steps: Cell::new(0),
+        searching: true,
+    }
+}
+
+/// A comparison opens levels up to its depth bound and no further, closes each
+/// one it opened, and refuses a level once it has opened its step bound in all.
+#[test]
+fn a_comparison_holds_its_depth_and_its_steps() {
+    let bare = Side {
+        definitions: &[],
+        pool: &[],
+    };
+    let cx = comparison(&bare, &bare);
+    let levels: Vec<Level<'_>> = (0..MAX_COMPARISON_DEPTH)
+        .map(|_| cx.descend().expect("a level under the depth bound opens"))
+        .collect();
+    assert!(
+        cx.descend().is_none(),
+        "the level past the depth bound is refused"
+    );
+    drop(levels);
+    assert_eq!(cx.depth.get(), 0, "every level opened is closed");
+    cx.steps.set(MAX_COMPARISON_STEPS - 1);
+    assert!(cx.descend().is_some(), "the last step opens");
+    assert!(cx.descend().is_none(), "and the one past it does not");
+}
+
+/// The identity pairs two tables only where they are as long, each definition
+/// with the one at its own index and with no other.
+#[test]
+fn the_identity_pairs_tables_of_one_length_index_for_index() {
+    let two = [Schema::Int, Schema::Str];
+    let one = [Schema::Int];
+    let side = |definitions| Side {
+        definitions,
+        pool: &[],
+    };
+    assert!(Renaming::identity(&side(&two), &side(&one)).is_none());
+    let mut identity = Renaming::identity(&side(&two), &side(&two)).expect("one length");
+    assert!(matches!(identity.pair(1, 1), Paired::Before));
+    assert!(matches!(identity.pair(0, 1), Paired::Apart));
+    assert!(matches!(identity.pair(1, 0), Paired::Apart));
+}
