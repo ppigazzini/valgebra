@@ -1107,7 +1107,8 @@ class _Point:
 @dataclasses.dataclass
 class _Labeled(_Point):
     label: str
-    x: bool
+    # Narrowed on purpose: the redeclared field is the one the test reads.
+    x: bool  # ty: ignore[invalid-mutable-override]
 
 
 def test_a_dataclass_reads_the_annotations_of_every_base() -> None:

@@ -62,8 +62,8 @@ dev = [
     "pyright>=1.1.414",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
-    "ruff>=0.17.0",
-    "ty>=0.0.86",
+    "ruff>=0.17.1",
+    "ty>=0.0.89",
 ]
 # The wall-clock harness and the external comparison points: the libraries the
 # benchmarks time valgebra against, and the same libraries the boundary suite
