@@ -182,6 +182,13 @@ training too, counting the comparison gate's shapes on the PGO wheel built at a
 change and at its base (`perf_gate.py --profiled`): built with the nested list's
 training taken out, that shape reads 50.89% more instructions.
 
+A record inside a list is laid out by the lists of records the workload reads,
+and weighted lightly, its reading moves with code beside it that it never runs:
+trained a quarter as often, on records of scalar fields alone, a list of two
+hundred records whose record holds a list reads 1.3% more instructions on the
+profiled wheel. So the workload reads its lists of records at the weight a
+document's records are read with, one of them of records holding a list.
+
 A parsed JSON array of records is read through a general loop of its own, and
 untrained it is laid out by chance too: two builds of one source read the
 comparison gate's document 10% apart in instructions, and a source path one

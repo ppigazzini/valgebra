@@ -277,9 +277,23 @@ def _containers() -> None:
         name: str
         age: int
 
+    # A list of records is read through the general loop by these two, so they
+    # carry the weight a document's records do, and the second has a field that
+    # is a list, as a payload's records have: trained a quarter as often and
+    # with scalar fields alone, a list of records reads 1.3% more by count, its
+    # record laid out around the paths beside it.
+    class Member(TypedDict):
+        id: int
+        name: str
+        tags: list[str]
+
     people = Validator(list[Person])
     crowd = [{"name": "Ada", "age": n} for n in range(20)]
-    _run(people.is_valid, [crowd, [*crowd, {"name": 5, "age": 1}]], 1000)
+    _run(people.is_valid, [crowd, [*crowd, {"name": 5, "age": 1}]], 4000)
+    members = Validator(list[Member])
+    roster = [{"id": n, "name": "Ada", "tags": ["a", "b"]} for n in range(20)]
+    refused = {"id": "x", "name": "Ada", "tags": []}
+    _run(members.is_valid, [roster, [*roster, refused]], 1000)
     deep_schema: object = int
     deep_value: object = 0
     for _ in range(25):
