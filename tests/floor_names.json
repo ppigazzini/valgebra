@@ -565,10 +565,16 @@
     "collections": {
       "since": "3.10"
     },
+    "concurrent": {
+      "since": "3.10"
+    },
     "contextlib": {
       "since": "3.10"
     },
     "copy": {
+      "since": "3.10"
+    },
+    "ctypes": {
       "since": "3.10"
     },
     "dataclasses": {
@@ -622,6 +628,9 @@
     "pickle": {
       "since": "3.10"
     },
+    "platform": {
+      "since": "3.10"
+    },
     "re": {
       "since": "3.10"
     },
@@ -635,6 +644,9 @@
       "since": "3.10"
     },
     "statistics": {
+      "since": "3.10"
+    },
+    "struct": {
       "since": "3.10"
     },
     "subprocess": {

@@ -1242,3 +1242,71 @@ uv run --no-sync python scripts/perf_gate.py --update  # the core count; --decis
 uv run --no-sync --group bench python scripts/compare_gate.py --update  # one run's ratios, a reading for a window
 uv run --no-sync python scripts/compare_gate.py --record-window WINDOW.json  # arms the ratchet from the lane's window
 ```
+
+## Reading one build against another
+
+The gates above each hold one reading of one build against its base.
+`scripts/perf_inspect.py` reads any build against any other -- a release on
+PyPI, a wheel, or a revision built as the release builds it -- over the shapes
+`scripts/perf_shapes.py` holds, on the interpreter it is given, and says which
+of three readings each figure is:
+
+| reading | what it counts | what it cannot see |
+|---|---|---|
+| `count` | instructions per call under cachegrind, as the difference of two runs, in the instruction gate's environment | a cache, the branch predictor, the alignment of a loop: time |
+| `cycles` | the processor's own cycles, instructions, branch mispredicts and frontend stalls per call, through `perf_event_open`, the environments interleaved | a difference under the spread between two readings of one build, and any machine whose kernel gives no counter |
+| `symbols` | the functions, or with line tables the source lines, that spend the instructions one build spends over the other; with `--per N`, the instructions run `N` times a call, disassembled | time, as `count` cannot |
+
+```bash
+uv run --no-sync python scripts/perf_inspect.py env last --python "$(uv python find --managed-python 3.14)" --release 0.0.19
+uv run --no-sync python scripts/perf_inspect.py env head --python "$(uv python find --managed-python 3.14)" --build
+uv run --no-sync python scripts/perf_inspect.py count last head
+uv run --no-sync python scripts/perf_inspect.py cycles last head --shapes deep records
+uv run --no-sync python scripts/perf_inspect.py symbols last head --shape deep --per 25
+```
+
+`env` makes an environment under `target/perf-inspect/` holding the standard
+library and one valgebra; `--build` builds the checkout, or the revision it
+names, with the training's hash seed fixed, from a directory whose path is one
+length whatever the tree, so two builds differ in their sources and nothing
+else. Every reading is against the first environment named. `count` exits 1
+where `--tolerance` is given and a shape rose past it; every reading exits 2
+where it cannot be taken. It needs valgrind, `uv` for `--release`, and for
+`--build` the `llvm-tools` component the PGO build needs.
+
+**Read a change against the last release on every interpreter the wheels
+ship.** Each interpreter's wheel is trained and laid out on its own, so a
+reading on one says nothing about another: one release read a list nested
+twenty-five deep 3.1% dearer than the release before it on 3.12 and 0.2% on
+3.14, and a hundred-entry `dict[str, int]` 5.4% dearer on 3.14t and 2% to 3%
+cheaper on every build with a global lock. One `env` per interpreter and side, and one
+`count` per pair, is the reading; a survey of one interpreter is a reading of
+that one.
+
+**Decide on the count, and confirm in cycles.** A count is deterministic: two
+builds of one source and one toolchain read it to the instruction, so a
+difference is the code's. It does not predict time on every shape: that nested list
+read 0.2% more instructions in one release than in the one before it, and 4%
+more cycles. `cycles` reads what the
+count cannot and carries the machine's noise, so it starts each round at the
+next environment, prints the median of the rounds, and beside it the rounds in
+which each environment read slower: a cell inside the spread of the same build
+read twice has shown nothing, and on the machine above that spread is about 2%,
+4% on a shape of a few hundred cycles.
+
+**Read a change in cycles against its base built the same way.** A base
+`--build` made differs from the change in its sources alone; a release also
+differs in the container and the path it was built in, which the layout
+follows. Against a release, the count is the reading that holds.
+
+**`symbols` names where, not why.** A release wheel is stripped, so it names
+the extension's functions only between builds `--build` made; against a
+release it names the C library's alone, which is where an allocator's luck
+shows -- a `realloc` that copies, read as `memcpy`. A function inlined into
+another reads as its caller, which is why `--per` reads past functions to the
+instructions themselves. `--lines` adds line tables and leaves the code as it is -- a list
+nested twenty-five deep counts the same with them and without -- while the
+length of the path a tree is built from moves it: the same tree built from a
+path two characters longer read that list 1% cheaper. `--build` unpacks every
+tree at one length for that reason. `tests/test_perf_inspect.py` holds the
+readers of both output formats to hand-written files.

@@ -147,6 +147,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | competitive ratio | `scripts/perf_compare.json` | `uv run --no-sync --group bench python scripts/compare_gate.py` |
 | what a profile buys, per shape | the two wheels a run builds | `uv run --no-sync --group bench python scripts/pgo_compare.py --record plain.json` |
 | the wall-clock figures the performance and JSON pages state, read again on one machine | `docs/11-performance.md`, `docs/07-json.md` | `uv run --no-sync python scripts/page_figures.py --python-314 "$(uv python find --managed-python 3.14)"` |
+| one build against another, shape by shape -- instructions per call, the processor's counters per call, and the functions and lines a shape moved -- in environments its `env` step makes, each against the first named | `scripts/perf_shapes.py` | `uv run --no-sync python scripts/perf_inspect.py count last head` |
 | membership held and decisions only widened | `scripts/metamorphic_reference.json` | `uv run --no-sync python scripts/metamorphic_gate.py` |
 | core mutation adequacy | `scripts/mutation_baseline.json` | `cargo mutants --package valgebra-core -- -- --skip deep_subtype_into_bottom_terminates --skip subtyping_terminates_on_a_distributed_tower --skip a_chain_of_a_hundred_thousand_states_minimizes` |
 | walk mutation adequacy | `scripts/mutation_baseline_walk.json` | `cargo mutants --package valgebra-py --features interpreter-tests -- -- --skip recursion_deeper_than_the_bound_is_refused --skip the_two_readings_agree_at_the_walks_depth_bound` |
