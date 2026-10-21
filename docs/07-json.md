@@ -228,6 +228,10 @@ than from this page:
 uv run --no-sync --group bench pytest benches/bench_json.py
 ```
 
+`scripts/page_figures.py` re-reads this table and the one below with the
+performance page's figures, and the [performance page's
+method](11-performance.md#method) says how to run it.
+
 Avoiding materialization helps where the document is large or scalar-heavy: the
 10,000-element array is nearly six times faster than parse-then-validate, and
 the wide record four and a half. The middle row is the shape where it pays least,

@@ -273,6 +273,36 @@ quarter of a multiplier — a minimum sits below a median by however much the ru
 was disturbed, and the 3.14 results below read both — so read a cell here
 against the same cell, not against the gate's output.
 
+**One command re-reads every figure on this page and on the
+[JSON page](07-json.md#performance)**, on the checkout as it stands or on the
+commit `--rev` names:
+
+```bash
+uv run --no-sync python scripts/page_figures.py --python-314 /path/to/that/python
+```
+
+It needs `uv`, the `llvm-tools` component the PGO build needs, and the three
+interpreters the tables name: the one passed, and CPython 3.12 and the
+free-threaded 3.14 as `uv` installs them, unless `--python-312` and
+`--python-314t` name others. It builds everything it times under
+`target/page-figures/`, every wheel from one directory, takes the readings one
+at a time, and prints each figure under the name of the section that states it.
+`--stage` runs one of those three steps alone, and `--help` says what each
+holds. `MEASURE` in the script holds the repeats this section states, and
+`tests/test_page_figures.py` holds the page to it.
+
+On the machine above the build takes about seven minutes and the readings about
+six, and the readings are a wall clock: run them on an idle machine, with
+nothing beside them. The script edits no page. A figure is copied in by hand
+once read, because a run something disturbed reads slow, and only a reader can
+tell that from a figure that moved. Of the figures under
+[How the speed is made](#how-the-speed-is-made),
+it re-reads the three that state a cost of this tree: the reference pool's
+pair, the fifty refined fields' build and the report on a deep value. A figure
+stating a technique's before and after is a pair built where the technique
+landed, and the changelog's figures are each fix's own pair, on the build its
+entry names; it re-reads neither.
+
 ### The cheapest door, and where the floor is
 
 `x in v` is `v.is_valid(x)` through the container protocol, and it is the
