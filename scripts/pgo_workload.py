@@ -221,11 +221,15 @@ def _lists_with_readers() -> None:
     wrong = _Pair(1, "a")
     vars(wrong)["y"] = 2
     _explain(pairs.validate, [[_Pair(1, "a")] * 24, [wrong]], 500)
+    # The refined lists are read at the weight of the mapping read beside
+    # them: trained at a quarter of these rounds beside a hundred-entry
+    # mapping, a list of refined strings reads 0.7% more instructions on 3.12
+    # and 3.14, three an element, in its base's type test and the call to it.
     bounded = Validator(list[Annotated[int, _AtLeast(0)]])
-    _run(bounded.is_valid, [list(range(24)), [0, -1]], 2000)
+    _run(bounded.is_valid, [list(range(24)), [0, -1]], 4000)
     _explain(bounded.validate, [list(range(24)), [0, -1]], 500)
     worded = Validator(list[Annotated[str, Regex("[a-z]+")]])
-    _run(worded.is_valid, [["ab", "cd"] * 12, ["ab", "1"]], 2000)
+    _run(worded.is_valid, [["ab", "cd"] * 12, ["ab", "1"]], 8000)
 
 
 def _records() -> None:

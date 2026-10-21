@@ -641,8 +641,12 @@ program that builds validators per request, and to no validation call.
   `check/walk/record.rs`), reading the depth level and the fatal-signal flag as
   the general walk does, so each refuses exactly where the walk refuses. A
   thousand-element `list[int | None]` costs 87% fewer instructions that way. A
-  Rust test holds the direct reading to the walk's verdict for every scalar
-  schema against every kind of value.
+  mapping whose one clause is two scalars reads the level and the flag once for
+  the dict, and its entries as two type tests each (`scalar_map_matches`): a
+  hundred-entry `dict[str, int]` costs a third fewer instructions that way on
+  the profiled wheels, and the binding gate's sixty-four entries 43% fewer
+  (`--binding-mapping`). A Rust test holds the direct reading to the walk's
+  verdict for every scalar schema against every kind of value.
 - **An instance of the class itself is read off its type pointer.**
   `type(obj) is C` answers `isinstance(obj, C)` before `C.__instancecheck__` is
   asked, which is the test CPython's `PyObject_IsInstance` makes first
@@ -689,12 +693,10 @@ program that builds validators per request, and to no validation call.
   own frame (`check_union` in `check/walk.rs`), and a mapping's scan keeps one
   fast frame for every entry its clauses are asked of (`covered` in
   `check/walk/record.rs`), rather than a pair built and dropped per branch and
-  per key: a `dict[str, int]` of sixty-four entries costs 10% fewer
-  instructions that way (`--binding-mapping`), and a recursive schema's
-  descent 10% fewer (`--binding-recursive`). The scan reads the frame's
-  context where it lies, asking each half of a clause as a record asks a field
-  (`field_holds`), rather than copying the context once an entry: the same
-  mapping costs another 9.7% fewer. Where a fast walk has no frame to
+  per key: a recursive schema's descent costs 10% fewer instructions that way
+  (`--binding-recursive`). The scan reads the frame's context where it lies,
+  asking each half of a clause as a record asks a field (`field_holds`), rather
+  than copying the context once an entry. Where a fast walk has no frame to
   hold -- `is_valid` and `is_valid_json` themselves, a mapping's scan, a parsed
   object -- its pair is an `Unwritten` one, never dropped because it never owns
   anything: `is_valid` on a scalar costs 6% fewer instructions that way on

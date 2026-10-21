@@ -4979,6 +4979,88 @@ fn a_mapping_of_one_scalar_clause_is_read_entry_by_entry() {
     });
 }
 
+/// A mapping of one clause of two scalars is read as two type tests an entry
+/// where a level is free under it and no fatal signal is recorded, and the
+/// reading declines a second clause, a clause that is not two scalars, the
+/// walk's bound and a recorded signal, each of which the general scan reads.
+/// Where it is taken it answers as the walk does, and keeps for a union what
+/// the scan keeps: the entries admitted before the refusal, never inside one.
+#[test]
+fn a_mapping_of_two_scalars_is_read_as_its_tests() {
+    use super::record::{Decided, scalar_map_matches};
+    Python::attach(|py| {
+        let index = build_index(py, &Schema::Int, &[], &[]);
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &[],
+            defs: &[],
+            index: &index,
+            state: &state,
+            mode: WalkMode::Fast,
+        };
+        let dict = |source: &str| {
+            py.eval(&std::ffi::CString::new(source).expect("no nul"), None, None)
+                .expect("the dict evaluates")
+                .cast_into::<PyDict>()
+                .expect("a dict")
+        };
+        let clause = |key, value| MapClause { key, value };
+        let read = |defaults: &[MapClause], source: &str| {
+            let mut decided = Decided::default();
+            scalar_map_matches(defaults, &dict(source), ctx, Some(&mut decided))
+                .map(|ok| (ok, decided.progress()))
+        };
+        let str_int = [clause(Schema::Str, Schema::Int)];
+        let sources = [
+            "{'a': 1, 'b': 2}",
+            "{}",
+            "{'a': 1, 'b': 'x', 'c': 3}",
+            "{'a': True}",
+            "{'a': 1, 2: 2}",
+            "{'a': 1.5}",
+            "{'a': None}",
+        ];
+        for source in sources {
+            let walked = decide(
+                py,
+                &Schema::mapping(str_int[0].clone()),
+                &dict(source),
+                &[],
+                &[],
+            );
+            assert_eq!(
+                read(&str_int, source).map(|(ok, _)| ok),
+                Some(walked),
+                "{source}"
+            );
+        }
+        assert_eq!(read(&str_int, "{'a': 1, 'b': 2}"), Some((true, (2, false))));
+        assert_eq!(
+            read(&str_int, "{'a': 1, 'b': 'x', 'c': 3}"),
+            Some((false, (1, false)))
+        );
+        let none_bytes = [clause(Schema::NoneType, Schema::Bytes)];
+        assert_eq!(read(&none_bytes, "{None: b'x'}"), Some((true, (1, false))));
+        assert_eq!(read(&none_bytes, "{None: 'x'}"), Some((false, (0, false))));
+
+        let of_lists = Schema::list(SeqShape::homogeneous(Schema::Int));
+        assert_eq!(read(&[clause(Schema::Str, of_lists)], "{}"), None);
+        let two = [
+            clause(Schema::Str, Schema::Int),
+            clause(Schema::Int, Schema::Str),
+        ];
+        assert_eq!(read(&two, "{}"), None);
+        assert_eq!(read(&[], "{}"), None);
+        state.depth.set(MAX_WALK_DEPTH - 1);
+        assert_eq!(read(&str_int, "{'a': 1}"), Some((true, (1, false))));
+        state.depth.set(MAX_WALK_DEPTH);
+        assert_eq!(read(&str_int, "{'a': 1}"), None);
+        state.depth.set(0);
+        state.signals.fatal_seen.set(true);
+        assert_eq!(read(&str_int, "{'a': 1}"), None);
+    });
+}
+
 /// A sequence whose repeated element is a scalar is read as its type test where
 /// one level is free under it, and one whose element is a union of scalars as
 /// a test per branch where two are -- the union's and its branch's -- whether

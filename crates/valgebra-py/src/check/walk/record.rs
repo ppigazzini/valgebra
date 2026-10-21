@@ -19,7 +19,7 @@ use pyo3::types::{PyDict, PyString};
 use rustc_hash::FxHashMap;
 use valgebra_core::{Attribute, Field, MapClause, PathSegment, Schema, quoted};
 
-use super::scalar::{admitted_quietly, scalar_member};
+use super::scalar::{Scalar, admitted_quietly, scalar_admits, scalar_member, scalar_of};
 #[cfg(PyPy)]
 use super::{Base, held_dict, reads_its_length, reads_its_values};
 use super::{
@@ -704,6 +704,11 @@ fn keyed_map_matches_py(
         return false;
     };
     let mut decided = decided;
+    if fields.is_empty()
+        && let Some(answered) = scalar_map_matches(defaults, dict, ctx, decided.as_deref_mut())
+    {
+        return answered;
+    }
     if let Some(plan) = ctx.index.records.get(&(fields.as_ptr() as usize)) {
         if let Some(answered) =
             keyed_map_asks_for_its_keys(fields, defaults, dict, ctx, plan, decided.as_deref_mut())
@@ -742,6 +747,93 @@ fn keyed_map_matches_py(
             },
         )
     }
+}
+
+/// A mapping of one clause whose key and value are each a scalar kind --
+/// `dict[str, int]` -- decided as two type tests an entry, or `None` where the
+/// general scan must read it.
+///
+/// [`keyed_map_scan`] reads such a mapping through [`covered`], which asks
+/// each half of an entry as a field ([`field_holds`]): the schema's kind, the
+/// level, the fatal-signal flag and the clause count are read again at every
+/// entry, around the two tests that decide it. Read once here, a hundred-entry
+/// `dict[str, int]` takes about forty-five fewer instructions an entry on the
+/// profiled 3.12 and 3.14 wheels, and about fifty on the free-threaded ones,
+/// whose profiled scan lays those reads out dearest.
+///
+/// The answers are the scan's. A type test runs no Python, so nothing an entry
+/// does can record a signal or move the dict, and the scan, its count and its
+/// stop are [`keyed_map_scan`]'s own: a dict another thread moves reads as
+/// unreadable there and here. A recorded signal declines to the scan, which
+/// refuses every entry, and so does a map with no level free under it, where
+/// the scan walks each half through [`member`] to refuse it at the bound and
+/// record why. What the deciding walk keeps for a union is what the scan
+/// keeps: the entries admitted before the refusal, and a refusal that is never
+/// inside a field.
+#[expect(
+    clippy::redundant_closure_for_method_calls,
+    reason = "the loop takes a test over a `Value` of any lifetime, and the \
+              method path names one lifetime; each closure is the method, \
+              generic over the lifetime the loop hands it"
+)]
+pub(super) fn scalar_map_matches(
+    defaults: &[MapClause],
+    dict: &Bound<'_, PyDict>,
+    ctx: Ctx<'_>,
+    decided: Option<&mut Decided>,
+) -> Option<bool> {
+    let [clause] = defaults else {
+        return None;
+    };
+    let (key_kind, value_kind) = (scalar_of(&clause.key)?, scalar_of(&clause.value)?);
+    if !ctx.room_to_descend() || ctx.state.signals.fatal_seen.get() {
+        return None;
+    }
+    let state = ctx.state;
+    let (admitted, scan) = match (key_kind, value_kind) {
+        (Scalar::Str, Scalar::Int) => {
+            scalar_map_loop(dict, state, |key| key.is_str(), |value| value.is_int())
+        }
+        _ => scalar_map_loop(
+            dict,
+            state,
+            |key| scalar_admits(key_kind, key),
+            |value| scalar_admits(value_kind, value),
+        ),
+    };
+    if let Some(keep) = decided {
+        keep.admitted = admitted;
+        keep.inside = false;
+    }
+    Some(read_whole(&scan, ctx))
+}
+
+/// The scan [`scalar_map_matches`] reads a mapping with, asking `key_admits`
+/// and `value_admits` of each entry: how many entries both admitted, and how
+/// the scan ended.
+///
+/// Generic over the two tests, so the pair the instruction gate counts -- a
+/// `str` key with an `int` value -- is a loop of its own with each test written
+/// where it is asked, as a list of one kind is
+/// ([`scalar_list_matches`](super::sequence)). Asked through [`scalar_admits`],
+/// each half of every entry dispatches on its kind: four or five instructions
+/// an entry more on the profiled 3.12 and 3.14 wheels.
+fn scalar_map_loop(
+    dict: &Bound<'_, PyDict>,
+    state: &WalkState,
+    key_admits: impl Fn(&Value<'_, '_>) -> bool,
+    value_admits: impl Fn(&Value<'_, '_>) -> bool,
+) -> (usize, Scan) {
+    let mut admitted = 0usize;
+    let scan = scan_dict(dict, state, |key, val| {
+        if key_admits(&Value::Py(key)) && value_admits(&Value::Py(val)) {
+            admitted += 1;
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    (admitted, scan)
 }
 
 /// Walk a dict once against a record's fields, resolving each string key to a

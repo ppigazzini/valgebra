@@ -168,7 +168,8 @@ alike, so a value whose union of literals sits one level past the bound is
 refused by `is_valid` and `validate` alike, though the union's table would ask
 nothing. A shortcut that cannot open the level declines to the walk rather
 than refusing: `scalar_member`, the type test a union's scalar branch and a
-record's scalar field are asked, answers nothing where no level is free, so
+record's scalar field are asked, answers nothing where no level is free, and a
+mapping of two scalars declines to the scan there (`scalar_map_matches`), so
 `member` refuses there and records the stop. Refused as `false`, the scalar
 would read as a decided refusal, and a complement over it would admit the
 value.
@@ -406,10 +407,9 @@ explaining walk -- builds it from the parts it keeps. A fast walk writes neither
 walk is fast already it asks in the frame it holds: `check_union` walks each
 branch in the union's frame, and a mapping's scan keeps one fast frame for every
 entry `covered` asks of its clauses. Each buffer is a value with a destructor,
-and a pair built and dropped per branch and per key is a tenth of what a
-recursive schema's walk and a `dict[str, int]` cost (`--binding-recursive`,
-`--binding-mapping`). Where a fast walk has no frame to borrow -- the entry
-points `is_valid` and `is_valid_json`, a mapping's scan, a parsed object, a
+and a pair built and dropped per branch is a tenth of what a recursive schema's
+walk costs (`--binding-recursive`). Where a fast walk has no frame to borrow --
+the entry points `is_valid` and `is_valid_json`, a mapping's scan, a parsed object, a
 complement's inner walk -- it takes an `Unwritten` pair (`walk.rs`), whose
 buffers are never dropped: they never own anything, and dropping an empty
 location buffer is a call into drop glue written out of line. A record read by
@@ -602,9 +602,18 @@ most of what they cost, and each asks the test directly:
 - **A parsed array.** A document's array of one scalar kind, or of a union of
   them, is one test an element (`json_array_matches`); a document is never
   explained, so the loop records nothing.
-- **A mapping's clause.** `dict[str, int]` reads both halves of each entry as
-  type tests in `covered`, and reads no key as a field name, since a mapping
-  declares none: 37% fewer instructions on a thousand entries.
+- **A mapping of two scalars.** `dict[str, int]` -- one clause whose key and
+  value are each a scalar kind -- is two type tests an entry
+  (`scalar_map_matches`): the kinds, the level and the fatal-signal flag are
+  read once for the dict, no key is read as a field name, since a mapping
+  declares none, and a `str` key with an `int` value is a loop of its own, as
+  a list of one kind is. A second clause, a clause
+  that is not two scalars, the walk's bound and a recorded signal decline to
+  the scan, which asks both halves of each entry in `covered` as a record asks
+  a field. A hundred entries cost about forty-five fewer instructions an entry
+  than through `covered` on the profiled wheels, and the binding gate's
+  sixty-four 43% fewer in all on the build without a profile
+  (`--binding-mapping`).
 - **A tuple whose every position is a scalar.** `tuple[int, str, float]`, and a
   `NamedTuple` of builtin fields, is a type test a position
   (`scalar_positions_tuple_matches`): a thousand such tuples cost 37% fewer
@@ -748,11 +757,14 @@ kind, 6% without it.
 recursive function under fat LTO, with the arms of `member` inlined into it, so
 a test added to an arm moves the register allocation of every shape that crosses
 the arm. Asked inline in `check_seq`, the union question costs a list nested
-twenty-five deep 4%; a one-comparison shortcut for `dict[str, int]` in the
-record walk costs the closed record 5% and the nested list 7%, though neither
+twenty-five deep 4%; a one-comparison shortcut for `dict[str, int]` inside the
+record scan costs the closed record 5% and the nested list 7%, though neither
 reads a mapping. So the sequence readings of a union are out of line behind a
-test of the tail's tag, which the nested list pays at 1.4%, and a mapping has no
-reading beyond `covered`'s. Even the order of that test's cases is a cost:
+test of the tail's tag, which the nested list pays at 1.4%, and a mapping's
+reader is asked where a record's reading starts, behind the test that the
+record declares no field (`keyed_map_matches_py`), where the closed record,
+the list of records, the fifty-field record and the nested list read within
+1.1% of the walk without it on every interpreter the wheels ship. Even the order of that test's cases is a cost:
 without a profile the compiler tests first the tags a case covers most of, so
 the union and the meet are tested before a nested list's tag, which costs the
 plain build's nested list 1.86%. Marking the reader `element_list_matches` cold
