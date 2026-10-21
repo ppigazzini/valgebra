@@ -215,9 +215,9 @@ ships), per-call median on a passing document:
 
 | Shape | `is_valid_json` | `json.loads` + `is_valid` | speedup |
 | --- | --- | --- | --- |
-| Record, 50 int fields | 1.43 us | 6.36 us | ~4.5x |
-| List of 200 small mappings | 23.2 us | 37.4 us | ~1.6x |
-| `list[int]`, 10,000 elements | 86 us | 496 us | ~5.8x |
+| Record, 50 int fields | 1.28 us | 5.77 us | ~4.5x |
+| List of 200 small mappings | 21.3 us | 33.7 us | ~1.6x |
+| `list[int]`, 10,000 elements | 76 us | 436 us | ~5.7x |
 
 `benches/bench_json.py` times both columns, and a strict
 `TypeAdapter.validate_json` over the same three shapes beside them; that third
@@ -237,15 +237,15 @@ way. Measure your own documents rather than reading a rule off these three.
 Where the middle shape's time goes is measured, because it is the shape where
 valgebra is closest to pydantic-core. On the competitive gate's document -- two
 hundred records of five fields, one of them a list and one a mapping, 17 KB --
-`is_valid_json` reads about 71 us on the machine above in the PGO wheel, and
+`is_valid_json` reads about 59 us on the machine above in the PGO wheel, and
 the parts are:
 
 | part | per call | how it was measured |
 | --- | --- | --- |
-| the parse into the tree the walk reads, and the call | 56 us | `Validator(anything).is_valid_json`, which parses and admits without a walk |
-| the walk over that tree | 15 us | `is_valid_json` less the row above |
-| `jiter::JsonValue::parse` alone | 68 us | in Rust, release, no profile |
-| jiter's pull parser over the same bytes, building nothing | 18 us | in Rust, release, no profile |
+| the parse into the tree the walk reads, and the call | 46 us | `Validator(anything).is_valid_json`, which parses and admits without a walk |
+| the walk over that tree | 13 us | `is_valid_json` less the row above |
+| `jiter::JsonValue::parse` alone | 61 us | in Rust, release, no profile |
+| jiter's pull parser over the same bytes, building nothing | 16 us | in Rust, release, no profile |
 
 The first two rows are one process. The parse moves with the heap a process
 starts from, by as much as two fifths between processes of one build, and the
