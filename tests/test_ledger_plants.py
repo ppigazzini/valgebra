@@ -1208,7 +1208,7 @@ PLANTS = (
             tree,
             ".github/workflows/ci.yml",
             "      - uses: $/.github/actions/setup-uv\n        with:\n"
-            '          python-version: "3.14"\n'
+            '          python-version: "3.15"\n'
             "      - run: uv sync --locked --no-install-project --group bench\n",
             "      - uses: $/.github/actions/setup-uv\n"
             "      - run: uv sync --locked --no-install-project --group bench\n",
@@ -3836,8 +3836,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "          key: python-3.14t\n",
-            "          key: python-3.14t\n"
+            "          key: python-3.15t\n",
+            "          key: python-3.15t\n"
             "          add-rust-environment-hash-key: false\n",
         ),
         trips=("test_every_rust_cache_restores_behind_the_toolchain_wrapper",),

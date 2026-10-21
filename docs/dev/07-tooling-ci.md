@@ -139,7 +139,7 @@ reproduces; the count is the table's rather than this sentence's:
 | the step's declared `env:` | yes, since the plan carries it | without `RUSTDOCFLAGS=-D warnings`, `cargo doc` cannot fail locally |
 | the terminal's own variables | yes, `runner_environment` | `FORCE_COLOR` turns `pip-audit` red against a clean dependency tree |
 | the machine's git identity | yes, `deep_clone` and `NO_IDENTITY` | a checkout configures no `user.name`, this repository has one in its own `.git/config`, and a ledger that plants a commit with `git commit-tree` passes here and fails there |
-| the interpreter the lane names | partly: `PYO3_PYTHON` and every CPython job's `uv` follow the caller's release, since the jobs share one clone, and a job on another implementation takes the interpreter its uv setup names; the gate's closing line says so | the mutation lanes name CPython 3.12 in `ci.yml` and the cachegrind lane 3.14; a local sweep on 3.14 can read as survivors mutants the lane kills, a difference that is the interpreter's |
+| the interpreter the lane names | partly: `PYO3_PYTHON` and every CPython job's `uv` follow the caller's release, since the jobs share one clone, and a job on another implementation takes the interpreter its uv setup names; the gate's closing line says so | the mutation lanes name CPython 3.12 in `ci.yml` and the cachegrind lane 3.15; a local sweep on 3.14 can read as survivors mutants the lane kills, a difference that is the interpreter's |
 | the *release* of the interpreter, not only the caller's | yes, at the floor: the gate builds it beside the caller's and runs the product suite and the checks marked `interpreter` on it | `typing.Self`, `LiteralString` and `Unpack` are 3.11 members; a test module naming them collects here on 3.14, fails to collect on the floor, and takes every job on it red |
 | the operating system and architecture | no | a macOS or Windows leg fails where Linux does not, and nothing local sees it |
 | the pinned tool versions | no, for the tools `taiki-e/install-action` installs | `ci.yml` installs `cargo-deny`, `cargo-llvm-cov` and `cargo-mutants` at versions it names, and the gate runs whichever is on the caller's `PATH`; a `uvx` step carries its pin in its own command, so the gate runs the lane's version of it |
@@ -433,7 +433,7 @@ through cargo rather than through maturin, which builds the extension module
 the release lane ships:
 
 ```bash
-# The venv's interpreter, on the 3.14 the bench lane pins: the one valgebra is installed in.
+# The venv's interpreter, on the 3.15 the bench lane pins: the one valgebra is installed in.
 export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
 cargo build --profile profiling -p valgebra-py --features pyo3/extension-module
 pkg="$("$PYO3_PYTHON" -c 'import valgebra, pathlib; print(pathlib.Path(valgebra.__file__).parent)')"
@@ -710,7 +710,7 @@ because the shapes a profile serves best are the per-element ones and a global
 lock is what those pay. The release matrix's `pgo: true` is decided on that
 reading, and `docs/11-performance.md` carries the decision with its reason.
 
-**The lane names the interpreter these are read on**, which is CPython 3.14,
+**The lane names the interpreter these are read on**, which is CPython 3.15,
 and it is written in `ci.yml` rather than left to the runner image: a ratio
 belongs to the pair of libraries *and* the interpreter running them, and a lane
 that inherits one from an image makes claims nobody chose. The same holds for
@@ -961,7 +961,7 @@ interpreter. Such a site says in its doc comment which behavior of which
 release it answers, with the measurement for each reading; `snapshot_pays` in
 the sequence walk is the one site. Each lane that measures reads one side: the
 binding sweep and the coverage lane pin 3.12, where the snapshot reading
-compiles in, and the bench lane pins 3.14, where the reading in place does, so
+compiles in, and the bench lane pins 3.15, where the reading in place does, so
 the instruction gate holds the cost of that reading and of no other. The
 product suite holds the answers on every interpreter, since the readings answer
 alike. What no lane holds is the cost of the snapshot reading and of the

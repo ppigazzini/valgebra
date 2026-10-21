@@ -442,9 +442,9 @@ jobs:
     # the concurrency test exercises true parallel validation there.
     #
     # Every release the package supports runs on every event, and its
-    # free-threaded build at the newest release, 3.15. The cp314t build is
-    # timed by `bench (free-threaded)` and its wheel run by the release's smoke,
-    # and no leg here runs the suite on it. The release ships a wheel built per
+    # free-threaded build at the newest release, 3.15. The cp314t build's wheel
+    # is run by the release's smoke, and no leg here runs the suite on it or
+    # times it. The release ships a wheel built per
     # version against a version-specific ABI, so each one is a separate
     # artifact a caller installs, and a lane that does not run is a wheel
     # nothing exercised until somebody reported it. Sampling the ends
@@ -915,7 +915,7 @@ jobs:
           # release links HEAD's workload against that one while the base,
           # built in a fresh target directory, links this one, and the gate
           # then compares two interpreters rather than two commits.
-          key: python-3.14
+          key: python-3.15
       - name: Install valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
         # The ceilings in `scripts/perf_compare.json` and the counts in
@@ -925,7 +925,7 @@ jobs:
         # means, so the version is written here rather than left to the image.
       - uses: $/.github/actions/setup-uv
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       - run: uv sync --locked --no-install-project --group bench
       # The wall-clock benches must measure the shipped artifact, not a debug
       # build, so build the release wheel with LTO and profile-guided
@@ -1076,7 +1076,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.14", "3.14t"]
+        python-version: ["3.15", "3.15t"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1159,10 +1159,10 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          key: python-3.14t
+          key: python-3.15t
       - uses: $/.github/actions/setup-uv
         with:
-          python-version: "3.14t"
+          python-version: "3.15t"
       - run: uv sync --locked --no-install-project --group bench
       - name: Build and install the optimized extension
         run: uv run --no-sync --group bench maturin develop --uv --release
@@ -1228,7 +1228,7 @@ jobs:
       # is the `pypy 3.11` lane's, which builds and runs one of its own.
       - uses: $/.github/actions/setup-uv
         with:
-          python-version: "3.14"
+          python-version: "3.15"
       - name: Install each built wheel and import it
         run: |
           for wheel in dist/*-cp3*-*.whl; do
