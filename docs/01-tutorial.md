@@ -181,6 +181,9 @@ assert record == {"name": "Ada", "age": 36}
 You can now check scalars, collections, records, constraints, failures, and
 JSON. From here:
 
+- The [recipes](19-recipes.md) put them to work: a response checked in a test,
+  a schema held to its last version, a configuration file read and checked.
+
 - The [schema language](03-schema-language.md) lists every form and the set it
   denotes.
 - [Refinements](05-refinements.md) covers the full constraint vocabulary.

@@ -189,7 +189,8 @@ closed, a subsystem's contract is the *intersection* of its parts' contracts, an
 exclusion is a *complement*, and a migration is "old schema *or* new" — contracts
 refactor like code instead of decaying into opaque predicate functions.
 
-Start at the [tutorial](docs/01-tutorial.md); the [algebra guide](docs/04-algebra.md)
+Start at the [tutorial](docs/01-tutorial.md); the [recipes](docs/19-recipes.md)
+do three of those tasks end to end, and the [algebra guide](docs/04-algebra.md)
 covers composition.
 
 ### As a harness over a codebase that has none

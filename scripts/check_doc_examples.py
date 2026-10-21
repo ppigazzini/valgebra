@@ -224,6 +224,15 @@ EXPECTED: tuple[Expected, ...] = (
     ),
     Expected(
         "ruff",
+        "docs/19-recipes.md",
+        "UP035",
+        2,
+        "`TypedDict` and `NotRequired` come from `typing_extensions`, whose "
+        "`TypedDict` takes `closed=True` on every release the page covers; "
+        "`typing` has it only from 3.15",
+    ),
+    Expected(
+        "ruff",
         "docs/05-refinements.md",
         "UP045",
         2,

@@ -101,6 +101,7 @@ cover.
 | [00-installation.md](00-installation.md) | installing the package and its build toolchain |
 | [01-tutorial.md](01-tutorial.md) | a guided path from a scalar schema to an inspected failure |
 | [02-quickstart.md](02-quickstart.md) | the condensed tour, for a reader who knows the domain |
+| [19-recipes.md](19-recipes.md) | tasks done end to end: a response in a test, a schema against its last version, a configuration file |
 | [03-schema-language.md](03-schema-language.md) | every schema form, with its denotation as a set of values |
 | [04-algebra.md](04-algebra.md) | the Boolean lattice, the normal form construction builds, and the composition recipes |
 | [05-refinements.md](05-refinements.md) | constraints and predicate refinements over a base schema |
@@ -122,6 +123,8 @@ cover.
 
 - New here? [Installation](00-installation.md), then the
   [quickstart](02-quickstart.md).
+- Have a task in mind? The [recipes](19-recipes.md) check a response in a test,
+  hold a schema to its last version, and read a configuration file.
 - Writing schemas? The [schema language](03-schema-language.md) covers every
   form with its denotation, [refinements](05-refinements.md) the constraints,
   and [recursive schemas](06-recursion.md) the fixpoint.
