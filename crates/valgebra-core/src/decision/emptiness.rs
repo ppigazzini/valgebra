@@ -25,7 +25,7 @@ use crate::verdict::Verdict;
 
 use super::constraints::{Density, bounds_unsatisfiable, longest, shortest, tightest_bounds};
 use super::literals::FiniteMeet;
-use super::records::keyed_map_meet_verdict;
+use super::records::{keyed_map_meet_verdict, keyed_map_minus_keyed_maps};
 use super::{
     Budget, Cx, DECISION_BUDGET, LeafRelations, NoLeafRelations, descending,
     has_complementary_pair, has_disjoint_pair, spend,
@@ -487,24 +487,28 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
 }
 
 /// A meet the rules declined, read as a set minus sets where it is one: a
-/// table met with complements of tables ([`FiniteMeet`]).
+/// table met with complements of tables ([`FiniteMeet`]), or a keyed map met
+/// with complements of keyed maps ([`keyed_map_minus_keyed_maps`]).
 ///
 /// Out of line, and asked only of a declined meet no reference unfolds, so the
-/// meets the rules decide carry the reading nowhere on their path; and a meet
-/// holding a member of no shape it reads -- a class with its attributes, say --
-/// leaves at the first look.
+/// meets the rules decide carry neither reading on their path; and a meet
+/// holding a member of no shape either reads -- a class with its attributes,
+/// say -- leaves at the first look.
 #[inline(never)]
 fn a_difference_of_sets(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
     let shaped = members.iter().all(|member| {
         matches!(
             member,
-            Schema::Literal(_) | Schema::Union(_) | Schema::Complement(_)
+            Schema::Literal(_) | Schema::Union(_) | Schema::Complement(_) | Schema::KeyedMap { .. }
         )
     });
     if !shaped {
         return Verdict::Unknown;
     }
-    FiniteMeet::of(members).map_or(Verdict::Unknown, |meet| meet.verdict(cx.oracle))
+    match FiniteMeet::of(members) {
+        Some(meet) => meet.verdict(cx.oracle),
+        None => keyed_map_minus_keyed_maps(members, cx),
+    }
 }
 
 /// Whether `members` hold a pattern refinement and the complement of one with

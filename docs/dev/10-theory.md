@@ -197,20 +197,26 @@ SOURCE: §13.5 "There is one descriptor because there is one type"
 
 HELD-BY: the_two_spellings_of_the_top_lower_to_one_descriptor, the_two_spellings_of_the_top_are_not_one_node
 
-**Castagna, ICFP 2023, (17): the backtrack-free record rule.** A record below a
-union of records is decided by an algorithm over the semantic domains, whose
-whole point is that it never backtracks. valgebra does not run it:
-`keyed_map_subtype` compares one map with one map, so the question a union of
-records asks is not one the rules are shaped to answer, and they decline it at
-any width. What decides it is the descriptor, which lowers the difference and
-reads its emptiness -- so the width at which the answer stops is the
-*lowering's* bound rather than a rule's, and at four fields the difference is
-past the node budget and the work allowance while the relation holds as plainly
-as it does at three. **[NOT-REACHED: no-backtrack-free-record-rule]**
+**Castagna, ICFP 2023, (17) and (22): the backtrack-free record rule.** A
+record below a union of records is decided by `Φ`, which narrows the record by
+one member a level and a label at a time and never builds the difference.
+**[LOAD-BEARING: a-record-splits-across-a-union]** —
+`keyed_map_splits_across_union` in `decision/records.rs`: the product rule's
+shape one component over, the defaults compared part by part as (22) compares
+them, and the clauses placed in the key partition by the set representation's
+own `key_cover`, so the two deciders agree on which key falls where. Its
+emptiness reading, `keyed_map_minus_keyed_maps`, answers `R ∧ ¬R₁ ∧ … ∧ ¬Rₙ`
+the same way, so the two routes to one inclusion do not part. Two points are
+the tree's own. A member set aside on a default that escapes it refutes only
+through an infinite part of the partition: Theorem 4.5 rests on Lemma 4.4,
+whose proof adds a fresh key of that part to a witness, and `None` has one key
+and `bool` two. And a label narrowed to a table of constants minus constants is
+read as the set it leaves (`FiniteMeet` in `decision/literals.rs`), without
+which a tag of literals would decline at its first narrowing.
 
-SOURCE: §13.3 "`keyed_map_subtype` is a structural rule, not `Phi`"
+SOURCE: §13.3 "`keyed_map_splits_across_union` runs `Phi` beside the one-map rule"
 
-HELD-BY: a_record_below_a_union_of_records_is_the_descriptors_answer, a_record_below_its_corners_stops_where_the_lowering_does
+HELD-BY: a_record_below_a_union_of_records_is_the_rules_answer, a_record_split_stops_where_the_decision_budget_does, a_record_splits_across_the_records_that_fix_its_tag, a_record_splits_on_whether_a_key_is_present, a_member_apart_at_an_optional_label_is_dropped, a_member_set_aside_on_a_finite_part_keeps_only_the_proof, a_member_whose_default_the_rules_cannot_relate_is_set_aside, a_clause_the_partition_does_not_hold_declines_the_split, a_record_minus_the_records_that_cover_it_is_empty, a_record_split_agrees_with_the_set_reading
 
 The paper's model is a *quasi-constant function*: named labels over a finite
 domain, with the rest given by a default keyed by a partition of the key space.

@@ -37,6 +37,7 @@ PRODUCT: every entry of the published decidability boundary
 from __future__ import annotations
 
 import enum
+import itertools
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -142,18 +143,6 @@ class _Color(enum.Enum):
 
     RED = 1
     GREEN = 2
-
-
-def _nested(depth: int, inner: Any) -> Any:
-    """Wrap `inner` in that many records, which is what nesting costs.
-
-    The bounds on a build are three, and nesting is the one that grows the work
-    exponentially -- so the shape the allowance is sized against is a record
-    minus the union of its siblings, one level at a time.
-    """
-    for _ in range(depth):
-        inner = {"a": inner}
-    return inner
 
 
 _JSON = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
@@ -312,8 +301,13 @@ ROWS: dict[str, Row] = {
         ),
     ),
     "A schema too large to build.": Declines(
-        _nested(3, {"x": union(int, str, bytes, float)}),
-        union(*[_nested(3, {"x": kind}) for kind in (int, str, bytes, float)]),
+        {f"f{i}": union(int, str) for i in range(7)},
+        union(
+            *[
+                {f"f{i}": kind for i, kind in enumerate(choice)}
+                for choice in itertools.product((int, str), repeat=7)
+            ]
+        ),
         "a larger allowance, which bounds the cost of asking and not the schema",
     ),
     "A predicate.": Declines(

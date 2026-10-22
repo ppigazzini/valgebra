@@ -416,6 +416,82 @@ fn the_product_rule_takes_a_level_for_each_branch_it_narrows_by() {
     );
 }
 
+/// The record rule takes a level of the query's depth for each member it
+/// narrows by, as the product rule does for each branch.
+///
+/// The same chain one kind over: a record whose tag no member is proved to
+/// hold, against forty records that each fix the tag to a constant the oracle
+/// does not read, so no member is set aside and the split narrows by each in
+/// turn. The leaf goals at the bottom are forty levels down, and a chain begun
+/// near the bound declines there and gives its levels back.
+#[test]
+fn the_record_rule_takes_a_level_for_each_member_it_narrows_by() {
+    use std::cell::Cell;
+
+    use super::super::{ConstIx, LeafRelations, Relation, Schema};
+    use crate::descr::lower::Constants;
+    use crate::ir::{Field, Openness};
+
+    struct Watch<'a> {
+        budget: &'a Budget,
+        deepest: Cell<u32>,
+    }
+    impl Constants for Watch<'_> {}
+    impl LeafRelations for Watch<'_> {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            self.deepest
+                .set(self.deepest.get().max(self.budget.depth.get()));
+            None
+        }
+    }
+
+    let tagged = |tag: Schema| {
+        Schema::record(
+            vec![
+                Field {
+                    name: "kind".into(),
+                    schema: tag,
+                    required: true,
+                },
+                Field {
+                    name: "order".into(),
+                    schema: Schema::Int,
+                    required: true,
+                },
+            ],
+            Openness::Closed,
+        )
+    };
+    let members = 40;
+    let union = Schema::union((0..members).map(|i| tagged(Schema::Literal(ConstIx::new(i)))));
+    let deepest_from = |start: u32| {
+        let budget = Budget::new(DECISION_BUDGET);
+        budget.depth.set(start);
+        let watch = Watch {
+            budget: &budget,
+            deepest: Cell::new(0),
+        };
+        let answer = tagged(Schema::Int).subtype_relation(&union, &watch, &[], &budget);
+        assert_eq!(budget.depth.get(), start, "the levels came back");
+        (answer, watch.deepest.get())
+    };
+
+    let (_, shallow) = deepest_from(0);
+    let width = u32::try_from(members).expect("forty fits");
+    assert!(
+        shallow >= width,
+        "the leaf goals of {members} members reach depth {shallow}"
+    );
+
+    let start = MAX_DECISION_DEPTH - width / 2;
+    let (answer, near) = deepest_from(start);
+    assert_eq!(answer, Relation::Unknown);
+    assert!(
+        near > start + width / 4 && near <= MAX_DECISION_DEPTH,
+        "a chain begun at {start} climbs to {near}"
+    );
+}
+
 /// The depth admits exactly [`MAX_DECISION_DEPTH`] levels and refuses the next,
 /// and a refusal takes no level: the levels below it still close, the count is
 /// back where the query found it once they have, and the next descent reaches

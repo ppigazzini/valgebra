@@ -253,6 +253,24 @@ def _nested(leaf: object, depth: int, *, mapping: bool) -> object:
     return leaf
 
 
+def _record_split(width: int) -> tuple[object, object]:
+    """Build a record of `width` fields each `int | str`, and its corners.
+
+    The record's reading of `_split`: the `2 ** width` records fixing every
+    field *are* the record, no one of them contains it, and the record rule
+    splits it across them a field at a time.
+    """
+    names = [f"f{i}" for i in range(width)]
+    subject = dict.fromkeys(names, union(int, str))
+    corners = union(
+        *[
+            dict(zip(names, choice, strict=True))
+            for choice in itertools.product((int, str), repeat=width)
+        ]
+    )
+    return subject, corners
+
+
 def _chain(width: int) -> object:
     """Build an open record whose key takes `width` constants, minus each one.
 
@@ -755,6 +773,57 @@ _DECIDED = [
         ),
         id="map:wider-record<=its-corners",
     ),
+    # The record rule's width, where the product rule's is: six fields against
+    # their sixty-four corners decide, as six tuple components do, which is the
+    # number the decidability page gives.
+    pytest.param("subtype", *_record_split(6), id="map:six-field-record<=its-corners"),
+    # A record whose tag takes three values against records that each fix the
+    # tag: covered where no member asks for more, refuted on
+    # `{"kind": "a", "order": 0}` where one requires a key the subject leaves
+    # free. The literals are the tag's values, which the split narrows one
+    # record at a time.
+    pytest.param(
+        "subtype",
+        {"kind": Literal["a", "b", "c"], "order": int, str: Any},
+        union(
+            {"kind": Literal["a"], "order": int, str: Any},
+            {"kind": Literal["b"], "order": int, str: Any},
+            {"kind": Literal["c"], "order": int, str: Any},
+        ),
+        id="map:tagged-record<=the-records-fixing-its-tag",
+    ),
+    pytest.param(
+        "refutes",
+        {"kind": Literal["a", "b", "c"], "order": int, str: Any},
+        union(
+            {"kind": Literal["a"], "order": int, "amount": int, str: Any},
+            {"kind": Literal["b"], "order": int, "reason": str, str: Any},
+            {"kind": Literal["c"], "order": int, str: Any},
+        ),
+        id="map:tagged-record!<=members-requiring-more",
+    ),
+    # Two tags, three values each: the nine corners cover the record, and the
+    # eight left when one is missing do not.
+    pytest.param(
+        "subtype",
+        {"kind": Literal["a", "b", "c"], "status": Literal["x", "y", "z"], str: Any},
+        union(
+            *[
+                {"kind": Literal[kind], "status": Literal[status], str: Any}  # ty: ignore[invalid-type-form]
+                for kind in "abc"
+                for status in "xyz"
+            ]
+        ),
+        id="map:two-tag-record<=its-nine-corners",
+    ),
+    # A record split on whether a key is there: `c` present lands in the first
+    # member, `c` absent in the second, and neither holds the record alone.
+    pytest.param(
+        "subtype",
+        {"a": int, "c?": bool},
+        union({"c": union(int, str), str: Any}, {"c?": bytes, str: Any}),
+        id="map:record<=split-on-a-keys-presence",
+    ),
     # A refutation the rules reach on one branch of a union and must not lose on
     # the others. A branch the subject shares no value with decides nothing
     # about the inclusion, so leaving it in the union leaves a decline where the
@@ -1144,11 +1213,19 @@ _DECIDED = [
         complement(union({"t": str}, {"t": bytes})),
         id="map:record<=the-complement-of-two-records",
     ),
+    # The chain the record rule reads as emptiness, one complement at a time,
+    # with the key's constants taken away as a set; its length is no bound.
     pytest.param(
         "empty",
         _chain(12),
         None,
         id="empty:open-record-minus-a-chain-of-12",
+    ),
+    pytest.param(
+        "empty",
+        _chain(64),
+        None,
+        id="empty:open-record-minus-a-chain-of-64",
     ),
     # A list is refuted by its rules at any depth, and a mapping is too: the
     # value its clause gives a key is asked against the one clause that reads
@@ -1220,40 +1297,15 @@ def _missed(why: str) -> pytest.MarkDecorator:
 
 
 _LEDGERED: list[object] = [
-    # The width of the decided fragment. A record whose fields each take two
-    # types *is* the union of the records that fix every field, and the rows
-    # above decide that at two fields and at three. At four it is refused
-    # before it is answered: the difference reads 96 schema nodes against a
-    # budget of 64, and would spend 9,965 units of work against an allowance
-    # of 4,096 (`descr/lower.rs`). Both bounds are past, so raising either
-    # alone leaves the refusal where it is.
-    #
-    # The relation is true, and the refusal is sound -- a decline is "not
-    # proven" -- so what this row carries is the *number*: three fields decide
-    # and four do not, which is a sentence a caller can act on and a figure
-    # that fails here if either bound moves.
+    # The record rule's width from the other side: seven fields against their
+    # 128 corners spend the decision budget before the split finishes, as seven
+    # tuple components do, and the difference is past every bound a lowering
+    # has. True, and the decline is sound; the number is what this row carries.
     pytest.param(
         "subtype",
-        {
-            "a": union(int, str),
-            "b": union(int, str),
-            "c": union(int, str),
-            "d": union(int, str),
-        },
-        union(
-            *[
-                {"a": a, "b": b, "c": c, "d": d}
-                for a in (int, str)
-                for b in (int, str)
-                for c in (int, str)
-                for d in (int, str)
-            ]
-        ),
-        id="map:four-field-record<=its-corners",
-        marks=_missed(
-            "the difference reads more schema nodes than a lowering builds, "
-            "and costs more work than one spends"
-        ),
+        *_record_split(7),
+        id="map:seven-field-record<=its-corners",
+        marks=_missed("the split multiplies past the work a decision may spend"),
     ),
     # The product rule's width from the other side: seven components against
     # their 128 corners spends the decision budget before the split finishes.
@@ -1263,16 +1315,6 @@ _LEDGERED: list[object] = [
         *_split(7),
         id="tuple:seven-components<=its-corners",
         marks=_missed("the split multiplies past the work a decision may spend"),
-    ),
-    # The difference chain one link past the rows above: thirteen links read
-    # more schema nodes than a lowering builds (`BUDGET`, `descr/lower.rs`),
-    # and a budget of twice that decides it.
-    pytest.param(
-        "empty",
-        _chain(13),
-        None,
-        id="empty:open-record-minus-a-chain-of-13",
-        marks=_missed("the chain reads more schema nodes than a lowering builds"),
     ),
     # Past the nesting a lowering descends (`DEPTH`, `descr/lower.rs`), which
     # is where the set representation stops reading a mapping.

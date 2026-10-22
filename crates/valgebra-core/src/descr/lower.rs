@@ -417,7 +417,10 @@ fn map(
 /// `int`, whose part holds no boolean. That is a union of key types, which is
 /// all the paper's footnote 15 asks of a map's domain. A complement of a
 /// constant cuts a part, so it is refused with the constant.
-fn key_cover(key: &Schema, pool: &dyn Constants) -> Option<(Vec<Label>, Vec<Option<Kind>>)> {
+pub(crate) fn key_cover(
+    key: &Schema,
+    pool: &dyn Constants,
+) -> Option<(Vec<Label>, Vec<Option<Kind>>)> {
     let part = |kind: Kind| Some((Vec::new(), vec![Some(kind)]));
     let every_part = || KEY_KINDS.iter().copied().map(Some).chain([None]);
     match key {

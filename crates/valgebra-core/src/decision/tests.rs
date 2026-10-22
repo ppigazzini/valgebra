@@ -6399,23 +6399,24 @@ fn a_union_narrowed_to_one_branch_refutes_where_that_branch_does() {
     );
 }
 
-/// The width of the decided fragment is the allowance, and the difference is
-/// what spends it.
+/// The width of the fragment the set reading decides is the allowance, and the
+/// difference is what spends it.
 ///
 /// A record whose fields each take several types *is* the union of the records
-/// that fix them, and the rules have no split rule for a record, so the sets
-/// answer -- by building `subject ∧ ¬corners` and reading whether it holds a
-/// value. Both widths below lower well inside the node and nesting bounds; what
-/// separates them is what the difference costs, which grows with the number of
-/// corners because a meet against a complemented union removes one part at a
-/// time and each removal multiplies.
+/// that fix them, and the set reading answers it by building `subject ∧
+/// ¬corners` and reading whether it holds a value. Both widths below lower well
+/// inside the node and nesting bounds; what separates them is what the
+/// difference costs, which grows with the number of corners because a meet
+/// against a complemented union removes one part at a time and each removal
+/// multiplies.
 ///
-/// Eight corners decides. Sixteen spends the whole allowance and declines --
-/// `Unknown` rather than `Fails`, which is the distinction this asks for: the
-/// relation holds, and a decline is "not proven within what a build may spend".
-/// Sixteen is where the fragment ends however the fields and the types divide
-/// them, which is the reading `tests/test_completeness_ledger.py` carries for
-/// four fields over two types and this one carries for two over four.
+/// Nine corners decide, two fields over three types. Sixteen, over four,
+/// spend the whole allowance and decline -- `Unknown` rather than `Fails`: the
+/// relation holds, and a decline is "not proven within what a build may
+/// spend". The set reading is asked alone, because the record rule decides
+/// both (`a_record_below_a_union_of_records_is_the_rules_answer`), and which
+/// width it stops at moves with the members' keys and openness, so the figure
+/// is this pair's.
 #[test]
 fn a_difference_past_the_allowance_declines() {
     let split = |types: &[Schema]| {
@@ -6445,19 +6446,19 @@ fn a_difference_past_the_allowance_declines() {
                 .collect::<Vec<_>>(),
         )
     };
-    let relation = |types: &[Schema]| {
-        split(types).subtype_relation_under(&corners(types), &NoLeafRelations, &[])
+    let sets = |types: &[Schema]| {
+        split(types).descriptor_contained_in(&corners(types), &NoLeafRelations, &[])
     };
 
     assert_eq!(
-        relation(&[Schema::Int, Schema::Str, Schema::Bool]),
+        sets(&[Schema::Int, Schema::Str, Schema::Bool]),
         Relation::Holds,
-        "eight corners is inside what a build may spend"
+        "nine corners are inside what a build may spend"
     );
     assert_eq!(
-        relation(&[Schema::Int, Schema::Str, Schema::Bool, Schema::Bytes]),
+        sets(&[Schema::Int, Schema::Str, Schema::Bool, Schema::Bytes]),
         Relation::Unknown,
-        "sixteen is past it, and what is past it declines rather than refutes"
+        "sixteen are past it, and what is past it declines rather than refutes"
     );
 }
 
@@ -6488,84 +6489,401 @@ fn record_and_its_corners(width: usize) -> (Schema, Schema) {
     (subject, Schema::union(corners))
 }
 
-// THEORY: no-backtrack-free-record-rule
-/// A record below a union of records is decided one representation over, not
-/// by a rule.
-///
-/// The record papers give a backtrack-free algorithm for exactly this shape:
-/// `R0 ≤ ⋁ R_i` iff `R0` is empty or the algorithm's condition holds, over the
-/// semantic domains. valgebra does not run it. `keyed_map_subtype` compares one
-/// map with one map, so the question a union of records asks is not a question
-/// it is shaped to answer, and the rules decline it whatever the width.
-///
-/// What decides it is the descriptor, which lowers the difference and reads
-/// its emptiness. That is a real answer and the caller sees no difference --
-/// and it is why the width at which the answer stops is a property of the
-/// *lowering's* bounds rather than of any rule: at four fields the difference
-/// is past the node budget and the work allowance, and
-/// `tests/test_completeness_ledger.py` carries that number. An implementation
-/// with the paper's algorithm would answer from the rule and never build the
-/// difference, so neither bound would bind.
-///
-/// Both halves are asserted, because the claim is the *pair*: the rules alone
-/// decline, and the procedure as a whole decides.
-#[test]
-fn a_record_below_a_union_of_records_is_the_descriptors_answer() {
-    for width in 2..=3 {
-        let (subject, corners) = record_and_its_corners(width);
+/// The same union with its first corner left out, which the subject's value of
+/// that corner stands outside.
+fn without_the_first(corners: &Schema) -> Schema {
+    match corners {
+        Schema::Union(members) => {
+            Schema::union(members.iter().skip(1).cloned().collect::<Vec<_>>())
+        }
+        other => other.clone(),
+    }
+}
 
-        // The structural procedure alone, with a budget it cannot exhaust.
+// THEORY: a-record-splits-across-a-union
+/// A record below a union of records is decided by a rule, in both directions.
+///
+/// `keyed_map_splits_across_union` is ICFP 2023's `Φ`: no corner contains the
+/// subject, so the rule that tries each member alone declines, and the split
+/// narrows one label at a time. The rules are asked alone, with a budget of
+/// their own, so the answer is theirs and not the set reading's -- which
+/// declines from sixteen corners (`a_difference_past_the_allowance_declines`).
+#[test]
+fn a_record_below_a_union_of_records_is_the_rules_answer() {
+    for width in 2..=4 {
+        let (subject, corners) = record_and_its_corners(width);
         let budget = Budget::new(DECISION_BUDGET);
         assert_eq!(
             subject.subtype_relation(&corners, &NoLeafRelations, &[], &budget),
-            Relation::Unknown,
-            "the rules answered a union of records at {width} fields"
-        );
-
-        // And the relation a caller asks, which reaches the second decider.
-        assert_eq!(
-            subject.subtype_relation_under(&corners, &NoLeafRelations, &[]),
             Relation::Holds,
-            "the descriptor did not decide the corners at {width} fields"
+            "the rules did not split the record across its {} corners",
+            1usize << width
+        );
+        let budget = Budget::new(DECISION_BUDGET);
+        assert_eq!(
+            subject.subtype_relation(&without_the_first(&corners), &NoLeafRelations, &[], &budget),
+            Relation::Fails,
+            "a corner left out did not refute at {width} fields"
         );
     }
 }
 
-// THEORY: no-backtrack-free-record-rule
-/// The width at which that answer stops is the lowering's, not a rule's.
+// THEORY: a-record-splits-across-a-union
+/// The width the split reaches is the decision budget's, as the product rule's
+/// is.
 ///
-/// The consequence of having no rule for the shape: the only decider is the
-/// one that builds the difference, so the answer stops where *building* stops
-/// rather than where the relation stops holding. At four fields the difference
-/// is past the node budget and the work allowance and the whole procedure
-/// declines, while the relation holds as plainly as it does at three.
-///
-/// A conservative decline is sound, so nothing a caller reads is wrong. What
-/// the row records is the number, and that the number belongs to the lowering:
-/// an implementation running the paper's algorithm would answer from the rule
-/// at any width, and neither bound would be reached.
+/// Every corner the split cannot set aside is a level it narrows by, and each
+/// level asks a goal per field, so the work grows with the corners: six
+/// fields against their sixty-four decide, seven against their hundred and
+/// twenty-eight spend the budget, which is where six tuple components decide
+/// and seven decline (`docs/15-decidability.md`). A decline is sound, so the
+/// number is what this holds.
 #[test]
-fn a_record_below_its_corners_stops_where_the_lowering_does() {
-    // Three fields: the rules decline and the difference is small enough.
-    let (narrow, its_corners) = record_and_its_corners(3);
+fn a_record_split_stops_where_the_decision_budget_does() {
+    let (narrow, its_corners) = record_and_its_corners(6);
+    let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
-        narrow.subtype_relation_under(&its_corners, &NoLeafRelations, &[]),
+        narrow.subtype_relation(&its_corners, &NoLeafRelations, &[], &budget),
         Relation::Holds
     );
-
-    // Four: the same shape, one field wider, and nothing decides it.
-    let (wide, its_corners) = record_and_its_corners(4);
+    let (wide, its_corners) = record_and_its_corners(7);
     let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
         wide.subtype_relation(&its_corners, &NoLeafRelations, &[], &budget),
         Relation::Unknown,
-        "a rule answered the wider record"
+        "seven fields decided, so the recorded width has moved"
+    );
+}
+
+/// A record whose tag takes three kinds, and records that each fix the tag.
+///
+/// The shape a union of tagged records is written in: `order` shared, the
+/// tag's kinds standing for the literals a caller writes, which the rules read
+/// through the oracle (`a_table_minus_constants_is_the_set_it_leaves`).
+fn tagged(tag: Schema, extra: Option<&str>) -> Schema {
+    let mut fields = vec![field("kind", tag, true), field("order", Schema::Int, true)];
+    if let Some(name) = extra {
+        fields.push(field(name, Schema::Int, true));
+    }
+    open(fields)
+}
+
+// THEORY: a-record-splits-across-a-union
+/// A union of tagged records covers the record whose tag takes their tags only
+/// where no member asks for more, and a member that does refutes it.
+///
+/// The refutation is the case the set reading declines at three members: a
+/// member requiring a key the subject leaves free has a value of the subject
+/// outside it, `{"kind": 0, "order": 0}`, and the rule names it by narrowing
+/// the tag and the key in turn.
+#[test]
+fn a_record_splits_across_the_records_that_fix_its_tag() {
+    let subject = tagged(
+        Schema::union([Schema::Int, Schema::Str, Schema::Bytes]),
+        None,
+    );
+    let relation = |members: Vec<Schema>| {
+        let budget = Budget::new(DECISION_BUDGET);
+        subject.subtype_relation(&Schema::union(members), &NoLeafRelations, &[], &budget)
+    };
+    assert_eq!(
+        relation(vec![
+            tagged(Schema::Int, None),
+            tagged(Schema::Str, None),
+            tagged(Schema::Bytes, None),
+        ]),
+        Relation::Holds
     );
     assert_eq!(
-        wide.subtype_relation_under(&its_corners, &NoLeafRelations, &[]),
-        Relation::Unknown,
-        "the wider record decided, so the recorded width has moved"
+        relation(vec![
+            tagged(Schema::Int, Some("amount")),
+            tagged(Schema::Str, Some("reason")),
+            tagged(Schema::Bytes, None),
+        ]),
+        Relation::Fails
     );
+    // A member of another kind shares no value with a dict, so the refutation
+    // stands beside it; a class may hold a dict, so beside one it does not.
+    assert_eq!(
+        relation(vec![
+            tagged(Schema::Int, Some("x0")),
+            tagged(Schema::Str, None),
+            tagged(Schema::Bytes, None),
+            Schema::Int,
+        ]),
+        Relation::Fails
+    );
+    assert_eq!(
+        relation(vec![
+            tagged(Schema::Int, Some("x0")),
+            tagged(Schema::Str, None),
+            tagged(Schema::Bytes, None),
+            Schema::Instance(ClassIx::new(0)),
+        ]),
+        Relation::Unknown
+    );
+}
+
+// THEORY: a-record-splits-across-a-union
+/// A record split on whether a key is present.
+///
+/// `{a: int, c?: bool}` closed lands in `{c: int | str}` where `c` is there and
+/// in `{c?: Literal}` where it is not, and in neither alone: the split narrows
+/// `c` in `T⊥`, where absence is one of the values an optional key holds.
+#[test]
+fn a_record_splits_on_whether_a_key_is_present() {
+    let subject = closed(vec![
+        field("a", Schema::Int, true),
+        field("c", Schema::Bool, false),
+    ]);
+    let present = open(vec![field(
+        "c",
+        Schema::union([Schema::Int, Schema::Str]),
+        true,
+    )]);
+    let absent = open(vec![field("c", Schema::Bytes, false)]);
+    let budget = Budget::new(DECISION_BUDGET);
+    assert_eq!(
+        subject.subtype_relation(
+            &Schema::union([present.clone(), absent.clone()]),
+            &NoLeafRelations,
+            &[],
+            &budget,
+        ),
+        Relation::Holds
+    );
+    let budget = Budget::new(DECISION_BUDGET);
+    assert_eq!(
+        subject.subtype_relation(&present, &NoLeafRelations, &[], &budget),
+        Relation::Fails,
+        "`{{\"a\": 0}}` is outside the member requiring `c`"
+    );
+    // Two members that each require `c` cover no dict leaving it out, so the
+    // split refutes on `{"a": 0}`: absence is a value the narrowing keeps.
+    let budget = Budget::new(DECISION_BUDGET);
+    assert_eq!(
+        subject.subtype_relation(
+            &Schema::union([
+                open(vec![field("c", Schema::Int, true)]),
+                open(vec![field("c", Schema::Str, true)]),
+            ]),
+            &NoLeafRelations,
+            &[],
+            &budget,
+        ),
+        Relation::Fails
+    );
+}
+
+// THEORY: a-record-splits-across-a-union
+/// A member is dropped where a label shares no value with it, an optional
+/// label included.
+///
+/// A record whose optional fields each take `int` or `str` is below the
+/// records fixing every field's type, each field optional there too. Narrowing
+/// by a member makes a field required -- the value outside the member is one
+/// carrying the key -- and a later member whose optional field holds the other
+/// type shares no value with it there: neither slot holds the other's type, and
+/// only the member's admits absence. Dropping that member is what keeps four
+/// fields inside the budget; read without it they spend it all.
+#[test]
+fn a_member_apart_at_an_optional_label_is_dropped() {
+    let width = 4;
+    let either = || Schema::union([Schema::Int, Schema::Str]);
+    let subject = closed(
+        (0..width)
+            .map(|i| field(&format!("f{i}"), either(), false))
+            .collect(),
+    );
+    let corners = Schema::union(
+        (0..1usize << width)
+            .map(|mask| {
+                closed(
+                    (0..width)
+                        .map(|i| {
+                            let leaf = if mask >> i & 1 == 0 {
+                                Schema::Int
+                            } else {
+                                Schema::Str
+                            };
+                            field(&format!("f{i}"), leaf, false)
+                        })
+                        .collect(),
+                )
+            })
+            .collect::<Vec<_>>(),
+    );
+    let budget = Budget::new(DECISION_BUDGET);
+    assert_eq!(
+        subject.subtype_relation(&corners, &NoLeafRelations, &[], &budget),
+        Relation::Holds
+    );
+}
+
+// THEORY: a-record-splits-across-a-union
+/// A member set aside on a default that escapes it refutes only through an
+/// infinite part of the key partition.
+///
+/// The subject maps the key `None` to an `int` or a `str`. Two members split
+/// that between them -- one maps it to an `int`, the other to a `str` -- and
+/// every dict of the subject has one `None` key at most, so the union covers
+/// it. Each member's default is narrower than the subject's, so `Φ` sets both
+/// aside and reaches its base case: read exactly, that refutes, because
+/// Lemma 4.4 adds a fresh key of the escaping part to a witness, and `None`
+/// has one key to give. The same split over `int` keys is refuted, and is:
+/// `{1: 1, 2: "x"}` is in neither member.
+#[test]
+fn a_member_set_aside_on_a_finite_part_keeps_only_the_proof() {
+    let keyed = |key: Schema, value: Schema| Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause { key, value }].into(),
+    };
+    let either = || Schema::union([Schema::Int, Schema::Str]);
+    for (key, refuted) in [(Schema::NoneType, false), (Schema::Int, true)] {
+        let subject = keyed(key.clone(), either());
+        let members = Schema::union([
+            keyed(key.clone(), Schema::Int),
+            keyed(key.clone(), Schema::Str),
+        ]);
+        let budget = Budget::new(DECISION_BUDGET);
+        let rules = subject.subtype_relation(&members, &NoLeafRelations, &[], &budget);
+        if refuted {
+            assert_eq!(rules, Relation::Fails, "the split over {key:?} keys");
+        } else {
+            assert_ne!(rules, Relation::Fails, "the split over {key:?} keys");
+            assert_eq!(
+                subject.subtype_relation_under(&members, &NoLeafRelations, &[]),
+                Relation::Holds,
+                "the set reading decides the {key:?} split, and it holds"
+            );
+        }
+    }
+}
+
+// THEORY: a-record-splits-across-a-union
+/// A member whose default the rules cannot relate to the subject's is set
+/// aside, keeping only the proof the rest give.
+///
+/// The subject's unnamed keys hold an instance of class 0, the first member's
+/// an instance of class 1, and an oracle that reads no class cannot say
+/// whether one is the other: the subject's `{"a": 1, "x": c}` is in the member
+/// exactly where `c` is. Split across that member's labels, the record would
+/// read as covered; set aside, the second member covers nothing of it, so the
+/// rules decline rather than prove.
+#[test]
+fn a_member_whose_default_the_rules_cannot_relate_is_set_aside() {
+    let with_rest = |value: Schema, rest: Schema| Schema::KeyedMap {
+        fields: vec![field("a", value, true)].into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: rest,
+        }]
+        .into(),
+    };
+    let subject = with_rest(Schema::Int, Schema::Instance(ClassIx::new(0)));
+    let members = Schema::union([
+        with_rest(Schema::Int, Schema::Instance(ClassIx::new(1))),
+        with_rest(Schema::Str, Schema::ANYTHING),
+    ]);
+    let budget = Budget::new(DECISION_BUDGET);
+    assert_ne!(
+        subject.subtype_relation(&members, &NoLeafRelations, &[], &budget),
+        Relation::Holds
+    );
+}
+
+// THEORY: a-record-splits-across-a-union
+/// A clause the rule cannot place in the key partition declines the split.
+///
+/// A literal key names one constant, which is a label rather than a part, and
+/// the rule's labels are field names; two clauses reading one part are a
+/// disjunction (`clauses-are-unordered`) the rule does not take apart. Either
+/// leaves the pair to the set reading.
+#[test]
+fn a_clause_the_partition_does_not_hold_declines_the_split() {
+    let (subject, corners) = record_and_its_corners(2);
+    let with = |clauses: Vec<MapClause>| match &subject {
+        Schema::KeyedMap { fields, .. } => Schema::KeyedMap {
+            fields: fields.clone(),
+            defaults: clauses.into(),
+        },
+        other => other.clone(),
+    };
+    for clauses in [
+        vec![MapClause {
+            key: Schema::Literal(ConstIx::new(0)),
+            value: Schema::Int,
+        }],
+        vec![
+            MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            },
+            MapClause {
+                key: Schema::Str,
+                value: Schema::Bytes,
+            },
+        ],
+    ] {
+        let budget = Budget::new(DECISION_BUDGET);
+        let subject = with(clauses);
+        let Schema::Union(members) = &corners else {
+            panic!("the corners are a union");
+        };
+        assert_eq!(
+            super::records::keyed_map_splits_across_union(
+                &subject,
+                members,
+                &mut Cx::new(&NoLeafRelations, &[], &budget),
+            ),
+            Relation::Unknown,
+            "{subject:?} was split"
+        );
+    }
+}
+
+// THEORY: a-record-splits-across-a-union
+/// The split read as emptiness: a record minus the records that cover it is
+/// empty, and one a member is missing from holds the value it leaves out.
+///
+/// The two routes to `a <= b` -- the rules and the emptiness of `a ∧ ¬b` --
+/// answer alike here, so the chain the set reading declines at thirteen links
+/// is decided one complement at a time.
+#[test]
+fn a_record_minus_the_records_that_cover_it_is_empty() {
+    let subject = tagged(
+        Schema::union([Schema::Int, Schema::Str, Schema::Bytes]),
+        None,
+    );
+    let minus = |members: Vec<Schema>| {
+        Schema::meet(
+            core::iter::once(subject.clone()).chain(members.into_iter().map(Schema::complement)),
+        )
+        .verdict()
+    };
+    assert_eq!(
+        minus(vec![
+            tagged(Schema::Int, None),
+            tagged(Schema::Str, None),
+            tagged(Schema::Bytes, None),
+        ]),
+        Verdict::Empty
+    );
+    assert_eq!(
+        minus(vec![tagged(Schema::Int, None), tagged(Schema::Str, None)]),
+        Verdict::Inhabited
+    );
+    // Two maps met, minus a third: each holds a value the third does not, and
+    // their meet holds none, since `a` is an `int` in both and the third takes
+    // every `int`. The reading takes one map as its subject, so it declines a
+    // meet of two rather than read either alone.
+    let a = |schema: Schema| open(vec![field("a", schema, true)]);
+    let two_maps = Schema::meet([
+        a(Schema::union([Schema::Int, Schema::Bytes])),
+        a(Schema::union([Schema::Int, Schema::Str])),
+        a(Schema::Int).complement(),
+    ]);
+    assert_ne!(two_maps.verdict(), Verdict::Inhabited);
 }
 
 /// `int | str | bytes | float | None`, the five kinds the product rows spread over.

@@ -14,6 +14,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - feat: a table met with complements of tables is decided as the set it leaves
+- feat: a record is decided against a union of records it splits across
 
 -->
 
@@ -27,6 +28,18 @@ answer of its own, or a repair to a change not yet released.
   left. The rules read it by lookup, as they read two tables: a constant is
   taken away by its pool position, and kept only where the bindings say it is
   a value apart from every table taken away.
+- **A record is decided against a union of records it splits across.** A
+  record whose tag takes three literals is `"subset"` of the three records
+  that each fix one, and `"not_subset"` of three where one also requires a
+  key the subject leaves free, where that answered `"undecided"`; `{"a": int,
+  "c?": bool}` is below a record requiring `c` beside one leaving it out. A
+  record whose fields each take two types is decided against its corners up
+  to six fields, where four declined, and seven decline on the decision
+  budget. Read as emptiness, a record minus the records that cover it is
+  empty, so an open record minus the record of each constant its key takes is
+  proved empty at any length, where thirteen declined. The split is
+  Castagna's backtrack-free rule for records (ICFP 2023), run by the rules
+  rather than by building the difference.
 
 ## [0.0.19] - 2026-10-20
 

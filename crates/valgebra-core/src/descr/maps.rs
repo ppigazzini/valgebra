@@ -77,13 +77,13 @@ pub(crate) const KEY_KINDS: [Kind; 8] = [
 /// The last part is what keeps the default a *total* function on the keys. A key
 /// the partition did not cover would be governed by nothing, and an atom would
 /// then admit a dict it says nothing about.
-const PARTS: usize = KEY_KINDS.len() + 1;
+pub(crate) const PARTS: usize = KEY_KINDS.len() + 1;
 
 /// The part a key of `kind` falls in, or `None` for a kind no key can have.
 ///
 /// A `list`, a `set` and a `dict` are unhashable, so a dict carrying one as a key
 /// is not a dict at all, and every atom declines it.
-fn key_slot(kind: Option<Kind>) -> Option<usize> {
+pub(crate) fn key_slot(kind: Option<Kind>) -> Option<usize> {
     match kind {
         Some(kind) => KEY_KINDS.iter().position(|listed| *listed == kind),
         None => Some(KEY_KINDS.len()),

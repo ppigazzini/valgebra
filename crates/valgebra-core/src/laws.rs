@@ -6640,3 +6640,110 @@ proptest! {
         }
     }
 }
+
+/// A record over the three names a split reads, open or closed, its fields
+/// drawn over kinds, a union of two, and literals -- constant 3 among them,
+/// which is constant 0's value at another index.
+fn split_record() -> impl Strategy<Value = Schema> {
+    let literal = |index: usize| Schema::Literal(ConstIx::new(index));
+    let leaf = prop_oneof![
+        Just(Schema::Int),
+        Just(Schema::Str),
+        Just(Schema::Bool),
+        Just(Schema::NoneType),
+        Just(Schema::union([Schema::Int, Schema::Str])),
+        prop::sample::select(vec![0usize, 1, 3]).prop_map(literal),
+        Just(Schema::union([literal(0), literal(1)])),
+    ];
+    let fields = prop::collection::btree_map(
+        prop::sample::select(vec!["a", "b", "c"]),
+        (leaf, any::<bool>()),
+        0..3,
+    );
+    (fields, any::<bool>()).prop_map(|(fields, open)| {
+        Schema::record(
+            fields
+                .into_iter()
+                .map(|(name, (schema, required))| Field {
+                    name: name.into(),
+                    schema,
+                    required,
+                })
+                .collect(),
+            if open {
+                Openness::Open
+            } else {
+                Openness::Closed
+            },
+        )
+    })
+}
+
+/// Whether `schema` names the constant at `index` anywhere in it.
+fn names_constant(schema: &Schema, index: usize) -> bool {
+    match schema {
+        Schema::Literal(at) => at.get() == index,
+        Schema::Union(members) | Schema::Intersection(members) => {
+            members.iter().any(|member| names_constant(member, index))
+        }
+        Schema::Complement(inner) => names_constant(inner, index),
+        Schema::KeyedMap { fields, defaults } => {
+            fields
+                .iter()
+                .any(|field| names_constant(&field.schema, index))
+                || defaults.iter().any(|clause| {
+                    names_constant(&clause.key, index) || names_constant(&clause.value, index)
+                })
+        }
+        _ => false,
+    }
+}
+
+proptest! {
+    // THEORY: a-record-splits-across-a-union
+    /// A record against a union of records: the split agrees with the set
+    /// reading wherever both decide, and with itself asked as the emptiness of
+    /// the difference; and a proof it gives holds of every value the universe
+    /// reads.
+    ///
+    /// The set reading is the independent decider -- it builds the difference
+    /// and reads it, and the lattice laws hold it to values -- so a split that
+    /// answers apart from it is a defect in one of the two. The emptiness
+    /// reading is the same rule asked the other way round, and the completeness
+    /// probe holds the two routes together over the survey corpus; this holds
+    /// them together over drawn splits. The values are read with the pool
+    /// `member_full` uses, which agrees with the oracle's on constants 0 and 1
+    /// and not on 3, so a draw naming 3 is held by the deciders alone.
+    #[test]
+    fn a_record_split_agrees_with_the_set_reading(
+        subject in split_record(),
+        members in prop::collection::vec(split_record(), 2..5),
+    ) {
+        let union = Schema::union(members);
+        let oracle = CorpusOracle;
+        let budget = crate::decision::Budget::new(DECISION_BUDGET);
+        let rules = subject.subtype_relation(&union, &oracle, &[], &budget);
+        let sets = subject.descriptor_contained_in(&union, &oracle, &[]);
+        if rules != Relation::Unknown && sets != Relation::Unknown {
+            prop_assert_eq!(rules, sets, "{:?} <= {:?}", subject, union);
+        }
+        let difference =
+            Schema::meet([subject.clone(), union.clone().complement()]).verdict_under(&oracle);
+        prop_assert!(
+            !matches!(
+                (rules, difference),
+                (Relation::Holds, Verdict::Inhabited) | (Relation::Fails, Verdict::Empty)
+            ),
+            "{:?} <= {:?} is {:?} and its difference {:?}", subject, union, rules, difference
+        );
+        if rules == Relation::Holds && !names_constant(&subject, 3) && !names_constant(&union, 3) {
+            let pool = const_pool();
+            for value in &boundary_values(&[&subject, &union]) {
+                prop_assert!(
+                    !member_full(&subject, value, &pool) || member_full(&union, value, &pool),
+                    "{:?} is in {:?} and outside {:?}", value, subject, union
+                );
+            }
+        }
+    }
+}

@@ -257,8 +257,10 @@ a complement against a meet -- and it is the one nothing else holds: a width
 bound refuses an answer too wide to represent, and says nothing about how long
 reaching a narrow one may take. So the allowance is what sets the width of the
 fragment the sets decide, and `decision/tests.rs` carries the two record splits
-either side of it: a record over eight corners decides, one over sixteen
-declines, and a decline is "not proven within what a build may spend".
+either side of it, asked of the set reading alone: a record over nine corners
+decides, one over sixteen declines, and a decline is "not proven within what a
+build may spend". The record rule decides both, so the figure is the set
+reading's and not the relation's.
 
 **Against a complement, the difference meets the inner set.** `a ∧ ¬¬x` is
 `a ∧ x`, and `x` is lowered on the widened side in place of complementing the
@@ -807,9 +809,10 @@ goals (below).
 subterms finitely many: a schema is a finite tree with back edges into a finite
 table of definitions, and unfolding a reference reaches a body that table holds.
 A rule asks a pair of the children of the pair it was asked, or unfolds a
-reference, except in three places, and each builds out of the subterms rather
+reference, except in four places, and each builds out of the subterms rather
 than past them. The product rule meets a component with the complements of
-branch components, so what it asks is a meet of subterms and their complements.
+branch components, and the record rule a field with the complements of member
+fields, so what either asks is a meet of subterms and their complements.
 The union rule asks the subject against the branches it can meet, a union of
 some members of a union it was handed. And a meet or a complement folds to the
 top or the bottom. So every goal is a pair drawn from a finite closure `C` --
@@ -843,8 +846,8 @@ and the definitions, so a query has finitely many meet goals, and a goal met
 again on its path is answered by hypothesis as a reference is.
 
 `decision/goal_tests.rs` holds the premise: every goal the recorder sees is in
-`C`, over the product rule's widest shapes, the union rule's narrowing, and
-whatever the drawn-query property draws. A pair on the trail is a pair of shared
+`C`, over the product rule's widest shapes, the record rule's split, the union
+rule's narrowing, and whatever the drawn-query property draws. A pair on the trail is a pair of shared
 handles, so pushing one costs a reference count rather than a copy of the
 subtree, and comparing two short-circuits on pointer identity where the two
 schemas were built alike.
@@ -860,21 +863,22 @@ still be long: two fixpoints nesting 100 and 99 lists around the back edge
 return to a goal on the trail only after `lcm(100, 99)` levels, a few steps
 each, and a chain of definitions asks its emptiness as deep as the chain runs.
 `MAX_DECISION_DEPTH` counts the levels the goal recursion (a goal that reaches
-the rules), the emptiness recursion (`empty_and_region`) and the product rule
-(`product_subtype`) hold open in one query, carried in its `Budget` beside the
-steps, one count for the three since an emptiness question asked inside a goal,
-and a goal asked at the bottom of a product, run on the same stack; past it the
-answer is undecided. The product rule takes a level for each branch it narrows
-by, so its depth is a union's width rather than a schema's nesting, and the
-step budget caps that width without capping the goal asked at the bottom of
-it. A level costs about 1 KiB on the profile-guided wheel, so
+the rules), the emptiness recursion (`empty_and_region`) and the two split
+rules (`product_subtype` and the record rule's `phi`) hold open in one query,
+carried in its `Budget` beside the steps, one count for all of them since an
+emptiness question asked inside a goal, and a goal asked at the bottom of a
+split, run on the same stack; past it the answer is undecided. A split rule
+takes a level for each branch it narrows by, so its depth is a union's width
+rather than a schema's nesting, and the step budget caps that width without
+capping the goal asked at the bottom of it. A level costs about 1 KiB on the profile-guided wheel, so
 the bound fits half of a 1 MiB thread. What the count costs the decision
 workloads, against the two placements it is not given, is the `Budget` doc
 comment's in `decision.rs`.
 `the_depth_bound_declines_and_gives_its_levels_back` holds the goal and
 emptiness recursions to it, and the levels to being given back, and
-`the_product_rule_takes_a_level_for_each_branch_it_narrows_by` holds the
-product rule.
+`the_product_rule_takes_a_level_for_each_branch_it_narrows_by` and
+`the_record_rule_takes_a_level_for_each_member_it_narrows_by` hold the split
+rules.
 
 What to say about the ceiling is what it is measured to reach.
 `DECISION_BUDGET` is the ceiling and is a row of the bounds table
@@ -897,7 +901,11 @@ corners costs the ways the corners can be ordered, not two to the power of
 their count: `the_product_rule_decides_its_corners_in_a_bounded_number_of_steps`
 holds five kinds under a fixed bound. Three positions over five kinds against
 their hundred and twenty-five corners multiply that again and reach the
-ceiling, and the pair is declined, which is the conservative answer.
+ceiling, and the pair is declined, which is the conservative answer. The
+record rule is the same family over labels, with the same drop: six fields
+of `int | str` against their sixty-four corners decide and seven against
+their hundred and twenty-eight reach the ceiling, which
+`a_record_split_stops_where_the_decision_budget_does` holds.
 
 **A popped trail pays for every path, and one family doubles them.** The trail
 keeps no pair once its decision returns, so a goal reached by two paths is

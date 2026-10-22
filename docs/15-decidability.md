@@ -191,16 +191,29 @@ answers `"undecided"`.
   can do this — a meet of two mappings, or of two optional fields, always contains
   the empty dict.
 
-    A record is decided against a **union of records it splits across** as well,
-    which is the same shape one kind over from the fixed sequence above:
-    `{"a": int | str, "b": int | str}` is below the four records that fix both
-    keys. No single branch contains it, so the rules decline and the sets
-    answer, by emptiness of the difference. Its reach is narrower than the
-    sequence's, because no rule splits a record and the difference runs under
-    the set representation's build bounds: three keys are decided against
-    their eight corners, and four decline against their sixteen, where six
-    tuple components are decided against sixty-four ([where that
-    bites](#sound-but-conservative)).
+    A record is decided against a **union of records it splits across** as
+    well, by the fixed sequence's rule one kind over: Castagna's
+    backtrack-free split for records, which narrows the record by one member
+    a level, a label at a time. `{"a": int | str, "b": int | str}` is below
+    the four records that fix both keys; a record whose tag takes three
+    literals is below the three records that each fix one; and `{"a": int,
+    "c?": bool}` is below a record requiring `c` beside one leaving it out. A
+    member asking for a key the subject leaves free refutes: `{"kind": "a" |
+    "b" | "c", "order": int}` is decided not below three records fixing the
+    tag where one of them also requires an `amount`. Its reach is the
+    sequence's -- six fields against their sixty-four corners, seven declining
+    against their 128 ([where that bites](#sound-but-conservative)). A member
+    whose clauses the rule cannot place in the key partition -- a literal key,
+    a key holding part of a kind, two clauses reading one kind -- leaves the
+    pair to the set representation. So does a member the subject's clause for
+    `None` or `bool` keys escapes, as far as a refutation goes: those parts
+    hold one key and two, too few for the fresh key the rule's refutation
+    adds to its witness.
+
+    Read as emptiness, a record minus the records that cover it is empty, one
+    complement at a time, and a record one of them leaves uncovered holds a
+    value: an open record whose key takes sixty-four constants, minus the
+    record of each, is proved empty.
 
 - **A difference written as one complemented union.** `a ∧ ¬(b ∨ c)` and
   `a ∧ ¬b ∧ ¬c` are one set, and both are decided where either is: no spelling
@@ -749,35 +762,36 @@ the shape. What is left below is what the descriptor cannot hold.
   measures it beside it.
 
   **Where that bites is width.** A record whose fields each take two types is
-  the union of the records that fix every field, and the rules have no split
-  rule for a record, so the sets answer it. Three fields against their eight
-  corners is decided; four against their sixteen is refused, because the
-  difference reads more nodes than a lowering builds and costs more work than
-  one spends. The shape is the first an ordinary annotation reaches, so it is
-  the number to know:
+  the union of the records that fix every field, and the record rule splits it
+  across them as the product rule splits a tuple, so the two reach as far:
+  six fields against their sixty-four corners are decided, and seven against
+  their 128 spend the decision budget before the split finishes, with the
+  difference past every bound a lowering has. The shape is the first an
+  ordinary annotation reaches, so it is the number to know:
 
   ```python
   from valgebra import Validator, union
 
-  pair = {"a": int | str, "b": int | str, "c": int | str}
-  corners = union(
-      *[
-          {"a": a, "b": b, "c": c}
-          for a in (int, str)
-          for b in (int, str)
-          for c in (int, str)
-      ]
-  )
-  assert Validator(pair).relation_to(corners) == "subset"  # three fields
+
+  def with_corners(width):
+      names = [f"f{i}" for i in range(width)]
+      corners = union(
+          *[
+              {name: (int, str)[mask >> i & 1] for i, name in enumerate(names)}
+              for mask in range(1 << width)
+          ]
+      )
+      return Validator(dict.fromkeys(names, int | str)), corners
+
+
+  six, corners = with_corners(6)
+  assert six.relation_to(corners) == "subset"
+  seven, corners = with_corners(7)
+  assert seven.relation_to(corners) == "undecided"
   ```
 
-  A fourth field answers `undecided`, which is the conservative answer and not
-  a claim about the relation: it holds, and proving it takes a larger bound.
-
-  A chain of differences meets the same bound through its length. An open
-  record whose key takes twelve constants, minus the record of each constant,
-  is proved empty; at thirteen the chain reads more nodes than a lowering
-  builds and is declined, since each link adds five.
+  The seventh field's `undecided` is the conservative answer and not a claim
+  about the relation: it holds, and proving it takes a larger budget.
 
   **Depth bites a mapping the rules do not read.** The rules refute a list by
   its elements at any depth, and a mapping by the value its clause gives a key
@@ -805,11 +819,10 @@ lands: it enumerates what the procedure must *decide* and fails in both
 directions, so a relation that regresses to conservatism fails there and one
 that becomes decided is added there. It also carries a strict expected-failure
 mark for a relation that holds and is not decided, so the row fails on the day
-it decides. Those rows are the bound-limited relations above — the four-field
-record and the seven-component tuple against their corners and the
-thirteen-link chain of differences, each carrying the width at which the bound
-stops it — and the two sets whose members are one number in two kinds; the
-ledger's `_LEDGERED` list owns them.
+it decides. Those rows are the bound-limited relations above — the seven-field
+record and the seven-component tuple against their corners, each carrying the
+width at which the budget stops it — and the two sets whose members are one
+number in two kinds; the ledger's `_LEDGERED` list owns them.
 
 ```python
 from typing import Annotated, Literal, NamedTuple

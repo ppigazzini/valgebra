@@ -610,11 +610,30 @@ fn every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms() {
     let split_by_kind =
         Schema::union([list_of(Schema::Int), list_of(Schema::Str), Schema::NoneType]);
     assert_eq!(ask(&words, &split_by_kind, &[]).0, Relation::Fails);
+    // A record whose field takes the four kinds, against the records fixing
+    // it: the record rule narrows the field by each member's.
+    let record = |field: Schema| {
+        Schema::record(
+            vec![crate::ir::Field {
+                name: "a".into(),
+                schema: field,
+                required: true,
+            }],
+            crate::ir::Openness::Closed,
+        )
+    };
+    let split = record(Schema::union(kinds.iter().cloned()));
+    let by_kind = Schema::union(kinds.iter().cloned().map(record));
+    let by_kind_but_one = Schema::union(kinds.iter().skip(1).cloned().map(record));
+    assert_eq!(ask(&split, &by_kind, &[]).0, Relation::Holds);
+    assert_eq!(ask(&split, &by_kind_but_one, &[]).0, Relation::Fails);
     let built = [
         (product.clone(), all),
         (product, all_but_one),
         (product_subject(), product_split()),
         (words, split_by_kind),
+        (split.clone(), by_kind),
+        (split, by_kind_but_one),
     ];
     for (sub, sup) in &built {
         let (outside, built) = outside_the_closure(sub, sup, &[]);

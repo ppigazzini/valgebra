@@ -462,8 +462,9 @@ non-relation or a relation valgebra does not yet prove. They decide a wide fragm
 algebra, class and literal inclusion, refinements with bound and length
 constraints, prefix-and-tail sequences, sets and frozensets, records and
 mappings (including multi-clause mixed maps, a closed record against a catch-all
-mapping, and mixed maps where the supertype's extra field is optional and the
-subtype's catch-all covers it), inclusion in a complement where the two schemas
+mapping, mixed maps where the supertype's extra field is optional and the
+subtype's catch-all covers it, and a record against a union of records it splits
+across), inclusion in a complement where the two schemas
 share no value, and recursion -- and [the decidability
 boundary](15-decidability.md) lists the pairs inside it that decline: a key
 holding part of a kind, a record against a mapping keyed by literals, and

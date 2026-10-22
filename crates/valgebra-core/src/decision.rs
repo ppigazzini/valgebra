@@ -32,7 +32,7 @@ use emptiness::class_with_attributes;
 use literals::{finite_meet_below, finite_set, finite_set_below};
 use products::{linear_subtype, seq_splits_across_union};
 use readings::outside_every_kind;
-use records::{attr_record_subtype, keyed_map_subtype};
+use records::{attr_record_subtype, keyed_map_splits_across_union, keyed_map_subtype};
 
 pub use crate::oracle::{LeafRelations, NoLeafRelations};
 
@@ -44,10 +44,12 @@ pub use crate::oracle::{LeafRelations, NoLeafRelations};
 /// **The bound is on cost; termination does not rest on it.** Every goal a
 /// query asks is a pair drawn from a finite closure of its subterms -- the
 /// subterms, their complements, meets of those, and unions of some members of
-/// a union among them -- because the three rules that build a term build it
+/// a union among them -- because the four rules that build a term build it
 /// out of the subterms: [`seq_splits_across_union`] meets a component with the
-/// complements of branch components, the union rule narrows a union to the
-/// branches the subject can meet, and a meet or a complement folds to a bound.
+/// complements of branch components, [`keyed_map_splits_across_union`] a field
+/// with the complements of member fields, the union rule narrows a union to
+/// the branches the subject can meet, and a meet or a complement folds to a
+/// bound.
 /// Every other step asks a smaller pair or unfolds a reference onto the trail,
 /// where a pair that comes back is answered by hypothesis, so every path is
 /// finite. `docs/dev/02-decision.md` writes the argument out, and
@@ -56,7 +58,7 @@ pub use crate::oracle::{LeafRelations, NoLeafRelations};
 /// any caller, and that is what this ceiling is for.
 ///
 /// One budget is threaded through a whole top-level query — subtyping, the
-/// emptiness checks it calls into and the product rule share it, and the two
+/// emptiness checks it calls into and the two split rules share it, and the two
 /// directions of an equivalence share it — so no rule spends a second one. A
 /// lowering is the one cost it does not count: where the rules can neither prove
 /// nor refute `A <= ~B`, the `Complement` arm of `subtype_by_shape` asks the
@@ -135,9 +137,10 @@ impl Budget {
 /// `refused` where the level would pass [`MAX_DECISION_DEPTH`].
 ///
 /// The goal recursion and the emptiness recursion each descend through this
-/// once a level, and the product rule once for each branch it narrows by; the
-/// three share the count, since an emptiness question asked deep inside a goal,
-/// and a goal asked at the bottom of a product, run on the same stack. No guard closes the level:
+/// once a level, and the product and record rules once for each branch they
+/// narrow by; all of them share the count, since an emptiness question asked
+/// deep inside a goal, and a goal asked at the bottom of a split, run on the
+/// same stack. No guard closes the level:
 /// a query that unwinds drops its budget with it, so the count is restored on
 /// the return alone -- a guard's drop put an unwinding path on every goal and
 /// read dearer than the count itself.
@@ -713,9 +716,14 @@ impl Schema {
             }
             refuted |= answer == Relation::Fails;
         }
-        let split = seq_splits_across_union(self, members, cx);
-        if split != Relation::Unknown {
-            return split;
+        // The kind tested here and the rules out of line: a split is the rare
+        // answer, and the union rule is inlined into the goal recursion, so
+        // every union this path reaches would otherwise carry both rules.
+        if matches!(self, Schema::Seq { .. } | Schema::KeyedMap { .. }) {
+            let split = self.splits_across_union(members, cx);
+            if split != Relation::Unknown {
+                return split;
+            }
         }
         // A branch the subject shares no value with decides nothing about the
         // inclusion: `A ⊆ X ∪ Y` with `A ∩ X = ∅` is `A ⊆ Y`. Dropping such a
@@ -777,6 +785,19 @@ impl Schema {
             return Relation::Holds;
         }
         reduced.refutation_only()
+    }
+
+    /// `A ⊆ (Y ∪ Z)` where `A` lands in no single branch and splits across
+    /// several: a fixed-length sequence across sequences of its arity
+    /// ([`seq_splits_across_union`]), a keyed map across keyed maps
+    /// ([`keyed_map_splits_across_union`]). `Unknown` for any other subject.
+    #[inline(never)]
+    fn splits_across_union(&self, members: &[Schema], cx: &mut Cx<'_>) -> Relation {
+        match self {
+            Schema::Seq { .. } => seq_splits_across_union(self, members, cx),
+            Schema::KeyedMap { .. } => keyed_map_splits_across_union(self, members, cx),
+            _ => Relation::Unknown,
+        }
     }
 
     /// `A ⊆ X ∪ Y` where `A ∩ X = ∅`, which is `A ⊆ Y`.

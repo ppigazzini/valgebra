@@ -16,12 +16,14 @@ use std::cell::Cell;
 
 use rustc_hash::FxHashMap;
 
-use crate::descr::maps::KEY_KINDS;
+use crate::descr::lower::key_cover;
+use crate::descr::maps::{KEY_KINDS, PARTS, key_slot};
 use crate::ir::{Attribute, Field, MapClause, Schema};
 use crate::kind::Kind;
+use crate::oracle::denotes_a_set_within;
 use crate::verdict::{Relation, Verdict};
 
-use super::Cx;
+use super::{Cx, descending, spend};
 
 /// What the keyed maps meeting in an intersection admit between them: `Empty`
 /// where no dict is in every map, `Inhabited` where every member is a closed
@@ -442,6 +444,454 @@ fn clause_escapes<'b>(
         }
     }
     Relation::Unknown
+}
+
+/// Whether the keyed map `schema` is below the union of `members`, split
+/// across the keyed maps among them: ICFP 2023's backtrack-free `Φ`, formula
+/// (17), with the defaults read part by part as (22) reads them.
+///
+/// A record whose tag takes three values lands in no single branch of a union
+/// of three records that each fix the tag, and [`keyed_map_subtype`] compares
+/// one map with one map, so this is the rule that sees it. It is
+/// [`product_subtype`](super::products::product_subtype) one component over:
+/// labels in place of positions, and the defaults as the guard (22) puts on
+/// each branch.
+///
+/// ```text
+/// Φ(R, [])       = R is empty
+/// Φ(R, [B, ..N]) = if def(R) ≤ def(B) on every part
+///                  then for every label ℓ:  R(ℓ) ≤ B(ℓ)  or  Φ(R with ℓ := R(ℓ) ∖ B(ℓ), N)
+///                  else Φ(R, N)
+/// ```
+///
+/// A label is read in `T⊥`, where an optional field holds absence as a value
+/// (`Slot`), and the labels are those the record and the branch name: a label
+/// both read through their defaults is below on the guard the branch was
+/// entered on, so the paper's union over every map adds nothing.
+///
+/// **A branch is set aside exactly where some label shares no value**, as in
+/// the product rule: narrowing by it leaves the record as it was. Without the
+/// drop a record below its sixteen corners narrows by every corner at every
+/// label.
+///
+/// **The else-branch refutes only through an infinite part.** Theorem 4.5
+/// rests on Lemma 4.4, whose proof adds to a witness a fresh key of the part
+/// whose default escapes the branch, and the paper says the hypothesis that
+/// every key type is infinite "is actually used". `None` has one key and
+/// `bool` two, so a branch set aside on those parts alone keeps the proof the
+/// rest give and drops their refutation. Every other part, the one for keys of
+/// no listed kind included, has a key no label takes.
+///
+/// A member that is no map this reads is set aside, and a refutation stands
+/// only where each such member shares no kind with the subject, which is
+/// [`Schema::disjoint_with`]'s two discriminants.
+///
+/// The rule reads the clauses the way the set representation does
+/// ([`key_cover`]), so the two deciders agree on which key falls in which part.
+/// A clause naming a constant, holding part of a kind, or reading a part
+/// another clause reads declines, as [`clause_escapes`] declines it.
+pub(super) fn keyed_map_splits_across_union(
+    schema: &Schema,
+    members: &[Schema],
+    cx: &mut Cx<'_>,
+) -> Relation {
+    let Schema::KeyedMap { fields, defaults } = schema else {
+        return Relation::Unknown;
+    };
+    // One branch is the pair the union rule asked already, and most unions
+    // carry no second map, so this costs them one walk of the members.
+    if members
+        .iter()
+        .filter(|member| matches!(member, Schema::KeyedMap { .. }))
+        .nth(1)
+        .is_none()
+    {
+        return Relation::Unknown;
+    }
+    split_across(fields, defaults, members.iter(), schema, cx)
+}
+
+/// The meet `R ∧ ¬R₁ ∧ … ∧ ¬Rₙ` of one keyed map with the complements of
+/// keyed maps: empty exactly where `R` is below their union, which is
+/// [`keyed_map_splits_across_union`] read as emptiness.
+///
+/// Without it the two routes to one question part: `a <= b` would decide
+/// where `a & ~b` is left to the set representation, whose difference spends
+/// its allowance on the chain this decides one complement at a time.
+/// `Unknown` for any other meet, and asked only where the meet's own rules
+/// have declined.
+///
+/// **A complement is read here only where its inner denotes a set**, the
+/// guard the complement law takes ([`denotes_a_set_within`]). The rule
+/// relates the subject to each removed map through the subtyping rules, which
+/// prove a predicate below itself by identity, so `R ∧ ¬R` would read as
+/// empty for an `R` carrying one -- and a predicate may answer its two
+/// occurrences apart, which is why that law declines it.
+pub(super) fn keyed_map_minus_keyed_maps(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
+    // The shape first, which reads discriminants alone; the walk the set guard
+    // takes is paid only by a meet of this shape.
+    let mut subject = None;
+    let mut removed = 0usize;
+    for member in members {
+        match member {
+            Schema::KeyedMap { .. } if subject.is_none() => subject = Some(member),
+            Schema::Complement(_) => removed += 1,
+            _ => return Verdict::Unknown,
+        }
+    }
+    let Some(schema @ Schema::KeyedMap { fields, defaults }) = subject else {
+        return Verdict::Unknown;
+    };
+    let sets = members.iter().all(|member| match member {
+        Schema::Complement(inner) => denotes_a_set_within(inner, cx.oracle, cx.defs),
+        _ => true,
+    });
+    if removed == 0 || !sets {
+        return Verdict::Unknown;
+    }
+    let removed = members.iter().flat_map(|member| match member {
+        Schema::Complement(inner) => match &**inner {
+            Schema::Union(branches) => branches.iter(),
+            other => core::slice::from_ref(other).iter(),
+        },
+        _ => [].iter(),
+    });
+    match split_across(fields, defaults, removed, schema, cx) {
+        Relation::Holds => Verdict::Empty,
+        Relation::Fails => Verdict::Inhabited,
+        Relation::Unknown => Verdict::Unknown,
+    }
+}
+
+/// The two readings' shared body: the subject's fields and clauses, the
+/// members of the union it is asked below, and `schema` itself, which a member
+/// set aside is held disjoint from.
+fn split_across<'s>(
+    fields: &'s [Field],
+    defaults: &'s [MapClause],
+    members: impl Iterator<Item = &'s Schema>,
+    schema: &Schema,
+    cx: &mut Cx<'_>,
+) -> Relation {
+    let Some(parts) = parts_of(defaults, cx) else {
+        return Relation::Unknown;
+    };
+    let Some(subject) = Labels::of(fields, names_read(&parts)) else {
+        return Relation::Unknown;
+    };
+    let mut branches = Vec::new();
+    let mut set_aside_hold_none = true;
+    for member in members {
+        let read = match member {
+            Schema::KeyedMap { fields, defaults } => parts_of(defaults, cx).and_then(|theirs| {
+                Some(Branch {
+                    labels: Labels::of(fields, names_read(&theirs))?,
+                    defaults: defaults_against(&parts, &theirs, cx),
+                })
+            }),
+            _ => None,
+        };
+        match read {
+            Some(branch) => branches.push(branch),
+            None => set_aside_hold_none &= schema.disjoint_with(member, cx.oracle),
+        }
+    }
+    if branches.is_empty() {
+        return Relation::Unknown;
+    }
+    let answer = phi(&subject, &branches, cx);
+    if set_aside_hold_none {
+        answer
+    } else {
+        answer.proof_only()
+    }
+}
+
+/// What a key of the `str` part no field names reads: the part a record's
+/// field names fall in.
+fn names_read<'s>(parts: &[Option<&'s Schema>; PARTS]) -> Option<&'s Schema> {
+    key_slot(Some(Kind::Str))
+        .and_then(|part| parts.get(part))
+        .copied()
+        .flatten()
+}
+
+/// Whether `part` holds finitely many keys -- `None`'s one and `bool`'s two --
+/// where the else-branch of `Φ` keeps only its proof.
+fn finite(part: usize) -> bool {
+    [Kind::NoneType, Kind::Bool]
+        .into_iter()
+        .any(|kind| key_slot(Some(kind)) == Some(part))
+}
+
+/// What each part of the key partition maps to under `defaults`: the value of
+/// the one clause holding every key of it, or `None` where no clause holds one
+/// and a key there is absent. `None` overall where a clause names a constant
+/// or holds part of a kind, or two clauses read one part.
+fn parts_of<'s>(defaults: &'s [MapClause], cx: &Cx<'_>) -> Option<[Option<&'s Schema>; PARTS]> {
+    let mut parts = [None; PARTS];
+    for clause in defaults {
+        let (labels, covered) = key_cover(&clause.key, cx.oracle)?;
+        if !labels.is_empty() {
+            return None;
+        }
+        for part in covered {
+            let slot = parts.get_mut(key_slot(part)?)?;
+            if slot.replace(&clause.value).is_some() {
+                return None;
+            }
+        }
+    }
+    Some(parts)
+}
+
+/// How a subject's defaults stand against a branch's, which is the condition
+/// (22) branches on.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Defaults {
+    /// Every part's default is within the branch's: split across its labels.
+    Within,
+    /// Some part's default holds a value the branch's does not, so a value of
+    /// the subject escapes the branch under a key no label names. `exact` where
+    /// one such part is infinite, which is where a refutation stands.
+    Exceed { exact: bool },
+    /// Neither is proved.
+    Unknown,
+}
+
+/// Read once per branch, since narrowing a label never moves a default.
+fn defaults_against(
+    mine: &[Option<&Schema>; PARTS],
+    theirs: &[Option<&Schema>; PARTS],
+    cx: &mut Cx<'_>,
+) -> Defaults {
+    let mut exceeds: Option<bool> = None;
+    let mut declined = false;
+    for (part, (mine, theirs)) in mine.iter().zip(theirs).enumerate() {
+        let Some(mine) = mine else {
+            continue;
+        };
+        let answer = match theirs {
+            Some(theirs) => mine.is_subtype_rec(theirs, cx),
+            // The branch admits no key here, so the default escapes it exactly
+            // where it holds a value.
+            None => Relation::of_mismatch(mine.verdict_rec(cx)),
+        };
+        match answer {
+            Relation::Holds => {}
+            Relation::Fails => {
+                let exact = !finite(part);
+                exceeds = Some(exceeds.unwrap_or(false) || exact);
+            }
+            Relation::Unknown => declined = true,
+        }
+    }
+    match exceeds {
+        Some(exact) => Defaults::Exceed { exact },
+        None if declined => Defaults::Unknown,
+        None => Defaults::Within,
+    }
+}
+
+/// One label as `Φ` reads it: the values its key may hold, and whether the key
+/// may be absent -- ICFP's `T⊥`, where an optional field holds `⊥`.
+#[derive(Clone, Debug)]
+struct Slot {
+    ty: Schema,
+    absent: bool,
+}
+
+impl Slot {
+    /// `self ≤ theirs` in `T⊥`. Absence the other slot does not allow is a
+    /// value outside it, whatever the types say of each other.
+    fn below(&self, theirs: &Slot, cx: &mut Cx<'_>) -> Relation {
+        if self.absent && !theirs.absent {
+            return Relation::Fails;
+        }
+        self.ty.is_subtype_rec(&theirs.ty, cx)
+    }
+
+    /// `self ∖ theirs` in `T⊥`: absent where this allows it and that does not.
+    fn without(&self, theirs: &Slot) -> Slot {
+        Slot {
+            ty: Schema::meet([self.ty.clone(), theirs.ty.clone().complement()]),
+            absent: self.absent && !theirs.absent,
+        }
+    }
+
+    /// Whether the two slots share no value, absence included.
+    fn apart(&self, theirs: &Slot, cx: &mut Cx<'_>) -> bool {
+        if self.absent && theirs.absent {
+            return false;
+        }
+        self.ty.shares_no_value_with(&theirs.ty, cx)
+    }
+}
+
+/// A keyed map's labels in name order, and what a key of the `str` part no
+/// label names reads: the clause there, or absence.
+#[derive(Clone, Debug)]
+struct Labels<'s> {
+    named: Vec<(&'s str, Slot)>,
+    rest: Option<&'s Schema>,
+}
+
+impl<'s> Labels<'s> {
+    /// `None` where two fields share a name, which the frontend never builds and
+    /// a label cannot hold twice.
+    fn of(fields: &'s [Field], rest: Option<&'s Schema>) -> Option<Self> {
+        let mut named: Vec<(&'s str, Slot)> = fields
+            .iter()
+            .map(|field| {
+                let slot = Slot {
+                    ty: field.schema.clone(),
+                    absent: !field.required,
+                };
+                (&*field.name, slot)
+            })
+            .collect();
+        named.sort_by(|a, b| a.0.cmp(b.0));
+        if named
+            .windows(2)
+            .any(|pair| matches!(pair, [(a, _), (b, _)] if a == b))
+        {
+            return None;
+        }
+        Some(Self { named, rest })
+    }
+
+    /// The slot a key of this name reads.
+    fn slot(&self, name: &str) -> Slot {
+        let named = self
+            .named
+            .binary_search_by(|(label, _)| (*label).cmp(name))
+            .ok()
+            .and_then(|at| self.named.get(at));
+        match named {
+            Some((_, slot)) => slot.clone(),
+            None => Slot {
+                ty: self.rest.map_or(Schema::Nothing, Schema::clone),
+                absent: true,
+            },
+        }
+    }
+
+    /// The names either map labels, in order and once.
+    fn names_with(&self, other: &Labels<'s>) -> Vec<&'s str> {
+        let mut names: Vec<&'s str> = self
+            .named
+            .iter()
+            .chain(&other.named)
+            .map(|(name, _)| *name)
+            .collect();
+        names.sort_unstable();
+        names.dedup();
+        names
+    }
+
+    /// The same map with `name` read as `slot`.
+    fn with(&self, name: &'s str, slot: Slot) -> Labels<'s> {
+        let mut named = self.named.clone();
+        match named.binary_search_by(|(label, _)| (*label).cmp(name)) {
+            Ok(at) => {
+                if let Some(entry) = named.get_mut(at) {
+                    entry.1 = slot;
+                }
+            }
+            Err(at) => named.insert(at, (name, slot)),
+        }
+        Labels {
+            named,
+            rest: self.rest,
+        }
+    }
+
+    /// `Φ(R, [])`: refuted where every key the map requires holds a value,
+    /// proved where one holds none.
+    fn base_case(&self, cx: &mut Cx<'_>) -> Relation {
+        let mut verdict = Verdict::Inhabited;
+        for (_, slot) in &self.named {
+            if slot.absent {
+                continue;
+            }
+            match slot.ty.verdict_rec(cx) {
+                Verdict::Empty => return Relation::Holds,
+                Verdict::Unknown => verdict = Verdict::Unknown,
+                Verdict::Inhabited => {}
+            }
+        }
+        Relation::of_mismatch(verdict)
+    }
+}
+
+/// A map of the union, read for `Φ`.
+struct Branch<'s> {
+    labels: Labels<'s>,
+    defaults: Defaults,
+}
+
+/// `Φ(subject, branches)` in three values.
+///
+/// Each conjunct a label asks is the paper's: covered where the label is
+/// below the branch's or where the record narrowed there is below the rest.
+/// It refutes where both refute, since the label's refutation stands on a
+/// value the narrowed record holds and the rest's on that record having one
+/// outside them, and the first conjunct that does not hold is the answer.
+/// Each branch narrowed by is a level of the query's depth, as in the product
+/// rule.
+fn phi(subject: &Labels<'_>, branches: &[Branch<'_>], cx: &mut Cx<'_>) -> Relation {
+    if !spend(cx.budget) {
+        return Relation::Unknown;
+    }
+    let mut refutes = true;
+    let mut remaining = branches;
+    let (branch, rest) = loop {
+        let Some((branch, rest)) = remaining.split_first() else {
+            let answer = subject.base_case(cx);
+            return if refutes { answer } else { answer.proof_only() };
+        };
+        remaining = rest;
+        match branch.defaults {
+            Defaults::Within => {
+                let apart = subject
+                    .names_with(&branch.labels)
+                    .into_iter()
+                    .any(|name| subject.slot(name).apart(&branch.labels.slot(name), cx));
+                if !apart {
+                    break (branch, rest);
+                }
+            }
+            Defaults::Exceed { exact } => refutes &= exact,
+            Defaults::Unknown => refutes = false,
+        }
+    };
+    let answer = 'labels: {
+        for name in subject.names_with(&branch.labels) {
+            let mine = subject.slot(name);
+            let theirs = branch.labels.slot(name);
+            let here = mine.below(&theirs, cx);
+            if here == Relation::Holds {
+                continue;
+            }
+            let narrowed = mine.without(&theirs);
+            // A required key narrowed to no value empties the record, which
+            // every union covers; asked here, for the one slot that moved,
+            // rather than of every slot at every level.
+            let covered = if !narrowed.absent && narrowed.ty.verdict_rec(cx).is_empty() {
+                Relation::Holds
+            } else {
+                let narrowed = subject.with(name, narrowed);
+                descending(cx.budget, Relation::Unknown, || phi(&narrowed, rest, cx))
+            };
+            match (here, covered) {
+                (_, Relation::Holds) => {}
+                (Relation::Fails, Relation::Fails) => break 'labels Relation::Fails,
+                _ => break 'labels Relation::Unknown,
+            }
+        }
+        Relation::Holds
+    };
+    if refutes { answer } else { answer.proof_only() }
 }
 
 /// Whether the attribute record `fa` is a subtype of `fb`: width and depth.
