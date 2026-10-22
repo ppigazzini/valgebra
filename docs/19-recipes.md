@@ -1,5 +1,5 @@
 ---
-description: Tasks done end to end -- a response in a test, a schema against its last version, a configuration file, a model's tool call, a response from an API the code does not own, a field of a FastAPI request, a message routed by its shape.
+description: Tasks done end to end -- a response in a test, a value whose type a checker does not know, a schema against its last version, a configuration file, a model's tool call, a response from an API the code does not own, a field of a FastAPI request, a message routed by its shape.
 ---
 
 # Recipes
@@ -59,6 +59,59 @@ def pytest_assertrepr_compare(op: str, left: object, right: object) -> list[str]
 E       AssertionError: assert {'id': 7, 'name': None} is not in the schema
 E         at name: expected str, got None [string_type]
 ```
+
+## A value whose type the checker does not know
+
+A value from `json.loads`, a cache, a queue or a JSON column reaches the code
+typed `Any` or `object`, and a checker reads nothing about it: a misspelled key
+is found when the line runs. `is_valid` is a `TypeGuard`, so where it answers
+`True` a checker reads the value as the schema's type, and `ensure` is the
+raising form, which returns the value it was given, typed:
+
+```python
+import json
+from typing import Literal, TypedDict
+
+from valgebra import Validator
+
+
+class Order(TypedDict):
+    id: int
+    status: Literal["open", "paid"]
+    total: int
+
+
+ORDERS = Validator(Order)
+
+
+def charge(order: Order) -> str:
+    return f"charging {order['total']} for order {order['id']}"
+
+
+def charge_cached(cache: dict[str, object], key: str) -> str | None:
+    cached = cache.get(key)
+    if not ORDERS.is_valid(cached):
+        return None
+    return charge(cached)  # a checker reads `cached` as an `Order` here
+
+
+cache: dict[str, object] = {"order:7": {"id": 7, "status": "open", "total": 1200}}
+assert charge_cached(cache, "order:7") == "charging 1200 for order 7"
+assert charge_cached(cache, "order:8") is None
+
+data = json.loads('{"id": 8, "status": "paid", "total": 300}')
+order = ORDERS.ensure(data)  # an `Order` to a checker, and the same object
+assert order is data
+```
+
+`ensure` is `typing.cast` with the check: `cast(Order, data)` tells the
+checker what nothing has checked. A schema narrows where a checker reads it as
+a type, as it reads a class such as a `TypedDict`, a dataclass or
+`list[Order]`; `int | None`, a `Literal` and an `Annotated` form read as
+`Validator[object]` and narrow nothing
+([what each spelling reads as](18-static-checking.md#a-validators-type-is-its-sets)).
+And a `False` narrows nothing: past a refusal the value reads as it did before
+([a `True` narrows](18-static-checking.md#a-true-narrows-and-a-false-does-not)).
 
 ## A schema against its last version
 
