@@ -24,6 +24,7 @@ use crate::oracle::denotes_a_set_within;
 use crate::verdict::Verdict;
 
 use super::constraints::{Density, bounds_unsatisfiable, longest, shortest, tightest_bounds};
+use super::literals::FiniteMeet;
 use super::records::keyed_map_meet_verdict;
 use super::{
     Budget, Cx, DECISION_BUDGET, LeafRelations, NoLeafRelations, descending,
@@ -478,10 +479,32 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
         }
     };
     let verdict = match verdict {
-        Verdict::Unknown => meet_through_a_reference(members, cx).unwrap_or(Verdict::Unknown),
+        Verdict::Unknown => meet_through_a_reference(members, cx)
+            .unwrap_or_else(|| a_difference_of_sets(members, cx)),
         settled => settled,
     };
     (verdict, region)
+}
+
+/// A meet the rules declined, read as a set minus sets where it is one: a
+/// table met with complements of tables ([`FiniteMeet`]).
+///
+/// Out of line, and asked only of a declined meet no reference unfolds, so the
+/// meets the rules decide carry the reading nowhere on their path; and a meet
+/// holding a member of no shape it reads -- a class with its attributes, say --
+/// leaves at the first look.
+#[inline(never)]
+fn a_difference_of_sets(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
+    let shaped = members.iter().all(|member| {
+        matches!(
+            member,
+            Schema::Literal(_) | Schema::Union(_) | Schema::Complement(_)
+        )
+    });
+    if !shaped {
+        return Verdict::Unknown;
+    }
+    FiniteMeet::of(members).map_or(Verdict::Unknown, |meet| meet.verdict(cx.oracle))
 }
 
 /// Whether `members` hold a pattern refinement and the complement of one with

@@ -15,7 +15,7 @@ use std::borrow::Cow;
 use std::slice;
 
 use crate::ir::{ConstIx, Schema};
-use crate::verdict::Relation;
+use crate::verdict::{Relation, Verdict};
 
 use super::LeafRelations;
 
@@ -76,6 +76,184 @@ pub(super) fn finite_set(schema: &Schema) -> Option<&[Schema]> {
         }
         _ => None,
     }
+}
+
+/// A meet of finite sets of constants and complements of finite sets, read as
+/// the finite set it denotes: the constants every kept table holds and no
+/// taken table does.
+///
+/// It is the term a record's tag narrows to when a record is split across the
+/// records that fix it, one complement per record, and the term a table minus
+/// each of its members is.
+pub(super) struct FiniteMeet<'s> {
+    kept: Vec<&'s [Schema]>,
+    taken: Vec<&'s [Schema]>,
+}
+
+impl<'s> FiniteMeet<'s> {
+    /// The meet of `members`, where each is a finite set of constants or the
+    /// complement of one and at least one is a set kept; `None` otherwise.
+    pub(super) fn of(members: &'s [Schema]) -> Option<Self> {
+        // Read once without collecting, so a meet that is no such thing -- the
+        // common one -- allocates nothing to find that out.
+        let table = |member: &'s Schema| match member {
+            Schema::Complement(inner) => finite_set(inner),
+            other => finite_set(other),
+        };
+        if !members.iter().all(|member| table(member).is_some()) {
+            return None;
+        }
+        let mut kept = Vec::new();
+        let mut taken = Vec::new();
+        for member in members {
+            match member {
+                Schema::Complement(inner) => taken.push(finite_set(inner)?),
+                other => kept.push(finite_set(other)?),
+            }
+        }
+        (!kept.is_empty()).then_some(Self { kept, taken })
+    }
+
+    /// Whether the meet holds a value: empty where every constant of its first
+    /// kept table is out, inhabited where one is in.
+    pub(super) fn verdict(&self, oracle: &dyn LeafRelations) -> Verdict {
+        let Some(first) = self.kept.first() else {
+            return Verdict::Unknown;
+        };
+        let mut verdict = Verdict::Empty;
+        for member in *first {
+            match self.placed(member, oracle) {
+                Placed::Out => {}
+                Placed::In => return Verdict::Inhabited,
+                Placed::Unread => verdict = Verdict::Unknown,
+            }
+        }
+        verdict
+    }
+
+    /// `self ⊆ supertype` for a finite set `supertype`: every constant of the
+    /// meet found in it, and refuted by one that is in the meet and apart from
+    /// it.
+    ///
+    /// A constant not proved out of the meet is asked of the supertype whatever
+    /// else is known of it, since one found there by index is in it either way;
+    /// the proof is conservative where the meet reads wider than it is, and
+    /// never wrong.
+    pub(super) fn below(&self, supertype: &[Schema], oracle: &dyn LeafRelations) -> Relation {
+        let Some(first) = self.kept.first() else {
+            return Relation::Unknown;
+        };
+        let mut answer = Relation::Holds;
+        for member in *first {
+            let place = self.placed(member, oracle);
+            if place == Placed::Out {
+                continue;
+            }
+            let Schema::Literal(index) = member else {
+                answer = Relation::Unknown;
+                continue;
+            };
+            if holds_index(supertype, *index) {
+                continue;
+            }
+            if place == Placed::In && apart_from(*index, supertype, oracle) {
+                return Relation::Fails;
+            }
+            answer = Relation::Unknown;
+        }
+        answer
+    }
+
+    /// Where `member` stands, read by index first and by the oracle after.
+    ///
+    /// One index is one constant, so a table holding the index holds the
+    /// constant, and a constant whose index a taken table holds is out exactly.
+    /// The converse is the oracle's: two indices may name equal constants, so a
+    /// constant no kept table is missing and no taken table holds by index is
+    /// in the set only where the oracle says it is a value apart from every
+    /// taken table.
+    fn placed(&self, member: &Schema, oracle: &dyn LeafRelations) -> Placed {
+        let Schema::Literal(index) = member else {
+            return Placed::Unread;
+        };
+        if self.taken.iter().any(|table| holds_index(table, *index)) {
+            return Placed::Out;
+        }
+        let mut in_every = true;
+        for table in &self.kept {
+            if holds_index(table, *index) {
+                continue;
+            }
+            if apart_from(*index, table, oracle) {
+                return Placed::Out;
+            }
+            in_every = false;
+        }
+        let is_value = || oracle.literals_disjoint(*index, *index) == Some(false);
+        let apart_from_taken = || {
+            self.taken
+                .iter()
+                .all(|table| apart_from(*index, table, oracle))
+        };
+        if in_every && is_value() && apart_from_taken() {
+            Placed::In
+        } else {
+            Placed::Unread
+        }
+    }
+}
+
+/// `meet ⊆ other` for a meet of `members` that is a [`FiniteMeet`] and a table
+/// `other`, and `Unknown` for any other pair.
+///
+/// Out of line, since the meet arm it is asked from is inlined into the goal
+/// recursion and nearly every pair passes it by.
+#[inline(never)]
+pub(super) fn finite_meet_below(
+    members: &[Schema],
+    other: &Schema,
+    oracle: &dyn LeafRelations,
+) -> Relation {
+    let Some(supertype) = finite_set(other) else {
+        return Relation::Unknown;
+    };
+    FiniteMeet::of(members).map_or(Relation::Unknown, |meet| meet.below(supertype, oracle))
+}
+
+/// Where a constant of a kept table stands in the set a [`FiniteMeet`]
+/// denotes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Placed {
+    /// Not in it: a taken table holds its index, or a kept table is disjoint
+    /// from it.
+    Out,
+    /// In it: every kept table holds its index, and it is a value disjoint
+    /// from every taken table.
+    In,
+    /// Neither is proved.
+    Unread,
+}
+
+/// Whether the canonical `table` holds the constant at `index`.
+fn holds_index(table: &[Schema], index: ConstIx) -> bool {
+    table
+        .binary_search_by(|held| match held {
+            Schema::Literal(at) => at.cmp(&index),
+            _ => core::cmp::Ordering::Less,
+        })
+        .is_ok()
+}
+
+/// Whether the oracle says the constant at `index` is no constant of `table`.
+fn apart_from(index: ConstIx, table: &[Schema], oracle: &dyn LeafRelations) -> bool {
+    let indices: Vec<ConstIx> = table
+        .iter()
+        .filter_map(|held| match held {
+            Schema::Literal(at) => Some(*at),
+            _ => None,
+        })
+        .collect();
+    oracle.literal_sets_disjoint(&[index], &indices) == Some(true)
 }
 
 /// `A ⊆ B` between two finite sets of constants, decided by membership.

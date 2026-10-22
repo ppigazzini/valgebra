@@ -29,7 +29,7 @@ use crate::verdict::{Relation, Verdict};
 use crate::oracle::has_complementary_pair;
 use constraints::constraint_entailed;
 use emptiness::class_with_attributes;
-use literals::{finite_set, finite_set_below};
+use literals::{finite_meet_below, finite_set, finite_set_below};
 use products::{linear_subtype, seq_splits_across_union};
 use readings::outside_every_kind;
 use records::{attr_record_subtype, keyed_map_subtype};
@@ -943,8 +943,13 @@ impl Schema {
             // unfolded, as it is for any other subject: a reference denotes
             // exactly its definition, and the decomposition that runs first is
             // the cheap route rather than the only one.
+            //
+            // A meet of tables and complements of tables is a table, which is
+            // what a record's tag narrows to, and is asked as one once the
+            // member rule has not placed it.
             (Schema::Intersection(members), _) => self
                 .meet_below(other, members, cx)
+                .or_else(|| finite_meet_below(members, other, cx.oracle))
                 .or_else(|| self.unstructured(other, cx))
                 .or_else(|| self.below_a_reference(other, cx)),
             (_, Schema::Union(members)) => self

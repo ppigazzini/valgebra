@@ -775,7 +775,13 @@ sets is membership of every value of one in the other -- a walk of the two
 tables, exact in both directions, where distributing one against the other is a
 decision step per pair. The rule reads a table only in the canonical order its
 constructor leaves it in, and its refutation is the oracle's: two constants at
-two pool positions are two values only where the bindings can compare them.
+two pool positions are two values only where the bindings can compare them. A
+meet of tables and complements of tables is a table too -- the constants every
+kept table holds and no taken one does -- and is read the same way, as a
+subject below a table and as an emptiness (`FiniteMeet` in
+`decision/literals.rs`). A constant is taken away by its pool position, which
+is exact, and kept only where the oracle says it is a value apart from every
+taken table, since two positions may hold one value.
 
 And one repetition is removed rather than bounded. A record whose fields carry
 one schema, or a tuple whose positions do, asks the *same goal* once per field

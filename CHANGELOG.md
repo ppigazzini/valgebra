@@ -13,7 +13,20 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- feat: a table met with complements of tables is decided as the set it leaves
+
 -->
+
+### Added
+
+- **A table of constants minus constants is decided as the set it leaves.**
+  `intersection(Literal[0, ..., n], complement(Literal[0]), ...)` taking every
+  member away is proved empty at any length, where the set representation
+  declined from twenty-one members, and a table minus some of its constants
+  is below a table holding the rest and refuted by one missing a constant
+  left. The rules read it by lookup, as they read two tables: a constant is
+  taken away by its pool position, and kept only where the bindings say it is
+  a value apart from every table taken away.
 
 ## [0.0.19] - 2026-10-20
 

@@ -1011,6 +1011,24 @@ it in, so the transform that renumbers one sorts it again
 sort, two tables agreeing on nothing about where each constant sits fall out of
 the canonical order and are distributed against each other instead.
 
+A table met with other tables and with the complements of tables is the finite
+set it leaves, decided by the same lookup, which is what a record's tag narrows
+to when the record rule splits it:
+
+```python
+from typing import Literal
+
+from valgebra import complement, intersection
+
+left = intersection(Literal["a", "b", "c"], complement(Literal["a"]))
+assert left.relation_to(Literal["b", "c"]) == "subset"
+assert left.relation_to(Literal["b"]) == "not_subset"  # "c" is left
+```
+
+A constant is taken away by its pool position, which is exact, and kept only
+where the bindings say it is a value apart from every table taken away, since
+two positions may hold one value.
+
 The refutation is the bindings' to give: two constants at two pool positions are
 two *values* only where their type's equality can be trusted, and a constant
 that does not equal itself — `float("nan")` — denotes no value at all, so

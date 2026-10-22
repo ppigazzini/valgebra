@@ -3800,6 +3800,92 @@ fn a_table_of_literals_is_decided_as_the_set_it_denotes() {
     assert_eq!(table_relation(&[2], &[0, 1], &Values), Relation::Fails);
 }
 
+/// A table met with complements of tables, the term a record's tag narrows to.
+fn table_minus(kept: &[usize], taken: &[&[usize]]) -> Schema {
+    let table = |indices: &[usize]| {
+        Schema::union(
+            indices
+                .iter()
+                .map(|index| Schema::Literal(ConstIx::new(*index))),
+        )
+    };
+    Schema::meet(
+        core::iter::once(table(kept))
+            .chain(taken.iter().map(|indices| table(indices).complement())),
+    )
+}
+
+/// A table minus constants is the set it leaves, decided as a set.
+///
+/// Every constant a taken table holds by index is out of it, and every other
+/// one the oracle reads as a value apart from the taken tables is in it: so
+/// the meet is below a table holding what is left, refuted by one that misses
+/// a constant left, and empty where every constant is taken.
+#[test]
+fn a_table_minus_constants_is_the_set_it_leaves() {
+    let relation = |subject: &Schema, supertype: &[usize]| {
+        let supertype = Schema::union(
+            supertype
+                .iter()
+                .map(|index| Schema::Literal(ConstIx::new(*index))),
+        );
+        let budget = Budget::new(DECISION_BUDGET);
+        subject.subtype_relation(&supertype, &Values, &[], &budget)
+    };
+    let left = table_minus(&[0, 1, 2], &[&[0]]);
+    assert_eq!(relation(&left, &[1, 2]), Relation::Holds);
+    assert_eq!(
+        relation(&left, &[1]),
+        Relation::Fails,
+        "2 is left, and not in `1`"
+    );
+    assert_eq!(
+        table_minus(&[0, 1, 2], &[&[0], &[1], &[2]]).verdict_under(&Values),
+        Verdict::Empty
+    );
+    assert_eq!(
+        table_minus(&[0, 1, 2], &[&[0], &[1]]).verdict_under(&Values),
+        Verdict::Inhabited
+    );
+    // Two tables kept are the constants both hold.
+    let both = Schema::meet([
+        Schema::union([
+            Schema::Literal(ConstIx::new(0)),
+            Schema::Literal(ConstIx::new(1)),
+        ]),
+        Schema::union([
+            Schema::Literal(ConstIx::new(1)),
+            Schema::Literal(ConstIx::new(2)),
+        ]),
+    ]);
+    assert_eq!(relation(&both, &[1]), Relation::Holds);
+}
+
+/// A constant taken under another index is not read as kept.
+///
+/// Index 3 is the value at index 0 (`Values`), so `{0, 1} minus {3}` is `{1}`
+/// -- and reading by index alone would keep `0` and refute the meet below
+/// `{1}` on it. The rule keeps a constant only where the oracle says it is
+/// apart from every taken table, so the pair declines rather than refutes,
+/// and the meet that takes its last constant that way is not read inhabited.
+#[test]
+fn a_constant_taken_under_another_index_is_not_read_as_kept() {
+    let budget = Budget::new(DECISION_BUDGET);
+    assert_ne!(
+        table_minus(&[0, 1], &[&[3]]).subtype_relation(
+            &Schema::Literal(ConstIx::new(1)),
+            &Values,
+            &[],
+            &budget,
+        ),
+        Relation::Fails
+    );
+    assert_ne!(
+        table_minus(&[0], &[&[3]]).verdict_under(&Values),
+        Verdict::Inhabited
+    );
+}
+
 /// Deciding one table against another is a walk of two lists, not a product of
 /// their members.
 ///
