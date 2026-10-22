@@ -1304,37 +1304,49 @@ that one.
 
 **Decide on the count, and confirm in cycles.** On a build with the GIL a count
 is deterministic: two builds of one source and one toolchain read it to the
-instruction, so a
-difference is the code's, between environments whose names are one length. A
-shape that allocates reads the heap its process starts with, and the
-environment's path is part of that process: one release in two environments
-named a character apart read `explain_record` 3.1% apart and `json_records`
-0.7%, and to the instruction at one length. On a free-threaded build, a shape
-of a few thousand instructions is not exact: two counts of one pair on
+instruction between environments whose names are one length, so a difference is
+the code's -- on a shape that allocates, where it reads the same at a second
+size of the environment, as the next paragraph says. On a free-threaded build, a
+shape of a few thousand instructions is not exact: two counts of one pair on
 3.15t read `literal` -0.03% and -13.5%, and `scalar` +6.3% and +8.7%, where
 `validate` read +1.9% both times. Count such a cell twice, and read one that
-does not repeat as nothing shown. A count does not predict time on every
-shape: that nested list
-read 0.2% more instructions in one release than in the one before it, and 4%
-more cycles. `cycles` reads what the
-count cannot and carries the machine's noise, so it starts each round at the
-next environment, prints the median of the rounds, and beside it the rounds in
-which each environment read slower: a cell inside the spread of the same build
-read twice has shown nothing. On the machine above that spread is about 2%, 4%
-on a shape of a few hundred cycles, and it is a shape's own: two environments
-of one build read `list[int | str]` 14% apart, at every round of two runs,
-where `list[int]` read 0.6% apart. So the control is the base in a second
-environment, read in the same run, and each cell is weighed against its own
-shape's control.
+does not repeat as nothing shown. A count does not predict time on every shape:
+that nested list read 0.2% more instructions in one release than in the one
+before it, and 4% more cycles. `cycles` reads what the count cannot and carries
+the machine's noise, so it starts each round at the next environment, prints the
+median of the rounds, and beside it the rounds in which each environment read
+slower: a cell inside the spread of the same build read twice has shown nothing.
+On the machine above that spread is about 2%, 4% on a shape of a few hundred
+cycles, and it is a shape's own: two environments of one build read `list[int |
+str]` 14% apart, at every round of two runs, where `list[int]` read 0.6% apart.
+So the control is the base in a second environment, read in the same run, and
+each cell is weighed against its own shape's control.
 
-**Read a change against its base built the same way.** A base `--build`
-made differs from the change in its sources alone; a release also differs in
-the container and the path it was built in, which the layout follows, and in
-the binary a shape that allocates hands the C library's allocator: on 3.11
-PyPI's 0.0.19 read `explain_record` 0.84% below a build here of its own commit,
-167 instructions a call in `_int_malloc`. So a change is read against its
-base's revision built here, and in cycles only that way; a release's own
-wheel is read by count, for what it ships.
+**A shape that allocates is counted at a second size.** It reads the heap its
+loop starts from, and everything run before the loop leaves that heap, the
+environment included: one release in two environments named a character apart
+read `explain_record` 3.1% apart and `json_records` 0.7%, and to the instruction
+at one length. Two builds may move together as the environment grows, or apart.
+Two that build a validator to the instruction alike differed by the same count,
+within 0.02%, at every size up to 8,200 bytes larger on 3.11, 3.12, 3.14 and
+3.15, where each alone spread up to 3.7%; the builds of two releases read
+`json_deep` anywhere from 1.5% cheaper to 8.0% dearer by the environment's size
+alone. `count --pad BYTES` adds that many bytes to every run's environment, so a
+shape that allocates and reads dearer is counted again at two sizes, `--pad 600`
+and `--pad 1100`: a difference that is the code's reads the same at each.
+Trimming the heap before the loop, as the binding gate does, is not the remedy
+here: it took `explain_record`'s 3.1% to 0.02% and moved `json_deep`'s from 0.3%
+to 0.7%.
+
+**Read a change against its base built the same way.** A base `--build` made
+differs from the change in its sources alone; a release also differs in the
+container and the path it was built in, which the layout follows, and in the
+binary a shape that allocates hands the C library's allocator: on 3.11 PyPI's
+0.0.19 read `explain_record` 0.84% below a build here of its own commit, 167
+instructions a call in `_int_malloc`, and 0.39% above it with the environment
+1,100 bytes larger. So a change is read against its base's revision built here,
+and in cycles only that way; a release's own wheel is read by count, for what it
+ships.
 
 **`symbols` names where, not why.** A release wheel is stripped, so it names
 the extension's functions only between builds `--build` made; against a

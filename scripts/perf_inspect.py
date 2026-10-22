@@ -6,10 +6,12 @@ valgebra: a release from PyPI, a wheel on disk, or a revision built as the
 release builds it.
 
 - `count`: instructions per call under cachegrind. On a build with the GIL,
-  two environments named at one length compare to the instruction, so a
-  difference is the code's; the performance page says why the length, and how
-  a free-threaded build's small shapes read. It sees no cache, branch
-  predictor or alignment.
+  two environments named at one length compare to the instruction. A shape
+  that allocates also reads the heap its loop starts from, which the
+  environment's size moves, and `--pad BYTES` grows every run's environment
+  by that much: a difference that is the code's reads the same with it. The
+  performance page says why the length, and how a free-threaded build's small
+  shapes read. It sees no cache, branch predictor or alignment.
 - `cycles`: user-mode cycles, instructions, branch mispredicts and frontend
   stalls per call, from the processor's own counters through
   `perf_event_open`. What the machine did, so it sees what `count` cannot, and
@@ -223,8 +225,14 @@ def make_env(args: Any) -> int:
     return EXIT_OK
 
 
-def cachegrind(command: Sequence[str], out: str = "/dev/null") -> int:
-    """Return the instructions `command` executes under cachegrind."""
+def cachegrind(command: Sequence[str], out: str = "/dev/null", pad: int = 0) -> int:
+    """Return the instructions `command` executes under cachegrind.
+
+    `pad` adds one variable of that many bytes to the environment it runs in.
+    """
+    env = perf_gate.workload_environment(os.environ)
+    if pad:
+        env["PERF_INSPECT_PAD"] = "x" * pad
     run = subprocess.run(
         [
             "valgrind",
@@ -235,7 +243,7 @@ def cachegrind(command: Sequence[str], out: str = "/dev/null") -> int:
         ],
         capture_output=True,
         text=True,
-        env=perf_gate.workload_environment(os.environ),
+        env=env,
         check=False,
     )
     found = perf_gate.IREFS.search(run.stderr)
@@ -256,7 +264,9 @@ def change(base: float, value: float) -> float:
     return 100 * (value / base - 1)
 
 
-def count(names: Sequence[str], shapes: Sequence[str], tolerance: float | None) -> int:
+def count(
+    names: Sequence[str], shapes: Sequence[str], tolerance: float | None, pad: int = 0
+) -> int:
     """Print instructions per call per shape, each environment against the first."""
     if shutil.which("valgrind") is None:
         _cannot_run("valgrind is not on PATH")
@@ -267,7 +277,9 @@ def count(names: Sequence[str], shapes: Sequence[str], tolerance: float | None) 
             zip(
                 jobs,
                 pool.map(
-                    lambda j: cachegrind([*commands[j[0]], "run", j[1], str(j[2])]),
+                    lambda j: cachegrind(
+                        [*commands[j[0]], "run", j[1], str(j[2])], pad=pad
+                    ),
                     jobs,
                 ),
                 strict=True,
@@ -560,6 +572,9 @@ def _arguments(argv: Sequence[str]) -> Any:
     reading.add_argument(
         "--tolerance", type=float, help="exit 1 past this rise, in per cent"
     )
+    reading.add_argument(
+        "--pad", type=int, default=0, help="bytes added to every run's environment"
+    )
     timing = steps.add_parser("cycles", help="hardware counters per call, interleaved")
     timing.add_argument("names", nargs="+")
     timing.add_argument("--shapes", nargs="+", default=every, help="default: all")
@@ -588,7 +603,7 @@ def main(argv: Sequence[str] = ()) -> int:
         case "env":
             return make_env(args)
         case "count":
-            return count(args.names, args.shapes, args.tolerance)
+            return count(args.names, args.shapes, args.tolerance, args.pad)
         case "cycles":
             return cycles(args.names, args.shapes, args.rounds, args.cpu)
         case _:

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import ast
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -95,8 +95,8 @@ def test_a_rise_past_the_tolerance_exits_1(
     # rises by `rise` per cent of it.
     per_call = {"base": 1000.0, "head": 1000.0 * (1 + rise / 100)}
 
-    def counted(command: Sequence[str], out: str = "/dev/null") -> int:
-        del out
+    def counted(command: Sequence[str], out: str = "/dev/null", pad: int = 0) -> int:
+        del out, pad
         name, calls = command[0], int(command[-1])
         return int(5_000_000 + per_call[name] * calls)
 
@@ -105,6 +105,34 @@ def test_a_rise_past_the_tolerance_exits_1(
     monkeypatch.setattr(inspect, "cachegrind", counted)
     assert inspect.count(["base", "head"], ["deep"], tolerance=1.0) == status
     assert inspect.count(["base", "head"], ["deep"], tolerance=None) == 0
+
+
+def test_a_pad_adds_one_variable_of_its_size_to_every_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A shape that allocates reads the heap its loop starts from, and the
+    # environment's size moves that heap; a padded count differs from a plain
+    # one in that size and in nothing else.
+    handed: list[dict[str, str]] = []
+
+    def run(command: Sequence[str], **kwargs: Any) -> Any:
+        handed.append(kwargs["env"])
+        irefs = 5_000_000 + 1000 * int(command[-1])
+        return inspect.subprocess.CompletedProcess(command, 0, "", f"I refs: {irefs:,}")
+
+    monkeypatch.setattr(inspect.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    monkeypatch.setattr(inspect, "worker", lambda name: [name])
+    monkeypatch.setattr(inspect.subprocess, "run", run)
+    plain = inspect.perf_gate.workload_environment(inspect.os.environ)
+    assert inspect.count(["base", "head"], ["deep"], tolerance=None) == 0
+    assert handed == [plain] * 4
+    handed.clear()
+    assert inspect.count(["base", "head"], ["deep"], tolerance=None, pad=600) == 0
+    assert len(handed) == 4
+    for env in handed:
+        added = [env[name] for name in env.keys() - plain.keys()]
+        assert added == ["x" * 600]
+        assert {name: env[name] for name in plain} == plain
 
 
 def test_the_shapes_the_orchestrator_names_are_the_table() -> None:
