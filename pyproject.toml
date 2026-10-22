@@ -76,6 +76,15 @@ bench = [
     "jsonschema>=4.26.0",
     "msgspec>=0.22.0",
 ]
+# What an example on the documentation's pages imports that no other group
+# holds: FastAPI, for the recipes page's FastAPI recipe. Installed only where
+# every example is read -- the `doc-examples` lane, and the floor leg whose
+# repository audit plants the checkers' ledger -- so no other leg resolves
+# FastAPI's pydantic on an interpreter it publishes no wheel for. Never a
+# runtime dependency.
+examples = [
+    "fastapi>=0.159.1",
+]
 # Documentation-site tools: the MkDocs Material site and the mkdocstrings API
 # reference generator. Never runtime dependencies.
 #

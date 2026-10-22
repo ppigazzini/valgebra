@@ -530,6 +530,13 @@ jobs:
         continue-on-error: ${{ matrix.python-version == '3.16' }}
         timeout-minutes: 2
         run: uv sync --locked --no-install-project
+      # The leg that runs the repository audit reads every example: its suite
+      # holds the checkers' ledger over them, and the audit plants that ledger.
+      # So it adds the `examples` group, which no other leg needs.
+      - name: Install the examples' packages
+        if: ${{ matrix.os == 'ubuntu-26.04' && matrix.python-version == env.FLOOR }}
+        timeout-minutes: 2
+        run: uv sync --locked --no-install-project --group examples
       # A Windows row optimizes the dev profile one level, and keeps its debug
       # assertions. Its main thread's stack is what `python.exe` reserves --
       # 2,000,000 bytes in uv's build, 3,000,000 in python.org's -- and the
@@ -760,7 +767,9 @@ jobs:
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.12"
-      - run: uv sync --locked
+      # With the `examples` group: the packages an example imports that the
+      # dev group does not hold.
+      - run: uv sync --locked --group examples
       - run: uv run --no-sync maturin develop --uv
       # Execute every runnable example in the README and the docs site; fail on
       # a stale snippet.

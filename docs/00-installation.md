@@ -19,7 +19,7 @@ pip install valgebra
 uv add valgebra
 ```
 
-valgebra has no runtime dependencies. The examples in these pages import three
+valgebra has no runtime dependencies. The examples in these pages import
 packages it does not:
 
 - [annotated-types](https://pypi.org/project/annotated-types/), whose markers
@@ -29,11 +29,14 @@ packages it does not:
   forms an example spells from it where an older Python's `typing` lacks them.
 - [pytest](https://pypi.org/project/pytest/), which the examples showing a
   refusal use.
+- [FastAPI](https://pypi.org/project/fastapi/) and
+  [pydantic](https://pypi.org/project/pydantic/), which the
+  [FastAPI recipe](19-recipes.md#a-field-of-a-fastapi-request) uses.
 
 Install them to run the examples as printed:
 
 ```bash
-pip install annotated-types typing-extensions pytest
+pip install annotated-types typing-extensions pytest fastapi pydantic
 ```
 
 Wheels are published for Linux (manylinux, x86_64 and aarch64), macOS (Intel and

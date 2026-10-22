@@ -1,13 +1,14 @@
 ---
-description: Tasks done end to end -- a response in a test, a schema against its last version, a configuration file, a model's tool call.
+description: Tasks done end to end -- a response in a test, a schema against its last version, a configuration file, a model's tool call, a field of a FastAPI request.
 ---
 
 # Recipes
 
 Each recipe is one task done with a value already in hand: a response checked
 in a test, a schema held to its previous version, a configuration file read
-and checked, a model's tool call checked before the tool runs. Each says what
-it cannot do, and each block runs as written.
+and checked, a model's tool call checked before the tool runs, a field of a
+web request checked against a shape another field chooses. Each says what it
+cannot do, and each block runs as written.
 
 ## A response in a test
 
@@ -242,3 +243,83 @@ the value converted.
 so the parameters the model is shown are written by hand, or by another
 library, beside the `TypedDict` that checks what comes back, and nothing holds
 the two to one shape: a parameter added to one is added to the other by hand.
+
+## A field of a FastAPI request
+
+The request body stays FastAPI's, a pydantic model, which parses it. What
+valgebra checks is a field the model leaves free because its shape depends on
+another field: an event whose `data` is read by its `kind`, from a table of
+kinds the application adds to. One exception handler answers every refusal in
+the application as FastAPI answers a body pydantic refuses: a `422` whose
+`detail` lists the errors, each with its path and code.
+
+```python
+import asyncio
+from typing import Any, Literal
+
+import pytest
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from typing_extensions import TypedDict
+
+from valgebra import ValidationError, Validator
+
+
+class Event(BaseModel):
+    kind: str
+    data: dict[str, Any]
+
+
+class OrderPaid(TypedDict, closed=True):
+    order: int
+    amount: int
+    currency: Literal["EUR", "USD"]
+
+
+class OrderRefunded(TypedDict, closed=True):
+    order: int
+    reason: str
+
+
+EVENT_DATA: dict[str, Validator[Any]] = {
+    "order.paid": Validator(OrderPaid),
+    "order.refunded": Validator(OrderRefunded),
+}
+
+app = FastAPI()
+
+
+@app.exception_handler(ValidationError)
+async def refused(_request: Request, error: ValidationError) -> JSONResponse:
+    """Answer a refusal with a 422 that lists the errors, as FastAPI does."""
+    return JSONResponse({"detail": jsonable_encoder(error.errors)}, status_code=422)
+
+
+@app.post("/events")
+def receive(event: Event) -> dict[str, str]:
+    schema = EVENT_DATA.get(event.kind)
+    if schema is None:
+        raise HTTPException(422, detail=f"no event of kind {event.kind!r}")
+    schema.validate(event.data)
+    return {"accepted": event.kind}
+
+
+refund = Event(kind="order.refunded", data={"order": 7, "reason": "late"})
+assert receive(refund) == {"accepted": "order.refunded"}
+
+paid = {"order": 7, "amount": "12.00", "currency": "GBP"}
+with pytest.raises(ValidationError) as caught:
+    receive(Event(kind="order.paid", data=paid))
+assert [(item["path"], item["code"]) for item in caught.value.errors] == [
+    (("amount",), "int_type"),
+    (("currency",), "union_error"),
+]
+answer = asyncio.run(refused(Request({"type": "http"}), caught.value))
+assert answer.status_code == 422
+```
+
+The endpoint and the handler are called here as the functions they are.
+Posted to `/events`, the same payment is answered `422`, with each error's
+path sent as a JSON list.

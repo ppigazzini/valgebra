@@ -25,6 +25,7 @@ LEDGER: every checker diagnostic on a published example is expected with a reaso
 
 from __future__ import annotations
 
+import importlib.util
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -51,6 +52,17 @@ def checker() -> ModuleType:
     return load_script("check_doc_examples", "valgebra_doc_example_checkers")
 
 
+#: The packages an example imports that this environment cannot import: the
+#: checkers read an import they cannot resolve as a diagnostic of the example.
+#: The `examples` group holds them, which the doc-examples lane installs and,
+#: of the python job's legs, the one that runs the repository audit.
+ABSENT = sorted(
+    package
+    for package in load_script("docs_lint").example_packages()
+    if importlib.util.find_spec(package.replace("-", "_")) is None
+)
+
+
 @pytest.fixture(scope="module")
 def reading() -> Any:
     """Read the blocks once: one subprocess per checker for the whole module."""
@@ -61,8 +73,16 @@ def reading() -> Any:
 
 # The two rows that read what the checkers report. mypy parses with the
 # running interpreter, and only 3.12 and later parse every block: on the floor
-# its reading is set aside, so these two read on every leg.
+# its reading is set aside, so these two read on every leg. The first reads
+# every diagnostic, so it reads only where every package an example imports is
+# installed.
 @pytest.mark.interpreter
+@pytest.mark.skipif(
+    bool(ABSENT),
+    reason=f"the examples import {', '.join(ABSENT)}, which this environment "
+    "lacks; the `examples` group holds it, which the doc-examples lane and "
+    "the audit's leg install",
+)
 def test_every_diagnostic_is_expected_and_every_row_reported(reading: Any) -> None:
     wrong = checker().problems(reading.found, reading.checkers)
     assert not wrong, "\n".join(wrong)
