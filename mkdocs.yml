@@ -124,7 +124,7 @@ plugins:
           - 00-installation.md: Install the package and its build toolchain.
           - 01-tutorial.md: Guided learning path from a scalar schema to an inspected failure.
           - 02-quickstart.md: Condensed feature tour for readers who know the domain.
-          - 19-recipes.md: Tasks done end to end -- a response in a test, a schema against its last version, a configuration file, a model's tool call, a field of a FastAPI request.
+          - 19-recipes.md: Tasks done end to end -- a response in a test, a schema against its last version, a configuration file, a model's tool call, a field of a FastAPI request, a message routed by its shape.
         Guides:
           - 03-schema-language.md: Every schema form with its denotation as a set of Python values.
           - 04-algebra.md: The Boolean lattice (union, intersection, complement), the normal form construction builds, and the recipes derived from them.

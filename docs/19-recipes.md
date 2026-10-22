@@ -1,5 +1,5 @@
 ---
-description: Tasks done end to end -- a response in a test, a schema against its last version, a configuration file, a model's tool call, a field of a FastAPI request.
+description: Tasks done end to end -- a response in a test, a schema against its last version, a configuration file, a model's tool call, a field of a FastAPI request, a message routed by its shape.
 ---
 
 # Recipes
@@ -320,3 +320,115 @@ assert answer.status_code == 422
 The endpoint and the handler are called here as the functions they are.
 Posted to `/events`, the same payment is answered `422`, with each error's
 path sent as a JSON list.
+
+## A message routed by its shape
+
+A consumer reading messages of several kinds hands each to a handler, and where
+no field names the kind, the handler is the one whose schema the message is
+in. Two schemas that overlap make that answer depend on the order the handlers
+were added, since a message in both goes to whichever comes first.
+`intersection(a, b).is_empty()` proves that no value is in both, so a route is
+refused unless its schema is proven apart from every other's, and whether every
+message the producer sends has a route is `is_subtype_of`:
+
+```python
+from collections.abc import Callable
+from typing import Any
+
+from typing_extensions import NotRequired, TypedDict
+
+from valgebra import Validator, intersection, union
+
+
+class Payment(TypedDict, closed=True):
+    order: int
+    amount: int
+
+
+class Refund(TypedDict, closed=True):
+    order: int
+    reason: str
+
+
+class Shipment(TypedDict, closed=True):
+    order: int
+    carrier: str
+
+
+ROUTES: dict[Validator[Any], Callable[[Any], str]] = {}
+
+
+def route(schema: Validator[Any], handler: Callable[[Any], str]) -> None:
+    """Send `handler` the messages in `schema`, which no other route's may share."""
+    for known in ROUTES:
+        if not intersection(known, schema).is_empty():
+            msg = f"{schema!r} may admit a message {known!r} admits"
+            raise ValueError(msg)
+    ROUTES[schema] = handler
+
+
+def dispatch(message: object) -> str:
+    """Hand `message` to the one route whose schema it is in."""
+    for schema, handler in ROUTES.items():
+        if schema.is_valid(message):
+            return handler(message)
+    msg = f"no route takes {message!r}"
+    raise LookupError(msg)
+
+
+def on_payment(message: Payment) -> str:
+    return f"order {message['order']}: {message['amount']} paid"
+
+
+def on_refund(message: Refund) -> str:
+    return f"order {message['order']}: refunded, {message['reason']}"
+
+
+def on_shipment(message: Shipment) -> str:
+    return f"order {message['order']}: shipped by {message['carrier']}"
+
+
+route(Validator(Payment), on_payment)
+route(Validator(Refund), on_refund)
+assert dispatch({"order": 7, "amount": 1200}) == "order 7: 1200 paid"
+
+
+class Adjustment(TypedDict, closed=True):
+    order: int
+    amount: int
+    note: NotRequired[str]
+
+
+def on_adjustment(message: Adjustment) -> str:
+    return f"order {message['order']}: adjusted by {message['amount']}"
+
+
+refused = False
+try:
+    route(Validator(Adjustment), on_adjustment)
+except ValueError:
+    refused = True
+assert refused
+# A payment is an adjustment too, since `note` is optional.
+assert {"order": 7, "amount": 1200} in Validator(Adjustment)
+
+SENT = union(Payment, Refund, Shipment)  # every message the producer sends
+assert SENT.relation_to(union(*ROUTES)) == "not_subset"  # a shipment has no route
+route(Validator(Shipment), on_shipment)
+assert SENT.is_subtype_of(union(*ROUTES))
+```
+
+**Handlers told apart by their keys take closed records.** An open `TypedDict`
+admits every key it does not name, so two open records overlap wherever one's
+keys can sit beside the other's: open, `Payment` and `Refund` both admit
+`{"order": 7, "amount": 1200, "reason": "late"}`, and the second route is
+refused. An optional field does the same between closed ones, as `Adjustment`
+does above.
+
+**A refused route is not a proven overlap.** `is_empty` answers `True` only on a
+proof, and `False` both where the two schemas meet and where the procedure
+declines ([the decidability boundary](15-decidability.md#the-contract)), so the
+router refuses what it cannot prove apart, which is the safe side; a value both
+admit, as the block names, shows the overlap is real. Where one field names the
+kind, a table keyed by it is the router, as the FastAPI recipe's is, and needs
+no proof.
