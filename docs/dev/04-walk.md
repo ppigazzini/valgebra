@@ -608,9 +608,14 @@ most of what they cost, and each asks the test directly:
   nested document pays a call at every level, 5.5% more instructions for one
   nested twenty-five deep. Behind the test, a document of two hundred records
   costs 2.2% fewer instructions on the profiled 3.12, 3.14 and 3.14t wheels and
-  a refused array of a thousand integers 2% fewer, and the test costs the
-  document nested twenty-five deep 0.7%. A document is never explained, so the
-  readers record nothing.
+  a refused array of a thousand integers 2% fewer. The union's and the record's
+  readings are functions of their own that `json_array_read` reaches by a jump
+  (`union_array_matches`), so the reader of a scalar array saves no register
+  and builds no stack frame, which costs a document of two hundred records
+  0.6% where it does. No entry explains a document, so the readers record
+  nothing, and an explaining walk, which only the walk's own tests run over a
+  document, is declined in `json_array_read` rather than tested at every level:
+  tested there, it costs the document nested twenty-five deep 0.5%.
 - **A mapping of scalars.** `dict[str, int]` -- one clause whose key and value
   are each a scalar kind -- is two type tests an entry (`scalar_map_matches`):
   the kinds, the level and the fatal-signal flag are read once for the dict, no

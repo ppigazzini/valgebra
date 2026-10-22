@@ -6605,39 +6605,44 @@ fn a_parsed_array_of_records_is_read_by_each_record() {
             state: &state,
             mode: WalkMode::Fast,
         };
-        let read = |fields: &[Field], source: &str| {
+        let empty = Schema::keyed_map(Vec::new(), Vec::new());
+        let read = |element: &Schema, source: &str| {
             let parsed = JsonValue::parse(source.as_bytes(), false).expect("the JSON parses");
             let JsonValue::Array(items) = &parsed else {
                 panic!("an array");
             };
             let (mut path, mut out) = (Vec::new(), Vec::new());
             record_array_matches(
-                fields,
-                &[],
+                element,
                 py,
                 items,
                 &mut Frame::new(&mut path, &mut out, ctx),
             )
         };
-        assert_eq!(read(&fields, r#"[{"id": 1}, {"id": 2}]"#), Some(true));
-        assert_eq!(read(&fields, r#"[{"id": 1}, {"id": "x"}]"#), Some(false));
-        assert_eq!(read(&fields, r#"[{"id": "x"}, {"id": 2}]"#), Some(false));
+        assert_eq!(read(&record, r#"[{"id": 1}, {"id": 2}]"#), Some(true));
+        assert_eq!(read(&record, r#"[{"id": 1}, {"id": "x"}]"#), Some(false));
+        assert_eq!(read(&record, r#"[{"id": "x"}, {"id": 2}]"#), Some(false));
+        assert_eq!(
+            read(&Schema::Int, "[1]"),
+            None,
+            "only a record is read here"
+        );
         state.depth.set(MAX_WALK_DEPTH - 2);
-        assert_eq!(read(&fields, r#"[{"id": 1}]"#), Some(true));
+        assert_eq!(read(&record, r#"[{"id": 1}]"#), Some(true));
         state.depth.set(MAX_WALK_DEPTH);
-        assert_eq!(read(&fields, r#"[{"id": 1}]"#), None);
+        assert_eq!(read(&record, r#"[{"id": 1}]"#), None);
         state.depth.set(0);
-        assert_eq!(read(&[], "[{}]"), Some(true));
+        assert_eq!(read(&empty, "[{}]"), Some(true));
         state.signals.fatal_seen.set(true);
-        assert_eq!(read(&[], "[{}]"), Some(false));
+        assert_eq!(read(&empty, "[{}]"), Some(false));
         state.signals.fatal_seen.set(false);
     });
 }
 
 /// A parsed array is read by the reader for its element where one takes it --
 /// one scalar kind, a union of them, a record -- and declines to the general
-/// loop for any other element, and for a scalar or a union where the levels
-/// their tests need are not free.
+/// loop for any other element, for a scalar or a union where the levels their
+/// tests need are not free, and for every element in an explaining walk.
 #[test]
 fn a_parsed_array_is_read_by_the_reader_for_its_element() {
     use super::sequence::json_array_read;
@@ -6678,6 +6683,23 @@ fn a_parsed_array_is_read_by_the_reader_for_its_element() {
         assert_eq!(read(&Schema::Int, "[1]"), None);
         assert_eq!(read(&nullable, "[1]"), None);
         state.depth.set(0);
+        let explaining = Ctx {
+            mode: WalkMode::Explain,
+            ..ctx
+        };
+        let parsed = JsonValue::parse(b"[1]", false).expect("the JSON parses");
+        let JsonValue::Array(items) = &parsed else {
+            panic!("an array");
+        };
+        let (mut path, mut out) = (Vec::new(), Vec::new());
+        for element in [&Schema::Int, &nullable, &record] {
+            let mut frame = Frame::new(&mut path, &mut out, explaining);
+            assert_eq!(
+                json_array_read(element, py, items, &mut frame),
+                None,
+                "an explaining walk reads a document through the general loop"
+            );
+        }
     });
 }
 

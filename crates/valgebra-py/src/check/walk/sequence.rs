@@ -184,7 +184,6 @@ fn json_array_matches(
 ) -> bool {
     let ctx = frame.ctx;
     if prefix.is_empty()
-        && !ctx.mode.explains()
         && let Some(
             element @ (Schema::Anything(_)
             | Schema::Nothing
@@ -215,10 +214,20 @@ fn json_array_matches(
 /// kind, a union of them or a record, read by the reader for its kind, and
 /// `None` where that reader declines.
 ///
-/// One scalar kind at every position is its test an element, and a union of
-/// them a test a branch; a record is [`record_array_matches`]. A document is
-/// never explained, so only the deciding walk reaches here and nothing is
-/// recorded.
+/// One scalar kind at every position is its test an element, read here; a
+/// union of them is [`union_array_matches`] and a record
+/// [`record_array_matches`], each reached by a jump, so this reading saves no
+/// register and builds no stack frame. With the union read here and the record
+/// called, it saves six registers for every array it reads, and a document of
+/// two hundred records reads 0.6% more instructions on the profiled 3.14
+/// wheel.
+///
+/// Only the deciding walk is answered here, and an explaining one is declined
+/// to the general loop: no entry explains a document, which `validate_json`
+/// reads as the Python value it parses to, and the walk's own tests are the
+/// only explaining walks over one. Tested in [`json_array_matches`], at every
+/// level, the mode costs a document nested twenty-five deep 0.5% of its
+/// instructions.
 #[inline(never)]
 pub(super) fn json_array_read(
     element: &Schema,
@@ -227,6 +236,9 @@ pub(super) fn json_array_read(
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
     let ctx = frame.ctx;
+    if ctx.mode.explains() {
+        return None;
+    }
     if let Some((kind, _)) = homogeneous_scalar(&[], Some(element), ctx) {
         return Some(
             items
@@ -235,19 +247,33 @@ pub(super) fn json_array_read(
         );
     }
     match element {
-        Schema::Union(members) => {
-            let members = homogeneous_scalar_union(&[], members, ctx)?;
-            Some(
-                items
-                    .iter()
-                    .all(|item| scalar_union_admits(members, &Value::Json(py, item))),
-            )
-        }
-        Schema::KeyedMap { fields, defaults } => {
-            record_array_matches(fields, defaults, py, items, frame)
-        }
+        Schema::Union(_) => union_array_matches(element, py, items, frame),
+        Schema::KeyedMap { .. } => record_array_matches(element, py, items, frame),
         _ => None,
     }
+}
+
+/// Membership for a parsed array whose every element is a union of scalar
+/// kinds, a test a branch, where the levels their tests need are free, and
+/// `None` elsewhere or for an element that is not such a union. Out of line,
+/// and taking the element's schema, for the reason [`record_array_matches`]
+/// is.
+#[inline(never)]
+fn union_array_matches(
+    element: &Schema,
+    py: Python<'_>,
+    items: &[JsonValue<'_>],
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let Schema::Union(members) = element else {
+        return None;
+    };
+    let members = homogeneous_scalar_union(&[], members, frame.ctx)?;
+    Some(
+        items
+            .iter()
+            .all(|item| scalar_union_admits(members, &Value::Json(py, item))),
+    )
 }
 
 /// Membership for a parsed array whose every element is a keyed map, read as
@@ -256,16 +282,20 @@ pub(super) fn json_array_read(
 ///
 /// Each element is the record's check, inlined here, with the level the walk
 /// opens for an element held across the array and the fatal-signal flag read
-/// at every element, as [`member`] reads it. A document is never explained, so
-/// the deciding walk alone reaches it and nothing is named.
+/// at every element, as [`member`] reads it. Only the deciding walk reaches it,
+/// so nothing is named. It takes the element's schema, and declines any but a
+/// record, so that its arguments fit the registers [`json_array_read`] jumps
+/// with.
 #[inline(never)]
 pub(super) fn record_array_matches(
-    fields: &[Field],
-    defaults: &[MapClause],
+    element: &Schema,
     py: Python<'_>,
     items: &[JsonValue<'_>],
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
+    let Schema::KeyedMap { fields, defaults } = element else {
+        return None;
+    };
     let ctx = frame.ctx;
     let _element = ctx.descend()?;
     let mut ok = true;
