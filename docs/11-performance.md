@@ -189,12 +189,12 @@ hundred records whose record holds a list reads 1.3% more instructions on the
 profiled wheel. So the workload reads its lists of records at the weight a
 document's records are read with, one of them of records holding a list.
 
-A parsed JSON array of records is read through a general loop of its own, and
-untrained it is laid out by chance too: two builds of one source read the
-comparison gate's document 10% apart in instructions, and a source path one
-character longer is enough to move it. Trained, every build reads one count,
-within 0.2%, and the document takes 12 to 14% less time than untrained on
-CPython 3.14.
+A parsed JSON array of records is read through a loop of its own
+(`record_array_matches`), and untrained it is laid out by chance too: two builds
+of one source read the comparison gate's document 10% apart in instructions, and
+a source path one character longer is enough to move it. Trained, every build
+reads one count, within 0.2%, and the document takes 12 to 14% less time than
+untrained on CPython 3.14.
 
 The same holds for a reader the workload never enters: the lists a reader of
 their own settles -- a union of literals, one class, a union of scalars, a tuple

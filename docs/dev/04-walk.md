@@ -600,8 +600,18 @@ most of what they cost, and each asks the test directly:
   A set of a thousand strings costs 10% fewer instructions to accept that way,
   and 28% fewer to `validate` (`--binding-set`).
 - **A parsed array.** A document's array of one scalar kind, or of a union of
-  them, is one test an element (`json_array_matches`); a document is never
-  explained, so the loop records nothing.
+  them, is one test an element, and an array of records is each record's check,
+  inlined, with the level the walk opens for an element held across the array
+  (`json_array_read`, `record_array_matches`). They are out of line behind a
+  test of the element's tag in `json_array_matches`, which `member` inlines: a
+  reading added there laid out its loop over scalars anew, two instructions an
+  element of a `list[int]` document, and with the whole function out of line a
+  nested document pays a call at every level, 5.5% more instructions for one
+  nested twenty-five deep. Behind the test, a document of two hundred records
+  costs 2.2% fewer instructions on the profiled 3.12, 3.14 and 3.14t wheels and
+  a refused array of a thousand integers 2% fewer, and the test costs the
+  document nested twenty-five deep 0.7%. A document is never explained, so the
+  readers record nothing.
 - **A mapping of scalars.** `dict[str, int]` -- one clause whose key and value
   are each a scalar kind -- is two type tests an entry (`scalar_map_matches`):
   the kinds, the level and the fatal-signal flag are read once for the dict, no

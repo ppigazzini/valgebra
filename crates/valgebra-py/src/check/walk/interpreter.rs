@@ -6537,6 +6537,150 @@ fn a_list_of_records_is_read_by_each_record() {
     });
 }
 
+/// A parsed array of records answers what the walk answers of the list the
+/// same text evaluates to, behind a fixed prefix too, and an explaining walk,
+/// which the reader leaves to the general loop, names a refused element at its
+/// index, as that loop does.
+#[test]
+fn a_parsed_array_of_records_answers_as_the_list_does() {
+    Python::attach(|py| {
+        let record = Schema::keyed_map(
+            vec![
+                field("id", Schema::Int, true),
+                field(
+                    "tags",
+                    Schema::list(SeqShape::homogeneous(Schema::Str)),
+                    false,
+                ),
+            ],
+            Vec::new(),
+        );
+        let list = Schema::list(SeqShape::homogeneous(record.clone()));
+        let after_an_int = Schema::list(SeqShape::prefix_tail([Schema::Int], record));
+        for source in [
+            r#"[{"id": 1}, {"id": 2, "tags": ["a"]}]"#,
+            "[]",
+            "[{}]",
+            r#"[{"id": "x"}]"#,
+            r#"[{"id": 1, "tags": [1]}]"#,
+            r#"[{"id": 1, "other": 2}]"#,
+            "[5]",
+            r#"[{"id": 1}, {"id": 1, "id": "x"}]"#,
+            r#"[5, {"id": 1}]"#,
+        ] {
+            let parsed = JsonValue::parse(source.as_bytes(), false).expect("the JSON parses");
+            let listed = evaluate(py, source);
+            for schema in [&list, &after_an_int] {
+                assert_eq!(
+                    holds_json(py, schema, &parsed),
+                    decide(py, schema, &listed, &[], &[]),
+                    "{source}"
+                );
+            }
+        }
+        let parsed =
+            JsonValue::parse(br#"[{"id": 1}, {"id": "x"}]"#, false).expect("the JSON parses");
+        let (ok, violations) = explain_json(py, &list, &parsed);
+        let at: Vec<Vec<PathSegment>> = violations.into_iter().map(|v| v.path).collect();
+        assert_eq!((ok, at), (false, vec![vec![PathSegment::Index(1)]]));
+    });
+}
+
+/// The parsed-array reader checks every element by its record and stops at
+/// the first it refuses; it declines where the level below the array is not
+/// free, and after a fatal signal refuses even a record that reads nothing, as
+/// `member` refuses every node after one.
+#[test]
+fn a_parsed_array_of_records_is_read_by_each_record() {
+    use super::sequence::record_array_matches;
+    Python::attach(|py| {
+        let fields = vec![field("id", Schema::Int, true)];
+        let record = Schema::keyed_map(fields.clone(), Vec::new());
+        let index = build_index(py, &record, &[], &[]);
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &[],
+            defs: &[],
+            index: &index,
+            state: &state,
+            mode: WalkMode::Fast,
+        };
+        let read = |fields: &[Field], source: &str| {
+            let parsed = JsonValue::parse(source.as_bytes(), false).expect("the JSON parses");
+            let JsonValue::Array(items) = &parsed else {
+                panic!("an array");
+            };
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            record_array_matches(
+                fields,
+                &[],
+                py,
+                items,
+                &mut Frame::new(&mut path, &mut out, ctx),
+            )
+        };
+        assert_eq!(read(&fields, r#"[{"id": 1}, {"id": 2}]"#), Some(true));
+        assert_eq!(read(&fields, r#"[{"id": 1}, {"id": "x"}]"#), Some(false));
+        assert_eq!(read(&fields, r#"[{"id": "x"}, {"id": 2}]"#), Some(false));
+        state.depth.set(MAX_WALK_DEPTH - 2);
+        assert_eq!(read(&fields, r#"[{"id": 1}]"#), Some(true));
+        state.depth.set(MAX_WALK_DEPTH);
+        assert_eq!(read(&fields, r#"[{"id": 1}]"#), None);
+        state.depth.set(0);
+        assert_eq!(read(&[], "[{}]"), Some(true));
+        state.signals.fatal_seen.set(true);
+        assert_eq!(read(&[], "[{}]"), Some(false));
+        state.signals.fatal_seen.set(false);
+    });
+}
+
+/// A parsed array is read by the reader for its element where one takes it --
+/// one scalar kind, a union of them, a record -- and declines to the general
+/// loop for any other element, and for a scalar or a union where the levels
+/// their tests need are not free.
+#[test]
+fn a_parsed_array_is_read_by_the_reader_for_its_element() {
+    use super::sequence::json_array_read;
+    Python::attach(|py| {
+        let record = Schema::keyed_map(vec![field("id", Schema::Int, true)], Vec::new());
+        let nullable = Schema::union(vec![Schema::Int, Schema::NoneType]);
+        let of_ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let index = build_index(py, &record, &[], &[]);
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &[],
+            defs: &[],
+            index: &index,
+            state: &state,
+            mode: WalkMode::Fast,
+        };
+        let read = |element: &Schema, source: &str| {
+            let parsed = JsonValue::parse(source.as_bytes(), false).expect("the JSON parses");
+            let JsonValue::Array(items) = &parsed else {
+                panic!("an array");
+            };
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            json_array_read(
+                element,
+                py,
+                items,
+                &mut Frame::new(&mut path, &mut out, ctx),
+            )
+        };
+        assert_eq!(read(&Schema::Int, "[1, 2]"), Some(true));
+        assert_eq!(read(&Schema::Int, r#"[1, "x"]"#), Some(false));
+        assert_eq!(read(&nullable, "[1, null]"), Some(true));
+        assert_eq!(read(&nullable, r#"[1, "x"]"#), Some(false));
+        assert_eq!(read(&record, r#"[{"id": 1}]"#), Some(true));
+        assert_eq!(read(&record, r#"[{"id": "x"}]"#), Some(false));
+        assert_eq!(read(&of_ints, "[[1]]"), None);
+        state.depth.set(MAX_WALK_DEPTH);
+        assert_eq!(read(&Schema::Int, "[1]"), None);
+        assert_eq!(read(&nullable, "[1]"), None);
+        state.depth.set(0);
+    });
+}
+
 /// A module holding a named tuple `Point(x: int, y: str)`, a subclass of it,
 /// a second named tuple of the same fields, and instances of each the
 /// named-tuple list tests read, under the name its test gives, for the reason
