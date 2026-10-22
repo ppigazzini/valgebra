@@ -5,9 +5,11 @@ environments this script makes, each holding the standard library and one
 valgebra: a release from PyPI, a wheel on disk, or a revision built as the
 release builds it.
 
-- `count`: instructions per call under cachegrind. Deterministic, so two
-  environments compare to the instruction and a difference is the code's. It
-  sees no cache, branch predictor or alignment.
+- `count`: instructions per call under cachegrind. On a build with the GIL,
+  two environments named at one length compare to the instruction, so a
+  difference is the code's; the performance page says why the length, and how
+  a free-threaded build's small shapes read. It sees no cache, branch
+  predictor or alignment.
 - `cycles`: user-mode cycles, instructions, branch mispredicts and frontend
   stalls per call, from the processor's own counters through
   `perf_event_open`. What the machine did, so it sees what `count` cannot, and

@@ -1291,9 +1291,19 @@ cheaper on every build with a global lock. One `env` per interpreter and side, a
 `count` per pair, is the reading; a survey of one interpreter is a reading of
 that one.
 
-**Decide on the count, and confirm in cycles.** A count is deterministic: two
-builds of one source and one toolchain read it to the instruction, so a
-difference is the code's. It does not predict time on every shape: that nested list
+**Decide on the count, and confirm in cycles.** On a build with the GIL a count
+is deterministic: two builds of one source and one toolchain read it to the
+instruction, so a
+difference is the code's, between environments whose names are one length. A
+shape that allocates reads the heap its process starts with, and the
+environment's path is part of that process: one release in two environments
+named a character apart read `explain_record` 3.1% apart and `json_records`
+0.7%, and to the instruction at one length. On a free-threaded build, a shape
+of a few thousand instructions is not exact: two counts of one pair on
+3.15t read `literal` -0.03% and -13.5%, and `scalar` +6.3% and +8.7%, where
+`validate` read +1.9% both times. Count such a cell twice, and read one that
+does not repeat as nothing shown. A count does not predict time on every
+shape: that nested list
 read 0.2% more instructions in one release than in the one before it, and 4%
 more cycles. `cycles` reads what the
 count cannot and carries the machine's noise, so it starts each round at the

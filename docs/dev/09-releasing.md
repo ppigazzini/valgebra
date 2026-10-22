@@ -1,8 +1,8 @@
 # Cutting a release
 
-How a version reaches an index: the wheels a release builds, the surfaces a bump
-touches, the two dispatches that publish, what to check between them, and the tag
-that records the result.
+How a version reaches an index: what is read before the bump, the wheels a
+release builds, the surfaces a bump touches, the two dispatches that publish,
+what to check between them, and the tag that records the result.
 `.github/workflows/release.yml` owns the build and the upload; this page owns the
 order and the checks that happen outside it.
 
@@ -56,7 +56,7 @@ job condition in `release.yml` rather than a convention:
 - **`confirm_version` must equal the version in the built wheels**, and an empty
   input aborts. A dispatch cannot publish a version the run did not build.
 - **The ref must be `main`.** A dispatch from a topic branch uploads nothing, so
-  the bump commit has to land before step 2 — that is why step 1 says to land it.
+  the bump commit has to land before step 3 — that is why step 2 says to land it.
 - **The version must be absent from the target index.** The check fails closed: a
   200 is a stale re-publish and anything other than a definitive 404 leaves the
   question unanswered and also aborts.
@@ -66,7 +66,26 @@ release waits for whatever reviewers those environments require.
 
 ## The order
 
-1. **Bump, in one commit.** The workspace version, both lockfiles, and the
+1. **Read the tree against the last release**, on every CPython release a
+   wheel is built for with a profile: an environment holding the version PyPI
+   serves and one holding the tree, named at one length, and a `count` of the
+   two, as [Reading one build against another](../11-performance.md#reading-one-build-against-another)
+   reads them. Run the three for each release, `LAST` the version PyPI serves:
+
+   ```bash
+   py="$(uv python find --managed-python 3.14)"
+   uv run --no-sync python scripts/perf_inspect.py env last --python "$py" --release "$LAST"
+   uv run --no-sync python scripts/perf_inspect.py env head --python "$py" --build
+   uv run --no-sync python scripts/perf_inspect.py count last head
+   ```
+
+   The merge gates hold each change to its base, on the interpreters the bench
+   lanes run: a cost that grows by less than their band in each of several
+   changes, or on another interpreter, passes every one of them. A shape that
+   reads dearer is confirmed and placed as that section says, then fixed
+   before the bump, or named in the version's section with what it buys.
+
+2. **Bump, in one commit.** The workspace version, both lockfiles, and the
    changelog: roll the `Unreleased` entries into a section for the version,
    dated the day of this commit rather than the day the tag lands, and add its
    compare and tag links. Land it on `main`, so the merge gates run
@@ -74,7 +93,7 @@ release waits for whatever reviewers those environments require.
 
    The changelog ledger (`tests/test_changelog_ledger.py`) reads the *page* for
    which version is released and measures the roll against that version's tag.
-   Between this step and step 6 the section names a version no tag resolves yet,
+   Between this step and step 7 the section names a version no tag resolves yet,
    so the ledger skips: there is nothing left to account for, and the roll is
    empty because it was just emptied. It resumes the moment the tag lands — and
    nothing holds a `feat`/`fix` landed in the window to a roll line until it
@@ -85,21 +104,21 @@ release waits for whatever reviewers those environments require.
    cargo metadata --format-version 1 --offline --manifest-path fuzz/Cargo.toml >/dev/null
    ```
 
-2. **Dispatch to TestPyPI** — `publish_target: testpypi`, `confirm_version` the
+3. **Dispatch to TestPyPI** — `publish_target: testpypi`, `confirm_version` the
    new version.
-3. **Check what the index serves** (below).
-4. **Dispatch to PyPI** — `publish_target: pypi`, the same version.
-5. **Check what the index serves** again, against PyPI. A section with
+4. **Check what the index serves** (below).
+5. **Dispatch to PyPI** — `publish_target: pypi`, the same version.
+6. **Check what the index serves** again, against PyPI. A section with
    `Security` entries has their advisories published now, beside the release,
    as `SECURITY.md`'s process says: a fix and its advisory go out together.
-6. **Tag the published commit**, annotated, subject `valgebra X.Y.Z`:
+7. **Tag the published commit**, annotated, subject `valgebra X.Y.Z`:
 
    ```bash
    git tag -a vX.Y.Z -m "valgebra X.Y.Z" <commit>
    git push origin vX.Y.Z
    ```
 
-## Checking an index (steps 3 and 5)
+## Checking an index (steps 4 and 6)
 
 The workflow's smoke jobs prove each **artifact** imports and passes the product
 suite. They cannot prove the
@@ -272,6 +291,10 @@ and a row that leaves its interpreters to the build image named too.
 
 ## What this does not cover
 
+- **The wheels a local count cannot run.** Step 1 reads each CPython release's
+  Linux x86_64 build. Every other wheel is a build of its own, for another
+  platform, architecture or implementation, and no count reads it against the
+  release before.
 - **The wheels no smoke can load.** The musllinux cp314t and pp311 wheels are
   built and not imported: no Alpine image carries a free-threaded CPython or a
   PyPy, so the first install of either is a user's.
@@ -281,4 +304,5 @@ and a row that leaves its interpreters to the build image named too.
   platform.
 - **A published version that is wrong.** It cannot be replaced, only yanked, and
   the workflow refuses a version the index already serves. The remedy is the next
-  patch version, which is why step 3 exists before step 4.
+  patch version, which is why step 4 exists before step 5, and step 1 before
+  the bump.
