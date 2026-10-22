@@ -309,7 +309,8 @@ gate only catches what it exercises, and the wheel a release ships:
   asks the sets length bounds over a list, whose automaton holds a state per
   element, so a cost an element pays reads as one;
 - the **binding** shapes, which `MODES` in `scripts/perf_gate.py` owns (`--binding`, `--binding-boundary`,
-  `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-mapping`,
+  `--binding-record`, `--binding-keys`, `--binding-open`,
+  `--binding-record-list`, `--binding-mapping`, `--binding-mapping-lists`,
   `--binding-subclass`, `--binding-recursive`, `--binding-deep`,
   `--binding-refined`, `--binding-nullable`, `--binding-set`,
   `--binding-json`, `--binding-json-reject`, `--binding-json-union`,
@@ -320,8 +321,9 @@ gate only catches what it exercises, and the wheel a release ships:
   `--binding-explain`, `--binding-explain-accept`, `--binding-explain-list`) —
   membership over a live Python value, the call boundary alone, a wide record
   closed, the same record walked over a value whose keys are interned, the
-  record open the way a `TypedDict` is, a `dict[str, int]` read through its
-  clause, walking a `NamedTuple`, a recursive schema's descent, a value nested
+  record open the way a `TypedDict` is, a list of records, a `dict[str, int]`
+  read through its clause, a `dict[str, list[int]]` whose values are walked,
+  walking a `NamedTuple`, a recursive schema's descent, a value nested
   twenty-five deep, elements that each read a refinement's bound, a list of
   `int | None`, a `set[str]`, parsing and walking a JSON document -- accepted,
   rejected halfway, as a union of two record kinds, read through a key-type
@@ -333,7 +335,9 @@ gate only catches what it exercises, and the wheel a release ships:
   record or accepting one in the same mode, and explaining a refused list. The
   walk is the shipped hot path neither pure-Rust workload reaches; a count of
   the walk does not see schema construction, and a count of a closed record
-  does not see an open one, which can read a third dearer. Each shape builds what it reads outside its loop: formatting its names
+  does not see an open one, which can read a third dearer. Nor does a record
+  reached alone see the copy of its check a list of records inlines, nor a
+  mapping of two scalar kinds the scan any other mapping takes. Each shape builds what it reads outside its loop: formatting its names
   and filling a dict per iteration would be most of a build shape's count.
 
   **One accepting JSON shape cannot measure every JSON change**: the paths a

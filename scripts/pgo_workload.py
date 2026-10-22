@@ -84,6 +84,7 @@ TRAINED: dict[str, tuple[str, ...]] = {
     "binding-deep": ("_containers",),
     "binding-refined": ("_lists_with_readers",),
     "binding-mapping": ("_mappings",),
+    "binding-record-list": ("_containers",),
     "binding-nullable": ("_lists_with_readers",),
     "json_document": ("_json_documents",),
     "binding-json": ("_json_documents",),
@@ -137,6 +138,12 @@ UNTRAINED: dict[str, str] = {
         "and met with the element's shape: `_relations` reaches the sequence "
         "automaton's product through a meet of lists, and no call here relates "
         "a length-bounded list."
+    ),
+    "binding-mapping-lists": (
+        "A mapping whose value is a list, read by the scan that asks the "
+        "clause of each key and walks each value: no call here validates one, "
+        "and `_mappings` reads a `dict[str, int]`, which a reader of its own "
+        "takes."
     ),
     "binding-protocol": (
         "Compiling a protocol, whose members `typing` lists and the frontend "
@@ -274,18 +281,16 @@ def _sequences() -> None:
 
 def _containers() -> None:
     # Lists whose elements are containers, which the homogeneous shapes above
-    # never reach: those take a loop of their own, and every other list is read
-    # through the general one. A list of records, and a list nested as deep as
-    # a document nests.
+    # never reach: a list of records, read by the records' reader, and a list
+    # nested as deep as a document nests, read through the general loop.
     class Person(TypedDict):
         name: str
         age: int
 
-    # A list of records is read through the general loop by these two, so they
-    # carry the weight a document's records do, and the second has a field that
-    # is a list, as a payload's records have: trained a quarter as often and
-    # with scalar fields alone, a list of records reads 1.3% more by count, its
-    # record laid out around the paths beside it.
+    # These two carry the weight a document's records do, and the second has a
+    # field that is a list, as a payload's records have: trained a quarter as
+    # often and with scalar fields alone, a list of records reads 1.3% more by
+    # count, its record laid out around the paths beside it.
     class Member(TypedDict):
         id: int
         name: str
@@ -322,10 +327,10 @@ def _documents() -> None:
 
 
 def _json_documents() -> None:
-    # A parsed JSON array of records, read element by element through the
-    # general loop of the JSON array, which a single JSON record and an array
-    # of one scalar kind each skip: two hundred records accepted, and the same
-    # refused at the hundredth, whose `id` is a string.
+    # A parsed JSON array of records, read element by element by the array's
+    # reader for records, which a single JSON record never reaches: two hundred
+    # records accepted, and the same refused at the hundredth, whose `id` is a
+    # string.
     class JsonRecord(TypedDict):
         id: int
         name: str

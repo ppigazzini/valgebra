@@ -40,15 +40,17 @@ Three workloads, and the shapes each is read in:
   read what a bound costs an element.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
-  twenty-seven shapes: the membership walk (`--binding`), the call boundary
+  twenty-nine shapes: the membership walk (`--binding`), the call boundary
   alone (`--binding-boundary`), the walk over a wide record
   (`--binding-record`), the same walk over a value whose keys are interned
   (`--binding-keys`), the same fields declared by an open record
-  (`--binding-open`), a mapping read through its clause (`--binding-mapping`),
-  walking a `tuple` subclass (`--binding-subclass`), matching a string against
-  a compiled pattern (`--binding-pattern`), walking a value against a
-  recursive schema (`--binding-recursive`), walking a value nested twenty-five
-  deep (`--binding-deep`), walking refined elements (`--binding-refined`),
+  (`--binding-open`), a list of records (`--binding-record-list`), a mapping
+  read through its clause (`--binding-mapping`), a mapping whose value is
+  walked (`--binding-mapping-lists`), walking a `tuple` subclass
+  (`--binding-subclass`), matching a string against a compiled pattern
+  (`--binding-pattern`), walking a value against a recursive schema
+  (`--binding-recursive`), walking a value nested twenty-five deep
+  (`--binding-deep`), walking refined elements (`--binding-refined`),
   walking elements of a union of scalars (`--binding-nullable`), walking a set
   (`--binding-set`), parsing and walking a JSON document (`--binding-json`),
   the same document rejected halfway (`--binding-json-reject`), a document of
@@ -478,6 +480,8 @@ MODES = {
     "binding-deep": ("binding_workload", "binding deep nesting walk"),
     "binding-refined": ("binding_workload", "binding refined element walk"),
     "binding-mapping": ("binding_workload", "binding mapping walk"),
+    "binding-mapping-lists": ("binding_workload", "binding mapping of lists walk"),
+    "binding-record-list": ("binding_workload", "binding list of records walk"),
     "binding-nullable": ("binding_workload", "binding nullable element walk"),
     "binding-set": ("binding_workload", "binding set walk"),
 }
@@ -526,6 +530,8 @@ BINDING_ITERATIONS = {
     "binding-deep": (50_000, 15_000),
     "binding-refined": (20_000, 5_000),
     "binding-mapping": (20_000, 5_000),
+    "binding-mapping-lists": (20_000, 5_000),
+    "binding-record-list": (20_000, 5_000),
     "binding-nullable": (150_000, 50_000),
     "binding-set": (150_000, 50_000),
 }
@@ -560,6 +566,8 @@ BINDING_SHAPES = {
     "binding-deep": "deep",
     "binding-refined": "refined",
     "binding-mapping": "mapping",
+    "binding-mapping-lists": "mapping-lists",
+    "binding-record-list": "record-list",
     "binding-nullable": "nullable",
     "binding-set": "set",
 }

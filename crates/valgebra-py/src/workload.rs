@@ -259,6 +259,20 @@ pub enum BindingShape {
     /// for each; a mapping declares none, so each entry is iterated and asked
     /// of the clause, a reading no other shape over a Python value reaches.
     Mapping,
+    /// A `dict[str, list[int]]` of sixty-four entries, each a list of two
+    /// integers: a mapping whose value no type test decides, so each entry is
+    /// read by the scan every mapping takes but one of scalar kinds, which
+    /// asks the clause of the key and walks the value. The clause
+    /// [`Mapping`](BindingShape::Mapping) reads is two scalar kinds, which a
+    /// reader of its own settles, so without this shape the scan is measured
+    /// by nothing.
+    MappingLists,
+    /// Sixty-four records in a list, against `list[User]` where `User` is a
+    /// `TypedDict` of an integer, a string and a list of strings: the list a
+    /// payload is, read by the list's reader for records. That reader inlines
+    /// the record's check, a copy of its own beside the one [`member`] calls,
+    /// and every record shape here reads only that one.
+    RecordList,
     /// Sixty-four elements against `list[int | None]`, integers and `None`
     /// alternating: a list whose element is a union of scalars, which has a
     /// reader of its own beside the one for a single kind that the walk shape
@@ -299,6 +313,8 @@ impl BindingShape {
             "deep" => BindingShape::Deep,
             "refined" => BindingShape::Refined,
             "mapping" => BindingShape::Mapping,
+            "mapping-lists" => BindingShape::MappingLists,
+            "record-list" => BindingShape::RecordList,
             "nullable" => BindingShape::Nullable,
             "set" => BindingShape::Set,
             _ => return None,
@@ -750,6 +766,8 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
         BindingShape::Deep => spelled_walk(py, iters, DEEP),
         BindingShape::Refined => spelled_walk(py, iters, REFINED),
         BindingShape::Mapping => spelled_walk(py, iters, MAPPING),
+        BindingShape::MappingLists => spelled_walk(py, iters, MAPPING_LISTS),
+        BindingShape::RecordList => spelled_walk(py, iters, RECORD_LIST),
         BindingShape::Nullable => spelled_walk(py, iters, NULLABLE),
         BindingShape::Set => spelled_walk(py, iters, SET),
         BindingShape::Pattern => pattern_walk(py, iters),
@@ -949,6 +967,16 @@ const REFINED: &str = "from typing import Annotated\n\
 /// Sixty-four string keys, each holding an integer.
 const MAPPING: &str = "SPELLING = dict[str, int]\n\
      VALUE = {f'k{i}': i for i in range(64)}\n";
+
+/// Sixty-four string keys, each holding two integers.
+const MAPPING_LISTS: &str = "SPELLING = dict[str, list[int]]\n\
+     VALUE = {f'k{i}': [i, i] for i in range(64)}\n";
+
+/// Sixty-four of the records `scripts/perf_shapes.py` reads, each a member.
+const RECORD_LIST: &str = "from typing import TypedDict\n\
+     User = TypedDict('User', {'id': int, 'name': str, 'tags': list[str]})\n\
+     SPELLING = list[User]\n\
+     VALUE = [{'id': i, 'name': f'n{i}', 'tags': ['a', 'b']} for i in range(64)]\n";
 
 /// Sixty-four integers and `None`, alternating.
 const NULLABLE: &str = "SPELLING = list[int | None]\n\
