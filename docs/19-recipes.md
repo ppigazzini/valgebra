@@ -4,11 +4,8 @@ description: Tasks done end to end -- a response in a test, a schema against its
 
 # Recipes
 
-Each recipe is one task done with a value already in hand: a response checked
-in a test, a schema held to its previous version, a configuration file read
-and checked, a model's tool call checked before the tool runs, a field of a
-web request checked against a shape another field chooses. Each says what it
-cannot do, and each block runs as written.
+Each recipe is one task done end to end with a value already in hand. Each says
+what it cannot do, and each block runs as written.
 
 ## A response in a test
 
