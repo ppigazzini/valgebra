@@ -1314,10 +1314,14 @@ which each environment read slower: a cell inside the spread of the same build
 read twice has shown nothing, and on the machine above that spread is about 2%,
 4% on a shape of a few hundred cycles.
 
-**Read a change in cycles against its base built the same way.** A base
-`--build` made differs from the change in its sources alone; a release also
-differs in the container and the path it was built in, which the layout
-follows. Against a release, the count is the reading that holds.
+**Read a change against its base built the same way.** A base `--build`
+made differs from the change in its sources alone; a release also differs in
+the container and the path it was built in, which the layout follows, and in
+the binary a shape that allocates hands the C library's allocator: on 3.11
+PyPI's 0.0.19 read `explain_record` 0.84% below a build here of its own commit,
+167 instructions a call in `_int_malloc`. So a change is read against its
+base's revision built here, and in cycles only that way; a release's own
+wheel is read by count, for what it ships.
 
 **`symbols` names where, not why.** A release wheel is stripped, so it names
 the extension's functions only between builds `--build` made; against a

@@ -68,13 +68,14 @@ release waits for whatever reviewers those environments require.
 
 1. **Read the tree against the last release**, on every CPython release a
    wheel is built for with a profile: an environment holding the version PyPI
-   serves and one holding the tree, named at one length, and a `count` of the
-   two, as [Reading one build against another](../11-performance.md#reading-one-build-against-another)
-   reads them. Run the three for each release, `LAST` the version PyPI serves:
+   serves, built here from its tag, and one holding the tree, named at one
+   length, and a `count` of the two, as [Reading one build against another](../11-performance.md#reading-one-build-against-another)
+   reads them. Built here, the two differ in their sources alone. Run the
+   three for each release, `LAST` the version PyPI serves:
 
    ```bash
    py="$(uv python find --managed-python 3.14)"
-   uv run --no-sync python scripts/perf_inspect.py env last --python "$py" --release "$LAST"
+   uv run --no-sync python scripts/perf_inspect.py env last --python "$py" --build "v$LAST"
    uv run --no-sync python scripts/perf_inspect.py env head --python "$py" --build
    uv run --no-sync python scripts/perf_inspect.py count last head
    ```
