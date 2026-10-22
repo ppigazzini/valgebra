@@ -289,6 +289,14 @@ impl Decided {
 /// order to report every violation, resuming where the first pass stopped
 /// rather than re-reading the fields it found to match.
 ///
+/// The deciding pass reads over the caller's buffers, in a fast frame of its
+/// own ([`keyed_map_asks_for_its_keys`]), and a fast walk writes neither of
+/// them, so they come back as they went. It keeps what it reached only where
+/// the walk explains, and only for a record it refuses. With buffers of its own
+/// and its progress kept always, a list of two hundred records reads 4.8% more
+/// instructions on the profiled 3.14 wheel, and a record the walk reaches
+/// alone 2.9% more.
+///
 /// Inlined into the reader of a list of records, which asks it of every
 /// element: called there, a list of two hundred records of three fields reads
 /// 6.5% to 7% more instructions on the profiled 3.12 and 3.14 wheels.
@@ -306,12 +314,24 @@ pub(super) fn check_keyed_map(
     frame: &mut Frame<'_, '_>,
 ) -> bool {
     let ctx = frame.ctx;
-    let mut decided = Decided::default();
-    let keep = ctx.mode.explains().then_some(&mut decided);
-    let ok = keyed_map_matches(fields, defaults, value, ctx, keep);
-    if !ok && ctx.mode.explains() {
+    // What the deciding pass reached, which only an explaining walk reads.
+    let mut decided = None;
+    let keep = ctx
+        .mode
+        .explains()
+        .then(|| decided.insert(Decided::default()));
+    #[cfg(debug_assertions)]
+    let written = (frame.path.len(), frame.out.len());
+    let ok = keyed_map_matches(fields, defaults, value, frame, keep);
+    #[cfg(debug_assertions)]
+    debug_assert_eq!(
+        written,
+        (frame.path.len(), frame.out.len()),
+        "a fast walk writes neither buffer of the frame it reads in"
+    );
+    if !ok && let Some(decided) = &decided {
         let before = frame.out.len();
-        keyed_map_explain(fields, defaults, value, frame, &decided);
+        keyed_map_explain(fields, defaults, value, frame, decided);
         if frame.out.len() == before {
             // Two passes read the same dict and disagreed, so the dict did not
             // stay still between them: report that rather than a failure with
@@ -322,15 +342,16 @@ pub(super) fn check_keyed_map(
     ok
 }
 
-/// [`check_keyed_map`] in a frame of its own, for [`member`]'s arm.
+/// [`check_keyed_map`] behind a call of its own, for [`member`]'s arm.
 ///
 /// The walk is one function under fat LTO with its arms inlined, so code
 /// inlined into an arm lays out every shape crossing the walk anew: inlined
 /// there, the record's check took a list nested twenty-five deep 10% more
 /// cycles than behind this call in the profiled 3.14 wheel, and 16% more in
-/// the 3.12 one. A record the walk reaches alone pays the call, about
-/// thirty-six instructions and 3% of a three-field record's cycles on 3.14; a
-/// list of records reads its elements inlined.
+/// the 3.12 one. A record the walk reaches alone pays the call, and the
+/// buffers its deciding pass borrows pay it back: a three-field record reads
+/// one instruction more than with the check inlined. A list of records reads
+/// its elements inlined.
 #[inline(never)]
 pub(super) fn check_keyed_map_apart(
     fields: &[Field],
@@ -345,17 +366,20 @@ pub(super) fn check_keyed_map_apart(
 /// other key. The walk is inverted — it visits each entry once — and a JSON
 /// object's keys are strings, a duplicate keeping its last value as
 /// `json.loads` does.
+///
+/// The fields and clauses are asked over `frame`'s buffers, which a fast walk
+/// writes nothing to.
 pub(super) fn keyed_map_matches(
     fields: &[Field],
     defaults: &[MapClause],
     value: &Value<'_, '_>,
-    ctx: Ctx<'_>,
+    frame: &mut Frame<'_, '_>,
     decided: Option<&mut Decided>,
 ) -> bool {
     match value {
-        Value::Py(v) => keyed_map_matches_py(fields, defaults, v, ctx, decided),
+        Value::Py(v) => keyed_map_matches_py(fields, defaults, v, frame, decided),
         Value::Json(py, JsonValue::Object(entries)) => {
-            keyed_map_matches_json(fields, defaults, *py, entries, ctx)
+            keyed_map_matches_json(fields, defaults, *py, entries, frame.ctx)
         }
         Value::Json(..) => false,
     }
@@ -573,10 +597,11 @@ fn keyed_map_asks_for_its_keys(
     fields: &[Field],
     defaults: &[MapClause],
     dict: &Bound<'_, PyDict>,
-    ctx: Ctx<'_>,
+    frame: &mut Frame<'_, '_>,
     plan: &RecordPlan,
     decided: Option<&mut Decided>,
 ) -> Option<bool> {
+    let ctx = frame.ctx;
     // By its keys where the keys settle it. A record whose clause reads an
     // undeclared key together with its value has to be scanned, and the scan
     // walks the declared fields as it goes, so reading those by key first would
@@ -585,13 +610,9 @@ fn keyed_map_asks_for_its_keys(
     if undeclared == Undeclared::Read || plan.keys.len() != fields.len() {
         return None;
     }
-    // One pair of scratch buffers for the record, as the scan takes: a fast
-    // walk writes to neither. Dropped as ordinary vectors, unlike the scan's
-    // `Unwritten` pair: without the drop, the release build lays this loop out
-    // three instructions a field dearer -- 1.4% of `--binding-record` -- which
-    // outweighs the call the drop costs a small record.
-    let (mut path, mut out) = (Vec::new(), Vec::new());
-    let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
+    // A fast frame over the caller's buffers, which a fast walk writes nothing
+    // to ([`check_keyed_map`]).
+    let mut sub = Frame::new(&mut *frame.path, &mut *frame.out, fast(ctx));
     with_critical_section(dict.as_any(), || {
         let entries = dict.len();
         // Where the explaining walk would resume if this one refuses, and how
@@ -663,19 +684,21 @@ fn keyed_map_asks_for_its_keys(
                 Err(_) => return None,
             }
         }
+        // Every key the value carries is one of the declared ones exactly when
+        // the count of declared keys found equals the count it holds; there is
+        // then nothing for a clause to govern, whatever the clause. A record
+        // admitted keeps no progress, since only a refusal is explained.
+        let moved = dict.len() != entries;
+        if !moved && present == entries {
+            return Some(true);
+        }
         stopped(fields.len(), fields.len(), present, false);
-        if dict.len() != entries {
+        if moved {
             // The value changed while it was being read, so there is no reading
             // to answer from: not a member, exactly as the scan answers it, and
             // the explain pass names the mutation.
             record_move(ctx);
             return Some(false);
-        }
-        // Every key the value carries is one of the declared ones exactly when
-        // the count of declared keys found equals the count it holds; there is
-        // then nothing for a clause to govern, whatever the clause.
-        if present == entries {
-            return Some(true);
         }
         match undeclared {
             Undeclared::Refused => Some(false),
@@ -751,9 +774,10 @@ fn keyed_map_matches_py(
     fields: &[Field],
     defaults: &[MapClause],
     dict: &Bound<'_, PyAny>,
-    ctx: Ctx<'_>,
+    frame: &mut Frame<'_, '_>,
     decided: Option<&mut Decided>,
 ) -> bool {
+    let ctx = frame.ctx;
     let Ok(dict) = dict.cast::<PyDict>() else {
         return false;
     };
@@ -769,7 +793,7 @@ fn keyed_map_matches_py(
     }
     if let Some(plan) = ctx.index.records.get(&(fields.as_ptr() as usize)) {
         if let Some(answered) =
-            keyed_map_asks_for_its_keys(fields, defaults, dict, ctx, plan, decided.as_deref_mut())
+            keyed_map_asks_for_its_keys(fields, defaults, dict, frame, plan, decided.as_deref_mut())
         {
             return answered;
         }

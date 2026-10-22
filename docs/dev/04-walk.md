@@ -405,16 +405,15 @@ refuses). A walk needing a different frame -- a union explaining a branch into
 a buffer of its own, a clause pair deciding on the fast path inside an
 explaining walk -- builds it from the parts it keeps. A fast walk writes neither of a frame's buffers, so where the
 walk is fast already it asks in the frame it holds: `check_union` walks each
-branch in the union's frame, and a mapping's scan keeps one fast frame for every
-entry `covered` asks of its clauses. Each buffer is a value with a destructor,
+branch in the union's frame, a mapping's scan keeps one fast frame for every
+entry `covered` asks of its clauses, and a record's deciding pass reads over its
+caller's buffers in a fast frame (`keyed_map_asks_for_its_keys`). Each buffer is a value with a destructor,
 and a pair built and dropped per branch is a tenth of what a recursive schema's
 walk costs (`--binding-recursive`). Where a fast walk has no frame to borrow --
 the entry points `is_valid` and `is_valid_json`, a mapping's scan, a parsed object, a
 complement's inner walk -- it takes an `Unwritten` pair (`walk.rs`), whose
 buffers are never dropped: they never own anything, and dropping an empty
-location buffer is a call into drop glue written out of line. A record read by
-its keys keeps an ordinary pair, because without the drop the release build lays
-that loop out three instructions a field dearer.
+location buffer is a call into drop glue written out of line.
 
 ## A container is read against a count taken once
 
@@ -796,9 +795,9 @@ check is a call from `member`'s arm (`check_keyed_map_apart`), so a change to it
 leaves the walk laid out as it was: inlined there, it took the list nested
 twenty-five deep 10% more cycles than behind the call in the profiled 3.14
 wheel, and 16% more in the 3.12 one. A record the walk reaches alone pays the
-call, about thirty-six instructions and 3% of a three-field record's cycles on
-3.14, and the reader of a list of records, out of line itself, inlines the
-check, which called would cost the list 6.5% to 7% of its instructions. Even the
+call, and the buffers its deciding pass borrows pay it back: a three-field
+record reads one instruction more than with the check inlined. The reader of a list of records, out of line itself, inlines the check, which
+called would cost the list 6.5% to 7% of its instructions. Even the
 order of that test's cases is a cost: without a profile the compiler tests first
 the tags a case covers most of, so the union and the meet are tested before a
 nested list's tag, which costs the plain build's nested list 1.86%. Marking the

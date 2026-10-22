@@ -1176,7 +1176,13 @@ fn refused_branches<'s>(
         {
             let mut decided = Decided::default();
             if again(node, entered, ctx, || {
-                keyed_map_matches(fields, defaults, value, ctx, Some(&mut decided))
+                keyed_map_matches(
+                    fields,
+                    defaults,
+                    value,
+                    &mut Unwritten::default().frame(ctx),
+                    Some(&mut decided),
+                )
             }) {
                 return None;
             }

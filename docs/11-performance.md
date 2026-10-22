@@ -697,15 +697,17 @@ program that builds validators per request, and to no validation call.
   fast frame for every entry its clauses are asked of (`covered` in
   `check/walk/record.rs`), rather than a pair built and dropped per branch and
   per key: a recursive schema's descent costs 10% fewer instructions that way
-  (`--binding-recursive`). The scan reads the frame's context where it lies,
+  (`--binding-recursive`). A record's deciding pass reads over its caller's
+  buffers in a fast frame, and keeps its progress only where the walk explains
+  a record it refuses (`check_keyed_map`): a list of two hundred records costs
+  4.8% fewer instructions that way, and a record the walk reaches alone 2.9%. The scan reads the frame's context where it lies,
   asking each half of a clause as a record asks a field (`field_holds`), rather
   than copying the context once an entry. Where a fast walk has no frame to
   hold -- `is_valid` and `is_valid_json` themselves, a mapping's scan, a parsed
   object -- its pair is an `Unwritten` one, never dropped because it never owns
   anything: `is_valid` on a scalar costs 6% fewer instructions that way on
   CPython 3.15, `in` 9%, and the instruction gate's call boundary 13%
-  (`--binding-boundary`). A record read by its keys keeps an ordinary pair,
-  since without the drop the release build lays its loop out dearer.
+  (`--binding-boundary`).
 - **The context a level hands on is seven words.** It holds the pool, the
   definitions, and one reference each to the validator's index and the call's
   state (`Ctx` in `check/ctx.rs`), and a table or a cell lies at a fixed offset
