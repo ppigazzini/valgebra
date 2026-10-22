@@ -902,7 +902,9 @@ impl Schema {
         // lookup. What the distribution below would make of the same pair is a
         // decision step per pair of members, which is the product the budget
         // binds; this is a walk of the two lists, which is a sum.
-        if let (Some(subject), Some(supertype)) = (finite_set(self), finite_set(other)) {
+        if let Some(supertype) = finite_set(other)
+            && let Some(subject) = finite_set(self)
+        {
             let answer = finite_set_below(subject, supertype, other, cx.oracle);
             if answer != Relation::Unknown {
                 return answer;
