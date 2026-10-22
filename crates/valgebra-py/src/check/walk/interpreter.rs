@@ -4981,13 +4981,12 @@ fn a_mapping_of_one_scalar_clause_is_read_entry_by_entry() {
 
 /// A mapping of one clause of two scalars is read as two type tests an entry
 /// where a level is free under it and no fatal signal is recorded, and the
-/// reading declines a second clause, a clause that is not two scalars, the
+/// reading declines a clause that is not two scalars, a map of no clause, the
 /// walk's bound and a recorded signal, each of which the general scan reads.
 /// Where it is taken it answers as the walk does, and keeps for a union what
 /// the scan keeps: the entries admitted before the refusal, never inside one.
 #[test]
 fn a_mapping_of_two_scalars_is_read_as_its_tests() {
-    use super::record::{Decided, scalar_map_matches};
     Python::attach(|py| {
         let index = build_index(py, &Schema::Int, &[], &[]);
         let state = WalkState::new();
@@ -4998,18 +4997,8 @@ fn a_mapping_of_two_scalars_is_read_as_its_tests() {
             state: &state,
             mode: WalkMode::Fast,
         };
-        let dict = |source: &str| {
-            py.eval(&std::ffi::CString::new(source).expect("no nul"), None, None)
-                .expect("the dict evaluates")
-                .cast_into::<PyDict>()
-                .expect("a dict")
-        };
-        let clause = |key, value| MapClause { key, value };
-        let read = |defaults: &[MapClause], source: &str| {
-            let mut decided = Decided::default();
-            scalar_map_matches(defaults, &dict(source), ctx, Some(&mut decided))
-                .map(|ok| (ok, decided.progress()))
-        };
+        let read =
+            |defaults: &[MapClause], source: &str| scalar_map_read(py, defaults, source, ctx);
         let str_int = [clause(Schema::Str, Schema::Int)];
         let sources = [
             "{'a': 1, 'b': 2}",
@@ -5024,7 +5013,7 @@ fn a_mapping_of_two_scalars_is_read_as_its_tests() {
             let walked = decide(
                 py,
                 &Schema::mapping(str_int[0].clone()),
-                &dict(source),
+                &eval_dict(py, source),
                 &[],
                 &[],
             );
@@ -5045,11 +5034,6 @@ fn a_mapping_of_two_scalars_is_read_as_its_tests() {
 
         let of_lists = Schema::list(SeqShape::homogeneous(Schema::Int));
         assert_eq!(read(&[clause(Schema::Str, of_lists)], "{}"), None);
-        let two = [
-            clause(Schema::Str, Schema::Int),
-            clause(Schema::Int, Schema::Str),
-        ];
-        assert_eq!(read(&two, "{}"), None);
         assert_eq!(read(&[], "{}"), None);
         state.depth.set(MAX_WALK_DEPTH - 1);
         assert_eq!(read(&str_int, "{'a': 1}"), Some((true, (1, false))));
@@ -5059,6 +5043,94 @@ fn a_mapping_of_two_scalars_is_read_as_its_tests() {
         state.signals.fatal_seen.set(true);
         assert_eq!(read(&str_int, "{'a': 1}"), None);
     });
+}
+
+/// A mapping of several clauses, each two scalars, is read as the tests of
+/// each entry where a level is free and no signal is recorded: an entry belongs
+/// where some clause admits both its halves, as the walk answers. A clause that
+/// is not two scalars, the bound and a signal decline to the scan, and what the
+/// reading keeps for a union is the scan's.
+#[test]
+fn a_mapping_of_several_scalar_clauses_is_read_as_its_tests() {
+    Python::attach(|py| {
+        let index = build_index(py, &Schema::Int, &[], &[]);
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &[],
+            defs: &[],
+            index: &index,
+            state: &state,
+            mode: WalkMode::Fast,
+        };
+        let read =
+            |defaults: &[MapClause], source: &str| scalar_map_read(py, defaults, source, ctx);
+        let two = [
+            clause(Schema::Str, Schema::Int),
+            clause(Schema::Int, Schema::Str),
+        ];
+        let sources = [
+            "{'a': 1, 2: 'x'}",
+            "{}",
+            "{'a': 1, 2: 3}",
+            "{2: 'x', 'a': 'y'}",
+            "{True: 'x'}",
+            "{1.5: 'x'}",
+            "{'a': True, 3: 'z'}",
+        ];
+        for source in sources {
+            let schema = Schema::keyed_map(Vec::new(), two.to_vec());
+            let walked = decide(py, &schema, &eval_dict(py, source), &[], &[]);
+            assert_eq!(
+                read(&two, source).map(|(ok, _)| ok),
+                Some(walked),
+                "{source}"
+            );
+        }
+        assert_eq!(
+            read(&two, "{'a': 1, 2: 'x', 3: 4, 'b': 2}"),
+            Some((false, (2, false)))
+        );
+
+        let of_lists = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let with_a_list = [
+            clause(Schema::Str, Schema::Int),
+            clause(Schema::Int, of_lists),
+        ];
+        assert_eq!(read(&with_a_list, "{}"), None);
+        state.depth.set(MAX_WALK_DEPTH - 1);
+        assert_eq!(read(&two, "{'a': 1}"), Some((true, (1, false))));
+        state.depth.set(MAX_WALK_DEPTH);
+        assert_eq!(read(&two, "{'a': 1}"), None);
+        state.depth.set(0);
+        state.signals.fatal_seen.set(true);
+        assert_eq!(read(&two, "{'a': 1}"), None);
+    });
+}
+
+/// A clause of a mapping, `key` to `value`.
+fn clause(key: Schema, value: Schema) -> MapClause {
+    MapClause { key, value }
+}
+
+/// The dict a source evaluates to.
+fn eval_dict<'py>(py: Python<'py>, source: &str) -> Bound<'py, PyDict> {
+    py.eval(&std::ffi::CString::new(source).expect("no nul"), None, None)
+        .expect("the dict evaluates")
+        .cast_into::<PyDict>()
+        .expect("a dict")
+}
+
+/// What the scalar mapping reader answers for `defaults` over the dict `source`
+/// evaluates to, and the progress it keeps for a union.
+fn scalar_map_read(
+    py: Python<'_>,
+    defaults: &[MapClause],
+    source: &str,
+    ctx: Ctx<'_>,
+) -> Option<(bool, (usize, bool))> {
+    let mut decided = super::record::Decided::default();
+    super::record::scalar_map_matches(defaults, &eval_dict(py, source), ctx, Some(&mut decided))
+        .map(|ok| (ok, decided.progress()))
 }
 
 /// A sequence whose repeated element is a scalar is read as its type test where

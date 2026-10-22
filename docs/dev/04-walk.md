@@ -169,7 +169,7 @@ refused by `is_valid` and `validate` alike, though the union's table would ask
 nothing. A shortcut that cannot open the level declines to the walk rather
 than refusing: `scalar_member`, the type test a union's scalar branch and a
 record's scalar field are asked, answers nothing where no level is free, and a
-mapping of two scalars declines to the scan there (`scalar_map_matches`), so
+mapping of scalars declines to the scan there (`scalar_map_matches`), so
 `member` refuses there and records the stop. Refused as `false`, the scalar
 would read as a decided refusal, and a complement over it would admit the
 value.
@@ -602,18 +602,22 @@ most of what they cost, and each asks the test directly:
 - **A parsed array.** A document's array of one scalar kind, or of a union of
   them, is one test an element (`json_array_matches`); a document is never
   explained, so the loop records nothing.
-- **A mapping of two scalars.** `dict[str, int]` -- one clause whose key and
-  value are each a scalar kind -- is two type tests an entry
-  (`scalar_map_matches`): the kinds, the level and the fatal-signal flag are
-  read once for the dict, no key is read as a field name, since a mapping
-  declares none, and a `str` key with an `int` value is a loop of its own, as
-  a list of one kind is. A second clause, a clause
-  that is not two scalars, the walk's bound and a recorded signal decline to
-  the scan, which asks both halves of each entry in `covered` as a record asks
-  a field. A hundred entries cost about forty-five fewer instructions an entry
-  than through `covered` on the profiled wheels, and the binding gate's
-  sixty-four 43% fewer in all on the build without a profile
-  (`--binding-mapping`).
+- **A mapping of scalars.** `dict[str, int]` -- one clause whose key and value
+  are each a scalar kind -- is two type tests an entry (`scalar_map_matches`):
+  the kinds, the level and the fatal-signal flag are read once for the dict, no
+  key is read as a field name, since a mapping declares none, and a `str` key
+  with an `int` value is a loop of its own, as a list of one kind is. A hundred
+  entries cost about forty-five fewer instructions an entry than through
+  `covered` on the profiled wheels, and the binding gate's sixty-four 43% fewer
+  in all on the build without a profile (`--binding-mapping`). A map of several
+  such clauses -- `{str: int, int: bool}` -- asks each clause's two tests in
+  turn, an entry belonging where one admits both its halves
+  (`scalar_clauses_match`), and arms no memo for the clauses after the first,
+  where `covered` arms one, since no clause reaches a definition: a hundred
+  entries of two clauses cost 41% to 42% fewer instructions on the profiled 3.12
+  and 3.14 wheels, and 35% on 3.14t. A clause that is not two scalars, the
+  walk's bound and a recorded signal decline to the scan, which asks both halves
+  of each entry in `covered` as a record asks a field.
 - **A tuple whose every position is a scalar.** `tuple[int, str, float]`, and a
   `NamedTuple` of builtin fields, is a type test a position
   (`scalar_positions_tuple_matches`): a thousand such tuples cost 37% fewer
@@ -748,8 +752,8 @@ length bounds 19%. A list of records is read so too (`record_list_matches`):
 each element is its record's check, inlined into the reader, with the level
 held across the list, and the fatal-signal flag read at every element, as
 `member` reads it, since a record that declares no field reads nothing that
-would refuse on it. Two hundred records of three fields cost 8% fewer
-instructions on 3.12 and 3.14, and 6% on 3.14t. The list arm hands every
+would refuse on it. Two hundred records of three fields cost 7.5% fewer
+instructions on 3.12 and 3.14, and 5.7% on 3.14t. The list arm hands every
 kind of tail to one reader (`element_list_matches`) behind its one tag test,
 which asks the whole run of tags from a keyed map to a refinement, a
 complement and an attribute record among
@@ -770,22 +774,29 @@ test of the tail's tag, which the nested list pays at 1.4%, and a mapping's
 reader is asked where a record's reading starts, behind the test that the record
 declares no field (`keyed_map_matches_py`), where the closed record, the list of
 records, the fifty-field record and the nested list read within 1.1% of the walk
-without it on every interpreter the wheels ship. A record's own check is a call
-from `member`'s arm (`check_keyed_map_apart`), so a change to it leaves the walk
-laid out as it was: inlined there, it took the list nested twenty-five deep 10%
-more cycles than behind the call in the profiled 3.14 wheel, and 16% more in the
-3.12 one. A record the walk reaches alone pays the call, about thirty-six
-instructions and 3% of a three-field record's cycles on 3.14, and the reader of
-a list of records, out of line itself, inlines the check, which called would
-cost the list 6.5% to 7% of its instructions. Even the order of that test's
-cases is a cost: without a profile the compiler tests first the tags a case
-covers most of, so the union and the meet are tested before a nested list's tag,
-which costs the plain build's nested list 1.86%. Marking the reader
-`element_list_matches` cold restores the order there and costs the PGO wheel the
-release ships more -- a list of lists 4.4% of its instructions, lists of refined
-values 1.6% to 3.5% -- so the reader is not marked, and the plain build pays.
-The branch test is paid by every branch that is not a scalar too, eight
-instructions each, which is 1% on a union of twenty record kinds.
+without it on every interpreter the wheels ship. The reader of several clauses
+is a call from the reader of one (`scalar_clauses_match`). The readings of a
+mapping are inlined into a record's check, so code added beside them lays out
+the record's own loop over its fields anew: with the readings out of line as a
+whole, the plain build's fifty-field record read three instructions more a
+field, past the merge gate's ceiling. Behind its own call the reader costs the
+record shapes up to 1.2% of their instructions in the profiled 3.12 and 3.14
+wheels, and moves no shape that reads neither by more than 0.02%. A record's own
+check is a call from `member`'s arm (`check_keyed_map_apart`), so a change to it
+leaves the walk laid out as it was: inlined there, it took the list nested
+twenty-five deep 10% more cycles than behind the call in the profiled 3.14
+wheel, and 16% more in the 3.12 one. A record the walk reaches alone pays the
+call, about thirty-six instructions and 3% of a three-field record's cycles on
+3.14, and the reader of a list of records, out of line itself, inlines the
+check, which called would cost the list 6.5% to 7% of its instructions. Even the
+order of that test's cases is a cost: without a profile the compiler tests first
+the tags a case covers most of, so the union and the meet are tested before a
+nested list's tag, which costs the plain build's nested list 1.86%. Marking the
+reader `element_list_matches` cold restores the order there and costs the PGO
+wheel the release ships more -- a list of lists 4.4% of its instructions, lists
+of refined values 1.6% to 3.5% -- so the reader is not marked, and the plain
+build pays. The branch test is paid by every branch that is not a scalar too,
+eight instructions each, which is 1% on a union of twenty record kinds.
 
 **An error the walk answers with is dropped out of line.** PyO3 asks, when an
 error is dropped, whether the thread is attached to the interpreter, and that

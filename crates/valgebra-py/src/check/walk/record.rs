@@ -808,8 +808,9 @@ fn keyed_map_matches_py(
 }
 
 /// A mapping of one clause whose key and value are each a scalar kind --
-/// `dict[str, int]` -- decided as two type tests an entry, or `None` where the
-/// general scan must read it.
+/// `dict[str, int]` -- decided as two type tests an entry, a mapping of
+/// several such clauses decided by [`scalar_clauses_match`], or `None` where
+/// the general scan must read it.
 ///
 /// [`keyed_map_scan`] reads such a mapping through [`covered`], which asks
 /// each half of an entry as a field ([`field_holds`]): the schema's kind, the
@@ -841,7 +842,7 @@ pub(super) fn scalar_map_matches(
     decided: Option<&mut Decided>,
 ) -> Option<bool> {
     let [clause] = defaults else {
-        return None;
+        return scalar_clauses_match(defaults, dict, ctx, decided);
     };
     let (key_kind, value_kind) = (scalar_of(&clause.key)?, scalar_of(&clause.value)?);
     if !ctx.room_to_descend() || ctx.state.signals.fatal_seen.get() {
@@ -859,6 +860,65 @@ pub(super) fn scalar_map_matches(
             |value| scalar_admits(value_kind, value),
         ),
     };
+    if let Some(keep) = decided {
+        keep.admitted = admitted;
+        keep.inside = false;
+    }
+    Some(read_whole(&scan, ctx))
+}
+
+/// [`scalar_map_matches`] for a mapping of more than one clause, every one of
+/// them two scalar kinds -- `{str: int, int: bool}` -- or `None` where the
+/// general scan must read it.
+///
+/// An entry belongs where some clause admits both its halves, which is the
+/// union of rectangles the clauses denote, asked as the scan asks it but for
+/// what the scan reads again at every entry: the level, the fatal-signal flag
+/// and, for each clause after the first, the memo a union's next branch is
+/// armed with ([`covered`]). No clause reaches a definition, so there is no
+/// memo to arm.
+///
+/// It answers as [`scalar_map_matches`] does, for the same reasons: no type
+/// test runs Python, the scan is [`keyed_map_scan`]'s, and a clause that is not
+/// two scalars, the walk's bound and a recorded signal decline to that scan. A
+/// map of no clause declines too: the scan answers for it.
+///
+/// Out of line, the one reading of a mapping that is: the readings are
+/// inlined into the record's check, so code added beside them lays out the
+/// record's own loop over its fields anew. With the readings out of line as a
+/// whole, the build without a profile read three instructions more a field of
+/// a fifty-field record; behind this call alone, the record shapes read up to
+/// 1.2% more in the profiled 3.12 and 3.14 wheels.
+#[inline(never)]
+fn scalar_clauses_match(
+    defaults: &[MapClause],
+    dict: &Bound<'_, PyDict>,
+    ctx: Ctx<'_>,
+    decided: Option<&mut Decided>,
+) -> Option<bool> {
+    let kinds = |clause: &MapClause| Some((scalar_of(&clause.key)?, scalar_of(&clause.value)?));
+    if defaults.is_empty()
+        || !defaults.iter().all(|clause| kinds(clause).is_some())
+        || !ctx.room_to_descend()
+        || ctx.state.signals.fatal_seen.get()
+    {
+        return None;
+    }
+    let mut admitted = 0usize;
+    let scan = scan_dict(dict, ctx.state, |key, val| {
+        let (key, val) = (Value::Py(key), Value::Py(val));
+        let covers = |clause: &MapClause| {
+            kinds(clause).is_some_and(|(key_kind, value_kind)| {
+                scalar_admits(key_kind, &key) && scalar_admits(value_kind, &val)
+            })
+        };
+        if defaults.iter().any(covers) {
+            admitted += 1;
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
     if let Some(keep) = decided {
         keep.admitted = admitted;
         keep.inside = false;

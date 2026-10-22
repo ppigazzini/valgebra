@@ -645,8 +645,11 @@ program that builds validators per request, and to no validation call.
   the dict, and its entries as two type tests each (`scalar_map_matches`): a
   hundred-entry `dict[str, int]` costs a third fewer instructions that way on
   the profiled wheels, and the binding gate's sixty-four entries 43% fewer
-  (`--binding-mapping`). A Rust test holds the direct reading to the walk's
-  verdict for every scalar schema against every kind of value.
+  (`--binding-mapping`). A mapping of several such clauses asks each clause's
+  two tests in turn (`scalar_clauses_match`): a hundred-entry
+  `{str: int, int: bool}` costs 41% to 42% fewer instructions than the scan
+  on the profiled 3.12 and 3.14 wheels. A Rust test holds the direct reading
+  to the walk's verdict for every scalar schema against every kind of value.
 - **An instance of the class itself is read off its type pointer.**
   `type(obj) is C` answers `isinstance(obj, C)` before `C.__instancecheck__` is
   asked, which is the test CPython's `PyObject_IsInstance` makes first
@@ -753,20 +756,20 @@ program that builds validators per request, and to no validation call.
 - **A tuple of scalar positions is one type test a position**
   (`scalar_positions_tuple_matches`), and a list whose element is a union of
   literals, one class, a tuple of scalars or a named tuple of them is read
-  through that union's table, the type-pointer test, a test of each position,
-  or the class's pointer test and a test of each position, with the positions
-  read once for the list (`element_list_matches`). An element the test does not
+  through that union's table, the type-pointer test, a test of each position, or
+  the class's pointer test and a test of each position, with the positions read
+  once for the list (`element_list_matches`). An element the test does not
   settle is walked, which may run Python, so the list is read in place unless a
   snapshot settles it entirely. A thousand `datetime.date` values cost 76% fewer
   instructions than through the general loop, a thousand `tuple[int, str]` 61%
   on 3.12 and 3.14, 68% in the 3.14 PGO wheel, and a thousand two-field
   `NamedTuple`s 76% on 3.12, 3.14 and 3.15, 81% under `validate`. A list of
-  refinements calls each element's own check, with the level the walk opens
-  for an element held across the list (`refined_list_matches`): a thousand
-  integers under two bounds cost 12% fewer instructions, and a thousand strings
-  under two length bounds 19%. A list of records reads each element by its
-  record's check, inlined into the reader, with that level held the same way
-  (`record_list_matches`): two hundred three-field `TypedDict`s cost 8% fewer
+  refinements calls each element's own check, with the level the walk opens for
+  an element held across the list (`refined_list_matches`): a thousand integers
+  under two bounds cost 12% fewer instructions, and a thousand strings under two
+  length bounds 19%. A list of records reads each element by its record's check,
+  inlined into the reader, with that level held the same way
+  (`record_list_matches`): two hundred three-field `TypedDict`s cost 7.5% fewer
   instructions on 3.12 and 3.14. A list of dataclasses walks an element of
   exactly the class as the record of its fields, without dispatching the meet,
   the class and the record around it (`class_record_list_matches`): 12% fewer
