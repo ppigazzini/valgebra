@@ -1,12 +1,13 @@
 ---
-description: Tasks done end to end -- a response in a test, a schema against its last version, a configuration file.
+description: Tasks done end to end -- a response in a test, a schema against its last version, a configuration file, a model's tool call.
 ---
 
 # Recipes
 
 Each recipe is one task done with a value already in hand: a response checked
 in a test, a schema held to its previous version, a configuration file read
-and checked. Each says what it cannot do, and each block runs as written.
+and checked, a model's tool call checked before the tool runs. Each says what
+it cannot do, and each block runs as written.
 
 ## A response in a test
 
@@ -185,3 +186,59 @@ returns: `SETTINGS.validate(data)` raises as `load` does.
 `at port: expected int, got '8080' [int_type]` -- where a parsing library would
 read it as the number. Convert first, with the library that owns the format,
 and check what it returns.
+
+## A model's tool call
+
+A model that calls a tool writes the arguments itself, as JSON, and nothing
+about the model makes them right. `load` parses and checks them in one call,
+and its error names every wrong argument and why, which is what goes back to
+the model as the tool's result. A closed record also refuses an argument the
+tool does not take, which a model invents as readily as a wrong value:
+
+```python
+from typing import Literal
+
+from typing_extensions import NotRequired, TypedDict
+
+from valgebra import ValidationError, Validator
+
+
+class GetWeather(TypedDict, closed=True):
+    city: str
+    unit: Literal["celsius", "fahrenheit"]
+    days: NotRequired[int]
+
+
+GET_WEATHER = Validator(GetWeather)
+
+arguments = '{"city": "Turin", "unit": "kelvin", "days": 3.0, "country": "IT"}'
+refused = False
+try:
+    GET_WEATHER.load(arguments)
+except ValidationError as error:
+    refused = True
+    result = str(error)  # the tool's result, sent back to the model
+    assert result.splitlines() == [
+        "3 validation errors:",
+        "at days: expected int, got 3.0 [int_type]",
+        (
+            "at unit: expected one of: the literal 'celsius', the literal "
+            "'fahrenheit', got 'kelvin' [union_error]"
+        ),
+        "at country: expected no unexpected key, got 'country' [extra_forbidden]",
+    ]
+assert refused
+
+call = GET_WEATHER.load('{"city": "Turin", "unit": "celsius"}')
+assert call == {"city": "Turin", "unit": "celsius"}
+```
+
+Arguments a client library hands over already parsed, as a dict, are
+`GET_WEATHER.validate(arguments)`, which raises the same error. A JSON number
+written `3.0` is a float, so `days` refuses it: the model is told, rather than
+the value converted.
+
+**The tool's schema is written twice.** valgebra does not render a JSON Schema,
+so the parameters the model is shown are written by hand, or by another
+library, beside the `TypedDict` that checks what comes back, and nothing holds
+the two to one shape: a parameter added to one is added to the other by hand.
