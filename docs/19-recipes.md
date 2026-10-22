@@ -1,5 +1,5 @@
 ---
-description: Tasks done end to end -- a response in a test, a value whose type a checker does not know, a schema against its last version, a configuration file, a model's tool call, a response from an API the code does not own, a field of a FastAPI request, a message routed by its shape.
+description: Tasks done end to end -- a response in a test, a value whose type a checker does not know, a schema against its last version, stored data against a new schema, a configuration file, a model's tool call, a response from an API the code does not own, a field of a FastAPI request, a message routed by its shape.
 ---
 
 # Recipes
@@ -180,6 +180,81 @@ declines; `"not_subset"` is a refutation, a value of the one outside the other.
 Where the procedure declines, `relation_to` answers `"undecided"` and both
 assertions fail, so the test is red rather than green on a guess. Which
 relations decline is the [decidability boundary](15-decidability.md#the-contract).
+
+## Stored data against a new schema
+
+Data stored under one version of a schema is read under the next, so a
+migration is the request case of [the recipe above](#a-schema-against-its-last-version):
+every stored value must be a new one. Where the old schema is a subtype of the
+new, that is proven of every value the old schema admits, and no row needs
+reading. Where `relation_to` answers `"not_subset"`, some old value is refused,
+though not necessarily one the table holds, and the rows are read:
+`is_valid_json` parses each stored document and checks it
+[in place](07-json.md#performance), building no dict for it, and
+`validate_json` gives the reasons for the ones it refuses:
+
+```python
+import sqlite3
+from typing import Literal, TypedDict
+
+from valgebra import ValidationError, Validator
+
+
+class ProfileV1(TypedDict):
+    name: str
+    plan: Literal["free", "pro", "legacy"]
+
+
+class ProfileV2(TypedDict):
+    name: str
+    plan: Literal["free", "pro", "legacy", "team"]
+
+
+class ProfileV3(TypedDict):
+    name: str
+    plan: Literal["free", "pro", "team"]
+
+
+STORED = Validator(ProfileV1)
+# A plan added: every stored profile is a new one, and no row is read.
+assert STORED.is_subtype_of(ProfileV2)
+# A plan retired: a stored profile may be refused, so the rows are read.
+assert STORED.relation_to(ProfileV3) == "not_subset"
+
+db = sqlite3.connect(":memory:")
+db.execute("CREATE TABLE profiles (id INTEGER PRIMARY KEY, doc TEXT)")
+db.executemany(
+    "INSERT INTO profiles (doc) VALUES (?)",
+    [
+        ('{"name": "Ada", "plan": "pro"}',),
+        ('{"name": "Bob", "plan": "legacy"}',),
+        ('{"name": "Cy", "plan": "free"}',),
+    ],
+)
+
+NEW = Validator(ProfileV3)
+
+
+def why(doc: str) -> list[tuple[object, object]]:
+    """Give the path and code of every reason `NEW` refuses a stored document."""
+    try:
+        NEW.validate_json(doc)
+    except ValidationError as error:
+        return [(item["path"], item["code"]) for item in error.errors]
+    raise AssertionError("validate_json admitted a document is_valid_json refused")
+
+
+rows = db.execute("SELECT id, doc FROM profiles").fetchall()
+refused = {row_id: why(doc) for row_id, doc in rows if not NEW.is_valid_json(doc)}
+assert refused == {2: [(("plan",), "union_error")]}
+```
+
+**The proof is about the old schema, not the table.** It covers the stored rows
+only where each was checked against the old schema when it was written; a row
+another writer put there, or one older than the check, is covered by no proof,
+and only the scan reads it. Where `relation_to` answers `"undecided"`, read the
+rows too. A column a driver hands back decoded, as a dict, is checked with
+`is_valid` and `validate` instead.
 
 ## A configuration file
 
