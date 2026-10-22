@@ -55,7 +55,8 @@ from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments, git_outpu
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
-#: A step to run: its job, its name, its command, and the job's own `env`.
+#: A step to run: its job, its name, its command, and the environment a runner
+#: hands it -- the workflow's `env`, the job's, and its own.
 Step = tuple[str, str, str, dict[str, str]]
 
 
@@ -643,8 +644,17 @@ def interpreter_env() -> dict[str, str]:
 
 
 def build_plan(spec: dict, jobs: list[str]) -> tuple[list[Step], list[str]]:
-    """Collect the steps to run, and the ones only a runner can fill in."""
+    """Collect the steps to run, and the ones only a runner can fill in.
+
+    A runner hands every step the workflow's `env`, then its job's, then its
+    own, each over the one before; so does this, keeping the literal values.
+    Read only to fill in `${{ env.X }}`, the workflow's values would leave a
+    step that reads one as `$X` unbound here and set on a runner.
+    """
     workflow_env = {key: str(value) for key, value in (spec.get("env") or {}).items()}
+    inherited = {
+        key: value for key, value in workflow_env.items() if "${{" not in value
+    }
     plan: list[Step] = []
     unresolved: list[str] = []
     for job in jobs:
@@ -662,7 +672,7 @@ def build_plan(spec: dict, jobs: list[str]) -> tuple[list[Step], list[str]]:
                 continue
             if name in NETWORK:
                 filled = NETWORK[name][1]
-            plan.append((job, name, filled, {**job_env, **step_env}))
+            plan.append((job, name, filled, {**inherited, **job_env, **step_env}))
     plan += [
         (job, f"{name} (the part that runs here)", command, {})
         for job in jobs

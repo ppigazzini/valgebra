@@ -51,7 +51,8 @@ or a parser of its own.
 
 What a script runs a step or a measurement in is not shared, because the two
 are different rules. `gate.py` gives a step the caller's environment, less the
-color a terminal forces and the venv `uv run` names. `perf_gate.py` gives a
+color a terminal forces and the venv `uv run` names, and over it what a runner
+hands the step: the workflow's `env`, its job's and its own. `perf_gate.py` gives a
 workload the few names it needs, with the hash seed and the allocator fixed,
 since the environment's size moves a count. Either rule applied to the other's case fails a test:
 `test_a_forced_color_variable_does_not_reach_a_step` needs a caller's variable

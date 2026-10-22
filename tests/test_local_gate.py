@@ -124,6 +124,36 @@ def test_a_step_only_a_runner_can_fill_in_is_unaccounted() -> None:
     )
 
 
+def test_a_step_is_handed_the_workflow_env_under_its_jobs_and_its_own() -> None:
+    """A runner hands every step the workflow's `env`, then the job's, then its own.
+
+    A step reading a workflow variable as `$X` is set on a runner; handed only
+    its job's and its own, it ran unbound here, and a step under `bash -u`
+    failed locally that passed on the runner. A value only a runner can fill
+    in is dropped, as the job's are.
+    """
+    spec = {
+        "env": {"WORKFLOW": "w", "SHADOWED": "w", "RUNNER": "${{ github.sha }}"},
+        "jobs": {
+            "ci": {"needs": ["job"]},
+            "job": {
+                "env": {"JOB": "j", "SHADOWED": "j"},
+                "steps": [
+                    {"name": "reads", "run": 'echo "$WORKFLOW"', "env": {"STEP": "s"}}
+                ],
+            },
+        },
+    }
+    plan, _ = gate.build_plan(spec, gate.required_jobs(spec))
+    handed = {name: env for _, name, _, env in plan}
+    assert handed["reads"] == {
+        "WORKFLOW": "w",
+        "SHADOWED": "j",
+        "JOB": "j",
+        "STEP": "s",
+    }
+
+
 def test_an_env_expression_the_workflow_defines_is_filled_in() -> None:
     """And the other direction, so the refusal is not a blanket one."""
     assert gate.resolved("echo ${{ env.X }}", {"X": "1"}) == "echo 1"

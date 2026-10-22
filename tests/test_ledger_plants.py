@@ -980,6 +980,17 @@ PLANTS = (
         ),
         trips=("test_every_merge_gate_step_is_planned_or_excused_by_name",),
     ),
+    Plant(
+        "tests/test_local_gate.py",
+        ("scripts/gate.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/gate.py",
+            "{**inherited, **job_env, **step_env}",
+            "{**job_env, **step_env}",
+        ),
+        trips=("test_a_step_is_handed_the_workflow_env_under_its_jobs_and_its_own",),
+    ),
     # The same ledger again, on the half of the gate that is not a workflow
     # step: the floor interpreter it builds. Written down rather than read, the
     # number is right today and wrong the morning the floor moves -- and wrong
