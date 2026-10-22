@@ -1173,6 +1173,15 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   on every wheel target.
 - **A snapshot of a list on CPython 3.14**: 1.65 ns an element against 1.28 in
   place, timed, because that interpreter makes the reference counts cheap.
+- **Aligning code to 64 bytes**: a function starts on a 16-byte boundary, so a
+  change anywhere in the library can move it 16 bytes across the processor's
+  64-byte fetch lines. A list of a thousand refined integers read 2% more cycles
+  on CPython 3.14 in one build than in another at an equal count, nearly all of
+  it frontend stalls: its function's code is identical and starts 16 bytes later
+  in its line. Loop heads aligned to 64 bytes leave it 1.7% dearer, and
+  functions aligned to 64 bytes 2.0%, for a library 1.5% larger; every other
+  shape moves about 1% either way under either, inside its own shape's spread.
+  Read with `perf_inspect.py cycles`, thirty rounds.
 
 ## Regression gate
 
@@ -1311,8 +1320,12 @@ more cycles. `cycles` reads what the
 count cannot and carries the machine's noise, so it starts each round at the
 next environment, prints the median of the rounds, and beside it the rounds in
 which each environment read slower: a cell inside the spread of the same build
-read twice has shown nothing, and on the machine above that spread is about 2%,
-4% on a shape of a few hundred cycles.
+read twice has shown nothing. On the machine above that spread is about 2%, 4%
+on a shape of a few hundred cycles, and it is a shape's own: two environments
+of one build read `list[int | str]` 14% apart, at every round of two runs,
+where `list[int]` read 0.6% apart. So the control is the base in a second
+environment, read in the same run, and each cell is weighed against its own
+shape's control.
 
 **Read a change against its base built the same way.** A base `--build`
 made differs from the change in its sources alone; a release also differs in
