@@ -1,5 +1,5 @@
 ---
-description: Tasks done end to end -- a response in a test, a schema against its last version, a configuration file, a model's tool call, a field of a FastAPI request, a message routed by its shape.
+description: Tasks done end to end -- a response in a test, a schema against its last version, a configuration file, a model's tool call, a response from an API the code does not own, a field of a FastAPI request, a message routed by its shape.
 ---
 
 # Recipes
@@ -240,6 +240,61 @@ the value converted.
 so the parameters the model is shown are written by hand, or by another
 library, beside the `TypedDict` that checks what comes back, and nothing holds
 the two to one shape: a parameter added to one is added to the other by hand.
+
+## A response from an API the code does not own
+
+An API the code does not own changes its responses when its provider decides
+to. A check that raises stops the service at the first change, and no check
+lets the change reach the line that reads the field. `ensure` checks every response and
+returns it typed; where it refuses, each failure is logged by its path and
+code, and the code carries on with the last response that belonged:
+
+```python
+import logging
+from typing import TypedDict
+
+from valgebra import ValidationError, Validator
+
+log = logging.getLogger("rates")
+
+
+class Rate(TypedDict):
+    currency: str
+    rate: float
+
+
+RATES = Validator(list[Rate])
+last_good: list[Rate] = [{"currency": "USD", "rate": 1.08}]
+
+response = [{"currency": "USD", "rate": "1.09"}, {"code": "GBP", "rate": 0.86}]
+try:
+    rates = RATES.ensure(response)
+except ValidationError as error:
+    for item in error.errors:
+        log.warning("rates drifted at %s [%s]", item["path"], item["code"])
+    rates = last_good
+assert rates == last_good
+```
+
+```text
+rates drifted at (0, 'rate') [float_type]
+rates drifted at (1, 'currency') [missing_key]
+```
+
+A response that belongs is walked once and builds no error: the walk that says
+where runs, and the error is built, only for a response that drifted
+([reporting a failure](11-performance.md#reporting-a-failure)). The log line
+carries each failure's path and code and not its message, since the message
+renders the value it refused, and a response's values can be data a log should
+not keep; a code is stable, so a count by path and code is a metric.
+
+**An open record reports what was removed or changed, not what was added.** The
+second rate renamed `currency` to `code`, which reads as `currency` missing:
+that is the drift that breaks the line reading the field, and a closed record
+reports an added field too. A JSON number written without a point is an `int`,
+which a `float` field refuses
+([the JSON value mapping](07-json.md#json-to-python-value-mapping)), so where a
+provider writes whole numbers bare, the field is `int | float`.
 
 ## A field of a FastAPI request
 
