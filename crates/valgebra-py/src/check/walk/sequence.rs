@@ -14,12 +14,13 @@ use pyo3::prelude::*;
 use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyFrozenSet, PyIterator, PyList, PySet, PyTuple};
 use valgebra_core::{
-    Attribute, ClassIx, Constraint, PathSegment, Schema, SeqKind, SeqShape, Violation,
+    Attribute, ClassIx, Constraint, Field, MapClause, PathSegment, Schema, SeqKind, SeqShape,
+    Violation,
 };
 
 #[cfg(PyPy)]
 use super::reads_its_length;
-use super::record::check_attr_record;
+use super::record::{check_attr_record, check_keyed_map};
 use super::scalar::{
     Scalar, admitted_quietly, check_refine, homogeneous_scalar_union, scalar_union_admits,
 };
@@ -63,13 +64,14 @@ pub(super) fn check_seq(
             if let Some((kind, schema)) = homogeneous_scalar(prefix, tail, ctx) {
                 return scalar_list_matches(list, kind, schema, value, frame);
             }
-            // Every tag from a union to a refinement, a complement and an
+            // Every tag from a keyed map to a refinement, a complement and an
             // attribute record among them, though the reader declines both:
             // asked as that run of tags, the test costs a list nested
             // twenty-five deep 0.03% more instructions, and asked as only the
             // tags the reader takes, 1.25%.
             if let Some(
-                element @ (Schema::Union(_)
+                element @ (Schema::KeyedMap { .. }
+                | Schema::Union(_)
                 | Schema::Intersection(_)
                 | Schema::Complement(_)
                 | Schema::Instance(_)
@@ -650,9 +652,9 @@ fn nullable_list_read(
     }
 }
 
-/// Membership for a list whose element is a union, a meet, a class, a
-/// refinement or a tuple, read by the reader for its kind, and `None` where
-/// that reader declines.
+/// Membership for a list whose element is a keyed map, a union, a meet, a
+/// class, a refinement or a tuple, read by the reader for its kind, and `None`
+/// where that reader declines.
 ///
 /// One call for every kind, behind the one test of the tail's tag [`check_seq`]
 /// makes: a second test there moved the PGO wheel's layout of the general
@@ -676,6 +678,9 @@ pub(super) fn element_list_matches(
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
     match element {
+        Schema::KeyedMap { fields, defaults } => {
+            record_list_matches(list, prefix, fields, defaults, value, frame)
+        }
         Schema::Union(members) => {
             scalar_union_list_matches(list, prefix, element, members, value, frame)
         }
@@ -782,6 +787,56 @@ fn refined_list_matches(
             frame.path.push(PathSegment::Index(at));
         }
         ok &= check_refine(base, constraints, &Value::Py(item), frame);
+        if explains {
+            frame.path.pop();
+        }
+        if !ok && stop(ctx) {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    Some(match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    })
+}
+
+/// Membership for a list whose every element is a keyed map -- a list of
+/// `TypedDict`s, the shape a document's records come in -- where a level is
+/// free under the list, and `None` elsewhere.
+///
+/// Each element is the keyed map's own check ([`check_keyed_map`]), inlined
+/// here, and the level the walk opens for an element is opened once and held
+/// for the list, as a list of refinements is read
+/// ([`refined_list_matches`]): what [`member`] spends around the check, its
+/// depth guard and its dispatch on the element's tag, is spent once. The
+/// fatal-signal flag is read at every element, as [`member`] reads it, since a
+/// record that declares no field reads nothing that would refuse on it. An
+/// explaining walk names each element at its index, as the walk does.
+#[inline(never)]
+fn record_list_matches(
+    list: &Bound<'_, PyList>,
+    prefix: &[Schema],
+    fields: &[Field],
+    defaults: &[MapClause],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    if !prefix.is_empty() {
+        return None;
+    }
+    let _element = ctx.descend()?;
+    let explains = ctx.mode.explains();
+    let mut ok = true;
+    let scan = scan_list(list, |at, item| {
+        if explains {
+            frame.path.push(PathSegment::Index(at));
+        }
+        ok &= !ctx.state.signals.fatal_seen.get()
+            && check_keyed_map(fields, defaults, &Value::Py(item), frame);
         if explains {
             frame.path.pop();
         }

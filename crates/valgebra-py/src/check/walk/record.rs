@@ -283,6 +283,64 @@ impl Decided {
     }
 }
 
+/// Membership for a keyed map: a record or a mapping, read as a dict.
+///
+/// The fast check decides; on failure an explaining walk re-reads in declared
+/// order to report every violation, resuming where the first pass stopped
+/// rather than re-reading the fields it found to match.
+///
+/// Inlined into the reader of a list of records, which asks it of every
+/// element: called there, a list of two hundred records of three fields reads
+/// 6.5% to 7% more instructions on the profiled 3.12 and 3.14 wheels.
+/// [`member`] asks it through [`check_keyed_map_apart`].
+#[expect(
+    clippy::inline_always,
+    reason = "measured: called from the list reader, a list of records read \
+              6.5% to 7% more instructions"
+)]
+#[inline(always)]
+pub(super) fn check_keyed_map(
+    fields: &[Field],
+    defaults: &[MapClause],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let ctx = frame.ctx;
+    let mut decided = Decided::default();
+    let keep = ctx.mode.explains().then_some(&mut decided);
+    let ok = keyed_map_matches(fields, defaults, value, ctx, keep);
+    if !ok && ctx.mode.explains() {
+        let before = frame.out.len();
+        keyed_map_explain(fields, defaults, value, frame, &decided);
+        if frame.out.len() == before {
+            // Two passes read the same dict and disagreed, so the dict did not
+            // stay still between them: report that rather than a failure with
+            // nothing behind it.
+            mutated(value, frame);
+        }
+    }
+    ok
+}
+
+/// [`check_keyed_map`] in a frame of its own, for [`member`]'s arm.
+///
+/// The walk is one function under fat LTO with its arms inlined, so code
+/// inlined into an arm lays out every shape crossing the walk anew: inlined
+/// there, the record's check took a list nested twenty-five deep 10% more
+/// cycles than behind this call in the profiled 3.14 wheel, and 16% more in
+/// the 3.12 one. A record the walk reaches alone pays the call, about
+/// thirty-six instructions and 3% of a three-field record's cycles on 3.14; a
+/// list of records reads its elements inlined.
+#[inline(never)]
+pub(super) fn check_keyed_map_apart(
+    fields: &[Field],
+    defaults: &[MapClause],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    check_keyed_map(fields, defaults, value, frame)
+}
+
 /// Membership for a keyed map: named fields, then a default clause for every
 /// other key. The walk is inverted — it visits each entry once — and a JSON
 /// object's keys are strings, a duplicate keeping its last value as

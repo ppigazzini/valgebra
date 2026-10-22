@@ -764,7 +764,10 @@ program that builds validators per request, and to no validation call.
   refinements calls each element's own check, with the level the walk opens
   for an element held across the list (`refined_list_matches`): a thousand
   integers under two bounds cost 12% fewer instructions, and a thousand strings
-  under two length bounds 19%. A list of dataclasses walks an element of
+  under two length bounds 19%. A list of records reads each element by its
+  record's check, inlined into the reader, with that level held the same way
+  (`record_list_matches`): two hundred three-field `TypedDict`s cost 8% fewer
+  instructions on 3.12 and 3.14. A list of dataclasses walks an element of
   exactly the class as the record of its fields, without dispatching the meet,
   the class and the record around it (`class_record_list_matches`): 12% fewer
   instructions for a hundred five-field dataclasses, in both modes.

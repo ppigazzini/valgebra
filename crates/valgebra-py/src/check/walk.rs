@@ -56,7 +56,9 @@ mod record;
 mod scalar;
 mod sequence;
 
-use record::{Decided, check_attr_record, keyed_map_explain, keyed_map_matches};
+use record::{
+    Decided, check_attr_record, check_keyed_map_apart, keyed_map_explain, keyed_map_matches,
+};
 use scalar::{
     admit, check_literal, check_refine, homogeneous_scalar, is_of_its_kind, scalar_admits,
     scalar_member, scalar_of,
@@ -553,24 +555,7 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
             CollKind::FrozenSet => check_frozenset(element, value, frame),
         },
         Schema::KeyedMap { fields, defaults } => {
-            // Membership is the single-pass fast check; on failure the explain
-            // pass re-walks in declared order to aggregate ordered violations,
-            // resuming where the first pass stopped rather than re-reading the
-            // fields it already found to match.
-            let mut decided = Decided::default();
-            let keep = ctx.mode.explains().then_some(&mut decided);
-            let ok = keyed_map_matches(fields, defaults, value, ctx, keep);
-            if !ok && ctx.mode.explains() {
-                let before = frame.out.len();
-                keyed_map_explain(fields, defaults, value, frame, &decided);
-                if frame.out.len() == before {
-                    // Two passes read the same dict and disagreed, so the dict
-                    // did not stay still between them: report that rather than a
-                    // failure with nothing behind it.
-                    mutated(value, frame);
-                }
-            }
-            ok
+            check_keyed_map_apart(fields, defaults, value, frame)
         }
         Schema::Union(members) => check_union(members, value, frame),
         Schema::Intersection(members) => check_intersection(members, value, frame),

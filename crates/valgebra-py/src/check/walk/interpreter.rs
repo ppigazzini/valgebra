@@ -6331,6 +6331,140 @@ fn a_list_of_refinements_is_read_by_each_refinement() {
     });
 }
 
+/// A list whose element is a record answers what the walk answers of a tuple
+/// of the same elements, which it walks element by element: in both modes, in
+/// place and wide enough for a snapshot, and with each refused element's
+/// failures named under its own index.
+#[test]
+fn a_list_of_records_answers_as_the_walk_does() {
+    Python::attach(|py| {
+        let record = Schema::keyed_map(
+            vec![
+                field("id", Schema::Int, true),
+                field(
+                    "tags",
+                    Schema::list(SeqShape::homogeneous(Schema::Str)),
+                    false,
+                ),
+            ],
+            Vec::new(),
+        );
+        let list = Schema::list(SeqShape::homogeneous(record.clone()));
+        let tuple = Schema::tuple(SeqShape::homogeneous(record));
+        let report = |schema: &Schema, value: &Bound<'_, PyAny>| {
+            let (ok, violations) = explain(py, schema, value, &[], &[]);
+            let fields: Vec<_> = violations
+                .into_iter()
+                .map(|v| (v.path, v.code, v.expected, v.value_summary))
+                .collect();
+            (ok, fields)
+        };
+        for (source, want) in [
+            ("[{'id': 1}, {'id': 2, 'tags': ['a']}]", true),
+            ("[]", true),
+            ("[{}]", false),
+            ("[{'id': 'x'}]", false),
+            ("[{'id': 1, 'tags': [1]}]", false),
+            ("[{'id': 1, 'other': 2}]", false),
+            ("[5]", false),
+            ("[{'id': 1}] * 40", true),
+            ("[{'id': 1}] * 39 + [{'id': None}]", false),
+        ] {
+            let listed = evaluate(py, source);
+            let tupled = evaluate(py, &format!("tuple({source})"));
+            assert_eq!(decide(py, &list, &listed, &[], &[]), want, "{source}");
+            assert_eq!(report(&list, &listed), report(&tuple, &tupled), "{source}");
+        }
+        let value = evaluate(py, "[{'id': 'x', 'tags': [1]}, {'id': 1}, 7]");
+        let (ok, violations) = explain(py, &list, &value, &[], &[]);
+        let at: Vec<Vec<PathSegment>> = violations
+            .into_iter()
+            .map(|violation| violation.path)
+            .collect();
+        let key = |name: &str| PathSegment::Key(name.into());
+        assert_eq!(
+            (ok, at),
+            (
+                false,
+                vec![
+                    vec![PathSegment::Index(0), key("id")],
+                    vec![PathSegment::Index(0), key("tags"), PathSegment::Index(0)],
+                    vec![PathSegment::Index(2)],
+                ]
+            )
+        );
+    });
+}
+
+/// The record-list reader checks every element by its record, in the walk's
+/// own mode: a deciding walk stops at the first element refused, an explaining
+/// one names each, and one that fails fast the first. It declines behind a
+/// fixed prefix and where the level below the list is not free, with that
+/// level and none below it refuses a field as too deep, as the walk does, and
+/// after a fatal signal refuses even a record that reads nothing, as `member`
+/// refuses every node after one.
+#[test]
+fn a_list_of_records_is_read_by_each_record() {
+    use super::sequence::element_list_matches;
+    Python::attach(|py| {
+        let record = Schema::keyed_map(vec![field("id", Schema::Int, true)], Vec::new());
+        let empty = Schema::keyed_map(Vec::new(), Vec::new());
+        let index = build_index(py, &record, &[], &[]);
+        let state = WalkState::new();
+        let ctx = |mode| Ctx {
+            pool: &[],
+            defs: &[],
+            index: &index,
+            state: &state,
+            mode,
+        };
+        let read = |element: &Schema, source: &str, prefix: &[Schema], mode| {
+            let value = evaluate(py, source);
+            let listed = value.cast::<PyList>().expect("a list");
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx(mode));
+            let answer =
+                element_list_matches(listed, prefix, element, &Value::Py(&value), &mut frame);
+            let at: Vec<Vec<PathSegment>> = out.into_iter().map(|v| v.path).collect();
+            (answer, at)
+        };
+        let fast = WalkMode::Fast;
+        let id_at = |at| vec![PathSegment::Index(at), PathSegment::Key("id".into())];
+        let two = "[{'id': 1}, {'id': 2}]";
+        let refused = "[{'id': 'x'}, {'id': 2}, {'id': None}]";
+        assert_eq!(read(&record, two, &[], fast), (Some(true), vec![]));
+        assert_eq!(read(&record, refused, &[], fast), (Some(false), vec![]));
+        assert_eq!(
+            read(&record, refused, &[], WalkMode::Explain),
+            (Some(false), vec![id_at(0), id_at(2)])
+        );
+        assert_eq!(
+            read(&record, refused, &[], WalkMode::ExplainFailFast),
+            (Some(false), vec![id_at(0)])
+        );
+        assert_eq!(read(&record, two, &[Schema::Int], fast), (None, vec![]));
+        state.depth.set(MAX_WALK_DEPTH - 2);
+        assert_eq!(read(&record, two, &[], fast), (Some(true), vec![]));
+        // The record takes the last level, and its field finds none: refused
+        // as too deep, where the walk refuses it.
+        state.depth.set(MAX_WALK_DEPTH - 1);
+        assert_eq!(
+            read(&record, "[{'id': 1}]", &[], WalkMode::Explain),
+            (Some(false), vec![id_at(0)])
+        );
+        state.depth.set(MAX_WALK_DEPTH);
+        assert_eq!(read(&record, two, &[], fast), (None, vec![]));
+        state.depth.set(0);
+        assert_eq!(read(&empty, "[{}]", &[], fast), (Some(true), vec![]));
+        state.signals.fatal_seen.set(true);
+        assert_eq!(
+            read(&empty, "[{}]", &[], WalkMode::Explain),
+            (Some(false), vec![])
+        );
+        state.signals.fatal_seen.set(false);
+    });
+}
+
 /// A module holding a named tuple `Point(x: int, y: str)`, a subclass of it,
 /// a second named tuple of the same fields, and instances of each the
 /// named-tuple list tests read, under the name its test gives, for the reason

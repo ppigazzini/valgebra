@@ -744,9 +744,15 @@ checked once, in the walk's own mode, and named at its index as the walk names
 it. Without a call into `member`, its depth guard and its dispatch at every
 element, a thousand integers under two bounds cost 12% fewer instructions on
 3.12 and 3.15, 13% to 14% under `validate`, and a thousand strings under two
-length bounds 19%. The list arm hands every kind of tail to one reader
-(`element_list_matches`) behind its one tag test, which asks the whole run of
-tags from a union to a refinement, a complement and an attribute record among
+length bounds 19%. A list of records is read so too (`record_list_matches`):
+each element is its record's check, inlined into the reader, with the level
+held across the list, and the fatal-signal flag read at every element, as
+`member` reads it, since a record that declares no field reads nothing that
+would refuse on it. Two hundred records of three fields cost 8% fewer
+instructions on 3.12 and 3.14, and 6% on 3.14t. The list arm hands every
+kind of tail to one reader (`element_list_matches`) behind its one tag test,
+which asks the whole run of tags from a keyed map to a refinement, a
+complement and an attribute record among
 them though the reader declines both: asked as only the tags the reader takes,
 the test costs a list nested twenty-five deep 1.25% more instructions, and
 asked as the run, 0.03%. The readers cost the PGO wheel's walk of a nested
@@ -761,18 +767,25 @@ twenty-five deep 4%; a one-comparison shortcut for `dict[str, int]` inside the
 record scan costs the closed record 5% and the nested list 7%, though neither
 reads a mapping. So the sequence readings of a union are out of line behind a
 test of the tail's tag, which the nested list pays at 1.4%, and a mapping's
-reader is asked where a record's reading starts, behind the test that the
-record declares no field (`keyed_map_matches_py`), where the closed record,
-the list of records, the fifty-field record and the nested list read within
-1.1% of the walk without it on every interpreter the wheels ship. Even the order of that test's cases is a cost:
-without a profile the compiler tests first the tags a case covers most of, so
-the union and the meet are tested before a nested list's tag, which costs the
-plain build's nested list 1.86%. Marking the reader `element_list_matches` cold
-restores the order there and costs the PGO wheel the release ships more -- a
-list of lists 4.4% of its instructions, lists of refined values 1.6% to 3.5% --
-so the reader is not marked, and the plain build pays. The branch test is paid
-by every branch that is not a scalar too, eight instructions each, which is 1%
-on a union of twenty record kinds.
+reader is asked where a record's reading starts, behind the test that the record
+declares no field (`keyed_map_matches_py`), where the closed record, the list of
+records, the fifty-field record and the nested list read within 1.1% of the walk
+without it on every interpreter the wheels ship. A record's own check is a call
+from `member`'s arm (`check_keyed_map_apart`), so a change to it leaves the walk
+laid out as it was: inlined there, it took the list nested twenty-five deep 10%
+more cycles than behind the call in the profiled 3.14 wheel, and 16% more in the
+3.12 one. A record the walk reaches alone pays the call, about thirty-six
+instructions and 3% of a three-field record's cycles on 3.14, and the reader of
+a list of records, out of line itself, inlines the check, which called would
+cost the list 6.5% to 7% of its instructions. Even the order of that test's
+cases is a cost: without a profile the compiler tests first the tags a case
+covers most of, so the union and the meet are tested before a nested list's tag,
+which costs the plain build's nested list 1.86%. Marking the reader
+`element_list_matches` cold restores the order there and costs the PGO wheel the
+release ships more -- a list of lists 4.4% of its instructions, lists of refined
+values 1.6% to 3.5% -- so the reader is not marked, and the plain build pays.
+The branch test is paid by every branch that is not a scalar too, eight
+instructions each, which is 1% on a union of twenty record kinds.
 
 **An error the walk answers with is dropped out of line.** PyO3 asks, when an
 error is dropped, whether the thread is attached to the interpreter, and that
