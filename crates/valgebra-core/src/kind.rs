@@ -5,8 +5,9 @@
 //! eleven ways over Python's builtin types: a partition but for `bool`, whose
 //! values are `int`s too ([`Kind::shares_values_with`]). It is the one a
 //! descriptor is indexed with: `Descr::kinds` is an array over it, which is
-//! what makes that structure "a record mapping each atomic type to its
-//! representation". [`Region`] is the seven-bit *summary* derived from it, a
+//! what makes that structure "essentially a record, mapping each atomic type
+//! to its representation" [CD24, §7.1]. [`Region`] is the seven-bit *summary*
+//! derived from it, a
 //! partition without exception, and [`Regions`] is a region set that may be
 //! opaque where a schema is not scalar-decidable.
 //!

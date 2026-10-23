@@ -420,9 +420,9 @@ impl<G: Guard> MapAtom<G> {
         let mut pinned = Vec::new();
         for want in &self.wanted {
             // A want past the key partition is no element of the model -- the
-            // model gives a default on the partition and nowhere else -- so an
-            // atom carrying one is proved nothing, as the search's
-            // own reading of the same miss declines.
+            // model gives a default on the partition and nowhere else
+            // [Cas23, Def. 4.6] -- so an atom carrying one is proved nothing,
+            // as the search's own reading of the same miss declines.
             let Some(default) = self.defaults.get(want.slot) else {
                 return Verdict::Unknown;
             };

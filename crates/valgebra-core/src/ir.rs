@@ -852,9 +852,9 @@ pub enum Schema {
     /// through [`Schema::Union`], [`Schema::Intersection`] and
     /// [`Schema::Complement`] over the sequence node. The shape itself is *not*
     /// closed under those operations here -- it has no complement or intersection
-    /// constructor -- so the closure is at the schema level and the regular
-    /// languages the shape is drawn from are the model, not a computation this
-    /// crate performs.
+    /// constructor -- so the closure is at the schema level, and the set
+    /// representation computes it: `descr/symbolic.rs` reads a Boolean
+    /// combination of sequence shapes as one automaton over element sets.
     Seq {
         /// Whether the value is a list or a tuple.
         container: SeqKind,
@@ -997,9 +997,10 @@ pub enum SeqKind {
 ///
 /// This is a *linear* language rather than a regular one, and deliberately so.
 /// The general form is a regular expression over element schemas, as
-/// Hosoya-Vouillon-Pierce give it, and deciding inclusion between two of those
-/// wants the automaton construction `docs/15-decidability.md` records as
-/// unbuilt. Nothing in this crate or the bindings builds an alternation or a
+/// Hosoya-Vouillon-Pierce give it, and the automaton that decides inclusion
+/// between such languages is built one representation over
+/// (`descr/symbolic.rs`), so what keeps this shape linear is the schema
+/// language: nothing in this crate or the bindings builds an alternation or a
 /// nested repetition, so the general form would make every walk answer for
 /// shapes no value reaches, and every membership check prove first that the
 /// shape it holds is one of the three. This shape is the only one there is.

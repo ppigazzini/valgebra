@@ -550,7 +550,7 @@ spelling answers and the other declines. `a ∧ ¬(b ∨ c)` against `a ∧ ¬b 
 is the pair, De Morgan is why they are one set, and the tests below read what a
 caller is told rather than what a value is.
 
-IMPLEMENTED-BY: descr/mod.rs, descr/mod.rs::Component::top, descr/mod.rs::Descr::complement, descr/mod.rs::Descr::zip, descr/values.rs::Values::covers
+IMPLEMENTED-BY: descr/mod.rs, descr/mod.rs::Component::top, kind.rs, descr/mod.rs::Descr::complement, descr/mod.rs::Descr::zip, descr/values.rs::Values::covers
 
 HELD-BY: the_lattice_laws_hold_of_the_descriptors, the_complement_laws_hold_of_the_descriptors, emptiness_agrees_with_the_values, laws.rs::the_verdict_is_stable_under_de_morgan, descr/maps/tests.rs::the_verdict_is_stable_under_de_morgan, the_descriptor_and_the_procedure_never_contradict_each_other, a_meet_with_a_negated_union_answers_as_the_spelled_out_meet, test_the_verdict_is_stable_under_de_morgan, descr/maps/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, descr/records/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, descr/sets/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, a_meet_against_a_negated_side_removes_one_line_at_a_time
 
@@ -747,8 +747,9 @@ HELD-BY: the_same_shape_under_two_kinds_does_not_meet, every_kind_has_exactly_on
 covers it.** `set[T]` and `frozenset[T]` denote the finite sets whose members
 all lie in `T`. A meet of powersets is the powerset of the meet, and a meet of
 powersets is inside a union of powersets exactly where the meet of their
-elements is inside one of them [FCB08, Lem. 6.7], which with one of each reads
-`set[A] <= set[B]` exactly where `A <= B`, finite sets included [Cas23, fn. 3].
+elements is inside one of them, stated for the finite subsets a Python set is
+[FCB08, Lem. 6.30], which with one of each reads `set[A] <= set[B]` exactly
+where `A <= B`.
 The set representation reads the lemma a line at a time: a line
 `P(T) ∧ ⋀ ¬P(Sⱼ)` is empty where some `Sⱼ` covers `T`. The converse is where
 Python departs: `==` joins values the element keeps apart, `1` and `True` among
@@ -757,7 +758,7 @@ inhabited only where one member escapes every `Sⱼ` or the letter keeps one
 member per `Sⱼ` apart (`Members::one_member_each` in `descr/sets.rs`).
 **[LOAD-BEARING: a-set-is-a-powerset]**
 
-IMPLEMENTED-BY: decision.rs::Schema::subtype_by_shape, descr/sets.rs::Line::emptiness, descr/sets.rs::Line::one_member_each, descr/sets.rs::Line::tidy, descr/sets.rs::<Line as Summand>::meet
+IMPLEMENTED-BY: decision.rs::Schema::subtype_by_shape, descr/sets.rs, descr/sets.rs::Line::emptiness, descr/sets.rs::Line::one_member_each, descr/sets.rs::Line::tidy, descr/sets.rs::<Line as Summand>::meet
 
 HELD-BY: the_structural_inclusion_rules_decide_without_the_descriptor, a_meet_of_powersets_is_the_powerset_of_the_meet, a_line_is_empty_when_a_subtraction_covers_it, the_powerset_of_nothing_holds_the_empty_set, emptiness_agrees_with_the_sets, a_set_line_is_read_as_python_holds_its_members
 

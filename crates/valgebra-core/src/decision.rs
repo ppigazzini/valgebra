@@ -967,7 +967,7 @@ impl Schema {
     ///
     /// They are rules of the kind a rule-based inclusion states: a union is
     /// below a schema where each member is [BBC+26, (anyOf-l)], a set below a
-    /// set where its element is [FCB08, Lem. 6.7], and a schema below a
+    /// set where its element is [FCB08, Lem. 6.30], and a schema below a
     /// complement where the two share no value [FCB08, §4.1].
     ///
     /// Split from its caller because the two lattice bounds around it are asked
@@ -1041,8 +1041,8 @@ impl Schema {
             (Schema::Ref(_), _) => self.left_reduces_below(other, cx),
             (_, Schema::Ref(_)) => self.below_a_reference(other, cx),
             // Set and frozenset inclusion reduces to element inclusion: a
-            // powerset is inside another exactly where its element is
-            // [FCB08, Lem. 6.7], finite sets included [Cas23, fn. 3].
+            // powerset of finite sets is inside another exactly where its
+            // element is [FCB08, Lem. 6.30].
             (
                 Schema::Coll {
                     container: a_kind,

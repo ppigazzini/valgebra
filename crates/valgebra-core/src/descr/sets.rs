@@ -15,7 +15,8 @@
 //! > a line is empty when some `Sⱼ` covers `T`.
 //!
 //! The converse holds of mathematical sets, where one member per `j` can be
-//! chosen and the members collected, and it fails of Python's. A Python set
+//! chosen and the members collected into a finite set [FCB08, Lem. 6.30], and
+//! it fails of Python's. A Python set
 //! holds no two members that compare equal, and `==` joins values the element
 //! descriptor keeps apart -- `1` and `True`, `(1,)` and `(True,)` -- so the
 //! members collected may be one. A set of `Literal[1, True]` outside both
@@ -82,7 +83,7 @@ impl<G: Members> Line<G> {
     /// What is known about a set satisfying this line.
     ///
     /// A subtracted powerset that covers the elements empties it, the direction
-    /// of [FCB08, Lem. 6.7] that holds of Python's sets too. A guard that
+    /// of [FCB08, Lem. 6.30] that holds of Python's sets too. A guard that
     /// cannot answer whether it covers leaves the line *unknown* rather than
     /// inhabited -- the distinction the whole verdict exists to make, since a
     /// line kept is only a line not disproved.
@@ -99,7 +100,7 @@ impl<G: Members> Line<G> {
             return verdict;
         }
         // The lemma's converse collects one member per subtraction
-        // [FCB08, Lem. 6.7]. One member escaping every subtraction is a set of
+        // [FCB08, Lem. 6.30]. One member escaping every subtraction is a set of
         // one, which no `==` can collapse. Where it takes one member per
         // subtraction, whether one set holds them all is the letter's to say --
         // and a subtraction the loop above could not read leaves its escape
@@ -117,7 +118,7 @@ impl<G: Members> Line<G> {
     }
 
     /// Whether one set holds a member of every `T ∧ ¬Sⱼ`, the witness the
-    /// converse of [FCB08, Lem. 6.7] collects, which Python's `==` may join.
+    /// converse of [FCB08, Lem. 6.30] collects, which Python's `==` may join.
     ///
     /// An escape holding every value offers a member no other can collide with,
     /// so only the ones a letter bounds are asked.
@@ -147,7 +148,7 @@ impl<G: Members> Line<G> {
     ///
     /// Two steps, each removing a way to write one line twice. A subtracted
     /// powerset only matters where it meets `elements`, since a powerset met
-    /// with a powerset is the powerset of the meet [FCB08, Lem. 6.7], so it is
+    /// with a powerset is the powerset of the meet [FCB08, Lem. 6.30], so it is
     /// cut down to that; and one that another covers adds nothing, since
     /// excluding the larger already excludes the smaller. What is left is an
     /// antichain, kept in order so two ways of writing it compare equal.
@@ -209,7 +210,7 @@ impl<G: Members> Summand for Line<G> {
     }
 
     /// A set in both lines is drawn wholly from both, so the elements meet,
-    /// `P(A) ∧ P(B) = P(A ∧ B)` [FCB08, Lem. 6.7], and the subtractions
+    /// `P(A) ∧ P(B) = P(A ∧ B)` [FCB08, Lem. 6.30], and the subtractions
     /// collect.
     fn meet(&self, other: &Line<G>) -> Option<Line<G>> {
         let mut minus = self.minus.clone();

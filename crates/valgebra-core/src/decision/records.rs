@@ -946,9 +946,9 @@ impl<'s> Labels<'s> {
         }
     }
 
-    /// `Φ(R, [])`, the paper's `false` [Cas23, (18)] with (17)'s `R ≤ 0` folded
-    /// in: refuted where every key the map requires holds a value, proved where
-    /// one holds none [Cas23, (11)].
+    /// `Φ(R, [])`, the paper's `false` [Cas23, (18)] with the `R ≤ 0` of
+    /// [Cas23, (17)] folded in: refuted where every key the map requires holds
+    /// a value, proved where one holds none [Cas23, (11)].
     fn base_case(&self, cx: &mut Cx<'_>) -> Relation {
         let mut verdict = Verdict::Inhabited;
         for (_, slot) in &self.named {

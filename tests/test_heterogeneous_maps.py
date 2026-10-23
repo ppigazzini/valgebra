@@ -39,12 +39,13 @@ def test_heterogeneous_mapping_by_key_schema() -> None:
 def test_two_clauses_claiming_one_key_are_a_disjunction() -> None:
     """A key two clauses claim is admitted when either reads it.
 
-    A literal-keyed clause and a `str` clause both claim the key `k`. The
-    paper's clauses are ordered and the first wins; here a key belongs when
-    *some* clause admits it and its value, so `k` may carry what either clause
-    allows -- which is the deviation, stated as the set it denotes: the dicts
-    of the record whose optional field `k` takes either type, where `k` is the
-    exact `str`. A field reads every key equal to its name, a `str` subclass's
+    A literal-keyed clause and a `str` clause both claim the key `k`. Typespec
+    gives the first of two overlapping clauses the priority, and the paper
+    forbids the overlap [Cas23, §4.4]; here a key belongs when *some* clause
+    admits it and its value, so `k` may carry what either clause allows --
+    which is the deviation, stated as the set it denotes: the dicts of the
+    record whose optional field `k` takes either type, where `k` is the exact
+    `str`. A field reads every key equal to its name, a `str` subclass's
     included, and a literal reads the exact `str` alone, so the clauses are
     below the record and a subclass's `k` carrying a `str` is in the record
     only.
@@ -111,8 +112,9 @@ def test_a_key_belongs_when_some_clause_admits_it_over_drawn_clauses(
     key by the clause's key schema and the value by its value schema, and the
     clauses' order is not part of the schema. The oracle is built from the
     clauses' own atoms, so what it holds is the combination rule and nothing
-    about an atom; the paper's leftmost-match reading fails the first drawn
-    dict whose key two clauses claim and only the later one reads.
+    about an atom; a leftmost-match reading, Typespec's [Cas23, §4.4], fails
+    the first drawn dict whose key two clauses claim and only the later one
+    reads.
     """
     expected = all(
         any(
