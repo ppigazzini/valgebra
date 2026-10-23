@@ -206,7 +206,10 @@ branches, one disjunct, one rule of an algorithm. A line that applies its
 item's own result again carries nothing. An item that departs from the result
 cites it and names the departure beside it; one that refuses an input the
 theory excludes cites what excludes it. Cite the work the table says owns the
-surface, and a second one only for a step the first does not state.
+surface, and a second one only for a step the first does not state. The
+citation is written with the code, in the commit that writes the code: the
+ledger below reads a citation once it is there, and no check can tell that one
+is missing.
 
 **Put it after the summary, at the clause it supports.** Directly after the
 clause and before its punctuation; two results behind two clauses are two

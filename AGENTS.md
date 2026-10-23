@@ -38,6 +38,7 @@ zone you are changing before changing it, and fix that page in the same commit.
 | an error or a code | [docs/dev/05-errors.md](docs/dev/05-errors.md) |
 | a gate or a lane | [docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md), [docs/dev/08-testing.md](docs/dev/08-testing.md) |
 | whether the algebra may gain a node | [docs/dev/01-schema-ir.md](docs/dev/01-schema-ir.md) |
+| code that implements a paper's result | [docs/dev/12-writing.md](docs/dev/12-writing.md#citing-a-paper), [docs/dev/10-theory.md](docs/dev/10-theory.md) |
 | any prose at all | [docs/dev/12-writing.md](docs/dev/12-writing.md) |
 
 [docs/dev/13-glossary.md](docs/dev/13-glossary.md) defines the words this project
