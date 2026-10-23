@@ -554,7 +554,7 @@ fn a_union_nested_in_the_union_is_read_as_its_members() {
     }
 }
 
-// THEORY: structural-rather-than-reduction
+// THEORY: structural-rather-than-reduction, a-set-is-a-powerset
 /// The structural inclusion rules, held to their own work.
 ///
 /// The descriptor is asked after these rules and decides much of what they

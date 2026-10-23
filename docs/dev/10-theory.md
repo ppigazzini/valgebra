@@ -53,6 +53,7 @@ published version can number a result apart.
 | `CD24` | Castagna & Duboc, "Guard Analysis and Safe Erasure Gradual Typing: a Type System for Elixir" | a descriptor per kind of atom, tuples as unions of atoms, the gradual pair | the preprint, v4 of 2 June 2026 | [arXiv:2408.14345v4](https://arxiv.org/abs/2408.14345v4) |
 | `FCB08` | Frisch, Castagna & Benzaken, "Semantic Subtyping: Dealing Set-Theoretically with Function, Union, Intersection, and Negation Types", *JACM* 55(4), 2008 | the model: interpretation, normal forms, kinds, products, simulations | the published article | [doi:10.1145/1391289.1391293](https://doi.org/10.1145/1391289.1391293) |
 | `HVP05` | Hosoya, Vouillon & Pierce, "Regular Expression Types for XML", *TOPLAS* 27(1), 2005 | sequences as regular expression types, the classical algorithm, hash consing | the published article | [doi:10.1145/1053468.1053470](https://doi.org/10.1145/1053468.1053470) |
+| `Nak00` | Nakano, "A Modality for Recursion", LICS 2000 | guardedness: the variable of a recursive type under a guard | the published paper | [doi:10.1109/LICS.2000.855774](https://doi.org/10.1109/LICS.2000.855774) |
 
 ## The frame: a schema denotes a set
 
@@ -71,11 +72,14 @@ about Python.
 
 ## The algebra: a Boolean lattice of value sets
 
-**Birkhoff, _Lattice Theory_.** Union, intersection and complement over value
-sets form a Boolean algebra; the folds the constructors apply are its laws.
-**[LOAD-BEARING: lattice-theory]** — `crates/valgebra-core/src/ir.rs`, where a schema is built
-in the lattice normal form, and the property suites that check each claimed
-equivalence against membership rather than asserting it.
+**Union, intersection and complement over value sets form a Boolean algebra**,
+and the folds the constructors apply are its laws. A set-theoretic
+interpretation takes a union to the union of the sets, a negation to the
+complement and the empty type to the empty set [FCB08, Def. 4.1], so every law
+of the algebra of sets -- Birkhoff's _Lattice Theory_ -- is a law of the types.
+**[LOAD-BEARING: lattice-theory]** — `crates/valgebra-core/src/ir.rs`, where a
+schema is built in the lattice normal form, and the property suites that check
+each claimed equivalence against membership rather than asserting it.
 
 SOURCE: §13.2 "**The laws hold by construction**"; §2 "every combinator builds the normal"
 
@@ -288,9 +292,13 @@ where the inductive set is that least fixpoint. Both are
 **[GUIDING: the-fixpoint-theorems-nearby]**.
 
 **Nakano, "A Modality for Recursion" (2000).** The guardedness modality: a
-recursion variable under a guard is productive. **[LOAD-BEARING: guarded-recursion]** for the
-*discipline* — `occurs_unguarded_under` is that condition, and it is what makes
-the induction above well founded.
+recursion variable under a guard is productive, which the paper states as a type
+expression proper in its variable [Nak00, Def. 8], [Nak00, Def. 9]. Castagna
+asks the same of a recursive type as contractivity, every infinite branch
+passing through infinitely many constructors [Cas23, Def. 2.1].
+**[LOAD-BEARING: guarded-recursion]** for the *discipline* —
+`occurs_unguarded_under` is that condition, with the structural constructors for
+the guard, and it is what makes the induction above well founded.
 
 SOURCE: §13.0 "Contractivity buys **well-definedness of the fixpoint**; regularity buys"; §13.4 "**Guarded recursion.** Nakano's modality"; §4 "for the *discipline* (`occurs_unguarded`)"; §4 "recursion is sound when the variable sits under a guard"; §4 "`Schema::occurs_unguarded` (the contractivity check)"
 
@@ -304,13 +312,15 @@ HELD-BY: contractivity_requires_a_structural_guard, test_non_contractive_body_is
 compute nothing.
 
 **A reference denotes the definition it names.** `Ref(i)` and `defs[i]` are one
-set, so a fixpoint and its own unfolding are equivalent in both directions and
-a caller who writes the body out by hand has written the same schema. That is
-the **equirecursive** reading, and it is a choice: the isorecursive one makes
-the two distinct types with a coercion between them, and every relation is then
-about which side of that coercion a value sits on. Pierce, *TAPL* ch. 20--21 is
-where the two are set beside each other; the definitions table is the same
-shape pydantic-core's `definition-ref` has. **[LOAD-BEARING: a-reference-denotes-its-definition]**
+set, so a fixpoint and its own unfolding are equivalent in both directions and a
+caller who writes the body out by hand has written the same schema. That is the
+**equirecursive** reading, which makes unfolding transparent, a type and its
+unfolding each below the other [AC93, §3.2], and it is a choice: the
+isorecursive one makes the two distinct types with a coercion between them, and
+every relation is then about which side of that coercion a value sits on.
+Pierce, *TAPL* ch. 20--21 is where the two are set beside each other; the
+definitions table is the same shape pydantic-core's `definition-ref` has.
+**[LOAD-BEARING: a-reference-denotes-its-definition]**
 
 SOURCE: §4 "an **equirecursive** reading"
 
@@ -601,12 +611,13 @@ SOURCE: §13.0 "**Subtyping, defined.** UIN Definition 4"
 
 HELD-BY: subtyping_is_sound_over_the_structural_fragment, a_refutation_is_a_value, a_map_relation_stands_on_a_dict, a_proof_over_a_fixpoint_has_no_witness_against_it, test_no_proof_is_refuted_by_a_value, test_a_claimed_refutation_stands_on_a_value
 
-**A cut reference proves and never refutes.** The descriptor decides `a <= b`
-by lowering the difference, and a recursive reference is cut to a bound: the
-top where the schema is used positively, the bottom under a complement. The
-widened difference contains the real one, so its emptiness proves the inclusion
-and its inhabitance proves nothing; a refutation comes only from a pair the
-lowering did not widen. **[LOAD-BEARING: a-cut-reference-proves]**
+**A cut reference proves and never refutes.** The descriptor decides `a <= b` by
+lowering the difference, and a recursive reference is cut to a bound: the top
+where the schema is used positively, the bottom under a complement, which is the
+finite approximation of a recursive type at the depth of the cut [AC93, §3.4].
+The widened difference contains the real one, so its emptiness proves the
+inclusion and its inhabitance proves nothing; a refutation comes only from a
+pair the lowering did not widen. **[LOAD-BEARING: a-cut-reference-proves]**
 
 SOURCE: §13.1 "**The polarity cut is one-directional.**"
 
@@ -623,6 +634,22 @@ beside it. **[LOAD-BEARING: kinds-decompose-emptiness]**
 SOURCE: §13.1 "positives of mixed kind make a clause empty outright"
 
 HELD-BY: the_same_shape_under_two_kinds_does_not_meet, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart, a_kind_is_an_independent_question
+
+**A set type is a powerset, and a line of them is empty where one powerset
+covers it.** `set[T]` and `frozenset[T]` denote the finite sets whose members
+all lie in `T`. A meet of powersets is the powerset of the meet, and a meet of
+powersets is inside a union of powersets exactly where the meet of their
+elements is inside one of them [FCB08, Lem. 6.7], which with one of each reads
+`set[A] <= set[B]` exactly where `A <= B`, finite sets included [Cas23, fn. 3].
+The set representation reads the lemma a line at a time: a line
+`P(T) ∧ ⋀ ¬P(Sⱼ)` is empty where some `Sⱼ` covers `T`. The converse is where
+Python departs: `==` joins values the element keeps apart, `1` and `True` among
+them, so the members a witness collects may be one, and a line is read
+inhabited only where one member escapes every `Sⱼ` or the letter keeps one
+member per `Sⱼ` apart (`Members::one_member_each` in `descr/sets.rs`).
+**[LOAD-BEARING: a-set-is-a-powerset]**
+
+HELD-BY: the_structural_inclusion_rules_decide_without_the_descriptor, a_meet_of_powersets_is_the_powerset_of_the_meet, a_line_is_empty_when_a_subtraction_covers_it, the_powerset_of_nothing_holds_the_empty_set, emptiness_agrees_with_the_sets, a_set_line_is_read_as_python_holds_its_members
 
 **Two fixpoints, one procedure.** Emptiness reads a cycle back to a visiting
 reference, or to a meet held open on its path, as uninhabited -- the least
@@ -677,9 +704,11 @@ SOURCE: §14.5 "Each kind's representation should be closed under complement"
 HELD-BY: descr/integers/tests.rs::the_lattice_laws_hold_of_the_integers, the_lattice_laws_hold_of_the_floats, the_lattice_laws_hold_of_the_languages, the_lattice_laws_hold_of_the_sequences, descr/sets/tests.rs::the_lattice_laws_hold_of_the_sets, the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_objects, the_lattice_laws_hold_of_the_values, the_complement_laws_hold_of_the_values, an_emptiness_is_refused_by_every_boundary_value, the_universe_separates_a_pair_inside_a_shape, the_universe_separates_a_pair_inside_a_position, the_universe_separates_a_pair_at_the_tail_of_a_position, the_universe_separates_a_pair_spelled_through_a_wrapper, test_each_kinds_top_is_decided_at_the_value_that_decides_it, test_a_hashable_subclass_of_an_unhashable_kind_is_a_set_member, test_a_class_whose_metaclass_runs_isinstance_declines_every_relation
 
 **A node built alike is one handle.** Interning shares the nodes of two schemas
-built the same way, so the trail's comparisons short-circuit on pointer
-identity and the per-rule caches see one handle per DAG member. What it buys is
-that sharing and nothing about a relation. **[LOAD-BEARING: a-node-built-alike-is-one-handle]**
+built the same way, as Hosoya, Vouillon and Pierce share theirs so that a
+reflexivity check is a comparison of handles [HVP05, §5.1], so the trail's
+comparisons short-circuit on pointer identity and the per-rule caches see one
+handle per DAG member. What it buys is that sharing and nothing about a
+relation. **[LOAD-BEARING: a-node-built-alike-is-one-handle]**
 
 SOURCE: §13.6 "**Hash consing.** Hosoya-Vouillon-Pierce"
 
@@ -909,7 +938,7 @@ holds no dict, and the descriptor reads it that way. **[DEVIATION: the-key-parti
 HELD-BY: an_atom_requiring_a_key_and_its_boolean_holds_no_dict, a_want_with_one_viable_witness_requires_that_key, a_labeled_key_witnesses_a_wanted_key
 
 **The kind partition overlaps at `bool`.** The source's kinds are its three
-constructors, and no value has two of them. Here the basic kind is split eleven
+constructors [FCB08, §6.1], and no value has two of them. Here the basic kind is split eleven
 ways, and `bool` subclasses `int`, so every boolean is an integer: a meet of the
 two is the booleans rather than empty, and `bool` met with `~int` is empty. The
 rules read the pair through `Kind::shares_values_with`, the one exception it

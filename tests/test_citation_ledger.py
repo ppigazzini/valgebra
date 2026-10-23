@@ -65,6 +65,7 @@ LABELS: dict[str, str] = {
     "Cas23": "castagna-2023-typing-records-maps-structs-ICFP",
     "FCB08": "frisch-castagna-benzaken-2008-semantic-subtyping-JACM",
     "HVP05": "hosoya-vouillon-pierce-2005-regular-expression-types-xml",
+    "Nak00": "nakano-2000-modality-for-recursion",
 }
 
 #: A label as `alpha` builds it: up to four letters of the authors, a `+` past

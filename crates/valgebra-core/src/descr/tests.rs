@@ -659,7 +659,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
-    // THEORY: property-testing
+    // THEORY: property-testing, a-set-is-a-powerset
     /// A set line's verdict is a claim about Python's sets, whose members are
     /// unequal under `==`: an inhabited line holds one, an empty line none. And
     /// where no two escapes hold one number in two kinds, a line holding one is

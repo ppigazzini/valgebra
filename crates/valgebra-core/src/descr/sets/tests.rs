@@ -125,6 +125,7 @@ proptest! {
         POWERSETS.complement_laws(&a, &b)?;
     }
 
+    // THEORY: a-set-is-a-powerset
     /// Emptiness is a decision about the sets, not about the form.
     #[test]
     fn emptiness_agrees_with_the_sets(a in lattice()) {
@@ -137,6 +138,7 @@ proptest! {
         }
     }
 
+    // THEORY: a-set-is-a-powerset
     /// A meet of two powersets is the powerset of the meet, which is the one
     /// operation the kind is closed under.
     #[test]
@@ -170,6 +172,7 @@ fn disjoint_powersets_meet_in_the_empty_set_alone() {
     assert!(same(&met, &SetLattice::of(IntSet::empty())));
 }
 
+// THEORY: a-set-is-a-powerset
 /// The powerset of nothing is not nothing: it holds the empty set.
 #[test]
 fn the_powerset_of_nothing_holds_the_empty_set() {
@@ -182,6 +185,7 @@ fn the_powerset_of_nothing_holds_the_empty_set() {
     assert!(!SetLattice::<IntSet>::empty().holds(&[]));
 }
 
+// THEORY: a-set-is-a-powerset
 /// A line is empty exactly when a subtracted powerset covers it, which is
 /// the rule the whole kind rests on.
 #[test]
