@@ -195,8 +195,9 @@ def test_the_clauses_admitting_every_value_close_as_one(
 ) -> None:
     """Two clauses admitting every value are one clause, however they are split.
 
-    ICFP 2023 reads the wildcard as sugar for the clauses it covers, and a
-    union of key types as the clauses it joins, so `{str: anything,
+    The paper reads the wildcard as sugar for the clauses it covers
+    [Cas23, §4.4], and a union of key types as the clauses it joins
+    [Cas23, fn. 15], so `{str: anything,
     complement(str): anything}` is the top clause written twice and closes to
     `{}` as the top does. Read one clause at a time, the answer turned on
     whether the others' keys folded: the same pair beside `bytes: int`, or the

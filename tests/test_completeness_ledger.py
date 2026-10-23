@@ -918,7 +918,7 @@ _DECIDED = [
         id="mu:t&{a:None|{a:None}}!<=nothing",
     ),
     # A key the subject's clause holds a whole kind of, which the supertype
-    # reads through one clause or none: ICFP Lemma 4.7, a key kind at a time.
+    # reads through one clause or none: [Cas23, Lem. 4.7], a key kind at a time.
     # The rules refute each; against a recursive supertype the set
     # representation declines, and they are the only decider. The value that
     # refutes is listed beside each row.

@@ -40,12 +40,12 @@ results the design leans on, not dated approximations of them.
 ## Works cited by label
 
 A citation names a work by its label and the place in it: `[Cas23, (22)]` is
-formula (22) of the work labeled `Cas23`, and `[FCB08, Lem. 6.5]` is the lemma
-numbered 6.5 in `FCB08`. A label is the one the `alpha` bibliography style
-builds from the authors and the year, which is how these works label one
-another, and this table is the one place a work's identifier is written. A
-number is the one the copy in the third column prints; a preprint and the
-published version can number a result apart.
+the equation tagged (22) in the work labeled `Cas23`, and `[FCB08, Lem. 6.5]`
+is the lemma numbered 6.5 in `FCB08`. A label is the one the `alpha`
+bibliography style builds from the authors and the year, which is how these
+works label one another, and this table is the one place a work's identifier
+is written. A number is the one the copy in the third column prints; a
+preprint and the published version can number a result apart.
 [12-writing.md](12-writing.md#citing-a-paper) says when to cite and where.
 
 | Label | Work | Owns here | Read in | Identifier |

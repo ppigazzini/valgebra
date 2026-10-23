@@ -941,8 +941,8 @@ proptest! {
     })]
 
     // THEORY: records-maps-and-structs
-    /// ICFP 2023's (12): the meet of two atoms holds exactly the dicts both
-    /// hold, over dicts the test draws rather than the eight it lists.
+    /// The meet of two atoms holds exactly the dicts both hold [Cas23, (12)],
+    /// over dicts the test draws rather than the eight it lists.
     ///
     /// The meet is the componentwise meet -- each label's type met, each
     /// part's default met, the wanted sets united -- and that construction is
@@ -1048,8 +1048,8 @@ proptest! {
     }
 
     // THEORY: records-maps-and-structs
-    /// ICFP 2023's (11), in the direction a proof runs: an atom decided empty
-    /// holds no dict, drawn or listed.
+    /// An atom decided empty holds no dict, drawn or listed, which is
+    /// [Cas23, (11)] in the direction a proof runs.
     ///
     /// The other direction is not a law a finite universe can state -- an
     /// inhabited atom need not have a witness among a few drawn dicts -- so

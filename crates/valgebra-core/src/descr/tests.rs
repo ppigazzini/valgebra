@@ -962,7 +962,7 @@ fn a_record_constrains_the_attributes_it_names_and_no_others() {
 }
 
 /// Meeting two records over different attributes is the object carrying
-/// both, which is formula (12) pointwise.
+/// both, which is [Cas23, (12)] pointwise.
 #[test]
 fn two_attributes_meet_rather_than_conflict() {
     const BOTH: &[(&str, Value)] = &[("x", Value::integer(1)), ("y", Value::integer(0))];

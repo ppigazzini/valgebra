@@ -1492,6 +1492,48 @@ PLANTS = (
         trips=("test_no_locator_stands_outside_a_label",),
     ),
     Plant(
+        # An equation named by its tag outside a label, in a test module's doc:
+        # "formula (12)" is a place in a paper with nothing saying whose.
+        "tests/test_citation_ledger.py",
+        ("crates/valgebra-core/src/descr/tests.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/descr/tests.rs",
+            "fn two_attributes_meet_rather_than_conflict() {",
+            "/// A planted step, which is formula (12) again.\n"
+            "fn two_attributes_meet_rather_than_conflict() {",
+        ),
+        trips=("test_no_locator_stands_outside_a_label",),
+    ),
+    Plant(
+        # The same through a venue's possessive and a hyphenated footnote, the
+        # two spellings the old references took.
+        "tests/test_citation_ledger.py",
+        ("crates/valgebra-core/src/descr/tests.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/descr/tests.rs",
+            "fn two_attributes_meet_rather_than_conflict() {",
+            "/// A planted step, ICFP 2023's (12) under the footnote-11 guard.\n"
+            "fn two_attributes_meet_rather_than_conflict() {",
+        ),
+        trips=("test_no_locator_stands_outside_a_label",),
+    ),
+    Plant(
+        # A numbered result cited under no label in a Python test's comment:
+        # the Python tests are read for the form as the Rust ones are.
+        "tests/test_citation_ledger.py",
+        ("tests/test_algebra_closure.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_algebra_closure.py",
+            "def test_two_pure_maps_never_meet_empty() -> None:\n",
+            "def test_two_pure_maps_never_meet_empty() -> None:\n"
+            "    # A planted reference to JACM Lemma 6.5, under no label.\n",
+        ),
+        trips=("test_no_locator_stands_outside_a_label",),
+    ),
+    Plant(
         # A label the table has no row for: a citation of a work nobody can
         # look up, since the table is the one place an identifier is written.
         "tests/test_citation_ledger.py",

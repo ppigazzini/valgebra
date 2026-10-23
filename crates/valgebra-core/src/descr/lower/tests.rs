@@ -2350,7 +2350,8 @@ fn a_key_holding_part_of_a_kind_refuses() {
 
 /// A complement beside a finite part leaves the part's keys finite.
 ///
-/// ICFP 2023 reads every key type as infinite, so a constraint the default
+/// The paper's map containment reads every key type as infinite
+/// [Cas23, Lem. 4.7], so a constraint the default
 /// cannot meet is met by a key no label names. `None`'s part holds one key
 /// and `bool`'s two, and the complement `open` writes beside either leaves
 /// them so: `{None: int | str}` opened is below the union of `{None: int}`

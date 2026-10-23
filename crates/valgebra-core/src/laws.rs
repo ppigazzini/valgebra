@@ -6328,7 +6328,7 @@ fn intersection_of(members: Vec<Schema>) -> Schema {
 /// ```
 ///
 /// and applied at any fixed arity the way the proof of [Cas23, Lem. 4.7]
-/// generalizes formula (2) to arity `n` [Cas23, App. C.1], over every mapping
+/// generalizes [Cas23, (2)] to arity `n` [Cas23, App. C.1], over every mapping
 /// of the branches to positions: each has some position whose clause is
 /// empty. Each clause's emptiness is asked of the scalar fragment,
 /// where it is exact, so the value this returns is the relation itself and

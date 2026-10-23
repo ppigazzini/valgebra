@@ -4,9 +4,9 @@ The subtyping decision is coinductive: it assumes a goal, unfolds, and reads a
 pair already on the trail as a local success. Two groups state the hazard that
 comes with it independently. Castagna's record paper: "if one of the 'or'
 clauses fails, then this **invalidates all the hypotheses we added to check
-it**". Castagna & Duboc, for arrows: "a naive implementation may have to
-backtrack and, therefore, **unroll all the memoized solutions found in the
-current run**".
+it**" [Cas23, §2.1.4]. Castagna & Duboc, for arrows: "a naive implementation
+may have to backtrack and, therefore, **unroll all the memoized solutions found
+in the current run**" [CD24, §4.1].
 
 So a table over goals may not be an ordinary map. It has to be persistent, so a
 failed disjunct can roll it back, or hold only results that rested on no open
@@ -21,8 +21,8 @@ reader who moves that count adds the table without meeting the condition.
 
 This holds the hazard in the tree rather than in memory. A map keyed by a pair
 of schemas inside the coinductive procedure fails here until the sentence that
-discharges §14.3 is written beside it -- not as a promise that the sentence is
-true, which nothing mechanical can check, but so that writing one is a
+says how it reverts is written beside it -- not as a promise that the sentence
+is true, which nothing mechanical can check, but so that writing one is a
 deliberate act a reviewer sees rather than an omission nobody does.
 
 LEDGER: every table keyed by a goal in the coinductive procedure says how it
@@ -91,7 +91,8 @@ def _without_test_items(text: str) -> str:
     """Blank every `#[cfg(test)]` item, keeping the offsets of what is left.
 
     A table keyed by a goal is not a memo when a test owns it: the goal counter
-    that holds §14.2's number is exactly that shape, and it answers no query.
+    that holds the measured count of goals is exactly that shape, and it
+    answers no query.
     Blanked rather than removed so the lines above a real declaration are still
     the lines above it.
     """

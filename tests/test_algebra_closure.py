@@ -65,7 +65,7 @@ def test_a_literal_is_still_a_member_of_its_own_kind() -> None:
     assert not Validator(Literal["a"]).is_subtype_of(int)
 
 
-# --- Products decompose (JACM Lemma 6.5), and the shapes that must NOT --------
+# --- Products decompose [FCB08, Lem. 6.5], and the shapes that must NOT ------
 
 
 # THEORY: a-sequence-splits-across-a-union
@@ -125,7 +125,7 @@ def test_two_optional_fields_do_not_empty_the_record() -> None:
 
 
 def test_two_pure_maps_never_meet_empty() -> None:
-    # ICFP footnote 11: a meet of two mappings always contains `{}`.
+    # A meet of two mappings always contains `{}` [Cas23, fn. 11].
     assert not intersection({str: int}, {str: str}).is_empty()
 
 

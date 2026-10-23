@@ -52,7 +52,9 @@ LEDGER: every citation is a label the theory page tables, at a number its paper 
 from __future__ import annotations
 
 import functools
+import io
 import re
+import tokenize
 from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
@@ -119,11 +121,19 @@ SCOPE = (
     "crates/valgebra-py/src/check/walk.rs",
     "crates/valgebra-py/src/check/walk/record.rs",
     "crates/valgebra-py/src/check/walk/scalar.rs",
+    "tests/test_*.py",
+)
+
+#: The ledgers that spell a citation's forms to test this one: each writes the
+#: refused forms on purpose, so none is read for them.
+_SPELLS_THE_FORMS = frozenset(
+    {"test_citation_ledger.py", "test_ledger_plants.py", "test_theory_ledger.py"}
 )
 
 #: A test module, whose tests a `HELD-BY:` line names: its citations are held to
 #: the form and listed under no claim, since a test holds a result rather than
-#: implementing it.
+#: implementing it. A Python test module is one by its language, since the code
+#: half reads Rust items alone.
 _TEST_MODULE = re.compile(r"(?:^|/)(?:(?:\w+_)?tests|laws)\.rs$")
 
 #: Each label the table may carry, and the stem of the shelf's file for the
@@ -182,13 +192,18 @@ _KINDS = {
 }
 
 #: A locator written outside a label: a named statement with its number, a
-#: section sign, or a footnote. What a reader opens a paper *at*, which is what
-#: makes it a citation rather than prose.
+#: section sign, a footnote, or an equation's tag. What a reader opens a paper
+#: *at*, which is what makes it a citation rather than prose: "formula (12)"
+#: and "ICFP 2023's (12)" name one equation as surely as `[Cas23, (12)]` does,
+#: and say less about whose.
 _LOOSE = re.compile(
     r"\b(?:Theorem|Definition|Lemma|Proposition|Corollary|Remark|Figure|Algorithm"
     r"|Appendix)\s+[0-9A-Z]+(?:\.[0-9]+)*\b"
     r"|§\d+(?:\.\d+)*"
-    r"|\bfootnote\s+\d+"
+    r"|\bfootnote[\s-]+\d+"
+    r"|\bformulae?\s+\(\d+\)"
+    r"|\(\d+\)'s\b"
+    r"|'s\s+\(\d+\)"
 )
 
 #: A section of the project's own notes, which number from 13 and which no paper
@@ -216,7 +231,46 @@ class Citation(NamedTuple):
 @functools.cache
 def _scoped() -> tuple[Path, ...]:
     """Give the files `SCOPE` names, in a stable order."""
-    return tuple(sorted({path for glob in SCOPE for path in ROOT.glob(glob)}))
+    return tuple(
+        sorted(
+            path
+            for path in {path for glob in SCOPE for path in ROOT.glob(glob)}
+            if path.name not in _SPELLS_THE_FORMS
+        )
+    )
+
+
+def _python_prose(source: str) -> list[str]:
+    """Give a Python file's lines with only its comments and docstrings kept.
+
+    A comment keeps its text after the `#`, and a triple-quoted string its text
+    between the quotes; everything else is blanked, so a line number still
+    points at its line, and a citation spelled inside code -- a schema, an
+    expected message -- is not read as one made.
+    """
+    lines = source.split("\n")
+    kept = [[" "] * len(line) for line in lines]
+
+    def keep(row: int, column: int, text: str) -> None:
+        for offset, line in enumerate(text.split("\n")):
+            at = column if offset == 0 else 0
+            target = kept[row - 1 + offset]
+            target[at : at + len(line)] = line
+
+    tokens = tokenize.generate_tokens(io.StringIO(source).readline)
+    for token in tokens:
+        (row, column), text = token.start, token.string
+        if token.type == tokenize.COMMENT:
+            keep(row, column + 1, text[1:])
+            continue
+        if token.type != tokenize.STRING:
+            continue
+        opened = re.match(r"[rRbBuUfF]*(\"\"\"|\'\'\')", text)
+        if opened is None:
+            continue
+        inner = text[opened.end() : -3]
+        keep(row, column + opened.end(), inner)
+    return ["".join(line).rstrip() for line in kept]
 
 
 #: Code a page quotes, inline or fenced: an example of the form, or of the form
@@ -240,6 +294,8 @@ def _text(path: Path) -> str:
     than dropped, so a line number still points at its line.
     """
     lines = path.read_text(encoding="utf-8").split("\n")
+    if path.suffix == ".py":
+        lines = _python_prose("\n".join(lines))
     if path.suffix == ".rs":
         read = []
         for line in lines:

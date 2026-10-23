@@ -1033,8 +1033,9 @@ fn meet_is_empty(members: &[Schema]) -> bool {
     .is_empty()
 }
 
-/// The two rules ICFP formulae (11) and (12) give for a meet of record atoms,
-/// and the footnote-11 guard that stops each from firing where it must not.
+/// The two rules [Cas23, (11)] and [Cas23, (12)] give for a meet of record
+/// atoms, and the guard of [Cas23, fn. 11] that stops each from firing where it
+/// must not.
 ///
 /// Driven against the rule rather than through `is_empty`, because the
 /// question is which of these shapes the rule answers for: reached through
@@ -5636,7 +5637,7 @@ fn a_refinement_pair_with_disjoint_bases_is_refuted_by_the_rules() {
 /// Two sequences of one container meet in the sequences of their elements' meet.
 ///
 /// `a* ∩ b* = (a ∩ b)*`, reading a homogeneous sequence as a regular
-/// expression over its element (Hosoya, Vouillon & Pierce). Where the elements
+/// expression type over its element [HVP05, §2.4]. Where the elements
 /// share no value that is `∅*`, which is not empty -- it holds the empty
 /// sequence, and so do both sides. So disjointness needs one more thing than
 /// disjoint elements: something that rules the empty sequence out.
@@ -6525,7 +6526,8 @@ fn without_the_first(corners: &Schema) -> Schema {
 // THEORY: a-record-splits-across-a-union
 /// A record below a union of records is decided by a rule, in both directions.
 ///
-/// `keyed_map_splits_across_union` is ICFP 2023's `Φ`: no corner contains the
+/// `keyed_map_splits_across_union` is the paper's `Φ` [Cas23, (22)]. No corner
+/// contains the
 /// subject, so the rule that tries each member alone declines, and the split
 /// narrows one label at a time. The rules are asked alone, with a budget of
 /// their own, so the answer is theirs and not the set reading's -- which

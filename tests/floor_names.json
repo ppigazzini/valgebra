@@ -604,6 +604,9 @@
     "importlib": {
       "since": "3.10"
     },
+    "io": {
+      "since": "3.10"
+    },
     "itertools": {
       "since": "3.10"
     },
@@ -674,6 +677,9 @@
       "since": "3.10"
     },
     "timeit": {
+      "since": "3.10"
+    },
+    "tokenize": {
       "since": "3.10"
     },
     "tomllib": {
