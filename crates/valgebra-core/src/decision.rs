@@ -29,7 +29,9 @@ use crate::verdict::{Relation, Verdict};
 use crate::oracle::has_complementary_pair;
 use constraints::constraint_entailed;
 use emptiness::class_with_attributes;
-use literals::{finite_meet_below, finite_set, finite_set_below};
+use literals::{
+    finite_meet_below, finite_set, finite_set_below, the_constant_speaks_for_the_literal,
+};
 use products::{linear_subtype, seq_splits_across_union};
 use readings::outside_every_kind;
 use records::{attr_record_subtype, keyed_map_splits_across_union, keyed_map_subtype};
@@ -1204,7 +1206,20 @@ impl Schema {
         if self.disjoint_with(other, cx.oracle) {
             return Relation::Fails;
         }
-        match cx.oracle.leaf_subtype(self, other) {
+        // A proof walks a literal's constant, which speaks for the literal only
+        // where nothing the supertype asks tells two equal values apart; a
+        // proof it cannot speak for is no answer, and the pair reads as one
+        // the oracle declined.
+        let leaf = cx
+            .oracle
+            .leaf_subtype(self, other)
+            .filter(|&holds| match self {
+                Schema::Literal(constant) if holds => {
+                    the_constant_speaks_for_the_literal(*constant, other, cx.oracle, cx.defs)
+                }
+                _ => true,
+            });
+        match leaf {
             Some(true) => Relation::Holds,
             Some(false) => Relation::Fails,
             None => match other {

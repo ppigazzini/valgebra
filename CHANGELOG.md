@@ -16,6 +16,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a table met with complements of tables is decided as the set it leaves
 - feat: a record is decided against a union of records it splits across
 - feat: a clause keyed by literals is read one constant at a time
+- fix: a literal is proved below a predicate only where it is its constant alone
 
 -->
 
@@ -50,6 +51,22 @@ answer of its own, or a repair to a change not yet released.
   `{"a": int}` against `dict[Literal["a"], int]` answers `"not_subset"` where
   it answered `"undecided"`; and `dict[Literal["a"], int]` is below
   `{"a?": int}` by the rules, without the set representation.
+
+### Security
+
+- **A literal is proved below a predicate only where it is its constant
+  alone.** A literal holds every value of its constant's type equal to it, and
+  the relations proved it below a schema by running the constant alone through
+  it. So `Literal[0.0]` was answered `subset` of `Annotated[float, lambda x:
+  math.copysign(1.0, x) > 0]`, though `-0.0` is in the first and not the
+  second; `Literal[Decimal("1.00")]` was answered `subset` of a predicate
+  requiring two decimal places, though `Decimal("1.0")` is in the first and
+  not the second; and the literal of an instance whose `__eq__` compares one
+  attribute was answered `subset` of a protocol requiring another, which an
+  equal instance carries otherwise. The answers were wrong in 0.0.1 through
+  0.0.19, the last in 0.0.16 through 0.0.19. Such a pair answers `undecided`.
+  A literal of an `int`, a `bool`, a `str`, `bytes`, `None`, a nonzero float
+  or an `Enum` member is its constant alone, and is decided as it was.
 
 ## [0.0.19] - 2026-10-20
 

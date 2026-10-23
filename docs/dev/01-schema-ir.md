@@ -36,14 +36,18 @@ Two consequences a reader needs before touching this file:
 No value is carved out. `Schema::Float` is disjoint from `Schema::Int` for the
 mirror reason: `int` does not subclass `float`.
 
-**A `Literal` is a *typed* singleton.** Python's `==` conflates across types
-(`1 == True == 1.0`), so equality alone would make `Literal[1]` admit `True` and
-`1.0`. Membership requires `type(x) is type(c)` as well, which is what keeps the
-typing spec's distinction between `Literal[1]`, `Literal[True]` and
-`Literal[1.0]`. The same-type test runs **before** `==`, so a value of another
+**A `Literal` is its constant's exact type refined by `==`.** Python's `==`
+conflates across types (`1 == True == 1.0`), so equality alone would make
+`Literal[1]` admit `True` and `1.0`. Membership requires `type(x) is type(c)` as
+well, which is what keeps the typing spec's distinction between `Literal[1]`,
+`Literal[True]` and `Literal[1.0]`. For the spec's own `Literal` types that is
+the one value `c`; for a float zero or a `Decimal` it is every value `==` joins
+to `c` within the type, which
+[10-theory.md](10-theory.md) states as a deviation with what it costs a
+proof. The same-type test runs **before** `==`, so a value of another
 type never reaches the comparison — which is why a raising `__eq__` is only
 observable from an object of the pooled constant's own type. The set
-representation reads the same singleton: the constant met with its builtin's
+representation reads the same set: the constant met with its builtin's
 exact class (`Class::exact` in `descr/classes.rs`), which no class derives
 from, so `Literal[5]` and an `int` subclass's 5 share no value there either.
 

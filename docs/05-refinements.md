@@ -54,7 +54,10 @@ A predicate marker is checked at validation time, and nothing is inferred from i
 a predicate only when they carry the same one. A decision query may still call it:
 asking whether a literal is a subtype of a refinement asks whether that literal's
 value belongs to it, which runs the predicate. A slow or side-effecting predicate
-is one `is_subtype_of` pays for.
+is one `is_subtype_of` pays for. The answer stands for the literal only where its
+constant is its one value: `Literal[0.0]` also holds `-0.0` and
+`Literal[Decimal("1.00")]` holds `Decimal("1.0")`, which a predicate can tell
+apart, so such a literal below a predicate is not proven.
 
 ## Supported markers
 

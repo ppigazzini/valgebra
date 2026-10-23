@@ -15,6 +15,7 @@ use std::borrow::Cow;
 use std::slice;
 
 use crate::ir::{ConstIx, Schema};
+use crate::oracle::{asks_no_callback, every_node_within};
 use crate::verdict::{Relation, Verdict};
 
 use super::LeafRelations;
@@ -256,15 +257,47 @@ fn apart_from(index: ConstIx, table: &[Schema], oracle: &dyn LeafRelations) -> b
     oracle.literal_sets_disjoint(&[index], &indices) == Some(true)
 }
 
+/// Whether the leaf oracle's proof that the literal of `constant` is below
+/// `other` speaks for every value the literal denotes.
+///
+/// The oracle proves a literal below a schema by walking the constant through
+/// it, a predicate included. The literal is the values of the constant's exact
+/// type that `==` it: the model's singleton [FCB08, §4.2] where `==` joins no
+/// other value to the constant, and a wider set where it does -- `-0.0` beside
+/// `0.0`, `Decimal("1.0")` beside `Decimal("1.00")`. Two equal values answer
+/// every atom alike under the trust base but two: a callback, which may answer
+/// any function of the value ([`asks_no_callback`]), and an attribute record,
+/// which reads what two equal instances of a type with its own `__eq__` may
+/// hold apart. So the constant speaks for the literal where it is the only
+/// value, or where `other` reaches neither of those.
+///
+/// Out of line, behind the discriminant test its caller makes, so the leaf
+/// proofs of every other subject pay nothing for it.
+#[inline(never)]
+pub(super) fn the_constant_speaks_for_the_literal(
+    constant: ConstIx,
+    other: &Schema,
+    oracle: &dyn LeafRelations,
+    definitions: &[Schema],
+) -> bool {
+    oracle.constant_is_alone(constant)
+        || every_node_within(other, definitions, |node| {
+            !matches!(node, Schema::AttrRecord { .. }) && asks_no_callback(node, oracle)
+        })
+}
+
 /// `A ⊆ B` between two finite sets of constants, decided by membership.
 ///
-/// A literal denotes a singleton [FCB08, §4.2], or the empty set for a constant
-/// unequal to itself, so a union of literals denotes the set of its constants,
-/// and inclusion between two such sets is membership of every constant of one
-/// in the other. That is **exact in both directions**, which is what a set
-/// gives that a shape does not: every member found is a proof, and one member
-/// found nowhere is a refutation naming the value that stands against the
-/// inclusion.
+/// A literal denotes its constant's class under `==` within its type, which is
+/// the model's singleton [FCB08, §4.2] where `==` joins nothing to the
+/// constant and the empty set for a constant unequal to itself. So a union of
+/// literals denotes the classes of its constants, and inclusion between two
+/// such unions is membership of every constant of one in the other: a class
+/// lies inside another exactly where the constants are equal, `==` being
+/// transitive under the trust base. That is **exact in both directions**,
+/// which is what a set gives that a shape does not: every member found is a
+/// proof, and one member found nowhere is a refutation naming the value that
+/// stands against the inclusion.
 ///
 /// Both readings are one walk. The lists are canonical, so a member is found by
 /// binary search rather than by a scan, and the pair costs `n log m` where the

@@ -591,6 +591,60 @@ fn a_list_is_not_a_scalar_and_is_read_as_nothing_the_pool_can_order() {
     });
 }
 
+// THEORY: a-constant-is-the-values-equal-to-it
+#[test]
+fn a_constant_is_alone_where_equality_joins_nothing_to_it() {
+    // `constant_is_alone`: is the constant the only value of its exact type
+    // that `==` it. A proof walking the constant through a predicate speaks
+    // for the literal only where it is, so the answer is what keeps
+    // `Literal[0.0]` from being proved below a sign test `-0.0` fails.
+    Python::attach(|py| {
+        let source = "types.SimpleNamespace(\
+             values=[1, True, 'a', b'x', None, 1.5, 0.0, -0.0, float('nan'),\
+                     complex(1, 2), complex(0.0, 2), __import__('decimal').Decimal('1.00'),\
+                     enum.Enum('Plain', 'A').A, enum.IntEnum('Number', 'A').A,\
+                     type('Always', (), {'__eq__': lambda self, other: True,\
+                                         '__hash__': lambda self: 0})(),\
+                     object()],\
+         )";
+        let values: Vec<Py<PyAny>> = built(py, source)
+            .getattr("values")
+            .unwrap()
+            .try_iter()
+            .unwrap()
+            .map(|value| value.unwrap().unbind())
+            .collect();
+        asking(py, values, |oracle| {
+            let alone = |slot| oracle.constant_is_alone(ConstIx::new(slot));
+            for (slot, what) in [
+                (0, "an int"),
+                (1, "a bool"),
+                (2, "a str"),
+                (3, "bytes"),
+                (4, "None"),
+                (5, "a float that is no zero"),
+                (8, "nan, which equals nothing"),
+                (9, "a complex number with no zero part"),
+                (12, "an Enum's member, which compares by identity"),
+                (15, "an object of a type comparing by identity"),
+            ] {
+                assert!(alone(slot), "{what}");
+            }
+            for (slot, what) in [
+                (6, "0.0, which -0.0 equals"),
+                (7, "-0.0, which 0.0 equals"),
+                (10, "a complex number with a zero part"),
+                (11, "a Decimal, which Decimal('1.0') equals"),
+                (13, "an IntEnum's member, whose == is int's"),
+                (14, "a type whose == is its own"),
+            ] {
+                assert!(!alone(slot), "{what}");
+            }
+            assert!(!alone(16), "a slot the pool does not hold");
+        });
+    });
+}
+
 #[test]
 fn a_type_whose_equality_is_its_own_is_not_trusted_to_decide_disjointness() {
     // Two constants are disjoint when they are different values, and "different"

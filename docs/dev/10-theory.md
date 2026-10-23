@@ -1111,15 +1111,31 @@ HELD-BY: two_constraints_pinned_to_one_key_ask_it_for_both, a_boolean_the_intege
 
 **A constant is the values equal to it, so `nan` is the empty set.** The model
 takes a singleton type for every constant, `[[b_c]] = {c}` [FCB08, §4.2]. A
-literal here denotes the values of its constant's type that `==` it, which is
-that singleton for a constant equal to itself and the empty set for one that is
-not, `float("nan")`: a `nan` literal admits nothing, and a union carrying one
-beside members a supertype holds is below that supertype.
+literal here denotes `{x | type(x) is type(c) and x == c}`, the constant's exact
+type refined by Python's equality: a refined base type [JV20, §3.2] whose
+predicate is `==`. Where `==` joins no other value to the constant -- an `int`,
+a `bool`, a `str`, `bytes`, `None`, a float or complex number with no zero part,
+an instance of a type comparing by identity, which covers the spec's `Literal`
+types and an `Enum`'s members -- that is the model's singleton. A constant that
+does not equal itself, `float("nan")`, denotes the empty set: a `nan` literal
+admits nothing, and a union carrying one beside members a supertype holds is
+below that supertype. Where `==` joins more, the literal is wider than its
+constant: `Literal[0.0]` holds `-0.0`, `Literal[Decimal("1.00")]` holds
+`Decimal("1.0")`, and a type whose `__eq__` is its own may hold values that
+differ. So the constant speaks for the literal only where nothing tells the two
+apart.
+Two equal values answer every atom alike under the trust base -- a type test,
+`==`, a bound's comparison, a step's `%` -- but two: a callback, which may answer
+any function of the value, and an attribute record, which reads what two equal
+instances may hold apart. A proof that walks the constant through a supertype is
+the literal's where the constant is the only value or the supertype reaches
+neither, and a refutation by a constant equal to itself stands always, since the
+constant is a value of its literal.
 **[DEVIATION: a-constant-is-the-values-equal-to-it]**
 
-IMPLEMENTED-BY: decision/literals.rs::finite_set_below
+IMPLEMENTED-BY: decision/literals.rs::finite_set_below, decision/literals.rs::the_constant_speaks_for_the_literal
 
-HELD-BY: a_constant_that_does_not_equal_itself_denotes_no_value, a_literal_nan_is_the_empty_set, test_nan_never_matches_a_nan_literal
+HELD-BY: a_constant_that_does_not_equal_itself_denotes_no_value, a_literal_nan_is_the_empty_set, test_nan_never_matches_a_nan_literal, a_constant_speaks_for_its_literal_where_nothing_tells_equal_values_apart, a_constant_is_alone_where_equality_joins_nothing_to_it, test_a_float_zero_literal_is_not_proved_below_a_sign_predicate, test_a_decimal_literal_is_not_proved_below_a_predicate_on_its_exponent, test_an_attribute_record_tells_two_equal_constants_apart, test_a_literal_that_is_its_whole_class_is_proved_below_a_predicate, test_a_literal_is_not_always_a_singleton
 
 **Membership has a third answer.** The membership predicate is two-valued over
 the values it is defined on, and a negation is its `not` [Cas24, Def. 3]. The

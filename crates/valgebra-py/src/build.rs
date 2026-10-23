@@ -1640,7 +1640,7 @@ impl Pool {
         self.index.reserve(additional);
     }
 
-    /// Pool `obj` as the constant of a typed singleton.
+    /// Pool `obj` as a literal's constant.
     fn intern_const(&mut self, obj: &Bound<'_, PyAny>) -> ConstIx {
         ConstIx::new(self.intern(obj))
     }

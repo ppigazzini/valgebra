@@ -72,7 +72,10 @@ answers `"undecided"`.
   whole set, which is what the typing spec assigns it. `tuple`, `set`,
   `frozenset` and `dict` read the same way, as `str` and `int` do.
 - **Class and literal inclusion.** A class is a subtype of its base *classes*,
-  by `issubclass`, and a literal is a subtype of any schema it is a member of. A
+  by `issubclass`, and a literal is a subtype of any schema its constant is a
+  member of, where the constant is the literal's one value or the schema tells
+  no two equal values apart: `Literal[0.0]` also holds `-0.0`, so a predicate
+  that refuses `-0.0` leaves it undecided ([Predicates](#undecidable-at-runtime)). A
   dataclass or named tuple relates the same way: its schema is below one over a
   base class it carries every attribute of, each with a narrower schema, and below
   the bare class it is an instance of. A **named tuple** relates to the tuple its
@@ -928,7 +931,24 @@ message or treats them opaquely — it never guesses.
     it, and belonging runs the predicate — so `is_subtype_of` and `is_equivalent`
     execute user code, as `is_empty` executes a rich comparison when it orders two
     refinement bounds. A predicate with side effects, or one that is slow, is one
-    a type query pays for.
+    a type query pays for. The constant speaks for its literal only where it is
+    the literal's one value: `Literal[0.0]` also holds `-0.0`, and
+    `Literal[Decimal("1.00")]` holds `Decimal("1.0")`, which a predicate can
+    tell apart, so such a literal below a predicate is not proven.
+
+    ```python
+    import math
+    from decimal import Decimal
+    from typing import Annotated, Literal
+
+    from valgebra import Validator
+
+    positive = Annotated[float, lambda x: math.copysign(1.0, x) > 0]
+    assert Validator(Literal[1.5]).relation_to(positive) == "subset"
+    assert Validator(Literal[0.0]).relation_to(positive) == "undecided"  # -0.0
+    two_places = Annotated[Decimal, lambda d: d.as_tuple().exponent == -2]
+    assert Validator(Literal[Decimal("1.00")]).relation_to(two_places) == "undecided"
+    ```
 - **Typing qualifiers.** `Final` and `ClassVar` are rejected as schemas; they
   qualify a declaration and carry no value-membership meaning. On a class they
   are read as what they are: a `ClassVar` annotates the class rather than an
@@ -982,9 +1002,10 @@ product of their member counts, and a Boolean combination nested past a handful
 of levels demands work exponential in its depth.
 
 One shape avoids the product entirely, and it is the one a contract writes most:
-a union of nothing but **literals**. A literal denotes a singleton, so such a
-union denotes a *finite set of values*, and inclusion between two finite sets is
-membership of every value of one in the other. That is decided by lookup rather
+a union of nothing but **literals**. A literal denotes its constant and the
+values its type's `==` joins to it, so such a union denotes a *finite set of
+constants*, each standing for its class, and inclusion between two finite sets
+is membership of every constant of one in the other. That is decided by lookup rather
 than by distribution, and it is exact in both directions — every value found is
 a proof, and one value found nowhere is a refutation, since it is in the subject
 and outside the other schema. Two tables of ten thousand codes each are decided

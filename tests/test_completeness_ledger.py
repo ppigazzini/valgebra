@@ -1673,6 +1673,7 @@ class _Partial:
         return 0
 
 
+# THEORY: a-constant-is-the-values-equal-to-it
 def test_a_literal_is_not_always_a_singleton() -> None:
     """Why the entry above cannot be closed by comparing the two constants.
 

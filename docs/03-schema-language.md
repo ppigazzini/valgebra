@@ -222,10 +222,12 @@ assert repr(tup) == "tuple[str, int, ...]"
 
 ## Literals
 
-`Literal[...]` denotes a typed singleton: a value is a member iff it has the
-**same type** as the literal and is equal to it. The same-type rule keeps the
-constants `1`, `True` and `1.0` distinct, even though Python's `==` conflates
-them:
+`Literal[...]` denotes the values equal to its constant and of the same type:
+a value is a member iff it has the **same type** as the literal and is equal to
+it. For an `int`, a `str` or an enum member that is the constant alone; for a
+float zero it is both zeros, so `Literal[0.0]` admits `-0.0`. The same-type
+rule keeps the constants `1`, `True` and `1.0` distinct, even though Python's
+`==` conflates them:
 
 ```python
 from typing import Literal

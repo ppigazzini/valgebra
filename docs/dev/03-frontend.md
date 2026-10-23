@@ -506,8 +506,8 @@ exact builtin
 scalar is answered first, so a wide `Literal` asks none of the rest. The
 refusal names the spelling that was meant. A constant the spec does not admit
 there -- a float, an instance -- is read all the same, as the constant
-`Validator(c)` reads it: the set is the same singleton, and a static checker
-is what refuses the spelling.
+`Validator(c)` reads it: the set is the same, the values of `c`'s type that
+`==` it, and a static checker is what refuses the spelling.
 
 A `tuple` reads its arguments as a *shape*: `tuple[int, str]` is a fixed
 sequence of two, `tuple[int, ...]` is a homogeneous one, and `tuple[()]` is the
@@ -570,7 +570,7 @@ One pool holds four kinds of object, so the slot means nothing until the fronten
 says what it pooled. That decision is at the mint, not at the read:
 
 ```rust
-lits.intern_const(obj)      // the constant of a typed singleton
+lits.intern_const(obj)      // a literal's constant
 lits.intern_class(ty)       // an isinstance atom
 lits.intern_operand(bound)  // a comparison or multiple-of operand
 lits.intern_predicate(func) // a user callback

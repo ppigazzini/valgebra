@@ -227,6 +227,23 @@ pub trait LeafRelations: Constants {
     fn literals_disjoint(&self, _left: ConstIx, _right: ConstIx) -> Option<bool> {
         None
     }
+
+    /// Whether the pooled constant behind a [`Schema::Literal`] is the only
+    /// value its literal denotes; `false` where the bindings cannot say.
+    ///
+    /// A literal denotes the values of its constant's exact type that `==` it.
+    /// Where `==` joins no other value to the constant -- an `int`, a `bool`, a
+    /// `str`, `bytes`, `None`, a float or complex number with no zero part, an
+    /// instance of a type that compares by identity -- that is the constant
+    /// alone, and the constant's membership is the literal's. Where it joins
+    /// more -- `-0.0` to `0.0`, `Decimal("1.00")` to `Decimal("1.0")`, two
+    /// instances of a type whose `__eq__` is its own -- the constant speaks for
+    /// the literal only before atoms that answer equal values alike. The
+    /// default answers `false`, the reading that keeps a proof only where the
+    /// supertype tells no two equal values apart.
+    fn constant_is_alone(&self, _constant: ConstIx) -> bool {
+        false
+    }
 }
 
 /// The trivial [`LeafRelations`] that decides nothing — the core default, under
@@ -365,13 +382,44 @@ pub(crate) fn denotes_a_set_within(
     oracle: &dyn LeafRelations,
     definitions: &[Schema],
 ) -> bool {
+    every_node_within(schema, definitions, |node| asks_no_callback(node, oracle))
+}
+
+/// Whether one node runs no user code to answer membership: no predicate, and
+/// no class whose `isinstance` the bindings cannot vouch for.
+///
+/// Only the bindings hold the class, so only they can tell a pure one from a
+/// hooked one, and no answer is the conservative answer.
+pub(crate) fn asks_no_callback(node: &Schema, oracle: &dyn LeafRelations) -> bool {
+    match node {
+        Schema::Instance(_) => oracle.atom_denotes_a_set(node) == Some(true),
+        Schema::Refine { constraints, .. } => !constraints
+            .iter()
+            .any(|constraint| matches!(constraint, Constraint::Predicate(_))),
+        _ => true,
+    }
+}
+
+/// Whether `admits` holds of every node `schema` reaches, through the
+/// definitions a reference names: the walk [`denotes_a_set_within`] takes,
+/// with the question asked of each node left to the caller.
+///
+/// A reference is read where `definitions` holds what it names and refused
+/// where it does not, and a reference met again inside its own body is not
+/// read twice. A `SelfRef` is refused outright: it is a build marker, and what
+/// it stands for is not in hand.
+pub(crate) fn every_node_within(
+    schema: &Schema,
+    definitions: &[Schema],
+    mut admits: impl FnMut(&Schema) -> bool,
+) -> bool {
     // The root is held beside the worklist rather than inside it. A one-element
     // `vec![...]` is a heap allocation, and most schemas asked this question
-    // answer from the root alone -- an atom has no children to defer, and the
-    // two refusals below return before reaching any. Seeding the loop this way
-    // leaves the worklist empty until a node actually has children, so the
-    // common call allocates nothing; the order is the stack's either way, since
-    // the root is the only thing the vector held.
+    // answer from the root alone -- an atom has no children to defer, and a
+    // refusal returns before reaching any. Seeding the loop this way leaves the
+    // worklist empty until a node actually has children, so the common call
+    // allocates nothing; the order is the stack's either way, since the root is
+    // the only thing the vector held.
     let mut pending: Vec<&Schema> = Vec::new();
     let mut root = Some(schema);
     let mut open: Vec<DefIx> = Vec::new();
@@ -388,28 +436,16 @@ pub(crate) fn denotes_a_set_within(
                 pending.push(body);
             }
             Schema::SelfRef(_) => return false,
-            // Only the bindings hold the class, so only they can tell a pure one
-            // from a hooked one. No answer is the conservative answer.
-            Schema::Instance(_) => {
-                if oracle.atom_denotes_a_set(node) != Some(true) {
-                    return false;
-                }
-            }
-            Schema::Refine { constraints, .. } => {
-                if constraints
-                    .iter()
-                    .any(|constraint| matches!(constraint, Constraint::Predicate(_)))
-                {
+            // Every other node is asked, then searched through its children,
+            // which the term states once. Restating the child set here is how
+            // a variant added later hides a node from this walk while an
+            // exhaustive `match` reports nothing.
+            _ => {
+                if !admits(node) {
                     return false;
                 }
                 node.push_children(&mut pending);
             }
-            // Every other node is searched through its children, which the term
-            // states once. Restating the child set here is how a variant added
-            // later hides a callback from this walk while an exhaustive `match`
-            // reports nothing: the arms above are the ones with something to say
-            // beyond "look inside".
-            _ => node.push_children(&mut pending),
         }
     }
     true

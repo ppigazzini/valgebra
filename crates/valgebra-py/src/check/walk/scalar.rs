@@ -285,9 +285,10 @@ pub(super) fn check_literal(
     ok
 }
 
-/// Whether `value` is the typed singleton denoted by `literal`: same type and
+/// Whether `value` is a member of the literal of `literal`: same type and
 /// equal. The same-type guard rules out Python's cross-type equality
-/// (`1 == True == 1.0`), so `Literal[1]` denotes `{1}`, not `{1, True, 1.0}`.
+/// (`1 == True == 1.0`), so `Literal[1]` denotes `{1}`, not `{1, True, 1.0}`;
+/// within the type it is `==`, so `Literal[0.0]` admits `-0.0`.
 /// Returns the comparison result so a raising `__eq__` is folded by the caller.
 /// The three probe helpers below take the **value first** and the pooled object
 /// second. All three arguments are `&Bound<'_, PyAny>`, so every transposition

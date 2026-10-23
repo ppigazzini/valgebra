@@ -23,7 +23,8 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
-    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
+    PyBool, PyBytes, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString,
+    PyTuple, PyType,
 };
 use rustc_hash::FxHashMap;
 use valgebra_core::descr::classes::{Attributes, Class, Hook, Member, Namespace, Reach};
@@ -918,8 +919,9 @@ impl LeafRelations for PoolRelations<'_, '_> {
 
     fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
         match sub {
-            // A literal denotes a singleton: `{v}` is a subtype of `sup` exactly
-            // when `v` is a member of `sup`.
+            // The constant's membership, which is the literal's where the
+            // constant is its one value or nothing in `sup` tells equal values
+            // apart; the core asks which, and keeps this proof only there.
             Schema::Literal(index) => {
                 let value = self.literals.get(index.get())?.bind(self.py);
                 Some(self.is_member(sup, value))
@@ -1026,6 +1028,39 @@ impl LeafRelations for PoolRelations<'_, '_> {
             }
         }
         Some(true)
+    }
+
+    /// Whether the constant is the only value of its exact type that `==` it.
+    ///
+    /// An exact `int`, `bool`, `str` or `bytes` and `None` are: their `==` is
+    /// equality of value, and two equal values are one. A float is unless it
+    /// is a zero, since `-0.0 == 0.0` is the one pair of distinct floats `==`
+    /// joins and `nan` joins nothing; a complex number likewise, unless a part
+    /// is. An instance of a type that compares by identity is, an `Enum`'s
+    /// members among them. Anything else is not: `Decimal("1.0")` equals
+    /// `Decimal("1.00")`, and a type whose `__eq__` is its own may equal values
+    /// that differ.
+    fn constant_is_alone(&self, constant: ConstIx) -> bool {
+        let Some(value) = self.literals.get(constant.get()) else {
+            return false;
+        };
+        let value = value.bind(self.py);
+        let ty = value.get_type();
+        if value.is_none()
+            || ty.is(PyBool::type_object(self.py))
+            || ty.is(PyInt::type_object(self.py))
+            || ty.is(PyString::type_object(self.py))
+            || ty.is(PyBytes::type_object(self.py))
+        {
+            return true;
+        }
+        if ty.is(PyFloat::type_object(self.py)) {
+            return value.extract::<f64>().is_ok_and(|float| float != 0.0);
+        }
+        if let Ok(complex) = value.cast_exact::<PyComplex>() {
+            return complex.real() != 0.0 && complex.imag() != 0.0;
+        }
+        self.heard(compares_by_identity(&ty)).unwrap_or(false)
     }
 
     fn compare(&self, left: OperandIx, right: OperandIx) -> Option<core::cmp::Ordering> {

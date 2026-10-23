@@ -3518,16 +3518,22 @@ fn a_refinement_as_the_supertype_carries_its_base_s_refutation() {
 /// A refinement carries its base's refutation and nothing else, so a reading
 /// that answered before the oracle would turn every proof the oracle can make
 /// about a refinement into a decline -- and the oracle is the only reader of a
-/// constant, which is what decides a literal against a predicate.
+/// constant, which is what decides a literal against a predicate where the
+/// constant is its literal's one value.
 #[test]
 fn the_oracle_answers_a_refinement_before_its_base_is_read() {
     /// An oracle that proves one leaf pair: the constant at index 0 belongs to
-    /// every set, which stands in for the bindings running a predicate on it.
+    /// every set, which stands in for the bindings running a predicate on it,
+    /// and is the only value of its literal, as a `str` constant is.
     struct Proving;
     impl Constants for Proving {}
     impl LeafRelations for Proving {
         fn leaf_subtype(&self, sub: &Schema, _: &Schema) -> Option<bool> {
             matches!(sub, Schema::Literal(index) if index.get() == 0).then_some(true)
+        }
+
+        fn constant_is_alone(&self, _: ConstIx) -> bool {
+            true
         }
     }
     let literal = Schema::Literal(ConstIx::new(0));
@@ -7125,6 +7131,97 @@ fn a_literal_keyed_mapping_is_refuted_under_the_constant_it_names() {
         by_words(&keyed_by(0, Schema::Int), &beside_a_class),
         Relation::Fails
     );
+}
+
+/// A leaf oracle answering, of every literal's constant and every schema,
+/// whether the constant is a member, holding every constant a value, and
+/// saying nothing of whether a constant is the only value of its literal,
+/// which the core reads as no.
+struct EveryConstant {
+    member: bool,
+}
+
+impl Constants for EveryConstant {}
+
+impl LeafRelations for EveryConstant {
+    fn leaf_subtype(&self, sub: &Schema, _: &Schema) -> Option<bool> {
+        matches!(sub, Schema::Literal(_)).then_some(self.member)
+    }
+
+    fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+        (left == right).then_some(false)
+    }
+}
+
+/// The same oracle, where every constant is the only value of its literal.
+struct EveryConstantAlone {
+    member: bool,
+}
+
+impl Constants for EveryConstantAlone {}
+
+impl LeafRelations for EveryConstantAlone {
+    fn leaf_subtype(&self, sub: &Schema, _: &Schema) -> Option<bool> {
+        matches!(sub, Schema::Literal(_)).then_some(self.member)
+    }
+
+    fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+        (left == right).then_some(false)
+    }
+
+    fn constant_is_alone(&self, _: ConstIx) -> bool {
+        true
+    }
+}
+
+// THEORY: a-constant-is-the-values-equal-to-it
+/// A constant speaks for its literal where it is the only value, or where the
+/// supertype asks nothing that tells two equal values apart.
+///
+/// The oracle proves the literal below every schema by the constant's
+/// membership. Where the constant is the literal's one value that proof
+/// stands; where it is not, a predicate or an attribute record may refuse a
+/// value equal to the constant, so the proof through either is no answer,
+/// and a supertype with neither keeps it. A refutation stands whatever the
+/// constant's class: the constant is a value of its literal.
+#[test]
+fn a_constant_speaks_for_its_literal_where_nothing_tells_equal_values_apart() {
+    let literal = Schema::Literal(ConstIx::new(0));
+    let predicate = Schema::Refine {
+        base: Arc::new(Schema::Float),
+        constraints: vec![Constraint::Predicate(PredIx::new(1))].into(),
+    };
+    let attributes = Schema::attr_record(vec![Attribute {
+        name: "y".into(),
+        schema: Schema::Int,
+    }]);
+    let relation = |oracle: &dyn LeafRelations, sup: &Schema| {
+        let budget = Budget::new(DECISION_BUDGET);
+        literal.subtype_relation(sup, oracle, &[], &budget)
+    };
+    let alone = EveryConstantAlone { member: true };
+    let not_alone = EveryConstant { member: true };
+    for sup in [&predicate, &attributes, &Schema::Float] {
+        assert_eq!(relation(&alone, sup), Relation::Holds, "{sup:?}");
+    }
+    for sup in [&predicate, &attributes] {
+        assert_eq!(relation(&not_alone, sup), Relation::Unknown, "{sup:?}");
+    }
+    assert_eq!(
+        relation(&not_alone, &Schema::Float),
+        Relation::Holds,
+        "a supertype that tells no two equal values apart keeps the proof"
+    );
+    // A refutation stands on the leaf alone against an attribute record, which
+    // has no base to refute it through, so the guard must leave it be.
+    for refuting in [
+        &EveryConstant { member: false } as &dyn LeafRelations,
+        &EveryConstantAlone { member: false },
+    ] {
+        for sup in [&predicate, &attributes] {
+            assert_eq!(relation(refuting, sup), Relation::Fails, "{sup:?}");
+        }
+    }
 }
 
 /// A literal clause meets a record's field through the constant that is its

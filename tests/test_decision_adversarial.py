@@ -8,9 +8,12 @@ adversarial: a complement that is not a subtype of itself, or a pool merge that
 gives one constant two indices, fails it.
 """
 
+import enum
 import json
+import math
 from collections.abc import Callable
-from typing import Annotated, Any, Literal, Protocol
+from decimal import Decimal
+from typing import Annotated, Any, Literal, Protocol, runtime_checkable
 
 import annotated_types as at
 import pytest
@@ -244,6 +247,103 @@ def test_a_pattern_over_text_and_bytes_holds_no_byte_string() -> None:
 
     assert pattern.relation_to(str) == "subset"
     assert pattern.is_equivalent(Annotated[str, Regex("a*")])
+
+
+def _sign(value: float) -> bool:
+    return math.copysign(1.0, value) > 0
+
+
+# THEORY: a-constant-is-the-values-equal-to-it
+def test_a_float_zero_literal_is_not_proved_below_a_sign_predicate() -> None:
+    """``Literal[0.0]`` holds ``-0.0``, which a sign test refuses.
+
+    The constant passes the predicate and its equal does not, so a proof
+    standing on the constant would claim a value the supertype refuses.
+    """
+    positive = Annotated[float, _sign]
+    literal = Validator(Literal[0.0])  # ty: ignore[invalid-type-form]
+    assert literal.is_valid(-0.0)
+    assert not Validator(positive).is_valid(-0.0)
+    assert literal.relation_to(positive) == "undecided"
+    assert not literal.is_subtype_of(positive)
+    # A refutation by the constant stands, since `0.0` is a value of the literal.
+    negative = Annotated[float, lambda x: math.copysign(1.0, x) < 0]
+    assert literal.relation_to(negative) == "not_subset"
+
+
+# THEORY: a-constant-is-the-values-equal-to-it
+def test_a_decimal_literal_is_not_proved_below_a_predicate_on_its_exponent() -> None:
+    """``Literal[Decimal("1.00")]`` holds ``Decimal("1.0")``, which has one place.
+
+    A check for two decimal places is the predicate a money field carries, and
+    two equal ``Decimal`` values answer it apart. The literal stays proved
+    below the schemas that answer equal values alike.
+    """
+    two_places = Annotated[Decimal, lambda d: d.as_tuple().exponent == -2]
+    literal = Validator(Literal[Decimal("1.00")])  # ty: ignore[invalid-type-form]
+    assert literal.is_valid(Decimal("1.0"))
+    assert not Validator(two_places).is_valid(Decimal("1.0"))
+    assert literal.relation_to(two_places) == "undecided"
+    assert literal.relation_to(Decimal) == "subset"
+    assert literal.relation_to(Annotated[Decimal, at.Gt(Decimal(0))]) == "subset"
+
+
+class _ByX:
+    """Two instances are equal when their ``x`` is, whatever their ``y``."""
+
+    def __init__(self, x: int, y: int) -> None:
+        self.x = x
+        self.y = y
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _ByX) and other.x == self.x
+
+    def __hash__(self) -> int:
+        return hash(self.x)
+
+
+@runtime_checkable
+class _HasOneY(Protocol):
+    y: Literal[1]
+
+
+# THEORY: a-constant-is-the-values-equal-to-it
+def test_an_attribute_record_tells_two_equal_constants_apart() -> None:
+    """An attribute record reads what two equal instances hold apart.
+
+    ``_ByX(1, 1) == _ByX(1, 2)``, so the literal of the first holds the second,
+    and a protocol requiring ``y == 1`` admits the constant and refuses its
+    equal. No callback is asked, so only the attribute record stops the proof.
+    """
+    literal = Validator(Literal[_ByX(1, 1)])  # ty: ignore[invalid-type-form]
+    assert literal.is_valid(_ByX(1, 2))
+    assert not Validator(_HasOneY).is_valid(_ByX(1, 2))
+    assert literal.relation_to(_HasOneY) == "undecided"
+
+
+class _Color(enum.Enum):
+    RED = 1
+
+
+# THEORY: a-constant-is-the-values-equal-to-it
+def test_a_literal_that_is_its_whole_class_is_proved_below_a_predicate() -> None:
+    """Where the constant is the literal's one value, its membership is the proof.
+
+    An ``int``, a nonzero float and an ``Enum``'s member are the only values of
+    their literals, so running the predicate on the constant decides the pair
+    both ways.
+    """
+    assert (
+        Validator(Literal[5]).relation_to(Annotated[int, lambda x: x > 0]) == "subset"
+    )
+    assert (
+        Validator(Literal[5]).relation_to(Annotated[int, lambda x: x < 0])
+        == "not_subset"
+    )
+    one_and_a_half = Literal[1.5]  # ty: ignore[invalid-type-form]
+    assert Validator(one_and_a_half).relation_to(Annotated[float, _sign]) == "subset"
+    red = Annotated[_Color, lambda color: color.value == 1]
+    assert Validator(Literal[_Color.RED]).relation_to(red) == "subset"
 
 
 class _WeirdInt(int):

@@ -821,13 +821,16 @@ pub enum Schema {
     Bytes,
     /// Denotes the values of `c`'s exact type that equal it, for a fixed
     /// constant `c`: a value is a member iff it has the *same type* as `c` and is
-    /// equal to it. That is the typed singleton `{c}` for a constant whose `==`
-    /// is Python's usual one, and the empty set for `nan`, which equals nothing.
-    /// Same-type is what makes this a singleton — Python's `==` conflates across
-    /// types (`1 == True == 1.0`), so equality alone would make `Literal[1]`
-    /// also admit `True` and `1.0`. Requiring `type(x) is type(c)` keeps the
-    /// typing spec's distinction between `Literal[1]`, `Literal[True]`, and
-    /// `Literal[1.0]`.
+    /// equal to it. That is the one value `c` where `==` joins nothing else to
+    /// it -- the spec's `Literal` types, a float with no zero part, an instance
+    /// of a type comparing by identity -- the empty set for `nan`, which equals
+    /// nothing, and a wider set where `==` joins more: `Literal[0.0]` holds
+    /// `-0.0` and `Literal[Decimal("1.00")]` holds `Decimal("1.0")`
+    /// (`docs/dev/10-theory.md`, "A constant is the values equal to it"). The
+    /// same-type test is what keeps Python's cross-type `==` out
+    /// (`1 == True == 1.0`): equality alone would make `Literal[1]` also admit
+    /// `True` and `1.0`, and `type(x) is type(c)` keeps the typing spec's
+    /// distinction between `Literal[1]`, `Literal[True]`, and `Literal[1.0]`.
     ///
     /// A set under the trust base, which takes a value's `==` to answer one way
     /// (`docs/14-soundness.md`): a value whose `==` answers two calls

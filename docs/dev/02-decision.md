@@ -120,7 +120,9 @@ the value outside the base is outside a subset of it, while being inside the
 base says nothing about the constraints. The oracle is asked before the
 refinement because it proves where the refinement reading only refutes: a
 literal below a predicate refinement is settled by running the predicate on the
-constant.
+constant, where the constant is the literal's one value or the supertype asks
+nothing that tells two equal values apart
+(`the_constant_speaks_for_the_literal` in `decision/literals.rs`).
 
 Both halves are gated. `scripts/perf_gate.py --decision` measures the relations
 that hold; `--decision-refute` measures the ones a rule refutes, which is the
@@ -420,6 +422,11 @@ corpus of its own driving every question below
   stands;
 - `literals_disjoint` — do these two constants share a value, the one-pair form
   of the question above;
+- `constant_is_alone` — is this constant the only value its literal denotes,
+  which decides whether `leaf_subtype`'s proof by the constant speaks for the
+  literal before a predicate or an attribute record
+  (`the_constant_speaks_for_the_literal`). The default answers no, which keeps
+  such a proof only where the supertype tells no two equal values apart;
 - `compare` — order two pooled refinement bounds;
 - `no_int_between` — does the interval between two bounds admit no integer.
   Read both ways: `bounds_unsatisfiable` takes `Some(true)` as an empty integer

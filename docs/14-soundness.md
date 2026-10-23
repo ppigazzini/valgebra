@@ -43,7 +43,7 @@ Anything         always                         (⟦Anything⟧ = all values;
                                                  `Any` is this node, spelled)
 Nothing          never                          (⟦Nothing⟧ = ∅)
 Bool/Int/...     issubclass(type(x), T)         (the scalar region)
-Literal(c)       type(x) is type(c) and x == c  (typed singleton)
+Literal(c)       type(x) is type(c) and x == c  (same type, equal)
 Union(A_i)       some A_i accepts x             (∃: set union)
 Intersection     every A_i accepts x            (∀: set intersection)
 Complement(A)    A does not accept x            (¬: set complement)
@@ -320,11 +320,15 @@ The soundness is relative to a small, explicit trust base:
   matches no pattern. The `str` kind holds one all the same — it is a string of
   one character — so a kind is never a subtype of a pattern over it, however
   much text that pattern matches, and `"\ud800"` is the value that says so.
-- **A literal is a singleton where its constant's equality is Python's own.**
-  `Literal[c]` denotes `{x | type(x) is type(c) and x == c}`. For a builtin
-  scalar that is one value; for a constant whose class defines `__eq__` it is
-  whatever that method admits, and for `float("nan")`, which is equal to nothing
-  including itself, it is the empty set.
+- **A literal is its constant's class under `==`.** `Literal[c]` denotes
+  `{x | type(x) is type(c) and x == c}`. For an `int`, a `bool`, a `str`,
+  `bytes`, `None` and a nonzero float that is one value; for a float zero it is
+  both zeros, for a `Decimal` every spelling equal to it, for a constant whose
+  class defines `__eq__` whatever that method admits, and for `float("nan")`,
+  which is equal to nothing including itself, the empty set. A proof that runs
+  the constant through a predicate or reads its attributes speaks for that one
+  value, so it stands for the literal only where the constant is the whole
+  class; `Literal[0.0]` below a predicate refusing `-0.0` is not proven.
 - **A constant's `==` is an equivalence.** `Literal[c]` is proved below
   `Literal[d]` from `c == d`, which is a proof only where equality is
   transitive: a value equal to `c` is then equal to `d`. A refutation between
