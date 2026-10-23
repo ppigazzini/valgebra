@@ -521,15 +521,17 @@ fn claimed_beside_the_region(
 
 /// The clause list an openness gives a node that already carries `defaults`.
 ///
-/// **Openness is the default of the region no clause claims** (ICFP Definition
-/// 4.6): a clause is a key-type region with its own default, and these two
-/// operators are about the region the clauses leave over. Closing sends it to
-/// bottom -- the clause that frees it goes -- and opening sends it to the top,
-/// which is one clause admitting every value at every key the others do not
-/// claim. The claimed regions are untouched either way, so the paper's own
-/// closed `{|"a" = Int, String => Bool|}` keeps its `String => Bool`. The
-/// clauses admitting every value are read as the one clause they are first
-/// ([`tops_merged`]), so the region does not turn on how they are split.
+/// **Openness is the default of the region no clause claims.** Open and closed
+/// are ICFP 2023's two kinds of record type (§3.2), and the §4.4 example writes
+/// both as quasi K-step functions, each region with a default of its own
+/// (Definition 4.6): a clause is a key-type region with its own default, and
+/// these two operators are about the region the clauses leave over. Closing
+/// sends it to bottom -- the clause that frees it goes -- and opening sends it
+/// to the top, which is one clause admitting every value at every key the
+/// others do not claim. The claimed regions are untouched either way, so the
+/// paper's own closed `{|"a" = Int, String => Bool|}` keeps its `String =>
+/// Bool`. The clauses admitting every value are read as the one clause they are
+/// first ([`tops_merged`]), so the region does not turn on how they are split.
 fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
     // A node with no clauses claims no key, so the unclaimed region is the
     // whole key space and the answer is the shared list either way: the top
@@ -581,7 +583,7 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
 /// over the join of the keys, and the region `open` frees is such a clause, so
 /// which of them is the region is not a question the pair can answer apart:
 /// `{str: anything, complement(str): anything}` is the top clause written
-/// twice, ICFP 2023's wildcard (l.1509-1511) spelled as the union footnote 15
+/// twice, ICFP 2023's wildcard (§4.4) spelled as the union footnote 15
 /// reads one as. Read one at a time, each would be tested against the
 /// complement of the others' keys, and the answer would turn on whether that
 /// complement folds: the pair alone closes to `{}` as the top does, and beside
@@ -1335,9 +1337,9 @@ fn canonical_fields(fields: &mut [Field]) {
 
 /// Put a map's catch-all clauses in the order two spellings agree on.
 ///
-/// The clauses are unordered here -- a deliberate narrowing of the model, which
-/// orders them -- so `{str: int, int: bool}` and `{int: bool, str: int}` govern
-/// exactly the same dicts and are one schema.
+/// The clauses are unordered, as the model's are -- ICFP 2023 reads no order
+/// into a map's fields (§4.4) -- so `{str: int, int: bool}` and `{int: bool,
+/// str: int}` govern exactly the same dicts and are one schema.
 fn canonical_clauses(defaults: &mut Vec<MapClause>) {
     defaults.sort();
     defaults.dedup();
@@ -1463,12 +1465,13 @@ impl MapClause {
 
 /// Whether a record's own clauses already say what this field says.
 ///
-/// The paper's `dom` read as a set rather than as a syntax: a field that
-/// constrains its key to exactly what the record gives every key it does not
-/// name adds nothing, and two records differing only in such a field are one
-/// record. A closed record says every unnamed key is absent, which is what an
-/// optional field admitting nothing says; an open one says every unnamed key is
-/// free, which is what an optional field admitting everything says.
+/// The paper's `dom` leaves out a label mapped to what the default gives every
+/// key the record does not name, so two records differing only in such a field
+/// are one record. This reads it where the record gives every unnamed key one
+/// of the two bounds: a closed record says every unnamed key is absent, which
+/// is what an optional field admitting nothing says; an open one says every
+/// unnamed key is free, which is what an optional field admitting everything
+/// says.
 ///
 /// A *required* field is never covered: it says the key must be there, and no
 /// clause says that of a key it does not name.

@@ -1,13 +1,14 @@
 //! The kinds of the value universe, and the summary derived from them.
 //!
-//! [`Kind`] is the eleven kinds the semantic-subtyping literature sorts the
-//! atoms by -- a partition but for `bool`, whose values are `int`s too
-//! ([`Kind::shares_values_with`]) -- and the one a descriptor is indexed with:
-//! `Descr::kinds` is an array over it, which is what makes that structure "a
-//! record mapping each atomic type to its representation". [`Region`] is the
-//! seven-bit *summary* derived from it, a partition without exception, and
-//! [`Regions`] is a region set that may be opaque where a schema is not
-//! scalar-decidable.
+//! [`Kind`] sorts the atoms the way the semantic-subtyping literature does, by
+//! the constructor of their values -- JACM §6.1 has three kinds -- split eleven
+//! ways over Python's builtin types: a partition but for `bool`, whose values
+//! are `int`s too ([`Kind::shares_values_with`]). It is the one a descriptor is
+//! indexed with: `Descr::kinds` is an array over it, which is what makes that
+//! structure "a record mapping each atomic type to its representation".
+//! [`Region`] is the seven-bit *summary* derived from it, a partition without
+//! exception, and [`Regions`] is a region set that may be opaque where a schema
+//! is not scalar-decidable.
 //!
 //! All three sit **below both deciders**, which is why they are here rather
 //! than in either. The structural rules reason in the summary, because that is

@@ -346,7 +346,8 @@ pub(crate) fn has_complementary_pair_within(
 /// recursion uses, and the only one that terminates.
 ///
 /// **That assumption is contractivity, and this does not check it.** A
-/// contractive body has a *unique* fixpoint, which is what makes "the set the
+/// contractive body denotes one set of finite values, by induction on the
+/// value (`docs/dev/10-theory.md`, Recursion), which is what makes "the set the
 /// reference denotes" a thing to speak of at all; a body whose reference is
 /// unguarded may have many fixpoints or none, and `t = ~t` has none. Read as
 /// a set anyway, such a reference lets a caller fold `t | ~t` to the top --

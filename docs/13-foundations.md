@@ -71,7 +71,7 @@ The same line of work models the structural forms valgebra uses:
   lists uniformly.
 - **Maps as keyed-default functions.** A dict, record, or map is named fields
   plus key-schema-keyed default clauses — the set-theoretic model of records and
-  maps as quasi-constant functions.
+  maps as quasi K-step functions.
 
 ## `Any` is the top, spelled
 
@@ -243,4 +243,5 @@ The essential reading, in the order it maps onto valgebra:
    ([above](#any-is-the-top-spelled)).
 
 A current synthesis is Castagna, "Programming with Union, Intersection, and
-Negation Types", 2024 ([arXiv:2111.03354](https://arxiv.org/abs/2111.03354)).
+Negation Types", in *The French School of Programming* (Springer, 2024)
+([arXiv:2111.03354v4](https://arxiv.org/abs/2111.03354v4)).

@@ -6327,9 +6327,10 @@ fn intersection_of(members: Vec<Schema>) -> Schema {
 ///   iff  ∀ N' ⊆ N.  t1 ∧ ⋀_{i∈N'} ¬s1ᵢ = ∅   or   t2 ∧ ⋀_{i∈N∖N'} ¬s2ᵢ = ∅
 /// ```
 ///
-/// and applied at any fixed arity, as Castagna & Duboc state the tuple rule:
-/// every assignment of the branches to positions has some position whose
-/// clause is empty. Each clause's emptiness is asked of the scalar fragment,
+/// and applied at any fixed arity the way ICFP 2023 generalizes formula (2)
+/// to arity `n` in the proof of Lemma 4.7 (Appendix C.1), over every mapping
+/// of the branches to positions: each has some position whose clause is
+/// empty. Each clause's emptiness is asked of the scalar fragment,
 /// where it is exact, so the value this returns is the relation itself and
 /// not an approximation of it.
 fn lemma_6_5(components: &[Schema], branches: &[Vec<Schema>]) -> bool {
