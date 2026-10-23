@@ -6812,7 +6812,7 @@ fn a_member_whose_default_the_rules_cannot_relate_is_set_aside() {
 ///
 /// A literal key names one constant, which is a label rather than a part, and
 /// the rule's labels are field names; two clauses reading one part are a
-/// disjunction (`clauses-are-unordered`) the rule does not take apart. Either
+/// disjunction (`clauses-may-overlap`) the rule does not take apart. Either
 /// leaves the pair to the set reading.
 #[test]
 fn a_clause_the_partition_does_not_hold_declines_the_split() {

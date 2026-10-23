@@ -1463,7 +1463,7 @@ fn a_clause_over_a_finite_key_part_is_exhausted_by_its_keys() {
     );
 }
 
-// THEORY: clauses-are-unordered
+// THEORY: clauses-may-overlap
 /// A literal-keyed clause is a clause, and the key it names is read by every
 /// clause that covers it.
 ///
@@ -1576,7 +1576,7 @@ fn a_literal_keyed_clause_is_read_beside_the_clauses_that_cover_its_key() {
     );
 }
 
-// THEORY: clauses-are-unordered
+// THEORY: clauses-may-overlap
 /// A field is read instead of a clause that names its key, and a clause
 /// naming another key is read all the same.
 ///

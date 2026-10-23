@@ -117,8 +117,9 @@ citations below as "Castagna & Duboc §7.1" are this section.
 ## Sequences as a regular language
 
 **Hosoya, Vouillon & Pierce, "Regular Expression Types for XML" (TOPLAS 2005).**
-Regular languages are closed under union, intersection and complement, so a
-sequence type is a first-class member of the algebra rather than an ad-hoc node.
+Regular expression types correspond exactly to tree automata, whose languages
+are closed under union, intersection and complement, so a sequence type is a
+first-class member of the algebra rather than an ad-hoc node.
 **[GUIDING: sequences-as-a-regular-language]** — `Schema::Seq`, carrying a
 `SeqShape`, is one node subsuming the homogeneous, fixed and prefix-plus-tail
 forms for exactly this reason ([01-schema-ir.md](01-schema-ir.md)).
@@ -208,9 +209,12 @@ own `key_cover`, so the two deciders agree on which key falls where. Its
 emptiness reading, `keyed_map_minus_keyed_maps`, answers `R ∧ ¬R₁ ∧ … ∧ ¬Rₙ`
 the same way, so the two routes to one inclusion do not part. Two points are
 the tree's own. A member set aside on a default that escapes it refutes only
-through an infinite part of the partition: Theorem 4.5 rests on Lemma 4.4,
-whose proof adds a fresh key of that part to a witness, and `None` has one key
-and `bool` two. And a label narrowed to a table of constants minus constants is
+through an infinite part of the partition: Theorem 4.5 proves (22) under the
+hypothesis §4.4 makes of every key type, that it is infinite, and the paper
+says the hypothesis "is actually used" -- the proof of Lemma 4.7 (Appendix C.1)
+takes a key of the part no label names. `None` has one key and `bool` two,
+where the paper would write their keys as labels. And a label narrowed to a
+table of constants minus constants is
 read as the set it leaves (`FiniteMeet` in `decision/literals.rs`), without
 which a tag of literals would decline at its first narrowing.
 
@@ -218,16 +222,19 @@ SOURCE: §13.3 "`keyed_map_splits_across_union` runs `Phi` beside the one-map ru
 
 HELD-BY: a_record_below_a_union_of_records_is_the_rules_answer, a_record_split_stops_where_the_decision_budget_does, a_record_splits_across_the_records_that_fix_its_tag, a_record_splits_on_whether_a_key_is_present, a_member_apart_at_an_optional_label_is_dropped, a_member_set_aside_on_a_finite_part_keeps_only_the_proof, a_member_whose_default_the_rules_cannot_relate_is_set_aside, a_clause_the_partition_does_not_hold_declines_the_split, a_record_minus_the_records_that_cover_it_is_empty, a_record_split_agrees_with_the_set_reading
 
-The paper's model is a *quasi-constant function*: named labels over a finite
-domain, with the rest given by a default keyed by a partition of the key space.
-valgebra's clauses are neither ordered nor a partition — a key belongs when
-**some** clause admits it and its value, in the walk and in subtyping alike, and
-two clauses may claim the same key. That is valgebra's own model rather than the
-paper's, and the paper says why it is not theirs: it forbids overlapping domains
-in one map, and rejects the leftmost-match reading precisely because a semantic
-subtyping relation disregards the order of the fields. The set each node denotes
-is well defined; what it does not have is the paper's canonical form, which is
-why the domain is the field list as written.
+The paper's model is a *quasi K-step function* (Definition 4.6): named labels,
+and every other key given the default of the key type it falls in, the key
+types a partition of the keys. valgebra's clauses need not be a partition — a
+key belongs when **some** clause admits it and its value, in the walk and in
+subtyping alike, and two clauses may claim the same key. That is valgebra's own
+model rather than the paper's, and the paper says why it is not theirs: it
+forbids overlapping domains in one map (§4.4), and an overlap read at face value
+makes a key in two domains satisfy both, a conjunction where valgebra reads a
+disjunction. Neither reads the clauses in order: the paper rejects the
+leftmost-match reading because a semantic subtyping relation disregards the
+order of the fields. The set each node denotes is well defined; what it does
+not have is the paper's canonical form, which is why the domain is the field
+list as written.
 
 ## Recursion
 
@@ -740,7 +747,7 @@ Openness is the default of the key-type region the clauses leave over: `open`
 frees that region and `close` refuses it, and neither touches a region a clause
 claims. A clause short of every value claims its keys; the clauses admitting
 every value are one clause over the union of their keys, ICFP 2023's wildcard
-(l.1509-1511) written as the union its footnote 15 reads one as, of which the
+(§4.4) written as the union its footnote 15 reads one as, of which the
 part over keys another clause claims stays and the rest is the region. So a
 mapping opened keeps what a `str` key maps to and admits an `int` key with any
 value, one clause is read the same whether or not a field is declared beside
@@ -765,7 +772,7 @@ open record of both fields admits, and closing the meet closes each record on
 its own, to two records no dict belongs to both of. A `close` on sets would
 need the record normal form with its positive atoms merged, which is a change
 to the constructors for an operator no failing use case asks for, and
-closedness is per declaration wherever else it is spelled. §13.4b licenses
+closedness is per declaration wherever else it is spelled. The argument licenses
 exactly this -- a spelling-sensitive operator is permitted provided it is
 declared -- and what it forbids is one clause read two ways according to an
 unrelated field, which is incoherence rather than syntax-sensitivity.
@@ -775,7 +782,7 @@ thing a reader of `ir/transform.rs` checks against. The set the operators give
 is the obligation above, and its rows ask values.
 **[DEVIATION: open-and-close-are-term-rewrites]**
 
-SOURCE: §14.6 "Operators belong on the representation built for them"
+SOURCE: §14.6 "Operators belong on the representation built for them"; §13.4b "So a spelling-sensitive `open`/`close` is *permitted*"
 
 HELD-BY: opening_a_mapping_frees_the_region_no_clause_claims, with_records_open_keeps_the_region_a_mapping_claims, opening_a_record_that_claims_a_region_leaves_one_clause, the_two_readings_of_one_term_close_to_one_set, test_opening_is_not_a_function_of_the_set, test_a_meet_of_open_records_closes_apart_from_its_record
 
@@ -838,9 +845,12 @@ SOURCE: §13.3 "**the `S` component is absent**"
 
 HELD-BY: two_spellings_of_one_keyed_map_are_one_term, opening_drops_a_field_the_record_already_said, a_label_carrying_its_regions_default_is_absorbed
 
-**Clauses are unordered where the source orders them.** A key belongs when
+**Clauses may overlap where the source forbids it.** A key belongs when
 *some* clause admits it and its value, in the walk and in subtyping alike, and
-two clauses may claim one key. **[DEVIATION: clauses-are-unordered]**
+two clauses may claim one key: a disjunction, where ICFP 2023 forbids two
+domains of one map to overlap and an overlap read at face value is a
+conjunction. Neither reads the clauses in order.
+**[DEVIATION: clauses-may-overlap]**
 
 HELD-BY: test_heterogeneous_mapping_by_key_schema, test_two_clauses_claiming_one_key_are_a_disjunction, test_a_key_belongs_when_some_clause_admits_it_over_drawn_clauses, a_literal_keyed_clause_is_read_beside_the_clauses_that_cover_its_key, a_field_is_read_instead_of_a_clause_that_names_its_key, test_a_parsed_object_is_covered_by_whichever_clause_can_read_its_keys, test_named_field_takes_precedence_over_the_catch_all
 
@@ -958,9 +968,10 @@ HELD-BY: the_lattice_laws_hold_of_the_lines, the_complement_laws_hold_of_the_lin
 **No result here is implemented whole.** What is implemented is named per
 entry, and the shape of every gap is the same: a construction the paper gives
 over its own type language, carried out here over the fragment this IR can
-spell. The word component is the classical construction, a complement by subset
-construction, a product and an emptiness test, on the regular languages a `str`
-refinement denotes. Hosoya-Vouillon-Pierce §4.1 describe it and set it aside:
+spell. The word component is the classical construction, a complement by
+exchanging the accepting states of an automaton `regex-automata` determinized
+once per pattern, a product and an emptiness test, on the regular languages a
+`str` refinement denotes. Hosoya-Vouillon-Pierce §4.1 describe it and set it aside:
 an early XDuce used it, and it realized every exponential blow-up the types
 held, so their paper decides inclusion top-down instead. Neither that algorithm
 nor the tree-automata inclusion it decides is built, and neither is the

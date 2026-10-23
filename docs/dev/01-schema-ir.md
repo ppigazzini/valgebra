@@ -127,8 +127,8 @@ syntax, so a set that syntax can express and valgebra cannot is a completeness
 gap, while a set only a bespoke combinator could name is not. Whoever owns the
 algebra decides where that line sits; a page here records the decision, and
 [10-theory.md](10-theory.md) already shows the form such a decision takes — the
-map clauses are unordered where the paper's are ordered, written down as the
-deviation `clauses-are-unordered`.
+map clauses may overlap where the paper's may not, written down as the
+deviation `clauses-may-overlap`.
 
 ### What does not count as evidence
 
@@ -159,10 +159,10 @@ denotes dicts and has no carrier field, so supplying one changes the
 constructor. Beyond the admission test, two costs specific to this one:
 
 - The model `KeyedMap` is built from is recorded in
-  [10-theory.md](10-theory.md) as *records and maps as quasi-constant
-  functions* — named fields plus a key-typed default. No carrier appears in
-  that description, and **none appears in the source either**, which the title
-  makes worth saying out loud. Castagna's "struct" is an *access style*, not a
+  [10-theory.md](10-theory.md) as a *quasi K-step function* — named fields
+  plus a default per key type. No carrier appears in that description, and
+  **none appears in the source either**, which the title makes worth saying
+  out loud. Castagna's "struct" is an *access style*, not a
   carrier: the abstract defines one as a record "accessed by providing nominal
   keys", and §1 contrasts `r.key`, which raises where the key is absent, with
   `r[keyexp]`, which does not — one record value, two ways of reading it, one
