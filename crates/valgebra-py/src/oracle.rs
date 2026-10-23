@@ -968,6 +968,13 @@ impl LeafRelations for PoolRelations<'_, '_> {
         kind_of(self.literals.get(constant.get())?.bind(self.py))
     }
 
+    /// Whether the two constants' literals share no value: constants of two
+    /// exact types, or of one type and unequal under an equality this oracle
+    /// trusts. A literal is its constant's class under `==` within the type,
+    /// the model's singleton [FCB08, §4.2] where `==` joins nothing else to
+    /// the constant, so a constant asked against itself is how the core asks
+    /// whether its literal holds a value, and `nan`, equal to nothing, holds
+    /// none.
     fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
         let left_value = self.literals.get(left.get())?.bind(self.py);
         let right_value = self.literals.get(right.get())?.bind(self.py);
@@ -991,6 +998,10 @@ impl LeafRelations for PoolRelations<'_, '_> {
         self.heard(left_value.eq(right_value)).map(|equal| !equal)
     }
 
+    /// [`literals_disjoint`](LeafRelations::literals_disjoint) over two sets of
+    /// constants in one pass: two literals share a value where their constants
+    /// are one exact type and equal [FCB08, §4.2], under the equality the pair
+    /// form trusts.
     fn literal_sets_disjoint(&self, left: &[ConstIx], right: &[ConstIx]) -> Option<bool> {
         // Hash the smaller side and probe with the larger, which turns the
         // core's member-by-member walk into one pass. Keyed by `(type, value)`
@@ -1030,7 +1041,8 @@ impl LeafRelations for PoolRelations<'_, '_> {
         Some(true)
     }
 
-    /// Whether the constant is the only value of its exact type that `==` it.
+    /// Whether the constant is the only value of its exact type that `==` it,
+    /// which makes its literal the model's singleton [FCB08, §4.2].
     ///
     /// An exact `int`, `bool`, `str` or `bytes` and `None` are: their `==` is
     /// equality of value, and two equal values are one. A float is unless it

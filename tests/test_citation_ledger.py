@@ -118,6 +118,8 @@ SCOPE = (
     "crates/valgebra-core/src/laws.rs",
     "crates/valgebra-core/src/schema_tests.rs",
     "crates/valgebra-py/src/build.rs",
+    "crates/valgebra-py/src/build/refine.rs",
+    "crates/valgebra-py/src/oracle.rs",
     "crates/valgebra-py/src/check/walk.rs",
     "crates/valgebra-py/src/check/walk/record.rs",
     "crates/valgebra-py/src/check/walk/scalar.rs",

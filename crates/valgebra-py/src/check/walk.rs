@@ -831,6 +831,12 @@ fn walk_declined(code: &str) -> bool {
     .any(|declined| declined.as_str() == code)
 }
 
+/// Whether `value` is a member of some branch, the union clause of the
+/// membership predicate [Cas24, Def. 3], read branch by branch until one
+/// admits.
+///
+/// A walk that explains, or that settles a complement's inner walk, reads the
+/// branches in [`union_by_mode`].
 fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
     // One comparison and one call for the two walks that are not the plain
@@ -891,10 +897,11 @@ fn union_by_mode(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
     }
 }
 
-/// [`check_union`]'s scan in [`WalkMode::Settle`], read in Kleene's strong
-/// logic: a branch that admits decides the union, whatever another branch
-/// answered; a refusal beside one that stopped stops; and only refusals
-/// refuse.
+/// [`check_union`]'s scan in [`WalkMode::Settle`]: the union clause of the
+/// membership predicate [Cas24, Def. 3] read in Kleene's strong logic, where a
+/// stop is a third answer the predicate does not have. A branch that admits
+/// decides the union, whatever another branch answered; a refusal beside one
+/// that stopped stops; and only refusals refuse.
 ///
 /// A stop answers `true` in this mode, with its code in the stop cell, so each
 /// branch is read with the cell cleared, to tell a member from a stop: the
@@ -1332,6 +1339,11 @@ fn made_by_type(class: &Bound<'_, PyAny>) -> bool {
     class.get_type().is(class.py().get_type::<PyType>())
 }
 
+/// Whether `value` is a member of every member of the meet, the members' sets
+/// intersected [FCB08, Def. 4.1].
+///
+/// An explaining walk collects each member's failure until one rejects the
+/// value itself ([`rejected_the_value`]).
 fn check_intersection(
     members: &[Schema],
     value: &Value<'_, '_>,
@@ -1379,6 +1391,12 @@ fn rejected_the_value(out: &[Violation], before: usize, depth: usize) -> bool {
         .is_some_and(|since| since.iter().any(|v| v.path.len() == depth))
 }
 
+/// Whether `value` is outside the inner schema: the negation clause of the
+/// membership predicate [Cas24, Def. 3] with a third answer the predicate does
+/// not have. An inner walk that stopped decided nothing, so the complement
+/// refuses the value with the stop's code where `not` would admit it, and a
+/// value that moved while it was read is refused whatever the inner walk
+/// answered.
 fn check_complement(inner: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
     // A value matches the complement iff it does not match the inner schema; the

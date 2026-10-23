@@ -373,11 +373,12 @@ fn substitute<'py>(
 ///
 /// `type Nest[T] = T | list[Nest[list[T]]]` unfolds `Nest[int]` into
 /// `Nest[list[int]]` and that into `Nest[list[list[int]]]`: every unfolding is
-/// an alias the build has not met, so no key repeats and no fixpoint ties it.
-/// mypy refuses the shape where it is defined ("type variable nesting on right
-/// hand side"), and the same rule is asked here before the body is built. A
-/// recursion over the parameters alone, or over arguments naming none of them,
-/// repeats a key and is tied.
+/// an alias the build has not met, so no key repeats and no fixpoint ties it,
+/// and the type would have infinitely many distinct subterms, which regularity
+/// excludes [Cas23, Def. 2.1]. mypy refuses the shape where it is defined
+/// ("type variable nesting on right hand side"), and the same rule is asked
+/// here before the body is built. A recursion over the parameters alone, or
+/// over arguments naming none of them, repeats a key and is tied.
 ///
 /// The body is walked through a list rather than the native stack, since an
 /// annotation can be nested deeper than a stack holds before the build's own

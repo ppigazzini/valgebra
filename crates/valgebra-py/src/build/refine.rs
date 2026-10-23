@@ -274,11 +274,15 @@ fn kinded(base: &Schema, lits: &Pool) -> Schema {
 
 /// Refuse a constraint no value of the base can answer.
 ///
-/// A constraint that cannot be asked of a value is not a narrowing: reading a
-/// length off an `int` raises, and the walk reads a raise as a non-member, so
-/// `Annotated[int, MinLen(1)]` compiles to a schema that admits nothing at all
-/// and says nothing about why. That is a schema nobody writes on purpose, so it
-/// is refused where it is written rather than at the first value that meets it.
+/// A refinement whose predicate is not well sorted over its base is not a
+/// well-formed type [JV20, Fig. 3.3], and this is that rule read in three
+/// values: a constraint is refused where no value of the base can answer it,
+/// and kept where some can. A constraint that cannot be asked of a value is not
+/// a narrowing: reading a length off an `int` raises, and the walk reads a
+/// raise as a non-member, so `Annotated[int, MinLen(1)]` compiles to a schema
+/// that admits nothing at all and says nothing about why. That is a schema
+/// nobody writes on purpose, so it is refused where it is written rather than
+/// at the first value that meets it.
 pub(super) fn check_constraint_fits(
     base: &Schema,
     constraint: &Constraint,

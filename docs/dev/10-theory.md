@@ -92,7 +92,7 @@ each claimed equivalence against membership rather than asserting it.
 
 SOURCE: §13.2 "**The laws hold by construction**"; §2 "every combinator builds the normal"
 
-IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend, ir.rs::Schema::union_within, ir.rs::Schema::meet_within, ir.rs::Schema::complement, kind.rs::Region::union, kind.rs::Region::intersect, kind.rs::Region::complement, oracle.rs::has_complementary_pair_within
+IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend, ir.rs::Schema::union_within, ir.rs::Schema::meet_within, ir.rs::Schema::complement, kind.rs::Region::union, kind.rs::Region::intersect, kind.rs::Region::complement, oracle.rs::has_complementary_pair_within, valgebra-py/src/check/walk.rs::check_intersection
 
 HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference
 
@@ -239,7 +239,7 @@ one the notation may name or leave [Cas23, Def. 2.2].
 
 SOURCE: §3 "The model behind `Schema::KeyedMap`"; §13.3 "**The representation Theorem 4.2 produces.**"
 
-IMPLEMENTED-BY: decision.rs::Schema::holds_a_value_shallowly, decision/emptiness.rs::intersection_verdict, decision/records.rs::keyed_map_meet_verdict, decision/records.rs::keyed_map_subtype, decision/records.rs::entered, decision/records.rs::Labels::of, descr/maps.rs, descr/maps.rs::Wanted, descr/maps.rs::Search::assign, descr/maps.rs::MapAtom::absorbed, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/maps.rs::MapAtom::complement, descr/maps.rs::MapLattice::record, descr/records.rs, descr/records.rs::Atom::meet, descr/records.rs::Atom::emptiness, descr/records.rs::Atom::complement, descr/records.rs::Atom::tidy, descr/records.rs::RecordLattice::attribute, descr/values.rs::Field::top, descr/values.rs::Field::meet, descr/values.rs::Field::join, descr/values.rs::Field::complement, descr/values.rs::Field::emptiness, descr/lower.rs::map, ir.rs::Schema::record, ir.rs::canonical_fields, ir.rs::already_said, valgebra-py/src/check/walk/record.rs::keyed_map_scan
+IMPLEMENTED-BY: decision.rs::Schema::holds_a_value_shallowly, decision/emptiness.rs::intersection_verdict, decision/records.rs::keyed_map_meet_verdict, decision/records.rs::keyed_map_subtype, decision/records.rs::entered, decision/records.rs::Labels::of, descr/maps.rs, descr/maps.rs::Wanted, descr/maps.rs::Search::assign, descr/maps.rs::MapAtom::absorbed, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/maps.rs::MapAtom::complement, descr/maps.rs::MapLattice::record, descr/records.rs, descr/records.rs::Atom::meet, descr/records.rs::Atom::emptiness, descr/records.rs::Atom::complement, descr/records.rs::Atom::tidy, descr/records.rs::RecordLattice::attribute, descr/values.rs::Field::top, descr/values.rs::Field::meet, descr/values.rs::Field::join, descr/values.rs::Field::complement, descr/values.rs::Field::emptiness, descr/lower.rs::map, ir.rs::Schema::record, ir.rs::canonical_fields, ir.rs::already_said, valgebra-py/src/check/walk/record.rs::keyed_map_scan, valgebra-py/src/check/walk/record.rs::keyed_map_asks_for_its_keys, valgebra-py/src/check/walk/record.rs::keyed_map_matches_json
 
 HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition, a_key_of_whole_kinds_opens_the_parts_it_holds
 
@@ -485,12 +485,14 @@ everywhere are undecided, since deciding them means deciding whether two Python
 callables agree. Two refinements compare as refined base types do under
 Sub-Base, by an entailment of their predicates [JV20, Fig. 3.4], here without a
 solver: a bound or a step is entailed through the oracle one constraint at a
-time, and a predicate only by itself.
+time, and a predicate only by itself. A refinement whose predicate is not well
+sorted over its base is not a type at all [JV20, Fig. 3.3], and the frontend
+refuses a constraint no value of the base can answer.
 **[LOAD-BEARING: a-refinement-narrows-its-base]**
 
 SOURCE: §10 "the runtime check; the static/SMT side is"
 
-IMPLEMENTED-BY: decision.rs::refinement_subtype, decision/constraints.rs::constraint_entailed, ir.rs::Schema::refine, valgebra-py/src/check/walk/scalar.rs::check_refine
+IMPLEMENTED-BY: decision.rs::refinement_subtype, decision/constraints.rs::constraint_entailed, ir.rs::Schema::refine, valgebra-py/src/check/walk/scalar.rs::check_refine, valgebra-py/src/build/refine.rs::check_constraint_fits
 
 HELD-BY: test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker, test_every_cell_narrows_its_base_or_is_refused
 
@@ -874,7 +876,8 @@ HELD-BY: the_matrix_repeats_a_goal_only_where_a_meet_meets_a_union, a_record_of_
 
 **Regularity bounds the goals a query asks.** A schema is a finite tree with
 back edges into a finite table of definitions, so the subterms reachable by
-unfolding it are finitely many. A rule asks a pair of them or a pair built out
+unfolding it are finitely many, which is the regularity a type is asked
+[Cas23, Def. 2.1]. A rule asks a pair of them or a pair built out
 of them -- a meet of subterms and their complements from the product rule, a
 union of some of a union's members from the union rule, a bound from a fold --
 so every goal is drawn from a finite closure, as the normal forms over the
@@ -891,7 +894,7 @@ recursive meet of maps is read under its cycle rather than unfolded again.
 
 SOURCE: §14.2 "Regularity bounds the number of distinct"
 
-IMPLEMENTED-BY: decision/emptiness.rs::meet_through_a_reference
+IMPLEMENTED-BY: decision/emptiness.rs::meet_through_a_reference, valgebra-py/src/build.rs::refuse_a_growing_argument
 
 HELD-BY: every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms, the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks, the_goals_a_drawn_query_asks_are_pairs_of_the_subterms, a_recursive_meet_of_maps_is_decided_within_its_unfoldings
 
@@ -1041,7 +1044,7 @@ domains of one map to overlap and an overlap read at face value is a
 conjunction. Neither reads the clauses in order.
 **[DEVIATION: clauses-may-overlap]**
 
-IMPLEMENTED-BY: descr/maps.rs::MapLattice::record, ir.rs::canonical_clauses
+IMPLEMENTED-BY: descr/maps.rs::MapLattice::record, ir.rs::canonical_clauses, valgebra-py/src/check/walk/record.rs::covered
 
 HELD-BY: test_heterogeneous_mapping_by_key_schema, test_two_clauses_claiming_one_key_are_a_disjunction, test_a_key_belongs_when_some_clause_admits_it_over_drawn_clauses, a_literal_keyed_clause_is_read_beside_the_clauses_that_cover_its_key, a_field_is_read_instead_of_a_clause_that_names_its_key, test_a_parsed_object_is_covered_by_whichever_clause_can_read_its_keys, test_named_field_takes_precedence_over_the_catch_all
 
@@ -1134,7 +1137,7 @@ neither, and a refutation by a constant equal to itself stands always, since the
 constant is a value of its literal.
 **[DEVIATION: a-constant-is-the-values-equal-to-it]**
 
-IMPLEMENTED-BY: decision/literals.rs::finite_set_below, decision/literals.rs::the_constant_speaks_for_the_literal
+IMPLEMENTED-BY: decision/literals.rs::finite_set_below, decision/literals.rs::the_constant_speaks_for_the_literal, valgebra-py/src/check/walk/scalar.rs::literal_matches, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::literals_disjoint, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::literal_sets_disjoint, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::constant_is_alone
 
 HELD-BY: a_constant_that_does_not_equal_itself_denotes_no_value, a_literal_nan_is_the_empty_set, test_nan_never_matches_a_nan_literal, a_constant_speaks_for_its_literal_where_nothing_tells_equal_values_apart, a_constant_is_alone_where_equality_joins_nothing_to_it, test_a_float_zero_literal_is_not_proved_below_a_sign_predicate, test_a_decimal_literal_is_not_proved_below_a_predicate_on_its_exponent, test_an_attribute_record_tells_two_equal_constants_apart, test_a_literal_that_is_its_whole_class_is_proved_below_a_predicate, test_a_literal_is_not_always_a_singleton
 
@@ -1148,7 +1151,7 @@ stop's code rather than admitting it
 ([04-walk.md](04-walk.md#a-stop-is-not-a-non-member)).
 **[DEVIATION: membership-has-a-third-answer]**
 
-IMPLEMENTED-BY: valgebra-py/src/check/walk.rs::member
+IMPLEMENTED-BY: valgebra-py/src/check/walk.rs::member, valgebra-py/src/check/walk.rs::check_union, valgebra-py/src/check/walk.rs::settled_union, valgebra-py/src/check/walk.rs::check_complement
 
 HELD-BY: test_a_complement_refuses_a_value_its_inner_walk_stopped_on, test_a_complement_refuses_a_document_its_inner_walk_stopped_on, a_complement_refuses_a_value_its_inner_walk_stopped_on
 

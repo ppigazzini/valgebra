@@ -405,7 +405,8 @@ fn field_holds(
 
 /// Whether `(key, val)` is covered by some default clause: the key belongs to a
 /// clause's key schema and the value to that clause's value schema. The clauses
-/// denote a union of key×value rectangles.
+/// denote a union of key×value rectangles, a disjunction where the paper
+/// forbids two domains of one map to overlap [Cas23, §4.4].
 ///
 /// Decided in `sub`, a fast walk's frame the caller holds for the whole map:
 /// a fast walk writes neither of its buffers, but each is a value with a
@@ -571,8 +572,8 @@ impl Undeclared {
     }
 }
 
-/// A record's membership, asked key by key rather than read entry by entry, or
-/// `None` where that reading does not settle it.
+/// A record's membership [Cas23, (21)], asked key by key rather than read entry
+/// by entry, or `None` where that reading does not settle it.
 ///
 /// A dict cannot repeat a key, so the value holds nothing but declared keys
 /// exactly when the count of declared keys found equals the count it holds.
@@ -982,10 +983,12 @@ fn scalar_map_loop(
 /// declared-field index through `lookup` (a precomputed plan or a freshly built
 /// map). A key that resolves checks its value against that field; any other key
 /// must be covered by a default clause, the default of its part
-/// [Cas23, Def. 4.6]. The record matches iff every entry matches and every
-/// required field was seen, which is a dict's membership in a record type
-/// [Cas23, (21)]. How many entries it admitted is kept in `decided`, where a
-/// union asks, as the by-keys reading keeps how many fields it admitted.
+/// [Cas23, Def. 4.6], two clauses claiming one key read as a disjunction
+/// ([`covered`]) where the definition asks a partition. The record matches iff
+/// every entry matches and every required field was seen, which is a dict's
+/// membership in a record type [Cas23, (21)]. How many entries it admitted is
+/// kept in `decided`, where a union asks, as the by-keys reading keeps how many
+/// fields it admitted.
 fn keyed_map_scan(
     fields: &[Field],
     defaults: &[MapClause],
@@ -1062,9 +1065,10 @@ fn read_whole(scan: &Scan, ctx: Ctx<'_>) -> bool {
 /// stack: sixteen slots of one pointer each.
 const FOUND_ON_STACK: usize = 16;
 
-/// The keyed-map fast path over a JSON object. Keys are strings; a duplicate key
-/// keeps its last value (a reverse find), as `json.loads` does. Records are
-/// small, so a linear scan beats building a per-object map.
+/// A record's membership [Cas23, (21)] over a parsed JSON object. Keys are
+/// strings; a duplicate key keeps its last value (a reverse find), as
+/// `json.loads` does. Records are small, so a linear scan beats building a
+/// per-object map.
 pub(super) fn keyed_map_matches_json(
     fields: &[Field],
     defaults: &[MapClause],
