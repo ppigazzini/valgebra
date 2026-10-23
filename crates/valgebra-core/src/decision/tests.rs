@@ -6743,9 +6743,10 @@ fn a_member_apart_at_an_optional_label_is_dropped() {
 /// that between them -- one maps it to an `int`, the other to a `str` -- and
 /// every dict of the subject has one `None` key at most, so the union covers
 /// it. Each member's default is narrower than the subject's, so `Φ` sets both
-/// aside and reaches its base case: read exactly, that refutes, because
-/// Lemma 4.4 adds a fresh key of the escaping part to a witness, and `None`
-/// has one key to give. The same split over `int` keys is refuted, and is:
+/// aside and reaches its base case: read exactly, that refutes, because the
+/// proof of ICFP 2023's Lemma 4.7 takes a key of the escaping part that no
+/// label names (Appendix C.1), and `None` has one key to give. The same split
+/// over `int` keys is refuted, and is:
 /// `{1: 1, 2: "x"}` is in neither member.
 #[test]
 fn a_member_set_aside_on_a_finite_part_keeps_only_the_proof() {

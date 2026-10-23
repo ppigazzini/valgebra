@@ -2,9 +2,10 @@
 //!
 //! The question every relation reduces to. Subtyping is the emptiness of a
 //! difference and equivalence is two of those, so this is the module the other
-//! two rest on; it is JACM Definition 6.9 read *inductively* over the
-//! constructors rather than as a saturation -- a union is empty when every
-//! member is, a meet when its members share no value, a product when a
+//! two rest on. It reads JACM Definition 6.9's simulation by recursion over the
+//! constructors rather than as a saturation, a node met again on its own path
+//! taken as empty, which is the coinductive hypothesis -- a union is empty when
+//! every member is, a meet when its members share no value, a product when a
 //! component is -- with the value-region partition folded in the same pass, so
 //! a Boolean node reads its children's regions in constant time.
 //!

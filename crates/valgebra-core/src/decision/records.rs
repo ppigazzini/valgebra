@@ -1,11 +1,12 @@
 //! Records and mappings: what a keyed map admits, and when two of them relate.
 //!
-//! A dict is a function from keys to values that is constant on all but
-//! finitely many of them, so a *set* of dicts is written by naming the keys it
-//! constrains and saying what every other key maps to. That is the node these
-//! rules read, and they read it in the shape the frontend writes rather than in
-//! a canonical form: the fields as spelled, and the clauses unordered, so a key
-//! belongs when *some* clause admits it.
+//! A dict is a function from keys to values that is constant, within each part
+//! of a partition of the keys, on all but finitely many of them -- ICFP 2023's
+//! quasi K-step function (Definition 4.6) -- so a *set* of dicts is written by
+//! naming the keys it constrains and saying what every other key of each part
+//! maps to. That is the node these rules read, and they read it in the shape
+//! the frontend writes rather than in a canonical form: the fields as spelled,
+//! and the clauses unordered, so a key belongs when *some* clause admits it.
 //!
 //! The cursor is what keeps a field lookup from being a scan. Both field lists
 //! are sorted by name where the constructors built them, so two sorted lists
@@ -117,8 +118,9 @@ pub(super) fn keyed_map_meet_verdict(members: &[Schema], cx: &mut Cx<'_>) -> Ver
 /// refutes on a value it names, and declines where pieces of `b` cover one of
 /// `a` only together. `dict[int | str, int]` is below `{int: int, str: int}`,
 /// each key kind under a clause of its own, and no one clause covers the
-/// first's: ICFP 2023 Lemma 4.7 needs the clauses read jointly, which is the
-/// set representation's to decide, and it does.
+/// first's. The set representation splits a clause by the parts of the key
+/// partition first, which is how ICFP 2023's Lemma 4.7 compares defaults, one
+/// part at a time, and it decides the pair.
 ///
 /// One rule, the conjunction of three readings, for every shape a keyed map
 /// takes: a closed record is the rule with `da` empty, and a pure mapping the
@@ -561,8 +563,9 @@ fn spelled_by(clause: &MapClause, field: &Field, cx: &mut Cx<'_>) -> Relation {
 }
 
 /// Whether the keyed map `schema` is below the union of `members`, split
-/// across the keyed maps among them: ICFP 2023's backtrack-free `Φ`, formula
-/// (17), with the defaults read part by part as (22) reads them.
+/// across the keyed maps among them: ICFP 2023's backtrack-free `Φ` in the form
+/// (22) gives it, the defaults read part by part, to which (17) reduces the
+/// inclusion.
 ///
 /// A record whose tag takes three values lands in no single branch of a union
 /// of three records that each fix the tag, and [`keyed_map_subtype`] compares
@@ -578,6 +581,10 @@ fn spelled_by(clause: &MapClause, field: &Field, cx: &mut Cx<'_>) -> Relation {
 ///                  else Φ(R, N)
 /// ```
 ///
+/// The paper's `Φ(R, ∅)` is `false`, with (17) asking `R ≤ 0` once beside it;
+/// reading the record's emptiness at the base, and a narrowed label's where it
+/// moves, folds that disjunct into the recursion.
+///
 /// A label is read in `T⊥`, where an optional field holds absence as a value
 /// (`Slot`), and the labels are those the record and the branch name: a label
 /// both read through their defaults is below on the guard the branch was
@@ -589,12 +596,13 @@ fn spelled_by(clause: &MapClause, field: &Field, cx: &mut Cx<'_>) -> Relation {
 /// label.
 ///
 /// **The else-branch refutes only through an infinite part.** Theorem 4.5
-/// rests on Lemma 4.4, whose proof adds to a witness a fresh key of the part
-/// whose default escapes the branch, and the paper says the hypothesis that
-/// every key type is infinite "is actually used". `None` has one key and
-/// `bool` two, so a branch set aside on those parts alone keeps the proof the
-/// rest give and drops their refutation. Every other part, the one for keys of
-/// no listed kind included, has a key no label takes.
+/// proves (22) under the hypothesis §4.4 makes of every key type, that it is
+/// infinite, and the paper says the hypothesis "is actually used": the proof
+/// of Lemma 4.7 (Appendix C.1) takes a key of the part that no label names.
+/// `None` has one key and `bool` two, where the paper would write their keys
+/// as labels; this keeps the part, so a branch set aside on it alone keeps the
+/// proof the rest give and drops their refutation. Every other part, the one
+/// for keys of no listed kind included, has a key no label takes.
 ///
 /// A member that is no map this reads is set aside, and a refutation stands
 /// only where each such member shares no kind with the subject, which is

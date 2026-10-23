@@ -33,18 +33,22 @@ pub(super) fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
 /// `branches`, all of the same arity, in the three values of [`Relation`].
 ///
 /// JACM Lemma 6.5 characterizes this by splitting the negative set every way,
-/// which is `2^|N|` subsets *and* needs a hypothesis retracted whenever a split
-/// fails. ICFP §2.1.4 gives the equivalent formulation that does not backtrack,
-/// and this is that function at `n` components rather than two:
+/// `2^|N|` subsets, and an implementation that tries them must retract a
+/// hypothesis whenever a split fails (ICFP §2.1.4). That section gives the
+/// equivalent formulation that does not backtrack, and this is that function
+/// at `n` components rather than two:
 ///
 /// ```text
 /// Phi(P, [])       = P is empty
 /// Phi(P, [B, ..R]) = for every i:  P[i] <= B[i]  or  Phi(P with P[i] := P[i] \ B[i], R)
 /// ```
 ///
-/// Narrowing a component to the empty set makes the whole product empty, and the
-/// empty set is below everything -- which is the base case that makes a value
-/// split across branches decide, since no single branch contains it.
+/// The paper's `Phi(…, ∅)` is `false`, with the product's emptiness asked once
+/// beside it; asking every component's at every level folds that disjunct into
+/// the recursion. Narrowing a component to the empty set makes the whole
+/// product empty, and the empty set is below everything -- which is the base
+/// case that makes a value split across branches decide, since no single branch
+/// contains it.
 ///
 /// **A branch that shares no value with the product at some position is
 /// dropped.** Where `P[j] & B[j]` is empty, narrowing `P[j]` by `B[j]` leaves it
