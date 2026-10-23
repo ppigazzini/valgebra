@@ -271,6 +271,7 @@ proptest! {
         prop_assert!(a.union(&a.complement()).is_some());
     }
 
+    // THEORY: one-language-one-table
     /// Equality of the canonical forms is equality of the languages.
     ///
     /// The claim the whole representation rests on, held against the
@@ -321,6 +322,7 @@ proptest! {
         }
     }
 
+    // THEORY: one-language-one-table
     /// Cutting blocks by the smaller half finds the partition the rounds find,
     /// and it puts each pair of the drawn table in one block.
     ///
@@ -411,6 +413,7 @@ fn one_pattern_is_decided_inside_another() {
     );
 }
 
+// THEORY: one-language-one-table
 /// Two spellings of one language are one set, which is the canonicity claim
 /// stated on the cases a reader would doubt.
 #[test]
@@ -674,6 +677,7 @@ fn a_text_complement_cut_to_its_kind_holds_only_str_words() {
     );
 }
 
+// THEORY: one-language-one-table
 /// Complementing a minimal table leaves a minimal table.
 ///
 /// The property `RegularSet::complement` relies on to skip a minimization pass:
@@ -774,6 +778,7 @@ fn each_defect_of_a_table_is_one_well_formed_refuses() {
     }
 }
 
+// THEORY: one-language-one-table
 /// A cut gives the smaller part a new block and queues it, and the larger part
 /// keeps the block.
 ///
@@ -816,6 +821,25 @@ fn a_cut_moves_the_smaller_part() {
     let mut queued = Vec::new();
     cleared.cut_marked(&mut queued);
     assert_eq!((cleared.block, queued), (vec![0, 1, 0, 0, 0], vec![]));
+}
+
+// THEORY: one-language-one-table
+/// A block cut while it waits in the queue leaves both parts waiting.
+///
+/// D'Antoni & Veanes's Figure 3, line 14: a split block that is queued is
+/// replaced by both parts, where an unqueued one adds only its smaller part
+/// (line 15, which `a_cut_moves_the_smaller_part` holds). The larger part
+/// keeps the block's number, and with it the entry already queued, and the
+/// smaller part is pushed, so one push serves both lines.
+#[test]
+fn a_cut_of_a_queued_block_queues_both_parts() {
+    let mut partition = super::Partition::by_acceptance(&[false; 5]);
+    for state in [1, 3] {
+        partition.mark(state);
+    }
+    let mut queued = vec![0];
+    partition.cut_marked(&mut queued);
+    assert_eq!((partition.block, queued), (vec![0, 1, 0, 1, 0], vec![0, 1]));
 }
 
 /// A word is a chain of states, which is the table a refinement by rounds

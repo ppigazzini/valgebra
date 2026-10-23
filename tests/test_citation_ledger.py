@@ -63,8 +63,11 @@ LABELS: dict[str, str] = {
     "AC93": "amadio-cardelli-1993-subtyping-recursive-types",
     "CD24": "castagna-duboc-2024-guard-analysis-safe-erasure-elixir",
     "Cas23": "castagna-2023-typing-records-maps-structs-ICFP",
+    "Cas24": "castagna-2021-union-intersection-negation",
+    "DV14": "dantoni-veanes-2014-minimization-symbolic-automata",
     "FCB08": "frisch-castagna-benzaken-2008-semantic-subtyping-JACM",
     "HVP05": "hosoya-vouillon-pierce-2005-regular-expression-types-xml",
+    "JV20": "jhala-vazou-2020-refinement-types",
     "Nak00": "nakano-2000-modality-for-recursion",
 }
 

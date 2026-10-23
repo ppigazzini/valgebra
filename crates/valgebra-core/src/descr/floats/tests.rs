@@ -152,6 +152,7 @@ fn the_ordered_halves_leave_nan_outside() {
     assert_eq!(halves.complement(), FloatSet::nan());
 }
 
+// THEORY: a-constant-is-the-values-equal-to-it
 /// A literal `nan` admits nothing, because `nan` is equal to no value --
 /// itself included.
 #[test]

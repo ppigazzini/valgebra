@@ -73,6 +73,7 @@ def test_signed_zero_follows_python_equality_in_literals() -> None:
     assert Validator(-0.0).is_valid(0.0)
 
 
+# THEORY: a-constant-is-the-values-equal-to-it
 def test_nan_never_matches_a_nan_literal() -> None:
     # A float-constant literal is equality membership, and NaN != NaN, so a NaN
     # literal admits no value — not even a NaN. This mirrors Python's equality.

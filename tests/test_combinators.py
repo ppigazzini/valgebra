@@ -144,6 +144,7 @@ def _stopping(code: str) -> tuple[Validator, object]:
     return Validator(Annotated[int, at.Predicate(_raises)]), 1
 
 
+# THEORY: membership-has-a-third-answer
 @pytest.mark.parametrize("code", STOPS)
 def test_a_complement_refuses_a_value_its_inner_walk_stopped_on(code: str) -> None:
     """A walk that stopped said nothing about the set, so its negation says nothing.
@@ -210,6 +211,7 @@ def test_a_complement_refuses_a_value_that_moves_under_its_inner_scan() -> None:
     assert caught.value.code == "mutated_during_validation"
 
 
+# THEORY: membership-has-a-third-answer
 @pytest.mark.parametrize("code", ["recursion_limit", "predicate_error"])
 def test_a_complement_refuses_a_document_its_inner_walk_stopped_on(code: str) -> None:
     """The same on the JSON path, for the two stops a document can carry.

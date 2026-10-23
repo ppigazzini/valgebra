@@ -4021,6 +4021,7 @@ fn an_unordered_union_of_literals_is_not_read_as_a_set() {
     );
 }
 
+// THEORY: a-constant-is-the-values-equal-to-it
 /// A literal denotes the values equal to its constant, which for a constant
 /// that does not equal itself is none of them. The oracle answers it as the
 /// question it has: a singleton disjoint from itself is the empty set.

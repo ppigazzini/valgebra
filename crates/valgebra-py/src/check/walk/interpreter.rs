@@ -7194,6 +7194,7 @@ fn checked_by(slot: usize) -> Schema {
     }
 }
 
+// THEORY: membership-has-a-third-answer
 /// A walk that stopped has not said the value is outside a set, so a
 /// complement over it refuses the value with the stop's code: past the walk's
 /// own bound, past the reference trail's, at a value inside itself and at a

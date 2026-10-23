@@ -50,9 +50,12 @@ published version can number a result apart.
 |---|---|---|---|---|
 | `AC93` | Amadio & Cardelli, "Subtyping Recursive Types", *TOPLAS* 15(4), 1993 | the trail of recursive subtyping, the unfolding of a reference | the published article | [doi:10.1145/155183.155231](https://doi.org/10.1145/155183.155231) |
 | `Cas23` | Castagna, "Typing Records, Maps, and Structs", *PACMPL* 7(ICFP), Article 196, 2023 | records and maps: the atoms, their operations, the backtrack-free rules | the published article, with its appendices | [doi:10.1145/3607838](https://doi.org/10.1145/3607838) |
+| `Cas24` | Castagna, "Programming with Union, Intersection, and Negation Types", *The French School of Programming*, Springer, 2024, pp. 309-378 | subtyping as inclusion, the membership predicate | the preprint, v4 of 27 March 2024 (arXiv:2111.03354v4) | [doi:10.1007/978-3-031-34518-0_12](https://doi.org/10.1007/978-3-031-34518-0_12) |
 | `CD24` | Castagna & Duboc, "Guard Analysis and Safe Erasure Gradual Typing: a Type System for Elixir" | a descriptor per kind of atom, tuples as unions of atoms, the gradual pair | the preprint, v4 of 2 June 2026 | [arXiv:2408.14345v4](https://arxiv.org/abs/2408.14345v4) |
+| `DV14` | D'Antoni & Veanes, "Minimization of Symbolic Automata", POPL 2014 | the word and sequence automata: guards, minimality, partition refinement | the published paper | [doi:10.1145/2535838.2535849](https://doi.org/10.1145/2535838.2535849) |
 | `FCB08` | Frisch, Castagna & Benzaken, "Semantic Subtyping: Dealing Set-Theoretically with Function, Union, Intersection, and Negation Types", *JACM* 55(4), 2008 | the model: interpretation, normal forms, kinds, products, simulations | the published article | [doi:10.1145/1391289.1391293](https://doi.org/10.1145/1391289.1391293) |
 | `HVP05` | Hosoya, Vouillon & Pierce, "Regular Expression Types for XML", *TOPLAS* 27(1), 2005 | sequences as regular expression types, the classical algorithm, hash consing | the published article | [doi:10.1145/1053468.1053470](https://doi.org/10.1145/1053468.1053470) |
+| `JV20` | Jhala & Vazou, "Refinement Types: A Tutorial" | refined base types and their subtyping | the preprint, v1 | [arXiv:2010.07763v1](https://arxiv.org/abs/2010.07763v1) |
 | `Nak00` | Nakano, "A Modality for Recursion", LICS 2000 | guardedness: the variable of a recursive type under a guard | the published paper | [doi:10.1109/LICS.2000.855774](https://doi.org/10.1109/LICS.2000.855774) |
 
 ## The frame: a schema denotes a set
@@ -189,7 +192,9 @@ corners -- and declines past them. `Φ` characterizes the inclusion exactly, so
 the rule refutes as well as proves -- a product with a value and no branch left
 is outside the union -- where every member the rule sets aside holds none of the
 subject's values; and a branch that shares no value with the narrowed product at
-some position is dropped, which the same characterization makes exact.
+some position is dropped, which the same characterization makes exact. The
+emptiness of every component is asked at every level, where the paper asks the
+product's once beside `Φ`.
 
 SOURCE: §13.1 "**The product decomposition.**"
 
@@ -422,14 +427,17 @@ set narrowed by predicates. **[GUIDING: refinement-types]** — `Schema::Refine`
 the SMT machinery: bounds are compared through the oracle, and a user predicate
 is opaque.
 
-**A refinement is its base narrowed, and a predicate is opaque.** `Refine {
-base, constraints }` denotes `{x ∈ ⟦base⟧ | every constraint holds}`, so it is
-below its base whatever the constraints say -- a subset does not depend on
-*which* subset -- and the base is not below it, because that would need the
-predicate to hold of every value. A predicate is compared by the object
-carrying it: two refinements over one predicate are one set, and two over
-separately written predicates that agree everywhere are undecided, since
-deciding them means deciding whether two Python callables agree.
+**A refinement is its base narrowed, and a predicate is opaque.**
+`Refine { base, constraints }` denotes `{x ∈ ⟦base⟧ | every constraint holds}`,
+so it is below its base whatever the constraints say -- a subset does not depend
+on *which* subset -- and the base is not below it, because that would need the
+predicate to hold of every value. A predicate is compared by the object carrying
+it: two refinements over one predicate are one set, and two over separately
+written predicates that agree everywhere are undecided, since deciding them
+means deciding whether two Python callables agree. Two refinements compare as
+refined base types do under Sub-Base, by an entailment of their predicates
+[JV20, Fig. 3.4], here without a solver: a bound or a step is entailed through
+the oracle one constraint at a time, and a predicate only by itself.
 **[LOAD-BEARING: a-refinement-narrows-its-base]**
 
 SOURCE: §10 "the runtime check; the static/SMT side is"
@@ -524,35 +532,59 @@ and its *order* reads the spelling (`descr/integers.rs`). The set, record and
 sequence components are not canonical either way, and equality on them is
 emptiness of both differences — which is the same question, asked twice.
 
-## Three representations with no paper here
+## Automata over an algebra of letters
+
+**D'Antoni & Veanes, "Minimization of Symbolic Automata" (POPL 2014).** A
+symbolic automaton reads its letters through the predicates of an effective
+Boolean algebra rather than one at a time from a finite alphabet [DV14, §2]; a
+minimal one is unique up to renaming its states and the equivalence of its
+predicates [DV14, Thm. 1], and Hopcroft's partition refinement lifts to it
+[DV14, Fig. 3]. Both automata of the descriptor are this construction. The word
+automaton's letters are bytes in classes no state separates, which stand in for
+the minterms the figure computes [DV14, Prop. 1]. The sequence automaton's
+letters are descriptors: an edge carries a guard, and what the guards leave over
+is an *else* edge, since a descriptor naming its own universe would have to
+build itself. **[LOAD-BEARING: one-language-one-table]** — `equivalent_states`
+in `descr/regular.rs` is the figure at its lines 5 to 15, the tie-break
+included, with four differences that move no partition: line 3 queues both
+initial blocks, which the paper asks only of a partial automaton and which costs
+a complete one a splitter; line 4 reads the byte classes for the minterms; the
+loop is bounded by a pop per state; and the start block is renumbered first. The
+canonical numbering then removes the renaming, so two spellings of one word
+language have one table. The sequence automaton refines by Moore's rounds of
+signatures [DV14, §3] and compares the joined guards by equality, which is finer
+than their sets, so two states no sequence tells apart may stay apart: its table
+names a language only up to that, and sequence equality is emptiness of both
+differences.
+
+HELD-BY: the_halves_cut_where_the_rounds_do, a_cut_moves_the_smaller_part, a_cut_of_a_queued_block_queues_both_parts, two_spellings_of_one_language_are_one_set, being_equal_is_holding_the_same_language, a_complement_is_already_minimal, the_rounds_from_the_distances_end_where_the_rounds_from_one_block_do, a_complement_of_a_sequence_language_is_already_minimal
+
+## Two representations with no paper here
 
 The page's contract is that a citation names a line that exists because of it.
-Three components of the descriptor ship and have **no row above**, and saying so
-is what keeps the rest of the page readable as a complete account rather than a
-selective one. None is an unbuilt idea -- each is code, with a test suite, in the
-file named -- and each carries the construction the literature would attribute it
-to, written here as a description rather than as a citation because the source
-was not read first-hand:
+Two components of the descriptor ship and have **no row above**, and saying so is
+what keeps the rest of the page readable as a complete account rather than a
+selective one. Neither is an unbuilt idea -- each is code, with a test suite, in
+the file named -- and each carries the construction the literature would
+attribute it to, written here as a description rather than as a citation because
+no work on the shelf states it:
 
 | where | the construction | the work it belongs to |
 |---|---|---|
-| `crates/valgebra-core/src/descr/regular.rs` | a minimal deterministic automaton per word kind: cut the blocks of a partition of the states by the transitions read backwards, queueing the smaller part of each cut, then coarsen the alphabet and renumber canonically | **Hopcroft's** algorithm, `k n log n` over `n` states and `k` classes, named at the function |
-| `crates/valgebra-core/src/descr/symbolic.rs` | a refinement of the states until their signatures stop changing, started from a partition by each state's distances to acceptance and to refusal and its longest walk that keeps acceptance in reach, and signing in each round only the states that share a block, one alphabet up, where a letter is a descriptor, an edge carries a guard and the total transition is an *else* edge rather than a guard naming the universe | **Moore's** algorithm, named at the function in `automaton.rs`, and the minimization of **symbolic automata** over a Boolean algebra of guards |
 | `crates/valgebra-core/src/descr/integers.rs` | eventually periodic sets as an interval set per residue class, two periods meeting at their least common multiple | the ultimately periodic sets, which are the **one-variable fragment of Presburger arithmetic**. The representation is semilinear rather than automaton-based |
+| `crates/valgebra-core/src/descr/floats.rs` | closed intervals of floats with `nan` held apart in a bit of its own, an open end written as the neighboring float and `-0.0` read as `0.0` | the order of IEEE 754 doubles, which are discrete: a union of closed intervals is the integers' representation without the residues |
 
 **Why they are described and not cited.** A citation here is held to the rule the
 rest of the page is: the theorem was read, and matched to what the code does. For
-these three it was matched to the code and not to the paper, so a row above would
-be an attribution from memory -- which is the failure mode this page exists to
+these two no work on the shelf states the construction, so a row above would be
+an attribution from memory -- which is the failure mode this page exists to
 avoid, in a politer form than quoting a theorem number a secondary source
 reported. The reading that can be done here has been: each description above is
-against the source, `regular.rs` names Hopcroft at the function that cuts the
-partition, and `automaton.rs` names Moore at the refinement the sequence
-automaton runs.
+against the code.
 
-The consequence worth stating: **the descriptor's components are the part of
-this design least anchored in a read source.** They are held by their own test
-modules and by the completeness ledger rather than by a theorem, which is a
+The consequence worth stating: **the integer and float components are the part
+of this design least anchored in a read source.** They are held by their own
+test modules and by the completeness ledger rather than by a theorem, which is a
 weaker guarantee than the rest of the page offers and is the honest place to
 start looking if one of them is wrong.
 
@@ -708,7 +740,9 @@ built the same way, as Hosoya, Vouillon and Pierce share theirs so that a
 reflexivity check is a comparison of handles [HVP05, §5.1], so the trail's
 comparisons short-circuit on pointer identity and the per-rule caches see one
 handle per DAG member. What it buys is that sharing and nothing about a
-relation. **[LOAD-BEARING: a-node-built-alike-is-one-handle]**
+relation. The table is lossy where theirs keeps every node: a collision evicts
+and an entry is weak, so two schemas built alike are one handle while the first
+lives and holds its slot. **[LOAD-BEARING: a-node-built-alike-is-one-handle]**
 
 SOURCE: §13.6 "**Hash consing.** Hosoya-Vouillon-Pierce"
 
@@ -886,9 +920,12 @@ HELD-BY: test_eq_is_the_normal_form_and_not_the_set, laws.rs::construction_prese
 
 **The IR's keyed map carries no negative component and is not canonicalized.**
 The descriptor has one -- `MapAtom::wanted` -- so a negated record has a
-representation there; what remains is the IR node, whose `dom` is the field
-list as written rather than the semantic domain the paper's operators read.
-**[DEVIATION: no-negative-clause-component]**
+representation there; what remains is the IR node, whose `dom` is the field list
+as written rather than the semantic domain the paper's operators read. And each
+wanted constraint names the labels it excludes where it is made, which is not
+the paper's shape: [Cas23, Thm. 4.2] fixes one label set for a whole normal form
+before its atoms combine, where an atom here carries its own labels and a meet
+unions them. **[DEVIATION: no-negative-clause-component]**
 
 SOURCE: §13.3 "**the `S` component is absent**"
 
@@ -964,6 +1001,28 @@ by `MAX_ASSIGNMENTS` and declines past it.
 
 HELD-BY: two_constraints_pinned_to_one_key_ask_it_for_both, a_boolean_the_integer_label_occupies_witnesses_nothing, the_one_none_key_cannot_witness_against_its_own_label, the_search_for_keys_past_its_bound_is_unknown, test_one_key_cannot_witness_two_clauses_of_a_union
 
+**A constant is the values equal to it, so `nan` is the empty set.** The model
+takes a singleton type for every constant, `[[b_c]] = {c}` [FCB08, §4.2]. A
+literal here denotes the values of its constant's type that `==` it, which is
+that singleton for a constant equal to itself and the empty set for one that is
+not, `float("nan")`: a `nan` literal admits nothing, and a union carrying one
+beside members a supertype holds is below that supertype.
+**[DEVIATION: a-constant-is-the-values-equal-to-it]**
+
+HELD-BY: a_constant_that_does_not_equal_itself_denotes_no_value, a_literal_nan_is_the_empty_set, test_nan_never_matches_a_nan_literal
+
+**Membership has a third answer.** The membership predicate is two-valued over
+the values it is defined on, and a negation is its `not` [Cas24, Def. 3]. The
+walk answers neither for a value past what it can read -- one past the depth
+bound, one inside itself, one that moved while read, one whose predicate raised
+-- and a complement reads its inner walk in Kleene's strong logic, where that
+third answer stays the third: `complement(t)` refuses such a value with the
+stop's code rather than admitting it
+([04-walk.md](04-walk.md#a-stop-is-not-a-non-member)).
+**[DEVIATION: membership-has-a-third-answer]**
+
+HELD-BY: test_a_complement_refuses_a_value_its_inner_walk_stopped_on, test_a_complement_refuses_a_document_its_inner_walk_stopped_on, a_complement_refuses_a_value_its_inner_walk_stopped_on
+
 **The integer and float carriers are `i64` and `f64`.** Membership is exact --
 the walk reads the Python object -- and a relation *declines* where deciding it
 takes a value the carrier cannot spell. A rounded carrier would be wrong in one
@@ -1032,9 +1091,9 @@ relation. And the interning that shares a name with hash consing is a table of
 nodes, not a decision procedure. Where a page here says otherwise, the page is
 wrong.
 
-**And three components are attributed to no source at all**, which is a
-different and larger gap than any of the above: see [Three representations with
-no paper here](#three-representations-with-no-paper-here).
+**And two components are attributed to no source at all**, which is a
+different and larger gap than any of the above: see [Two representations with
+no paper here](#two-representations-with-no-paper-here).
 
 The departures are tagged rows in [the ledger above](#where-this-tree-departs-from-its-sources),
 each with the tests that hold its cost.
