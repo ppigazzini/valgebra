@@ -1461,8 +1461,8 @@ fn a_label_of_a_union_is_the_union_of_the_labels() {
 /// The key partition is read per part: a map that says what its `str` keys
 /// map to says nothing about its `int` keys.
 ///
-/// The default is a *function* on the parts, which is what Castagna's §4.4
-/// requires of a key type and what the kind partition supplies. Reading one
+/// The default is a *function* on the parts, which is what Castagna requires of
+/// a key type [Cas23, §4.4] and what the kind partition supplies. Reading one
 /// part for another would make `dict[str, int]` a claim about every key.
 #[test]
 fn a_map_constrains_one_part_of_the_key_partition() {

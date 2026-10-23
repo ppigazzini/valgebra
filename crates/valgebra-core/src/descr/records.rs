@@ -1,33 +1,34 @@
 //! Objects described by their attributes, as a union of open record atoms.
 //!
-//! An **atom** names finitely many attributes and says what each one holds; every
-//! attribute it does not name is unconstrained. That is Castagna's record type
-//! `⟨(τ_ℓ)_{ℓ∈L}; ⊤⟩` with the default fixed at `⊤` -- the always-open reading,
-//! which is the only sound one for a Python object, since an object may carry
-//! attributes no schema mentions.
+//! An **atom** names finitely many attributes and says what each one holds;
+//! every attribute it does not name is unconstrained. That is Castagna's record
+//! type `⟨(τ_ℓ)_{ℓ∈L}; ⊤⟩` [Cas23, Def. 4.1] with the default fixed at `⊤` --
+//! the always-open reading, which is the only sound one for a Python object,
+//! since an object may carry attributes no schema mentions.
 //!
 //! A field's type lives in `T⊥`, the values extended with one more element for
-//! *undefined*. That is the paper's device and it earns its place immediately:
-//! optionality stops being a flag with rules of its own and becomes membership.
-//! A required `int` field is `int`; an optional one is `int ∪ ⊥`; a field that
-//! must be missing is `⊥` alone; and an unnamed attribute's `⊤` is `anything ∪
-//! ⊥`. Meet, complement and emptiness are then the ordinary operations on `T⊥`,
-//! with the extra element carried as a bit beside the guard.
+//! *undefined* [Cas23, §4.1]. That is the paper's device and it earns its place
+//! immediately: optionality stops being a flag with rules of its own and
+//! becomes membership. A required `int` field is `int`; an optional one is `int
+//! ∪ ⊥`; a field that must be missing is `⊥` alone; and an unnamed attribute's
+//! `⊤` is `anything ∪ ⊥`. Meet, complement and emptiness are then the ordinary
+//! operations on `T⊥`, with the extra element carried as a bit beside the
+//! guard.
 //!
-//! **The default being `⊤` is what makes a negative set unnecessary.** Formula
-//! (13) says a record fails an atom by holding a *named* attribute outside its
-//! type -- an unnamed one cannot fail, being unconstrained -- so the complement
-//! of one atom is a finite union of atoms, one per label:
+//! **The default being `⊤` is what makes a negative set unnecessary.** A record
+//! fails an atom by holding a *named* attribute outside its type [Cas23, (13)]
+//! -- an unnamed one cannot fail, being unconstrained -- so the complement of
+//! one atom is a finite union of atoms, one per label:
 //!
 //! ```text
 //! ¬⟨(τ_ℓ)_{ℓ∈L}; ⊤⟩  =  ⋁_{ℓ∈L} ⟨ℓ: not(τ_ℓ); ⊤⟩
 //! ```
 //!
-//! where `not` is the complement in `T⊥`, which flips `⊥` as well (ICFP 2023,
-//! §4.1). A union of atoms is therefore closed under all three operations, and
-//! the `S` the paper carries for maps is not wanted here. It is wanted there
-//! because a map's keys are a *region* with defaults per kind, where a
-//! difference cannot be pushed onto finitely many labels; an attribute
+//! where `not` is the complement in `T⊥`, which flips `⊥` as well
+//! [Cas23, §4.1]. A union of atoms is therefore closed under all three
+//! operations, and the `S` the paper carries for maps is not wanted here. It is
+//! wanted there because a map's keys are a *region* with defaults per kind,
+//! where a difference cannot be pushed onto finitely many labels; an attribute
 //! namespace has no such regions.
 
 use super::classes::{Class, Reach};
@@ -91,8 +92,8 @@ impl<G: Guard> Atom<G> {
         }
     }
 
-    /// The objects in both: every label of either, met where they share one,
-    /// and every class constraint of either, which collect.
+    /// The objects in both: every label of either, met where they share one
+    /// [Cas23, (12)], and every class constraint of either, which collect.
     fn meet(&self, other: &Atom<G>) -> Option<Atom<G>> {
         let mut fields = self.fields.clone();
         for (label, theirs) in &other.fields {
@@ -117,9 +118,9 @@ impl<G: Guard> Atom<G> {
     /// What is known about an object satisfying this atom.
     ///
     /// Three ways to be empty, and each is a pair that cannot both hold. Some
-    /// attribute holds nothing and may not be missing either; some class it must
-    /// be an instance of derives from one it must not; or two it must be an
-    /// instance of are laid out apart.
+    /// attribute holds nothing and may not be missing either [Cas23, (11)];
+    /// some class it must be an instance of derives from one it must not; or
+    /// two it must be an instance of are laid out apart.
     ///
     /// **The open world is what makes the third answer necessary.** Two classes
     /// it must both be an instance of, neither deriving from the other and
@@ -211,9 +212,9 @@ impl<G: Guard> Atom<G> {
 
     /// The objects failing this atom, one atom per label.
     ///
-    /// Formula (13) at its simplest, which the open default earns: an object
-    /// fails by holding some *named* attribute outside its type, and each label
-    /// is one way to fail.
+    /// The difference [Cas23, (13)] gives at its simplest, which the open
+    /// default earns: an object fails by holding some *named* attribute outside
+    /// its type, and each label is one way to fail.
     fn complement(&self) -> Vec<Atom<G>> {
         let attributes = self.fields.iter().map(|(label, field)| Atom {
             fields: BTreeMap::from([(label.clone(), field.complement())]),
@@ -249,11 +250,13 @@ impl<G: Guard> Atom<G> {
     /// Drop what constrains nothing, so two ways of writing one atom compare
     /// equal.
     ///
-    /// A label whose field is the top says nothing. So does a class implied by
-    /// another already there: being an instance of a class implies being one of
-    /// its ancestors, so `is_a` keeps only what derives from nothing else in it;
-    /// and *not* being an instance of a class implies not being one of its
-    /// descendants, so `not_a` keeps only the ancestors.
+    /// A label whose field is the top says nothing, being what the default
+    /// gives it, which the notation leaves to name or not [Cas23, Def. 2.2]. So
+    /// does a class implied by another already there: being an instance of a
+    /// class implies being one of its ancestors, so `is_a` keeps only what
+    /// derives from nothing else in it; and *not* being an instance of a class
+    /// implies not being one of its descendants, so `not_a` keeps only the
+    /// ancestors.
     fn tidy(mut self) -> Atom<G> {
         self.fields.retain(|_, field| field != &Field::top());
         let is_a = self.is_a.clone();
@@ -357,7 +360,8 @@ impl<G: Guard> RecordLattice<G> {
     /// The objects carrying `label`, whose value is in `ty`.
     ///
     /// `optional` admits the objects that do not carry it at all, which is the
-    /// `⊥` in the field's type rather than a rule beside it.
+    /// `⊥` in the field's type rather than a rule beside it, as an optional
+    /// field is `t ∨ ⊥` in a record type [Cas23, §3.2].
     #[must_use]
     pub(crate) fn attribute(label: &str, ty: G, optional: bool) -> RecordLattice<G> {
         RecordLattice::one(Atom {

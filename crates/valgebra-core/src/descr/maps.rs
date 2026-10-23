@@ -1,11 +1,11 @@
 //! Maps as record atoms with per-kind defaults and a negative set.
 //!
-//! A dict is a *quasi K-step function* from keys to values (Castagna, ICFP
-//! 2023, Definition 4.6, after Frisch 2004): total on the keys, and constant on
-//! all but finitely many of the keys of each part of a partition of them. So a
-//! set of dicts is written by naming the finitely many keys it constrains and
-//! saying what every other key of each part maps to -- which is Definition
-//! 4.1's atom,
+//! A dict is a *quasi K-step function* from keys to values [Cas23, Def. 4.6],
+//! after Frisch's quasi-constant ones: total on the keys, and constant on all
+//! but finitely many of the keys of each part of a partition of them. So a set
+//! of dicts is written by naming the finitely many keys it constrains and
+//! saying what every other key of each part maps to -- which is the atom of
+//! [Cas23, Def. 4.1],
 //!
 //! ```text
 //! ⟨ (τ_ℓ)_{ℓ∈L} ; t₀ ; S ⟩
@@ -17,7 +17,8 @@
 //! the complement of a map is not a map, and the union-of-atoms form the whole
 //! representation rests on would not exist.
 //!
-//! Three properties do the work, and they are the paper's (11), (12) and (13):
+//! Three properties do the work, [Cas23, (11)], [Cas23, (12)] and
+//! [Cas23, (13)], written out below.
 //!
 //! ```text
 //! ⟨τ; t₀; S⟩ ≠ ∅   ⟺   ∀ℓ. τ_ℓ ≠ ∅   and   ∀s ∈ S. t₀ ∧ s ≠ ∅              (11)
@@ -25,16 +26,16 @@
 //! ⟨τ; t₀; S⟩ ∖ ⟨τ′; t′₀; ∅⟩  =  ⟨τ; t₀; S ∪ {¬t′₀}⟩ ∨ ⋁_{ℓ₀} ⟨τ^{ℓ₀}; t₀; S⟩ (13)
 //! ```
 //!
-//! where `τ^{ℓ₀}_ℓ` is `τ_ℓ ∧ not(τ′_ℓ)` at `ℓ₀` and `τ_ℓ` elsewhere. Read (13)
-//! as the ways to *fail* an atom: some named key's value is outside its type, or
-//! some unnamed key's value is outside the default. Finitely many, each an atom
-//! again, which is what keeps the representation closed.
+//! where `τ^{ℓ₀}_ℓ` is `τ_ℓ ∧ not(τ′_ℓ)` at `ℓ₀` and `τ_ℓ` elsewhere. Read the
+//! third as the ways to *fail* an atom: some named key's value is outside its
+//! type, or some unnamed key's value is outside the default. Finitely many,
+//! each an atom again, which is what keeps the representation closed.
 //!
-//! **The default is per key kind.** The paper's §4.4 maps are indexed by a
+//! **The default is per key kind.** The maps of [Cas23, §4.4] are indexed by a
 //! partition of the key space whose parts are pairwise disjoint -- "we propose to
 //! forbid any overlapping between domains in the same map" -- because a key
 //! belonging to two domains would have two types and the theory would be that of
-//! function intersections instead (§4.5). The kind partition is such a
+//! function intersections instead [Cas23, §4.5]. The kind partition is such a
 //! partition but for its two finite parts, `None` and `bool`, whose keys the
 //! paper would write as labels, and using it is what lets the atom stay a
 //! function. A key schema
@@ -83,6 +84,9 @@ pub(crate) const KEY_KINDS: [Kind; 8] = [
 pub(crate) const PARTS: usize = KEY_KINDS.len() + 1;
 
 /// The part a key of `kind` falls in, or `None` for a kind no key can have.
+///
+/// The parts are the key types, pairwise disjoint and covering the keys
+/// [Cas23, §4.4], each with a default of its own [Cas23, Def. 4.6].
 ///
 /// A `list`, a `set` and a `dict` are unhashable, so a dict carrying one as a key
 /// is not a dict at all, and every atom declines it.
@@ -154,17 +158,18 @@ pub(crate) struct Entry<V> {
 /// `ty`.
 ///
 /// The kind travels with the type because the default does: "some unnamed key
-/// maps outside `t₀`" is a different claim per part of the partition, and (13)
-/// produces one such constraint per part.
+/// maps outside `t₀`" is a different claim per part of the partition, and
+/// [Cas23, (13)] produces one such constraint per part.
 ///
 /// **The labels travel with it too, and that is not the paper's shape.** The
-/// paper reads `S` against the atom's own `L`, and can, because Theorem 4.2 fixes
-/// one `L` for every atom of a normal form before any of them is combined. Here
-/// each atom carries its own labels, and a meet unions them -- so an `S` read
-/// against "the atom's labels" would quietly *strengthen* as the atom learned
-/// more names, and `A ∧ B` would hold fewer maps than `A` and `B` share. Naming
-/// the exclusion set at the point the constraint is made keeps its meaning fixed
-/// under every later operation, which is the same fixing the paper does globally.
+/// paper reads `S` against the atom's own `L`, and can, because
+/// [Cas23, Thm. 4.2] fixes one `L` for every atom of a normal form before any
+/// of them is combined. Here each atom carries its own labels, and a meet
+/// unions them -- so an `S` read against "the atom's labels" would quietly
+/// *strengthen* as the atom learned more names, and `A ∧ B` would hold fewer
+/// maps than `A` and `B` share. Naming the exclusion set at the point the
+/// constraint is made keeps its meaning fixed under every later operation,
+/// which is the same fixing the paper does globally.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Wanted<G> {
     slot: usize,
@@ -200,7 +205,9 @@ pub(crate) const MAX_ASSIGNMENTS: usize = 4096;
 /// infinitely many.
 ///
 /// `bool`'s part has two keys and `None`'s one, and those are the parts where
-/// a key no label names is not always there to meet a constraint.
+/// a key no label names is not always there to meet a constraint: the paper
+/// writes such a part's keys as labels [Cas23, §4.4], since its proof takes a
+/// key no label names [Cas23, App. C.1].
 fn finite_keys(slot: usize) -> Option<Vec<Label>> {
     match KEY_KINDS.get(slot)? {
         Kind::Bool => Some(vec![Label::Bool(false), Label::Bool(true)]),
@@ -231,7 +238,8 @@ struct Search<'a, G> {
 
 impl<G: Guard> Search<'_, G> {
     /// What is known about some dict meeting every constraint in `pinned`,
-    /// with the keys held so far.
+    /// with the keys held so far: the constraints [Cas23, (11)] reads one at a
+    /// time, read together where they share a key.
     fn assign(&mut self, pinned: &[Pinned<'_, G>]) -> Verdict {
         let Some((want, rest)) = pinned.split_first() else {
             return Verdict::Inhabited;
@@ -323,28 +331,29 @@ impl<G: Guard> MapAtom<G> {
         }
     }
 
-    /// What the atom says about a label it may or may not name.
+    /// What the atom says about a label it may or may not name: its own field,
+    /// or its part's default [Cas23, Def. 4.6].
     fn field(&self, label: &Label) -> Field<G> {
         match self.labels.get(label) {
             Some(field) => field.clone(),
             // A label the atom does not name is governed by the default for its
-            // own part, which is what Definition 4.6's quasi K-step function
-            // maps it to -- so reading it here is exact rather than a widening.
+            // own part, which is what the quasi K-step function maps it to --
+            // so reading it here is exact rather than a widening.
             None => self.default_for(Some(label.kind())),
         }
     }
 
     /// The same atom with every label its part's default already covers dropped.
     ///
-    /// This is the paper's `dom`, read up to the equality of fields. Definition
-    /// 2.2 notes that the notation is "not univocal (unless we require zᵢ ≠
-    /// z...)": naming a key and giving it exactly what the default already
-    /// gives it says nothing, and two atoms that differ only in such a name are
-    /// one atom. Equality is finer than a field's set where its descriptor's is
-    /// (`Descr`), so a name it misses stays: a second spelling of one atom,
-    /// never a wrong one. Dropping the names is what makes `{"a?": nothing}`
-    /// and `{}` the same closed map rather than two that merely admit the same
-    /// dicts.
+    /// This is the paper's `dom`, read up to the equality of fields. The paper
+    /// notes [Cas23, Def. 2.2] that the notation is "not univocal (unless we
+    /// require zᵢ ≠ z...)": naming a key and giving it exactly what the default
+    /// already gives it says nothing, and two atoms that differ only in such a
+    /// name are one atom. Equality is finer than a field's set where its
+    /// descriptor's is (`Descr`), so a name it misses stays: a second spelling
+    /// of one atom, never a wrong one. Dropping the names is what makes `{"a?":
+    /// nothing}` and `{}` the same closed map rather than two that merely admit
+    /// the same dicts.
     fn absorbed(mut self) -> MapAtom<G> {
         let covered: Vec<Label> = self
             .labels
@@ -373,22 +382,22 @@ impl<G: Guard> MapAtom<G> {
             })
     }
 
-    /// (11): what is known about this atom holding a dict.
+    /// What is known about this atom holding a dict, as [Cas23, (11)] reads it.
     ///
     /// Empty as soon as a named key's type is, or no dict can satisfy every
     /// constraint of `S` at once.
     ///
-    /// The paper's (11) reads each constraint of `S` against the default alone,
-    /// and each on its own. Both rest on the hypothesis its §4.4 states for
-    /// Lemma 4.7, that every key type is infinite: a constraint is met by a key no label names, and
-    /// a second constraint by a second such key. That holds here of a part
-    /// with infinitely many keys, and a constraint its default can meet is met
-    /// by a fresh key of its own. The rest are **pinned** to keys the atom
-    /// can name -- a label of the part, or a key of `bool`'s part or `None`'s,
-    /// which have two keys and one -- and two pinned to one key ask that key
-    /// for a value in both. So those are read together: each is given a key,
-    /// every key a value in what each of its constraints asks, and the keys
-    /// the dict then carries must be keys one dict can hold.
+    /// The property reads each constraint of `S` against the default alone, and
+    /// each on its own. Both rest on the hypothesis [Cas23, §4.4] states for
+    /// [Cas23, Lem. 4.7], that every key type is infinite: a constraint is met
+    /// by a key no label names, and a second constraint by a second such key.
+    /// That holds here of a part with infinitely many keys, and a constraint
+    /// its default can meet is met by a fresh key of its own. The rest are
+    /// **pinned** to keys the atom can name -- a label of the part, or a key of
+    /// `bool`'s part or `None`'s, which have two keys and one -- and two pinned
+    /// to one key ask that key for a value in both. So those are read together:
+    /// each is given a key, every key a value in what each of its constraints
+    /// asks, and the keys the dict then carries must be keys one dict can hold.
     fn emptiness(&self) -> Verdict {
         let labels = Verdict::every(self.labels.values().map(Field::emptiness));
         if labels == Verdict::Empty {
@@ -410,9 +419,9 @@ impl<G: Guard> MapAtom<G> {
         }
         let mut pinned = Vec::new();
         for want in &self.wanted {
-            // A want past the key partition is no element of the model -- ICFP
-            // Definition 4.6 gives a default on the partition and nowhere else
-            // -- so an atom carrying one is proved nothing, as the search's
+            // A want past the key partition is no element of the model -- the
+            // model gives a default on the partition and nowhere else -- so an
+            // atom carrying one is proved nothing, as the search's
             // own reading of the same miss declines.
             let Some(default) = self.defaults.get(want.slot) else {
                 return Verdict::Unknown;
@@ -454,11 +463,12 @@ impl<G: Guard> MapAtom<G> {
         Verdict::every([labels, search.assign(&pinned)].into_iter())
     }
 
-    /// (12): the dicts in both atoms.
+    /// The dicts in both atoms, met as [Cas23, (12)] meets them.
     ///
     /// The label sets are unioned first, each side reading a label it does not
-    /// name off its own default -- which is what Definition 4.6's quasi K-step
-    /// function maps it to, so the extension is exact rather than a widening.
+    /// name off its own default -- which is what the quasi K-step function maps
+    /// it to [Cas23, Def. 4.6], so the extension is exact rather than a
+    /// widening.
     fn meet(&self, other: &MapAtom<G>) -> Option<MapAtom<G>> {
         let mut labels = BTreeMap::new();
         for label in self.labels.keys().chain(other.labels.keys()) {
@@ -488,24 +498,24 @@ impl<G: Guard> MapAtom<G> {
         })
     }
 
-    /// (13): the ways to fail this atom, as atoms.
+    /// The ways to fail this atom, as atoms, by [Cas23, (13)].
     ///
     /// An atom is `P ∖ N`, with `P = ⟨τ; t₀; ∅⟩` and `N` the maps that meet none
     /// of `S`. So `¬A` is `¬P ∨ N`, and there are three ways in:
     ///
     /// - a **named** key's value is outside what the atom allows there, which is
-    ///   (13)'s per-label disjunct taken from the whole;
+    ///   the per-label disjunct of the difference, taken from the whole;
     /// - an **unnamed** key of some part maps outside that part's default, which
-    ///   is (13)'s `¬t′₀` disjunct, one per part because the default is one per
+    ///   is its `¬t′₀` disjunct, one per part because the default is one per
     ///   part;
     /// - a constraint of `S` is not met: **no** unnamed key of its part
     ///   maps into it, which is the `N` above.
     ///
-    /// The third is why this is a complement rather than a difference. (13) is
-    /// stated for a subtrahend whose `S` is empty, and an atom that came out of a
-    /// complement does not have one -- so the caller folds complements with a
-    /// product instead of subtracting, and the case is handled here where the
-    /// `S` is in reach.
+    /// The third is why this is a complement rather than a difference. The
+    /// difference is stated for a subtrahend whose `S` is empty, and an atom
+    /// that came out of a complement does not have one -- so the caller folds
+    /// complements with a product instead of subtracting, and the case is
+    /// handled here where the `S` is in reach.
     ///
     /// The labels of `L` are written explicitly into the last two, at their top,
     /// so the witness a constraint asks for is a key **outside** `L`.
@@ -718,9 +728,10 @@ impl<G: Guard> MapLattice<G> {
     /// -- `t₀` governs the keys `L` does not name.
     ///
     /// A part `opened` does not mention is shut, which is what a record with no
-    /// catch-all forbids. Two clauses over one part join, which is the IR's
-    /// reading of overlapping clauses: a key belongs when *some* clause admits
-    /// it.
+    /// catch-all forbids, a closed record giving every key it does not name
+    /// `⊥` [Cas23, §3.2]. Two clauses over one part join, which is the IR's
+    /// reading of overlapping clauses where the paper forbids them
+    /// [Cas23, §4.4], so a key belongs when *some* clause admits it.
     #[must_use]
     pub(crate) fn record(
         labels: impl IntoIterator<Item = (Label, G, bool)>,

@@ -167,16 +167,19 @@ impl<S: Summand> PolarUnion<S> {
     /// The values in both, or `None` past the bound or where a summand's meet
     /// refuses.
     ///
-    /// A negated side is removed one summand at a time rather than rebuilt
-    /// into a union first. `¬⋁ᵢSᵢ` is `⋀ᵢ¬Sᵢ`, so both orders compute this
-    /// set; what they differ in is the widest intermediate they ask the bound
-    /// about. Rebuilding first multiplies every `¬Sᵢ` together with nothing to
-    /// narrow the product, while meeting each factor into what is already held
-    /// drops the summands holding nothing before the next factor multiplies
-    /// them. A bound reached under one spelling of a difference and not the
-    /// other would make a relation's answer a property of how it was written.
+    /// A negated side is removed one summand at a time rather than rebuilt into
+    /// a union first. `¬⋁ᵢSᵢ` is `⋀ᵢ¬Sᵢ` [FCB08, Lem. 6.2], so both orders
+    /// compute this set; what they differ in is the widest intermediate they
+    /// ask the bound about. Rebuilding first multiplies every `¬Sᵢ` together
+    /// with nothing to narrow the product, while meeting each factor into what
+    /// is already held drops the summands holding nothing before the next
+    /// factor multiplies them. A bound reached under one spelling of a
+    /// difference and not the other would make a relation's answer a property
+    /// of how it was written.
     pub(super) fn intersect(&self, other: &Self, within: S::Within) -> Option<Self> {
         let mut summands = match (self.negated, other.negated) {
+            // The meet of two unions is the union of the pairwise meets
+            // [FCB08, Lem. 6.2].
             (false, false) => product(&self.summands, &other.summands)?,
             (false, true) => self.summands.clone(),
             (true, false) => other.summands.clone(),
@@ -184,6 +187,8 @@ impl<S: Summand> PolarUnion<S> {
             // meet starts at the whole universe and both sides narrow it.
             (true, true) => vec![S::top(within)],
         };
+        // Each negated summand is subtracted from what is held, the way the
+        // proof of [Cas23, Thm. 4.2] subtracts the negated atoms one at a time.
         for negated in [self, other].into_iter().filter(|side| side.negated) {
             for summand in &negated.summands {
                 summands = product(&summands, summand.complement(within).as_ref())?;
@@ -222,10 +227,10 @@ impl<S: Summand> PolarUnion<S> {
 /// The summands a union of summands complements into, or `None` past the
 /// bound.
 ///
-/// De Morgan over the summands: `¬⋁ᵢSᵢ` is `⋀ᵢ¬Sᵢ`, and each `¬Sᵢ` is the union
-/// [`Summand::complement`] gives, so the fold is a product rather than a
-/// subtraction. It starts from the whole universe, which is what complementing
-/// no summands yields.
+/// De Morgan over the summands: `¬⋁ᵢSᵢ` is `⋀ᵢ¬Sᵢ` [FCB08, Lem. 6.2], and each
+/// `¬Sᵢ` is the union [`Summand::complement`] gives, so the fold is a product
+/// rather than a subtraction. It starts from the whole universe, which is what
+/// complementing no summands yields.
 pub(super) fn complement_all<S: Summand>(summands: &[S], within: S::Within) -> Option<Vec<S>> {
     let mut whole = vec![S::top(within)];
     for summand in summands {
@@ -234,7 +239,8 @@ pub(super) fn complement_all<S: Summand>(summands: &[S], within: S::Within) -> O
     Some(whole)
 }
 
-/// The summands of a meet, which is a meet of every pair.
+/// The summands of a meet, which is a meet of every pair, the meet of two
+/// unions in normal form [FCB08, Lem. 6.2].
 ///
 /// Every pair charges the build's allowance, because this is the loop that
 /// multiplies: the pairs are the product of the two counts, a fold over several

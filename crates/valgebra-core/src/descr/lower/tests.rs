@@ -2288,8 +2288,8 @@ proptest! {
     /// A key of whole kinds lowers, and admits a key of each part exactly
     /// where its schema holds that key.
     ///
-    /// ICFP 2023's footnote 15 lets a map's domain be a union of key types,
-    /// and a complement of whole kinds is the union of the other parts -- the
+    /// A map's domain may be a union of key types [Cas23, fn. 15], and a
+    /// complement of whole kinds is the union of the other parts -- the
     /// part for a key of no listed kind among them, which no key schema
     /// names. The answer is held to what each form denotes rather than to the
     /// partition, so a complement subtracting the wrong parts, or leaving the

@@ -76,6 +76,22 @@ SCOPE = (
     "docs/dev/*.md",
     "crates/valgebra-core/src/decision.rs",
     "crates/valgebra-core/src/decision/*.rs",
+    "crates/valgebra-core/src/descr/mod.rs",
+    "crates/valgebra-core/src/descr/lines.rs",
+    "crates/valgebra-core/src/descr/polar.rs",
+    "crates/valgebra-core/src/descr/sets.rs",
+    "crates/valgebra-core/src/descr/values.rs",
+    "crates/valgebra-core/src/descr/classes.rs",
+    "crates/valgebra-core/src/descr/budget.rs",
+    "crates/valgebra-core/src/descr/maps.rs",
+    "crates/valgebra-core/src/descr/records.rs",
+    "crates/valgebra-core/src/descr/lower.rs",
+    "crates/valgebra-core/src/descr/tests.rs",
+    "crates/valgebra-core/src/descr/lattice_tests.rs",
+    "crates/valgebra-core/src/descr/sets/*.rs",
+    "crates/valgebra-core/src/descr/maps/*.rs",
+    "crates/valgebra-core/src/descr/records/*.rs",
+    "crates/valgebra-core/src/descr/lower/*.rs",
 )
 
 #: A test module, whose tests a `HELD-BY:` line names: its citations are held to
@@ -534,7 +550,8 @@ class Item(NamedTuple):
 
     file: Path
     name: str
-    """`phi`, `Slot::below`, `Labels`, or the empty string for the module."""
+    """`phi`, `Slot::below`, `<Atom as Summand>::meet`, `Labels`, or the empty
+    string for the module."""
     doc: frozenset[tuple[str, str]]
     """What its doc comment cites."""
     steps: frozenset[tuple[str, str]]
@@ -543,7 +560,10 @@ class Item(NamedTuple):
     """The lines it holds, its doc comment's included, counted from zero."""
 
 
-_IMPL = re.compile(r"^impl\b(?:<.*?>)?\s+(?:.*?\bfor\s+)?(?:\w+::)*(?P<owner>\w+)")
+_IMPL = re.compile(
+    r"^impl\b(?:<.*?>)?\s+(?:(?:\w+::)*(?P<trait>\w+)(?:<[^{]*?>)?\s+for\s+)?"
+    r"(?:\w+::)*(?P<owner>\w+)"
+)
 _TRAIT = re.compile(r"^(?:pub(?:\([\w:]+\))?\s+)?(?:unsafe\s+)?trait\s+(?P<owner>\w+)")
 _FN = re.compile(
     r"^(?P<indent>\s*)(?:pub(?:\([\w:]+\))?\s+)?(?:const\s+)?(?:unsafe\s+)?"
@@ -607,7 +627,8 @@ def _items(path: Path) -> tuple[Item, ...]:
         name = _named(line, owner)
         block = _IMPL.match(line) or _TRAIT.match(line)
         if block is not None and not line.rstrip().endswith(";"):
-            owner = block["owner"]
+            trait = block.groupdict().get("trait")
+            owner = f"<{block['owner']} as {trait}>" if trait else block["owner"]
         if name is None:
             continue
         top = at

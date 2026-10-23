@@ -3,16 +3,17 @@
 //! The structural decision procedure reads a schema's *syntax* and applies
 //! inclusion rules to it. That is why it is sound but incomplete: a relation it
 //! has no rule for is declined, and the shape a caller happened to write decides
-//! which rules fire. The descriptor is the
-//! other approach, the one Frisch, Castagna and Benzaken take (JACM 55(4), 2008)
-//! and Castagna and Duboc implement (§7): give the *set* a representation closed
-//! under union, intersection and complement, and decide every relation by
-//! emptiness of one combination.
+//! which rules fire. The descriptor is the other approach, the one Frisch,
+//! Castagna and Benzaken take [FCB08, §4.1] and Castagna and Duboc implement
+//! [CD24, §7.1]. It gives the *set* a representation closed under union,
+//! intersection and complement, and decides every relation by emptiness of one
+//! combination.
 //!
 //! The value universe is partitioned by [`Kind`], so a set of values is a set
 //! per kind and nothing more. Union, intersection and complement are then
-//! componentwise, which is the whole reason to partition first: no rule relates
-//! a list to an int, because they live in components that never meet.
+//! componentwise, the kinds being disjoint [CD24, §7.1], which is the whole
+//! reason to partition first: no rule relates a list to an int, because they
+//! live in components that never meet.
 //!
 //! **This is built beside the structural procedure, not in place of it**, and
 //! it is the second decider a caller reaches: `subtype_relation_under` asks the
@@ -160,7 +161,9 @@ pub(crate) enum Component {
 }
 
 impl Component {
-    /// Every value of the kind.
+    /// Every value of the kind, in the representation the kind holds: a
+    /// descriptor is a record mapping each kind of atom to its own
+    /// [CD24, §7.1].
     fn top(kind: Kind) -> Component {
         match kind {
             Kind::Bool => Component::Booleans(BoolSet::BOTH),
@@ -871,7 +874,8 @@ impl Descr {
 
     /// Every value this set does not hold.
     ///
-    /// Componentwise, which is what makes it *saturate*: complementing a
+    /// Componentwise, which is what makes it *saturate*, as the negation of an
+    /// atomic type saturates the others [CD24, §7.1]. Complementing a
     /// descriptor that holds only ints gives one holding every value of every
     /// other kind, because each of those components was empty and is now full.
     /// A representation that carried only the kinds it mentions would have to
@@ -898,6 +902,9 @@ impl Descr {
         core::array::from_fn(|_| Lines::bottom())
     }
 
+    /// The union or the meet of two descriptors, kind by kind, the kinds being
+    /// disjoint [CD24, §7.1].
+    ///
     /// Charges the build's allowance: a meet of two descriptors multiplies each
     /// kind's lines against the other's, and a union then has both to carry.
     fn zip(&self, other: &Descr, op: Op) -> Option<Descr> {
@@ -930,7 +937,7 @@ impl Descr {
     /// The question a constraint asks of the base it narrows, and it is a
     /// **read** of the components rather than a set built to ask it: every
     /// component outside `kinds`, and the kindless slot beside them, proved to
-    /// hold nothing.
+    /// hold nothing, each kind a question of its own [FCB08, (4)].
     ///
     /// Asked the other way -- meet the base with the complement of a union of
     /// those kinds and test the result for emptiness -- it costs two thirds of
@@ -966,10 +973,10 @@ impl Descr {
     /// What is known about this set admitting a value.
     ///
     /// The kinds partition the universe, so a value the descriptor admits is a
-    /// value some component admits: the verdict is the union's, empty only when
-    /// every component is proved empty and inhabited as soon as one is proved
-    /// inhabited. `Unknown` is what is left -- no component proved either way,
-    /// and one of them could not say.
+    /// value some component admits [FCB08, (4)], and the verdict is the
+    /// union's, empty only when every component is proved empty and inhabited
+    /// as soon as one is proved inhabited. `Unknown` is what is left -- no
+    /// component proved either way, and one of them could not say.
     #[must_use]
     pub fn emptiness(&self) -> Verdict {
         Verdict::any(

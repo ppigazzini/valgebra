@@ -92,7 +92,7 @@ each claimed equivalence against membership rather than asserting it.
 
 SOURCE: §13.2 "**The laws hold by construction**"; §2 "every combinator builds the normal"
 
-IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference
+IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend
 
 HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference
 
@@ -230,11 +230,14 @@ holding `⊥` [Cas23, §3.2], so an absent key is outside a required field
 [Cas23, §3.2.1]; two map atoms meet pointwise [Cas23, (12)] and are empty where
 a required label is [Cas23, (11)], two mappings always sharing the empty dict
 [Cas23, fn. 11]; and one map is below another one key type at a time
-[Cas23, Lem. 4.7].
+[Cas23, Lem. 4.7]. A set of dicts is a union of the atoms of [Cas23, Def. 4.1],
+the complement of one a union of atoms again by [Cas23, (13)], read in `T⊥`
+[Cas23, §4.1], where a label given its default is one the notation may name or
+leave [Cas23, Def. 2.2].
 
 SOURCE: §3 "The model behind `Schema::KeyedMap`"; §13.3 "**The representation Theorem 4.2 produces.**"
 
-IMPLEMENTED-BY: decision.rs::Schema::holds_a_value_shallowly, decision/emptiness.rs::intersection_verdict, decision/records.rs::keyed_map_meet_verdict, decision/records.rs::keyed_map_subtype, decision/records.rs::entered, decision/records.rs::Labels::of
+IMPLEMENTED-BY: decision.rs::Schema::holds_a_value_shallowly, decision/emptiness.rs::intersection_verdict, decision/records.rs::keyed_map_meet_verdict, decision/records.rs::keyed_map_subtype, decision/records.rs::entered, decision/records.rs::Labels::of, descr/maps.rs, descr/maps.rs::Wanted, descr/maps.rs::Search::assign, descr/maps.rs::MapAtom::absorbed, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/maps.rs::MapAtom::complement, descr/maps.rs::MapLattice::record, descr/records.rs, descr/records.rs::Atom::meet, descr/records.rs::Atom::emptiness, descr/records.rs::Atom::complement, descr/records.rs::Atom::tidy, descr/records.rs::RecordLattice::attribute, descr/values.rs::Field::top, descr/values.rs::Field::meet, descr/values.rs::Field::join, descr/values.rs::Field::complement, descr/values.rs::Field::emptiness, descr/lower.rs::map
 
 HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition, a_key_of_whole_kinds_opens_the_parts_it_holds
 
@@ -519,7 +522,10 @@ comparisons — and a table over goals would buy a saving on that one shape,
 which is a measurement away rather than a guess.
 
 **The descriptor**, the representation the two Castagna papers above give and
-Elixir's `Module.Types.Descr` implements, is **[LOAD-BEARING: the-descriptor]** in
+Elixir's `Module.Types.Descr` implements -- a record mapping each kind of atom
+to its representation, the operations run kind by kind and a negation saturating
+the other kinds [CD24, §7.1], so that a relation is the emptiness of one
+combination [FCB08, §4.1] -- is **[LOAD-BEARING: the-descriptor]** in
 `crates/valgebra-core/src/descr/`.
 
 Where the procedure in `decision.rs` reads a
@@ -534,6 +540,8 @@ either decides, so a law read against membership holds of a pair where one
 spelling answers and the other declines. `a ∧ ¬(b ∨ c)` against `a ∧ ¬b ∧ ¬c`
 is the pair, De Morgan is why they are one set, and the tests below read what a
 caller is told rather than what a value is.
+
+IMPLEMENTED-BY: descr/mod.rs, descr/mod.rs::Component::top, descr/mod.rs::Descr::complement, descr/mod.rs::Descr::zip, descr/values.rs::Values::covers
 
 HELD-BY: the_lattice_laws_hold_of_the_descriptors, the_complement_laws_hold_of_the_descriptors, emptiness_agrees_with_the_values, laws.rs::the_verdict_is_stable_under_de_morgan, descr/maps/tests.rs::the_verdict_is_stable_under_de_morgan, the_descriptor_and_the_procedure_never_contradict_each_other, a_meet_with_a_negated_union_answers_as_the_spelled_out_meet, test_the_verdict_is_stable_under_de_morgan, descr/maps/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, descr/records/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, descr/sets/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, a_meet_against_a_negated_side_removes_one_line_at_a_time
 
@@ -699,19 +707,18 @@ IMPLEMENTED-BY: decision.rs::Schema::descriptor_contained_in
 
 HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding
 
-**Kinds decompose emptiness.** Positives of two kinds that share no value make
-a clause empty outright [FCB08, (5)] -- every pair but `bool` and `int`, a
-deviation below --
-negatives of another kind are dropped, and each kind is then an
-independent question -- which is what lets every kind carry its own
-representation and the whole be a product over them. `Kind` is the one
+**Kinds decompose emptiness.** Positives of two kinds that share no value make a
+clause empty outright [FCB08, (5)] -- every pair but `bool` and `int`, a
+deviation below -- negatives of another kind are dropped, and each kind is then
+an independent question [FCB08, (4)] -- which is what lets every kind carry its
+own representation and the whole be a product over them. `Kind` is the one
 partition both deciders read; `Region` is derived from it, never maintained
 beside it, and a scalar atom's region is the set of constants its basic type
 denotes [FCB08, §4.2]. **[LOAD-BEARING: kinds-decompose-emptiness]**
 
 SOURCE: §13.1 "positives of mixed kind make a clause empty outright"
 
-IMPLEMENTED-BY: decision.rs::has_disjoint_pair, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::Schema::atom_region, decision/emptiness.rs::intersection_verdict, decision/products.rs::seq_splits_across_union
+IMPLEMENTED-BY: decision.rs::has_disjoint_pair, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::Schema::atom_region, decision/emptiness.rs::intersection_verdict, decision/products.rs::seq_splits_across_union, descr/mod.rs::Descr::within, descr/mod.rs::Descr::emptiness
 
 HELD-BY: the_same_shape_under_two_kinds_does_not_meet, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart, a_kind_is_an_independent_question
 
@@ -729,7 +736,7 @@ inhabited only where one member escapes every `Sⱼ` or the letter keeps one
 member per `Sⱼ` apart (`Members::one_member_each` in `descr/sets.rs`).
 **[LOAD-BEARING: a-set-is-a-powerset]**
 
-IMPLEMENTED-BY: decision.rs::Schema::subtype_by_shape
+IMPLEMENTED-BY: decision.rs::Schema::subtype_by_shape, descr/sets.rs::Line::emptiness, descr/sets.rs::Line::one_member_each, descr/sets.rs::Line::tidy, descr/sets.rs::<Line as Summand>::meet
 
 HELD-BY: the_structural_inclusion_rules_decide_without_the_descriptor, a_meet_of_powersets_is_the_powerset_of_the_meet, a_line_is_empty_when_a_subtraction_covers_it, the_powerset_of_nothing_holds_the_empty_set, emptiness_agrees_with_the_sets, a_set_line_is_read_as_python_holds_its_members
 
@@ -754,12 +761,15 @@ rather than one default for everything unnamed. A key falls in exactly one
 region, the key types being parts the paper asks to be disjoint [Cas23, §4.4]
 and a union of key types filling each part it covers [Cas23, fn. 15], and a
 mapping constrains one region and leaves the others as the openness says. One
-map is below another one region at a time [Cas23, Lem. 4.7].
+map is below another one region at a time [Cas23, Lem. 4.7]. A key schema
+naming part of a kind is refused, overlapping domains being a theory of their
+own [Cas23, §4.5], and the two finite parts, `None` and `bool`, are the ones the
+proof of that lemma has no key to spare in [Cas23, App. C.1].
 **[LOAD-BEARING: a-clause-is-a-region]**
 
 SOURCE: §13.3 "**That is `Schema::KeyedMap` exactly**"
 
-IMPLEMENTED-BY: decision/records.rs, decision/records.rs::clause_by_key, decision/records.rs::by_constants, decision/records.rs::parts_of, decision/records.rs::Labels::slot
+IMPLEMENTED-BY: decision/records.rs, decision/records.rs::clause_by_key, decision/records.rs::by_constants, decision/records.rs::parts_of, decision/records.rs::Labels::slot, descr/maps.rs, descr/maps.rs::key_slot, descr/maps.rs::finite_keys, descr/maps.rs::MapAtom::field, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/lower.rs::map, descr/lower.rs::key_cover
 
 HELD-BY: every_key_falls_in_exactly_one_part, a_map_constrains_one_part_of_the_key_partition, test_heterogeneous_mapping_by_key_schema, a_clause_constrains_its_region_alone_over_drawn_dicts
 
@@ -992,14 +1002,18 @@ unions them. **[DEVIATION: no-negative-clause-component]**
 
 SOURCE: §13.3 "**the `S` component is absent**"
 
+IMPLEMENTED-BY: descr/maps.rs::Wanted
+
 HELD-BY: two_spellings_of_one_keyed_map_are_one_term, opening_drops_a_field_the_record_already_said, a_label_carrying_its_regions_default_is_absorbed
 
 **Clauses may overlap where the source forbids it.** A key belongs when
 *some* clause admits it and its value, in the walk and in subtyping alike, and
-two clauses may claim one key: a disjunction, where ICFP 2023 forbids two
+two clauses may claim one key: a disjunction, where [Cas23, §4.4] forbids two
 domains of one map to overlap and an overlap read at face value is a
 conjunction. Neither reads the clauses in order.
 **[DEVIATION: clauses-may-overlap]**
+
+IMPLEMENTED-BY: descr/maps.rs::MapLattice::record
 
 HELD-BY: test_heterogeneous_mapping_by_key_schema, test_two_clauses_claiming_one_key_are_a_disjunction, test_a_key_belongs_when_some_clause_admits_it_over_drawn_clauses, a_literal_keyed_clause_is_read_beside_the_clauses_that_cover_its_key, a_field_is_read_instead_of_a_clause_that_names_its_key, test_a_parsed_object_is_covered_by_whichever_clause_can_read_its_keys, test_named_field_takes_precedence_over_the_catch_all
 
@@ -1063,6 +1077,8 @@ dict then carries must be keys one dict can hold -- so the one-key record
 `{"a": int | str}` is below `{str: ~int} | {str: ~str}`. The search is bounded
 by `MAX_ASSIGNMENTS` and declines past it.
 **[DEVIATION: pinned-wants-are-read-together]**
+
+IMPLEMENTED-BY: descr/maps.rs::Search::assign
 
 HELD-BY: two_constraints_pinned_to_one_key_ask_it_for_both, a_boolean_the_integer_label_occupies_witnesses_nothing, the_one_none_key_cannot_witness_against_its_own_label, the_search_for_keys_past_its_bound_is_unknown, test_one_key_cannot_witness_two_clauses_of_a_union
 

@@ -66,8 +66,8 @@ impl<G: Guard> Values<G> {
     /// Whether every value in `inner` is in this one, or `None` where a guard
     /// refuses.
     ///
-    /// Asked as `inner ∧ ¬self = ∅`, which is the one shape a Boolean algebra
-    /// answers without an order of its own.
+    /// Asked as `inner ∧ ¬self = ∅` [FCB08, §4.1], which is the one shape a
+    /// Boolean algebra answers without an order of its own.
     #[must_use]
     pub(crate) fn covers(&self, inner: &Values<G>) -> Option<bool> {
         match self {
@@ -112,7 +112,9 @@ pub(crate) struct Field<G> {
 }
 
 impl<G: Guard> Field<G> {
-    /// Any value, or none at all -- what an attribute no atom names holds.
+    /// Any value, or none at all -- what an attribute no atom names holds, the
+    /// `1 ∨ ⊥` an open record gives every label it does not name
+    /// [Cas23, §3.2].
     #[must_use]
     pub(crate) fn top() -> Field<G> {
         Field {
@@ -121,7 +123,8 @@ impl<G: Guard> Field<G> {
         }
     }
 
-    /// The values in both, or `None` where a guard refuses.
+    /// The values in both, the meet in `T⊥` [Cas23, §4.1], or `None` where a
+    /// guard refuses.
     #[must_use]
     pub(crate) fn meet(&self, other: &Field<G>) -> Option<Field<G>> {
         Some(Field {
@@ -130,8 +133,8 @@ impl<G: Guard> Field<G> {
         })
     }
 
-    /// The values in either, or `None` where a guard refuses. Missing on either
-    /// side is missing in the union.
+    /// The values in either, the union in `T⊥` [Cas23, §4.1], or `None` where
+    /// a guard refuses. Missing on either side is missing in the union.
     #[must_use]
     pub(crate) fn join(&self, other: &Field<G>) -> Option<Field<G>> {
         Some(Field {
@@ -140,7 +143,8 @@ impl<G: Guard> Field<G> {
         })
     }
 
-    /// The rest of `T⊥`, which flips the extra element along with the type.
+    /// The rest of `T⊥`, `not(τ)`, which flips the extra element along with the
+    /// type [Cas23, §4.1].
     #[must_use]
     pub(crate) fn complement(&self) -> Field<G> {
         Field {
@@ -150,7 +154,9 @@ impl<G: Guard> Field<G> {
     }
 
     /// What is known about something satisfying this field. Being allowed to be
-    /// missing settles it whatever the type says.
+    /// missing settles it whatever the type says, an optional field never being
+    /// empty [Cas23, fn. 11], and a required one is empty where its type is
+    /// [Cas23, (11)].
     #[must_use]
     pub(crate) fn emptiness(&self) -> Verdict {
         if self.absent {

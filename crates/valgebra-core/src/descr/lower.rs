@@ -288,6 +288,10 @@ pub fn lower_within(bounds: Bounds, schema: &Schema, pool: &dyn Constants) -> Op
 }
 
 /// [`lower`] with the nodes left to spend, which every node spends one of.
+///
+/// Each node lowers to the set it denotes: the bounds to the universe and the
+/// empty set, and a union, a meet and a complement to the union, intersection
+/// and complement of their members' sets [FCB08, Def. 4.1].
 fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>, depth: u32) -> Option<Descr> {
     budget.set(budget.get().checked_sub(1)?);
     let depth = depth.checked_sub(1)?;
@@ -348,8 +352,9 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>, depth: u32
 /// *beside* them: clauses are a disjunction, so a key the clause names is
 /// admitted when it or any other clause covering that key admits the value,
 /// and the label's type is the join of every clause that reads it. A clause
-/// whose key is a *kind* opens that part of the key partition. What no clause
-/// opens stays shut, which is what makes a record with no catch-all closed.
+/// whose key is a *kind* opens that part of the key partition [Cas23, §4.4].
+/// What no clause opens stays shut, which is what makes a record with no
+/// catch-all closed [Cas23, §3.2].
 fn map(
     fields: &[Field],
     defaults: &[MapClause],
@@ -405,19 +410,21 @@ fn map(
 /// `None` where it is neither -- a key schema covering *part* of a kind, such as
 /// a regex over strings, would need the default to hold a set of keys rather
 /// than a part of the partition, and that is the theory of overlapping domains
-/// the paper sets aside: "it is possible to define a theory for maps with
-/// overlapping domains, but in that case, there would not be any difference
-/// between record types and an intersection of function types whose codomain may
-/// contain an undefined value". Refusing is what keeps the default a function.
+/// the paper sets aside [Cas23, §4.5], "it is possible to define a theory for
+/// maps with overlapping domains, but in that case, there would not be any
+/// difference between record types and an intersection of function types whose
+/// codomain may contain an undefined value". Refusing is what keeps the default
+/// a function.
 ///
-/// A complement of whole parts is the other parts. The parts are a partition
-/// of the keys, so a key outside every part `inner` opens is in one of the
-/// rest, the part for a key of no listed kind among them: `~str` opens seven
-/// kinds and the classes, `~int` neither `int` nor `bool`, and `~bool` opens
-/// `int`, whose part holds no boolean. That is a union of key types, which
-/// footnote 15 lets a domain be, and the remaining parts are a complement's
-/// keys because the key types cover the keys (§4.4). A complement of a
-/// constant cuts a part, so it is refused with the constant.
+/// A complement of whole parts is the other parts. The parts are a partition of
+/// the keys, so a key outside every part `inner` opens is in one of the rest,
+/// the part for a key of no listed kind among them: `~str` opens seven kinds
+/// and the classes, `~int` neither `int` nor `bool`, and `~bool` opens `int`,
+/// whose part holds no boolean. That is a union of key types, which
+/// [Cas23, fn. 15] lets a domain be, and the remaining parts are a complement's
+/// keys because the key types cover the keys [Cas23, §4.4], each part with its
+/// own default [Cas23, Def. 4.6]. A complement of a constant cuts a part, so it
+/// is refused with the constant.
 pub(crate) fn key_cover(
     key: &Schema,
     pool: &dyn Constants,
