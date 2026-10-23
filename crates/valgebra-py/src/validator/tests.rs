@@ -28,6 +28,23 @@ fn pooled_over(literals: Vec<Py<PyAny>>) -> Validator {
     Validator::new(Schema::ANYTHING, literals, Vec::new())
 }
 
+/// A validator dropped while the thread is detached leaks its pooled objects
+/// rather than aborting the process. With `PyO3`'s reference pool compiled out,
+/// `pyo3_leak_on_drop_without_reference_pool` decides a drop the interpreter
+/// cannot take (`.cargo/config.toml`), and a `PyO3` that reads the flag by
+/// dropping the reference a second time recurses until the stack overflows:
+/// this row is the one that says so.
+#[test]
+fn a_validator_dropped_while_detached_leaks_its_pool() {
+    let held = Python::attach(|py| {
+        pooled_over(vec![
+            py.None(),
+            1i64.into_pyobject(py).unwrap().into_any().unbind(),
+        ])
+    });
+    drop(held);
+}
+
 #[test]
 fn the_pool_reads_a_scalar_by_its_exact_type() {
     Python::attach(|py| {

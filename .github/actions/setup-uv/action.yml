@@ -9,7 +9,7 @@ inputs:
       morning. Dependabot bumps the action SHA below but not this pin: rotate it
       on the monthly maintenance pass, in step with the uv-pre-commit rev.
     required: false
-    default: "0.13.3"
+    default: "0.13.5"
   python-version:
     description: >-
       Interpreter for uv to install and put on the path. Left empty, uv picks
@@ -39,8 +39,27 @@ runs:
     - name: Take uv's interpreter rather than the image's
       shell: bash
       run: echo "UV_PYTHON_PREFERENCE=only-managed" >> "$GITHUB_ENV"
+    # A build cache's key names the release a lane asks for, and the build
+    # behind that release is the newest patch the pinned uv's own download list
+    # carries, so a uv release can move every lane's interpreter while every
+    # key stands still. pyo3 asks for its interpreter again only when
+    # `PYO3_PYTHON` or `PYO3_ENVIRONMENT_SIGNATURE` changes value, and a lane's
+    # `PYO3_PYTHON` is `.venv/bin/python` whichever build stands behind it: a
+    # restored `target/` links a libpython at a path the runner no longer has.
+    # The signature names the pin, so a uv release makes pyo3 resolve again.
+    # `tests/test_lane_interpreters.py` holds it to the input.
+    #
+    # The workflow audit refuses a computed value written to the environment
+    # file, since an attacker who controls the value can append variables of
+    # their own. This one is the uv release the calling workflow names, or the
+    # default above, and no event payload reaches it.
+    - name: Name the uv release to pyo3
+      shell: bash
+      env:
+        UV_VERSION: ${{ inputs.uv-version }}
+      run: echo "PYO3_ENVIRONMENT_SIGNATURE=uv-$UV_VERSION" >> "$GITHUB_ENV" # zizmor: ignore[github-env]
     - id: install
-      uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       continue-on-error: true
       with:
         version: ${{ inputs.uv-version }}
@@ -48,7 +67,7 @@ runs:
         enable-cache: ${{ inputs.enable-cache }}
     - name: Retry the uv install
       if: steps.install.outcome == 'failure'
-      uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       with:
         version: ${{ inputs.uv-version }}
         python-version: ${{ inputs.python-version }}

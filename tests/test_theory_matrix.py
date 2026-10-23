@@ -63,7 +63,7 @@ class HashableList(list):
     """
 
     __slots__ = ()
-    __hash__ = object.__hash__  # ty: ignore[invalid-assignment]
+    __hash__ = object.__hash__
 
 
 class LyingKey(str):

@@ -746,6 +746,17 @@ keys its cache on that interpreter for the same reason, the `python` matrix
 included, and `tests/test_lane_interpreters.py` holds each key to naming every
 interpreter its job installs.
 
+**The uv release is named to pyo3 beside the key.** A key names the release a
+lane asks for, and the build behind it is the newest patch the pinned uv's own
+download list carries, so a uv release can move every lane's interpreter while
+every key stands still: a restored `target/` then links a libpython at a path
+the runner no longer has, and the workload fails to link. pyo3 also resolves its
+interpreter again when `PYO3_ENVIRONMENT_SIGNATURE` changes value, and
+`.github/actions/setup-uv` exports it naming the uv release, so a uv release
+costs a rebuild of pyo3 and what links it rather than a link against a build
+that is gone. `tests/test_lane_interpreters.py` holds the export to the
+wrapper's input.
+
 **Every build cache is keyed on the runner image as well.** A lane that names no
 interpreter -- `rust test`, `rust coverage` -- builds against the image's own,
 and pyo3 asks for it again only when `PYO3_PYTHON` changes. The key

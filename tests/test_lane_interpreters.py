@@ -34,7 +34,11 @@ A lane that builds against the image's own interpreter has the image for its
 interpreter, and the key the cache action computes does not name the image: a
 cache saved on Ubuntu 24.04 links libpython3.12 on an image that has none. So
 the toolchain wrapper exports the image's name under a prefix the key reads,
-and every job restores its cache behind the wrapper.
+and every job restores its cache behind the wrapper. And a key names the
+release a lane asks for, while the build behind it is the pinned uv's newest
+patch of that release: a uv release moves every lane's build with no key
+moving. pyo3 also resolves again when `PYO3_ENVIRONMENT_SIGNATURE` changes, so
+the uv wrapper exports it naming the uv release.
 
 LEDGER: no lane installs an interpreter without naming it
 """
@@ -78,6 +82,15 @@ _KEYED_PREFIXES = ("CARGO", "CC", "CFLAGS", "CXX", "CMAKE", "RUST")
 _EXPORTS_IMAGE = re.compile(
     r'\b([A-Z][A-Z_]*)=\$\{ImageOS\b[^}]*\}.*>>\s*"\$GITHUB_ENV"'
 )
+
+#: A `run:` line exporting pyo3's environment signature, with the variables
+#: its value expands.
+_EXPORTS_SIGNATURE = re.compile(
+    r'\bPYO3_ENVIRONMENT_SIGNATURE=([^"\s]*).*>>\s*"\$GITHUB_ENV"'
+)
+
+#: A shell variable expanded in a value.
+_EXPANDED = re.compile(r"\$\{?([A-Za-z_]\w*)")
 
 #: An interpreter uv is asked for by name: `pypy-3.11`, `graalpy-24`.
 _NAMED = re.compile(r"\b([a-z][a-z_]*[a-z])-\d")
@@ -313,6 +326,23 @@ def test_the_toolchain_wrapper_names_the_image_in_the_cache_key() -> None:
         f"and the cache key reads only names starting {_KEYED_PREFIXES}: a cache "
         "saved on one image restores on the next, linking the interpreter the "
         "first image carried"
+    )
+
+
+def test_the_uv_wrapper_names_its_release_to_pyo3() -> None:
+    wrapper = ROOT / WRAPPER.removeprefix("/") / "action.yml"
+    named = [
+        name
+        for step in read_workflow(wrapper)["runs"]["steps"]
+        for value in _EXPORTS_SIGNATURE.findall(str(step.get("run", "")))
+        for name in _EXPANDED.findall(value)
+        if "inputs.uv-version" in str((step.get("env") or {}).get(name, ""))
+    ]
+    assert named, (
+        "the uv wrapper exports no `PYO3_ENVIRONMENT_SIGNATURE` naming its "
+        "`uv-version` input: a uv release moves the build behind every lane's "
+        "interpreter with no cache key moving, and pyo3 then links the build "
+        "a restored cache was configured against"
     )
 
 

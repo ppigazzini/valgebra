@@ -392,7 +392,7 @@ class _HashableAgain(_UnhashableInt):
 class _HashableList(list):
     """A `list` that is a dict key."""
 
-    __hash__ = object.__hash__  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+    __hash__ = object.__hash__  # type: ignore[assignment]
 
 
 @pytest.mark.parametrize(

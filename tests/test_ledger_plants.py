@@ -3997,6 +3997,19 @@ PLANTS = (
         trips=("test_the_toolchain_wrapper_names_the_image_in_the_cache_key",),
     ),
     Plant(
+        # The uv wrapper naming the release a lane asks for to pyo3 in place of
+        # the uv release: a uv release moves every build with nothing moving.
+        "tests/test_lane_interpreters.py",
+        (".github/actions/setup-uv/action.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/actions/setup-uv/action.yml",
+            "        UV_VERSION: ${{ inputs.uv-version }}\n",
+            "        UV_VERSION: ${{ inputs.python-version }}\n",
+        ),
+        trips=("test_the_uv_wrapper_names_its_release_to_pyo3",),
+    ),
+    Plant(
         # A lane restoring its cache before the wrapper has named the image.
         "tests/test_lane_interpreters.py",
         (".github/workflows/ci.yml",),
@@ -4006,11 +4019,11 @@ PLANTS = (
             "      - uses: $/.github/actions/setup-rust\n"
             "        with:\n"
             "          toolchain: stable\n"
-            "      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
-            " # v2.9.2\n"
+            "      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0"
+            " # v2.9.3\n"
             "      # The default feature set",
-            "      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
-            " # v2.9.2\n"
+            "      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0"
+            " # v2.9.3\n"
             "      - uses: $/.github/actions/setup-rust\n"
             "        with:\n"
             "          toolchain: stable\n"
