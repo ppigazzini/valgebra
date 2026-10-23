@@ -16,9 +16,9 @@
 //! the sequence automaton alone reads it. The word automaton cuts its blocks by
 //! the transitions read backwards, which takes `k n log n` work over its byte
 //! classes. Over guards, reading the transitions backwards needs the minterms
-//! of every guard, or D'Antoni & Veanes's Figure 4, which does without them at
-//! the cost of a satisfiability check per split; rounds of signatures need
-//! neither. From one block they take a round per state on a chain, so the
+//! of every guard, or the minimization of [DV14, Fig. 4], which does without
+//! them at the cost of a satisfiability check per split; rounds of signatures
+//! need neither. From one block they take a round per state on a chain, so the
 //! sequence automaton starts them from a partition by each state's distances
 //! (`seed` in `symbolic.rs`), which parts a chain before the first round.
 
@@ -55,7 +55,8 @@ pub(super) const fn chain_fits(letters: usize) -> bool {
 }
 
 /// Whether a walk from state zero reaches a state `accepts` holds, following
-/// the targets `follow` pushes for each state it visits.
+/// the targets `follow` pushes for each state it visits: the emptiness test of
+/// the classical construction [HVP05, §4.1].
 ///
 /// Each state is visited once, so the walk ends because the states are finite.
 /// The caller decides which transitions are followed: every one, for a proof
@@ -84,11 +85,11 @@ pub(super) fn reaches(
 /// first reaches them, and each one's position in that order.
 ///
 /// The canonical numbering: a minimal table is unique up to renaming its
-/// states, and over guards up to their equivalence (D'Antoni & Veanes, Theorem
-/// 1); numbering the states by a walk that takes each state's transitions in a
-/// fixed order removes the renaming. That order is `targets`', so it is the
-/// caller's -- the byte classes in order, or the edges in guard order -- and a
-/// state no walk reaches gets no number.
+/// states, and over guards up to their equivalence [DV14, Thm. 1]; numbering
+/// the states by a walk that takes each state's transitions in a fixed order
+/// removes the renaming. That order is `targets`', so it is the caller's -- the
+/// byte classes in order, or the edges in guard order -- and a state no walk
+/// reaches gets no number.
 pub(super) fn canonical_order<I: IntoIterator<Item = u32>>(
     targets: impl Fn(u32) -> I,
 ) -> (Vec<u32>, FxHashMap<u32, u32>) {
@@ -110,7 +111,9 @@ pub(super) fn canonical_order<I: IntoIterator<Item = u32>>(
 }
 
 /// The coarsest partition of `count` states that `signature` cannot split,
-/// refined from `block`: Moore's algorithm, by signatures.
+/// refined from `block`: Moore's algorithm, by signatures, which D'Antoni &
+/// Veanes lift to guards [DV14, §3], toward the equivalence of
+/// [DV14, Def. 3].
 ///
 /// Each round splits every block by its members' signatures under the current
 /// partition -- one more input of lookahead. The part holding a block's first

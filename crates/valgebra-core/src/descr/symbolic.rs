@@ -13,9 +13,9 @@
 //! partition the universe -- pairwise disjoint, and covering. That is what keeps
 //! the machine deterministic and complete without listing an alphabet, and it is
 //! what makes a complement a flip of the accepting states rather than a
-//! construction. The technique is a symbolic automaton; the only thing it asks
-//! of a letter is that value sets form a Boolean algebra, which is what
-//! [`Guard`] says.
+//! construction. The technique is a symbolic automaton [DV14, §2]; the only
+//! thing it asks of a letter is that value sets form a Boolean algebra, which
+//! is what [`Guard`] says.
 //!
 //! **The recursion lives in the states, not in the guards.** `list[T]` is one
 //! accepting state with a self-loop guarded by `T` -- the cycle is an edge, so
@@ -62,7 +62,8 @@ pub(crate) const MAX_ROW: usize = MAX_STATES;
 pub(crate) const MAX_EDGES: usize = 1 << 16;
 
 /// A Boolean algebra of value sets, which is what an automaton's guards must
-/// form.
+/// form: an effective Boolean algebra [DV14, §2] short of a name for the
+/// universe.
 ///
 /// The three operations plus emptiness are all the machine asks of a letter.
 /// `meet` and `join` may refuse -- a component of the descriptor is bounded, and
@@ -186,9 +187,10 @@ type Signature<G> = (bool, Vec<(u32, Option<G>)>);
 /// State zero is the start. The edges leaving each state partition the value
 /// universe and are held in guard order, so equal tables are equal languages.
 /// The converse holds of minimal tables up to equivalence of their guards
-/// (D'Antoni & Veanes, Theorem 1 and §2): the canonical numbering removes the
-/// renaming, and a guard is compared as a descriptor, whose equality is finer
-/// than its set, so two tables of one language may still differ.
+/// [DV14, Thm. 1] in the reading [DV14, §2] gives the theorem, and the
+/// canonical numbering removes the renaming, and a guard is compared as a
+/// descriptor, whose equality is finer than its set, so two tables of one
+/// language may still differ.
 ///
 /// A lookup below answers a miss with state zero or with no edges rather than
 /// refusing, for the reason the byte automaton in `regular.rs` gives: a
@@ -263,8 +265,9 @@ impl<G: Guard> SymbolicDfa<G> {
         Some(canonical)
     }
 
-    /// The table a shape spells, and whether every prefix letter is proved to
-    /// hold a value, which is what makes it minimal as built.
+    /// The table a shape spells, complete by an else edge on every state
+    /// [DV14, §2], and whether every prefix letter is proved to hold a value,
+    /// which is what makes it minimal as built.
     fn chain(prefix: &[G], tail: Option<&G>) -> (SymbolicDfa<G>, bool) {
         let last = prefix.len();
         // The sink sits past the prefix states and the tail state.
@@ -358,7 +361,8 @@ impl<G: Guard> SymbolicDfa<G> {
         self.emptiness() == Verdict::Empty
     }
 
-    /// What is known about this language holding a sequence.
+    /// What is known about this language holding a sequence, by the classical
+    /// emptiness test, a walk to an accepting state [HVP05, §4.1].
     ///
     /// Two walks rather than one. The generous walk follows every edge whose
     /// guard is not *proved* dead: reaching no accepting state there proves the
@@ -384,7 +388,7 @@ impl<G: Guard> SymbolicDfa<G> {
     }
 
     /// Whether an accepting state is reachable, following the edges `reach`
-    /// admits.
+    /// admits, an edge taken where its guard is satisfiable [DV14, §2].
     fn accepts_under(&self, reach: Reach) -> bool {
         reaches(
             |state| self.accepts(state),
@@ -440,10 +444,11 @@ impl<G: Guard> SymbolicDfa<G> {
 
     /// Every sequence this language does not hold.
     ///
-    /// A flip of the accepting states, which is sound only because the edges
-    /// leaving each state *cover* the universe: a machine that could fall off
-    /// the table rejects by falling, and flipping its flags would accept those
-    /// sequences instead of the ones it meant.
+    /// A flip of the accepting states [HVP05, §4.1], which is sound only
+    /// because the edges leaving each state *cover* the universe [DV14, §2],
+    /// since a machine that could fall off the table rejects by falling, and
+    /// flipping its flags would accept those sequences instead of the ones it
+    /// meant.
     #[must_use]
     pub(crate) fn complement(&self) -> SymbolicDfa<G> {
         // The flip of a minimal machine is minimal: a sequence separates two
@@ -474,8 +479,9 @@ impl<G: Guard> SymbolicDfa<G> {
         }
     }
 
-    /// The sequences in both languages: the whole language is the identity and
-    /// the empty one absorbs, as [`union`](Self::union) reads them.
+    /// The sequences in both languages, the classical product [HVP05, §4.1],
+    /// where the whole language is the identity and the empty one absorbs, as
+    /// [`union`](Self::union) reads them.
     #[must_use]
     pub(crate) fn intersect(&self, other: &SymbolicDfa<G>) -> Option<SymbolicDfa<G>> {
         match (self.constant(), other.constant()) {
@@ -498,7 +504,8 @@ impl<G: Guard> SymbolicDfa<G> {
         }
     }
 
-    /// The product, accepting where `accept` says so.
+    /// The product, accepting where `accept` says so, the construction of
+    /// [HVP05, §4.1] over guards.
     ///
     /// One walk over reachable state *pairs* ([`Reached`]), each new one
     /// charging the build's allowance. The guards of a pair are the
@@ -601,7 +608,7 @@ impl<G: Guard> SymbolicDfa<G> {
     }
 
     /// Join the guards of edges that share a target, so a state's edge list has
-    /// one entry per target.
+    /// one entry per target, the normalized form of [DV14, §2].
     ///
     /// Two edges to one state are two ways to say one transition, and a form
     /// that kept them apart would make two equal languages unequal. A guard
@@ -652,8 +659,8 @@ impl<G: Guard> SymbolicDfa<G> {
     /// The same three passes [`regular`](super::regular) uses, with the middle
     /// one replaced: there is no alphabet to coarsen, so the edges of a state
     /// are put in guard order instead. Merge the states no sequence tells apart,
-    /// order every edge list, and renumber by a walk that takes edges in that
-    /// order.
+    /// the quotient of [DV14, Thm. 2], order every edge list, and renumber by a
+    /// walk that takes edges in that order.
     ///
     /// Total, and deliberately. The passes ask the guards to *join*, and a
     /// guard past its own bound refuses; a refusal there leaves two edges where
@@ -673,14 +680,14 @@ impl<G: Guard> SymbolicDfa<G> {
 
     /// Merge the states no sequence distinguishes.
     ///
-    /// A state's *signature* is its accepting flag together with, for each block
-    /// it can reach, the values that reach it. Two states with one signature
-    /// have one transition function, so they merge; refining until the
-    /// signatures stop changing is Moore's algorithm. D'Antoni & Veanes §3 lift
-    /// it to guards by asking whether a conjunction of two is satisfiable; a
-    /// signature compares the joined guards by equality instead, which is finer
-    /// than their sets, so two states no sequence tells apart may stay apart --
-    /// a larger table, never a wrong one.
+    /// A state's *signature* is its accepting flag together with, for each
+    /// block it can reach, the values that reach it. Two states with one
+    /// signature have one transition function, so they merge; refining until
+    /// the signatures stop changing is Moore's algorithm, which D'Antoni &
+    /// Veanes lift to guards [DV14, §3] by asking whether a conjunction of two
+    /// is satisfiable; a signature compares the joined guards by equality
+    /// instead, which is finer than their sets, so two states no sequence tells
+    /// apart may stay apart -- a larger table, never a wrong one.
     ///
     /// **The refinement starts from three distances a state has along the
     /// table's edges**: to an accepting state, to a rejecting one, and the
@@ -735,7 +742,8 @@ impl<G: Guard> SymbolicDfa<G> {
     }
 
     /// The blocks this state reaches, with the values that reach each, plus
-    /// whether it accepts.
+    /// whether it accepts: what one round of Moore's refinement compares
+    /// [DV14, §3].
     fn signature(&self, state: usize, block: &[u32]) -> Signature<G> {
         let state = u32::try_from(state).unwrap_or(0);
         let mut reached: Vec<(u32, Option<G>)> = Vec::new();
@@ -896,7 +904,8 @@ impl<G: Guard> SymbolicDfa<G> {
         distance
     }
 
-    /// Put every edge list in guard order and drop the edges no value can take.
+    /// Put every edge list in guard order and drop the edges no value can take,
+    /// so the table is clean of moves no sequence uses [DV14, §2].
     ///
     /// Both halves are canonicity. A guarded edge whose guard is empty is a
     /// transition no sequence uses -- `shape` makes one for a guard that admits
@@ -920,7 +929,8 @@ impl<G: Guard> SymbolicDfa<G> {
     }
 
     /// Renumber by a walk that takes edges in order, dropping unreachable
-    /// states ([`canonical_order`]).
+    /// states ([`canonical_order`]), which removes the renaming a minimal table
+    /// is unique up to [DV14, Thm. 1].
     fn renumber(&self) -> SymbolicDfa<G> {
         let (order, ids) =
             canonical_order(|state| self.outgoing(state).iter().map(|edge| edge.target));
@@ -941,10 +951,11 @@ impl<G: Guard> SymbolicDfa<G> {
     }
 }
 
-/// The two edges a single guard induces: the values it holds go one way, and the
-/// else edge takes the rest. Together they cover the universe, which is the
-/// invariant every state's edge list carries -- and the else edge is why the
-/// guard's complement is not needed to state it.
+/// The two edges a single guard induces: the values it holds go one way, and
+/// the else edge takes the rest. Together they cover the universe, which is
+/// what keeps the table complete [DV14, §2], which is the invariant every
+/// state's edge list carries -- and the else edge is why the guard's complement
+/// is not needed to state it.
 ///
 /// `covers` says whether the guard takes every value, which the caller asks.
 fn partition<G: Guard>(guard: &G, covers: bool, taken: u32, sink: u32) -> Vec<Edge<G>> {
@@ -1065,7 +1076,8 @@ impl<G: Guard> Met<G> {
     }
 }
 
-/// The values a state's else edge takes: everything its guarded edges do not.
+/// The values a state's else edge takes: everything its guarded edges do not,
+/// the edge completion adds [DV14, §2].
 ///
 /// `None` where a guard refuses to join or complement, which is the bounded
 /// case: the answer is then unknown rather than empty, and a caller that was

@@ -9,12 +9,12 @@
 //! says so.
 //!
 //! **The representation is a minimal deterministic automaton, canonically
-//! numbered.** A regular language has one minimal DFA up to isomorphism, so
-//! minimizing and then renumbering the states in a fixed order makes the
-//! representation canonical: two sets hold the same words exactly when their
-//! tables are equal. That is what lets a decision compare representations
-//! instead of running a language-equivalence check at every step; `Descr` names
-//! the components that are not canonical.
+//! numbered.** A regular language has one minimal DFA up to isomorphism
+//! [DV14, Thm. 1], so minimizing and then renumbering the states in a fixed
+//! order makes the representation canonical: two sets hold the same words
+//! exactly when their tables are equal. That is what lets a decision compare
+//! representations instead of running a language-equivalence check at every
+//! step; `Descr` names the components that are not canonical.
 //!
 //! **The alphabet is bytes, in equivalence classes.** A word is a byte string --
 //! UTF-8 for `str`, arbitrary for `bytes` -- so one machine serves both, and the
@@ -27,10 +27,11 @@
 //! The automaton comes from `regex-automata`, which the binding's `regex`
 //! already depends on, so the core shares a version rather than adding a
 //! dependency. What is taken from it is the *parser and determinizer* for one
-//! pattern; the three set operations and the emptiness decision are here,
-//! because the crate builds automata for searching and offers no complement.
-//! The determinizer is asked for every match rather than for the one a search
-//! prefers, since a set of words has no preference among its members.
+//! pattern; the three set operations and the emptiness decision are here, the
+//! classical construction [HVP05, §4.1], because the crate builds automata for
+//! searching and offers no complement. The determinizer is asked for every
+//! match rather than for the one a search prefers, since a set of words has no
+//! preference among its members.
 
 use regex_automata::dfa::{Automaton, dense};
 use regex_automata::util::syntax;
@@ -149,7 +150,8 @@ impl Dfa {
         self.accepts(state)
     }
 
-    /// Whether any reachable state accepts.
+    /// Whether any reachable state accepts, the classical emptiness test
+    /// [HVP05, §4.1].
     ///
     /// Read by a walk rather than off the minimal form, so it answers before
     /// minimization as well as after -- which is what the product construction
@@ -309,6 +311,8 @@ impl Dfa {
 
     /// The one-word automaton, at any length. [`RegularSet::word`] holds it to
     /// the bound; a test reads a chain longer than the bound through this.
+    /// Every state has an edge on every class, the stray ones to a dead state,
+    /// so the table is complete [DV14, §2].
     fn word(word: &[u8]) -> Dfa {
         // Built as a chain rather than through the pattern parser: a literal is
         // not a pattern, and escaping one into a pattern is a second place the
@@ -349,9 +353,10 @@ impl Dfa {
 
     /// Every word this automaton does not accept.
     ///
-    /// A flip of the accepting flags, which is only sound because the table is
-    /// *complete*: a partial automaton rejects by falling off the end, and
-    /// flipping its flags would accept those words instead of the ones it meant.
+    /// A flip of the accepting flags [HVP05, §4.1], which is only sound because
+    /// the table is *complete* [DV14, §2], since a partial automaton rejects by
+    /// falling off the end, and flipping its flags would accept those words
+    /// instead of the ones it meant.
     ///
     /// **The flip of a minimal table is minimal**, so this re-minimizes nothing.
     /// A word distinguishes two states in `L` exactly when it distinguishes them
@@ -370,7 +375,8 @@ impl Dfa {
         }
     }
 
-    /// The product of two automata, accepting where `accept` says so.
+    /// The product of two automata, accepting where `accept` says so, which is
+    /// the classical intersection where both must accept [HVP05, §4.1].
     ///
     /// One walk over reachable state *pairs* ([`Reached`]), so the states built
     /// are the ones a word can reach rather than the whole cross product. The
@@ -405,8 +411,9 @@ impl Dfa {
     /// Three passes, and each is needed for the form to be canonical: merge the
     /// states no word can tell apart, coarsen the alphabet to the partition the
     /// merged states induce, and renumber by a walk that visits classes in
-    /// order. A minimal DFA is unique up to isomorphism, so fixing the numbering
-    /// fixes the table.
+    /// order. Merging the equivalent states gives a minimal table
+    /// [DV14, Thm. 2], unique up to isomorphism [DV14, Thm. 1], so fixing the
+    /// numbering fixes the table.
     fn minimal(&self) -> Dfa {
         debug_assert!(self.well_formed(), "a table is minimized as it was built");
         let merged = self.merge_equivalent();
@@ -418,7 +425,8 @@ impl Dfa {
         minimal
     }
 
-    /// Merge the states no word distinguishes: one state for each block of
+    /// Merge the states no word distinguishes, the quotient by the equivalence
+    /// of [DV14, Def. 3], one state for each block of
     /// [`equivalent_states`](Self::equivalent_states).
     fn merge_equivalent(&self) -> Dfa {
         let block = self.equivalent_states();
@@ -455,14 +463,16 @@ impl Dfa {
     /// zero at state zero's, two states sharing one exactly when they accept
     /// the same words.
     ///
-    /// Hopcroft's algorithm. The accepting states and the rest start as two
-    /// blocks, and a block is cut wherever one class leads part of it into a
-    /// block, the *splitter*, and the rest of it elsewhere. Each part a cut
-    /// makes is a splitter in turn -- except that of the two parts only the
-    /// smaller is queued: a block no class cuts against a set and against one
-    /// part of it is one no class cuts against the other part either. So a
-    /// state is in a queued block at most `log n` times, and the work is
-    /// `k n log n` over `n` states and `k` classes.
+    /// Hopcroft's algorithm, as D'Antoni & Veanes lift it [DV14, Fig. 3], with
+    /// the byte classes for the minterms [DV14, Prop. 1] and both initial
+    /// blocks queued. The accepting states and the rest start as two blocks,
+    /// and a block is cut wherever one class leads part of it into a block, the
+    /// *splitter*, and the rest of it elsewhere. Each part a cut makes is a
+    /// splitter in turn -- except that of the two parts only the smaller is
+    /// queued: a block no class cuts against a set and against one part of it
+    /// is one no class cuts against the other part either. So a state is in a
+    /// queued block at most `log n` times, and the work is `k n log n` over `n`
+    /// states and `k` classes.
     ///
     /// A pass that signs every state afresh each round until a round changes
     /// nothing reaches the same partition and spends a round per state on a
@@ -516,7 +526,9 @@ impl Dfa {
 
     /// Coarsen the alphabet to the partition this automaton's states induce.
     ///
-    /// Two bytes belong together when no state's transition separates them.
+    /// Two bytes belong together when no state's transition separates them,
+    /// which makes the classes the minterms of the transitions [DV14, §4] and
+    /// keeps every class one no state reads apart [DV14, Prop. 1].
     /// Without this pass a language could carry a finer partition than it needs
     /// -- a product refines the alphabet whether or not the result uses the
     /// distinction -- and two equal languages would have unequal tables.
@@ -566,7 +578,8 @@ impl Dfa {
     }
 
     /// Renumber the states by a walk that takes classes in order, dropping the
-    /// ones no word reaches ([`canonical_order`]).
+    /// ones no word reaches ([`canonical_order`]), which removes the renaming a
+    /// minimal table is unique up to [DV14, Thm. 1].
     fn renumber(&self) -> Dfa {
         let (order, ids) = canonical_order(|state| {
             (0..self.class_count).map(move |class| self.step(state, class.try_into().unwrap_or(0)))
@@ -590,7 +603,8 @@ impl Dfa {
 }
 
 /// The alphabet two automata share: a class per pair of classes some byte
-/// realizes, plus the byte-to-class map over it.
+/// realizes, plus the byte-to-class map over it, the alphabet a product reads
+/// [DV14, §4].
 fn refine_alphabets(a: &Dfa, b: &Dfa) -> (Vec<Class>, usize, Vec<(Class, Class)>) {
     let mut ids: FxHashMap<(Class, Class), Class> = FxHashMap::default();
     let mut pairs: Vec<(Class, Class)> = Vec::new();
@@ -624,6 +638,8 @@ struct Predecessors {
 }
 
 impl Predecessors {
+    /// Every state's sources under every class, the transitions read backwards
+    /// that a cut needs [DV14, §4].
     fn of(dfa: &Dfa) -> Predecessors {
         let states = dfa.state_count();
         let run = |class: usize, target: u32| class * states + target as usize;
@@ -663,7 +679,8 @@ impl Predecessors {
         }
     }
 
-    /// The states `class` leads to `target` from.
+    /// The states `class` leads to `target` from, `δ⁻¹` of one minterm
+    /// [DV14, §4].
     fn leading_to(&self, class: usize, target: u32) -> &[u32] {
         let run = class * self.states + target as usize;
         let begin = self.starts.get(run).copied().unwrap_or(0);
@@ -697,7 +714,8 @@ struct Partition {
 
 impl Partition {
     /// The rejecting states and the accepting ones, each a block where it has
-    /// a member: the cut a word of length zero already makes.
+    /// a member: the cut a word of length zero already makes
+    /// [DV14, Fig. 3, l. 2].
     fn by_acceptance(accepting: &[bool]) -> Partition {
         let mut partition = Partition {
             members: Vec::with_capacity(accepting.len()),
@@ -743,7 +761,9 @@ impl Partition {
         self.members.get(begin..end).unwrap_or(&[])
     }
 
-    /// Mark `state`: it trades places with its block's first unmarked member.
+    /// Mark `state`, a member of the set leading into the splitter
+    /// [DV14, Fig. 3, l. 8], which trades places with its block's first
+    /// unmarked member.
     ///
     /// The lookups answer a miss with zero, as the table's do: every state has
     /// a block and a place, and every block a run, by construction.
@@ -778,11 +798,13 @@ impl Partition {
     }
 
     /// Cut each touched block between its marked and unmarked members, give
-    /// the smaller part a new block, and queue it.
+    /// the smaller part a new block, and queue it [DV14, Fig. 3, l. 9].
     ///
     /// The larger part keeps the block's id, and with it the block's place in
-    /// the queue where it had one, so both parts of a queued block are queued.
-    /// A block whose members are all marked is not cut. The marks are cleared.
+    /// the queue where it had one, so both parts of a queued block are queued
+    /// [DV14, Fig. 3, l. 14] and only the smaller of an unqueued one
+    /// [DV14, Fig. 3, l. 15]. A block whose members are all marked is not cut.
+    /// The marks are cleared.
     fn cut_marked(&mut self, queued: &mut Vec<u32>) {
         for block in std::mem::take(&mut self.touched) {
             let block = block as usize;
@@ -909,7 +931,9 @@ impl RegularSet {
         RegularSet::compile(&format!("(?:{pattern})"), utf8)
     }
 
-    /// Build a language from a pattern the caller of this module wrote.
+    /// Build a language from a pattern the caller of this module wrote, the
+    /// subset construction of the classical algorithm [HVP05, §4.1] done by
+    /// `regex-automata`.
     fn compile(anchored: &str, utf8: bool) -> Option<RegularSet> {
         let syntax = syntax::Config::new().utf8(utf8);
         // Every match, which is the classical construction. The builder's
@@ -984,7 +1008,8 @@ impl RegularSet {
             .map(|dfa| RegularSet { dfa: Arc::new(dfa) })
     }
 
-    /// The words in both sets, or `None` past [`MAX_STATES`].
+    /// The words in both sets, the product [HVP05, §4.1], or `None` past
+    /// [`MAX_STATES`].
     #[must_use]
     pub(crate) fn intersect(&self, other: &RegularSet) -> Option<RegularSet> {
         self.dfa

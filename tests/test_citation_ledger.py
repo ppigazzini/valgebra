@@ -92,6 +92,17 @@ SCOPE = (
     "crates/valgebra-core/src/descr/maps/*.rs",
     "crates/valgebra-core/src/descr/records/*.rs",
     "crates/valgebra-core/src/descr/lower/*.rs",
+    "crates/valgebra-core/src/descr/regular.rs",
+    "crates/valgebra-core/src/descr/symbolic.rs",
+    "crates/valgebra-core/src/descr/automaton.rs",
+    "crates/valgebra-core/src/descr/integers.rs",
+    "crates/valgebra-core/src/descr/interval.rs",
+    "crates/valgebra-core/src/descr/floats.rs",
+    "crates/valgebra-core/src/descr/regular/*.rs",
+    "crates/valgebra-core/src/descr/symbolic/*.rs",
+    "crates/valgebra-core/src/descr/integers/*.rs",
+    "crates/valgebra-core/src/descr/interval/*.rs",
+    "crates/valgebra-core/src/descr/floats/*.rs",
 )
 
 #: A test module, whose tests a `HELD-BY:` line names: its citations are held to

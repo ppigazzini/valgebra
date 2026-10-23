@@ -590,18 +590,30 @@ automaton's letters are bytes in classes no state separates, which stand in for
 the minterms the figure computes [DV14, Prop. 1]. The sequence automaton's
 letters are descriptors: an edge carries a guard, and what the guards leave over
 is an *else* edge, since a descriptor naming its own universe would have to
-build itself. **[LOAD-BEARING: one-language-one-table]** — `equivalent_states`
-in `descr/regular.rs` is the figure at its lines 5 to 15, the tie-break
-included, with four differences that move no partition: line 3 queues both
-initial blocks, which the paper asks only of a partial automaton and which costs
-a complete one a splitter; line 4 reads the byte classes for the minterms; the
-loop is bounded by a pop per state; and the start block is renumbered first. The
-canonical numbering then removes the renaming, so two spellings of one word
-language have one table. The sequence automaton refines by Moore's rounds of
-signatures [DV14, §3] and compares the joined guards by equality, which is finer
-than their sets, so two states no sequence tells apart may stay apart: its table
-names a language only up to that, and sequence equality is emptiness of both
-differences.
+build itself. **[LOAD-BEARING: one-language-one-table]** — the operations are
+the classical construction [HVP05, §4.1], where a complement flips the accepting
+states of a complete table, an intersection is a product, and emptiness is a
+walk to an accepting state. Minimizing merges the states of the equivalence of
+[DV14, Def. 3], which gives a minimal table [DV14, Thm. 2], and a cut reads the
+transitions backwards by class, as the figure reads them by minterm [DV14, §4].
+`equivalent_states` in `descr/regular.rs` is the figure at its lines 5 to 15 --
+from the initial partition [DV14, Fig. 3, l. 2], the predecessors of a splitter
+marked [DV14, Fig. 3, l. 8] and each block they cut split [DV14, Fig. 3, l. 9],
+a queued block replaced by both parts [DV14, Fig. 3, l. 14] and an unqueued one
+by its smaller part [DV14, Fig. 3, l. 15], the tie-break included -- with four
+differences that move no partition: line 3 queues both initial blocks, which the
+paper asks only of a partial automaton and which costs a complete one a
+splitter; line 4 reads the byte classes for the minterms; the loop is bounded by
+a pop per state; and the start block is renumbered first. The canonical
+numbering then removes the renaming, so two spellings of one word language have
+one table. The sequence automaton refines by Moore's rounds of signatures
+[DV14, §3] and compares the joined guards by equality, which is finer than their
+sets, so two states no sequence tells apart may stay apart: its table names a
+language only up to that, and sequence equality is emptiness of both
+differences. The sequence automaton does not read its transitions backwards,
+which over guards needs the minterms or the minimization of [DV14, Fig. 4].
+
+IMPLEMENTED-BY: descr/automaton.rs, descr/automaton.rs::reaches, descr/automaton.rs::canonical_order, descr/automaton.rs::refine, descr/regular.rs, descr/regular.rs::Dfa::is_empty, descr/regular.rs::Dfa::word, descr/regular.rs::Dfa::complement, descr/regular.rs::Dfa::product, descr/regular.rs::Dfa::minimal, descr/regular.rs::Dfa::merge_equivalent, descr/regular.rs::Dfa::equivalent_states, descr/regular.rs::Dfa::coarsen, descr/regular.rs::Dfa::renumber, descr/regular.rs::refine_alphabets, descr/regular.rs::Predecessors::of, descr/regular.rs::Predecessors::leading_to, descr/regular.rs::Partition::by_acceptance, descr/regular.rs::Partition::mark, descr/regular.rs::Partition::cut_marked, descr/regular.rs::RegularSet::compile, descr/regular.rs::RegularSet::intersect, descr/symbolic.rs, descr/symbolic.rs::Guard, descr/symbolic.rs::SymbolicDfa, descr/symbolic.rs::SymbolicDfa::chain, descr/symbolic.rs::SymbolicDfa::emptiness, descr/symbolic.rs::SymbolicDfa::accepts_under, descr/symbolic.rs::SymbolicDfa::complement, descr/symbolic.rs::SymbolicDfa::intersect, descr/symbolic.rs::SymbolicDfa::product, descr/symbolic.rs::SymbolicDfa::merge_targets, descr/symbolic.rs::SymbolicDfa::minimal, descr/symbolic.rs::SymbolicDfa::merge_equivalent, descr/symbolic.rs::SymbolicDfa::signature, descr/symbolic.rs::SymbolicDfa::sorted, descr/symbolic.rs::SymbolicDfa::renumber, descr/symbolic.rs::partition, descr/symbolic.rs::rest_of
 
 HELD-BY: the_halves_cut_where_the_rounds_do, a_cut_moves_the_smaller_part, a_cut_of_a_queued_block_queues_both_parts, two_spellings_of_one_language_are_one_set, being_equal_is_holding_the_same_language, a_complement_is_already_minimal, the_rounds_from_the_distances_end_where_the_rounds_from_one_block_do, a_complement_of_a_sequence_language_is_already_minimal
 

@@ -826,11 +826,11 @@ fn a_cut_moves_the_smaller_part() {
 // THEORY: one-language-one-table
 /// A block cut while it waits in the queue leaves both parts waiting.
 ///
-/// D'Antoni & Veanes's Figure 3, line 14: a split block that is queued is
-/// replaced by both parts, where an unqueued one adds only its smaller part
-/// (line 15, which `a_cut_moves_the_smaller_part` holds). The larger part
-/// keeps the block's number, and with it the entry already queued, and the
-/// smaller part is pushed, so one push serves both lines.
+/// A split block that is queued is replaced by both parts
+/// [DV14, Fig. 3, l. 14], where an unqueued one adds only its smaller part
+/// (line 15, which `a_cut_moves_the_smaller_part` holds). The larger part keeps
+/// the block's number, and with it the entry already queued, and the smaller
+/// part is pushed, so one push serves both lines.
 #[test]
 fn a_cut_of_a_queued_block_queues_both_parts() {
     let mut partition = super::Partition::by_acceptance(&[false; 5]);
