@@ -92,7 +92,7 @@ each claimed equivalence against membership rather than asserting it.
 
 SOURCE: §13.2 "**The laws hold by construction**"; §2 "every combinator builds the normal"
 
-IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend
+IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend, ir.rs::Schema::union_within, ir.rs::Schema::meet_within, ir.rs::Schema::complement, kind.rs::Region::union, kind.rs::Region::intersect, kind.rs::Region::complement, oracle.rs::has_complementary_pair_within
 
 HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference
 
@@ -120,7 +120,7 @@ position by position [BBC+26, (array)].
 
 SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
 
-IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype
+IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference
 
 HELD-BY: the_two_deciders_agree_under_an_oracle, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment
 
@@ -223,21 +223,23 @@ HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, the_p
 
 **Castagna, "Typing Records, Maps, and Structs" (ICFP 2023).** One node with
 named fields plus default clauses subsumes the record, the homogeneous mapping,
-the heterogeneous mapping and their combination. **[LOAD-BEARING: records-maps-and-structs]** —
-`Schema::KeyedMap`, where a closed record is no default clause and `dict[K, V]`
-is a single clause with no fields. A field is read in `T⊥`, an optional one
-holding `⊥` [Cas23, §3.2], so an absent key is outside a required field
-[Cas23, §3.2.1]; two map atoms meet pointwise [Cas23, (12)] and are empty where
-a required label is [Cas23, (11)], two mappings always sharing the empty dict
-[Cas23, fn. 11]; and one map is below another one key type at a time
-[Cas23, Lem. 4.7]. A set of dicts is a union of the atoms of [Cas23, Def. 4.1],
-the complement of one a union of atoms again by [Cas23, (13)], read in `T⊥`
-[Cas23, §4.1], where a label given its default is one the notation may name or
-leave [Cas23, Def. 2.2].
+the heterogeneous mapping and their combination.
+**[LOAD-BEARING: records-maps-and-structs]** — `Schema::KeyedMap`, where a
+closed record is no default clause and `dict[K, V]` is a single clause with no
+fields. A field is read in `T⊥`, an optional one holding `⊥` [Cas23, §3.2], so
+an absent key is outside a required field [Cas23, §3.2.1]; two map atoms meet
+pointwise [Cas23, (12)] and are empty where a required label is [Cas23, (11)],
+two mappings always sharing the empty dict [Cas23, fn. 11]; and one map is below
+another one key type at a time [Cas23, Lem. 4.7]. A dict is a member where every
+label holds its value or its absence and every other key what its part's default
+allows [Cas23, (21)]. A set of dicts is a union of the atoms of
+[Cas23, Def. 4.1], the complement of one a union of atoms again by
+[Cas23, (13)], read in `T⊥` [Cas23, §4.1], where a label given its default is
+one the notation may name or leave [Cas23, Def. 2.2].
 
 SOURCE: §3 "The model behind `Schema::KeyedMap`"; §13.3 "**The representation Theorem 4.2 produces.**"
 
-IMPLEMENTED-BY: decision.rs::Schema::holds_a_value_shallowly, decision/emptiness.rs::intersection_verdict, decision/records.rs::keyed_map_meet_verdict, decision/records.rs::keyed_map_subtype, decision/records.rs::entered, decision/records.rs::Labels::of, descr/maps.rs, descr/maps.rs::Wanted, descr/maps.rs::Search::assign, descr/maps.rs::MapAtom::absorbed, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/maps.rs::MapAtom::complement, descr/maps.rs::MapLattice::record, descr/records.rs, descr/records.rs::Atom::meet, descr/records.rs::Atom::emptiness, descr/records.rs::Atom::complement, descr/records.rs::Atom::tidy, descr/records.rs::RecordLattice::attribute, descr/values.rs::Field::top, descr/values.rs::Field::meet, descr/values.rs::Field::join, descr/values.rs::Field::complement, descr/values.rs::Field::emptiness, descr/lower.rs::map
+IMPLEMENTED-BY: decision.rs::Schema::holds_a_value_shallowly, decision/emptiness.rs::intersection_verdict, decision/records.rs::keyed_map_meet_verdict, decision/records.rs::keyed_map_subtype, decision/records.rs::entered, decision/records.rs::Labels::of, descr/maps.rs, descr/maps.rs::Wanted, descr/maps.rs::Search::assign, descr/maps.rs::MapAtom::absorbed, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/maps.rs::MapAtom::complement, descr/maps.rs::MapLattice::record, descr/records.rs, descr/records.rs::Atom::meet, descr/records.rs::Atom::emptiness, descr/records.rs::Atom::complement, descr/records.rs::Atom::tidy, descr/records.rs::RecordLattice::attribute, descr/values.rs::Field::top, descr/values.rs::Field::meet, descr/values.rs::Field::join, descr/values.rs::Field::complement, descr/values.rs::Field::emptiness, descr/lower.rs::map, ir.rs::Schema::record, ir.rs::canonical_fields, ir.rs::already_said, valgebra-py/src/check/walk/record.rs::keyed_map_scan
 
 HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition, a_key_of_whole_kinds_opens_the_parts_it_holds
 
@@ -252,6 +254,8 @@ every lattice rule can exclude a gradual case; having no such case does the same
 work by having nothing to exclude. **[NOT-REACHED: one-descriptor-one-type]**
 
 SOURCE: §13.5 "There is one descriptor because there is one type"
+
+IMPLEMENTED-BY: ir.rs::Spelling
 
 HELD-BY: the_two_spellings_of_the_top_lower_to_one_descriptor, the_two_spellings_of_the_top_are_not_one_node
 
@@ -348,6 +352,8 @@ The paper proves soundness of a modal type system
 by a step-indexed realizability argument; it states no theorem about contractive
 maps, and citing one to it is an error this page is written to avoid.
 
+IMPLEMENTED-BY: ir.rs::Guarded::join, ir.rs::Schema::guards_children, ir.rs::Schema::occurs_unguarded_under, ir.rs::Schema::union_within, oracle.rs::has_complementary_pair_within, valgebra-py/src/build.rs::tie_alias
+
 HELD-BY: contractivity_requires_a_structural_guard, test_non_contractive_body_is_rejected, structural_constructors_absorb_the_guard, a_reference_under_only_combinators_is_unguarded, a_reference_the_definitions_resolve_is_read_at_its_fixpoint
 
 [01-schema-ir.md](01-schema-ir.md) records why the check's structural arms
@@ -365,6 +371,8 @@ definitions table is the same shape pydantic-core's `definition-ref` has.
 **[LOAD-BEARING: a-reference-denotes-its-definition]**
 
 SOURCE: §4 "an **equirecursive** reading"
+
+IMPLEMENTED-BY: ir/transform.rs::Schema::unfolded, valgebra-py/src/check/walk.rs::check_ref
 
 HELD-BY: test_a_reference_denotes_the_definition_it_names, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, a_reference_and_its_definition_are_one_set_over_drawn_definitions, test_a_fixpoint_and_its_unfolding_are_one_set
 
@@ -468,20 +476,21 @@ is opaque.
 
 **A refinement is its base narrowed, and a predicate is opaque.**
 `Refine { base, constraints }` denotes `{x ∈ ⟦base⟧ | every constraint holds}`,
-so it is below its base whatever the constraints say -- a subset does not depend
-on *which* subset -- and the base is not below it, because that would need the
-predicate to hold of every value. A predicate is compared by the object carrying
-it: two refinements over one predicate are one set, and two over separately
-written predicates that agree everywhere are undecided, since deciding them
-means deciding whether two Python callables agree. Two refinements compare as
-refined base types do under Sub-Base, by an entailment of their predicates
-[JV20, Fig. 3.4], here without a solver: a bound or a step is entailed through
-the oracle one constraint at a time, and a predicate only by itself.
+a refined base type [JV20, §3.2], so it is below its base whatever the
+constraints say -- a subset does not depend on *which* subset -- and the base is
+not below it, because that would need the predicate to hold of every value. A
+predicate is compared by the object carrying it: two refinements over one
+predicate are one set, and two over separately written predicates that agree
+everywhere are undecided, since deciding them means deciding whether two Python
+callables agree. Two refinements compare as refined base types do under
+Sub-Base, by an entailment of their predicates [JV20, Fig. 3.4], here without a
+solver: a bound or a step is entailed through the oracle one constraint at a
+time, and a predicate only by itself.
 **[LOAD-BEARING: a-refinement-narrows-its-base]**
 
 SOURCE: §10 "the runtime check; the static/SMT side is"
 
-IMPLEMENTED-BY: decision.rs::refinement_subtype, decision/constraints.rs::constraint_entailed
+IMPLEMENTED-BY: decision.rs::refinement_subtype, decision/constraints.rs::constraint_entailed, ir.rs::Schema::refine, valgebra-py/src/check/walk/scalar.rs::check_refine
 
 HELD-BY: test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker, test_every_cell_narrows_its_base_or_is_refused
 
@@ -715,7 +724,7 @@ pair the lowering did not widen. **[LOAD-BEARING: a-cut-reference-proves]**
 
 SOURCE: §13.1 "**The polarity cut is one-directional.**"
 
-IMPLEMENTED-BY: decision.rs::Schema::descriptor_contained_in
+IMPLEMENTED-BY: decision.rs::Schema::descriptor_contained_in, ir/transform.rs::Polarity::flipped, ir/transform.rs::Schema::unfolded
 
 HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding
 
@@ -781,7 +790,7 @@ proof of that lemma has no key to spare in [Cas23, App. C.1].
 
 SOURCE: §13.3 "**That is `Schema::KeyedMap` exactly**"
 
-IMPLEMENTED-BY: decision/records.rs, decision/records.rs::clause_by_key, decision/records.rs::by_constants, decision/records.rs::parts_of, decision/records.rs::Labels::slot, descr/maps.rs, descr/maps.rs::key_slot, descr/maps.rs::finite_keys, descr/maps.rs::MapAtom::field, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/lower.rs::map, descr/lower.rs::key_cover
+IMPLEMENTED-BY: decision/records.rs, decision/records.rs::clause_by_key, decision/records.rs::by_constants, decision/records.rs::parts_of, decision/records.rs::Labels::slot, descr/maps.rs, descr/maps.rs::key_slot, descr/maps.rs::finite_keys, descr/maps.rs::MapAtom::field, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/lower.rs::map, descr/lower.rs::key_cover, valgebra-py/src/check/walk/record.rs::keyed_map_scan, valgebra-py/src/build.rs::checked_key
 
 HELD-BY: every_key_falls_in_exactly_one_part, a_map_constrains_one_part_of_the_key_partition, test_heterogeneous_mapping_by_key_schema, a_clause_constrains_its_region_alone_over_drawn_dicts
 
@@ -826,6 +835,8 @@ and an entry is weak, so two schemas built alike are one handle while the first
 lives and holds its slot. **[LOAD-BEARING: a-node-built-alike-is-one-handle]**
 
 SOURCE: §13.6 "**Hash consing.** Hosoya-Vouillon-Pierce"
+
+IMPLEMENTED-BY: ir/intern.rs::node, ir/intern.rs::members, ir.rs::Schema::union_within
 
 HELD-BY: a_node_built_twice_is_one_node_in_every_family, sharing_a_child_shares_the_parent_over_it, a_list_built_twice_is_one_list_holding_what_was_built
 
@@ -913,21 +924,25 @@ HELD-BY: test_the_two_deciders_are_measured_against_each_other, test_decision_de
 **`open` and `close` read the region no clause claims, and nothing else.**
 Openness is the default of the key-type region the clauses leave over: `open`
 frees that region and `close` refuses it, and neither touches a region a clause
-claims. A clause short of every value claims its keys; the clauses admitting
-every value are one clause over the union of their keys, the wildcard of
-[Cas23, §4.4] written as the union [Cas23, fn. 15] reads one as, of which the
-part over keys another clause claims stays and the rest is the region. So a
-mapping opened keeps what a `str` key maps to and admits an `int` key with any
-value, one clause is read the same whether or not a field is declared beside it,
-and the top split over `str` and `complement(str)` closes as the top does. Every
-record is rewritten, the one a clause maps a key to included. What the laws hold
-of the sets is narrower than "a function of the set": closing commutes with
-absorption, applying either operator twice gives the set applying it once gave,
-though not always the same term, and a name saying what its record says of every
-key it does not name moves no set either operator gives.
-**[OBLIGATION: open-and-close-read-the-region]**
+claims, open and closed being the two kinds of record type [Cas23, §3.2] and
+each region carrying a default of its own [Cas23, Def. 4.6]. A clause short of
+every value claims its keys; the clauses admitting every value are one clause
+over the union of their keys, the wildcard of [Cas23, §4.4] written as the union
+[Cas23, fn. 15] reads one as, sugar for the key types no clause names
+[Cas23, fn. 13], of which the part over keys another clause claims stays and the
+rest is the region. So a mapping opened keeps what a `str` key maps to and
+admits an `int` key with any value, one clause is read the same whether or not a
+field is declared beside it, and the top split over `str` and `complement(str)`
+closes as the top does. Every record is rewritten, the one a clause maps a key
+to included. What the laws hold of the sets is narrower than "a function of the
+set": closing commutes with absorption, applying either operator twice gives the
+set applying it once gave, though not always the same term, and a name saying
+what its record says of every key it does not name moves no set either operator
+gives. **[OBLIGATION: open-and-close-read-the-region]**
 
 SOURCE: §14.6 "Operators belong on the representation built for them"
+
+IMPLEMENTED-BY: ir/transform.rs::Schema::with_records_open, ir.rs::unclaimed_region, ir.rs::claimed_beside_the_region, ir.rs::clauses_over, ir.rs::tops_merged, ir.rs::merge_by_value
 
 HELD-BY: test_opening_a_mapping_frees_the_keys_no_clause_claims, test_a_clause_is_read_the_same_with_or_without_a_field_beside_it, test_one_term_closes_one_way_whichever_reading_wrote_it, test_closing_commutes_with_absorption, closing_commutes_with_absorption, opening_or_closing_twice_gives_the_set_once_did, with_records_open_reaches_the_record_a_clause_maps_to, test_opening_reaches_the_record_a_mapping_maps_to, opening_widens_closing_narrows_and_the_round_trip_is_at_most_closing, closing_an_opened_mapping_takes_out_the_region_opening_freed, test_closing_an_opened_mapping_takes_out_only_the_region_opening_freed, opening_under_a_complement_narrows_and_closing_widens, closing_an_opened_record_is_not_closing_the_record, test_closing_an_opened_schema_is_not_closing_it, a_name_the_record_already_says_moves_no_set_either_operator_gives
 
@@ -1025,7 +1040,7 @@ domains of one map to overlap and an overlap read at face value is a
 conjunction. Neither reads the clauses in order.
 **[DEVIATION: clauses-may-overlap]**
 
-IMPLEMENTED-BY: descr/maps.rs::MapLattice::record
+IMPLEMENTED-BY: descr/maps.rs::MapLattice::record, ir.rs::canonical_clauses
 
 HELD-BY: test_heterogeneous_mapping_by_key_schema, test_two_clauses_claiming_one_key_are_a_disjunction, test_a_key_belongs_when_some_clause_admits_it_over_drawn_clauses, a_literal_keyed_clause_is_read_beside_the_clauses_that_cover_its_key, a_field_is_read_instead_of_a_clause_that_names_its_key, test_a_parsed_object_is_covered_by_whichever_clause_can_read_its_keys, test_named_field_takes_precedence_over_the_catch_all
 
@@ -1073,7 +1088,7 @@ holds the booleans (`Kind::admitted_regions`). A rule reading two kinds as two
 disjoint sets would prove `bool & int` empty, which `True` refutes.
 **[DEVIATION: the-kind-partition-overlaps-at-bool]**
 
-IMPLEMENTED-BY: decision/readings.rs::Schema::type_tag_with
+IMPLEMENTED-BY: decision/readings.rs::Schema::type_tag_with, kind.rs, kind.rs::Kind::shares_values_with, kind.rs::Kind::admitted_regions
 
 HELD-BY: a_boolean_is_the_one_kind_another_kind_holds, test_a_boolean_is_an_integer_and_no_other_kind_is
 
@@ -1115,6 +1130,8 @@ third answer stays the third: `complement(t)` refuses such a value with the
 stop's code rather than admitting it
 ([04-walk.md](04-walk.md#a-stop-is-not-a-non-member)).
 **[DEVIATION: membership-has-a-third-answer]**
+
+IMPLEMENTED-BY: valgebra-py/src/check/walk.rs::member
 
 HELD-BY: test_a_complement_refuses_a_value_its_inner_walk_stopped_on, test_a_complement_refuses_a_document_its_inner_walk_stopped_on, a_complement_refuses_a_value_its_inner_walk_stopped_on
 

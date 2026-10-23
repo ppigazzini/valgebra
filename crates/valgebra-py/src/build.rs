@@ -187,9 +187,9 @@ type Found = (Option<Py<PyTuple>>, u64, Rc<Cell<bool>>);
 
 /// Build an alias's body as the fixpoint the alias binds.
 ///
-/// The contractivity check is the same one `recursive` runs, for the same
-/// reason: `type X = int | X` names a set no value settles, and a walk over it
-/// would not terminate.
+/// The contractivity check is the same one `recursive` runs [Cas23, Def. 2.1],
+/// for the same reason: `type X = int | X` names a set no value settles, and a
+/// walk over it would not terminate.
 fn tie_alias(
     alias: &Bound<'_, PyAny>,
     arguments: Option<&Bound<'_, PyTuple>>,
@@ -1679,9 +1679,10 @@ impl Pool {
 /// neither: it names part of a kind, and two such clauses can overlap without
 /// either containing the other. Overlapping key domains are a different theory
 /// from the one this library's maps are built on -- with them "there would not
-/// be any difference between record types and an intersection of function types"
-/// (Castagna, ICFP 2023, §4.5) -- and reading them as this library does, one
-/// clause at a time, answers a question the two spellings do not agree on.
+/// be any difference between record types and an intersection of function
+/// types" [Cas23, §4.5], which is why the paper forbids them [Cas23, §4.4] --
+/// and reading them as this library does, one clause at a time, answers a
+/// question the two spellings do not agree on.
 ///
 /// So it is refused where it is written, which is the rule the zero divisor and
 /// the invalid pattern already follow.

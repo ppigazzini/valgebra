@@ -839,8 +839,8 @@ fn opening_a_mapping_frees_the_region_no_clause_claims() {
 // THEORY: no-negative-clause-component
 /// What the constructors make canonical, and the one thing they do not.
 ///
-/// ICFP Definition 2.2: a record is a quasi-constant function, and `dom(r)` is
-/// `{l | r(l) != z}` for the default `z` -- **semantic**, so a label written
+/// A record is a quasi-constant function whose `dom(r)` is `{l | r(l) != z}`
+/// for the default `z` [Cas23, Def. 2.2] -- **semantic**, so a label written
 /// with the default as its type is not in the domain. A closed record gives
 /// every key it does not name nothing at all, so `{"a?": nothing}` names a key
 /// and says what the record already said: one domain, one record.

@@ -34,7 +34,9 @@ account. A claim on the theory page names the items that implement it on an
   cites is one a claim naming it cites, so code cannot start resting on a
   result the page does not account for;
 * a citation inside a body is a step of what its item implements, so the item
-  cites too, and no citation belongs to no item.
+  cites too, and no citation belongs to no item;
+* a claim that cites a result names the code resting on it, so a line deleted
+  whole does not leave a claim no check reads.
 
 What no check can see is an item that implements a result and cites nothing. A
 reader decides that a function is Lemma 4.7; this holds the citation once
@@ -103,12 +105,26 @@ SCOPE = (
     "crates/valgebra-core/src/descr/integers/*.rs",
     "crates/valgebra-core/src/descr/interval/*.rs",
     "crates/valgebra-core/src/descr/floats/*.rs",
+    "crates/valgebra-core/src/ir.rs",
+    "crates/valgebra-core/src/ir/*.rs",
+    "crates/valgebra-core/src/kind.rs",
+    "crates/valgebra-core/src/oracle.rs",
+    "crates/valgebra-core/src/verdict.rs",
+    "crates/valgebra-core/src/carries.rs",
+    "crates/valgebra-core/src/violation.rs",
+    "crates/valgebra-core/src/lib.rs",
+    "crates/valgebra-core/src/laws.rs",
+    "crates/valgebra-core/src/schema_tests.rs",
+    "crates/valgebra-py/src/build.rs",
+    "crates/valgebra-py/src/check/walk.rs",
+    "crates/valgebra-py/src/check/walk/record.rs",
+    "crates/valgebra-py/src/check/walk/scalar.rs",
 )
 
 #: A test module, whose tests a `HELD-BY:` line names: its citations are held to
 #: the form and listed under no claim, since a test holds a result rather than
 #: implementing it.
-_TEST_MODULE = re.compile(r"(?:^|/)(?:\w+_)?tests\.rs$")
+_TEST_MODULE = re.compile(r"(?:^|/)(?:(?:\w+_)?tests|laws)\.rs$")
 
 #: Each label the table may carry, and the stem of the shelf's file for the
 #: work. The page cannot name the file -- the shelf is not in a clone -- so the
@@ -663,13 +679,24 @@ def _sources() -> tuple[Path, ...]:
     )
 
 
+def _entry(path: Path) -> str:
+    """Give how an `IMPLEMENTED-BY:` entry names the file `path`.
+
+    A path under the core's `src`, which is where most of the code a theory
+    claim names lives, and the binding's from its crate down, so its `lib.rs`
+    is not the core's.
+    """
+    relative = path.relative_to(ROOT / "crates").as_posix()
+    return relative.removeprefix("valgebra-core/src/")
+
+
 def _resolve(entry: str) -> list[Item]:
     """Give the items an `IMPLEMENTED-BY:` entry can mean, among the held sources."""
     where, _, name = entry.partition("::")
     return [
         item
         for path in _sources()
-        if path.as_posix().endswith("/" + where)
+        if _entry(path) == where
         for item in _items(path)
         if item.name == name
     ]
@@ -725,11 +752,10 @@ def test_every_citing_item_is_listed_under_a_claim_that_cites_it() -> None:
             listed.setdefault(entry, set()).update(claim.cites)
     unlisted: list[str] = []
     for path in _sources():
-        relative = path.relative_to(ROOT / "crates").as_posix()
         for item in _items(path):
             if not item.doc:
                 continue
-            short = relative.split("/src/", 1)[1]
+            short = _entry(path)
             entry = f"{short}::{item.name}" if item.name else short
             cites = listed.get(entry)
             if cites is None:
@@ -740,6 +766,24 @@ def test_every_citing_item_is_listed_under_a_claim_that_cites_it() -> None:
                 for label, locator in sorted(item.doc - cites)
             ]
     assert not unlisted, unlisted
+
+
+def test_a_claim_about_code_lists_what_implements_it() -> None:
+    """A claim that cites a result about code names the code that rests on it.
+
+    The direction the other two cannot reach: an entry deleted from a line
+    leaves an item no claim names, which the reverse check reports, but a
+    claim whose line is deleted whole names nothing and asks nothing. A claim
+    citing a result is a claim some code implements, so the line is owed.
+    """
+    unlisted = [
+        claim.identifier
+        for claim in _claims()
+        if claim.tag in _ABOUT_CODE and claim.cites and not claim.items
+    ]
+    assert not unlisted, (
+        f"claims citing a result with no IMPLEMENTED-BY line: {unlisted}"
+    )
 
 
 def test_a_citation_inside_a_body_is_a_step_of_an_item_that_cites() -> None:

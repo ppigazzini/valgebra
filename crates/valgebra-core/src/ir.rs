@@ -168,8 +168,10 @@ macro_rules! pool_index {
 /// one node holds both. A gradual type is an atom apart from the top for a
 /// *second* question, consistency, which a static checker asks at every site
 /// where a value crosses between typed and untyped code; a validator has no
-/// such site and never asks it (`docs/dev/01-schema-ir.md`, "What `Any` is").
-/// What is left is a spelling, and a spelling is worth giving back.
+/// such site and never asks it (`docs/dev/01-schema-ir.md`, "What `Any` is"),
+/// so the two descriptors Castagna & Duboc carry a gradual type in
+/// [CD24, §7.1] are one here. What is left is a spelling, and a spelling is
+/// worth giving back.
 ///
 /// **It is not part of the set.** `PartialEq`, `Ord` and `Hash` are written by
 /// hand so every spelling compares and hashes alike, which is what keeps the
@@ -344,7 +346,9 @@ pub enum Guarded {
 
 impl Guarded {
     /// The join, in which [`Yes`](Guarded::Yes) **absorbs**: crossing a structural
-    /// constructor guards everything below it, however deeply it nests.
+    /// constructor guards everything below it, however deeply it nests, as
+    /// contractivity asks of every infinite branch [Cas23, Def. 2.1] and
+    /// Nakano's guard of a recursion variable [Nak00, Def. 8].
     ///
     /// The absorbing element is why the guardedness check answers what it does --
     /// only the arm demanding [`No`](Guarded::No) can report an unguarded
@@ -438,9 +442,11 @@ fn clauses_for(open: Openness) -> Clauses {
 /// The region no clause of `defaults` claims, as a key schema.
 ///
 /// The clauses denote a union of key-by-value rectangles, so the keys they
-/// speak for are the union of their key schemas and the rest is its complement.
-/// A record claims nothing, so its unclaimed region is the whole key space --
-/// which is why a bare catch-all is what openness reads as there.
+/// speak for are the union of their key schemas [Cas23, fn. 15] and the rest is
+/// its complement, the keys the wildcard names [Cas23, §4.4], which with the
+/// named key types make every key [Cas23, fn. 13]. A record claims nothing, so
+/// its unclaimed region is the whole key space -- which is why a bare catch-all
+/// is what openness reads as there.
 fn unclaimed_region(defaults: &[MapClause]) -> Schema {
     Schema::union(defaults.iter().map(|clause| clause.key.clone())).complement()
 }
@@ -457,16 +463,16 @@ fn unclaimed_region(defaults: &[MapClause]) -> Schema {
 /// clauses carrying one value are one clause over the union of their keys:
 /// `{int: anything, str: int}` opens to `{int | ~(int | str): anything, str:
 /// int}`. The complement in that key is the region `open` freed -- the
-/// complement of every key claimed, the clause's own beside it included --
-/// and the rest of the key is what the clause claims. So the complement alone
-/// goes and the claimed keys stand, which is ICFP 2023's reading of openness
-/// as the default of the key-types a record does not name, the named ones
-/// untouched either way. Read as the whole clause, closing an opened mapping
-/// over a class, or beside a clause with another value, would keep the freed
-/// region and admit every key. Where the complement law has folded the key to
-/// the top, the clause's own claim is not in the term to keep: what stays is
-/// the clause over the keys the other clauses claim, at which it admits every
-/// value, since closing touches no claimed region.
+/// complement of every key claimed, the clause's own beside it included -- and
+/// the rest of the key is what the clause claims. So the complement alone goes
+/// and the claimed keys stand, which is the paper's reading of openness as the
+/// default of the key-types a record does not name [Cas23, §4.4], the named
+/// ones untouched either way. Read as the whole clause, closing an opened
+/// mapping over a class, or beside a clause with another value, would keep the
+/// freed region and admit every key. Where the complement law has folded the
+/// key to the top, the clause's own claim is not in the term to keep: what
+/// stays is the clause over the keys the other clauses claim, at which it
+/// admits every value, since closing touches no claimed region.
 fn claimed_beside_the_region(
     clause: &MapClause,
     defaults: &[MapClause],
@@ -522,16 +528,17 @@ fn claimed_beside_the_region(
 /// The clause list an openness gives a node that already carries `defaults`.
 ///
 /// **Openness is the default of the region no clause claims.** Open and closed
-/// are ICFP 2023's two kinds of record type (§3.2), and the §4.4 example writes
-/// both as quasi K-step functions, each region with a default of its own
-/// (Definition 4.6): a clause is a key-type region with its own default, and
-/// these two operators are about the region the clauses leave over. Closing
-/// sends it to bottom -- the clause that frees it goes -- and opening sends it
-/// to the top, which is one clause admitting every value at every key the
-/// others do not claim. The claimed regions are untouched either way, so the
-/// paper's own closed `{|"a" = Int, String => Bool|}` keeps its `String =>
-/// Bool`. The clauses admitting every value are read as the one clause they are
-/// first ([`tops_merged`]), so the region does not turn on how they are split.
+/// are the two kinds of record type [Cas23, §3.2], and an example of
+/// [Cas23, §4.4] writes both as quasi K-step functions, each region with a
+/// default of its own [Cas23, Def. 4.6], since a clause is a key-type region
+/// with its own default, and these two operators are about the region the
+/// clauses leave over. Closing sends it to bottom -- the clause that frees it
+/// goes -- and opening sends it to the top, which is one clause admitting every
+/// value at every key the others do not claim. The claimed regions are
+/// untouched either way, so the paper's own closed `{|"a" = Int, String =>
+/// Bool|}` keeps its `String => Bool`. The clauses admitting every value are
+/// read as the one clause they are first ([`tops_merged`]), so the region does
+/// not turn on how they are split.
 fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
     // A node with no clauses claims no key, so the unclaimed region is the
     // whole key space and the answer is the shared list either way: the top
@@ -583,7 +590,7 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
 /// over the join of the keys, and the region `open` frees is such a clause, so
 /// which of them is the region is not a question the pair can answer apart:
 /// `{str: anything, complement(str): anything}` is the top clause written
-/// twice, ICFP 2023's wildcard (§4.4) spelled as the union footnote 15
+/// twice, the wildcard of [Cas23, §4.4] spelled as the union [Cas23, fn. 15]
 /// reads one as. Read one at a time, each would be tested against the
 /// complement of the others' keys, and the answer would turn on whether that
 /// complement folds: the pair alone closes to `{}` as the top does, and beside
@@ -611,12 +618,12 @@ fn tops_merged(defaults: &[MapClause]) -> Vec<MapClause> {
 
 /// Fold clauses carrying one value into one clause over the union of their keys.
 ///
-/// The clauses denote a union of key-by-value rectangles, so two sharing a value
-/// are one rectangle over the join of their keys -- the same set, one clause
-/// shorter. Read after the unclaimed region is freed, because that is where the
-/// pair arises: a record declaring `str => anything` for the keys it does not
-/// name is what a `TypedDict` builds, and freeing the key-types beside it gives
-/// two clauses carrying `anything` between them.
+/// The clauses denote a union of key-by-value rectangles, so two sharing a
+/// value are one rectangle over the join of their keys [Cas23, fn. 15] -- the
+/// same set, one clause shorter. Read after the unclaimed region is freed,
+/// because that is where the pair arises: a record declaring `str => anything`
+/// for the keys it does not name is what a `TypedDict` builds, and freeing the
+/// key-types beside it gives two clauses carrying `anything` between them.
 ///
 /// Leaving them apart costs a pair its answer where the region claimed holds a
 /// literal: the region freed is then the literal's complement, a key holding
@@ -1090,7 +1097,9 @@ impl Schema {
         Schema::union_within(members, &[])
     }
 
-    /// The join, with the definitions its members may refer into.
+    /// The join, with the definitions its members may refer into, built as the
+    /// union of the members' sets [FCB08, Def. 4.1] in a normal form flattened
+    /// and sorted, as Hosoya, Vouillon and Pierce keep theirs [HVP05, §5.1].
     ///
     /// Only the complement law reads them, and only for a recursive member: a
     /// `Ref` is not a set on its own evidence, so without the definitions
@@ -1098,13 +1107,14 @@ impl Schema {
     /// caller that holds the definitions -- which is every caller that combines
     /// two compiled validators -- passes them and gets the law for both.
     ///
-    /// **The table is required to be contractive**, because the law is about
-    /// sets and a non-contractive definition names none: `t = ~t` is satisfied
-    /// by no set, and folding `t | ~t` over it applies a law to nothing. Every
-    /// caller in the bindings has run `occurs_unguarded_under` on the body
-    /// before a `Ref` into it exists; a caller assembling a table by hand owes
-    /// that check. `oracle::denotes_a_set_within` is where a reference is read
-    /// and where the precondition bites.
+    /// **The table is required to be contractive** [Cas23, Def. 2.1], because
+    /// the law is about sets and a non-contractive definition names none: `t =
+    /// ~t` is satisfied by no set, and folding `t | ~t` over it applies a law
+    /// to nothing. Every caller in the bindings has run
+    /// `occurs_unguarded_under` on the body before a `Ref` into it exists; a
+    /// caller assembling a table by hand owes that check.
+    /// `oracle::denotes_a_set_within` is where a reference is read and where
+    /// the precondition bites.
     #[must_use]
     pub fn union_within(
         members: impl IntoIterator<Item = Schema>,
@@ -1166,7 +1176,8 @@ impl Schema {
         Schema::meet_within(members, &[])
     }
 
-    /// The meet, with the definitions its members may refer into. The dual of
+    /// The meet, with the definitions its members may refer into, the
+    /// intersection of the members' sets [FCB08, Def. 4.1]. The dual of
     /// [`union_within`](Self::union_within), and for the same reason -- and
     /// under the same precondition, that the table is contractive.
     #[must_use]
@@ -1214,8 +1225,10 @@ impl Schema {
     /// the Python surface: a one-character operator in a fold is a one-character
     /// defect, and typing has no operator for this one.
     ///
-    /// `~~A` is `A`, so a complement of a complement cancels. Nothing downstream
-    /// carries a double negation, and no rule anywhere may assume one exists.
+    /// `~~A` is `A`, the complement of the complement of a set
+    /// [FCB08, Def. 4.1], so a complement of a complement cancels. Nothing
+    /// downstream carries a double negation, and no rule anywhere may assume
+    /// one exists.
     ///
     /// The two bounds cancel with it: `~anything` is `nothing` and `~nothing` is
     /// `anything`. Without those, dropping the top from a meet -- which the
@@ -1234,7 +1247,7 @@ impl Schema {
     }
 
     /// A record of named fields. An open record admits any other key with any
-    /// value; a closed one admits none.
+    /// value; a closed one admits none [Cas23, §3.2].
     #[must_use]
     pub fn record(fields: Vec<Field>, open: Openness) -> Schema {
         Schema::keyed_map_within(fields, clauses_for(open))
@@ -1301,7 +1314,8 @@ impl Schema {
         }
     }
 
-    /// A refinement node: `base` narrowed by `constraints`, in canonical order.
+    /// A refinement node: `base` narrowed by `constraints`, in canonical order,
+    /// a base type refined by predicates [JV20, §3.2].
     ///
     /// With no constraint there is nothing to narrow, so the base is returned as
     /// it stands rather than wrapped in a node that says nothing -- which is the
@@ -1323,7 +1337,8 @@ impl Schema {
 /// Put a record's fields in the order two spellings of one record agree on.
 ///
 /// A record's fields are a *map*: `{"a": int, "b": str}` and `{"b": str, "a":
-/// int}` admit exactly the same dicts. Unordered they are two terms -- `==`
+/// int}` admit exactly the same dicts, a record type being a function on
+/// labels [Cas23, §3.2]. Unordered they are two terms -- `==`
 /// says so, `hash` says so, and a union of the pair keeps both members, since
 /// the dedup that folds a repeated member compares terms. Ordering by name is
 /// what keeps the written order out of the schema.
@@ -1337,9 +1352,9 @@ fn canonical_fields(fields: &mut [Field]) {
 
 /// Put a map's catch-all clauses in the order two spellings agree on.
 ///
-/// The clauses are unordered, as the model's are -- ICFP 2023 reads no order
-/// into a map's fields (§4.4) -- so `{str: int, int: bool}` and `{int: bool,
-/// str: int}` govern exactly the same dicts and are one schema.
+/// The clauses are unordered, as the model's are -- the paper reads no order
+/// into a map's fields [Cas23, §4.4] -- so `{str: int, int: bool}` and `{int:
+/// bool, str: int}` govern exactly the same dicts and are one schema.
 fn canonical_clauses(defaults: &mut Vec<MapClause>) {
     defaults.sort();
     defaults.dedup();
@@ -1466,12 +1481,12 @@ impl MapClause {
 /// Whether a record's own clauses already say what this field says.
 ///
 /// The paper's `dom` leaves out a label mapped to what the default gives every
-/// key the record does not name, so two records differing only in such a field
-/// are one record. This reads it where the record gives every unnamed key one
-/// of the two bounds: a closed record says every unnamed key is absent, which
-/// is what an optional field admitting nothing says; an open one says every
-/// unnamed key is free, which is what an optional field admitting everything
-/// says.
+/// key the record does not name [Cas23, Def. 2.2], so two records differing
+/// only in such a field are one record. This reads it where the record gives
+/// every unnamed key one of the two bounds: a closed record says every unnamed
+/// key is absent [Cas23, §3.2], which is what an optional field admitting
+/// nothing says; an open one says every unnamed key is free, which is what an
+/// optional field admitting everything says.
 ///
 /// A *required* field is never covered: it says the key must be there, and no
 /// clause says that of a key it does not name.
@@ -1802,11 +1817,13 @@ impl Schema {
 
     /// Whether this constructor guards its children.
     ///
-    /// A structural constructor does: a fixpoint unfolds one of them per step, so
-    /// a self-reference below one is productive. An algebraic combinator does not:
-    /// it consumes no unfolding, so a reference below it is as unguarded as the
-    /// combinator itself. The match takes no wildcard, so a new variant is a
-    /// compile error here, which is where the decision belongs.
+    /// A structural constructor does: a fixpoint unfolds one of them per step,
+    /// so a self-reference below one is productive, the constructor
+    /// contractivity asks of every infinite branch [Cas23, Def. 2.1]. An
+    /// algebraic combinator does not: it consumes no unfolding, so a reference
+    /// below it is as unguarded as the combinator itself. The match takes no
+    /// wildcard, so a new variant is a compile error here, which is where the
+    /// decision belongs.
     #[must_use]
     pub(crate) fn guards_children(&self) -> Guarded {
         match self {
@@ -1846,8 +1863,10 @@ impl Schema {
     /// away is reached.
     ///
     /// A `recursive` definition is contractive (productive) only when every
-    /// occurrence of its self-reference sits under a structural constructor;
-    /// `guarded` records whether such a constructor has been crossed.
+    /// occurrence of its self-reference sits under a structural constructor
+    /// [Cas23, Def. 2.1], a type expression proper in its variable
+    /// [Nak00, Def. 9]; `guarded` records whether such a constructor has been
+    /// crossed.
     ///
     /// One rule over the shared child traversal: a node joins its own guard onto
     /// the one it inherited and asks its children under the result. Because

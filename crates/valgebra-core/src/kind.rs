@@ -1,14 +1,14 @@
 //! The kinds of the value universe, and the summary derived from them.
 //!
 //! [`Kind`] sorts the atoms the way the semantic-subtyping literature does, by
-//! the constructor of their values -- JACM §6.1 has three kinds -- split eleven
-//! ways over Python's builtin types: a partition but for `bool`, whose values
-//! are `int`s too ([`Kind::shares_values_with`]). It is the one a descriptor is
-//! indexed with: `Descr::kinds` is an array over it, which is what makes that
-//! structure "a record mapping each atomic type to its representation".
-//! [`Region`] is the seven-bit *summary* derived from it, a partition without
-//! exception, and [`Regions`] is a region set that may be opaque where a schema
-//! is not scalar-decidable.
+//! the constructor of their values -- [FCB08, §6.1] has three kinds -- split
+//! eleven ways over Python's builtin types: a partition but for `bool`, whose
+//! values are `int`s too ([`Kind::shares_values_with`]). It is the one a
+//! descriptor is indexed with: `Descr::kinds` is an array over it, which is
+//! what makes that structure "a record mapping each atomic type to its
+//! representation". [`Region`] is the seven-bit *summary* derived from it, a
+//! partition without exception, and [`Regions`] is a region set that may be
+//! opaque where a schema is not scalar-decidable.
 //!
 //! All three sit **below both deciders**, which is why they are here rather
 //! than in either. The structural rules reason in the summary, because that is
@@ -64,20 +64,21 @@ impl Region {
     /// one bit is enough for every kind that falls in it.
     const NON_SCALAR: Region = Region(1 << 6);
 
-    /// Every region in either set.
+    /// Every region in either set, the union of the sets [FCB08, Def. 4.1].
     #[inline]
     pub(crate) const fn union(self, other: Region) -> Region {
         Region(self.0 | other.0)
     }
 
-    /// Every region in both sets.
+    /// Every region in both sets, their intersection [FCB08, Def. 4.1].
     #[inline]
     pub(crate) const fn intersect(self, other: Region) -> Region {
         Region(self.0 & other.0)
     }
 
-    /// Every region this set does not hold. Bounded to the partition, so the
-    /// unused eighth bit never appears in a result.
+    /// Every region this set does not hold, its complement [FCB08, Def. 4.1].
+    /// Bounded to the partition, so the unused eighth bit never appears in a
+    /// result.
     #[inline]
     pub(crate) const fn complement(self) -> Region {
         Region(Region::ALL.0 & !self.0)
@@ -90,7 +91,8 @@ impl Region {
     }
 
     /// Whether every region of `self` is also a region of `other`: set inclusion,
-    /// which on the scalar-decidable fragment *is* the subtyping relation.
+    /// which on the scalar-decidable fragment *is* the subtyping relation
+    /// [FCB08, §4.1].
     #[inline]
     pub(crate) const fn subset_of(self, other: Region) -> bool {
         self.intersect(other.complement()).is_empty()
@@ -219,9 +221,10 @@ pub enum Kind {
 impl Kind {
     /// Whether a value can have both this kind and `other`.
     ///
-    /// The partition is a partition but for one pair: `bool` subclasses `int`,
-    /// so every boolean is an integer and the two kinds share values. Two kinds
-    /// that share none are disjoint sets, which is the reading a kind is for.
+    /// The partition is a partition but for one pair, where the model's kinds
+    /// share no value [FCB08, §6.1], and `bool` subclasses `int`, so every
+    /// boolean is an integer and the two kinds share values. Two kinds that
+    /// share none are disjoint sets, which is the reading a kind is for.
     #[must_use]
     pub(crate) fn shares_values_with(self, other: Kind) -> bool {
         self == other
@@ -265,7 +268,8 @@ impl Kind {
 impl Kind {
     /// The regions a value of a schema *tagged* this kind may be in.
     ///
-    /// A kind's own region, with one exception, and it is the exception
+    /// A kind's own region, a kind's values being apart from every other's in
+    /// the model [FCB08, §6.1], with one exception, and it is the exception
     /// [`Schema::atom_region`](crate::Schema::atom_region) already names from
     /// the other side: `bool` subclasses `int`, so a schema whose values are
     /// integers admits both regions and a refinement over `int` holds `False`.

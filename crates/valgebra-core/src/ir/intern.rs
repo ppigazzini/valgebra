@@ -376,7 +376,9 @@ thread_local! {
     static CLAUSES: RefCell<Table<[MapClause]>> = RefCell::new(Table::new());
 }
 
-/// The shared handle for a child node.
+/// The shared handle for a child node, shared so that a reflexivity check is a
+/// comparison of handles, as Hosoya, Vouillon and Pierce share theirs
+/// [HVP05, §5.1].
 pub(super) fn node(schema: Schema) -> Arc<Schema> {
     let mut state = FxHasher::default();
     hash_node(&schema, &mut state);
@@ -391,7 +393,8 @@ pub(super) fn node(schema: Schema) -> Arc<Schema> {
     })
 }
 
-/// The shared handle for a member list.
+/// The shared handle for a member list, the union's sorted set of members
+/// [HVP05, §5.1].
 pub(super) fn members(items: &[Schema]) -> Members {
     let mut state = FxHasher::default();
     state.write_usize(items.len());

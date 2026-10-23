@@ -259,7 +259,8 @@ pub(crate) enum Polarity {
 }
 
 impl Polarity {
-    /// The side a complement puts the schema under it on.
+    /// The side a complement puts the schema under it on, the polarity a
+    /// finite approximation reads off a path [AC93, §3.4].
     #[must_use]
     pub(crate) fn flipped(self) -> Polarity {
         match self {
@@ -271,7 +272,8 @@ impl Polarity {
 
 impl Schema {
     /// This schema with its references unfolded, and the cut replaced by the
-    /// bound the position makes sound.
+    /// bound the position makes sound: an unfolding denotes what the reference
+    /// does [AC93, §3.2], and the cut is a finite approximation [AC93, §3.4].
     ///
     /// A set representation holds no cycle, so without this a recursive schema
     /// could not be lowered at all and every relation over one would be left to
@@ -547,12 +549,14 @@ impl Schema {
     /// under a field, a clause's key or value, a union, a meet or a complement.
     ///
     /// This backs the `open`/`close` methods. **Openness is the default of the
-    /// region no clause claims**: a clause is a key-type region carrying its own
-    /// default, so the operators rewrite that one region and leave every claimed
-    /// one alone. A record claims none, which is why opening it frees every key
-    /// and closing it refuses every key -- the record is the special case, not
-    /// the general one. A mapping claims one, so `dict[str, int]` opened still
-    /// says what a `str` key maps to and frees only the key-types beside it.
+    /// region no clause claims**, the open and closed records of [Cas23, §3.2]
+    /// read over key types [Cas23, §4.4], where a clause is a key-type region
+    /// carrying its own default, so the operators rewrite that one region and
+    /// leave every claimed one alone. A record claims none, which is why
+    /// opening it frees every key and closing it refuses every key -- the
+    /// record is the special case, not the general one. A mapping claims one,
+    /// so `dict[str, int]` opened still says what a `str` key maps to and frees
+    /// only the key-types beside it.
     ///
     /// It is a rewrite of the term, not an operation on the set: two terms for
     /// one set may open, or close, to two. A meet of two open records and the

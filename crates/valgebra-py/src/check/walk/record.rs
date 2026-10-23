@@ -981,10 +981,11 @@ fn scalar_map_loop(
 /// Walk a dict once against a record's fields, resolving each string key to a
 /// declared-field index through `lookup` (a precomputed plan or a freshly built
 /// map). A key that resolves checks its value against that field; any other key
-/// must be covered by a default clause. The record matches iff every entry
-/// matches and every required field was seen. How many entries it admitted is
-/// kept in `decided`, where a union asks, as the by-keys reading keeps how many
-/// fields it admitted.
+/// must be covered by a default clause, the default of its part
+/// [Cas23, Def. 4.6]. The record matches iff every entry matches and every
+/// required field was seen, which is a dict's membership in a record type
+/// [Cas23, (21)]. How many entries it admitted is kept in `decided`, where a
+/// union asks, as the by-keys reading keeps how many fields it admitted.
 fn keyed_map_scan(
     fields: &[Field],
     defaults: &[MapClause],

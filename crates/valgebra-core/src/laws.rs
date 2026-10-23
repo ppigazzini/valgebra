@@ -5404,9 +5404,9 @@ proptest! {
     /// The clauses admitting every value close as the one clause they are,
     /// however they are split.
     ///
-    /// Two clauses each admitting every value at their own keys are one
-    /// clause over the union of the keys, ICFP 2023's wildcard written as the
-    /// union its footnote 15 reads one as. Read one at a time, each would be
+    /// Two clauses each admitting every value at their own keys are one clause
+    /// over the union of the keys, the wildcard of [Cas23, §4.4] written as the
+    /// union [Cas23, fn. 15] reads one as. Read one at a time, each would be
     /// tested against the complement of the others' keys, and whether that
     /// folds would decide the answer: `{int: any, ~int: any, ~str: any}` would
     /// keep every clause where `{int | ~int | ~str: any}` closes to `{}`.
@@ -6282,7 +6282,7 @@ proptest! {
 }
 
 /// Every way of assigning each branch to one of `arity` positions, as a
-/// digit string: the `2^|N|` subsets JACM Lemma 6.5 states over the negative
+/// digit string: the `2^|N|` subsets [FCB08, Lem. 6.5] states over the negative
 /// atoms of a clause, generalized to `k^|N|` at arity `k`.
 fn assignments(count: usize, arity: usize) -> impl Iterator<Item = Vec<usize>> {
     (0..arity.pow(u32::try_from(count).unwrap_or(0))).map(move |mut code| {
@@ -6320,15 +6320,15 @@ fn intersection_of(members: Vec<Schema>) -> Schema {
     Schema::Intersection(members.into())
 }
 
-/// JACM Lemma 6.5 for a product, as the paper states it for pairs:
+/// The product lemma [FCB08, Lem. 6.5], as the paper states it for pairs:
 ///
 /// ```text
 /// t1 × t2 <= ⋁_{i∈N} (s1ᵢ × s2ᵢ)
 ///   iff  ∀ N' ⊆ N.  t1 ∧ ⋀_{i∈N'} ¬s1ᵢ = ∅   or   t2 ∧ ⋀_{i∈N∖N'} ¬s2ᵢ = ∅
 /// ```
 ///
-/// and applied at any fixed arity the way ICFP 2023 generalizes formula (2)
-/// to arity `n` in the proof of Lemma 4.7 (Appendix C.1), over every mapping
+/// and applied at any fixed arity the way the proof of [Cas23, Lem. 4.7]
+/// generalizes formula (2) to arity `n` [Cas23, App. C.1], over every mapping
 /// of the branches to positions: each has some position whose clause is
 /// empty. Each clause's emptiness is asked of the scalar fragment,
 /// where it is exact, so the value this returns is the relation itself and
@@ -6614,7 +6614,7 @@ proptest! {
     }
 
     // THEORY: a-sequence-splits-across-a-union
-    /// The product rule decides exactly what JACM Lemma 6.5 says it decides.
+    /// The product rule decides exactly what [FCB08, Lem. 6.5] says it decides.
     ///
     /// `Φ` is the backtrack-free form of the lemma's `2^|N|` enumeration, and
     /// the two are held to one answer over drawn products: a fixed pair

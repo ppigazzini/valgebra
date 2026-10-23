@@ -350,7 +350,8 @@ fn predicate_passes(value: &Bound<'_, PyAny>, predicate: &Bound<'_, PyAny>) -> P
     predicate.call1((value,))?.is_truthy()
 }
 
-/// Membership for a refinement: the base, and every constraint on a member of it.
+/// Membership for a refinement: the base, and every constraint on a member of
+/// it, a base type refined by predicates [JV20, §3.2].
 ///
 /// Constraints narrow the base set, so they are asked only of a base member,
 /// with one exception: a length bound on a container, which

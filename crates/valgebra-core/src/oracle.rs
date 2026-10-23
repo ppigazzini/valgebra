@@ -281,7 +281,9 @@ pub(crate) enum Connective {
 /// A `Ref` is not a set on its own evidence -- what it names is elsewhere -- so
 /// with no definitions to read, the fold declines for every recursive schema and
 /// `json & ~json` stands. Given them, the reference is resolved and the law
-/// applies to a fixpoint like any other set.
+/// applies to a fixpoint like any other set, a set and its complement meeting
+/// in nothing and joining to everything [FCB08, Def. 4.1], where the fixpoint
+/// is contractive [Cas23, Def. 2.1].
 ///
 /// **A schema of the connective's own kind is held as its members.** A
 /// constructor flattens a nested join into the join, so `A | ~A` with `A = int |

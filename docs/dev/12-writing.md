@@ -226,7 +226,8 @@ reader auditing either starts from the other.
 `tests/test_citation_ledger.py` holds the form, the place and the table over
 the files its `SCOPE` names, each number to a statement the paper prints where
 the papers are at hand, and the two lists alike: every item a line names cites
-what its claim cites, and every citing item is named.
+what its claim cites, every citing item is named, and every claim citing a
+result has its line.
 
 ## The gate, and what it cannot see
 

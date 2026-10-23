@@ -175,7 +175,8 @@ impl Relation {
         }
     }
 
-    /// The inclusion a difference decides: `a <= b` is `a & ~b = {}`.
+    /// The inclusion a difference decides: `a <= b` is `a & ~b = {}`
+    /// [FCB08, §4.1].
     ///
     /// The whole of the descriptor's reading, named where the two vocabularies
     /// meet. An empty difference proves the inclusion; a difference proved to

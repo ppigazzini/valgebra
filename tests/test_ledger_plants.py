@@ -1614,6 +1614,20 @@ PLANTS = (
         trips=("test_a_citation_inside_a_body_is_a_step_of_an_item_that_cites",),
     ),
     Plant(
+        # A claim's whole IMPLEMENTED-BY line dropped: the claim still cites the
+        # result and names no code resting on it, which no entry is left to
+        # report.
+        "tests/test_citation_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            "\n\nIMPLEMENTED-BY: ir.rs::Spelling\n",
+            "\n",
+        ),
+        trips=("test_a_claim_about_code_lists_what_implements_it",),
+    ),
+    Plant(
         # The other end of the theory ledger: a claim renamed on the page,
         # which leaves every marker naming it pointing at nothing while still
         # reading like a pointer. The `HELD-BY:` direction does not see it --

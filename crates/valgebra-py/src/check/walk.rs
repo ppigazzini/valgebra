@@ -494,7 +494,8 @@ fn predicate_at<'a, 'py>(
     pool_slot(ctx, index.get(), py)
 }
 
-/// Decide whether `value` is a member of `schema`'s set.
+/// Decide whether `value` is a member of `schema`'s set, the membership
+/// predicate of [Cas24, Def. 3] with a stop as a third answer.
 ///
 /// In explain mode a [`Violation`] is pushed into `out` for every independent
 /// failure and `path` accumulates the location of the current value; in fast
@@ -1617,7 +1618,8 @@ fn refused_on_the_trail(
     stopped(ctx.mode)
 }
 
-/// Whether this value is a member of the definition the reference names.
+/// Whether this value is a member of the definition the reference names, the
+/// reference denoting its definition [AC93, §3.2].
 ///
 /// The reference is entered on the trail for the length of the definition's
 /// walk, so a value reached from inside itself meets its own pair and is
