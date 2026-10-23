@@ -35,6 +35,25 @@ Some of this is decades old and stays, because a theorem does not expire.
 Stone's representation theorem and Nakano's guardedness modality are exactly the
 results the design leans on, not dated approximations of them.
 
+## Works cited by label
+
+A citation names a work by its label and the place in it: `[Cas23, (22)]` is
+formula (22) of the work labeled `Cas23`, and `[FCB08, Lem. 6.5]` is the lemma
+numbered 6.5 in `FCB08`. A label is the one the `alpha` bibliography style
+builds from the authors and the year, which is how these works label one
+another, and this table is the one place a work's identifier is written. A
+number is the one the copy in the third column prints; a preprint and the
+published version can number a result apart.
+[12-writing.md](12-writing.md#citing-a-paper) says when to cite and where.
+
+| Label | Work | Owns here | Read in | Identifier |
+|---|---|---|---|---|
+| `AC93` | Amadio & Cardelli, "Subtyping Recursive Types", *TOPLAS* 15(4), 1993 | the trail of recursive subtyping, the unfolding of a reference | the published article | [doi:10.1145/155183.155231](https://doi.org/10.1145/155183.155231) |
+| `Cas23` | Castagna, "Typing Records, Maps, and Structs", *PACMPL* 7(ICFP), Article 196, 2023 | records and maps: the atoms, their operations, the backtrack-free rules | the published article, with its appendices | [doi:10.1145/3607838](https://doi.org/10.1145/3607838) |
+| `CD24` | Castagna & Duboc, "Guard Analysis and Safe Erasure Gradual Typing: a Type System for Elixir" | a descriptor per kind of atom, tuples as unions of atoms, the gradual pair | the preprint, v4 of 2 June 2026 | [arXiv:2408.14345v4](https://arxiv.org/abs/2408.14345v4) |
+| `FCB08` | Frisch, Castagna & Benzaken, "Semantic Subtyping: Dealing Set-Theoretically with Function, Union, Intersection, and Negation Types", *JACM* 55(4), 2008 | the model: interpretation, normal forms, kinds, products, simulations | the published article | [doi:10.1145/1391289.1391293](https://doi.org/10.1145/1391289.1391293) |
+| `HVP05` | Hosoya, Vouillon & Pierce, "Regular Expression Types for XML", *TOPLAS* 27(1), 2005 | sequences as regular expression types, the classical algorithm, hash consing | the published article | [doi:10.1145/1053468.1053470](https://doi.org/10.1145/1053468.1053470) |
+
 ## The frame: a schema denotes a set
 
 **Scott and Strachey, denotational semantics.** A schema's meaning is the set of
@@ -87,8 +106,8 @@ The distinction is not pedantry. A rule stated as the reduction and implemented
 structurally has a hole wherever an arm is missing, and the reduction's name over
 the top is what stops anyone looking for one.
 
-On the expectation to hold of a rewriter, the paper offers an observation in
-§2.2, not a theorem, and it is about a syntactic rule set:
+On the expectation to hold of a rewriter, the paper offers an observation
+[FCB08, §2.2], not a theorem, and it is about a syntactic rule set:
 
 > Forgetting any of these rules yields a type system that, although sound, does
 > not match (i.e., it is not complete with respect to) the intuitive semantics of
@@ -108,11 +127,10 @@ compromises stated. **[GUIDING: a-peer-implementation]** — the closest thing t
 implementation.
 
 **Castagna & Duboc, "Guard Analysis and Safe Erasure Gradual Typing: a Type
-System for Elixir" (2024).** The same system formalized, with its implementation
-in §7.1: a descriptor per kind of atom, a type of tuples kept as a union of
-tuple atoms by distributing a negated tuple over its components "and likewise
-for larger arities", and a gradual type as two static descriptors. The two
-citations below as "Castagna & Duboc §7.1" are this section.
+System for Elixir" (2024).** The same system formalized, with its
+implementation: a descriptor per kind of atom, a type of tuples kept as a union
+of tuple atoms by distributing a negated tuple over its components "and likewise
+for larger arities", and a gradual type as two static descriptors [CD24, §7.1].
 
 ## Sequences as a regular language
 
@@ -154,19 +172,20 @@ leftmost-first, which keeps only the match a search prefers: `a|ab` would lose
 to the `regex` matcher the walk runs.
 
 **The rule that splits a fixed-length sequence across a union** is the product
-decomposition — Frisch, Castagna & Benzaken Lemma 6.5 for pairs, in the
-backtrack-free form Castagna gives as `Φ`, and generalized to a fixed component
-count the way Castagna & Duboc §7.1 state the tuple rule for larger arities.
-**[LOAD-BEARING: a-sequence-splits-across-a-union]** — `product_subtype` in `decision/products.rs`. It applies in subtyping
-and nowhere else: emptiness's rules do not decompose a product, so the same
-relation asked as a meet with a complement is left to the set representation,
-which decides it where the difference fits the build bounds -- `tuple[int | str,
-int]` against its two corners -- and declines past them. `Φ` characterizes the
-inclusion exactly, so the rule refutes as well as proves -- a product with a
-value and no branch left is outside the union -- where every member the rule
-sets aside holds none of the subject's values; and a branch that shares no value
-with the narrowed product at some position is dropped, which the same
-characterization makes exact.
+decomposition — [FCB08, Lem. 6.5] for pairs, in the backtrack-free form Castagna
+gives as `Φ` [Cas23, §2.1.4], and generalized to a fixed component count as the
+proof of [Cas23, Lem. 4.7] generalizes the pair to every arity, over the
+mappings of the branches to positions [Cas23, App. C.1].
+**[LOAD-BEARING: a-sequence-splits-across-a-union]** — `product_subtype` in
+`decision/products.rs`. It applies in subtyping and nowhere else: emptiness's
+rules do not decompose a product, so the same relation asked as a meet with a
+complement is left to the set representation, which decides it where the
+difference fits the build bounds -- `tuple[int | str, int]` against its two
+corners -- and declines past them. `Φ` characterizes the inclusion exactly, so
+the rule refutes as well as proves -- a product with a value and no branch left
+is outside the union -- where every member the rule sets aside holds none of the
+subject's values; and a branch that shares no value with the narrowed product at
+some position is dropped, which the same characterization makes exact.
 
 SOURCE: §13.1 "**The product decomposition.**"
 
@@ -184,57 +203,57 @@ SOURCE: §3 "The model behind `Schema::KeyedMap`"; §13.3 "**The representation 
 
 HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition, a_key_of_whole_kinds_opens_the_parts_it_holds
 
-**Castagna & Duboc §7.1: a gradual type is two static types.** Every gradual
-`t` is `t_down ∨ (? ∧ t_up)` and is represented by **two** descriptors, with
-the operations run on each separately. valgebra carries one, because it has one
-type to carry: `typing.Any` builds the top with a spelling beside it, a
-spelling is what `repr` reads to print and the sharing table (`ir/intern.rs`)
-reads to keep the two apart, no relation or law reads it, and the two
-spellings lower to the same descriptor. The pair exists so that every lattice rule can
-exclude a gradual case; having no such case does the same work by having
-nothing to exclude. **[NOT-REACHED: one-descriptor-one-type]**
+**A gradual type is two static types** in Castagna & Duboc's implementation
+[CD24, §7.1]. Every gradual `t` is `t_down ∨ (? ∧ t_up)` and is represented by
+**two** descriptors, with the operations run on each separately. valgebra
+carries one, because it has one type to carry: `typing.Any` builds the top with
+a spelling beside it, a spelling is what `repr` reads to print and the sharing
+table (`ir/intern.rs`) reads to keep the two apart, no relation or law reads it,
+and the two spellings lower to the same descriptor. The pair exists so that
+every lattice rule can exclude a gradual case; having no such case does the same
+work by having nothing to exclude. **[NOT-REACHED: one-descriptor-one-type]**
 
 SOURCE: §13.5 "There is one descriptor because there is one type"
 
 HELD-BY: the_two_spellings_of_the_top_lower_to_one_descriptor, the_two_spellings_of_the_top_are_not_one_node
 
-**Castagna, ICFP 2023, (17) and (22): the backtrack-free record rule.** A
-record below a union of records is decided by `Φ`, which narrows the record by
-one member a level and a label at a time and never builds the difference.
+**The backtrack-free record rule, [Cas23, (17)] and [Cas23, (22)].** A record
+below a union of records is decided by `Φ`, which narrows the record by one
+member a level and a label at a time and never builds the difference.
 **[LOAD-BEARING: a-record-splits-across-a-union]** —
 `keyed_map_splits_across_union` in `decision/records.rs`: the product rule's
-shape one component over, the defaults compared part by part as (22) compares
-them, and the clauses placed in the key partition by the set representation's
-own `key_cover`, so the two deciders agree on which key falls where. Its
-emptiness reading, `keyed_map_minus_keyed_maps`, answers `R ∧ ¬R₁ ∧ … ∧ ¬Rₙ`
-the same way, so the two routes to one inclusion do not part. Two points are
-the tree's own. A member set aside on a default that escapes it refutes only
-through an infinite part of the partition: Theorem 4.5 proves (22) under the
-hypothesis §4.4 makes of every key type, that it is infinite, and the paper
-says the hypothesis "is actually used" -- the proof of Lemma 4.7 (Appendix C.1)
-takes a key of the part no label names. `None` has one key and `bool` two,
-where the paper would write their keys as labels. And a label narrowed to a
-table of constants minus constants is
-read as the set it leaves (`FiniteMeet` in `decision/literals.rs`), without
-which a tag of literals would decline at its first narrowing.
+shape one component over, the defaults compared part by part as [Cas23, (22)]
+compares them, and the clauses placed in the key partition by the set
+representation's own `key_cover`, so the two deciders agree on which key falls
+where. Its emptiness reading, `keyed_map_minus_keyed_maps`, answers
+`R ∧ ¬R₁ ∧ … ∧ ¬Rₙ` the same way, so the two routes to one inclusion do not
+part. Two points are the tree's own. A member set aside on a default that
+escapes it refutes only through an infinite part of the partition:
+[Cas23, Thm. 4.5] proves (22) under the hypothesis [Cas23, §4.4] makes of every
+key type, that it is infinite, and the paper says the hypothesis "is actually
+used" -- the proof of [Cas23, Lem. 4.7] takes a key of the part no label names
+[Cas23, App. C.1]. `None` has one key and `bool` two, where the paper would
+write their keys as labels. And a label narrowed to a table of constants minus
+constants is read as the set it leaves (`FiniteMeet` in `decision/literals.rs`),
+without which a tag of literals would decline at its first narrowing.
 
 SOURCE: §13.3 "`keyed_map_splits_across_union` runs `Phi` beside the one-map rule"
 
 HELD-BY: a_record_below_a_union_of_records_is_the_rules_answer, a_record_split_stops_where_the_decision_budget_does, a_record_splits_across_the_records_that_fix_its_tag, a_record_splits_on_whether_a_key_is_present, a_member_apart_at_an_optional_label_is_dropped, a_member_set_aside_on_a_finite_part_keeps_only_the_proof, a_member_whose_default_the_rules_cannot_relate_is_set_aside, a_clause_the_partition_does_not_hold_declines_the_split, a_record_minus_the_records_that_cover_it_is_empty, a_record_split_agrees_with_the_set_reading
 
-The paper's model is a *quasi K-step function* (Definition 4.6): named labels,
-and every other key given the default of the key type it falls in, the key
-types a partition of the keys. valgebra's clauses need not be a partition — a
-key belongs when **some** clause admits it and its value, in the walk and in
+The paper's model is a *quasi K-step function* [Cas23, Def. 4.6], named labels
+and every other key given the default of the key type it falls in, the key types
+a partition of the keys. valgebra's clauses need not be a partition — a key
+belongs when **some** clause admits it and its value, in the walk and in
 subtyping alike, and two clauses may claim the same key. That is valgebra's own
 model rather than the paper's, and the paper says why it is not theirs: it
-forbids overlapping domains in one map (§4.4), and an overlap read at face value
-makes a key in two domains satisfy both, a conjunction where valgebra reads a
-disjunction. Neither reads the clauses in order: the paper rejects the
+forbids overlapping domains in one map [Cas23, §4.4], and an overlap read at
+face value makes a key in two domains satisfy both, a conjunction where valgebra
+reads a disjunction. Neither reads the clauses in order: the paper rejects the
 leftmost-match reading because a semantic subtyping relation disregards the
-order of the fields. The set each node denotes is well defined; what it does
-not have is the paper's canonical form, which is why the domain is the field
-list as written.
+order of the fields. The set each node denotes is well defined; what it does not
+have is the paper's canonical form, which is why the domain is the field list as
+written.
 
 ## Recursion
 
@@ -261,7 +280,7 @@ decision proves that fixpoint empty, which is its answer on the finite values.
 
 Two theorems sit nearby and neither is the justification. **Banach's fixed-point
 theorem** — "a contractile map over a complete metric space has a unique
-fixpoint", quoted at Amadio & Cardelli §3.3.2 — is the metric account of
+fixpoint", quoted at [AC93, §3.3.2] — is the metric account of
 recursive types, and its unique fixpoint lives among *infinite* trees, which the
 walk never admits. **Tarski's fixpoint theorem (1955)** gives a monotone map on a
 complete lattice a least fixpoint, and applies to the complement-free fragment,
@@ -326,7 +345,8 @@ HELD-BY: test_a_cycle_is_caught_by_identity_rather_than_by_equality, test_a_valu
 **Amadio & Cardelli, "Subtyping Recursive Types" (1993).** Subtyping between
 recursive types is decided coinductively over a **trail** of address pairs:
 assume the goal, unfold, and a pair already on the trail is a local success
-(§1.5, with the algorithm at §4.4). **[LOAD-BEARING: recursive-subtyping]** — the assumption stack in
+([AC93, §1.5], with the algorithm at [AC93, §4.4]).
+**[LOAD-BEARING: recursive-subtyping]** — the assumption stack in
 `crates/valgebra-core/src/decision.rs` is that idea, with terms where the paper
 has addresses.
 
@@ -358,13 +378,13 @@ SOURCE: §13.0 "**The circularity, and why valgebra escapes it.**"
 
 HELD-BY: test_the_membership_walk_never_consults_subtyping, test_a_callable_annotation_erases_the_arrow_it_writes, test_every_variant_is_a_generator_a_representative_or_a_marker, test_no_column_names_a_variant_that_is_gone
 
-**Frisch, Castagna & Benzaken, Definition 6.9.** Emptiness is proved
-coinductively too: a *simulation* is "a self-justifying set, that is a
+**Emptiness is proved coinductively too** in Frisch, Castagna & Benzaken's
+model: a *simulation* [FCB08, Def. 6.9] is "a self-justifying set, that is a
 co-inductive proof of the fact that all its elements are equal to `0`".
-**[GUIDING: emptiness-is-a-simulation]** — valgebra's emptiness recurses on the structure and reads a cycle
-back to a visiting reference, or to a meet held open on its path (`OPEN_MEETS`
-in `decision/emptiness.rs`), as uninhabited, which is the inductive reading of
-the same fact over finite values.
+**[GUIDING: emptiness-is-a-simulation]** — valgebra's emptiness recurses on the
+structure and reads a cycle back to a visiting reference, or to a meet held open
+on its path (`OPEN_MEETS` in `decision/emptiness.rs`), as uninhabited, which is
+the inductive reading of the same fact over finite values.
 
 Coinduction also governs the *value* side: a value that contains itself is
 refused by identity rather than followed ([04-walk.md](04-walk.md)).
@@ -746,17 +766,17 @@ HELD-BY: test_the_two_deciders_are_measured_against_each_other, test_decision_de
 Openness is the default of the key-type region the clauses leave over: `open`
 frees that region and `close` refuses it, and neither touches a region a clause
 claims. A clause short of every value claims its keys; the clauses admitting
-every value are one clause over the union of their keys, ICFP 2023's wildcard
-(§4.4) written as the union its footnote 15 reads one as, of which the
+every value are one clause over the union of their keys, the wildcard of
+[Cas23, §4.4] written as the union [Cas23, fn. 15] reads one as, of which the
 part over keys another clause claims stays and the rest is the region. So a
 mapping opened keeps what a `str` key maps to and admits an `int` key with any
-value, one clause is read the same whether or not a field is declared beside
-it, and the top split over `str` and `complement(str)` closes as the top does. Every record is rewritten, the one a clause maps a key to
-included. What the laws hold of the sets is narrower than "a function of the
-set": closing commutes with absorption, applying either operator twice
-gives the set applying it once gave, though not always the same term, and a
-name saying what its record says of every key it does not name moves no set
-either operator gives.
+value, one clause is read the same whether or not a field is declared beside it,
+and the top split over `str` and `complement(str)` closes as the top does. Every
+record is rewritten, the one a clause maps a key to included. What the laws hold
+of the sets is narrower than "a function of the set": closing commutes with
+absorption, applying either operator twice gives the set applying it once gave,
+though not always the same term, and a name saying what its record says of every
+key it does not name moves no set either operator gives.
 **[OBLIGATION: open-and-close-read-the-region]**
 
 SOURCE: §14.6 "Operators belong on the representation built for them"
@@ -900,16 +920,18 @@ disjoint sets would prove `bool & int` empty, which `True` refutes.
 
 HELD-BY: a_boolean_is_the_one_kind_another_kind_holds, test_a_boolean_is_an_integer_and_no_other_kind_is
 
-**A constraint no fresh key meets is read beside the others.** ICFP 2023's (11)
-reads each constraint of a map atom's `S` on its own, against the default,
-under the hypothesis §4.4 states before Lemma 4.7: every key type is infinite,
-so each constraint takes a key no label names and no other constraint wants. Two things break that here.
-The parts of `bool` and `None` hold two keys and one, and a constraint the
-default cannot meet is left to the keys the labels name. Those constraints are
-given keys together: a key holds one value, which every constraint given it
-asks for, and the keys a dict then carries must be keys one dict can hold -- so
-the one-key record `{"a": int | str}` is below `{str: ~int} | {str: ~str}`. The
-search is bounded by `MAX_ASSIGNMENTS` and declines past it. **[DEVIATION: pinned-wants-are-read-together]**
+**A constraint no fresh key meets is read beside the others.** Property
+[Cas23, (11)] reads each constraint of a map atom's `S` on its own, against the
+default, under the hypothesis [Cas23, §4.4] states before [Cas23, Lem. 4.7],
+that every key type is infinite, so each constraint takes a key no label names
+and no other constraint wants. Two things break that here. The parts of `bool`
+and `None` hold two keys and one, and a constraint the default cannot meet is
+left to the keys the labels name. Those constraints are given keys together: a
+key holds one value, which every constraint given it asks for, and the keys a
+dict then carries must be keys one dict can hold -- so the one-key record
+`{"a": int | str}` is below `{str: ~int} | {str: ~str}`. The search is bounded
+by `MAX_ASSIGNMENTS` and declines past it.
+**[DEVIATION: pinned-wants-are-read-together]**
 
 HELD-BY: two_constraints_pinned_to_one_key_ask_it_for_both, a_boolean_the_integer_label_occupies_witnesses_nothing, the_one_none_key_cannot_witness_against_its_own_label, the_search_for_keys_past_its_bound_is_unknown, test_one_key_cannot_witness_two_clauses_of_a_union
 
@@ -965,21 +987,21 @@ HELD-BY: the_lattice_laws_hold_of_the_lines, the_complement_laws_hold_of_the_lin
 
 ## The limit
 
-**No result here is implemented whole.** What is implemented is named per
-entry, and the shape of every gap is the same: a construction the paper gives
-over its own type language, carried out here over the fragment this IR can
-spell. The word component is the classical construction, a complement by
-exchanging the accepting states of an automaton `regex-automata` determinized
-once per pattern, a product and an emptiness test, on the regular languages a
-`str` refinement denotes. Hosoya-Vouillon-Pierce §4.1 describe it and set it aside:
+**No result here is implemented whole.** What is implemented is named per entry,
+and the shape of every gap is the same: a construction the paper gives over its
+own type language, carried out here over the fragment this IR can spell. The
+word component is the classical construction, a complement by exchanging the
+accepting states of an automaton `regex-automata` determinized once per pattern,
+a product and an emptiness test, on the regular languages a `str` refinement
+denotes. Hosoya, Vouillon and Pierce describe it [HVP05, §4.1] and set it aside:
 an early XDuce used it, and it realized every exponential blow-up the types
 held, so their paper decides inclusion top-down instead. Neither that algorithm
 nor the tree-automata inclusion it decides is built, and neither is the
-tree-logic engine above. The
-structural procedure is sound and budget-bounded and exact on a published
-fragment, not a decision procedure for the whole relation. And the interning that
-shares a name with hash consing is a table of nodes, not a decision procedure.
-Where a page here says otherwise, the page is wrong.
+tree-logic engine above. The structural procedure is sound and budget-bounded
+and exact on a published fragment, not a decision procedure for the whole
+relation. And the interning that shares a name with hash consing is a table of
+nodes, not a decision procedure. Where a page here says otherwise, the page is
+wrong.
 
 **And three components are attributed to no source at all**, which is a
 different and larger gap than any of the above: see [Three representations with

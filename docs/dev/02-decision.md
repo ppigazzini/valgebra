@@ -633,7 +633,7 @@ These are the readings that refute, each with the value it stands on:
   key of a kind the clause's key holds whole -- `None`, `7`, `()`, a name
   neither map declares -- which each supertype clause holds whole or not at
   all, with a value outside the one clause that reads it, or any value where
-  none does: ICFP Lemma 4.7, one key kind at a time (`holds_every_value_of`,
+  none does: [Cas23, Lem. 4.7], one key kind at a time (`holds_every_value_of`,
   `holds_no_value_of`). Kinds are read whole on purpose, because the plain key
   is then hashable: `list`, `tuple[list[int]]` and a class whose own instances
   are unhashable each hold a key only through a subclass that hashes, which
@@ -825,8 +825,8 @@ fields, so what either asks is a meet of subterms and their complements.
 The union rule asks the subject against the branches it can meet, a union of
 some members of a union it was handed. And a meet or a complement folds to the
 top or the bottom. So every goal is a pair drawn from a finite closure `C` --
-JACM §6.9's `N(A)`, the normal forms over the atoms a type mentions, read over
-schemas -- and a query asks at most `|C|²` distinct goals.
+the `N(A)` of [FCB08, §6.9], the normal forms over the atoms a type mentions,
+read over schemas -- and a query asks at most `|C|²` distinct goals.
 
 That bounds the goals and not yet a path, and the trail is what ends one. Every
 step but an unfolding asks a smaller pair: children are smaller than their
@@ -836,7 +836,7 @@ pair onto the trail, which holds each `(subject, supertype)` pair being decided,
 and a pair that comes back is answered by hypothesis. Along one path the trail
 only grows and holds distinct pairs of `C`, so `(|C|² − trail length, size of
 the goal)` falls at every step in the lexicographic order, a reference counting
-as one node of its side: the induction TOPLAS 2005 Theorem 4 makes over its
+as one node of its side: the induction [HVP05, Thm. 4] makes over its
 automaton's states, with the trail as its `Γ`.
 Emptiness is the same argument over one side. A verdict recurses into children
 or unfolds a reference its `visiting` list does not hold, and the meet of a

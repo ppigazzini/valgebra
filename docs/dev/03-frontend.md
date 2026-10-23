@@ -623,7 +623,7 @@ governs, and a map reads that as whole *kinds* of key or as the constants a
 `Literal` names. `Annotated[str, MinLen(2)]` is neither: it names part of a kind,
 and two such clauses can overlap without either containing the other. Overlapping
 key domains are a different theory from the one these maps are built on --
-Castagna's §4.5 says that with them "there would not be any difference between
+[Cas23, §4.5] says that with them "there would not be any difference between
 record types and an intersection of function types" -- and this library reads
 overlapping clauses disjunctively, which answers a question the two theories do
 not agree on.

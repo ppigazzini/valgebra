@@ -1,43 +1,46 @@
-"""A numbered result the theory page cites is one the shelf can be opened at.
+"""A result the tree cites is cited by label, at a number its paper prints.
 
-`docs/dev/10-theory.md` does not argue the theory; it records which result each
-design decision rests on, so a reader can check the decision against a page of a
-paper rather than against a recollection. That only works while the citation
-resolves: "Lemma 6.5" is worth writing because somebody can open the paper at
-Lemma 6.5, and worth nothing once nobody can say which paper.
+`docs/dev/10-theory.md` records which result each design decision rests on, so
+a reader can check the decision against a page of a paper rather than against a
+recollection. That only works while a citation resolves: "Lemma 6.5" is worth
+writing because somebody can open the paper at Lemma 6.5, and worth nothing once
+nobody can say which paper. So a citation is a label and a locator,
+`[FCB08, Lem. 6.5]`, the label a row of the page's table of works, and
+`docs/dev/12-writing.md` says when one is owed and where it goes.
 
-Two lists make it resolvable, and neither held the other. The page names works
-and cites numbered results of them. The shelf's own table names a work per
-surface and the file that holds it. A work cited on the page and missing from
-the table is a citation with no paper behind it; a file on the shelf with no
-row is a paper nothing says the use of.
+What this holds, over the files `SCOPE` names:
 
-So both are read here, over the theory page and the decision page. A numbered
-result is attributed to the **work named nearest at or before it in its
-paragraph**, or in the paragraph before where its own names none -- which is how
-a reader attributes it -- and a work is named by its authors, its venue or the
-shorthand the pages use. That work has to be one the table names and a file the
-shelf holds, and the number has to be one the paper states: the shelf's own
-rule is to verify a theorem number and trust a citation chain, and a wrong
-number resolved to a real paper passed before.
+* every citation's label is a row of the table, and every row is cited, so the
+  table neither names a work nobody cites nor misses one somebody does;
+* every locator has one of the forms the writing rule lists, and none stands
+  outside a label -- a `Lemma 4.7` with no label is the unresolvable citation
+  the form exists to end -- and no label stands without one, which rustdoc
+  reads as a link it cannot resolve;
+* no citation opens a paragraph or a comment, and none stands before a colon,
+  where Markdown reads it as a link definition and deletes the line;
+* where the shelf is at hand, every locator names a statement its paper prints:
+  the shelf's own rule is to verify a theorem number and trust a citation
+  chain, and a wrong number resolved to a real paper passed before.
 
-The shelf is not redistributed, so a clone has none: these rows skip where it is
-absent rather than failing, and say so. What does not skip is the direction that
-lives entirely in the tree -- every citation attributable to some work at all --
-because a numbered result under no work is unresolvable to every reader, with a
-shelf or without one.
+The shelf is not redistributed, so a clone has none: the rows that read it skip
+where it is absent rather than failing, and say so. The rest live entirely in
+the tree and hold in every clone.
 
-LEDGER: every numbered result the theory pages cite is one a paper on the shelf states
+LEDGER: every citation is a label the theory page tables, at a number its paper prints
 """
 
 from __future__ import annotations
 
+import functools
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
 
 from _tree import ROOT
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 pytestmark = pytest.mark.repository
 
@@ -49,231 +52,377 @@ THEORY = ROOT / "docs" / "dev" / "10-theory.md"
 #: the directory reaches nobody who clones this repository.
 SHELF = ROOT / ("__" + "DEV") / "papers"
 
-#: A numbered result of a paper: the named kinds, and a section number. Both are
-#: things a reader opens a paper *at*, which is what makes them citations rather
-#: than prose.
-_CITATION = re.compile(
-    r"\b(?:Theorem|Definition|Lemma|Proposition|Corollary)\s+\d+(?:\.\d+)*"
-    r"|§\d+(?:\.\d+)*"
-)
+#: The files the citation rule holds, as globs from the root. A file joins when
+#: its citations are written in the form, which is the commit that writes them.
+SCOPE = ("docs/dev/*.md",)
 
-#: A row of the shelf's table: the surface, the work, and the file holding it.
-_ROW = re.compile(r"^\|(?P<surface>[^|]+)\|(?P<work>[^|]+)\|(?P<file>[^|]+)\|$")
-
-#: The authors of a work, which is the table's owner cell up to the title. The
-#: page names a work the same way, so this is what ties the two together.
-_AUTHORS = re.compile(r"^(.*?),\s*\*")
-
-#: The pages whose citations are held: the design rationale, and the decision
-#: procedure's own page.
-PAGES = (THEORY, ROOT / "docs" / "dev" / "02-decision.md")
-
-#: Every way the pages name a work, and the stem of the shelf's file for it.
-#: Longest first at one position, so "Frisch, Castagna & Benzaken" is not read as
-#: the "Castagna" inside it. `None` is a work the shelf does not hold, named so
-#: that a citation of it is declared rather than resolved to the nearest paper.
-_JACM = "frisch-castagna-benzaken-2008-semantic-subtyping-JACM"
-_HVP = "hosoya-vouillon-pierce-2005-regular-expression-types-xml"
-ALIASES: dict[str, str | None] = {
-    "Frisch, Castagna & Benzaken": _JACM,
-    "JACM": _JACM,
-    "Castagna & Duboc": "castagna-duboc-2024-guard-analysis-safe-erasure-elixir",
-    "Castagna & Peyrot": "castagna-peyrot-2025-polymorphic-records",
-    "ICFP 2023": "castagna-2023-typing-records-maps-structs-ICFP",
-    "ICFP": "castagna-2023-typing-records-maps-structs-ICFP",
-    "UIN": "castagna-2021-union-intersection-negation",
-    "Amadio & Cardelli": "amadio-cardelli-1993-subtyping-recursive-types",
-    "Hosoya, Vouillon & Pierce": _HVP,
-    "TOPLAS 2005": _HVP,
-    "Nakano": "nakano-2000-modality-for-recursion",
-    # Named for the family that makes a trail keeping nothing exponential, and
-    # held by no file here. The pages describe the construction and give no
-    # section number, which is the rule for a source nobody here has read.
-    "Gapeyev, Levin & Pierce": None,
+#: Each label the table may carry, and the stem of the shelf's file for the
+#: work. The page cannot name the file -- the shelf is not in a clone -- so the
+#: pairing lives here, beside the check that reads it.
+LABELS: dict[str, str] = {
+    "AC93": "amadio-cardelli-1993-subtyping-recursive-types",
+    "CD24": "castagna-duboc-2024-guard-analysis-safe-erasure-elixir",
+    "Cas23": "castagna-2023-typing-records-maps-structs-ICFP",
+    "FCB08": "frisch-castagna-benzaken-2008-semantic-subtyping-JACM",
+    "HVP05": "hosoya-vouillon-pierce-2005-regular-expression-types-xml",
 }
 
+#: A label as `alpha` builds it: up to four letters of the authors, a `+` past
+#: four of them, the year's two digits, and a letter where two collide.
+_LABEL = r"[A-Z][A-Za-z]{0,3}\+?\d{2}[a-z]?"
+
+#: A citation: a label, a comma, and a locator up to the bracket.
+_TOKEN = re.compile(rf"\[(?P<label>{_LABEL}), (?P<locator>[^\]\n]+)\]")
+
+#: A label alone in brackets, which is a citation with no place in the work.
+_BARE = re.compile(rf"\[(?P<label>{_LABEL})\](?!\()")
+
+#: A citation broken across a line: the parse reads no citation there, so its
+#: locator would escape every check below.
+_BROKEN = re.compile(rf"\[(?P<label>{_LABEL}),[^\]\n]*\n")
+
+#: The parts a locator is written in, comma-separated, each one of the forms the
+#: writing rule lists: an equation or rule tag as printed, a section, a numbered
+#: statement, a figure, an algorithm, an appendix, a footnote, and the page or
+#: line that narrows the part before it.
+_NUMBER = r"[0-9A-Z]+(?:\.[0-9]+)*"
+_PART = re.compile(
+    rf"\((?P<tag>[A-Za-z0-9][A-Za-z0-9-]*)\)"
+    rf"|§(?P<section>\d+(?:\.\d+)*)"
+    rf"|(?P<kind>Def|Thm|Lem|Prop|Cor|Rem|Fig|Alg|App|fn)\. (?P<number>{_NUMBER})"
+    rf"|(?:p|l)\. \d+(?:-\d+)?"
+)
+
+#: The words a statement is printed under, for each abbreviation a locator uses.
+_KINDS = {
+    "Def": "Definition",
+    "Thm": "Theorem",
+    "Lem": "Lemma",
+    "Prop": "Proposition",
+    "Cor": "Corollary",
+    "Rem": "Remark",
+    "Alg": "Algorithm",
+}
+
+#: A locator written outside a label: a named statement with its number, a
+#: section sign, or a footnote. What a reader opens a paper *at*, which is what
+#: makes it a citation rather than prose.
+_LOOSE = re.compile(
+    r"\b(?:Theorem|Definition|Lemma|Proposition|Corollary|Remark|Figure|Algorithm"
+    r"|Appendix)\s+[0-9A-Z]+(?:\.[0-9]+)*\b"
+    r"|§\d+(?:\.\d+)*"
+    r"|\bfootnote\s+\d+"
+)
+
 #: A section of the project's own notes, which number from 13 and which no paper
-#: on the shelf reaches; a `SOURCE:` line quotes those notes.
-_NOTES = re.compile(r"§1[3-5](?:\.\d+)*")
+#: here reaches; a `SOURCE:` line quotes those notes, and the theory ledger holds
+#: it.
+_SOURCE = "SOURCE:"
+
+#: The table's rows: the label, the work, what it owns, the copy read, and the
+#: identifier, which is a DOI or a versioned arXiv number.
+_ROW = re.compile(
+    r"^\| `(?P<label>[^`]+)` \|(?P<work>[^|]+)\|(?P<owns>[^|]+)\|(?P<read>[^|]+)"
+    r"\| \[(?P<identifier>doi:10\.\d+/\S+|arXiv:\d{4}\.\d{4,5}v\d+)\]"
+    r"\(https://\S+\) \|$"
+)
 
 
-def _paragraphs(text: str) -> list[tuple[int, str]]:
-    """Each paragraph of `text`, with the line it starts on."""
-    found, line = [], 1
-    for block in re.split(r"(\n\s*\n)", text):
-        if block.strip():
-            found.append((line, block))
-        line += block.count("\n")
-    return found
+class Citation(NamedTuple):
+    """One citation in a file the rule holds."""
+
+    where: str
+    label: str
+    locator: str
 
 
-def _citations(page: Path) -> list[tuple[str, str, str | None]]:
-    """Each numbered result on `page`: where, what, and the alias it is of."""
-    found: list[tuple[str, str, str | None]] = []
-    last: str | None = None
-    for start, paragraph in _paragraphs(page.read_text(encoding="utf-8")):
-        marks = sorted(
-            (match.start(), -len(alias), alias)
-            for alias in ALIASES
-            for match in re.finditer(re.escape(alias), paragraph)
-        )
-        if not paragraph.lstrip().startswith("SOURCE:"):
-            for cited in _CITATION.finditer(paragraph):
-                if _NOTES.fullmatch(cited.group(0)):
-                    continue
-                before = [alias for at, _, alias in marks if at <= cited.start()]
-                line = start + paragraph[: cited.start()].count("\n")
-                work = before[-1] if before else last
-                found.append((f"{page.name}:{line}", cited.group(0), work))
-        if marks:
-            last = marks[-1][2]
-    return found
+@functools.cache
+def _scoped() -> tuple[Path, ...]:
+    """Give the files `SCOPE` names, in a stable order."""
+    return tuple(sorted({path for glob in SCOPE for path in ROOT.glob(glob)}))
 
 
-def _states(text: str, cited: str) -> bool:
-    """Whether the extraction `text` *states* the numbered result `cited`.
+#: Code a page quotes, inline or fenced: an example of the form, or of the form
+#: refused, which is spelled rather than used.
+_CODE = re.compile(r"```.*?```|`[^`\n]*`", re.DOTALL)
 
-    A statement opens a line: `LEMMA 6.5.`, `Lemma 4.7 (Map Containment).`,
-    number-first as Amadio & Cardelli print one (`5.2.2 LEMMA`), and a section
-    as `6.9. TITLE`, `1.5 Algorithm Outline` or its number alone. Case is folded,
-    so a ligature the extraction split (`DEfiNITION`) still reads. A mention --
-    "(Definition 6.9)" mid-sentence -- does not answer for a statement.
+
+def _text(path: Path) -> str:
+    """Give the text of `path` the rule reads, with what it does not read blanked.
+
+    A `SOURCE:` line quotes the project's notes by their own section numbers,
+    which are not a paper's, so it is read by the theory ledger and not here;
+    and quoted code spells a citation rather than making one. Blanked rather
+    than dropped, so a line number still points at its line.
     """
-    if cited.startswith("§"):
-        number = re.escape(cited[1:])
-        return re.search(rf"(?mi)^\s*{number}\.?(?:\s|$)", text) is not None
-    kind, number = cited.split()
-    number = re.escape(number)
-    stated = rf"(?mi)^\s*(?:{kind}\s+{number}\b|{number}\.?\s+{kind}\b)"
-    return re.search(stated, text) is not None
+    lines = path.read_text(encoding="utf-8").split("\n")
+    text = "\n".join("" if line.startswith(_SOURCE) else line for line in lines)
+    return _CODE.sub(lambda code: re.sub(r"[^\n]", " ", code[0]), text)
 
 
-def _table() -> list[tuple[str, str]]:
-    """Read the shelf's table as `(authors, file)` pairs.
+@functools.cache
+def _citations() -> tuple[Citation, ...]:
+    """Give every citation in the files the rule holds."""
+    found: list[Citation] = []
+    for path in _scoped():
+        text = _text(path)
+        for token in _TOKEN.finditer(text):
+            line = text.count("\n", 0, token.start()) + 1
+            where = f"{path.relative_to(ROOT)}:{line}"
+            found.append(Citation(where, token["label"], token["locator"]))
+    return tuple(found)
 
-    Pairs rather than a mapping from authors: the shelf holds two of Castagna's
-    papers, and a dict keyed by the author would drop one of them -- which reads
-    as a file with no row, since the row is there and the parse lost it.
-    """
-    shelf = SHELF / "README.md"
-    rows: list[tuple[str, str]] = []
-    for line in shelf.read_text(encoding="utf-8").splitlines():
-        row = _ROW.match(line.strip())
-        if row is None:
+
+@functools.cache
+def _table() -> dict[str, str]:
+    """Give the theory page's table of works, each label with its identifier."""
+    text = THEORY.read_text(encoding="utf-8")
+    section = text.split("## Works cited by label", 1)[1].split("\n## ", 1)[0]
+    rows: dict[str, str] = {}
+    for line in section.splitlines():
+        if not line.startswith("| `"):
             continue
-        work, name = row["work"].strip(), row["file"].strip().strip("`")
-        if not name.endswith(".pdf"):
-            continue
-        authors = _AUTHORS.match(work)
-        if authors is None:
-            continue
-        rows.append((authors[1].strip(), name))
+        row = _ROW.match(line)
+        assert row is not None, f"a row of the table this ledger cannot read: {line}"
+        assert row["label"] not in rows, f"a label two rows carry: {row['label']}"
+        rows[row["label"]] = row["identifier"]
     return rows
 
 
-def _on_the_shelf() -> list[str]:
-    return sorted(path.name for path in SHELF.glob("*.pdf"))
+def _parts(locator: str) -> list[re.Match[str]] | None:
+    """Give the parts of `locator`, or `None` where one has no form the rule has."""
+    parts = []
+    for piece in locator.split(", "):
+        part = _PART.fullmatch(piece)
+        if part is None:
+            return None
+        parts.append(part)
+    return parts
+
+
+def _states(text: str, part: re.Match[str]) -> bool | None:
+    """Whether the extraction `text` *prints* the statement `part` locates.
+
+    `None` for a page or a line, which narrows the part before it and is not a
+    statement of its own. A statement opens a line: `LEMMA 6.5.`, `Lemma 4.7
+    (Map Containment).`, number-first as Amadio & Cardelli print one (`5.2.2
+    LEMMA`), a section as `6.9. TITLE`, `1.5 Algorithm Outline` or its number
+    alone, a figure by its caption, an appendix by its heading, a footnote by its
+    number set against its first word, and an equation or a rule by its tag
+    closing a line. Case is folded, so a ligature the extraction split
+    (`DEfiNITION`) still reads. A mention -- "(Definition 6.9)" mid-sentence --
+    does not answer for a statement.
+    """
+    if part["tag"] is not None:
+        tag = re.escape(part["tag"])
+        return re.search(rf"(?m)\({tag}\)\s*$", text) is not None
+    if part["section"] is not None:
+        number = re.escape(part["section"])
+        return re.search(rf"(?m)^\s*{number}\.?(?:\s|$)", text) is not None
+    kind, number = part["kind"], part["number"]
+    if kind is None:
+        return None
+    escaped = re.escape(number)
+    if kind == "Fig":
+        stated = rf"(?mi)^\s*(?:Figure|Fig\.)\s+{escaped}[.:]"
+    elif kind == "App":
+        stated = rf"(?m)^\s*(?:Appendix\s+)?{escaped}\.?(?:\s|$)"
+    elif kind == "fn":
+        stated = rf"(?m)^{escaped}[A-Z]"
+    else:
+        word = _KINDS[kind]
+        stated = rf"(?mi)^\s*(?:{word}\s+{escaped}\b|{escaped}\.?\s+{word}\b)"
+    return re.search(stated, text) is not None
 
 
 _ABSENT = "the shelf is not redistributed, so a clone has none to read"
 
 
-def test_the_page_cites_numbered_results() -> None:
+def test_the_scope_cites_by_label() -> None:
     """The parse is the detector, so it is shown to have read something.
 
     A ledger over an empty universe passes having checked nothing, which is the
-    failure `tests/test_ledger_plants.py` rules out for the rest of them.
+    failure `tests/test_ledger_plants.py` rules out for the rest of them. And it
+    reads both shapes the pages use most: a section and a named statement.
     """
-    text = THEORY.read_text(encoding="utf-8")
-    cited = _CITATION.findall(text)
-    assert len(cited) >= 4, cited
-    # And it reads both shapes: a named result and a section number.
-    assert any(hit.startswith("§") for hit in cited), cited
-    assert any(not hit.startswith("§") for hit in cited), cited
+    cited = _citations()
+    assert len(cited) >= 20, cited
+    assert any(c.locator.startswith("§") for c in cited), cited
+    assert any(not c.locator.startswith("§") for c in cited), cited
 
 
-def test_every_numbered_result_is_attributed_to_a_work() -> None:
-    """A result under no work is one no reader can resolve, shelf or no shelf.
+def test_every_label_is_a_row_and_every_row_is_cited() -> None:
+    """The table and the citations name the same works, in both directions.
+
+    A label with no row is a citation no reader can resolve, and a row nothing
+    cites is a work the page lists for nothing. `LABELS` pairs each row with the
+    shelf's file, so a row it lacks is one no statement check can reach.
+    """
+    rows = _table()
+    assert len(rows) >= 5, rows
+    cited = {c.label for c in _citations()}
+    unknown = sorted(cited - set(rows))
+    assert not unknown, f"labels cited with no row in the table: {unknown}"
+    idle = sorted(set(rows) - cited)
+    assert not idle, f"rows of the table nothing cites: {idle}"
+    unpaired = sorted(set(rows) ^ set(LABELS))
+    assert not unpaired, f"rows and LABELS name different works: {unpaired}"
+
+
+def test_every_locator_has_a_form_the_rule_lists() -> None:
+    """A locator is written in the parts the writing rule names, and no other.
+
+    `Lemma 4.7` inside a label, `p.12` with no space or a `Section 4` are each
+    a form a reader parses differently from the next one, which is the drift a
+    fixed form ends.
+    """
+    malformed = [
+        f"{c.where} [{c.label}, {c.locator}]"
+        for c in _citations()
+        if _parts(c.locator) is None
+    ]
+    for path in _scoped():
+        text = _text(path)
+        malformed += [
+            f"{path.relative_to(ROOT)}:{text.count(chr(10), 0, hit.start()) + 1} "
+            f"[{hit['label']}, broken across a line"
+            for hit in _BROKEN.finditer(text)
+        ]
+    assert not malformed, f"locators in no form the rule lists: {malformed}"
+
+
+def test_no_locator_stands_outside_a_label() -> None:
+    """A numbered statement or a section is cited inside a label, or not at all.
 
     The direction that holds without the papers, which is why it does not skip:
-    the pages are the tracked record of what the design rests on, and "Lemma
-    6.5" with nothing before it saying whose lemma is a sentence that cannot be
-    checked by anybody.
+    "Lemma 6.5" with nothing saying whose lemma is a sentence nobody can check.
     """
-    cited = [row for page in PAGES for row in _citations(page)]
-    # The scan is the detector: no citations is no attribution for anything.
-    assert len(cited) >= 8, cited
-    orphaned = [f"{where} {what}" for where, what, work in cited if work is None]
-    assert not orphaned, (
-        f"numbered results with no work named before them: {orphaned}. Name the "
-        "work in the paragraph, or move the citation under the one it is of."
+    loose: list[str] = []
+    for path in _scoped():
+        text = _TOKEN.sub(lambda token: " " * len(token[0]), _text(path))
+        for hit in _LOOSE.finditer(text):
+            line = text.count("\n", 0, hit.start()) + 1
+            loose.append(f"{path.relative_to(ROOT)}:{line} {hit[0]!r}")
+    assert not loose, (
+        f"locators outside a label: {loose}. Write them as [Label, locator], "
+        "with the label a row of the theory page's table."
     )
 
 
-def test_every_cited_work_is_a_paper_the_shelf_holds() -> None:
-    """The work a citation resolves to is a file somebody can open."""
-    if not SHELF.is_dir():
-        pytest.skip(_ABSENT)
-    rowed = {Path(name).stem for _, name in _table()}
-    cited = {ALIASES[work] for page in PAGES for _, _, work in _citations(page) if work}
-    missing = sorted(stem for stem in cited if stem is not None and stem not in rowed)
-    assert not missing, f"works the pages cite that the shelf's table lacks: {missing}"
+def test_no_label_stands_without_a_locator() -> None:
+    """A label alone names a work and no place in it, and rustdoc reads a link."""
+    bare: list[str] = []
+    for path in _scoped():
+        text = _text(path)
+        for hit in _BARE.finditer(text):
+            line = text.count("\n", 0, hit.start()) + 1
+            bare.append(f"{path.relative_to(ROOT)}:{line} {hit[0]}")
+    assert not bare, f"labels with no locator: {bare}"
 
 
-def test_every_numbered_result_is_one_its_paper_states() -> None:
+def test_no_citation_opens_a_paragraph_or_stands_before_a_colon() -> None:
+    """A citation follows the clause it supports, and is never a link definition.
+
+    A paragraph opening on a citation puts the source before the claim, and a
+    citation before a colon is `[label]: destination` to Markdown, which deletes
+    the line -- mid-paragraph, in the site's renderer.
+    """
+    misplaced: list[str] = []
+    for path in _scoped():
+        text = _text(path)
+        for paragraph in re.finditer(r"(?:^|\n\n)\s*(\[[^\]\n]*\])", text):
+            if _TOKEN.fullmatch(paragraph[1]):
+                line = text.count("\n", 0, paragraph.start(1)) + 1
+                misplaced.append(f"{path.relative_to(ROOT)}:{line} opens on it")
+        for token in _TOKEN.finditer(text):
+            if text.startswith(":", token.end()):
+                line = text.count("\n", 0, token.start()) + 1
+                misplaced.append(f"{path.relative_to(ROOT)}:{line} before a colon")
+    assert not misplaced, misplaced
+
+
+def test_every_locator_is_one_its_paper_states() -> None:
     """The number a citation gives is one the cited paper prints.
 
-    Read against the shelf's text extractions. A citation of a work the shelf
-    does not hold is declared in `ALIASES` rather than checked.
+    Read against the shelf's text extractions, each part of a locator that names
+    a statement of its own.
     """
     texts = SHELF / "text"
     if not texts.is_dir():
         pytest.skip(_ABSENT)
     unstated, checked = [], 0
-    for page in PAGES:
-        for where, what, work in _citations(page):
-            stem = ALIASES.get(work) if work else None
-            if stem is None:
+    for citation in _citations():
+        stem = LABELS.get(citation.label)
+        parts = _parts(citation.locator)
+        if stem is None or parts is None:
+            continue
+        text = (texts / f"{stem}.txt").read_text(encoding="utf-8")
+        for part in parts:
+            stated = _states(text, part)
+            if stated is None:
                 continue
             checked += 1
-            text = (texts / f"{stem}.txt").read_text(encoding="utf-8")
-            if not _states(text, what):
-                unstated.append(f"{where} {what}, which {work} does not state")
-    assert checked >= 8, checked
-    assert not unstated, unstated
+            if not stated:
+                unstated.append(f"{citation.where} [{citation.label}, {part[0]}]")
+    assert checked >= 20, checked
+    assert not unstated, f"locators the cited paper does not print: {unstated}"
 
 
 def test_the_reader_of_a_statement_tells_it_from_a_mention() -> None:
     """The matcher answers both ways over the shapes the shelf prints."""
-    jacm = "we introduce (Definition 6.9) which\nLEMMA 6.5.\nLet P\n6.9. DECIDABILITY\n"
-    assert _states(jacm, "Lemma 6.5")
-    assert _states(jacm, "§6.9")
-    assert not _states(jacm, "Definition 6.9"), "a mention is not a statement"
-    assert not _states(jacm, "Lemma 6.4")
+
+    def part(locator: str) -> re.Match[str]:
+        parts = _parts(locator)
+        assert parts is not None, locator
+        return parts[0]
+
+    jacm = (
+        "we introduce (Definition 6.9) which\nLEMMA 6.5.\nLet P\n6.9. DECIDABILITY\n"
+        "(5)\nFigure 3. The rules\n"
+    )
+    assert _states(jacm, part("Lem. 6.5"))
+    assert _states(jacm, part("§6.9"))
+    assert not _states(jacm, part("Def. 6.9")), "a mention is not a statement"
+    assert not _states(jacm, part("Lem. 6.4"))
+    assert _states(jacm, part("(5)"))
+    assert not _states(jacm, part("(6)"))
+    assert _states(jacm, part("Fig. 3"))
+    assert not _states(jacm, part("Fig. 4"))
     amadio = "5.2.2 LEMMA (A system of contractile equations).\n1.5 Algorithm Outline\n"
-    assert _states(amadio, "Lemma 5.2.2")
-    assert _states(amadio, "§1.5")
-    assert not _states(amadio, "§4.1")
-    icfp = "2.1.4\nImplementation.\nLemma 4.7 (Map Containment). Let\n"
-    assert _states(icfp, "§2.1.4")
-    assert _states(icfp, "Lemma 4.7")
+    assert _states(amadio, part("Lem. 5.2.2"))
+    assert _states(amadio, part("§1.5"))
+    assert not _states(amadio, part("§4.1"))
+    icfp = "2.1.4\nImplementation.\nLemma 4.7 (Map Containment). Let\nC.1\n15We could\n"
+    assert _states(icfp, part("§2.1.4"))
+    assert _states(icfp, part("Lem. 4.7"))
+    assert _states(icfp, part("App. C.1"))
+    assert _states(icfp, part("fn. 15"))
+    assert not _states(icfp, part("fn. 16"))
+    rules = "C1 ⊆ C2 (uninhabited)\nas (anyOf-l) states\n"
+    assert _states(rules, part("(uninhabited)"))
+    assert not _states(rules, part("(anyOf-l)")), "a tag mid-line is a mention"
+    assert _states(icfp, part("l. 14")) is None, "a line narrows, it is no statement"
 
 
 def test_the_table_and_the_shelf_name_the_same_papers() -> None:
-    """Both directions over the shelf itself, so neither list drifts alone.
+    """Every label's file is on the shelf, and every paper there has a row.
 
-    A row whose file is gone is a citation that resolves to nothing; a file with
-    no row is a paper the table cannot say the use of, which is the whole
-    selection rule the shelf is chosen by.
+    Both directions over the shelf's own table, so neither list drifts alone. A
+    label whose file is gone is a citation that resolves to nothing; a file with
+    no row in the shelf's table is a paper nothing says the use of, which is the
+    whole selection rule the shelf is chosen by.
     """
     if not SHELF.is_dir():
         pytest.skip(_ABSENT)
-    table, held = _table(), _on_the_shelf()
-    assert len(table) >= 10, sorted(table)
-    rowed = {name for _, name in table}
+    held = {path.stem for path in SHELF.glob("*.pdf")}
+    missing = sorted(stem for stem in LABELS.values() if stem not in held)
+    assert not missing, f"labels whose paper the shelf does not hold: {missing}"
+    shelf = (SHELF / "README.md").read_text(encoding="utf-8")
+    rowed = set(re.findall(r"`([a-z0-9-]+(?:-[A-Za-z]+)?)\.pdf`", shelf))
+    assert len(rowed) >= 10, sorted(rowed)
     absent = sorted(name for name in rowed if name not in held)
     assert not absent, f"rows naming a file the shelf does not hold: {absent}"
-    unrowed = sorted(set(held) - rowed)
+    unrowed = sorted(held - rowed)
     assert not unrowed, (
         f"papers on the shelf with no row saying what they are for: {unrowed}"
     )

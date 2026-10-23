@@ -187,6 +187,39 @@ a checked operation, that note is the whole reason it looks the way it does.
 not "the following block does". A comment describes the code as it is, to someone
 who has never seen it.
 
+## Citing a paper
+
+**Cite a result by its label and its place.** `[Cas23, (22)]`,
+`[FCB08, Lem. 6.5]`, `[Cas23, §4.4, fn. 15]`: a label from the table on
+[10-theory.md](10-theory.md#works-cited-by-label), then a locator -- `(n)` for
+an equation or a rule tag as printed, `§`, `Def.`, `Thm.`, `Lem.`, `Prop.`,
+`Cor.`, `Rem.`, `Fig.`, `Alg.`, `App.` or `fn.`, and `p.` or `l.` after one of
+those. Neither stands alone: a bare `Lemma 4.7` leaves a reader to guess whose,
+and a bare `[Cas23]` is a link rustdoc cannot resolve. The label is not a link,
+because the table is the one place a work's identifier is written.
+
+**Every item that implements a result cites it.** A function, type or module
+whose correctness is a numbered result of a work in the table carries the
+citation of each result it implements, and a line that takes a distinct step of
+a result carries it in the `//` comment above: the guard of a formula and its
+branches, one disjunct, one rule of an algorithm. A line that applies its
+item's own result again carries nothing. An item that departs from the result
+cites it and names the departure beside it; one that refuses an input the
+theory excludes cites what excludes it. Cite the work the table says owns the
+surface, and a second one only for a step the first does not state.
+
+**Put it after the summary, at the clause it supports.** Directly after the
+clause and before its punctuation; two results behind two clauses are two
+citations. It never opens a comment or a paragraph, because the summary says
+what the item does, and never stands before a colon, because
+`[Cas23, (12)]: meet` is a Markdown link definition, which rustdoc and the
+site's renderer delete. A summary carries one only when the result is what it
+is about.
+
+`tests/test_citation_ledger.py` holds the form, the place and the table over
+the files its `SCOPE` names, and where the papers are at hand, each number to a
+statement the paper prints.
+
 ## The gate, and what it cannot see
 
 ```bash

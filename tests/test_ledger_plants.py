@@ -323,6 +323,23 @@ def _owe(tree: Path, line: str) -> None:
     )
 
 
+#: The pages citing a section of a paper, each of which the citation ledger's
+#: detector reads; respelling the sign in one of them leaves the others to
+#: answer for it.
+_SECTIONED = (
+    "docs/dev/01-schema-ir.md",
+    "docs/dev/02-decision.md",
+    "docs/dev/03-frontend.md",
+    "docs/dev/10-theory.md",
+)
+
+
+def _respell_sections(tree: Path) -> None:
+    """Write every section sign the citing pages carry as the word."""
+    for page in _SECTIONED:
+        _replace_all(tree, page, "§", "section ")
+
+
 def _edits(tree: Path, relative: str, *pairs: tuple[str, str]) -> None:
     """Apply several `_edit`s to one file, in order, each refusing if absent."""
     for old, new in pairs:
@@ -1475,10 +1492,10 @@ PLANTS = (
         trips=("test_every_file_excused_to_pytest_is_examined_there",),
     ),
     Plant(
-        # A numbered result cited under no work: the page names a lemma and a
+        # A numbered result cited under no label: the page names a theorem and a
         # reader has no way to say whose. The shelf direction cannot see it --
-        # every paper is still there and every row still resolves -- so only the
-        # attribution direction does.
+        # every paper is still there and every label still resolves -- so only
+        # the direction that reads the page alone does.
         "tests/test_citation_ledger.py",
         ("docs/dev/10-theory.md",),
         lambda tree: _edit(
@@ -1486,10 +1503,77 @@ PLANTS = (
             "docs/dev/10-theory.md",
             "# The theory\n",
             "# The theory\n\n"
-            "A planted result cited as Theorem 9.9, above every work the page "
-            "names, so nothing says whose theorem it is.\n",
+            "A planted result cited as Theorem 9.9, under no label, so nothing "
+            "says whose theorem it is.\n",
         ),
-        trips=("test_every_numbered_result_is_attributed_to_a_work",),
+        trips=("test_no_locator_stands_outside_a_label",),
+    ),
+    Plant(
+        # A label the table has no row for: a citation of a work nobody can
+        # look up, since the table is the one place an identifier is written.
+        "tests/test_citation_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            "an observation\n[FCB08, §2.2], not a theorem",
+            "an observation\n[FCB08, §2.2] [Xyz99, §1], not a theorem",
+        ),
+        trips=("test_every_label_is_a_row_and_every_row_is_cited",),
+    ),
+    Plant(
+        # A locator in a form the writing rule does not list: "Section 2.2"
+        # where the rule writes a section sign, which reads one way here and
+        # another in the next file.
+        "tests/test_citation_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            "[FCB08, §2.2], not a theorem",
+            "[FCB08, Section 2.2], not a theorem",
+        ),
+        trips=("test_every_locator_has_a_form_the_rule_lists",),
+    ),
+    Plant(
+        # A citation a reflow broke across two lines: the parse reads no
+        # citation there, so its locator would escape every other check.
+        "tests/test_citation_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            "[Cas23, (11)] reads each constraint",
+            "[Cas23,\n(11)] reads each constraint",
+        ),
+        trips=("test_every_locator_has_a_form_the_rule_lists",),
+    ),
+    Plant(
+        # A label with no place in the work: rustdoc reads `[Cas23]` as a link
+        # it cannot resolve, and a reader learns the work and not where in it.
+        "tests/test_citation_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            "[FCB08, §2.2], not a theorem",
+            "[FCB08], not a theorem",
+        ),
+        trips=("test_no_label_stands_without_a_locator",),
+    ),
+    Plant(
+        # A citation before a colon: `[label]: destination` is a Markdown link
+        # definition, which the site's renderer deletes, line and all, once a
+        # reflow moves it to the start of a line.
+        "tests/test_citation_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            "[FCB08, §2.2], not a theorem",
+            "[FCB08, §2.2]: not a theorem",
+        ),
+        trips=("test_no_citation_opens_a_paragraph_or_stands_before_a_colon",),
     ),
     Plant(
         # The other end of the theory ledger: a claim renamed on the page,
@@ -1893,12 +1977,12 @@ PLANTS = (
         trips=("test_the_local_gate_names_every_detached_surface",),
     ),
     Plant(
-        # The page's section references respelled in words: the parse reads no
-        # section citation, and every rule over them passes on none.
+        # Every page's section references respelled in words: the parse reads
+        # no section citation, and every rule over them passes on none.
         "tests/test_citation_ledger.py",
-        ("docs/dev/10-theory.md",),
-        lambda tree: _replace_all(tree, "docs/dev/10-theory.md", "§", "section "),
-        trips=("test_the_page_cites_numbered_results",),
+        _SECTIONED,
+        _respell_sections,
+        trips=("test_the_scope_cites_by_label",),
     ),
     Plant(
         # A release tag on a commit no branch reaches: what a rewrite below the
@@ -5092,8 +5176,7 @@ UNPLANTED: dict[str, str] = {
     **_excuse(
         "test_citation_ledger.py",
         NOT_IN_A_CLONE,
-        "test_every_cited_work_is_a_paper_the_shelf_holds",
-        "test_every_numbered_result_is_one_its_paper_states",
+        "test_every_locator_is_one_its_paper_states",
         "test_the_table_and_the_shelf_name_the_same_papers",
     ),
     **_excuse(

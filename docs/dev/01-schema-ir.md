@@ -164,11 +164,11 @@ constructor. Beyond the admission test, two costs specific to this one:
   **none appears in the source either**, which the title makes worth saying
   out loud. Castagna's "struct" is an *access style*, not a
   carrier: the abstract defines one as a record "accessed by providing nominal
-  keys", and §1 contrasts `r.key`, which raises where the key is absent, with
-  `r[keyexp]`, which does not — one record value, two ways of reading it, one
-  record type covering both. The word *nominal* there qualifies the **key**.
-  Records and maps alike interpret as quasi-`K`-step functions from keys to
-  values, and §4.5, which is where the paper weighs variations, considers
+  keys", and [Cas23, §1] contrasts `r.key`, which raises where the key is
+  absent, with `r[keyexp]`, which does not — one record value, two ways of
+  reading it, one record type covering both. The word *nominal* there qualifies
+  the **key**. Records and maps alike interpret as quasi-`K`-step functions from
+  keys to values, and [Cas23, §4.5], where the paper weighs variations, considers
   overlapping key domains and row polymorphism and never a tag. So the model
   offers no reading of a carrier-indexed map, and that is established rather
   than assumed.
