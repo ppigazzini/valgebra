@@ -153,7 +153,7 @@ pub(crate) enum Component {
     Sets(SetLattice<Arc<Descr>>),
     /// The dicts this descriptor admits, as a union of map atoms.
     ///
-    /// A dict is a *quasi-constant function* from keys to values, so the
+    /// A dict is a *quasi K-step function* from keys to values, so the
     /// component names the finitely many keys it constrains and says what every
     /// other key of each kind maps to ([`maps`]).
     Maps(MapLattice<Arc<Descr>>),

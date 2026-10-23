@@ -414,8 +414,9 @@ fn map(
 /// of the keys, so a key outside every part `inner` opens is in one of the
 /// rest, the part for a key of no listed kind among them: `~str` opens seven
 /// kinds and the classes, `~int` neither `int` nor `bool`, and `~bool` opens
-/// `int`, whose part holds no boolean. That is a union of key types, which is
-/// all the paper's footnote 15 asks of a map's domain. A complement of a
+/// `int`, whose part holds no boolean. That is a union of key types, which
+/// footnote 15 lets a domain be, and the remaining parts are a complement's
+/// keys because the key types cover the keys (§4.4). A complement of a
 /// constant cuts a part, so it is refused with the constant.
 pub(crate) fn key_cover(
     key: &Schema,

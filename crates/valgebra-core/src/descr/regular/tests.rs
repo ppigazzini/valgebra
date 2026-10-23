@@ -689,9 +689,9 @@ fn a_complement_is_already_minimal() {
             };
             let once = set.complement();
             assert_eq!(
-                once,
-                once.complement().complement(),
-                "{pattern:?} under {alphabet:?}"
+                once.dfa.minimal(),
+                *once.dfa,
+                "{pattern:?} under {alphabet:?}: a second pass moves nothing"
             );
             assert_eq!(set, once.complement(), "the flip is an involution");
         }

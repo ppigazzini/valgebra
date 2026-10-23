@@ -1,9 +1,9 @@
 //! Sequences as an automaton whose transitions are guarded by value sets.
 //!
-//! A sequence type is a regular language over its *elements*, which is the
-//! reason Hosoya, Vouillon and Pierce give for it being a first-class member of
-//! the algebra: regular languages are closed under union, intersection and
-//! complement, so the closure a descriptor component needs comes for free.
+//! A sequence type is a regular language over its *elements*. Regular
+//! expression types correspond to tree automata (Hosoya, Vouillon and Pierce),
+//! whose languages are closed under union, intersection and complement, so the
+//! closure a descriptor component needs comes for free.
 //! `str` already uses that (see [`regular`](super::regular)); this is the same
 //! construction one alphabet up, where a letter is a *set of values* rather than
 //! a byte.
@@ -184,9 +184,11 @@ type Signature<G> = (bool, Vec<(u32, Option<G>)>);
 /// A deterministic, complete automaton over guarded transitions.
 ///
 /// State zero is the start. The edges leaving each state partition the value
-/// universe and are held in guard order, so the table is a name for the
-/// language: equal tables are equal languages, and the minimization below is
-/// what makes the converse true.
+/// universe and are held in guard order, so equal tables are equal languages.
+/// The converse holds of minimal tables up to equivalence of their guards
+/// (D'Antoni & Veanes, Theorem 1 and §2): the canonical numbering removes the
+/// renaming, and a guard is compared as a descriptor, whose equality is finer
+/// than its set, so two tables of one language may still differ.
 ///
 /// A lookup below answers a miss with state zero or with no edges rather than
 /// refusing, for the reason the byte automaton in `regular.rs` gives: a
@@ -449,7 +451,7 @@ impl<G: Guard> SymbolicDfa<G> {
         // and the edges it walks are untouched, so neither the partition nor the
         // numbering a walk over them gives can move. Every constructor here
         // returns a minimal machine, which is the precondition, and
-        // `a_complement_is_already_minimal` holds the conclusion.
+        // `a_complement_of_a_sequence_language_is_already_minimal` holds both.
         SymbolicDfa {
             edges: self.edges.clone(),
             accepting: self.accepting.iter().map(|a| !a).collect(),
@@ -674,7 +676,11 @@ impl<G: Guard> SymbolicDfa<G> {
     /// A state's *signature* is its accepting flag together with, for each block
     /// it can reach, the values that reach it. Two states with one signature
     /// have one transition function, so they merge; refining until the
-    /// signatures stop changing is Moore's algorithm.
+    /// signatures stop changing is Moore's algorithm. D'Antoni & Veanes §3 lift
+    /// it to guards by asking whether a conjunction of two is satisfiable; a
+    /// signature compares the joined guards by equality instead, which is finer
+    /// than their sets, so two states no sequence tells apart may stay apart --
+    /// a larger table, never a wrong one.
     ///
     /// **The refinement starts from three distances a state has along the
     /// table's edges**: to an accepting state, to a rejecting one, and the

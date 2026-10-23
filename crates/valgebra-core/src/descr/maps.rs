@@ -1,10 +1,11 @@
 //! Maps as record atoms with per-kind defaults and a negative set.
 //!
-//! A dict is a *quasi-constant function* from keys to values (Castagna, ICFP
-//! 2023, Definition 2.2, after Frisch 2004): total on the keys, and constant on
-//! all but finitely many of them. So a set of dicts is written by naming the
-//! finitely many keys it constrains and saying what every other key maps to --
-//! which is Definition 4.1's atom,
+//! A dict is a *quasi K-step function* from keys to values (Castagna, ICFP
+//! 2023, Definition 4.6, after Frisch 2004): total on the keys, and constant on
+//! all but finitely many of the keys of each part of a partition of them. So a
+//! set of dicts is written by naming the finitely many keys it constrains and
+//! saying what every other key of each part maps to -- which is Definition
+//! 4.1's atom,
 //!
 //! ```text
 //! ⟨ (τ_ℓ)_{ℓ∈L} ; t₀ ; S ⟩
@@ -33,8 +34,10 @@
 //! partition of the key space whose parts are pairwise disjoint -- "we propose to
 //! forbid any overlapping between domains in the same map" -- because a key
 //! belonging to two domains would have two types and the theory would be that of
-//! function intersections instead. The kind partition is exactly such a
-//! partition, and using it is what lets the atom stay a function. A key schema
+//! function intersections instead (§4.5). The kind partition is such a
+//! partition but for its two finite parts, `None` and `bool`, whose keys the
+//! paper would write as labels, and using it is what lets the atom stay a
+//! function. A key schema
 //! that is neither a kind nor a constant has no part to land in, and the frontend
 //! refuses it rather than approximating.
 
@@ -325,21 +328,23 @@ impl<G: Guard> MapAtom<G> {
         match self.labels.get(label) {
             Some(field) => field.clone(),
             // A label the atom does not name is governed by the default for its
-            // own part, which is what Definition 2.2's quasi-constant function
-            // says it maps to -- so reading it here is exact rather than a
-            // widening.
+            // own part, which is what Definition 4.6's quasi K-step function
+            // maps it to -- so reading it here is exact rather than a widening.
             None => self.default_for(Some(label.kind())),
         }
     }
 
     /// The same atom with every label its part's default already covers dropped.
     ///
-    /// This is the paper's `dom` read **semantically**. Definition 2.2 notes that
-    /// the notation is "not univocal (unless we require zᵢ ≠ z...)": naming a key
-    /// and giving it exactly what the default already gives it says nothing, and
-    /// two atoms that differ only in such a name are one atom. Dropping them is
-    /// what makes `{"a?": nothing}` and `{}` the same closed map rather than two
-    /// that merely admit the same dicts.
+    /// This is the paper's `dom`, read up to the equality of fields. Definition
+    /// 2.2 notes that the notation is "not univocal (unless we require zᵢ ≠
+    /// z...)": naming a key and giving it exactly what the default already
+    /// gives it says nothing, and two atoms that differ only in such a name are
+    /// one atom. Equality is finer than a field's set where its descriptor's is
+    /// (`Descr`), so a name it misses stays: a second spelling of one atom,
+    /// never a wrong one. Dropping the names is what makes `{"a?": nothing}`
+    /// and `{}` the same closed map rather than two that merely admit the same
+    /// dicts.
     fn absorbed(mut self) -> MapAtom<G> {
         let covered: Vec<Label> = self
             .labels
@@ -452,9 +457,8 @@ impl<G: Guard> MapAtom<G> {
     /// (12): the dicts in both atoms.
     ///
     /// The label sets are unioned first, each side reading a label it does not
-    /// name off its own default -- which is what Definition 2.2's quasi-constant
-    /// function says it maps to, so the extension is exact rather than a
-    /// widening.
+    /// name off its own default -- which is what Definition 4.6's quasi K-step
+    /// function maps it to, so the extension is exact rather than a widening.
     fn meet(&self, other: &MapAtom<G>) -> Option<MapAtom<G>> {
         let mut labels = BTreeMap::new();
         for label in self.labels.keys().chain(other.labels.keys()) {

@@ -220,6 +220,19 @@ proptest! {
         prop_assert_eq!(shape(&prefix, tail.as_ref()), table.minimal());
     }
 
+    /// Complementing a minimal table leaves a minimal table.
+    ///
+    /// The property `SymbolicDfa::complement` relies on to skip a minimization
+    /// pass: the flip leaves every edge where it was, so a second pass over the
+    /// flipped table has nothing to merge, sort or renumber. The drawn table is
+    /// minimal as built, which is the precondition.
+    #[test]
+    fn a_complement_of_a_sequence_language_is_already_minimal(a in language()) {
+        prop_assert_eq!(a.clone().minimal(), a.clone());
+        let flipped = a.complement();
+        prop_assert_eq!(flipped.clone().minimal(), flipped);
+    }
+
     /// A side that is the whole language or the empty one is answered by the
     /// algebra's identities, and the answer is the table the product builds.
     #[test]
