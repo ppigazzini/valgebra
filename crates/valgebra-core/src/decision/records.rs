@@ -548,7 +548,8 @@ fn entered<'b>(
 /// The field `field` of `b` against a clause of `a` whose key holds some strings
 /// and not every one.
 ///
-/// A key naming constants spells the name exactly where one of them is it: a
+/// A key naming constants spells the name exactly where one of them is it, as
+/// the paper reads the keys of a finite key type as labels [Cas23, §4.4]. A
 /// literal pins the type, and the field reads the key the name is. A key the
 /// rules cannot place -- a class, a narrower tuple -- might admit it, so a proof
 /// carries and a refutation does not. Out of line, since the loop over `b`'s
@@ -676,6 +677,8 @@ pub(super) fn keyed_map_minus_keyed_maps(members: &[Schema], cx: &mut Cx<'_>) ->
     if removed == 0 || !sets {
         return Verdict::Unknown;
     }
+    // The complement of a union is the meet of its members' complements
+    // [FCB08, Lem. 6.2], so a removed union is its maps removed one by one.
     let removed = members.iter().flat_map(|member| match member {
         Schema::Complement(inner) => match &**inner {
             Schema::Union(branches) => branches.iter(),
@@ -721,6 +724,8 @@ fn split_across<'s>(
         };
         match read {
             Some(branch) => branches.push(branch),
+            // A member of another kind shares no value with the subject
+            // [FCB08, (5)], which is what lets it drop out of a refutation.
             None => set_aside_hold_none &= schema.disjoint_with(member, cx.oracle),
         }
     }
@@ -1015,7 +1020,8 @@ fn phi(subject: &Labels<'_>, branches: &[Branch<'_>], cx: &mut Cx<'_>) -> Relati
                 continue;
             }
             let narrowed = mine.without(&theirs);
-            // A required key narrowed to no value empties the record, which
+            // A required key narrowed to no value empties the record
+            // [Cas23, (11)], which
             // every union covers; asked here, for the one slot that moved,
             // rather than of every slot at every level.
             let covered = if !narrowed.absent && narrowed.ty.verdict_rec(cx).is_empty() {

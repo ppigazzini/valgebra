@@ -4,10 +4,11 @@
 //! difference and equivalence is two of those, so this is the module the other
 //! two rest on. It reads the simulation of [FCB08, Def. 6.9] by recursion over
 //! the constructors rather than as a saturation, a node met again on its own
-//! path taken as empty, which is the coinductive hypothesis -- a union is empty
-//! when every member is, a meet when its members share no value, a product when
-//! a component is -- with the value-region partition folded in the same pass,
-//! so a Boolean node reads its children's regions in constant time.
+//! path taken as empty [LN26, §5.1], which is the coinductive hypothesis -- a
+//! union is empty when every member is, a meet when its members share no value,
+//! a product when a component is -- with the value-region partition folded in
+//! the same pass, so a Boolean node reads its children's regions in constant
+//! time.
 //!
 //! The answer is three-valued because a refutation needs it: `Unknown` is not
 //! a proof of emptiness and not a proof of inhabitation, and the boolean the
@@ -275,13 +276,13 @@ impl Schema {
             }
             // An attribute record carries no class, so its attributes decide it
             // in both directions -- the same rule as a keyed map's required
-            // fields, and for the same reason. An attribute admitting nothing
-            // empties it, because no value can carry that attribute; attributes
-            // that are all *proven* inhabited make it inhabited, because an
-            // object carrying one witness per attribute is a value of the
-            // record. That second half is what a class in the same node would
-            // take away: an `isinstance` atom is opaque, so a node holding both
-            // can never be more than unknown.
+            // fields [Cas23, (11)], and for the same reason. An attribute
+            // admitting nothing empties it, because no value can carry that
+            // attribute; attributes that are all *proven* inhabited make it
+            // inhabited, because an object carrying one witness per attribute
+            // is a value of the record. That second half is what a class in the
+            // same node would take away: an `isinstance` atom is opaque, so a
+            // node holding both can never be more than unknown.
             Schema::AttrRecord { fields } => {
                 let verdict =
                     Verdict::every(fields.iter().map(|field| field.schema.verdict_rec(cx)));
@@ -346,11 +347,12 @@ impl Schema {
                 };
                 (verdict, region)
             }
-            // A literal denotes `{x | type(x) is type(c) and x == c}`, which
-            // holds `c` itself exactly when `c` equals itself. A constant that
-            // does not -- a `nan` -- denotes the empty set, and every other
-            // constant is a value, which is what makes a refutation naming one
-            // a refutation at all.
+            // A literal denotes `{x | type(x) is type(c) and x == c}`, the
+            // model's singleton [FCB08, §4.2] widened to the values `==` joins
+            // to `c`, which holds `c` itself exactly when `c` equals itself. A
+            // constant that does not -- a `nan` -- denotes the empty set, and
+            // every other constant is a value, which is what makes a refutation
+            // naming one a refutation at all.
             //
             // The core cannot read a constant, and this asks the oracle the
             // question it already answers: whether two constants denote
@@ -886,7 +888,11 @@ fn distinct_members(element: &Schema, wanted: usize, oracle: &dyn LeafRelations)
     Verdict::Unknown
 }
 
-/// How many values a schema denotes, as a lower and an upper bound.
+/// How many values a schema denotes, counted up to `==`, as a lower and an
+/// upper bound: the members a set drawn from it can hold apart, since a set
+/// keeps one of two equal values. A literal holding a value counts one, its
+/// constant's class being one member however many values `==` joins to it, the
+/// model's singleton [FCB08, §4.2] read as a set reads it.
 ///
 /// [`usize::MAX`] stands for "more than any bound a caller writes". The pair is
 /// read in one direction each: the upper bound proves a set empty, the lower

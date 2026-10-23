@@ -4,10 +4,11 @@
 //! A sequence of fixed length is a product of its positions, and the
 //! decomposition of a product against a *union* of products is the rule that
 //! needs care: stated the obvious way it enumerates every subset of the
-//! negative side, which is where the exponent in the literature comes from.
-//! The form here is the backtrack-free one -- narrow one component by the
-//! branch and recur on the rest -- so a component narrowed to the empty set
-//! ends the question, the empty set being below everything.
+//! negative side, which is where the exponent in the literature comes from
+//! [FCB08, Lem. 6.5]. The form here is the backtrack-free one
+//! [Cas23, §2.1.4] -- narrow one component by the branch and recur on the
+//! rest -- so a component narrowed to the empty set ends the question, the
+//! empty set being below everything.
 //!
 //! A repeated tail has no such decomposition: it admits sequences of every
 //! length, so there is no tuple of components to split over, and the shapes are

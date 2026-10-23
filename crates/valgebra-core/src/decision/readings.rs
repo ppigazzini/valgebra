@@ -323,8 +323,9 @@ impl Schema {
         Some(match self {
             Schema::NoneType => Kind::NoneType.region(),
             Schema::Bool => Kind::Bool.region(),
-            // `bool` subclasses `int`, so an `int` schema admits both regions.
-            // This is the one place a schema's regions are not its kind's.
+            // `bool` subclasses `int`, so an `int` schema admits both regions,
+            // where the model's kinds partition the values [FCB08, §6.1]. This
+            // is the one place a schema's regions are not its kind's.
             Schema::Int => Kind::Bool.region().union(Kind::Int.region()),
             Schema::Float => Kind::Float.region(),
             Schema::Str => Kind::Str.region(),

@@ -81,7 +81,8 @@ pub(super) fn finite_set(schema: &Schema) -> Option<&[Schema]> {
 
 /// A meet of finite sets of constants and complements of finite sets, read as
 /// the finite set it denotes: the constants every kept table holds and no
-/// taken table does.
+/// taken table does, each standing for its literal's class, the model's
+/// singleton [FCB08, §4.2] where `==` joins nothing else to the constant.
 ///
 /// It is the term a record's tag narrows to when a record is split across the
 /// records that fix it, one complement per record, and the term a table minus

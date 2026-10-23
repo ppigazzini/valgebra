@@ -996,14 +996,15 @@ pub enum SeqKind {
 /// both.
 ///
 /// This is a *linear* language rather than a regular one, and deliberately so.
-/// The general form is a regular expression over element schemas, as
-/// Hosoya-Vouillon-Pierce give it, and the automaton that decides inclusion
-/// between such languages is built one representation over
-/// (`descr/symbolic.rs`), so what keeps this shape linear is the schema
-/// language: nothing in this crate or the bindings builds an alternation or a
-/// nested repetition, so the general form would make every walk answer for
-/// shapes no value reaches, and every membership check prove first that the
-/// shape it holds is one of the three. This shape is the only one there is.
+/// The general form is a regular expression over element schemas, as Hosoya,
+/// Vouillon and Pierce give it (`docs/dev/10-theory.md`, "Sequences as a
+/// regular language"), and the automaton that decides inclusion between such
+/// languages is built one representation over (`descr/symbolic.rs`), so what
+/// keeps this shape linear is the schema language: nothing in this crate or the
+/// bindings builds an alternation or a nested repetition, so the general form
+/// would make every walk answer for shapes no value reaches, and every
+/// membership check prove first that the shape it holds is one of the three.
+/// This shape is the only one there is.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct SeqShape {
     /// The positional element schemas, matched in order from the front.
@@ -1183,7 +1184,8 @@ impl Schema {
     /// The meet, with the definitions its members may refer into, the
     /// intersection of the members' sets [FCB08, Def. 4.1]. The dual of
     /// [`union_within`](Self::union_within), and for the same reason -- and
-    /// under the same precondition, that the table is contractive.
+    /// under the same precondition, that the table is contractive
+    /// [Cas23, Def. 2.1].
     #[must_use]
     pub fn meet_within(
         members: impl IntoIterator<Item = Schema>,

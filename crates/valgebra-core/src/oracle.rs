@@ -364,7 +364,8 @@ pub(crate) fn has_complementary_pair_within(
 /// *assumed* to be a set: the greatest-fixpoint reading the rest of the
 /// recursion uses, and the only one that terminates.
 ///
-/// **That assumption is contractivity, and this does not check it.** A
+/// **That assumption is contractivity [Cas23, Def. 2.1], and this does not
+/// check it.** A
 /// contractive body denotes one set of finite values, by induction on the
 /// value (`docs/dev/10-theory.md`, Recursion), which is what makes "the set the
 /// reference denotes" a thing to speak of at all; a body whose reference is

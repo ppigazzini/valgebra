@@ -871,11 +871,11 @@ impl Schema {
 
     /// `(A ∩ B) ⊆ C`: a meet is below whatever one of its conjuncts is below.
     ///
-    /// When `C` is a union the meet may instead land in one branch, so that
-    /// sound rule is tried here too -- ahead of the plain `_ ⊆ (Y ∪ Z)` rule, so
-    /// a meet that contains its own supertype (a reference beside that union)
-    /// decides, which is what lets such a meet be recognized as a subtype of
-    /// itself.
+    /// When `C` is a union the meet may instead land in one branch
+    /// [BBC+26, (anyOf-r)], so that sound rule is tried here too -- ahead of
+    /// the plain `_ ⊆ (Y ∪ Z)` rule, so a meet that contains its own supertype
+    /// (a reference beside that union) decides, which is what lets such a meet
+    /// be recognized as a subtype of itself.
     ///
     /// Both halves are sound and incomplete: a conjunct that does not contain
     /// the supertype says nothing about the meet, so a disjunction of them that
