@@ -28,10 +28,11 @@ impl Schema {
         self.disjoint_with(other, &NoLeafRelations)
     }
 
-    /// Whether this schema and `other` are *provably* disjoint: no value belongs
-    /// to both. Sound, not complete — it returns true only when the concrete
-    /// types cannot overlap (distinct builtin scalars, distinct container kinds,
-    /// a refinement's base versus another, a union whose every member is, two
+    /// Whether this schema and `other` are *provably* disjoint: no value
+    /// belongs to both. Sound, not complete — it returns true only when the
+    /// concrete types cannot overlap, positives of two kinds meeting in nothing
+    /// [FCB08, (5)] (distinct builtin scalars, distinct container kinds, a
+    /// refinement's base versus another, a union whose every member is, two
     /// homogeneous sequences or sets of one container whose elements share no
     /// value where a length bound rules out the empty one), and
     /// false (conservatively) where it cannot decide: `Any`, a reference, a meet
@@ -275,6 +276,10 @@ impl Schema {
     }
 
     /// [`type_tag`](Self::type_tag) with the oracle that kinds a `Literal`.
+    ///
+    /// Each atom has one kind, the constructor of its values [FCB08, §6.1],
+    /// over the eleven-way split of the basic kind, and a refinement takes its
+    /// base's.
     pub(super) fn type_tag_with(&self, oracle: &dyn LeafRelations) -> Option<Kind> {
         Some(match self {
             Schema::Literal(constant) => return oracle.literal_kind(*constant),
@@ -306,12 +311,14 @@ impl Schema {
 
     /// The region a scalar atom denotes *exactly*, or `None` for every other node.
     ///
-    /// Exactness is the whole condition. A region set is read back through
-    /// [`Region::complement`], and the complement of an over-approximation is an
-    /// under-approximation -- which would report an inhabited schema empty. So a
-    /// node earns a region only when it denotes that region and nothing less:
-    /// `str` is every string, while `list[int]` is a proper part of the lists
-    /// and stays opaque.
+    /// A basic type denotes a fixed set of constants [FCB08, §4.2], and a
+    /// region is that set for the atoms the partition splits whole; `int`'s
+    /// also holds the booleans. Exactness is the whole condition. A region set
+    /// is read back through [`Region::complement`], and the complement of an
+    /// over-approximation is an under-approximation -- which would report an
+    /// inhabited schema empty. So a node earns a region only when it denotes
+    /// that region and nothing less: `str` is every string, while `list[int]`
+    /// is a proper part of the lists and stays opaque.
     pub(super) fn atom_region(&self) -> Option<Region> {
         Some(match self {
             Schema::NoneType => Kind::NoneType.region(),
@@ -329,11 +336,13 @@ impl Schema {
     /// The value-universe regions this schema denotes, as a set over the
     /// [`Kind`] partition, or [`Regions::Unknown`] when the schema is not
     /// *scalar-decidable* — built only from the scalar atoms, `Nothing`,
-    /// `Anything`, and the `Union`/`Intersection`/`Complement` combinators. On
-    /// that fragment the set is **exact**, so emptiness and subtyping are decided
-    /// completely; elsewhere the caller stays conservative. Literals, instances,
-    /// refinements, content-bearing containers, and references are not
-    /// scalar-decidable, so any combination holding one is `Unknown`.
+    /// `Anything`, and the `Union`/`Intersection`/`Complement` combinators,
+    /// read as the union, intersection and complement of sets
+    /// [FCB08, Def. 4.1]. On that fragment the set is **exact**, so emptiness
+    /// and subtyping are decided completely; elsewhere the caller stays
+    /// conservative. Literals, instances, refinements, content-bearing
+    /// containers, and references are not scalar-decidable, so any combination
+    /// holding one is `Unknown`.
     pub(crate) fn region_set(&self) -> Regions {
         if let Some(region) = self.atom_region() {
             return Regions::Known(region);

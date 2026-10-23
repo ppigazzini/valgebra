@@ -258,12 +258,13 @@ fn apart_from(index: ConstIx, table: &[Schema], oracle: &dyn LeafRelations) -> b
 
 /// `A ⊆ B` between two finite sets of constants, decided by membership.
 ///
-/// A literal denotes a singleton, so a union of literals denotes the set of its
-/// constants, and inclusion between two such sets is membership of every
-/// constant of one in the other. That is **exact in both directions**, which is
-/// what a set gives that a shape does not: every member found is a proof, and
-/// one member found nowhere is a refutation naming the value that stands
-/// against the inclusion.
+/// A literal denotes a singleton [FCB08, §4.2], or the empty set for a constant
+/// unequal to itself, so a union of literals denotes the set of its constants,
+/// and inclusion between two such sets is membership of every constant of one
+/// in the other. That is **exact in both directions**, which is what a set
+/// gives that a shape does not: every member found is a proof, and one member
+/// found nowhere is a refutation naming the value that stands against the
+/// inclusion.
 ///
 /// Both readings are one walk. The lists are canonical, so a member is found by
 /// binary search rather than by a scan, and the pair costs `n log m` where the

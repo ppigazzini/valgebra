@@ -323,23 +323,6 @@ def _owe(tree: Path, line: str) -> None:
     )
 
 
-#: The pages citing a section of a paper, each of which the citation ledger's
-#: detector reads; respelling the sign in one of them leaves the others to
-#: answer for it.
-_SECTIONED = (
-    "docs/dev/01-schema-ir.md",
-    "docs/dev/02-decision.md",
-    "docs/dev/03-frontend.md",
-    "docs/dev/10-theory.md",
-)
-
-
-def _respell_sections(tree: Path) -> None:
-    """Write every section sign the citing pages carry as the word."""
-    for page in _SECTIONED:
-        _replace_all(tree, page, "§", "section ")
-
-
 def _edits(tree: Path, relative: str, *pairs: tuple[str, str]) -> None:
     """Apply several `_edit`s to one file, in order, each refusing if absent."""
     for old, new in pairs:
@@ -1576,6 +1559,61 @@ PLANTS = (
         trips=("test_no_citation_opens_a_paragraph_or_stands_before_a_colon",),
     ),
     Plant(
+        # Code listed under context: a guiding paragraph names a result the
+        # design leans on without building, so an item under it rests on a
+        # sentence no test holds.
+        "tests/test_citation_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            "exact there ([02-decision.md](02-decision.md)).\n",
+            "exact there ([02-decision.md](02-decision.md)).\n\n"
+            "IMPLEMENTED-BY: decision/readings.rs::Schema::region_set\n",
+        ),
+        trips=("test_an_implementing_line_follows_a_claim_about_code",),
+    ),
+    Plant(
+        # A function renamed under its entry: the page names code that is gone,
+        # and every other line still reads as an account of the tree.
+        "tests/test_citation_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            "decision/records.rs::Labels::base_case, decision/records.rs::phi",
+            "decision/records.rs::Labels::base_case, decision/records.rs::phi_gone",
+        ),
+        trips=("test_every_implementing_entry_resolves_and_cites_its_claim",),
+    ),
+    Plant(
+        # An item that cites and is listed nowhere: code resting on a result
+        # the page does not say it rests on.
+        "tests/test_citation_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            "decision/records.rs::Labels::base_case, decision/records.rs::phi",
+            "decision/records.rs::Labels::base_case",
+        ),
+        trips=("test_every_citing_item_is_listed_under_a_claim_that_cites_it",),
+    ),
+    Plant(
+        # A citation between two items: a step of nothing, which no claim can
+        # name and no reader can tie to the code it explains.
+        "tests/test_citation_ledger.py",
+        ("crates/valgebra-core/src/decision/records.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/decision/records.rs",
+            "/// Whether `part` holds finitely many keys",
+            "// A stray step [Cas23, (17)].\n\n"
+            "/// Whether `part` holds finitely many keys",
+        ),
+        trips=("test_a_citation_inside_a_body_is_a_step_of_an_item_that_cites",),
+    ),
+    Plant(
         # The other end of the theory ledger: a claim renamed on the page,
         # which leaves every marker naming it pointing at nothing while still
         # reading like a pointer. The `HELD-BY:` direction does not see it --
@@ -1977,11 +2015,12 @@ PLANTS = (
         trips=("test_the_local_gate_names_every_detached_surface",),
     ),
     Plant(
-        # Every page's section references respelled in words: the parse reads
-        # no section citation, and every rule over them passes on none.
+        # The theory page's section references respelled in words: the parse
+        # reads no section citation there, and every rule over them passes on
+        # none.
         "tests/test_citation_ledger.py",
-        _SECTIONED,
-        _respell_sections,
+        ("docs/dev/10-theory.md",),
+        lambda tree: _replace_all(tree, "docs/dev/10-theory.md", "§", "section "),
         trips=("test_the_scope_cites_by_label",),
     ),
     Plant(

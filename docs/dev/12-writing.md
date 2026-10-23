@@ -216,9 +216,17 @@ what the item does, and never stands before a colon, because
 site's renderer delete. A summary carries one only when the result is what it
 is about.
 
+**The theory page names the item.** Under the claim citing the result, an
+`IMPLEMENTED-BY:` line beside the claim's `HELD-BY:` line names each item that
+implements it -- `decision/records.rs::phi`, `decision/records.rs::Slot::below`,
+or a module alone -- and the claim cites in its own paragraph every result an
+item it names cites. So the page says which code rests on which result, and a
+reader auditing either starts from the other.
+
 `tests/test_citation_ledger.py` holds the form, the place and the table over
-the files its `SCOPE` names, and where the papers are at hand, each number to a
-statement the paper prints.
+the files its `SCOPE` names, each number to a statement the paper prints where
+the papers are at hand, and the two lists alike: every item a line names cites
+what its claim cites, and every citing item is named.
 
 ## The gate, and what it cannot see
 

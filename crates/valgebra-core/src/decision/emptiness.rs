@@ -2,12 +2,12 @@
 //!
 //! The question every relation reduces to. Subtyping is the emptiness of a
 //! difference and equivalence is two of those, so this is the module the other
-//! two rest on. It reads JACM Definition 6.9's simulation by recursion over the
-//! constructors rather than as a saturation, a node met again on its own path
-//! taken as empty, which is the coinductive hypothesis -- a union is empty when
-//! every member is, a meet when its members share no value, a product when a
-//! component is -- with the value-region partition folded in the same pass, so
-//! a Boolean node reads its children's regions in constant time.
+//! two rest on. It reads the simulation of [FCB08, Def. 6.9] by recursion over
+//! the constructors rather than as a saturation, a node met again on its own
+//! path taken as empty, which is the coinductive hypothesis -- a union is empty
+//! when every member is, a meet when its members share no value, a product when
+//! a component is -- with the value-region partition folded in the same pass,
+//! so a Boolean node reads its children's regions in constant time.
 //!
 //! The answer is three-valued because a refutation needs it: `Unknown` is not
 //! a proof of emptiness and not a proof of inhabitation, and the boolean the
@@ -193,6 +193,11 @@ impl Schema {
 
     /// [`empty_and_region`](Self::empty_and_region) one level down, inside the
     /// level it holds.
+    ///
+    /// Each arm is a rule of the coinductive proof of emptiness
+    /// [FCB08, Def. 6.9], read over the constructors, with a reference met
+    /// again on its own path read as empty, as a node met during its own
+    /// traversal is [LN26, §5.1].
     fn empty_and_region_at(&self, cx: &mut Cx<'_>) -> (Verdict, Regions) {
         // Bound the work, sharing the budget with the caller (the subtyping
         // decision passes its own `cx.budget` in), so emptiness cannot escape the
@@ -215,9 +220,9 @@ impl Schema {
             Schema::Anything(_) => (Verdict::Inhabited, Regions::Known(Region::ALL)),
             Schema::Ref(id) => {
                 // A reference reached again while resolving it is a cycle: this
-                // occurrence demands an infinite unfolding, so on its own it has
-                // no finite inhabitant. A union base case or an optional or
-                // starred position escapes before reaching here.
+                // occurrence demands an infinite unfolding, so on its own it
+                // has no finite inhabitant [LN26, §5.1]. A union base case or
+                // an optional or starred position escapes before reaching here.
                 if cx.visiting.contains(id) {
                     return (Verdict::Empty, Regions::Unknown);
                 }
@@ -233,7 +238,8 @@ impl Schema {
                     None => (Verdict::Unknown, Regions::Unknown),
                 }
             }
-            // A sequence admits no value when a prefix element admits none. A
+            // A sequence admits no value when a prefix element admits none, a
+            // product being empty where a component is [FCB08, Lem. 6.5]. A
             // tail repeats zero times, so a shape whose prefix is all inhabited
             // admits at least the sequence that stops at the prefix.
             Schema::Seq { shape, .. } => {
@@ -260,7 +266,8 @@ impl Schema {
             // `false` meant only that nothing proved emptiness.
             Schema::Coll { .. } => (Verdict::Inhabited, Regions::Unknown),
             // A map is emptied by a required field that admits nothing, and
-            // admits the empty dict when it requires nothing at all.
+            // admits the empty dict when it requires nothing at all
+            // [Cas23, (11)].
             Schema::KeyedMap { fields, .. } => {
                 let required = fields.iter().filter(|field| field.required);
                 let verdict = Verdict::every(required.map(|field| field.schema.verdict_rec(cx)));
@@ -280,9 +287,9 @@ impl Schema {
                     Verdict::every(fields.iter().map(|field| field.schema.verdict_rec(cx)));
                 (verdict, Regions::Unknown)
             }
-            // A union is empty when every member is and inhabited when any member
-            // is; its region is the union of the members' regions, again folded
-            // from the children.
+            // A union is empty when every member is and inhabited when any
+            // member is [FCB08, Def. 4.1]; its region is the union of the
+            // members' regions, again folded from the children.
             Schema::Union(members) => {
                 let mut verdict = Verdict::Empty;
                 let mut region = Regions::UNION_UNIT;
@@ -302,8 +309,9 @@ impl Schema {
                 }
                 (verdict, region)
             }
-            // A complement's region is the partition minus its inner's region; it is
-            // empty exactly when that region is empty (`¬⊤ = ∅`).
+            // A complement's region is the partition minus its inner's region;
+            // it is empty exactly when that region is empty (`¬⊤ = ∅`,
+            // [FCB08, Def. 4.1]).
             //
             // The region that settles it is read by the **fast** fold, which
             // stops at the first member a union carries that the partition
@@ -417,10 +425,12 @@ fn density_of<'a>(bases: impl IntoIterator<Item = &'a Schema>) -> Density {
 /// The verdict and region set of an intersection.
 ///
 /// Seven rules can prove a meet empty and they are asked in one place: an empty
-/// member, canceling scalar regions, a member beside its own complement, a
-/// pattern beside the complement of one with the same constraints, two members
-/// of disjoint kinds, refinement bounds that cannot hold together, and a
-/// required key two record members cannot agree on.
+/// member, canceling scalar regions, a member beside its own complement
+/// [FCB08, Def. 4.1], a pattern beside the complement of one with the same
+/// constraints, two members of disjoint kinds [FCB08, (5)], refinement bounds
+/// that cannot hold together, and a required key two record members cannot
+/// agree on, the meet of two map atoms being the atom of the meets
+/// [Cas23, (12)] and empty where a required label is [Cas23, (11)].
 ///
 /// Proving a meet inhabited means finding a value in *every* member, which none
 /// of the seven does. The region settles it exactly over the whole scalar
@@ -547,28 +557,29 @@ fn has_a_pattern_and_its_complement(members: &[Schema], cx: &mut Cx<'_>) -> bool
 ///
 /// A meet is a set of values, and a reference denotes its definition, so `t ∧
 /// X` is the definition met with `X` and a definition that is a union is the
-/// union of its branches met with `X`: empty where every branch's meet is,
-/// inhabited where one is. A branch's meet is a meet like any other, so the
-/// rules read it as they read this one -- a branch of another kind than `X`
-/// meets nothing, two records meet key by key, and a key's meet reaches this
-/// again where its types name the reference. A union among a meet's members is
-/// distributed the same way where it holds a reference itself, since the
-/// reference is as often written inside one -- `{"next": Node | None}` -- as
-/// around it, and below an unfolding, where the key of a branch's meet is as
-/// often a union of the definition's own -- `t ∧ (None | {"a": None})` asks
-/// `None ∧ (None | {"a": None})`. Elsewhere a union is left to the rules, so a
-/// query with no reference in a meet pays nothing here.
+/// union of its branches met with `X` [FCB08, Lem. 6.2], empty where every
+/// branch's meet is, inhabited where one is. A branch's meet is a meet like any
+/// other, so the rules read it as they read this one -- a branch of another
+/// kind than `X` meets nothing, two records meet key by key, and a key's meet
+/// reaches this again where its types name the reference. A union among a
+/// meet's members is distributed the same way where it holds a reference
+/// itself, since the reference is as often written inside one -- `{"next": Node
+/// | None}` -- as around it, and below an unfolding, where the key of a
+/// branch's meet is as often a union of the definition's own -- `t ∧ (None |
+/// {"a": None})` asks `None ∧ (None | {"a": None})`. Elsewhere a union is left
+/// to the rules, so a query with no reference in a meet pays nothing here.
 ///
 /// The meet is the goal, its members sorted and without repeats -- the members
 /// of a meet are a set -- held open while the path below decides it
-/// ([`OpenMeet`]) and read as empty where the path reaches it again. That is
-/// the least fixpoint read inductively, as a reference reached again on
-/// `visiting` is: a value is a finite tree, so a value of the meet
-/// that needed a value of the same meet below it needs a smaller one, and a
-/// smallest value needs none. The goal is popped when it is decided and
+/// ([`OpenMeet`]) and read as empty where the path reaches it again
+/// [LN26, §5.1]. That is the least fixpoint read inductively, as a reference
+/// reached again on `visiting` is: a value is a finite tree, so a value of the
+/// meet that needed a value of the same meet below it needs a smaller one, and
+/// a smallest value needs none. The goal is popped when it is decided and
 /// remembered nowhere, since what it answered rested on the goals open above
 /// it. Its members are drawn from the schema's subterms and the definitions',
-/// so a query has finitely many, and a path holds each at most once.
+/// so a query has finitely many, as normal forms over the atoms a type mentions
+/// are [FCB08, §6.9], and a path holds each at most once.
 ///
 /// **The meet is its own goal and never the reference's.** Under `t = None |
 /// {"a": t}` the meet `t ∧ {"a": None | {"a": None}}` asks of its key `t ∧
@@ -663,7 +674,8 @@ impl OpenMeet {
     }
 
     /// Open `goal` for the query `budget` belongs to, or `None` where that
-    /// query holds it open already.
+    /// query holds it open already, a node met during its own traversal being
+    /// empty [LN26, §5.1].
     fn open(budget: &Budget, goal: Vec<Schema>) -> Option<Self> {
         let query = std::ptr::from_ref(budget) as usize;
         OPEN_MEETS.with_borrow_mut(|open| {

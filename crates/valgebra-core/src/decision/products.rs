@@ -21,10 +21,10 @@ use super::{Cx, descending, spend};
 /// The element schemas of a *fixed-arity* sequence, or `None` when the shape has
 /// a tail.
 ///
-/// Lemma 6.5 decomposes a product, and a sequence is a product only when its
-/// component count is fixed: a repeated tail admits sequences of every length,
-/// so there is no tuple of components to split over. An empty prefix with no
-/// tail is the nullary product.
+/// The decomposition of [FCB08, Lem. 6.5] is a product's, and a sequence is a
+/// product only when its component count is fixed: a repeated tail admits
+/// sequences of every length, so there is no tuple of components to split over.
+/// An empty prefix with no tail is the nullary product.
 pub(super) fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
     shape.tail.is_none().then(|| shape.prefix.to_vec())
 }
@@ -32,11 +32,13 @@ pub(super) fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
 /// Whether the product `components` is contained in the union of the products in
 /// `branches`, all of the same arity, in the three values of [`Relation`].
 ///
-/// JACM Lemma 6.5 characterizes this by splitting the negative set every way,
-/// `2^|N|` subsets, and an implementation that tries them must retract a
-/// hypothesis whenever a split fails (ICFP §2.1.4). That section gives the
-/// equivalent formulation that does not backtrack, and this is that function
-/// at `n` components rather than two:
+/// The inclusion is characterized by splitting the negative set every way
+/// [FCB08, Lem. 6.5], `2^|N|` subsets, and an implementation that tries them
+/// must retract a hypothesis whenever a split fails [Cas23, §2.1.4]. That
+/// section gives the equivalent formulation that does not backtrack, and this
+/// is that function at `n` components rather than two, as the proof of
+/// [Cas23, Lem. 4.7] generalizes the pair to every arity [Cas23, App. C.1], and
+/// reads:
 ///
 /// ```text
 /// Phi(P, [])       = P is empty
@@ -141,10 +143,11 @@ pub(super) fn product_subtype(
 /// Whether a fixed-arity sequence is covered by the sequence branches of a union.
 ///
 /// A value that splits across branches -- `tuple[int|str, int]` covered by
-/// `tuple[int, int] | tuple[str, int]` -- lands in no single branch, so the rule
-/// that tries each branch alone cannot see it. Branches of another container or
-/// another arity share no value with `self` by shape, so they drop out rather
-/// than blocking the decomposition.
+/// `tuple[int, int] | tuple[str, int]` -- lands in no single branch, so the
+/// rule that tries each branch alone cannot see it; the backtrack-free product
+/// rule does [Cas23, §2.1.4]. Branches of another container or another arity
+/// share no value with `self` by shape, a negative of another kind dropping out
+/// [FCB08, (5)], so they drop out rather than blocking the decomposition.
 ///
 /// A refutation from the product rule is a refutation of the union only where
 /// every member it set aside holds none of the subject's values. A sequence of
@@ -200,6 +203,10 @@ pub(super) fn seq_splits_across_union(
 /// Whether the language `pa · ta*` is included in `pb · tb*` — a fixed prefix
 /// optionally followed by a repeated tail, which is every [`SeqShape`].
 /// `ta`/`tb` of `None` mean no repeated tail.
+///
+/// Position by position, each against the other side's prefix or its tail, as
+/// the array rule compares items [BBC+26, (array)]; the refutations by length
+/// are this rule's own.
 pub(super) fn linear_subtype(
     pa: &[Schema],
     ta: Option<&Schema>,

@@ -1,8 +1,8 @@
 //! Records and mappings: what a keyed map admits, and when two of them relate.
 //!
 //! A dict is a function from keys to values that is constant, within each part
-//! of a partition of the keys, on all but finitely many of them -- ICFP 2023's
-//! quasi K-step function (Definition 4.6) -- so a *set* of dicts is written by
+//! of a partition of the keys, on all but finitely many of them -- the quasi
+//! K-step function of [Cas23, Def. 4.6] -- so a *set* of dicts is written by
 //! naming the keys it constrains and saying what every other key of each part
 //! maps to. That is the node these rules read, and they read it in the shape
 //! the frontend writes rather than in a canonical form: the fields as spelled,
@@ -32,17 +32,17 @@ use super::{Cx, descending, spend};
 /// map and the dict the rules below name is in all of them, and `Unknown`
 /// otherwise -- every member a map or not.
 ///
-/// ICFP formula (12) meets two record atoms pointwise -- field by field, clause
-/// by clause -- and formula (11) makes the result empty when a field's type is.
-/// A dict in the meet carries every key some side requires, with a value in every
-/// type its sides give that key, so two rules follow:
+/// Two record atoms meet pointwise [Cas23, (12)] -- field by field, clause by
+/// clause -- and the meet is empty when a field's type is [Cas23, (11)]. A dict
+/// in the meet carries every key some side requires, with a value in every type
+/// its sides give that key, so two rules follow:
 ///
 /// - a key required somewhere whose types meet to nothing admits no dict;
 /// - a key required somewhere and absent from a *closed* map admits none either,
 ///   since a closed map is exactly its declared keys.
 ///
-/// Only a **required** key can empty a meet. Footnote 11 of the same paper is the
-/// guard: the meet of two mappings "is never empty since it always contains at
+/// Only a **required** key can empty a meet. The guard is [Cas23, fn. 11], the
+/// meet of two mappings "is never empty since it always contains at
 /// least the empty record expression", and two optional fields are the same case
 /// -- the empty dict satisfies both.
 ///
@@ -119,15 +119,16 @@ pub(super) fn keyed_map_meet_verdict(members: &[Schema], cx: &mut Cx<'_>) -> Ver
 /// `a` only together. `dict[int | str, int]` is below `{int: int, str: int}`,
 /// each key kind under a clause of its own, and no one clause covers the
 /// first's. The set representation splits a clause by the parts of the key
-/// partition first, which is how ICFP 2023's Lemma 4.7 compares defaults, one
-/// part at a time, and it decides the pair.
+/// partition first, which is how [Cas23, Lem. 4.7] compares defaults, one part
+/// at a time, and it decides the pair.
 ///
 /// One rule, the conjunction of three readings, for every shape a keyed map
 /// takes: a closed record is the rule with `da` empty, and a pure mapping the
 /// rule with both field lists empty.
 ///
 /// 1. **Every field of `b`**: one `a` declares narrows into it and is required
-///    where `b` requires it; one `a` lacks is refuted where `b` requires it,
+///    where `b` requires it, an absent key being outside a required field
+///    [Cas23, §3.2.1]; one `a` lacks is refuted where `b` requires it,
 ///    since a clause never requires a key, and otherwise is held to the clauses
 ///    of `a` whose key can spell its name.
 /// 2. **Every field of `a` that `b` lacks** is covered by a clause of `b` whose
@@ -350,9 +351,9 @@ pub(super) fn keyed_map_subtype(
 /// the supertype's clauses `db` holds: `Fails` where one is found, `Unknown`
 /// where none is.
 ///
-/// ICFP Lemma 4.7 refutes a map below another one key-type at a time: a key
-/// the subject's clause admits and no clause of the supertype does, or one
-/// both admit whose value the subject's clause allows and the supertype's
+/// A map below another is refuted one key type at a time [Cas23, Lem. 4.7], by
+/// a key the subject's clause admits and no clause of the supertype does, or
+/// one both admit whose value the subject's clause allows and the supertype's
 /// forbids. This is that, read one **key kind** at a time. For a kind whose
 /// every value the clause's key holds, each clause of `b` either holds every
 /// value of the kind too or holds none ([`holds_every_value_of`],
@@ -384,10 +385,11 @@ pub(super) fn keyed_map_subtype(
 /// int}` is refuted by `{U2(): 1}` for such a subclass and by no plain value,
 /// so the pair declines.
 ///
-/// The finite kinds need nothing of their own. Lemma 4.7's proof assumes
-/// every key type is infinite, and `NoneType` and `bool` are not; but the rule
-/// refutes on one key, and a finite kind has one as surely as an infinite one.
-/// What a finite kind changes is the *proof*, which this does not attempt.
+/// The finite kinds need nothing of their own. The lemma is proved under the
+/// hypothesis that every key type is infinite [Cas23, §4.4], and `NoneType` and
+/// `bool` are not; but the rule refutes on one key, and a finite kind has one
+/// as surely as an infinite one. What a finite kind changes is the *proof*,
+/// which this does not attempt.
 ///
 /// [`holds_every_value_of`]: Schema::holds_every_value_of
 /// [`holds_no_value_of`]: Schema::holds_no_value_of
@@ -449,9 +451,10 @@ fn clause_by_key<'b>(
     by_constants(mine, fa, fb, db, &mut inhabited, values_asked, cx)
 }
 
-/// The constants `mine`'s key names, each read as a key of its own: refuted by
-/// one whose entry escapes the supertype, and proved where the key names
-/// constants alone and each lands inside its reader.
+/// The constants `mine`'s key names, each read as a key of its own, as the
+/// paper reads the keys of a finite key type as labels [Cas23, §4.4], and
+/// refuted by one whose entry escapes the supertype [Cas23, Lem. 4.7], and
+/// proved where the key names constants alone and each lands inside its reader.
 ///
 /// Out of line, behind the discriminant test its caller makes, so a key of
 /// kinds pays nothing for it.
@@ -514,9 +517,10 @@ fn read_once<'b>(label: &Label, db: &'b [MapClause], cx: &Cx<'_>) -> (Option<&'b
 }
 
 /// Whether the entries `mine` admits under a key `reader` reads land inside the
-/// supertype: refuted by a value of `mine`'s where nothing reads the key, or by
-/// one `reader` forbids. The two questions repeat across keys, so each is asked
-/// once.
+/// supertype: refuted by a value of `mine`'s where nothing reads the key, which
+/// the supertype maps to absence alone [Cas23, §3.2.1], or by one `reader`
+/// forbids [Cas23, Lem. 4.7]. The two questions repeat across keys, so each is
+/// asked once.
 fn entered<'b>(
     mine: &MapClause,
     reader: Option<&'b Schema>,
@@ -563,9 +567,9 @@ fn spelled_by(clause: &MapClause, field: &Field, cx: &mut Cx<'_>) -> Relation {
 }
 
 /// Whether the keyed map `schema` is below the union of `members`, split
-/// across the keyed maps among them: ICFP 2023's backtrack-free `Φ` in the form
-/// (22) gives it, the defaults read part by part, to which (17) reduces the
-/// inclusion.
+/// across the keyed maps among them: the backtrack-free `Φ` in the form
+/// [Cas23, (22)] gives it, the defaults read part by part, to which
+/// [Cas23, (17)] reduces the inclusion.
 ///
 /// A record whose tag takes three values lands in no single branch of a union
 /// of three records that each fix the tag, and [`keyed_map_subtype`] compares
@@ -581,9 +585,9 @@ fn spelled_by(clause: &MapClause, field: &Field, cx: &mut Cx<'_>) -> Relation {
 ///                  else Φ(R, N)
 /// ```
 ///
-/// The paper's `Φ(R, ∅)` is `false`, with (17) asking `R ≤ 0` once beside it;
-/// reading the record's emptiness at the base, and a narrowed label's where it
-/// moves, folds that disjunct into the recursion.
+/// The paper's `Φ(R, ∅)` is `false` [Cas23, (18)], with (17) asking `R ≤ 0`
+/// once beside it; reading the record's emptiness at the base, and a narrowed
+/// label's where it moves, folds that disjunct into the recursion.
 ///
 /// A label is read in `T⊥`, where an optional field holds absence as a value
 /// (`Slot`), and the labels are those the record and the branch name: a label
@@ -595,14 +599,14 @@ fn spelled_by(clause: &MapClause, field: &Field, cx: &mut Cx<'_>) -> Relation {
 /// drop a record below its sixteen corners narrows by every corner at every
 /// label.
 ///
-/// **The else-branch refutes only through an infinite part.** Theorem 4.5
-/// proves (22) under the hypothesis §4.4 makes of every key type, that it is
-/// infinite, and the paper says the hypothesis "is actually used": the proof
-/// of Lemma 4.7 (Appendix C.1) takes a key of the part that no label names.
-/// `None` has one key and `bool` two, where the paper would write their keys
-/// as labels; this keeps the part, so a branch set aside on it alone keeps the
-/// proof the rest give and drops their refutation. Every other part, the one
-/// for keys of no listed kind included, has a key no label takes.
+/// **The else-branch refutes only through an infinite part.** [Cas23, Thm. 4.5]
+/// proves (22) under the hypothesis [Cas23, §4.4] makes of every key type, that
+/// it is infinite, and the paper says the hypothesis "is actually used": the
+/// proof of [Cas23, Lem. 4.7] takes a key of the part that no label names
+/// [Cas23, App. C.1]. `None` has one key and `bool` two, where the paper would
+/// write their keys as labels; this keeps the part, so a branch set aside on it
+/// alone keeps the proof the rest give and drops their refutation. Every other
+/// part, the one for keys of no listed kind included, has a key no label takes.
 ///
 /// A member that is no map this reads is set aside, and a refutation stands
 /// only where each such member shares no kind with the subject, which is
@@ -635,7 +639,8 @@ pub(super) fn keyed_map_splits_across_union(
 
 /// The meet `R ∧ ¬R₁ ∧ … ∧ ¬Rₙ` of one keyed map with the complements of
 /// keyed maps: empty exactly where `R` is below their union, which is
-/// [`keyed_map_splits_across_union`] read as emptiness.
+/// [`keyed_map_splits_across_union`] read as emptiness, the form the paper
+/// decides `Φ` on [Cas23, §4.3].
 ///
 /// Without it the two routes to one question part: `a <= b` would decide
 /// where `a & ~b` is left to the set representation, whose difference spends
@@ -687,7 +692,8 @@ pub(super) fn keyed_map_minus_keyed_maps(members: &[Schema], cx: &mut Cx<'_>) ->
 
 /// The two readings' shared body: the subject's fields and clauses, the
 /// members of the union it is asked below, and `schema` itself, which a member
-/// set aside is held disjoint from.
+/// set aside is held disjoint from. The subject is the record [Cas23, (17)]
+/// narrows, and the maps among the members are its union.
 fn split_across<'s>(
     fields: &'s [Field],
     defaults: &'s [MapClause],
@@ -739,7 +745,8 @@ fn names_read<'s>(parts: &[Option<&'s Schema>; PARTS]) -> Option<&'s Schema> {
 }
 
 /// Whether `part` holds finitely many keys -- `None`'s one and `bool`'s two --
-/// where the else-branch of `Φ` keeps only its proof.
+/// where the else-branch of `Φ` keeps only its proof, since (22) is proved for
+/// infinite key types [Cas23, §4.4] and the proof uses it [Cas23, App. C.1].
 fn finite(part: usize) -> bool {
     [Kind::NoneType, Kind::Bool]
         .into_iter()
@@ -747,9 +754,11 @@ fn finite(part: usize) -> bool {
 }
 
 /// What each part of the key partition maps to under `defaults`: the value of
-/// the one clause holding every key of it, or `None` where no clause holds one
-/// and a key there is absent. `None` overall where a clause names a constant
-/// or holds part of a kind, or two clauses read one part.
+/// the one clause holding every key of it, the part's default [Cas23, Def. 4.6]
+/// with a union of key types filling each part it covers [Cas23, fn. 15], or
+/// `None` where no clause holds one and a key there is absent. `None` overall
+/// where a clause names a constant or holds part of a kind, or two clauses read
+/// one part, which the paper forbids [Cas23, §4.4].
 fn parts_of<'s>(defaults: &'s [MapClause], cx: &Cx<'_>) -> Option<[Option<&'s Schema>; PARTS]> {
     let mut parts = [None; PARTS];
     for clause in defaults {
@@ -768,7 +777,7 @@ fn parts_of<'s>(defaults: &'s [MapClause], cx: &Cx<'_>) -> Option<[Option<&'s Sc
 }
 
 /// How a subject's defaults stand against a branch's, which is the condition
-/// (22) branches on.
+/// [Cas23, (22)] branches on.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Defaults {
     /// Every part's default is within the branch's: split across its labels.
@@ -781,7 +790,8 @@ enum Defaults {
     Unknown,
 }
 
-/// Read once per branch, since narrowing a label never moves a default.
+/// The guard of [Cas23, (22)], part by part, read once per branch since
+/// narrowing a label never moves a default.
 fn defaults_against(
     mine: &[Option<&Schema>; PARTS],
     theirs: &[Option<&Schema>; PARTS],
@@ -816,7 +826,7 @@ fn defaults_against(
 }
 
 /// One label as `Φ` reads it: the values its key may hold, and whether the key
-/// may be absent -- ICFP's `T⊥`, where an optional field holds `⊥`.
+/// may be absent -- `T⊥` [Cas23, §4.1], where an optional field holds `⊥`.
 #[derive(Clone, Debug)]
 struct Slot {
     ty: Schema,
@@ -824,8 +834,9 @@ struct Slot {
 }
 
 impl Slot {
-    /// `self ≤ theirs` in `T⊥`. Absence the other slot does not allow is a
-    /// value outside it, whatever the types say of each other.
+    /// `self ≤ theirs` in `T⊥`, the label disjunct of [Cas23, (19)]. Absence
+    /// the other slot does not allow is a value outside it [Cas23, §3.2.1],
+    /// whatever the types say of each other.
     fn below(&self, theirs: &Slot, cx: &mut Cx<'_>) -> Relation {
         if self.absent && !theirs.absent {
             return Relation::Fails;
@@ -833,7 +844,9 @@ impl Slot {
         self.ty.is_subtype_rec(&theirs.ty, cx)
     }
 
-    /// `self ∖ theirs` in `T⊥`: absent where this allows it and that does not.
+    /// `self ∖ theirs` in `T⊥`, the narrowing `R(ℓ) ∧ not(B(ℓ))` of
+    /// [Cas23, (13)], absent where this allows it and that does not, since
+    /// `not` flips `⊥` [Cas23, §4.1].
     fn without(&self, theirs: &Slot) -> Slot {
         Slot {
             ty: Schema::meet([self.ty.clone(), theirs.ty.clone().complement()]),
@@ -859,6 +872,9 @@ struct Labels<'s> {
 }
 
 impl<'s> Labels<'s> {
+    /// The record as `Φ` reads it, a required field holding its type and an
+    /// optional one its type or `⊥` [Cas23, §3.2].
+    ///
     /// `None` where two fields share a name, which the frontend never builds and
     /// a label cannot hold twice.
     fn of(fields: &'s [Field], rest: Option<&'s Schema>) -> Option<Self> {
@@ -882,7 +898,8 @@ impl<'s> Labels<'s> {
         Some(Self { named, rest })
     }
 
-    /// The slot a key of this name reads.
+    /// The slot a key of this name reads: its label's, or the `str` part's
+    /// default where the record names none [Cas23, Def. 4.6].
     fn slot(&self, name: &str) -> Slot {
         let named = self
             .named
@@ -898,7 +915,8 @@ impl<'s> Labels<'s> {
         }
     }
 
-    /// The names either map labels, in order and once.
+    /// The names either map labels, in order and once: the labels (18) ranges
+    /// over [Cas23, (18)], cut to the two maps a step compares.
     fn names_with(&self, other: &Labels<'s>) -> Vec<&'s str> {
         let mut names: Vec<&'s str> = self
             .named
@@ -928,8 +946,9 @@ impl<'s> Labels<'s> {
         }
     }
 
-    /// `Φ(R, [])`: refuted where every key the map requires holds a value,
-    /// proved where one holds none.
+    /// `Φ(R, [])`, the paper's `false` [Cas23, (18)] with (17)'s `R ≤ 0` folded
+    /// in: refuted where every key the map requires holds a value, proved where
+    /// one holds none [Cas23, (11)].
     fn base_case(&self, cx: &mut Cx<'_>) -> Relation {
         let mut verdict = Verdict::Inhabited;
         for (_, slot) in &self.named {
@@ -952,15 +971,15 @@ struct Branch<'s> {
     defaults: Defaults,
 }
 
-/// `Φ(subject, branches)` in three values.
+/// `Φ(subject, branches)` in three values, as [Cas23, (22)] defines it.
 ///
-/// Each conjunct a label asks is the paper's: covered where the label is
-/// below the branch's or where the record narrowed there is below the rest.
-/// It refutes where both refute, since the label's refutation stands on a
-/// value the narrowed record holds and the rest's on that record having one
-/// outside them, and the first conjunct that does not hold is the answer.
-/// Each branch narrowed by is a level of the query's depth, as in the product
-/// rule.
+/// Each conjunct a label asks is the paper's: covered where the label is below
+/// the branch's or where the record narrowed there is below the rest. It
+/// refutes where both refute, since the characterization is exact
+/// [Cas23, Thm. 4.5], so the label's refutation stands on a value the narrowed
+/// record holds and the rest's on that record having one outside them, and the
+/// first conjunct that does not hold is the answer. Each branch narrowed by is
+/// a level of the query's depth, as in the product rule.
 fn phi(subject: &Labels<'_>, branches: &[Branch<'_>], cx: &mut Cx<'_>) -> Relation {
     if !spend(cx.budget) {
         return Relation::Unknown;
@@ -1023,9 +1042,12 @@ fn phi(subject: &Labels<'_>, branches: &[Branch<'_>], cx: &mut Cx<'_>) -> Relati
 /// carrying its attributes, whatever the value is -- so a nominal question is a
 /// conjunct of its own, and two records read off unrelated classes relate.
 ///
-/// The rule is set inclusion read off the denotation: an attribute the supertype
-/// does not name constrains nothing, and one it names constrains every value of
-/// the subtype exactly when the subtype names it too, at least as narrowly.
+/// The rule is set inclusion read off the denotation, record containment
+/// [Cas23, Lem. 2.3] with one record on each side, where an unnamed attribute
+/// is unconstrained, an open record's default [Cas23, §3.2]. An attribute the
+/// supertype does not name constrains nothing, and one it names constrains
+/// every value of the subtype exactly when the subtype names it too, at least
+/// as narrowly.
 pub(super) fn attr_record_subtype(fa: &[Attribute], fb: &[Attribute], cx: &mut Cx<'_>) -> Relation {
     let order = Cell::new(None);
     let mut a_by_name = FieldCursor::over(fa, fb, &order);

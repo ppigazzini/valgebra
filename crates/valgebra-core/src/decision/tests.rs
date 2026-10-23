@@ -5350,7 +5350,7 @@ fn clauses(pairs: Vec<(Schema, Schema)>) -> Schema {
 }
 
 /// A subject's clause is refuted by a key it admits that the supertype reads
-/// one way only (ICFP Lemma 4.7, a key kind at a time).
+/// one way only, a key kind at a time [Cas23, Lem. 4.7].
 ///
 /// Each row names the dict it stands on. Asked of the rules alone.
 #[test]
@@ -6745,8 +6745,8 @@ fn a_member_apart_at_an_optional_label_is_dropped() {
 /// every dict of the subject has one `None` key at most, so the union covers
 /// it. Each member's default is narrower than the subject's, so `Φ` sets both
 /// aside and reaches its base case: read exactly, that refutes, because the
-/// proof of ICFP 2023's Lemma 4.7 takes a key of the escaping part that no
-/// label names (Appendix C.1), and `None` has one key to give. The same split
+/// proof of [Cas23, Lem. 4.7] takes a key of the escaping part that no label
+/// names [Cas23, App. C.1], and `None` has one key to give. The same split
 /// over `int` keys is refuted, and is:
 /// `{1: 1, 2: "x"}` is in neither member.
 #[test]

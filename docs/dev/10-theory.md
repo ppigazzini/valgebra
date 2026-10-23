@@ -15,7 +15,9 @@ only where a test fails on the day it starts doing it.
 Every paragraph tagged LOAD-BEARING, OBLIGATION, DEVIATION or NOT-REACHED is
 followed by a `HELD-BY:` line naming the tests that fail when the sentence is
 false, or an `OWED:` line naming the tests it is owed and why they do not exist
-yet; a GUIDING or PLANNED tag carries an id and no holding line.
+yet; a GUIDING or PLANNED tag carries an id and no holding line. A claim the code
+implements also gives an `IMPLEMENTED-BY:` line naming the items that implement
+it, as [12-writing.md](12-writing.md#citing-a-paper) says.
 `tests/test_theory_ledger.py` holds both directions: a claim with neither line
 fails, a name that resolves to
 no test fails, an owed name that already resolves to one fails, and the count of
@@ -49,13 +51,16 @@ published version can number a result apart.
 | Label | Work | Owns here | Read in | Identifier |
 |---|---|---|---|---|
 | `AC93` | Amadio & Cardelli, "Subtyping Recursive Types", *TOPLAS* 15(4), 1993 | the trail of recursive subtyping, the unfolding of a reference | the published article | [doi:10.1145/155183.155231](https://doi.org/10.1145/155183.155231) |
+| `BBC+26` | Baazizi, Ben Ali, Colazzo, Ghelli, Klessinger, Sartiani & Scherzinger, "JSON Schema Inclusion through Refutational Normalization" | the rules of a structural inclusion: the uninhabited subject, the unions on either side, the arrays | the preprint, v4 of 10 August 2026 | [arXiv:2603.25306v4](https://arxiv.org/abs/2603.25306v4) |
 | `Cas23` | Castagna, "Typing Records, Maps, and Structs", *PACMPL* 7(ICFP), Article 196, 2023 | records and maps: the atoms, their operations, the backtrack-free rules | the published article, with its appendices | [doi:10.1145/3607838](https://doi.org/10.1145/3607838) |
 | `Cas24` | Castagna, "Programming with Union, Intersection, and Negation Types", *The French School of Programming*, Springer, 2024, pp. 309-378 | subtyping as inclusion, the membership predicate | the preprint, v4 of 27 March 2024 (arXiv:2111.03354v4) | [doi:10.1007/978-3-031-34518-0_12](https://doi.org/10.1007/978-3-031-34518-0_12) |
 | `CD24` | Castagna & Duboc, "Guard Analysis and Safe Erasure Gradual Typing: a Type System for Elixir" | a descriptor per kind of atom, tuples as unions of atoms, the gradual pair | the preprint, v4 of 2 June 2026 | [arXiv:2408.14345v4](https://arxiv.org/abs/2408.14345v4) |
 | `DV14` | D'Antoni & Veanes, "Minimization of Symbolic Automata", POPL 2014 | the word and sequence automata: guards, minimality, partition refinement | the published paper | [doi:10.1145/2535838.2535849](https://doi.org/10.1145/2535838.2535849) |
 | `FCB08` | Frisch, Castagna & Benzaken, "Semantic Subtyping: Dealing Set-Theoretically with Function, Union, Intersection, and Negation Types", *JACM* 55(4), 2008 | the model: interpretation, normal forms, kinds, products, simulations | the published article | [doi:10.1145/1391289.1391293](https://doi.org/10.1145/1391289.1391293) |
+| `HSHP20` | Habib, Shinnar, Hirzel & Pradel, "Type Safety with JSON Subschema" | a step entailed by a step it divides | the preprint, v2, of the ISSTA 2021 paper | [arXiv:1911.12651v2](https://arxiv.org/abs/1911.12651v2) |
 | `HVP05` | Hosoya, Vouillon & Pierce, "Regular Expression Types for XML", *TOPLAS* 27(1), 2005 | sequences as regular expression types, the classical algorithm, hash consing | the published article | [doi:10.1145/1053468.1053470](https://doi.org/10.1145/1053468.1053470) |
 | `JV20` | Jhala & Vazou, "Refinement Types: A Tutorial" | refined base types and their subtyping | the preprint, v1 | [arXiv:2010.07763v1](https://arxiv.org/abs/2010.07763v1) |
+| `LN26` | Laurent & Nguyễn, "Implementing Set-Theoretic Types", *PACMPL* 10(OOPSLA2), Article 334, 2026 | a node met during its own traversal read as empty | the HAL copy, hal-05369012 | [doi:10.1145/3839466](https://doi.org/10.1145/3839466) |
 | `Nak00` | Nakano, "A Modality for Recursion", LICS 2000 | guardedness: the variable of a recursive type under a guard | the published paper | [doi:10.1109/LICS.2000.855774](https://doi.org/10.1109/LICS.2000.855774) |
 
 ## The frame: a schema denotes a set
@@ -79,12 +84,15 @@ about Python.
 and the folds the constructors apply are its laws. A set-theoretic
 interpretation takes a union to the union of the sets, a negation to the
 complement and the empty type to the empty set [FCB08, Def. 4.1], so every law
-of the algebra of sets -- Birkhoff's _Lattice Theory_ -- is a law of the types.
+of the algebra of sets -- Birkhoff's _Lattice Theory_ -- is a law of the types,
+the complement of a union the meet of the complements [FCB08, Lem. 6.2].
 **[LOAD-BEARING: lattice-theory]** — `crates/valgebra-core/src/ir.rs`, where a
 schema is built in the lattice normal form, and the property suites that check
 each claimed equivalence against membership rather than asserting it.
 
 SOURCE: §13.2 "**The laws hold by construction**"; §2 "every combinator builds the normal"
+
+IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference
 
 HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference
 
@@ -97,15 +105,22 @@ exact there ([02-decision.md](02-decision.md)).
 
 **Frisch, Castagna & Benzaken, "Semantic Subtyping" (JACM 2008).** The model
 valgebra *is*: value sets with union, intersection and negation, where subtyping
-is `[[s ∧ ¬t]] = ∅`. **[LOAD-BEARING: semantic-subtyping]**, with a qualifier: `is_subtype_of` is
+is `[[s ∧ ¬t]] = ∅` [FCB08, §4.1]. **[LOAD-BEARING: semantic-subtyping]**, with a qualifier: `is_subtype_of` is
 **not** that reduction applied uniformly. It is a structural procedure whose arms
 decompose each pair by shape, and it calls emptiness where no shape is available
 to recurse into -- the two lattice bounds, and a complement on the right -- and on
 the subject of every refutation, which the witness guard (`witnessed` in
 `decision.rs`) reads before it believes one. Everywhere else the arms decide
-directly, and the set representation answers where they decline.
+directly, and the set representation answers where they decline. The arms are
+rules of the kind a rule-based inclusion of JSON Schema states: an uninhabited
+subject is below everything [BBC+26, (uninhabited)], a union is below a schema
+where each member is [BBC+26, (anyOf-l)], a schema is below a union where it is
+below one member [BBC+26, (anyOf-r)], and a sequence is below a sequence
+position by position [BBC+26, (array)].
 
 SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
+
+IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype
 
 HELD-BY: the_two_deciders_agree_under_an_oracle, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment
 
@@ -192,11 +207,15 @@ corners -- and declines past them. `Φ` characterizes the inclusion exactly, so
 the rule refutes as well as proves -- a product with a value and no branch left
 is outside the union -- where every member the rule sets aside holds none of the
 subject's values; and a branch that shares no value with the narrowed product at
-some position is dropped, which the same characterization makes exact. The
+some position is dropped, which the same characterization makes exact, as a
+branch of another container or arity drops out as a negative of another kind
+does [FCB08, (5)]. The
 emptiness of every component is asked at every level, where the paper asks the
 product's once beside `Φ`.
 
 SOURCE: §13.1 "**The product decomposition.**"
+
+IMPLEMENTED-BY: decision/products.rs::fixed_components, decision/products.rs::product_subtype, decision/products.rs::seq_splits_across_union
 
 HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, the_product_rule_is_lemma_6_5, test_a_product_splits_across_union_branches, the_product_rule_is_lemma_6_5_at_three_positions, the_product_rule_decides_every_covering_split, the_product_rule_decides_scalar_pairs_as_the_values_do, a_product_is_below_its_corners_and_refuted_by_a_missing_one, a_member_the_product_rule_sets_aside_withholds_its_refutation
 
@@ -206,9 +225,16 @@ HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, the_p
 named fields plus default clauses subsumes the record, the homogeneous mapping,
 the heterogeneous mapping and their combination. **[LOAD-BEARING: records-maps-and-structs]** —
 `Schema::KeyedMap`, where a closed record is no default clause and `dict[K, V]`
-is a single clause with no fields.
+is a single clause with no fields. A field is read in `T⊥`, an optional one
+holding `⊥` [Cas23, §3.2], so an absent key is outside a required field
+[Cas23, §3.2.1]; two map atoms meet pointwise [Cas23, (12)] and are empty where
+a required label is [Cas23, (11)], two mappings always sharing the empty dict
+[Cas23, fn. 11]; and one map is below another one key type at a time
+[Cas23, Lem. 4.7].
 
 SOURCE: §3 "The model behind `Schema::KeyedMap`"; §13.3 "**The representation Theorem 4.2 produces.**"
+
+IMPLEMENTED-BY: decision.rs::Schema::holds_a_value_shallowly, decision/emptiness.rs::intersection_verdict, decision/records.rs::keyed_map_meet_verdict, decision/records.rs::keyed_map_subtype, decision/records.rs::entered, decision/records.rs::Labels::of
 
 HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition, a_key_of_whole_kinds_opens_the_parts_it_holds
 
@@ -244,9 +270,17 @@ used" -- the proof of [Cas23, Lem. 4.7] takes a key of the part no label names
 [Cas23, App. C.1]. `None` has one key and `bool` two, where the paper would
 write their keys as labels. And a label narrowed to a table of constants minus
 constants is read as the set it leaves (`FiniteMeet` in `decision/literals.rs`),
-without which a tag of literals would decline at its first narrowing.
+without which a tag of literals would decline at its first narrowing. `Φ` is
+read in the if-then form [Cas23, (19)] gives it, in `T⊥` [Cas23, §4.1], a label
+narrowed as [Cas23, (13)] narrows it and an absence outside a required label
+[Cas23, §3.2.1], with the paper's base case `false` [Cas23, (18)] and
+[Cas23, (17)]'s `R ≤ 0` read as [Cas23, (11)] reads emptiness; its emptiness
+reading is the meet of a record with negated records the paper decides `Φ` on
+[Cas23, §4.3].
 
 SOURCE: §13.3 "`keyed_map_splits_across_union` runs `Phi` beside the one-map rule"
+
+IMPLEMENTED-BY: decision/records.rs::keyed_map_splits_across_union, decision/records.rs::keyed_map_minus_keyed_maps, decision/records.rs::split_across, decision/records.rs::finite, decision/records.rs::Defaults, decision/records.rs::defaults_against, decision/records.rs::Slot, decision/records.rs::Slot::below, decision/records.rs::Slot::without, decision/records.rs::Labels::names_with, decision/records.rs::Labels::base_case, decision/records.rs::phi
 
 HELD-BY: a_record_below_a_union_of_records_is_the_rules_answer, a_record_split_stops_where_the_decision_budget_does, a_record_splits_across_the_records_that_fix_its_tag, a_record_splits_on_whether_a_key_is_present, a_member_apart_at_an_optional_label_is_dropped, a_member_set_aside_on_a_finite_part_keeps_only_the_proof, a_member_whose_default_the_rules_cannot_relate_is_set_aside, a_clause_the_partition_does_not_hold_declines_the_split, a_record_minus_the_records_that_cover_it_is_empty, a_record_split_agrees_with_the_set_reading
 
@@ -370,6 +404,8 @@ SOURCE: §13.4 "for the trail idea, not arm for arm"
 The arms are not the paper's: it decides an ordering over
 `⊥/⊤/→/µ` and valgebra decides a lattice with no arrow.
 
+IMPLEMENTED-BY: decision.rs::Schema::subtype_by_rules, decision.rs::Schema::left_reduces_below, decision.rs::Schema::below_a_reference, decision.rs::Cx::assuming
+
 HELD-BY: decides_recursive_subtyping_coinductively,
 test_recursive_subtyping_is_coinductive,
 a_decision_leaves_the_trail_it_was_given,
@@ -441,6 +477,8 @@ the oracle one constraint at a time, and a predicate only by itself.
 **[LOAD-BEARING: a-refinement-narrows-its-base]**
 
 SOURCE: §10 "the runtime check; the static/SMT side is"
+
+IMPLEMENTED-BY: decision.rs::refinement_subtype, decision/constraints.rs::constraint_entailed
 
 HELD-BY: test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker, test_every_cell_narrows_its_base_or_is_refused
 
@@ -634,17 +672,21 @@ and deviation that has a test of its own or is owed one.
 ### Results
 
 **Subtyping is inclusion, in both directions.** `t1 <= t2` holds exactly when
-every value of `t1` is a value of `t2`, and `is_equivalent` is both directions.
+every value of `t1` is a value of `t2`, and `is_equivalent` is both directions
+[Cas24, Def. 4].
 A proof from either decider admits no counterexample the walk can find, and a
 refutation from either stands on a value the walk refuses, over the structural
 fragment, over maps keyed by every hashable kind, and over a recursive pair alike. **[LOAD-BEARING: subtyping-is-inclusion]**
 
 SOURCE: §13.0 "**Subtyping, defined.** UIN Definition 4"
 
+IMPLEMENTED-BY: decision.rs::Schema::equivalence_relation
+
 HELD-BY: subtyping_is_sound_over_the_structural_fragment, a_refutation_is_a_value, a_map_relation_stands_on_a_dict, a_proof_over_a_fixpoint_has_no_witness_against_it, test_no_proof_is_refuted_by_a_value, test_a_claimed_refutation_stands_on_a_value
 
 **A cut reference proves and never refutes.** The descriptor decides `a <= b` by
-lowering the difference, and a recursive reference is cut to a bound: the top
+lowering the difference, `a ∧ ¬b = ∅` [FCB08, §4.1], and a recursive reference
+is cut to a bound: the top
 where the schema is used positively, the bottom under a complement, which is the
 finite approximation of a recursive type at the depth of the cut [AC93, §3.4].
 The widened difference contains the real one, so its emptiness proves the
@@ -653,17 +695,23 @@ pair the lowering did not widen. **[LOAD-BEARING: a-cut-reference-proves]**
 
 SOURCE: §13.1 "**The polarity cut is one-directional.**"
 
+IMPLEMENTED-BY: decision.rs::Schema::descriptor_contained_in
+
 HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding
 
 **Kinds decompose emptiness.** Positives of two kinds that share no value make
-a clause empty outright -- every pair but `bool` and `int`, a deviation below --
+a clause empty outright [FCB08, (5)] -- every pair but `bool` and `int`, a
+deviation below --
 negatives of another kind are dropped, and each kind is then an
 independent question -- which is what lets every kind carry its own
 representation and the whole be a product over them. `Kind` is the one
 partition both deciders read; `Region` is derived from it, never maintained
-beside it. **[LOAD-BEARING: kinds-decompose-emptiness]**
+beside it, and a scalar atom's region is the set of constants its basic type
+denotes [FCB08, §4.2]. **[LOAD-BEARING: kinds-decompose-emptiness]**
 
 SOURCE: §13.1 "positives of mixed kind make a clause empty outright"
+
+IMPLEMENTED-BY: decision.rs::has_disjoint_pair, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::Schema::atom_region, decision/emptiness.rs::intersection_verdict, decision/products.rs::seq_splits_across_union
 
 HELD-BY: the_same_shape_under_two_kinds_does_not_meet, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart, a_kind_is_an_independent_question
 
@@ -681,26 +729,37 @@ inhabited only where one member escapes every `Sⱼ` or the letter keeps one
 member per `Sⱼ` apart (`Members::one_member_each` in `descr/sets.rs`).
 **[LOAD-BEARING: a-set-is-a-powerset]**
 
+IMPLEMENTED-BY: decision.rs::Schema::subtype_by_shape
+
 HELD-BY: the_structural_inclusion_rules_decide_without_the_descriptor, a_meet_of_powersets_is_the_powerset_of_the_meet, a_line_is_empty_when_a_subtraction_covers_it, the_powerset_of_nothing_holds_the_empty_set, emptiness_agrees_with_the_sets, a_set_line_is_read_as_python_holds_its_members
 
 **Two fixpoints, one procedure.** Emptiness reads a cycle back to a visiting
-reference, or to a meet held open on its path, as uninhabited -- the least
-fixpoint, no finite value reaches it --
+reference, or to a meet held open on its path, as uninhabited, as a node met
+during its own traversal is [LN26, §5.1] -- the least fixpoint, no finite value
+reaches it, the coinductive proof of emptiness [FCB08, Def. 6.9] read over
+finite values --
 and subtyping reads a cycle back to an assumed goal as proved -- the greatest.
 The two are one procedure asked in two directions, and the unfolding is sound
 in both. **[LOAD-BEARING: two-fixpoints-one-procedure]**
 
 SOURCE: §13.4 "**Mixed induction and coinduction.**"
 
+IMPLEMENTED-BY: decision/emptiness.rs, decision/emptiness.rs::Schema::empty_and_region_at, decision/emptiness.rs::meet_through_a_reference, decision/emptiness.rs::OpenMeet::open
+
 HELD-BY: detects_uninhabited_recursive_schemas, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, the_fixpoint_laws_hold_over_drawn_definitions, a_proof_over_a_fixpoint_has_no_witness_against_it, an_emptiness_is_refused_by_every_boundary_value, a_meet_with_a_reference_is_its_definition_met_with_the_rest, a_meet_with_a_reference_answers_as_its_values_do
 
 **A clause is a region with its own default.** A keyed map is a quasi-K-step
-function: named labels, and a default per key-type region rather than one
-default for everything unnamed. A key falls in exactly one region, and a
-mapping constrains one region and leaves the others as the openness says.
+function [Cas23, Def. 4.6], named labels and a default per key-type region
+rather than one default for everything unnamed. A key falls in exactly one
+region, the key types being parts the paper asks to be disjoint [Cas23, §4.4]
+and a union of key types filling each part it covers [Cas23, fn. 15], and a
+mapping constrains one region and leaves the others as the openness says. One
+map is below another one region at a time [Cas23, Lem. 4.7].
 **[LOAD-BEARING: a-clause-is-a-region]**
 
 SOURCE: §13.3 "**That is `Schema::KeyedMap` exactly**"
+
+IMPLEMENTED-BY: decision/records.rs, decision/records.rs::clause_by_key, decision/records.rs::by_constants, decision/records.rs::parts_of, decision/records.rs::Labels::slot
 
 HELD-BY: every_key_falls_in_exactly_one_part, a_map_constrains_one_part_of_the_key_partition, test_heterogeneous_mapping_by_key_schema, a_clause_constrains_its_region_alone_over_drawn_dicts
 
@@ -784,7 +843,9 @@ back edges into a finite table of definitions, so the subterms reachable by
 unfolding it are finitely many. A rule asks a pair of them or a pair built out
 of them -- a meet of subterms and their complements from the product rule, a
 union of some of a union's members from the union rule, a bound from a fold --
-so every goal is drawn from a finite closure, and the distinct goals a query
+so every goal is drawn from a finite closure, as the normal forms over the
+atoms a type mentions are finitely many [FCB08, §6.9], and the distinct goals a
+query
 reaches are at most its square. With the trail cutting a pair that comes back,
 that is the termination argument the saturating algorithm makes, and the work
 budget bounds cost rather than standing in for it. The closure is held on the
@@ -795,6 +856,8 @@ recursive meet of maps is read under its cycle rather than unfolded again.
 **[OBLIGATION: regularity-bounds-the-goals]**
 
 SOURCE: §14.2 "Regularity bounds the number of distinct"
+
+IMPLEMENTED-BY: decision/emptiness.rs::meet_through_a_reference
 
 HELD-BY: every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms, the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks, the_goals_a_drawn_query_asks_are_pairs_of_the_subterms, a_recursive_meet_of_maps_is_decided_within_its_unfoldings
 
@@ -984,6 +1047,8 @@ holds the booleans (`Kind::admitted_regions`). A rule reading two kinds as two
 disjoint sets would prove `bool & int` empty, which `True` refutes.
 **[DEVIATION: the-kind-partition-overlaps-at-bool]**
 
+IMPLEMENTED-BY: decision/readings.rs::Schema::type_tag_with
+
 HELD-BY: a_boolean_is_the_one_kind_another_kind_holds, test_a_boolean_is_an_integer_and_no_other_kind_is
 
 **A constraint no fresh key meets is read beside the others.** Property
@@ -1008,6 +1073,8 @@ that singleton for a constant equal to itself and the empty set for one that is
 not, `float("nan")`: a `nan` literal admits nothing, and a union carrying one
 beside members a supertype holds is below that supertype.
 **[DEVIATION: a-constant-is-the-values-equal-to-it]**
+
+IMPLEMENTED-BY: decision/literals.rs::finite_set_below
 
 HELD-BY: a_constant_that_does_not_equal_itself_denotes_no_value, a_literal_nan_is_the_empty_set, test_nan_never_matches_a_nan_literal
 
@@ -1046,11 +1113,15 @@ down a layout the frontend cannot read is its `isinstance` test and its kind and
 nothing else, so every relation about the structure its instances have is a
 question no rule can answer. The record half carries no class for the same
 reason the halves are split -- each is then a set the rules already know -- and
-it is decided against another record, by width and by depth, and against the
+it is decided against another record, by width and by depth, record
+containment [Cas23, Lem. 2.3] read with an unnamed attribute free, as an open
+record leaves it [Cas23, §3.2], and against the
 lattice bounds. Against every other node it **declines** in both directions: a
 subclass of any kind may carry an attribute, so without an oracle that
 enumerates a kind's values there is no witness either way, and a refutation
 would report a value nobody has. **[DEVIATION: a-class-is-what-can-be-read]**
+
+IMPLEMENTED-BY: decision/records.rs::attr_record_subtype
 
 HELD-BY: an_attribute_record_relates_to_every_other_node, a_class_met_with_its_attributes_has_a_value_when_its_fields_do, a_refutation_about_a_class_and_its_record_stands_on_an_instance_it_permits
 

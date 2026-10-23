@@ -159,15 +159,16 @@ pub(super) fn bounds_unsatisfiable<'a>(
     false
 }
 
-/// Whether a single supertype refinement constraint is *entailed* by the subtype's
-/// constraint set: every value satisfying all of `narrow` also satisfies `wide`.
-/// Order and length bounds entail by value (a tighter lower bound entails a looser
-/// one, dually for upper and length), decided through the ordering `oracle`; a
-/// divisor entails a divisor it divides, decided through the same oracle; the
-/// remaining kinds (`Predicate`, `Regex`) have no sound value entailment and
-/// require the constraint to appear verbatim, handled by the caller's
-/// syntactic-containment check. A bound the oracle cannot compare is not
-/// entailed (conservative).
+/// Whether a single supertype refinement constraint is *entailed* by the
+/// subtype's constraint set: every value satisfying all of `narrow` also
+/// satisfies `wide`, the entailment Sub-Base reduces a refined subtyping to
+/// [JV20, Fig. 3.4]. Order and length bounds entail by value (a tighter lower
+/// bound entails a looser one, dually for upper and length), decided through
+/// the ordering `oracle`; a divisor entails a divisor it divides, decided
+/// through the same oracle; the remaining kinds (`Predicate`, `Regex`) have no
+/// sound value entailment and require the constraint to appear verbatim,
+/// handled by the caller's syntactic-containment check. A bound the oracle
+/// cannot compare is not entailed (conservative).
 pub(super) fn constraint_entailed(
     wide: &Constraint,
     narrow_base: &Schema,
@@ -202,17 +203,18 @@ pub(super) fn constraint_entailed(
             Constraint::Le(n) => lt(oracle.compare(*n, *w)),
             _ => false,
         }),
-        // Length bounds compare by their raw counts.
+        // Length bounds compare by their raw counts, as the array rule compares
+        // its item counts [BBC+26, (array)].
         Constraint::MinLen(w) => narrow
             .iter()
             .any(|c| matches!(c, Constraint::MinLen(n) if n >= w)),
         Constraint::MaxLen(w) => narrow
             .iter()
             .any(|c| matches!(c, Constraint::MaxLen(n) if n <= w)),
-        // Every multiple of `n` is a multiple of `w` when `w` divides `n`,
-        // wherever `%` reads the value and both steps as one kind of number.
-        // The question goes to the oracle because a step is a value a caller
-        // wrote, and `%` is what the walk asks of a value.
+        // Every multiple of `n` is a multiple of `w` when `w` divides `n`
+        // [HSHP20, Fig. 10], wherever `%` reads the value and both steps as one
+        // kind of number. The question goes to the oracle because a step is a
+        // value a caller wrote, and `%` is what the walk asks of a value.
         Constraint::MultipleOf(w) => narrow.iter().any(|c| match c {
             Constraint::MultipleOf(n) => {
                 steps_read_alike(narrow_base, *w, *n, oracle)

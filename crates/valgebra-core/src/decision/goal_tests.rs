@@ -591,7 +591,7 @@ fn measured_pairs() -> Vec<(Schema, Schema, Vec<Schema>)> {
 /// The closure is finite, so the distinct goals number at most its square, and
 /// a recursion whose pairs are drawn from a finite set and whose trail cuts a
 /// pair that comes back terminates without a budget. That is the argument
-/// JACM §6.9 makes over `N(A)` and TOPLAS 2005 Theorem 4 makes over its
+/// [FCB08, §6.9] makes over `N(A)` and [HVP05, Thm. 4] makes over its
 /// automaton's states. What a test can hold is the premise: no rule builds a
 /// term outside the closure. The product shapes build one narrowing per branch
 /// and position, and the last shape a union of the branches its subject can

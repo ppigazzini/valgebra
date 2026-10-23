@@ -22,6 +22,24 @@ What this holds, over the files `SCOPE` names:
   the shelf's own rule is to verify a theorem number and trust a citation
   chain, and a wrong number resolved to a real paper passed before.
 
+And the code half, which is what keeps the page, the code and the papers one
+account. A claim on the theory page names the items that implement it on an
+`IMPLEMENTED-BY:` line, and over the source files in `SCOPE`:
+
+* every entry resolves to one item -- a function, a method, a type, or a module
+  -- whose doc comment cites a result its claim cites, so a rename or a
+  deletion takes the entry with it rather than leaving the page pointing at
+  nothing;
+* every item whose doc comment cites is named under a claim, and every result it
+  cites is one a claim naming it cites, so code cannot start resting on a
+  result the page does not account for;
+* a citation inside a body is a step of what its item implements, so the item
+  cites too, and no citation belongs to no item.
+
+What no check can see is an item that implements a result and cites nothing. A
+reader decides that a function is Lemma 4.7; this holds the citation once
+written.
+
 The shelf is not redistributed, so a clone has none: the rows that read it skip
 where it is absent rather than failing, and say so. The rest live entirely in
 the tree and hold in every clone.
@@ -54,20 +72,32 @@ SHELF = ROOT / ("__" + "DEV") / "papers"
 
 #: The files the citation rule holds, as globs from the root. A file joins when
 #: its citations are written in the form, which is the commit that writes them.
-SCOPE = ("docs/dev/*.md",)
+SCOPE = (
+    "docs/dev/*.md",
+    "crates/valgebra-core/src/decision.rs",
+    "crates/valgebra-core/src/decision/*.rs",
+)
+
+#: A test module, whose tests a `HELD-BY:` line names: its citations are held to
+#: the form and listed under no claim, since a test holds a result rather than
+#: implementing it.
+_TEST_MODULE = re.compile(r"(?:^|/)(?:\w+_)?tests\.rs$")
 
 #: Each label the table may carry, and the stem of the shelf's file for the
 #: work. The page cannot name the file -- the shelf is not in a clone -- so the
 #: pairing lives here, beside the check that reads it.
 LABELS: dict[str, str] = {
     "AC93": "amadio-cardelli-1993-subtyping-recursive-types",
+    "BBC+26": "baazizi-et-al-2026-json-schema-inclusion-refutational-normalization",
     "CD24": "castagna-duboc-2024-guard-analysis-safe-erasure-elixir",
     "Cas23": "castagna-2023-typing-records-maps-structs-ICFP",
     "Cas24": "castagna-2021-union-intersection-negation",
     "DV14": "dantoni-veanes-2014-minimization-symbolic-automata",
     "FCB08": "frisch-castagna-benzaken-2008-semantic-subtyping-JACM",
+    "HSHP20": "habib-shinnar-hirzel-pradel-2020-type-safety-json-subschema",
     "HVP05": "hosoya-vouillon-pierce-2005-regular-expression-types-xml",
     "JV20": "jhala-vazou-2020-refinement-types",
+    "LN26": "laurent-nguyen-2026-implementing-set-theoretic-types",
     "Nak00": "nakano-2000-modality-for-recursion",
 }
 
@@ -151,15 +181,31 @@ def _scoped() -> tuple[Path, ...]:
 _CODE = re.compile(r"```.*?```|`[^`\n]*`", re.DOTALL)
 
 
+#: A line of Rust that is a comment, doc or plain, and the text it carries.
+_COMMENT = re.compile(r"^(?P<lead>\s*//[/!]?)(?P<text>.*)$")
+
+
+@functools.cache
 def _text(path: Path) -> str:
     """Give the text of `path` the rule reads, with what it does not read blanked.
 
     A `SOURCE:` line quotes the project's notes by their own section numbers,
     which are not a paper's, so it is read by the theory ledger and not here;
-    and quoted code spells a citation rather than making one. Blanked rather
+    and quoted code spells a citation rather than making one. Of a source file
+    only the comments are read, each line that is one, so a blank comment line
+    parts two paragraphs as a blank line parts them on a page. Blanked rather
     than dropped, so a line number still points at its line.
     """
     lines = path.read_text(encoding="utf-8").split("\n")
+    if path.suffix == ".rs":
+        read = []
+        for line in lines:
+            comment = _COMMENT.match(line)
+            if comment is None or not comment["text"].strip():
+                read.append("")
+                continue
+            read.append(" " * len(comment["lead"]) + comment["text"])
+        lines = read
     text = "\n".join("" if line.startswith(_SOURCE) else line for line in lines)
     return _CODE.sub(lambda code: re.sub(r"[^\n]", " ", code[0]), text)
 
@@ -247,12 +293,14 @@ def test_the_scope_cites_by_label() -> None:
 
     A ledger over an empty universe passes having checked nothing, which is the
     failure `tests/test_ledger_plants.py` rules out for the rest of them. And it
-    reads both shapes the pages use most: a section and a named statement.
+    reads both shapes the theory page uses most: a section and a named
+    statement.
     """
     cited = _citations()
     assert len(cited) >= 20, cited
-    assert any(c.locator.startswith("§") for c in cited), cited
-    assert any(not c.locator.startswith("§") for c in cited), cited
+    page = [c for c in cited if c.where.startswith("docs/dev/10-theory.md:")]
+    assert any(c.locator.startswith("§") for c in page), page
+    assert any(not c.locator.startswith("§") for c in page), page
 
 
 def test_every_label_is_a_row_and_every_row_is_cited() -> None:
@@ -430,3 +478,258 @@ def test_the_table_and_the_shelf_name_the_same_papers() -> None:
     assert not unrowed, (
         f"papers on the shelf with no row saying what they are for: {unrowed}"
     )
+
+
+#: What a theory claim names its implementing items on.
+IMPLEMENTED_BY = "IMPLEMENTED-BY:"
+
+#: The tags a claim about code carries, which the theory ledger reads; a
+#: guiding or planned paragraph is context, and code rests on no context.
+_ABOUT_CODE = ("LOAD-BEARING", "OBLIGATION", "DEVIATION", "NOT-REACHED")
+
+
+class Claim(NamedTuple):
+    """One tagged paragraph of the theory page, its citations, and its items."""
+
+    tag: str
+    identifier: str
+    cites: frozenset[tuple[str, str]]
+    items: tuple[str, ...]
+
+
+@functools.cache
+def _claims() -> tuple[Claim, ...]:
+    """Give the theory page's claims, each with the items it names.
+
+    An `IMPLEMENTED-BY:` paragraph belongs to the claim before it, as a
+    `HELD-BY:` one does, and the claim's citations are its own paragraph's: a
+    claim is read on its own, so what it rests on is written in it.
+    """
+    found: list[Claim] = []
+    for paragraph in THEORY.read_text(encoding="utf-8").split("\n\n"):
+        if paragraph.startswith(IMPLEMENTED_BY):
+            assert found, f"an IMPLEMENTED-BY line before any claim: {paragraph!r}"
+            last = found[-1]
+            assert not last.items, f"two IMPLEMENTED-BY lines for {last.identifier}"
+            entries = paragraph[len(IMPLEMENTED_BY) :].replace("\n", " ").split(",")
+            items = tuple(entry.strip() for entry in entries if entry.strip())
+            found[-1] = last._replace(items=items)
+            continue
+        tag = _TAG.search(paragraph)
+        if tag is None:
+            continue
+        cites = frozenset(
+            (token["label"], token["locator"]) for token in _TOKEN.finditer(paragraph)
+        )
+        found.append(Claim(tag[1], tag[2], cites, ()))
+    return tuple(found)
+
+
+#: A claim's tag as the theory page writes it, and the id a line names it by.
+_TAG = re.compile(r"\*\*\[([A-Z-]+): ([a-z][a-z0-9-]*)\]\*\*")
+
+
+class Item(NamedTuple):
+    """A function, method, type or module of a source file, and where it sits."""
+
+    file: Path
+    name: str
+    """`phi`, `Slot::below`, `Labels`, or the empty string for the module."""
+    doc: frozenset[tuple[str, str]]
+    """What its doc comment cites."""
+    steps: frozenset[tuple[str, str]]
+    """What the comments inside its body cite."""
+    span: range
+    """The lines it holds, its doc comment's included, counted from zero."""
+
+
+_IMPL = re.compile(r"^impl\b(?:<.*?>)?\s+(?:.*?\bfor\s+)?(?:\w+::)*(?P<owner>\w+)")
+_TRAIT = re.compile(r"^(?:pub(?:\([\w:]+\))?\s+)?(?:unsafe\s+)?trait\s+(?P<owner>\w+)")
+_FN = re.compile(
+    r"^(?P<indent>\s*)(?:pub(?:\([\w:]+\))?\s+)?(?:const\s+)?(?:unsafe\s+)?"
+    r"fn\s+(?P<name>\w+)"
+)
+_TYPE = re.compile(
+    r"^(?:pub(?:\([\w:]+\))?\s+)?(?:struct|enum|union|type)\s+(?P<name>\w+)"
+)
+
+
+def _cited(text: str) -> frozenset[tuple[str, str]]:
+    return frozenset((t["label"], t["locator"]) for t in _TOKEN.finditer(text))
+
+
+def _named(line: str, owner: str | None) -> str | None:
+    """Give the item `line` opens, inside the block `owner` names, or `None`."""
+    fn = _FN.match(line)
+    if fn and not fn["indent"]:
+        return fn["name"]
+    if fn and fn["indent"] == "    " and owner is not None:
+        return f"{owner}::{fn['name']}"
+    kind = _TYPE.match(line) or _TRAIT.match(line)
+    if kind is None:
+        return None
+    return kind.groupdict().get("name") or kind["owner"]
+
+
+def _closing(raw: list[str], at: int) -> int:
+    """Give the line that closes the item opened at `at`, at its indentation."""
+    line = raw[at]
+    if line.rstrip().endswith((";", "}")):
+        return at
+    indent = line[: len(line) - len(line.lstrip())]
+    return next(
+        (k for k in range(at + 1, len(raw)) if raw[k].startswith(indent + "}")), at
+    )
+
+
+@functools.cache
+def _items(path: Path) -> tuple[Item, ...]:
+    """Give the items of the Rust file `path`, read as `rustfmt` lays them out.
+
+    A function at the margin is its name, one an `impl` or `trait` block holds
+    is `Owner::name`, and a type at the margin is its name; the module is the
+    `//!` lines at the head. An item's doc comment is the `///` lines above it,
+    attributes allowed between, and its body the lines to the brace that closes
+    at its indentation. A citation in a comment the read reaches inside no item
+    is reported by the check that wants every citation owned.
+    """
+    raw = path.read_text(encoding="utf-8").split("\n")
+    read = _text(path).split("\n")
+    head = 0
+    while head < len(raw) and raw[head].lstrip().startswith("//!"):
+        head += 1
+    module = _cited("\n".join(read[:head]))
+    found = [Item(path, "", module, frozenset(), range(head))]
+    owner = None
+    for at, line in enumerate(raw):
+        if owner is not None and line.startswith("}"):
+            owner = None
+        name = _named(line, owner)
+        block = _IMPL.match(line) or _TRAIT.match(line)
+        if block is not None and not line.rstrip().endswith(";"):
+            owner = block["owner"]
+        if name is None:
+            continue
+        top = at
+        while top > 0 and re.match(r"^\s*(?:///|#\[|#!\[)", raw[top - 1]):
+            top -= 1
+        doc = "\n".join(
+            read[k] for k in range(top, at) if raw[k].lstrip().startswith("///")
+        )
+        end = _closing(raw, at)
+        steps = _cited("\n".join(read[at : end + 1]))
+        found.append(Item(path, name, _cited(doc), steps, range(top, end + 1)))
+    return tuple(found)
+
+
+def _sources() -> tuple[Path, ...]:
+    """Give the source files the rule holds whose items implement, not test."""
+    return tuple(
+        path
+        for path in _scoped()
+        if path.suffix == ".rs" and not _TEST_MODULE.search(path.as_posix())
+    )
+
+
+def _resolve(entry: str) -> list[Item]:
+    """Give the items an `IMPLEMENTED-BY:` entry can mean, among the held sources."""
+    where, _, name = entry.partition("::")
+    return [
+        item
+        for path in _sources()
+        if path.as_posix().endswith("/" + where)
+        for item in _items(path)
+        if item.name == name
+    ]
+
+
+def test_an_implementing_line_follows_a_claim_about_code() -> None:
+    """Code is named under a claim it can be false against, never under context.
+
+    A guiding or planned paragraph names a result the design leans on without
+    building; an item listed under one would be code resting on a sentence no
+    test holds.
+    """
+    claims = _claims()
+    assert len(claims) >= 40, claims
+    misplaced = [c.identifier for c in claims if c.items and c.tag not in _ABOUT_CODE]
+    assert not misplaced, f"IMPLEMENTED-BY lines under context: {misplaced}"
+    named = [c for c in claims if c.items]
+    assert len(named) >= 5, "the parse read no IMPLEMENTED-BY line"
+
+
+def test_every_implementing_entry_resolves_and_cites_its_claim() -> None:
+    """An entry is one item, and the item cites a result its claim cites.
+
+    So a function renamed or deleted takes its entry with it, and an entry
+    whose item cites nothing of the claim is two accounts of the code that
+    disagree.
+    """
+    wrong: list[str] = []
+    for claim in _claims():
+        for entry in claim.items:
+            found = _resolve(entry)
+            if len(found) != 1:
+                wrong.append(f"{claim.identifier}: {entry} names {len(found)} items")
+                continue
+            if not found[0].doc & claim.cites:
+                wrong.append(
+                    f"{claim.identifier}: {entry} cites nothing the claim cites"
+                )
+    assert not wrong, wrong
+
+
+def test_every_citing_item_is_listed_under_a_claim_that_cites_it() -> None:
+    """Code cites only results the page accounts for, under a claim naming it.
+
+    The reverse direction: an item whose doc comment cites is named on some
+    claim's `IMPLEMENTED-BY:` line, and each result it cites is one a claim
+    naming it cites -- a function that starts resting on a lemma the page does
+    not mention fails here, in the commit that writes the citation.
+    """
+    listed: dict[str, set[tuple[str, str]]] = {}
+    for claim in _claims():
+        for entry in claim.items:
+            listed.setdefault(entry, set()).update(claim.cites)
+    unlisted: list[str] = []
+    for path in _sources():
+        relative = path.relative_to(ROOT / "crates").as_posix()
+        for item in _items(path):
+            if not item.doc:
+                continue
+            short = relative.split("/src/", 1)[1]
+            entry = f"{short}::{item.name}" if item.name else short
+            cites = listed.get(entry)
+            if cites is None:
+                unlisted.append(f"{entry} is named under no claim")
+                continue
+            unlisted += [
+                f"{entry} cites [{label}, {locator}], which no claim naming it cites"
+                for label, locator in sorted(item.doc - cites)
+            ]
+    assert not unlisted, unlisted
+
+
+def test_a_citation_inside_a_body_is_a_step_of_an_item_that_cites() -> None:
+    """A step cites inside an item that implements, and every citation has one.
+
+    A citation in a body is a line taking a step of a result, so the item it is
+    in implements that result and says so in its doc comment; a citation the
+    read finds in no item -- a comment between two functions -- belongs to
+    nothing a claim can name.
+    """
+    orphaned: list[str] = []
+    for path in _sources():
+        items = _items(path)
+        orphaned += [
+            f"{path.relative_to(ROOT)}::{item.name} cites inside its body only"
+            for item in items
+            if item.steps and not item.doc and item.name
+        ]
+        text = _text(path)
+        for token in _TOKEN.finditer(text):
+            line = text.count("\n", 0, token.start())
+            if not any(line in item.span for item in items):
+                where = f"{path.relative_to(ROOT)}:{line + 1}"
+                orphaned.append(f"{where} {token[0]} belongs to no item")
+    assert not orphaned, orphaned
