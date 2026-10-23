@@ -1,11 +1,11 @@
 //! Maps as record atoms with per-kind defaults and a negative set.
 //!
 //! A dict is a *quasi K-step function* from keys to values [Cas23, Def. 4.6],
-//! after Frisch's quasi-constant ones: total on the keys, and constant on all
-//! but finitely many of the keys of each part of a partition of them. So a set
-//! of dicts is written by naming the finitely many keys it constrains and
-//! saying what every other key of each part maps to -- which is the atom of
-//! [Cas23, Def. 4.1],
+//! after Frisch's quasi-constant ones [Cas23, Def. 2.2], total on the keys and
+//! constant on all but finitely many of the keys of each part of a partition
+//! of them. So a set of dicts is written by naming the finitely many keys it
+//! constrains and saying what every other key of each part maps to -- which is
+//! the atom of [Cas23, Def. 4.1],
 //!
 //! ```text
 //! ⟨ (τ_ℓ)_{ℓ∈L} ; t₀ ; S ⟩
@@ -345,7 +345,8 @@ impl<G: Guard> MapAtom<G> {
 
     /// The same atom with every label its part's default already covers dropped.
     ///
-    /// This is the paper's `dom`, read up to the equality of fields. The paper
+    /// This is the paper's `dom`, read up to the equality of fields, a label
+    /// set against the default of its own part [Cas23, Def. 4.6]. The paper
     /// notes [Cas23, Def. 2.2] that the notation is "not univocal (unless we
     /// require zᵢ ≠ z...)": naming a key and giving it exactly what the default
     /// already gives it says nothing, and two atoms that differ only in such a
@@ -500,8 +501,9 @@ impl<G: Guard> MapAtom<G> {
 
     /// The ways to fail this atom, as atoms, by [Cas23, (13)].
     ///
-    /// An atom is `P ∖ N`, with `P = ⟨τ; t₀; ∅⟩` and `N` the maps that meet none
-    /// of `S`. So `¬A` is `¬P ∨ N`, and there are three ways in:
+    /// An atom is `P ∖ N` [Cas23, Def. 4.1], with `P = ⟨τ; t₀; ∅⟩` and `N` the
+    /// maps that meet none of `S`. So `¬A` is `¬P ∨ N`, and there are three
+    /// ways in:
     ///
     /// - a **named** key's value is outside what the atom allows there, which is
     ///   the per-label disjunct of the difference, taken from the whole;

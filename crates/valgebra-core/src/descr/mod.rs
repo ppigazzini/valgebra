@@ -512,7 +512,8 @@ impl Descr {
         descr
     }
 
-    /// The singleton holding one float, which is empty for `nan`.
+    /// The singleton holding one float [FCB08, §4.2], which is empty for `nan`,
+    /// a value equal to nothing.
     #[must_use]
     pub(crate) fn float(value: f64) -> Descr {
         let mut descr = Descr::nothing();

@@ -235,11 +235,13 @@ label holds its value or its absence and every other key what its part's default
 allows [Cas23, (21)]. A set of dicts is a union of the atoms of
 [Cas23, Def. 4.1], the complement of one a union of atoms again by
 [Cas23, (13)], read in `T⊥` [Cas23, §4.1], where a label given its default is
-one the notation may name or leave [Cas23, Def. 2.2].
+one the notation may name or leave [Cas23, Def. 2.2]. An attribute record needs
+none of the `S` a map atom carries: the paper's record types need no more of it
+than whether it is empty [Cas23, Rem. 4.3].
 
 SOURCE: §3 "The model behind `Schema::KeyedMap`"; §13.3 "**The representation Theorem 4.2 produces.**"
 
-IMPLEMENTED-BY: decision.rs::Schema::holds_a_value_shallowly, decision/emptiness.rs::intersection_verdict, decision/records.rs::keyed_map_meet_verdict, decision/records.rs::keyed_map_subtype, decision/records.rs::entered, decision/records.rs::Labels::of, descr/maps.rs, descr/maps.rs::Wanted, descr/maps.rs::Search::assign, descr/maps.rs::MapAtom::absorbed, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/maps.rs::MapAtom::complement, descr/maps.rs::MapLattice::record, descr/records.rs, descr/records.rs::Atom::meet, descr/records.rs::Atom::emptiness, descr/records.rs::Atom::complement, descr/records.rs::Atom::tidy, descr/records.rs::RecordLattice::attribute, descr/values.rs::Field::top, descr/values.rs::Field::meet, descr/values.rs::Field::join, descr/values.rs::Field::complement, descr/values.rs::Field::emptiness, descr/lower.rs::map, ir.rs::Schema::record, ir.rs::canonical_fields, ir.rs::already_said, valgebra-py/src/check/walk/record.rs::keyed_map_scan, valgebra-py/src/check/walk/record.rs::keyed_map_asks_for_its_keys, valgebra-py/src/check/walk/record.rs::keyed_map_matches_json
+IMPLEMENTED-BY: decision.rs::Schema::holds_a_value_shallowly, decision/emptiness.rs::intersection_verdict, decision/records.rs::keyed_map_meet_verdict, decision/records.rs::keyed_map_subtype, decision/records.rs::entered, decision/records.rs::Labels::of, descr/maps.rs, descr/maps.rs::Wanted, descr/maps.rs::Search::assign, descr/maps.rs::MapAtom::absorbed, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/maps.rs::MapAtom::complement, descr/maps.rs::MapLattice::record, descr/records.rs, descr/records.rs::Atom::meet, descr/records.rs::Atom::emptiness, descr/records.rs::Atom::complement, descr/records.rs::Atom::tidy, descr/records.rs::RecordLattice::attribute, descr/values.rs::Field::top, descr/values.rs::Field::meet, descr/values.rs::Field::join, descr/values.rs::Field::complement, descr/values.rs::Field::emptiness, descr/lower.rs::map, ir.rs::Schema::record, ir.rs::canonical_fields, ir.rs::already_said, valgebra-py/src/check/walk/record.rs::keyed_map_scan, valgebra-py/src/check/walk/record.rs::keyed_map_asks_for_its_keys, valgebra-py/src/check/walk/record.rs::keyed_map_matches_json, descr/values.rs::Field
 
 HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition, a_key_of_whole_kinds_opens_the_parts_it_holds
 
@@ -492,7 +494,7 @@ refuses a constraint no value of the base can answer.
 
 SOURCE: §10 "the runtime check; the static/SMT side is"
 
-IMPLEMENTED-BY: decision.rs::refinement_subtype, decision/constraints.rs::constraint_entailed, ir.rs::Schema::refine, valgebra-py/src/check/walk/scalar.rs::check_refine, valgebra-py/src/build/refine.rs::check_constraint_fits
+IMPLEMENTED-BY: decision.rs::refinement_subtype, decision/constraints.rs::constraint_entailed, ir.rs::Schema::refine, valgebra-py/src/check/walk/scalar.rs::check_refine, valgebra-py/src/build/refine.rs::check_constraint_fits, descr/lower.rs::refine
 
 HELD-BY: test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker, test_every_cell_narrows_its_base_or_is_refused
 
@@ -624,7 +626,7 @@ language only up to that, and sequence equality is emptiness of both
 differences. The sequence automaton does not read its transitions backwards,
 which over guards needs the minterms or the minimization of [DV14, Fig. 4].
 
-IMPLEMENTED-BY: descr/automaton.rs, descr/automaton.rs::reaches, descr/automaton.rs::canonical_order, descr/automaton.rs::refine, descr/regular.rs, descr/regular.rs::Dfa::is_empty, descr/regular.rs::Dfa::word, descr/regular.rs::Dfa::complement, descr/regular.rs::Dfa::product, descr/regular.rs::Dfa::minimal, descr/regular.rs::Dfa::merge_equivalent, descr/regular.rs::Dfa::equivalent_states, descr/regular.rs::Dfa::coarsen, descr/regular.rs::Dfa::renumber, descr/regular.rs::refine_alphabets, descr/regular.rs::Predecessors::of, descr/regular.rs::Predecessors::leading_to, descr/regular.rs::Partition::by_acceptance, descr/regular.rs::Partition::mark, descr/regular.rs::Partition::cut_marked, descr/regular.rs::RegularSet::compile, descr/regular.rs::RegularSet::intersect, descr/symbolic.rs, descr/symbolic.rs::Guard, descr/symbolic.rs::SymbolicDfa, descr/symbolic.rs::SymbolicDfa::chain, descr/symbolic.rs::SymbolicDfa::emptiness, descr/symbolic.rs::SymbolicDfa::accepts_under, descr/symbolic.rs::SymbolicDfa::complement, descr/symbolic.rs::SymbolicDfa::intersect, descr/symbolic.rs::SymbolicDfa::product, descr/symbolic.rs::SymbolicDfa::merge_targets, descr/symbolic.rs::SymbolicDfa::minimal, descr/symbolic.rs::SymbolicDfa::merge_equivalent, descr/symbolic.rs::SymbolicDfa::signature, descr/symbolic.rs::SymbolicDfa::sorted, descr/symbolic.rs::SymbolicDfa::renumber, descr/symbolic.rs::partition, descr/symbolic.rs::rest_of
+IMPLEMENTED-BY: descr/automaton.rs, descr/automaton.rs::reaches, descr/automaton.rs::canonical_order, descr/automaton.rs::refine, descr/regular.rs, descr/regular.rs::Dfa::is_empty, descr/regular.rs::Dfa::word, descr/regular.rs::Dfa::complement, descr/regular.rs::Dfa::product, descr/regular.rs::Dfa::minimal, descr/regular.rs::Dfa::merge_equivalent, descr/regular.rs::Dfa::equivalent_states, descr/regular.rs::Dfa::coarsen, descr/regular.rs::Dfa::renumber, descr/regular.rs::refine_alphabets, descr/regular.rs::Predecessors::of, descr/regular.rs::Predecessors::leading_to, descr/regular.rs::Partition::by_acceptance, descr/regular.rs::Partition::mark, descr/regular.rs::Partition::cut_marked, descr/regular.rs::RegularSet::compile, descr/regular.rs::RegularSet::intersect, descr/symbolic.rs, descr/symbolic.rs::Guard, descr/symbolic.rs::SymbolicDfa, descr/symbolic.rs::SymbolicDfa::chain, descr/symbolic.rs::SymbolicDfa::emptiness, descr/symbolic.rs::SymbolicDfa::accepts_under, descr/symbolic.rs::SymbolicDfa::complement, descr/symbolic.rs::SymbolicDfa::intersect, descr/symbolic.rs::SymbolicDfa::product, descr/symbolic.rs::SymbolicDfa::merge_targets, descr/symbolic.rs::SymbolicDfa::minimal, descr/symbolic.rs::SymbolicDfa::merge_equivalent, descr/symbolic.rs::SymbolicDfa::signature, descr/symbolic.rs::SymbolicDfa::sorted, descr/symbolic.rs::SymbolicDfa::renumber, descr/symbolic.rs::partition, descr/symbolic.rs::rest_of, descr/regular.rs::Dfa::wtf8, descr/regular.rs::RegularSet
 
 HELD-BY: the_halves_cut_where_the_rounds_do, a_cut_moves_the_smaller_part, a_cut_of_a_queued_block_queues_both_parts, two_spellings_of_one_language_are_one_set, being_equal_is_holding_the_same_language, a_complement_is_already_minimal, the_rounds_from_the_distances_end_where_the_rounds_from_one_block_do, a_complement_of_a_sequence_language_is_already_minimal
 
@@ -793,17 +795,21 @@ proof of that lemma has no key to spare in [Cas23, App. C.1].
 
 SOURCE: §13.3 "**That is `Schema::KeyedMap` exactly**"
 
-IMPLEMENTED-BY: decision/records.rs, decision/records.rs::clause_by_key, decision/records.rs::by_constants, decision/records.rs::parts_of, decision/records.rs::Labels::slot, descr/maps.rs, descr/maps.rs::key_slot, descr/maps.rs::finite_keys, descr/maps.rs::MapAtom::field, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/lower.rs::map, descr/lower.rs::key_cover, valgebra-py/src/check/walk/record.rs::keyed_map_scan, valgebra-py/src/build.rs::checked_key, decision/records.rs::spelled_by
+IMPLEMENTED-BY: decision/records.rs, decision/records.rs::clause_by_key, decision/records.rs::by_constants, decision/records.rs::parts_of, decision/records.rs::Labels::slot, descr/maps.rs, descr/maps.rs::key_slot, descr/maps.rs::finite_keys, descr/maps.rs::MapAtom::field, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/lower.rs::map, descr/lower.rs::key_cover, valgebra-py/src/check/walk/record.rs::keyed_map_scan, valgebra-py/src/build.rs::checked_key, decision/records.rs::spelled_by, descr/maps.rs::MapAtom::absorbed
 
 HELD-BY: every_key_falls_in_exactly_one_part, a_map_constrains_one_part_of_the_key_partition, test_heterogeneous_mapping_by_key_schema, a_clause_constrains_its_region_alone_over_drawn_dicts
 
 **A sequence is a regular language, and the automaton over it is well formed.**
-The symbolic automaton that decides sequence inclusion has, at every state,
-edges that are pairwise disjoint and cover the letters; a complement flips the
-accepting states and no value flips twice; the lattice laws hold of the
-languages it denotes. **[LOAD-BEARING: a-sequence-is-a-language]**
+Regular expression types correspond to tree automata [HVP05, §1], and the
+symbolic automaton that decides sequence inclusion [DV14, §2] has, at every
+state, edges that are pairwise disjoint and cover the letters; a product meets
+the guards of two edges and drops a meet that is empty [DV14, §1]; a complement
+flips the accepting states and no value flips twice; the lattice laws hold of
+the languages it denotes. **[LOAD-BEARING: a-sequence-is-a-language]**
 
 SOURCE: §13.3 "**Sequences as regular expression types.**"
+
+IMPLEMENTED-BY: descr/symbolic.rs, descr/symbolic.rs::SymbolicDfa::product
 
 HELD-BY: the_lattice_laws_hold_of_the_sequences, the_complement_laws_hold_of_the_sequences, the_edges_leaving_a_state_cover_the_letters, an_accepting_state_behind_an_undecided_letter_is_unproved
 
@@ -1137,7 +1143,7 @@ neither, and a refutation by a constant equal to itself stands always, since the
 constant is a value of its literal.
 **[DEVIATION: a-constant-is-the-values-equal-to-it]**
 
-IMPLEMENTED-BY: decision/literals.rs::finite_set_below, decision/literals.rs::the_constant_speaks_for_the_literal, valgebra-py/src/check/walk/scalar.rs::literal_matches, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::literals_disjoint, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::literal_sets_disjoint, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::constant_is_alone, decision/emptiness.rs::value_count_bounds, decision/literals.rs::FiniteMeet
+IMPLEMENTED-BY: decision/literals.rs::finite_set_below, decision/literals.rs::the_constant_speaks_for_the_literal, valgebra-py/src/check/walk/scalar.rs::literal_matches, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::literals_disjoint, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::literal_sets_disjoint, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::constant_is_alone, decision/emptiness.rs::value_count_bounds, decision/literals.rs::FiniteMeet, descr/lower.rs::singleton, descr/floats.rs::FloatSet::just, descr/mod.rs::Descr::float
 
 HELD-BY: a_constant_that_does_not_equal_itself_denotes_no_value, a_literal_nan_is_the_empty_set, test_nan_never_matches_a_nan_literal, a_constant_speaks_for_its_literal_where_nothing_tells_equal_values_apart, a_constant_is_alone_where_equality_joins_nothing_to_it, test_a_float_zero_literal_is_not_proved_below_a_sign_predicate, test_a_decimal_literal_is_not_proved_below_a_predicate_on_its_exponent, test_an_attribute_record_tells_two_equal_constants_apart, test_a_literal_that_is_its_whole_class_is_proved_below_a_predicate, test_a_literal_is_not_always_a_singleton
 

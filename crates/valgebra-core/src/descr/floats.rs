@@ -216,8 +216,9 @@ impl FloatSet {
 
     /// The one-element set, or the empty set for `nan`.
     ///
-    /// `Literal[c]` denotes the values equal to `c`, and `nan` is equal to
-    /// nothing -- itself included. So a literal `nan` admits no value at all,
+    /// `Literal[c]` denotes the values equal to `c`, the model's singleton
+    /// [FCB08, §4.2] where `==` is identity, and `nan` is equal to nothing --
+    /// itself included. So a literal `nan` admits no value at all,
     /// which is a fact about Python's equality rather than a choice made here.
     #[must_use]
     pub(crate) fn just(value: f64) -> FloatSet {

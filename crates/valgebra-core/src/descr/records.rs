@@ -26,7 +26,9 @@
 //!
 //! where `not` is the complement in `T⊥`, which flips `⊥` as well
 //! [Cas23, §4.1]. A union of atoms is therefore closed under all three
-//! operations, and the `S` the paper carries for maps is not wanted here. It is
+//! operations, and the `S` the paper carries for maps is not wanted here, where
+//! the paper's own record types need no more of it than whether it is empty
+//! [Cas23, Rem. 4.3]. It is
 //! wanted there because a map's keys are a *region* with defaults per kind,
 //! where a difference cannot be pushed onto finitely many labels; an attribute
 //! namespace has no such regions.

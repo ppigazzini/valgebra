@@ -1,9 +1,9 @@
 //! Sequences as an automaton whose transitions are guarded by value sets.
 //!
 //! A sequence type is a regular language over its *elements*. Regular
-//! expression types correspond to tree automata (Hosoya, Vouillon and Pierce),
-//! whose languages are closed under union, intersection and complement, so the
-//! closure a descriptor component needs comes for free.
+//! expression types correspond to tree automata [HVP05, §1], whose languages
+//! are closed under union, intersection and complement, so the closure a
+//! descriptor component needs comes for free.
 //! `str` already uses that (see [`regular`](super::regular)); this is the same
 //! construction one alphabet up, where a letter is a *set of values* rather than
 //! a byte.
@@ -508,10 +508,11 @@ impl<G: Guard> SymbolicDfa<G> {
     /// [HVP05, §4.1] over guards.
     ///
     /// One walk over reachable state *pairs* ([`Reached`]), each new one
-    /// charging the build's allowance. The guards of a pair are the
-    /// pairwise meets of the two sides' guards: each side's edges are disjoint
-    /// and covering, so the meets are too, and the product needs no minterm
-    /// search -- which is what a set of guards with no such invariant would.
+    /// charging the build's allowance. The guards of a pair are the pairwise
+    /// meets of the two sides' guards, an empty meet dropped [DV14, §1]. Each
+    /// side's edges are disjoint and covering, so the meets are too, and the
+    /// product needs no minterm search -- which is what a set of guards with no
+    /// such invariant would.
     ///
     /// That disjointness is a *precondition*, not something asserted here, and
     /// the reason is in this module's own tests: the two that drive the size
@@ -753,7 +754,8 @@ impl<G: Guard> SymbolicDfa<G> {
                 reached.push((target, edge.guard.clone()));
                 continue;
             };
-            // Two edges to one block are one transition, so their guards join.
+            // Two edges to one block are one transition, so their guards join
+            // [DV14, §2].
             // Either being the else edge makes the pair one, since the rest
             // absorbs what the other took.
             match (kept.as_ref(), edge.guard.as_ref()) {

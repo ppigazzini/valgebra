@@ -102,7 +102,7 @@ impl<G: Guard> Values<G> {
 ///
 /// One type for a record's attributes and a map's labels both: the two ask the
 /// same question of a name -- what it holds, and whether it has to be there --
-/// and the paper's `T⊥` is that question with a name.
+/// and `T⊥` [Cas23, §4.1] is that question with a name.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Field<G> {
     /// The type the value must be in.

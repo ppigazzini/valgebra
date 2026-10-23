@@ -642,7 +642,8 @@ fn names_a_wide_key(key: &Schema, pool: &dyn Constants) -> bool {
     }
 }
 
-/// The set holding one pooled value and nothing else.
+/// The set holding one pooled value and nothing else, the model's singleton
+/// [FCB08, §4.2].
 ///
 /// The value at its exact type: a pooled constant is an exact `int`, `float`,
 /// `str` or `bytes`, and a kind also holds the builtin's subclasses, so the
@@ -686,7 +687,8 @@ fn sequence(
     Descr::sequence(&prefix?, tail.as_ref(), kind)
 }
 
-/// The base narrowed by every constraint, which is a meet.
+/// The base narrowed by every constraint, which is a meet, as a refined base
+/// type is its base cut down by its refinement [JV20, §3.2].
 ///
 /// Each constraint is a *set* here rather than a test, so narrowing is
 /// intersection and the order the constraints are written in carries no meaning

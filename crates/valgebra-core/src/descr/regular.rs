@@ -215,6 +215,9 @@ impl Dfa {
     ///   rules out an overlong encoding and a code point above `U+10FFFF`;
     /// * `0xED` does **not** narrow it, which is what admits the surrogates;
     /// * `0xC0`, `0xC1` and `0xF5..=0xFF` begin nothing.
+    ///
+    /// What begins nothing, or breaks off, goes to a dead state looping on
+    /// every class, so the table is complete [DV14, §2].
     fn wtf8() -> Dfa {
         // Class 0 is the catch-all, which here is the bytes no well-formed word
         // contains at all; the states are named by what they still expect, and
@@ -863,7 +866,9 @@ static EVERY_WORD: OnceLock<Arc<Dfa>> = OnceLock::new();
 /// a kind's universe alone is rebuilt at every complement of every slot -- and
 /// the table is immutable once built, which is the shape a shared handle is
 /// for. Equality and order read the table through it, so two spellings of one
-/// language stay one value.
+/// language stay one value: the table is minimal and canonically numbered, and
+/// two minimal tables of one language are one up to that numbering
+/// [DV14, Thm. 1].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct RegularSet {
     dfa: Arc<Dfa>,
