@@ -3085,6 +3085,10 @@ enum Obj {
     Int(i64),
     Float(f64),
     Str(&'static str),
+    /// An instance of a `str` subclass whose text is this. It is a `str`, so a
+    /// clause keyed by the kind holds it, and it is not the exact type a
+    /// literal pins, so `Literal["a"]` does not.
+    SubStr(&'static str),
     /// A byte string, as its length: a length bound over the kind is decided at
     /// a count, and a kind with one value has no count to be decided at.
     Bytes(usize),
@@ -3092,10 +3096,37 @@ enum Obj {
     Tuple(Vec<Obj>),
     Set(Vec<Obj>),
     FrozenSet(Vec<Obj>),
-    Map(Vec<(&'static str, Obj)>),
+    Map(Vec<(Key, Obj)>),
     /// A value of no listed kind, hashable: `object()`, the key a dict keyed
     /// by a complement of kinds may carry and a dict keyed by kinds may not.
     Object,
+}
+
+/// A mapping's key: a name, spelled as the exact `str` or as an instance of a
+/// `str` subclass equal to it. A record's field reads both, since a dict's
+/// lookup finds either under the name; a literal reads the first alone, which
+/// is the key a refutation of a record against a literal-keyed map stands on.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Key {
+    Exact(&'static str),
+    Subclass(&'static str),
+}
+
+impl Key {
+    /// The name the key is equal to.
+    fn name(self) -> &'static str {
+        match self {
+            Key::Exact(name) | Key::Subclass(name) => name,
+        }
+    }
+
+    /// The key as a value, which is what a clause's key schema reads.
+    fn value(self) -> Obj {
+        match self {
+            Key::Exact(name) => Obj::Str(name),
+            Key::Subclass(name) => Obj::SubStr(name),
+        }
+    }
 }
 
 /// The fixed constant pool that generated `Literal` and bound indices point
@@ -3128,7 +3159,7 @@ fn as_num(v: &Obj) -> Option<f64> {
 
 fn val_len(v: &Obj) -> Option<usize> {
     match v {
-        Obj::Str(s) => Some(s.chars().count()),
+        Obj::Str(s) | Obj::SubStr(s) => Some(s.chars().count()),
         Obj::Bytes(len) => Some(*len),
         Obj::List(xs) | Obj::Tuple(xs) | Obj::Set(xs) | Obj::FrozenSet(xs) => Some(xs.len()),
         Obj::Map(m) => Some(m.len()),
@@ -3137,7 +3168,7 @@ fn val_len(v: &Obj) -> Option<usize> {
 }
 
 /// Typed-singleton equality: same type *and* equal, so `Literal[1]` admits
-/// neither `True` nor `1.0`.
+/// neither `True` nor `1.0`, and `Literal["a"]` no `str` subclass's `"a"`.
 fn typed_eq(constant: &Obj, v: &Obj) -> bool {
     match (constant, v) {
         (Obj::None, Obj::None) => true,
@@ -3203,7 +3234,7 @@ fn member_full(schema: &Schema, value: &Obj, pool: &[Obj]) -> bool {
         Schema::Bool => matches!(value, Obj::Bool(_)),
         Schema::Int => matches!(value, Obj::Bool(_) | Obj::Int(_)), // bool ⊆ int
         Schema::Float => matches!(value, Obj::Float(_)),
-        Schema::Str => matches!(value, Obj::Str(_)),
+        Schema::Str => matches!(value, Obj::Str(_) | Obj::SubStr(_)),
         Schema::Bytes => matches!(value, Obj::Bytes(_)),
         Schema::Literal(index) => typed_eq(&pool[index.get()], value),
         Schema::Coll { container, element } => match (container, value) {
@@ -3221,17 +3252,17 @@ fn member_full(schema: &Schema, value: &Obj, pool: &[Obj]) -> bool {
         Schema::KeyedMap { fields, defaults } => match value {
             Obj::Map(entries) => {
                 let fields_ok = fields.iter().all(|field| {
-                    match entries.iter().find(|(key, _)| &*field.name == *key) {
+                    match entries.iter().find(|(key, _)| &*field.name == key.name()) {
                         Some((_, val)) => member_full(&field.schema, val, pool),
                         None => !field.required,
                     }
                 });
                 let rest_ok = entries.iter().all(|(key, val)| {
-                    if fields.iter().any(|field| &*field.name == *key) {
+                    if fields.iter().any(|field| &*field.name == key.name()) {
                         return true;
                     }
                     defaults.iter().any(|clause| {
-                        member_full(&clause.key, &Obj::Str(key), pool)
+                        member_full(&clause.key, &key.value(), pool)
                             && member_full(&clause.value, val, pool)
                     })
                 });
@@ -3297,12 +3328,18 @@ fn kind_edges() -> Vec<Obj> {
         Obj::Tuple(vec![Obj::Int(1)]),
         Obj::Tuple(vec![Obj::Int(1), Obj::Str("a")]),
         Obj::Map(vec![]),
-        Obj::Map(vec![("a", Obj::Int(1))]),
-        Obj::Map(vec![("a", Obj::Int(1)), ("b", Obj::Str("a"))]),
+        Obj::Map(vec![(Key::Exact("a"), Obj::Int(1))]),
+        Obj::Map(vec![
+            (Key::Exact("a"), Obj::Int(1)),
+            (Key::Exact("b"), Obj::Str("a")),
+        ]),
         // An entry whose key is not a declared field exercises the open-record
         // `defaults` arm against both a matching and a non-matching value.
-        Obj::Map(vec![("c", Obj::Int(1))]),
-        Obj::Map(vec![("a", Obj::Int(1)), ("c", Obj::Str("a"))]),
+        Obj::Map(vec![(Key::Exact("c"), Obj::Int(1))]),
+        Obj::Map(vec![
+            (Key::Exact("a"), Obj::Int(1)),
+            (Key::Exact("c"), Obj::Str("a")),
+        ]),
     ]
 }
 
@@ -4060,7 +4097,7 @@ fn containers_of(len: usize, out: &mut Vec<Obj>) {
     let entries = NAMES
         .iter()
         .take(len)
-        .map(|name| (*name, Obj::Int(1)))
+        .map(|name| (Key::Exact(name), Obj::Int(1)))
         .collect();
     out.push(Obj::Str(SIZED[len.min(SIZED.len() - 1)]));
     out.push(Obj::Bytes(len));
@@ -4159,7 +4196,7 @@ fn sized_like(schema: &Schema, len: usize, fuel: usize) -> Vec<Obj> {
             NAMES
                 .iter()
                 .take(len)
-                .map(|name| (*name, first.clone()))
+                .map(|name| (Key::Exact(name), first.clone()))
                 .collect(),
         ),
     ];
@@ -4231,11 +4268,11 @@ fn a_member(schema: &Schema, fuel: usize) -> Option<Obj> {
                 .filter(|field| field.required)
                 .map(|field| {
                     Some((
-                        static_name(&field.name)?,
+                        Key::Exact(static_name(&field.name)?),
                         a_member(&field.schema, fuel - 1)?,
                     ))
                 })
-                .collect::<Option<Vec<(&'static str, Obj)>>>()?,
+                .collect::<Option<Vec<(Key, Obj)>>>()?,
         )),
         Schema::Union(members) => members.iter().find_map(|member| a_member(member, fuel - 1)),
         // A meet and a complement are asked of the candidates rather than
@@ -4537,20 +4574,20 @@ fn sequence_edges(container: SeqKind, shape: &SeqShape, out: &mut Vec<Obj>) -> V
 fn record_edges(fields: &Fields, defaults: &Clauses, out: &mut Vec<Obj>) -> Vec<Obj> {
     // Every probe sits in a mapping that carries the record's required fields,
     // because a mapping missing one is refused before the probed entry is read.
-    let base: Vec<(&'static str, Obj)> = fields
+    let base: Vec<(Key, Obj)> = fields
         .iter()
         .filter(|field| field.required)
         .filter_map(|field| {
             Some((
-                static_name(&field.name)?,
+                Key::Exact(static_name(&field.name)?),
                 a_member(&field.schema, MEMBER_FUEL)?,
             ))
         })
         .collect();
-    let with = |key: &'static str, value: Obj| {
-        let mut entries: Vec<(&'static str, Obj)> = base
+    let with = |key: Key, value: Obj| {
+        let mut entries: Vec<(Key, Obj)> = base
             .iter()
-            .filter(|(name, _)| *name != key)
+            .filter(|(held, _)| held.name() != key.name())
             .cloned()
             .collect();
         entries.push((key, value));
@@ -4558,16 +4595,24 @@ fn record_edges(fields: &Fields, defaults: &Clauses, out: &mut Vec<Obj>) -> Vec<
     };
     let mut mine = Vec::new();
     let mut groups: Vec<Vec<Obj>> = Vec::new();
+    // Each field is probed under its name spelled both ways. The field reads
+    // either, and a literal clause of another map reads the exact `str` alone,
+    // so a refutation of this record against a map keyed by literals stands on
+    // a `str` subclass's instance equal to the name.
     for field in fields.iter() {
         let Some(name) = static_name(&field.name) else {
             continue;
         };
-        groups.push(
-            candidates(&field.schema, out)
-                .into_iter()
-                .map(|value| with(name, value))
-                .collect(),
-        );
+        let values = candidates(&field.schema, out);
+        for key in [Key::Exact(name), Key::Subclass(name)] {
+            groups.push(
+                values
+                    .iter()
+                    .cloned()
+                    .map(|value| with(key, value))
+                    .collect(),
+            );
+        }
     }
     // A default clause governs the keys no field declares, so its probes go
     // under names this record does not declare: under a declared one the field
@@ -4594,7 +4639,7 @@ fn record_edges(fields: &Fields, defaults: &Clauses, out: &mut Vec<Obj>) -> Vec<
                 values
                     .iter()
                     .cloned()
-                    .map(|value| with(key, value))
+                    .map(|value| with(Key::Exact(key), value))
                     .collect(),
             );
         }
@@ -4602,14 +4647,14 @@ fn record_edges(fields: &Fields, defaults: &Clauses, out: &mut Vec<Obj>) -> Vec<
     mine.extend(interleaved(&groups));
     // The three widths a record's own clauses separate: exactly the declared
     // names, one short of them, and one past them.
-    let declared: Vec<(&'static str, Obj)> = fields
+    let declared: Vec<(Key, Obj)> = fields
         .iter()
-        .filter_map(|field| Some((static_name(&field.name)?, Obj::Int(1))))
+        .filter_map(|field| Some((Key::Exact(static_name(&field.name)?), Obj::Int(1))))
         .collect();
     let mut short = declared.clone();
     short.pop();
     let mut wide = declared.clone();
-    wide.push(("z", Obj::Int(1)));
+    wide.push((Key::Exact("z"), Obj::Int(1)));
     mine.push(Obj::Map(declared));
     mine.push(Obj::Map(short));
     mine.push(Obj::Map(wide));
@@ -5062,12 +5107,12 @@ fn the_value_oracle_matches_sequences_and_open_records_independently() {
     };
     assert!(member_full(
         &open,
-        &Obj::Map(vec![("c", Obj::Int(1))]),
+        &Obj::Map(vec![(Key::Exact("c"), Obj::Int(1))]),
         &pool
     ));
     assert!(!member_full(
         &open,
-        &Obj::Map(vec![("c", Obj::Str("a"))]),
+        &Obj::Map(vec![(Key::Exact("c"), Obj::Str("a"))]),
         &pool
     ));
 }
@@ -5591,14 +5636,16 @@ fn universe_values() -> [Obj; 9] {
 /// Whether a dict of any keys belongs to a map, read off the map's denotation.
 ///
 /// [`member_full`]'s reading of a map with the key generalized from a name to
-/// a value: a key is a field's when it is the string the field is named, and
-/// is otherwise read by the clauses, one of which must hold both it and its
-/// value.
+/// a value: a key is a field's when it is a string equal to the name, the
+/// exact `str` or a subclass's instance, since a dict's lookup finds either,
+/// and is otherwise read by the clauses, one of which must hold both it and
+/// its value.
 fn dict_member(map: &Schema, dict: &[(Obj, Obj)], pool: &[Obj]) -> bool {
     let Schema::KeyedMap { fields, defaults } = map else {
         return false;
     };
-    let named = |key: &Obj, name: &str| matches!(key, Obj::Str(text) if *text == name);
+    let named =
+        |key: &Obj, name: &str| matches!(key, Obj::Str(text) | Obj::SubStr(text) if *text == name);
     fields.iter().all(
         |field| match dict.iter().find(|(key, _)| named(key, &field.name)) {
             Some((_, value)) => member_full(&field.schema, value, pool),
@@ -5616,7 +5663,8 @@ fn dict_member(map: &Schema, dict: &[(Obj, Obj)], pool: &[Obj]) -> bool {
 ///
 /// Each carries the map's required fields, each with the first value of the
 /// universe the field holds, and then one change: nothing, one field set to
-/// another value it holds, or one entry more under a key no field takes. A
+/// another value it holds under its name spelled as the exact `str` or as a
+/// `str` subclass's instance, or one entry more under a key no field takes. A
 /// subject with a required field the universe cannot fill gives none, and a
 /// refutation about it then fails here, which is the reading its emptiness
 /// asks for.
@@ -5641,15 +5689,18 @@ fn dicts_of(map: &Schema, pool: &[Obj]) -> Vec<Vec<(Obj, Obj)>> {
     }
     let mut dicts = vec![base.clone()];
     for field in fields.iter() {
-        let name = Obj::Str(static_name(&field.name).unwrap_or("a"));
+        let name = static_name(&field.name).unwrap_or("a");
+        let spellings = [Obj::Str(name), Obj::SubStr(name)];
         for value in member_of(&field.schema) {
-            let mut dict: Vec<(Obj, Obj)> = base
-                .iter()
-                .filter(|(key, _)| *key != name)
-                .cloned()
-                .collect();
-            dict.push((name.clone(), value));
-            dicts.push(dict);
+            for key in &spellings {
+                let mut dict: Vec<(Obj, Obj)> = base
+                    .iter()
+                    .filter(|(held, _)| !spellings.contains(held))
+                    .cloned()
+                    .collect();
+                dict.push((key.clone(), value.clone()));
+                dicts.push(dict);
+            }
         }
     }
     for key in universe_keys() {
@@ -5682,6 +5733,86 @@ pub(crate) fn recursive_schema() -> impl Strategy<Value = Schema> {
             shape: SeqShape::fixed([schema, Schema::Ref(DefIx::new(1))]),
         }),
     ]
+}
+
+/// A record refuted against a map keyed by literals has its witness in both
+/// universes, on a `str` subclass's key equal to the field's name.
+///
+/// The field reads that key, since a dict's lookup finds it under the name,
+/// and a literal clause, which pins the type, does not; a clause keyed by the
+/// kind does. So `{"a"?: int}` is outside `{Literal["a"]: int | str}`, and
+/// `{"a"?: bytes}` outside `{Literal["a"]: bytes, str: set[Any]}`, on
+/// `{MyStr("a"): ...}` and on no dict keyed by the exact `str`. The two pairs
+/// are the ones the laws below drew with no such key in their universes.
+#[test]
+fn a_refutation_on_a_str_subclass_key_has_its_witness() {
+    let pool = const_pool();
+    let optional_a = |schema: Schema| Schema::KeyedMap {
+        fields: vec![Field {
+            name: "a".into(),
+            schema,
+            required: false,
+        }]
+        .into(),
+        defaults: Vec::new().into(),
+    };
+    let keyed = |clauses: Vec<(Schema, Schema)>| Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: clauses
+            .into_iter()
+            .map(|(key, value)| MapClause { key, value })
+            .collect::<Vec<_>>()
+            .into(),
+    };
+    let literal_a = Schema::Literal(ConstIx::new(3));
+    let pairs = [
+        (
+            optional_a(Schema::Int),
+            keyed(vec![(
+                literal_a.clone(),
+                Schema::union([Schema::Int, Schema::Str]),
+            )]),
+        ),
+        (
+            optional_a(Schema::Bytes),
+            keyed(vec![
+                (literal_a, Schema::Bytes),
+                (Schema::Str, Schema::set(Schema::ANYTHING)),
+            ]),
+        ),
+    ];
+    for (a, b) in &pairs {
+        assert_eq!(
+            a.subtype_relation_under(b, &NoLeafRelations, &[]),
+            Relation::Fails,
+            "{a:?} <= {b:?}"
+        );
+        let escaping =
+            |dict: &[(Obj, Obj)]| dict_member(a, dict, &pool) && !dict_member(b, dict, &pool);
+        let witness = dicts_of(a, &pool)
+            .into_iter()
+            .find(|dict| escaping(dict))
+            .expect("a dict of the universe refutes the pair");
+        assert!(
+            witness
+                .iter()
+                .any(|(key, _)| matches!(key, Obj::SubStr("a"))),
+            "{witness:?}"
+        );
+        assert!(
+            dicts_of(a, &pool)
+                .into_iter()
+                .filter(|dict| dict.iter().all(|(key, _)| !matches!(key, Obj::SubStr(_))))
+                .all(|dict| !escaping(&dict)),
+            "no dict keyed by the exact `str` refutes {a:?} <= {b:?}"
+        );
+        assert!(
+            boundary_values(&[a, b])
+                .iter()
+                .any(|value| member_full(a, value, &pool) && !member_full(b, value, &pool)),
+            "a value of the universe refutes {a:?} <= {b:?}"
+        );
+    }
 }
 
 proptest! {
@@ -5727,8 +5858,10 @@ proptest! {
     /// must leave alone (every hashable kind, the complements `open` writes,
     /// unions and meets of them, a tuple holding a list, a list, a literal) and
     /// holds both answers to a universe of dicts keyed by plain values of every
-    /// hashable kind and by a name no drawn map declares: a refutation has a
-    /// dict in the subject and outside the supertype, and a proof has none.
+    /// hashable kind, by a name no drawn map declares, and by each declared
+    /// name spelled as a `str` subclass's instance, which a field reads and a
+    /// literal does not: a refutation has a dict in the subject and outside
+    /// the supertype, and a proof has none.
     #[test]
     fn a_map_relation_stands_on_a_dict(a in drawn_map(), b in drawn_map()) {
         let pool = const_pool();
@@ -6744,6 +6877,66 @@ proptest! {
                     "{:?} is in {:?} and outside {:?}", value, subject, union
                 );
             }
+        }
+    }
+}
+
+/// A keyed map over the names `a` and `b` and clauses keyed by literals, a
+/// kind or `str` -- constant 2 is the string `"a"`, which the field `a` reads.
+fn literal_keyed_map() -> impl Strategy<Value = Schema> {
+    let literal = |index: usize| Schema::Literal(ConstIx::new(index));
+    let value = prop_oneof![Just(Schema::Int), Just(Schema::Str), Just(Schema::ANYTHING)];
+    let key = prop_oneof![
+        Just(literal(2)),
+        Just(literal(0)),
+        Just(Schema::union([literal(0), literal(2)])),
+        Just(Schema::Str),
+        Just(Schema::Int),
+    ];
+    let fields = prop::collection::btree_map(
+        prop::sample::select(vec!["a", "b"]),
+        (value.clone(), any::<bool>()),
+        0..2,
+    );
+    let clauses = prop::collection::vec(
+        (key, value).prop_map(|(key, value)| MapClause { key, value }),
+        0..3,
+    );
+    (fields, clauses).prop_map(|(fields, clauses)| {
+        Schema::keyed_map(
+            fields
+                .into_iter()
+                .map(|(name, (schema, required))| Field {
+                    name: name.into(),
+                    schema,
+                    required,
+                })
+                .collect(),
+            clauses,
+        )
+    })
+}
+
+proptest! {
+    /// A clause keyed by literals is read one constant at a time, and the
+    /// rules' answer about it agrees with the set reading's wherever both
+    /// decide.
+    ///
+    /// The oracle names constant 2 as the string `"a"`, so a literal key meets
+    /// the field `a` by its value and constants 0 and 3 are one integer at two
+    /// indices. The set reading reads the same constants through the same
+    /// partition, and a refutation or proof the two give apart is a defect in
+    /// one of them.
+    #[test]
+    fn a_literal_keyed_clause_agrees_with_the_set_reading(
+        a in literal_keyed_map(),
+        b in literal_keyed_map(),
+    ) {
+        let budget = crate::decision::Budget::new(DECISION_BUDGET);
+        let rules = a.subtype_relation(&b, &CorpusOracle, &[], &budget);
+        let sets = a.descriptor_contained_in(&b, &CorpusOracle, &[]);
+        if rules != Relation::Unknown && sets != Relation::Unknown {
+            prop_assert_eq!(rules, sets, "{:?} <= {:?}", a, b);
         }
     }
 }

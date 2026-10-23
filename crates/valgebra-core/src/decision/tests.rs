@@ -5083,8 +5083,10 @@ fn a_clause_key_the_rules_cannot_read_leaves_the_field_unproven() {
 /// name. A key holding every string -- `str`, `anything`, a union with `str`
 /// in it, the complement of a kind that is not `str` -- reads it; a key
 /// holding no string -- another kind, the `complement(str)` that `open`
-/// writes on a mapping -- never does. Only a key that is neither leaves the
-/// field undecided. Asked of the rules alone.
+/// writes on a mapping -- never does, and a literal reads its exact constant
+/// alone, so the witness's key is a `str` subclass's instance equal to the
+/// name. Only a key the rules cannot place leaves the field undecided. Asked of
+/// the rules alone.
 #[test]
 fn a_clause_reads_a_field_by_whether_its_key_holds_every_string_or_none() {
     let relation = |sub: &Schema, sup: &Schema| {
@@ -5152,13 +5154,26 @@ fn a_clause_reads_a_field_by_whether_its_key_holds_every_string_or_none() {
         ),
         Relation::Unknown
     );
-    // A clause between the two leaves the field to a proof or nothing.
+    // A literal reads its exact constant alone, so beside one the witness
+    // takes a `str` subclass's `"a"` as its key, which the field reads and the
+    // literal does not: `str: int` reads it, and refutes.
     assert_eq!(
         relation(
             &with_str,
             &clauses(vec![
                 (Schema::Str, Schema::Int),
                 (Schema::Literal(ConstIx::new(0)), Schema::ANYTHING)
+            ])
+        ),
+        Relation::Fails
+    );
+    // A key the rules cannot place leaves the field to a proof or nothing.
+    assert_eq!(
+        relation(
+            &with_str,
+            &clauses(vec![
+                (Schema::Str, Schema::Int),
+                (Schema::Instance(ClassIx::new(0)), Schema::ANYTHING)
             ])
         ),
         Relation::Unknown
@@ -7000,5 +7015,164 @@ fn the_product_rule_decides_its_corners_in_a_bounded_number_of_steps() {
     assert!(
         spent.last().is_some_and(|&five| five < 60_000),
         "steps by width 2..=5: {spent:?}"
+    );
+}
+
+/// An oracle naming constants by value: indices 0 and 2 are the string `"a"`,
+/// 1 is `"b"`, and 3 is the integer 1, so two indices name one value.
+struct Words;
+
+impl Words {
+    fn at(index: ConstIx) -> Option<Operand> {
+        match index.get() {
+            0 | 2 => Some(Operand::Word(b"a".to_vec(), Kind::Str)),
+            1 => Some(Operand::Word(b"b".to_vec(), Kind::Str)),
+            3 => Some(Operand::Integer(1)),
+            _ => None,
+        }
+    }
+}
+
+impl Constants for Words {
+    fn constant(&self, index: ConstIx) -> Option<Operand> {
+        Words::at(index)
+    }
+}
+
+impl LeafRelations for Words {
+    fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+        None
+    }
+    fn literal_kind(&self, constant: ConstIx) -> Option<Kind> {
+        Some(match Words::at(constant)? {
+            Operand::Word(_, kind) => kind,
+            _ => Kind::Int,
+        })
+    }
+    fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+        Some(Words::at(left)? != Words::at(right)?)
+    }
+    fn literal_sets_disjoint(&self, left: &[ConstIx], right: &[ConstIx]) -> Option<bool> {
+        let read = |set: &[ConstIx]| {
+            set.iter()
+                .map(|i| Words::at(*i))
+                .collect::<Option<Vec<_>>>()
+        };
+        let (left, right) = (read(left)?, read(right)?);
+        Some(!left.iter().any(|value| right.contains(value)))
+    }
+}
+
+/// A mapping keyed by the literal at `index`, its values `value`.
+fn keyed_by(index: usize, value: Schema) -> Schema {
+    Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause {
+            key: Schema::Literal(ConstIx::new(index)),
+            value,
+        }]
+        .into(),
+    }
+}
+
+/// Under the rules alone, with an oracle that names constants.
+fn by_words(subject: &Schema, other: &Schema) -> Relation {
+    let budget = Budget::new(DECISION_BUDGET);
+    subject.subtype_relation(other, &Words, &[], &budget)
+}
+
+/// Two mappings keyed by one literal, apart under it, are refuted on that key
+/// at any depth.
+///
+/// The constant itself is the key: the subject's literal clause admits it, and
+/// the supertype's clause naming it reads it, whatever index it is pooled at.
+/// The set reading descends a bounded nesting; the rules read one level a goal.
+#[test]
+fn a_literal_keyed_mapping_is_refuted_under_the_constant_it_names() {
+    let nested = |index: usize, leaf: Schema| (0..20).fold(leaf, |inner, _| keyed_by(index, inner));
+    assert_eq!(
+        by_words(&nested(0, Schema::Int), &nested(0, Schema::Str)),
+        Relation::Fails
+    );
+    assert_eq!(
+        by_words(&nested(0, Schema::Int), &nested(2, Schema::Str)),
+        Relation::Fails,
+        "index 2 names the value index 0 does"
+    );
+    assert_eq!(
+        by_words(&nested(0, Schema::Int), &nested(2, Schema::Int)),
+        Relation::Holds
+    );
+    // A supertype clause the partition cannot place might read the key, so
+    // nothing is refuted beside it.
+    let beside_a_class = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![
+            MapClause {
+                key: Schema::Literal(ConstIx::new(0)),
+                value: Schema::Str,
+            },
+            MapClause {
+                key: Schema::Instance(ClassIx::new(0)),
+                value: Schema::Str,
+            },
+        ]
+        .into(),
+    };
+    assert_ne!(
+        by_words(&keyed_by(0, Schema::Int), &beside_a_class),
+        Relation::Fails
+    );
+}
+
+/// A literal clause meets a record's field through the constant that is its
+/// name, in both directions.
+///
+/// `dict[Literal["a"], int]` holds the key `"a"` alone, which the field `a`
+/// reads: below `{"a?": int}`, refuted against `{"a?": str}` on `{"a": 1}`. The
+/// other way, `{"a": int}` is outside `dict[Literal["a"], int]` on a `str`
+/// subclass's `"a"`, which the field reads and the literal, pinning the type,
+/// does not.
+#[test]
+fn a_literal_clause_meets_a_field_through_its_name() {
+    let optional_a = |schema: Schema| closed(vec![field("a", schema, false)]);
+    assert_eq!(
+        by_words(&keyed_by(0, Schema::Int), &optional_a(Schema::Int)),
+        Relation::Holds
+    );
+    assert_eq!(
+        by_words(&keyed_by(0, Schema::Int), &optional_a(Schema::Str)),
+        Relation::Fails
+    );
+    // The literal `"b"` never spells the name `a`, and is a key the closed
+    // record has nowhere to put.
+    assert_eq!(
+        by_words(&keyed_by(1, Schema::Int), &optional_a(Schema::Int)),
+        Relation::Fails
+    );
+    // A clause of `b` taking `a`'s literal clause whole reads no key a field of
+    // `b` names: the field does, so the literal meets the field, which refuses
+    // its value, and not the clause.
+    let field_beside_a_clause = Schema::KeyedMap {
+        fields: vec![field("a", Schema::Str, false)].into(),
+        defaults: vec![MapClause {
+            key: Schema::ANYTHING,
+            value: Schema::Int,
+        }]
+        .into(),
+    };
+    assert_eq!(
+        by_words(&keyed_by(0, Schema::Int), &field_beside_a_clause),
+        Relation::Fails
+    );
+    let required_a = closed(vec![field("a", Schema::Int, true)]);
+    assert_eq!(
+        by_words(&required_a, &keyed_by(0, Schema::Int)),
+        Relation::Fails
+    );
+    assert_eq!(
+        by_words(&required_a, &open(Vec::new())),
+        Relation::Holds,
+        "a clause holding every string reads the subclass's key as it reads the name"
     );
 }

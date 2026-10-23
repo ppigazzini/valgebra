@@ -215,6 +215,26 @@ answers `"undecided"`.
     value: an open record whose key takes sixty-four constants, minus the
     record of each, is proved empty.
 
+    A clause keyed by **literals** is read one constant at a time, each
+    constant a key the other map reads through its field of that name or
+    through the clause holding it. So `dict[Literal["a"], int]` is below
+    `{"a?": int}` and refuted against `{"a?": str}` on `{"a": 1}`, and two
+    mappings keyed by one literal are refuted under it at any depth, as two
+    `dict[str, ...]` chains are. A record is refuted against a mapping keyed by
+    literals on a `str` subclass's key equal to a field's name: the field reads
+    it, since the walk looks the name up, and a literal, which pins the type,
+    does not.
+
+    ```python
+    from typing import Literal
+
+    from valgebra import Validator
+
+    assert Validator(dict[Literal["a"], int]).is_subtype_of({"a?": int})
+    assert Validator({"a": int}).relation_to(dict[Literal["a"], int]) == "not_subset"
+    assert Validator(dict[str, int]).relation_to(dict[Literal["a"], int]) == "not_subset"
+    ```
+
 - **A difference written as one complemented union.** `a ∧ ¬(b ∨ c)` and
   `a ∧ ¬b ∧ ¬c` are one set, and both are decided where either is: no spelling
   of a difference is the harder one by construction. That is worth stating
@@ -584,27 +604,6 @@ the shape. What is left below is what the descriptor cannot hold.
     assert Validator(dict[Literal[1], int]).relation_to(dict[int, int]) == "subset"
     ```
 
-- **A record against a mapping keyed by literals.** A record's field reads
-  every key equal to its name, a `str` subclass's included, since the walk looks
-  the name up; a `Literal["a"]` key is the exact `str` alone. The partition names
-  a key by its value, so it reads the literal as every key equal to it, and a
-  difference that subtracts such a key from a dict a field or a kind's part can
-  key may lose a dict the real one keeps. Its empty reading is no proof there,
-  and the pair comes back "not proven": `{"a": int}` against
-  `dict[Literal["a"], int]` is undecided although `{MyStr("a"): 1}` refutes it.
-  Where every key of the subject is a literal's, the literal reading is exact,
-  and a refutation stands wherever the key is.
-
-    ```python
-    from typing import Literal
-
-    from valgebra import Validator
-
-    assert Validator({"a": int}).relation_to(dict[Literal["a"], int]) == "undecided"
-    assert Validator(dict[Literal["a"], int]).is_subtype_of(dict[Literal["a", "b"], int])
-    assert Validator(dict[str, int]).relation_to(dict[Literal["a"], int]) == "not_subset"
-    ```
-
 - **Recursion, past one unfolding.** A fixpoint as the **supertype** costs a
   *refutation* rather than an inclusion, and that is the sharper half. `a ≤ b`
   is `a ∧ ¬b = ∅`, so the supertype is where a schema stands under a
@@ -792,14 +791,6 @@ the shape. What is left below is what the descriptor cannot hold.
 
   The seventh field's `undecided` is the conservative answer and not a claim
   about the relation: it holds, and proving it takes a larger budget.
-
-  **Depth bites a mapping the rules do not read.** The rules refute a list by
-  its elements at any depth, and a mapping by the value its clause gives a key
-  the other map reads through one clause: `dict[str, ...]` forty levels deep
-  over `int` is `not_subset` of the same chain over `str`. A key the rules read
-  as a value rather than a kind -- a literal -- leaves the mapping to the sets,
-  whose lowering descends a bounded nesting: `dict[Literal["a"], ...]` four
-  levels deep is refuted and five levels deep answers `undecided`.
 
 - **A predicate.** Its satisfiability is undecidable (below), so neither
   representation reasons about one -- and that is a statement about the

@@ -620,12 +620,15 @@ These are the readings that refute, each with the value it stands on:
   what it names, since it denotes that set; once and not through what it finds,
   so the walk descends only into union branches and owes termination no argument
   about cycles.
-- `clause_escapes`, and the extra-field reading of `keyed_map_subtype` — an
+- `clause_by_key`, and the extra-field reading of `keyed_map_subtype` — an
   entry the subject's dict may carry and the supertype's rejects. For a field
   only the subject declares, the entry is the field's own name with a value of
   the field outside the one supertype clause whose key holds every string; a
   clause whose key holds none -- the `complement(str)` that `open` writes --
-  never reads a name, and a key between the two declines. For a catch-all
+  never reads a name, and a clause keyed by literals reads only those exact
+  constants, so beside one the entry's key is a `str` subclass's instance equal
+  to the name, which the field reads, since the walk looks the name up, and the
+  literal does not. A key between those declines. For a catch-all
   clause of the subject no supertype clause subsumes, the entry is under a plain
   key of a kind the clause's key holds whole -- `None`, `7`, `()`, a name
   neither map declares -- which each supertype clause holds whole or not at
@@ -640,7 +643,12 @@ These are the readings that refute, each with the value it stands on:
   `{"f": int | str}` against `{str: int, Any: str}` does: each refutes on a
   value of its own, and the union of their values is a term neither side
   spelled, outside the closure of subterms the budget's argument counts goals
-  in.
+  in. A clause keyed by literals is read one constant at a time the same way,
+  each constant its own key, read by the supertype's field of that name or by
+  the clause holding it -- through the partition's own `key_cover`, which names
+  a constant by its value. Such a key holds those constants and nothing else,
+  so it is also the one place this reading proves: the clause is covered where
+  each constant lands inside its reader.
 
 **A conjunct refutes beside a decline.** A rule folds the conjuncts of one claim
 about one pair with `Relation::all`, Kleene's strong conjunction: a refutation
@@ -665,8 +673,9 @@ in `decision/tests.rs` holds both sites.
 asks the four any pair can take -- `shorter_than`, `spills_past`,
 `outside_the_class`, then `disjoint_with` -- and the other two are asked where
 their shape is: `outside_every_kind` by the meet rule (`meet_below`), and
-`clause_escapes` by `keyed_map_subtype`. Each answers
-`Fails` on its own and none of them proves, so a pair that two of them refute is
+`clause_by_key` by `keyed_map_subtype`. Each answers
+`Fails` on its own, and none proves but `clause_by_key` over a key naming
+constants alone, so a pair that two of them refute is
 refuted whichever ran first: what the order decides is which reading names the
 value, never whether one is named. What it does decide is what an *unrefuted*
 pair pays, since that pair is asked all of them -- so the three that are a
@@ -1100,9 +1109,9 @@ seed `below-the-complement-of-a-length-the-shape-cannot-take` keeps the input,
 and `every_set_is_below_the_complement_of_an_empty_set` in `decision/tests.rs`
 keeps the pair.
 
-## Two more places a shape would stand in for the question
+## Three more places a shape would stand in for the question
 
-The same reading governs two more rules.
+The same reading governs three more rules.
 
 **A complement on the right is one question, not a shape to recurse into.**
 `A ⊆ ¬B` holds exactly when `A ∩ B = ∅`, which emptiness answers through kind
@@ -1118,7 +1127,17 @@ the supertype covers through a catch-all as undecided, which the general branch
 beside it decides; a second branch for the pure mapping computes what the
 general one computes.
 
-The pattern in all four: a branch keyed on a shape answers a narrower question
+**A literal key is not a field.** `dict[Literal["a"], int]` and `{"a?": int}`
+read the key `"a"` alike and a `str` subclass's `"a"` apart: the field reads
+it, since the walk looks the name up, and the literal, which pins the type,
+does not. Reading a literal-keyed clause as the field it names would prove
+`{"a?": int}` below `dict[Literal["a"], int]`, which `{MyStr("a"): 1}`
+refutes. The rules read the clause by its constants instead -- each a key the
+other map's field or clause reads -- which decides a literal-keyed subject both
+ways, and refute the record against the literal-keyed map on the subclass's
+key (`a_literal_clause_meets_a_field_through_its_name`).
+
+The pattern in all five: a branch keyed on a shape answers a narrower question
 than the general rule beside it, and reads as a deliberate special case because
 it has a comment. Prefer one rule that asks the question.
 

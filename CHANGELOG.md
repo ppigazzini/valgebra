@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - feat: a table met with complements of tables is decided as the set it leaves
 - feat: a record is decided against a union of records it splits across
+- feat: a clause keyed by literals is read one constant at a time
 
 -->
 
@@ -40,6 +41,15 @@ answer of its own, or a repair to a change not yet released.
   proved empty at any length, where thirteen declined. The split is
   Castagna's backtrack-free rule for records (ICFP 2023), run by the rules
   rather than by building the difference.
+- **A clause keyed by literals is read one constant at a time.** Two mappings
+  keyed by one literal are refuted under it at any depth:
+  `dict[Literal["a"], ...]` forty levels deep over `int` is `"not_subset"` of
+  the chain over `str`, where five levels answered `"undecided"`. A record is
+  refuted against a mapping keyed by literals on a `str` subclass's key equal
+  to a field's name, which the field reads and the literal does not, so
+  `{"a": int}` against `dict[Literal["a"], int]` answers `"not_subset"` where
+  it answered `"undecided"`; and `dict[Literal["a"], int]` is below
+  `{"a?": int}` by the rules, without the set representation.
 
 ## [0.0.19] - 2026-10-20
 

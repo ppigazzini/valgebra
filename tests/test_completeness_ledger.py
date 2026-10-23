@@ -253,6 +253,13 @@ def _nested(leaf: object, depth: int, *, mapping: bool) -> object:
     return leaf
 
 
+def _literal_keyed(leaf: object, depth: int) -> object:
+    """Nest `leaf` in `depth` mappings keyed by the literal `"a"`."""
+    for _ in range(depth):
+        leaf = dict[Literal["a"], leaf]  # ty: ignore[invalid-type-form]
+    return leaf
+
+
 def _record_split(width: int) -> tuple[object, object]:
     """Build a record of `width` fields each `int | str`, and its corners.
 
@@ -815,6 +822,30 @@ _DECIDED = [
             ]
         ),
         id="map:two-tag-record<=its-nine-corners",
+    ),
+    # A clause keyed by a literal is read by the constant it names: the field
+    # of that name reads it, and two mappings keyed by one literal are refuted
+    # under it at any depth, as two `dict[str, ...]` chains are.
+    pytest.param(
+        "subtype",
+        dict[Literal["a"], int],
+        {"a?": int},
+        id="map:dict[L[a],int]<={a?:int}",
+    ),
+    pytest.param(
+        "refutes",
+        _literal_keyed(int, 40),
+        _literal_keyed(str, 40),
+        id="refute:literal-keyed-mappings-40-deep-over-int<=over-str",
+    ),
+    # A record is refuted against a mapping keyed by literals on a `str`
+    # subclass's key equal to the field's name, which the field reads and the
+    # literal does not.
+    pytest.param(
+        "refutes",
+        {"a": int},
+        dict[Literal["a"], int],
+        id="map:{a:int}!<=dict[L[a],int]",
     ),
     # A record split on whether a key is there: `c` present lands in the first
     # member, `c` absent in the second, and neither holds the record alone.
