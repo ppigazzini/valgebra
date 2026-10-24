@@ -37,7 +37,7 @@
 )]
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyInt, PyList, PyModule, PyString};
+use pyo3::types::{PyDict, PyInt, PyList, PyModule, PyString, PyTuple};
 use valgebra_core::{Constraint, DefIx, Field, MapClause, Schema, SeqKind, SeqShape};
 
 use crate::build::{Pool, build_root};
@@ -150,6 +150,16 @@ pub enum BindingShape {
     /// reads its fields through `get_type_hints`, and reads the class's own
     /// declared order. Without this shape nothing counts any of that.
     Object,
+    /// Walking an instance of the same fifty-field dataclass: its type, then
+    /// each attribute through the name the index interned for it.
+    ///
+    /// The dataclass build beside it counts compiling the class, and the
+    /// record shapes walk a `dict`; neither reads an attribute. An instance is
+    /// read through `getattr` once a field, and the index's interned names are
+    /// what keep each lookup a pointer compare in the type's dictionary: a
+    /// name made per call would be hashed and compared every time, which no
+    /// other shape counts.
+    ObjectWalk,
     /// Compiling a fifty-member **protocol**: forty-five annotated members and
     /// five methods.
     ///
@@ -299,6 +309,7 @@ impl BindingShape {
             "annotated" => BindingShape::Annotated,
             "keys" => BindingShape::Keys,
             "object" => BindingShape::Object,
+            "object-walk" => BindingShape::ObjectWalk,
             "protocol" => BindingShape::Protocol,
             "relation" => BindingShape::Relation,
             "subclass" => BindingShape::Subclass,
@@ -784,6 +795,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
         BindingShape::ExplainAccept => explaining_record(py, iters, Wrong::No),
         BindingShape::Explain => explaining_record(py, iters, Wrong::Yes),
         BindingShape::ExplainList => explaining_list(py, iters),
+        BindingShape::ObjectWalk => object_walk(py, iters),
         BindingShape::Annotated | BindingShape::Object | BindingShape::Protocol => {
             let spelling = match shape {
                 BindingShape::Annotated => annotated_record(py),
@@ -808,6 +820,36 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             checksum
         }
     }
+}
+
+/// The walk over an instance of the fifty-field dataclass, one validator call
+/// per iteration.
+fn object_walk(py: Python<'_>, iters: usize) -> u64 {
+    let spelling = object_record(py);
+    let mut literals = Pool::default();
+    let mut definitions = Vec::new();
+    let schema = build_root(spelling.bind(py), &mut literals, &mut definitions)
+        .expect("fifty typed fields always build");
+    let validator = Validator::checked(schema, literals.into_items(), definitions)
+        .expect("a fifty-field record is within every limit");
+    let fields = PyTuple::new(py, 0..50_i32).expect("fifty small ints always build");
+    let obj = spelling
+        .bind(py)
+        .call1(fields)
+        .expect("the dataclass takes its fifty fields");
+    let work = digest(validator.schema.node_count(), shown(&obj));
+    settle_the_heap(py);
+    let mut checksum: u64 = 0;
+    for _ in 0..iters {
+        let state = WalkState::new();
+        let ok = member(
+            std::hint::black_box(&validator.schema),
+            &Value::Py(std::hint::black_box(&obj)),
+            &mut Unwritten::default().frame(validator.context(py, &state, WalkMode::Fast)),
+        );
+        checksum = checksum.wrapping_add(u64::from(ok) + work);
+    }
+    checksum
 }
 
 /// The walk over a single integer, one validator call per iteration.

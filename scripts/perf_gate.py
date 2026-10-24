@@ -40,7 +40,7 @@ Three workloads, and the shapes each is read in:
   read what a bound costs an element.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
-  twenty-nine shapes: the membership walk (`--binding`), the call boundary
+  thirty shapes: the membership walk (`--binding`), the call boundary
   alone (`--binding-boundary`), the walk over a wide record
   (`--binding-record`), the same walk over a value whose keys are interned
   (`--binding-keys`), the same fields declared by an open record
@@ -60,7 +60,8 @@ Three workloads, and the shapes each is read in:
   nested document (`--binding-json-deep`), building a validator from its
   Python spelling (`--binding-build`), compiling one written as a `TypedDict`
   of refined integers (`--binding-annotated`), compiling a fifty-field
-  dataclass (`--binding-object`), compiling a fifty-member protocol
+  dataclass (`--binding-object`), walking an instance of it
+  (`--binding-object-walk`), compiling a fifty-member protocol
   (`--binding-protocol`), relating two dataclasses (`--binding-relation`),
   explaining a failure in a record (`--binding-explain`) or accepting one in
   the same mode (`--binding-explain-accept`), and explaining a refused list
@@ -462,6 +463,7 @@ MODES = {
     "binding-open": ("binding_workload", "binding open record walk"),
     "binding-annotated": ("binding_workload", "binding annotated build"),
     "binding-object": ("binding_workload", "binding dataclass build"),
+    "binding-object-walk": ("binding_workload", "binding dataclass walk"),
     "binding-protocol": ("binding_workload", "binding protocol build"),
     "binding-relation": ("binding_workload", "binding relation between dataclasses"),
     "binding-subclass": ("binding_workload", "binding tuple subclass walk"),
@@ -515,6 +517,7 @@ BINDING_ITERATIONS = {
     "binding-open": (20_000, 5_000),
     "binding-annotated": (300, 100),
     "binding-object": (2_000, 500),
+    "binding-object-walk": (20_000, 5_000),
     "binding-protocol": (2_000, 500),
     "binding-relation": (20_000, 5_000),
     "binding-subclass": (150_000, 50_000),
@@ -551,6 +554,7 @@ BINDING_SHAPES = {
     "binding-open": "open",
     "binding-annotated": "annotated",
     "binding-object": "object",
+    "binding-object-walk": "object-walk",
     "binding-protocol": "protocol",
     "binding-relation": "relation",
     "binding-subclass": "subclass",
