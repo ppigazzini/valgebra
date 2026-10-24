@@ -545,12 +545,6 @@ impl<G: Guard> SymbolicDfa<G> {
             let (ours, yours) = (self.outgoing(mine), other.outgoing(theirs));
             let our_rest = our_rests.at(mine, ours)?;
             let your_rest = your_rests.at(theirs, yours)?;
-            // The product's else edge takes what *both* sides leave, so one side
-            // leaving nothing is enough to make it dead. Asked of the two rests
-            // already in hand rather than of their meet: a meet here would be a
-            // guard operation inside the operation that builds guards, and it
-            // does not descend.
-            let rest_is_empty = our_rest.is_empty() || your_rest.is_empty();
             let mut row: Vec<Edge<G>> = Vec::new();
             for (at_ours, ours) in ours.iter().enumerate() {
                 for (at_yours, yours) in yours.iter().enumerate() {
@@ -567,14 +561,13 @@ impl<G: Guard> SymbolicDfa<G> {
                         (None, Some(b), Rest::Left(rest), _) => Some(met.meet(at, rest, b)?),
                         (None, None, _, _) => None,
                     };
+                    // The product's own else edge is the pair of else edges, and
+                    // it is kept where it takes nothing: a row whose guarded
+                    // edges cover every value carries such an edge on its own
+                    // side already, and a product with the whole language
+                    // rebuilds that side's rows as they stand, which is what
+                    // `intersect` and `union` answer such a product with.
                     if guard.as_ref().is_some_and(Guard::is_empty) {
-                        continue;
-                    }
-                    // The product's own else edge is the pair of else edges. Where
-                    // it is dead the row is spelled without it, and the last
-                    // guarded edge becomes the else edge below -- the remaining
-                    // guards cover everything between them.
-                    if guard.is_none() && rest_is_empty {
                         continue;
                     }
                     let target = reached.id((ours.target, yours.target), budget::spend)?;
@@ -582,17 +575,6 @@ impl<G: Guard> SymbolicDfa<G> {
                         return None;
                     }
                     row.push(Edge { guard, target });
-                }
-            }
-            if rest_is_empty {
-                // Every value is taken by a guarded edge, so the largest of them
-                // is exactly what the others leave: naming it the else edge
-                // spells the row one way. One way up to the guards' own order,
-                // which reads a spelling where a guard has more than one -- see
-                // the `Guard` doc above.
-                row.sort_by(|a, b| a.guard.cmp(&b.guard).then(a.target.cmp(&b.target)));
-                if let Some(last) = row.last_mut() {
-                    last.guard = None;
                 }
             }
             // The two dimensions are bounded above; this bounds their product,
@@ -655,13 +637,16 @@ impl<G: Guard> SymbolicDfa<G> {
         }
     }
 
-    /// The minimal automaton for the same language, canonically numbered.
+    /// The same language with the states no signature tells apart merged,
+    /// canonically numbered.
     ///
     /// The same three passes [`regular`](super::regular) uses, with the middle
     /// one replaced: there is no alphabet to coarsen, so the edges of a state
-    /// are put in guard order instead. Merge the states no sequence tells apart,
-    /// the quotient of [DV14, Thm. 2], order every edge list, and renumber by a
-    /// walk that takes edges in that order.
+    /// are put in guard order instead. Merge the states no signature tells
+    /// apart -- the quotient of [DV14, Thm. 2] wherever two rows sending the
+    /// same values to the same states are spelled alike (`merge_equivalent`)
+    /// -- order every edge list, and renumber by a walk that takes edges in
+    /// that order.
     ///
     /// Total, and deliberately. The passes ask the guards to *join*, and a
     /// guard past its own bound refuses; a refusal there leaves two edges where
@@ -992,15 +977,6 @@ enum Rest<G> {
     Everything,
     /// What the row's guarded edges leave.
     Left(G),
-}
-
-impl<G: Guard> Rest<G> {
-    fn is_empty(&self) -> bool {
-        match self {
-            Rest::Everything => false,
-            Rest::Left(rest) => rest.is_empty(),
-        }
-    }
 }
 
 /// The rests one side's states leave, as one product asks them.
