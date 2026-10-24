@@ -18,6 +18,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a clause keyed by literals is read one constant at a time
 - fix: a literal is proved below a predicate only where it is its constant alone
 - fix: a list is copied for its walk with the collector held off before 3.12
+- fix: a marker answering through a lookup of its own is read through getattr
 
 -->
 
@@ -77,6 +78,15 @@ answer of its own, or a repair to a change not yet released.
   process ended; the copy reached 0.0.10 through 0.0.19. The collector is
   held for the copy alone and its state given back, at about ten nanoseconds
   a list; 3.12 and later and PyPy copy as they did.
+- **A marker answering through a lookup of its own is read through `getattr`.**
+  A constraint marker deriving from the `annotated_types` vocabulary that
+  answers `ge`, `max_length` or another name through a `__getattribute__` of
+  its own carries the name neither on its type nor in its dictionary, which is
+  where the frontend read it from, so `Annotated[int, M()]` with `M` answering
+  `ge=5` built `int` and accepted `0`. The reading was wrong in 0.0.11 through
+  0.0.19. Such a marker is asked for every name, as one with a `__getattr__`
+  hook is, and builds `Annotated[int, Ge(5)]`; a marker read through the
+  generic lookup is read as it was.
 
 ## [0.0.19] - 2026-10-20
 

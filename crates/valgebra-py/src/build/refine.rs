@@ -763,6 +763,23 @@ impl Probe {
     }
 }
 
+// A probe's bit is never one of the bits `Probes` keeps about the type, so a
+// mask holds the two apart: a twelfth probe would read as the vocabulary's flag.
+const _: () = {
+    let mut probes: &[Probe] = &Probe::ALL;
+    let mut bits = 0;
+    while let [probe, rest @ ..] = probes {
+        bits |= probe.bit();
+        probes = rest;
+    }
+    let flags = Probes::VOCABULARY
+        | Probes::CONSTRAINT_CLASS
+        | Probes::PATTERN
+        | Probes::HAS_HOOK
+        | Probes::HAS_OWN_DICT;
+    assert!(bits & flags == 0);
+};
+
 /// The mask each marker type reads under, one bit per [`Probe`] plus the
 /// answers [`Probes`] names about the type. Keyed by the type, which is what the
 /// answer is a property of.
@@ -799,9 +816,15 @@ const MAX_MARKER_TYPES: usize = 256;
 /// read directly -- a dictionary answers for a name it does not hold without
 /// raising, which is the whole point.
 ///
-/// A type with a `__getattr__` hook answers for names neither holds, so it is
-/// asked for everything, exactly as the frontend asked before this. That path
+/// A type with a `__getattr__` hook, or a `__getattribute__` other than the
+/// generic lookup, answers for names neither holds, so it is asked for
+/// everything through `getattr`, the reading the mask stands in for. That path
 /// is correct and gives up only the saving.
+///
+/// The mask is the type's as it is first read, and is kept for the process: a
+/// class given a probe name or a hook after a marker of it is read keeps the
+/// mask its first reading gave. Noticing would take the type's version tag,
+/// which is `CPython`'s alone, or a type watcher, which starts at 3.12.
 pub(super) struct Probes<'py> {
     mask: u16,
     own: Option<Bound<'py, PyDict>>,
@@ -809,7 +832,8 @@ pub(super) struct Probes<'py> {
 
 impl<'py> Probes<'py> {
     /// The type answers for names no dictionary of its own holds -- a
-    /// `__getattr__` hook -- so every name is asked of the marker, as before.
+    /// `__getattr__` hook, or a `__getattribute__` of its own -- so every name
+    /// is asked of the marker.
     const HAS_HOOK: u16 = 1 << 14;
 
     /// Instances of the type keep their values in a dictionary of their own,
@@ -867,7 +891,16 @@ impl<'py> Probes<'py> {
                 mask |= probe.bit();
             }
         }
-        if ty.getattr_opt(intern!(py, "__getattr__"))?.is_some() {
+        // A `__getattr__` answers for names no namespace holds, and so does a
+        // `__getattribute__` other than the generic lookup. A builtin base that
+        // names the generic lookup in a namespace of its own -- `int` on 3.10 to
+        // 3.13 -- reads as one too, which gives up the saving and no answer.
+        let lookup = intern!(py, "__getattribute__");
+        if ty.getattr_opt(intern!(py, "__getattr__"))?.is_some()
+            || !ty
+                .getattr(lookup)?
+                .is(&py.get_type::<PyAny>().getattr(lookup)?)
+        {
             mask |= Self::HAS_HOOK;
         }
         if marker

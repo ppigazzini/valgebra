@@ -78,6 +78,10 @@ fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
              \x20   def __init__(self, unit): self.unit = unit\n\
              for vocabulary in (namespace, slotted.Ge, slotted.MinLen, guarded, hooked, Timezone, Unit):\n\
              \x20   vocabulary.__module__ = 'annotated_types'\n\
+             class traced(namespace):\n\
+             \x20   def __getattribute__(self, name):\n\
+             \x20       if name == 'ge': return 0\n\
+             \x20       return object.__getattribute__(self, name)\n\
              class deprecated:\n\
              \x20   def __init__(self, message): self.message = message\n\
              \x20   def __call__(self, value): raise TypeError(value)\n\
@@ -280,10 +284,10 @@ fn each_spelling_builds_its_own_schema() {
             // frontend reads them from. `at` above keeps them in an instance
             // dictionary; the vocabulary this stands in for ships
             // `slots` dataclasses, which keep them on the *type* as
-            // descriptors, and a marker may answer through `__getattr__` for a
-            // name no dictionary of either holds. The corpus asks all three:
-            // a reading held by pytest alone is one the mutation sweep cannot
-            // see.
+            // descriptors, and a marker may answer through `__getattr__`, or a
+            // `__getattribute__` of its own, for a name no dictionary of either
+            // holds. The corpus asks each: a reading held by pytest alone is
+            // one the mutation sweep cannot see.
             (
                 "typing.Annotated[int, slotted.Ge(0)]",
                 "Annotated[int, Ge(0)]",
@@ -293,6 +297,10 @@ fn each_spelling_builds_its_own_schema() {
                 "Annotated[str, MinLen(1)]",
             ),
             ("typing.Annotated[int, hooked()]", "Annotated[int, Ge(0)]"),
+            // A marker of the vocabulary's that answers through a
+            // `__getattribute__` of its own carries no name on its type and
+            // none in its dictionary, so it is read as the hook it is.
+            ("typing.Annotated[int, traced()]", "Annotated[int, Ge(0)]"),
             // Both at once: the name is on the type *and* the type has a hook.
             // Its mask carries the vocabulary's bits beside the name's and the
             // hook's, so the mask that is exactly those two is a grouped
