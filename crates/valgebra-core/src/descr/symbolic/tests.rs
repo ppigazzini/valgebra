@@ -81,13 +81,16 @@ const SEQUENCES: Algebra<SymbolicDfa<IntSet>> = Algebra {
 
 /// The guards the generator draws from: two overlapping sets and two
 /// disjoint ones, so a product has meets that are empty and meets that are
-/// not.
+/// not, and one reaching down to one, which beside the integers from two
+/// covers every integer, so a union of the two starts with a row whose guards
+/// leave its else edge nothing.
 fn guards() -> Vec<IntSet> {
     vec![
         IntSet::just(0),
         IntSet::just(1),
         IntSet::between(Some(0), Some(1)),
         IntSet::between(Some(2), None),
+        IntSet::between(None, Some(1)),
     ]
 }
 
@@ -952,4 +955,21 @@ fn a_chain_with_an_undecided_letter_is_left_to_the_merge() {
         assert_eq!(shape(&prefix, Some(&held)), table.minimal());
     }
     assert!(SymbolicDfa::chain(&[held.clone(), held.clone()], None).1);
+}
+
+/// A row whose guarded edges cover every value is rebuilt by a product with
+/// the whole language as it stands, as `intersect` and `union` assume when
+/// they answer such a product with the side itself.
+///
+/// The union of `list[x <= 1]` and `list[x >= 2]` starts with that row: the
+/// two guards cover the integers between them, so the else edge beside them
+/// takes nothing.
+#[test]
+fn a_row_whose_guards_cover_is_rebuilt_as_it_stands() {
+    let low = shape(&[], Some(&IntSet::between(None, Some(1))));
+    let high = shape(&[], Some(&IntSet::between(Some(2), None)));
+    let either = low.union(&high).expect("a small union");
+    let all = SymbolicDfa::all();
+    assert_eq!(either.intersect(&all), either.product(&all, |p, q| p && q));
+    assert_eq!(all.intersect(&either), all.product(&either, |p, q| p && q));
 }

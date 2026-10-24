@@ -20,6 +20,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a list is copied for its walk with the collector held off before 3.12
 - fix: a marker answering through a lookup of its own is read through getattr
 - fix: the widest table the state bound admits is inside the build limit
+- fix: a product with the whole language rebuilds each row as it stands -- internal
 
 -->
 
