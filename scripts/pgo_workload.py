@@ -78,6 +78,7 @@ TRAINED: dict[str, tuple[str, ...]] = {
     "binding-open": ("_containers",),
     "binding-annotated": ("_containers", "_lists_with_readers"),
     "binding-object": ("_lists_with_readers", "_relations"),
+    "binding-object-walk": ("_lists_with_readers",),
     "binding-relation": ("_relations",),
     "binding-keys": ("_documents",),
     "binding-pattern": ("_lists_with_readers",),

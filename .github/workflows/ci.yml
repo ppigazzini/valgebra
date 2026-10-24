@@ -1003,7 +1003,7 @@ jobs:
             uv run --no-sync python scripts/perf_gate.py \
               --binding --binding-boundary --binding-record --binding-keys \
               --binding-build --binding-annotated --binding-object \
-              --binding-protocol --binding-relation \
+              --binding-object-walk --binding-protocol --binding-relation \
               --binding-subclass --binding-explain --binding-explain-accept \
               --binding-explain-list \
               --binding-open --binding-json --binding-pattern \
