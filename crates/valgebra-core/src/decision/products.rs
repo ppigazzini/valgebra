@@ -264,6 +264,10 @@ pub(super) fn linear_subtype(
         }))
     };
     match (ta, tb) {
+        // Two fixed lengths that differ are refuted by the lengths, before a
+        // position is compared. The positions would refute too, at the first
+        // one B lacks, but each one before it is a goal of its own, and its
+        // cost is charged to the budget the rest of the query decides with.
         (None, None) if pa.len() != pb.len() => Relation::Fails,
         (None, None | Some(_)) => aligns(cx),
         // A repeats without bound but B is finite-length: no value with a

@@ -2673,6 +2673,45 @@ fn intersection_of_unions_tower(depth: usize, leaf: Schema) -> Schema {
     node
 }
 
+/// Two fixed lengths that differ are refuted by the lengths, before a position
+/// is compared.
+///
+/// The positions the shorter tuple has are a pair the budget cannot afford:
+/// the towers below exhaust it alone. The refutation spends a handful of steps
+/// all the same, and the branch beside it is left the budget to prove the
+/// subject in. Comparing the positions first would answer the pair alike and
+/// leave the union undecided.
+#[test]
+fn a_length_mismatch_is_refuted_before_a_position_is_compared() {
+    let narrow = union(
+        Schema::set(Schema::Int),
+        intersection_of_unions_tower(18, Schema::Int),
+    );
+    let wide = union(
+        Schema::set(Schema::Int),
+        intersection_of_unions_tower(18, union(Schema::Int, Schema::Float)),
+    );
+    // The premise, asserted rather than assumed: the towers alone spend the
+    // whole budget, or comparing the positions would cost nothing to see.
+    let premise = narrow.subtype_steps(&wide);
+    assert!(
+        premise >= DECISION_BUDGET,
+        "the towers decide in {premise} steps"
+    );
+    let subject = Schema::tuple(SeqShape::fixed([narrow, Schema::Int]));
+    let shorter = Schema::tuple(SeqShape::fixed([wide]));
+    let steps = subject.subtype_steps(&shorter);
+    assert!(steps < 100, "the length refutation spent {steps} steps");
+    let either = Schema::Union(
+        vec![
+            shorter,
+            Schema::tuple(SeqShape::fixed([Schema::ANYTHING, Schema::Int])),
+        ]
+        .into(),
+    );
+    assert!(subject.is_subtype_of(&either));
+}
+
 /// A decision says which of the three things it established, and an exhausted
 /// budget is never mistaken for a proof.
 ///
