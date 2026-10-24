@@ -397,20 +397,30 @@ fn wide_interned_value(py: Python<'_>) -> Py<PyAny> {
 /// carries that package's module, which is what the frontend reads a
 /// constraint off: a workload that names no third-party package is one this
 /// lane can run with whatever it has installed, and it compiles the same
-/// constraint either way.
+/// constraint either way. It takes both shapes a marker keeps its bound in,
+/// which the frontend reads in two ways: the forty-five required fields a
+/// `slots` class, as `annotated_types` defines its markers, whose bound is a
+/// name on the type; the five others a class that keeps it in an instance
+/// dictionary, read from that dictionary.
 fn annotated_record(py: Python<'_>) -> Py<PyAny> {
     let module = PyModule::from_code(
         py,
         &std::ffi::CString::new(
             "from typing import Annotated, NotRequired, TypedDict\n\
              class Ge:\n\
+             \x20   __slots__ = ('ge',)\n\
              \x20   def __init__(self, ge):\n\
              \x20       self.ge = ge\n\
              \x20   def __repr__(self):\n\
              \x20       return f'Ge({self.ge})'\n\
-             Ge.__module__ = 'annotated_types'\n\
+             class Floor:\n\
+             \x20   def __init__(self, ge):\n\
+             \x20       self.ge = ge\n\
+             \x20   def __repr__(self):\n\
+             \x20       return f'Floor({self.ge})'\n\
+             Ge.__module__ = Floor.__module__ = 'annotated_types'\n\
              fields = {f'f{i}': Annotated[int, Ge(0)] for i in range(45)}\n\
-             fields.update({f'o{i}': NotRequired[Annotated[int, Ge(0)]] for i in range(5)})\n\
+             fields.update({f'o{i}': NotRequired[Annotated[int, Floor(0)]] for i in range(5)})\n\
              SPELLING = TypedDict('Wide', fields)\n",
         )
         .expect("no interior nul"),
