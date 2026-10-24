@@ -548,7 +548,11 @@ reads a list that belongs the way the deciding walk does, band and all, so
 
 The contract of the section above is kept: the copy answers about the list as it
 was when the copy was taken, so the count is compared again afterwards and a
-value that moved reports the move. The **instruction** count moves the other way
+value that moved reports the move. Before 3.12 allocating the copy may run a
+collection inside it, and a finalizer the collection runs may write to the list
+the copy is reading -- empty it, and the copy reads memory the list freed -- so
+on those releases the copy holds the collector off for its own length;
+`snapshot_of` in the same file says what that costs. The **instruction** count moves the other way
 -- the copy is instructions and the stall it removes is not, so a sixty-four
 element walk executes 47% more of them. The walk's budget in
 `scripts/perf_budget.json` is recorded on CPython 3.14, which reads the list in

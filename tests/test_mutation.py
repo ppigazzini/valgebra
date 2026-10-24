@@ -12,11 +12,20 @@ non-member, because nothing about the contents was decided, and never a
 The cross-thread case runs only where threads are genuinely parallel; under the
 GIL a predicate is the shape that reaches the same read, which is what the rest
 of the module drives.
+
+The walk runs Python of its own nowhere over a list one test settles, so a
+collection is the last way in: before 3.12 allocating the list's copy may run
+one, and a finalizer it runs may write to the list. Neither the answer nor the
+process may depend on whether a collection is due.
 """
 
 from __future__ import annotations
 
+import datetime as dt
+import gc
+import subprocess
 import sys
+import textwrap
 import threading
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -365,3 +374,94 @@ def test_a_container_written_by_another_thread_never_escapes_as_an_exception(
     mutate: Callable[[Any], None],
 ) -> None:
     assert _hammer(Validator(schema), shared, mutate) == []
+
+
+#: Collection thresholds are CPython's: PyPy's collector schedules its own steps,
+#: and its copy reads the list through bounds the list keeps.
+_CPYTHON = sys.implementation.name == "cpython"
+
+#: A width inside the snapshot band, so each reader takes the copy.
+_COPIED = 64
+
+
+@pytest.mark.skipif(not _CPYTHON, reason="a collection threshold is CPython's")
+@pytest.mark.parametrize("mode", ["is_valid", "validate"])
+@pytest.mark.parametrize(
+    ("annotation", "element"),
+    [
+        pytest.param(list[int], lambda i: 10**12 + i, id="scalars"),
+        pytest.param(
+            list[dt.date],
+            lambda i: dt.date(2000, 1, 1) + dt.timedelta(days=i),
+            id="instances",
+        ),
+    ],
+)
+def test_a_collection_due_inside_a_lists_copy_leaves_the_answer(
+    annotation: object, element: Callable[[int], object], mode: str
+) -> None:
+    """A finalizer a collection runs mid-copy belongs after the answer.
+
+    The finalizer appends into spare capacity, so the storage the copy reads
+    stays where it is; the copy would then answer about a shorter list than the
+    one in place and report a move the walk never made.
+    """
+    target = [element(i) for i in range(_COPIED)]
+    target.append(element(0))
+    target.pop()
+
+    class Finalizer:
+        cycle: object
+
+        def __del__(self) -> None:
+            target.append(element(0))
+
+    def plant() -> None:
+        finalizer = Finalizer()
+        finalizer.cycle = finalizer
+
+    check = getattr(Validator(annotation), mode)
+    threshold = gc.get_threshold()
+    gc.collect()
+    plant()
+    gc.set_threshold(1)
+    try:
+        answer = check(target)
+    finally:
+        gc.set_threshold(*threshold)
+    gc.collect()
+    assert answer is (True if mode == "is_valid" else None)
+
+
+@pytest.mark.skipif(not _CPYTHON, reason="a collection threshold is CPython's")
+def test_a_collection_emptying_a_list_inside_its_copy_is_survived() -> None:
+    """Emptied, the list's storage is freed under a copy that has not read it.
+
+    Run in a process of its own, because the failure is the process ending.
+    """
+    program = textwrap.dedent(
+        f"""
+        import gc
+        from valgebra import Validator
+
+        target = [10**12 + i for i in range({_COPIED})]
+
+        class Finalizer:
+            def __del__(self):
+                target.clear()
+
+        def plant():
+            finalizer = Finalizer()
+            finalizer.cycle = finalizer
+
+        check = Validator(list[int]).is_valid
+        gc.collect()
+        plant()
+        gc.set_threshold(1)
+        print(check(target))
+        """
+    )
+    ran = subprocess.run(  # noqa: S603 - the interpreter running this suite
+        [sys.executable, "-c", program], capture_output=True, text=True, check=False
+    )
+    assert (ran.returncode, ran.stdout.strip()) == (0, "True"), ran.stderr[-400:]

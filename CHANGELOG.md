@@ -17,6 +17,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a record is decided against a union of records it splits across
 - feat: a clause keyed by literals is read one constant at a time
 - fix: a literal is proved below a predicate only where it is its constant alone
+- fix: a list is copied for its walk with the collector held off before 3.12
 
 -->
 
@@ -67,6 +68,15 @@ answer of its own, or a repair to a change not yet released.
   0.0.19, the last in 0.0.16 through 0.0.19. Such a pair answers `undecided`.
   A literal of an `int`, a `bool`, a `str`, `bytes`, `None`, a nonzero float
   or an `Enum` member is its constant alone, and is decided as it was.
+- **A list is copied for its walk with the collector held off before 3.12.**
+  On CPython 3.10 and 3.11 a list one test settles -- `list[int]`,
+  `list[date]`, a list of literals or of tuples of scalars -- is read through
+  a tuple copy of it where the copy pays, and allocating the tuple may run a
+  collection inside the copy. A finalizer that collection ran which emptied
+  or regrew the list left the copy reading memory the list had freed, and the
+  process ended; the copy reached 0.0.10 through 0.0.19. The collector is
+  held for the copy alone and its state given back, at about ten nanoseconds
+  a list; 3.12 and later and PyPy copy as they did.
 
 ## [0.0.19] - 2026-10-20
 

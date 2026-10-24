@@ -101,6 +101,13 @@ exclude_re = [
     # interpreter tests read a data descriptor through each body on the
     # releases that compile it.
     "oracle\\.rs:.*: (replace type_has -> .*|.* in type_has)$",
+    # `snapshot_of` is the same case one release lower: a body for the releases
+    # before 3.12, which holds the collector off around the list's copy, and one
+    # for every other release, which copies. The sweep's 3.12 compiles the first
+    # out, and what `cargo mutants` offers for either is a `PyResult` no build
+    # accepts. `tests/test_mutation.py` holds the first on the 3.10 and 3.11
+    # lanes with a collection that empties the list inside the copy.
+    "check/walk/sequence\\.rs:.*: (replace snapshot_of -> .*|.* in snapshot_of)$",
     # `optional_attribute` is the same case one release over: a body for 3.12,
     # which asks a class through the builtin `getattr`, and one for every other
     # release, which is PyO3's `getattr_opt`. The sweep's 3.12 compiles the

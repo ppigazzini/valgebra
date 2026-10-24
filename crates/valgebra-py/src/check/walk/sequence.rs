@@ -11,6 +11,8 @@ use std::ops::ControlFlow;
 
 use jiter::JsonValue;
 use pyo3::prelude::*;
+#[cfg(not(any(Py_3_12, PyPy)))]
+use pyo3::sync::PyOnceLock;
 use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyFrozenSet, PyIterator, PyList, PySet, PyTuple};
 use valgebra_core::{
@@ -526,7 +528,7 @@ fn admitted_through_snapshot(
     if !(snapshot_pays(list.len()) && list.is_exact_instance_of::<PyList>()) {
         return None;
     }
-    match list.as_sequence().to_tuple() {
+    match snapshot_of(list) {
         Ok(snapshot) => {
             if !snapshot
                 .iter_borrowed()
@@ -573,7 +575,7 @@ fn explained_through_snapshot(
     if !(snapshot_pays(list.len()) && list.is_exact_instance_of::<PyList>()) {
         return ControlFlow::Continue(None);
     }
-    match list.as_sequence().to_tuple() {
+    match snapshot_of(list) {
         Ok(snapshot) => {
             let mut items = snapshot.iter_borrowed();
             if items.all(|item| admits(&Value::Py(&item))) {
@@ -1237,6 +1239,54 @@ pub(super) fn literal_list_matches(
     })
 }
 
+/// A copy of an exact list as a tuple, whose elements are then read borrowed.
+///
+/// From 3.12 a collection the copy's allocation makes due waits for the next
+/// bytecode (gh-97922), so the copy runs no Python. `PyPy`'s copy may run a
+/// finalizer, and reads the list through bounds the list itself keeps, so one
+/// that moves the list leaves a copy of the list at some moment of the move:
+/// another length, which the count compared afterwards reports, or the same,
+/// which is answered as a write at the same size is in place.
+#[cfg(any(Py_3_12, PyPy))]
+#[inline]
+fn snapshot_of<'py>(list: &Bound<'py, PyList>) -> PyResult<Bound<'py, PyTuple>> {
+    list.as_sequence().to_tuple()
+}
+
+/// A copy of an exact list as a tuple, taken with the collector held off.
+///
+/// Below 3.12 allocating the tuple may collect the youngest generation inside
+/// the copy, and a collection runs finalizers. `PyList_AsTuple` has read the
+/// list's storage and count by then and copies from them after, so a `__del__`
+/// or a weakref callback that empties or regrows the list leaves the copy
+/// reading memory the list no longer owns, which takes the process down. The
+/// collector is held for the copy alone and its state given back, so a
+/// collection that falls due inside it runs at the next allocation, where the
+/// walk holds the tuple -- as one does after an in-place scan, which allocates
+/// nothing. Three calls on functions held once cost about 360 instructions a
+/// copy, 7 to 10 ns on 3.11 -- `scripts/perf_gate.py --binding` reads 18% more
+/// on sixty-four integers -- against the 3 ns an element the copy saves below
+/// 3.14 ([`snapshot_pays`]), so the band's narrowest list pays for it.
+#[cfg(not(any(Py_3_12, PyPy)))]
+fn snapshot_of<'py>(list: &Bound<'py, PyList>) -> PyResult<Bound<'py, PyTuple>> {
+    static IS_ENABLED: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    static DISABLE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    static ENABLE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    let py = list.py();
+    let held = IS_ENABLED
+        .import(py, "gc", "isenabled")?
+        .call0()?
+        .is_truthy()?;
+    if held {
+        DISABLE.import(py, "gc", "disable")?.call0()?;
+    }
+    let copy = list.as_sequence().to_tuple();
+    if held {
+        ENABLE.import(py, "gc", "enable")?.call0()?;
+    }
+    copy
+}
+
 /// The loop [`scalar_list_matches`] and [`scalar_union_list_matches`] share,
 /// over the test each hands it.
 #[inline]
@@ -1254,12 +1304,12 @@ fn scalar_list_loop(
     // the in-place scan does. Only an exact list is copied: a
     // subclass's copy goes through its own `__iter__`, which need not
     // yield what it holds, and the walk reads what a list holds on
-    // every interpreter. Copying an exact list runs no Python, so
-    // the copy fails only where the tuple cannot be allocated, and
-    // that `MemoryError` is a fatal signal: recorded, never an
-    // answer.
+    // every interpreter. Copying an exact list runs no Python
+    // ([`snapshot_of`]), so the copy fails only where the tuple
+    // cannot be allocated, and that `MemoryError` is a fatal signal:
+    // recorded, never an answer.
     if snapshot_pays(list.len()) && list.is_exact_instance_of::<PyList>() {
-        match list.as_sequence().to_tuple() {
+        match snapshot_of(list) {
             Ok(snapshot) => {
                 let ok = snapshot
                     .iter_borrowed()
