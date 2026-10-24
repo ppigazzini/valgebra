@@ -1193,3 +1193,6 @@ impl<'a, 'o, T: Named> FieldCursor<'a, 'o, T> {
         self.fields.iter().find(|field| field.name() == name)
     }
 }
+
+#[cfg(test)]
+mod tests;
