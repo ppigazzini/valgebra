@@ -56,6 +56,14 @@ regex = "1.13"
 # one it already resolves.
 regex-syntax = "0.8"
 
+[dev-dependencies]
+# A test that needs a process of its own runs in one: an interpreter keeps a
+# module it imported for the process, so a reading that depends on a module
+# being absent cannot be asked after another test loaded it. The core's
+# property tests depend on it already, through proptest, so the lockfile gains
+# no crate.
+rusty-fork = "0.3"
+
 [features]
 # Enables an embedded interpreter (pyo3 `auto-initialize`) so the binding-internal
 # unit tests can acquire the GIL under `cargo test`. Off by default: without it

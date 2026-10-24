@@ -309,14 +309,18 @@ interpreter. The build interns strings, and on a free-threaded interpreter that
 can wait on a lock and let a stop-the-world pause begin, which a waiter still
 attached would never reach. Once built, the read is the same load either way.
 
-**Correctness never depends on one being present.** A node absent from an index
+**A verdict never depends on one being present.** A node absent from an index
 falls back to building the map, scanning the branches, or recompiling the
 pattern. The literal-union plan answers only for an exact int or str. The
 deciding walk takes its answer either way; the explaining walk takes only its
 *yes*, for the elements of a list of the union (`literal_list_matches`), and
 walks every other element. A non-literal union, another value type and a JSON
 value all fall through to the linear scan, which stays the one source of truth
-for behavior.
+for behavior. A **report** does depend on one: a record the index holds a plan
+for is read by its keys, and one it holds none for by its entries, which
+decides how far a deciding pass gets and so which branch of a union of records
+is explained ([08-error-model.md](../08-error-model.md)). So the traversal that
+builds the index descends into every node a record can sit under.
 
 **The constant itself is found by its address.** A literal a program spells in
 its own source is usually the object it validates: a string constant is

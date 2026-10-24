@@ -244,7 +244,10 @@ impl ValidatorIndex {
 /// is the validator's constants pool, needed to read each literal's value while
 /// building union plans. A record with no declared fields, and a union with a
 /// non-literal member, are skipped; the walk falls back to its general path for
-/// anything not indexed, so an incomplete traversal only costs speed.
+/// anything not indexed, which answers the same membership. A report is the
+/// exception: a record with no plan is read by its entries rather than its
+/// keys, and which branch of a union of records is explained follows that
+/// reading, so the traversal descends into every node a record can sit under.
 pub(crate) fn build_index(
     py: Python<'_>,
     schema: &Schema,

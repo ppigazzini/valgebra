@@ -1066,6 +1066,7 @@ dependencies = [
  "regex",
  "regex-syntax",
  "rustc-hash",
+ "rusty-fork",
  "valgebra-core",
 ]
 
