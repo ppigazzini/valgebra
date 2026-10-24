@@ -58,14 +58,7 @@ lib = load_script("_lib")
 #: Bounds no test drives to their edge, each with the reason it is out of
 #: reach. A reason is a sentence about the bound, not a note that nobody got
 #: to it.
-ACCEPTED: dict[str, str] = {
-    "BUILD_SIZE_LIMIT": (
-        "headroom for the automaton builder, above the state bound that "
-        "decides: the smallest pattern whose table sits inside the band this "
-        "leaves takes thirteen seconds to build, which is more than one line "
-        "is worth on every run of the suite"
-    ),
-}
+ACCEPTED: dict[str, str] = {}
 
 
 def _test_files() -> list[Path]:

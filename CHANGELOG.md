@@ -19,6 +19,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a literal is proved below a predicate only where it is its constant alone
 - fix: a list is copied for its walk with the collector held off before 3.12
 - fix: a marker answering through a lookup of its own is read through getattr
+- fix: the widest table the state bound admits is inside the build limit
 
 -->
 
@@ -53,6 +54,16 @@ answer of its own, or a repair to a change not yet released.
   `{"a": int}` against `dict[Literal["a"], int]` answers `"not_subset"` where
   it answered `"undecided"`; and `dict[Literal["a"], int]` is below
   `{"a?": int}` by the rules, without the set representation.
+
+### Fixed
+
+- **The widest pattern automaton the state bound admits is built.** A byte
+  pattern whose automaton gives every byte a class of its own reads 2,048
+  bytes a state, and the builder's limit was exactly `MAX_STATES` such rows,
+  so the 4,094- and 4,095-state tables were refused by the 4,160 bytes the
+  builder keeps beside its rows, and a relation over such a pattern answered
+  `undecided`. The limit leaves room for them, and the state bound refuses a
+  table at every width.
 
 ### Security
 
