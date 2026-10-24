@@ -13,16 +13,38 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- feat: a table met with complements of tables is decided as the set it leaves
-- feat: a record is decided against a union of records it splits across
-- feat: a clause keyed by literals is read one constant at a time
-- fix: a literal is proved below a predicate only where it is its constant alone
-- fix: a list is copied for its walk with the collector held off before 3.12
-- fix: a marker answering through a lookup of its own is read through getattr
-- fix: the widest table the state bound admits is inside the build limit
-- fix: a product with the whole language rebuilds each row as it stands -- internal
-
 -->
+
+## [0.0.20] - 2026-10-24
+
+Three relations decided where they declined, one wrong `subset` proof
+withdrawn, and a crash and an unread bound repaired: three additions, one fix
+and three security fixes, and nothing removed or refused. A record against a
+union of records it splits across, a table of constants minus constants, and a
+mapping keyed by literals answer `subset` or `not_subset` where they answered
+`undecided`, and so does a relation over a byte pattern whose automaton fills
+the state bound. The security fixes are a literal proved below a predicate or
+a protocol by running its constant alone through it, though the literal holds
+every value of its type equal to the constant; a list read through a copy on
+CPython 3.10 and 3.11, which a garbage-collector finalizer emptying the list
+under the copy took down; and a constraint marker answering through a
+`__getattribute__` of its own, whose bound went unread. The entries under
+Security name the releases each reached. Upgrade from any of them.
+
+The walk reads the shapes a document is made of in fewer instructions, on the
+profiled wheels of every CPython the release builds, against 0.0.19 built from
+its tag: a mapping of one or two scalar clauses, as `dict[str, int]`, 33% to
+36% fewer with a global lock and 23% to 27% fewer on the free-threaded builds;
+a list of `TypedDict` records 12% to 13% fewer, and 8% on the free-threaded
+builds; a JSON array of records 2% fewer; and a list nested twenty-five deep 3%
+to 5% fewer with a global lock. That list counts 0.5% to 1% more on the
+free-threaded builds, in register moves the walk's layout makes, and reads
+fewer cycles there. On 3.10 and 3.11 a list read through its copy counts the
+three hundred or so instructions the copy spends holding the collector off: a
+thousand elements of one scalar kind 1.4% to 1.6% more, of a union of scalars
+and explained once refused under 1% more. Every other shape counts at most
+0.15% more than 0.0.19, but the free-threaded builds' calls of under two
+thousand instructions, which the allocator moves by a few per cent either way.
 
 ### Added
 
@@ -3073,7 +3095,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.19...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.20...HEAD
+[0.0.20]: https://github.com/ppigazzini/valgebra/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/ppigazzini/valgebra/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/ppigazzini/valgebra/compare/v0.0.17...v0.0.18
 [0.0.17]: https://github.com/ppigazzini/valgebra/compare/v0.0.16...v0.0.17
