@@ -5,6 +5,7 @@ use super::refine::*;
 use super::*;
 use crate::render::render;
 use pyo3::exceptions::PyKeyboardInterrupt;
+use rusty_fork::rusty_fork_test;
 use std::ffi::CString;
 use valgebra_core::{
     Carries, Constraint, MapClause, SeqShape, StepGroup, carries_division, carries_length,
@@ -2911,4 +2912,40 @@ fn a_module_that_raises_on_import_is_raised_rather_than_missing() {
         let raised = raised.expect_err("an error that is not ImportError is raised");
         assert!(raised.is_instance_of::<pyo3::exceptions::PyRuntimeError>(py));
     });
+}
+
+rusty_fork_test! {
+    /// `typing.Unpack` splices a tuple's tail in a process that never loaded
+    /// `typing_extensions`, where only `typing`'s spelling can answer.
+    ///
+    /// `is_unpack_origin` asks `typing`'s form or the module's, and the module
+    /// is held once it is found loaded (`extensions` in `build.rs`), so in a
+    /// process where an earlier test imported it either half answers. This row
+    /// runs in a process of its own, which nothing has imported it into.
+    #[test]
+    fn typing_unpack_reads_where_typing_extensions_was_never_loaded() {
+        Python::attach(|py| {
+            if !Since(11).met(py) {
+                return;
+            }
+            let loaded = py
+                .import("sys")
+                .and_then(|sys| sys.getattr("modules"))
+                .and_then(|modules| modules.contains("typing_extensions"))
+                .expect("sys.modules answers");
+            assert!(!loaded, "nothing in this process imported typing_extensions");
+            let form = py
+                .eval(
+                    c"tuple[int, __import__('typing').Unpack[tuple[str, ...]]]",
+                    None,
+                    None,
+                )
+                .expect("the form evaluates");
+            assert_eq!(
+                build_schema(&form, &mut Pool::default(), &mut Vec::new())
+                    .expect("the form builds"),
+                Schema::tuple(SeqShape::prefix_tail([Schema::Int], Schema::Str)),
+            );
+        });
+    }
 }

@@ -7987,3 +7987,116 @@ fn the_smallest_recursive_body_is_walked_to_the_unfolding_bound() {
         assert_eq!(report.first().map(|v| v.code), Some("recursion_limit"));
     });
 }
+
+/// A union of records reports what it reports alone wherever it sits: as a
+/// list's element, a set's member, a meet's attribute, an attribute, and a
+/// refinement's base.
+///
+/// Which record branch a refused union explains is the one whose deciding pass
+/// got furthest (`chosen_record`), and how far a pass gets depends on how the
+/// record is read: a closed record by its keys, in the declared order, and one
+/// the index holds no plan for by its entries, in the dict's order
+/// (`docs/08-error-model.md`). So the index owes a plan to every record it can
+/// reach, and the value here tells the two readings apart: by its keys the
+/// `str` branch admits `a` and is explained, by its entries the `int` branch
+/// admits `b` and is. The union alone is the premise, read by its keys.
+#[test]
+fn a_union_of_records_reports_alike_wherever_it_sits() {
+    Python::attach(|py| {
+        let module = helpers(
+            py,
+            "class Hashed(dict):\n\
+             \x20   __hash__ = object.__hash__\n\
+             class Box:\n\
+             \x20   def __init__(self, x):\n\
+             \x20       self.x = x\n",
+            "reports_alike",
+        );
+        let pool: Vec<Py<PyAny>> = vec![module.getattr("Box").expect("Box").unbind()];
+        let record = |kind: Schema| {
+            Schema::record(
+                vec![field("a", kind.clone(), true), field("b", kind, true)],
+                Openness::Closed,
+            )
+        };
+        let union = Schema::union([record(Schema::Int), record(Schema::Str)]);
+        let (admitted, alone) = explain(
+            py,
+            &union,
+            &evaluated(&module, "dict(b=1, a='s')"),
+            &pool,
+            &[],
+        );
+        assert!(!admitted);
+        let alone = codes_at(&alone);
+        assert_eq!(alone, [("string_type", "b".to_owned())], "read by its keys");
+        let attributes = Schema::attr_record(vec![attribute("x", union.clone())]);
+        let carriers = [
+            (
+                "a list's element",
+                Schema::list(SeqShape::homogeneous(union.clone())),
+                "[dict(b=1, a='s')]",
+                "[0].",
+            ),
+            (
+                "a set's member",
+                Schema::set(union.clone()),
+                "{Hashed(b=1, a='s')}",
+                "",
+            ),
+            (
+                "a meet's attribute",
+                Schema::Intersection(
+                    vec![Schema::Instance(ClassIx::new(0)), attributes.clone()].into(),
+                ),
+                "Box(dict(b=1, a='s'))",
+                "x.",
+            ),
+            ("an attribute", attributes, "Box(dict(b=1, a='s'))", "x."),
+            (
+                "a refinement's base",
+                Schema::refine(union, vec![Constraint::MinLen(1)]),
+                "dict(b=1, a='s')",
+                "",
+            ),
+        ];
+        for (carrier, schema, source, prefix) in carriers {
+            let (admitted, report) = explain(py, &schema, &evaluated(&module, source), &pool, &[]);
+            assert!(!admitted, "{carrier}");
+            let wanted: Vec<_> = alone
+                .iter()
+                .map(|(code, at)| (*code, format!("{prefix}{at}")))
+                .collect();
+            assert_eq!(codes_at(&report), wanted, "{carrier}");
+        }
+    });
+}
+
+/// A record whose catch-all clause reads its values is read by a scan, so its
+/// explaining pass starts at the first entry, and a predicate on an entry
+/// before the refused one runs a second time (`docs/05-refinements.md`).
+#[test]
+fn a_record_whose_clause_reads_values_is_explained_from_its_first_entry() {
+    Python::attach(|py| {
+        let module = counting(py, "explained_from_the_first_entry");
+        let pool: Vec<Py<PyAny>> = vec![module.getattr("count").expect("count").unbind()];
+        let record = Schema::keyed_map(
+            vec![
+                field("a", checked_by(0), true),
+                field("b", Schema::Int, true),
+            ],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        );
+        let (admitted, report) = explain(py, &record, &eval(py, "{'a': 1, 'b': 'x'}"), &pool, &[]);
+        assert!(!admitted);
+        assert_eq!(codes_at(&report), [("int_type", "b".to_owned())]);
+        assert_eq!(
+            calls(&module),
+            2,
+            "the deciding scan and the explaining one"
+        );
+    });
+}
