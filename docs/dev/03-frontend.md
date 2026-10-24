@@ -185,8 +185,12 @@ them to compile fifty fields. Which names a marker can carry is a property of
 its type (`Ge` is a `slots` dataclass, so `Ge.ge` is the descriptor
 that reads the slot and `Ge.gt` does not exist), so the type is read once and
 its answer kept, and a marker that keeps its values in a dictionary of its own
-is read from that dictionary. A type with a `__getattr__` hook answers for
-names neither holds, and is asked for everything.
+is read from that dictionary. A type with a `__getattr__` hook, or a
+`__getattribute__` other than the generic lookup, answers for names neither
+holds, and is asked for everything. The answer is the type's as first read and
+is kept for the process, so a class given one of the names or a hook after a
+marker of it is read keeps the reading it was first given (`Probes` in
+`build/refine.rs` says why no portable reading notices).
 
 **Callability is how `annotated_types` tells its two marker shapes apart**, so
 the order is its rule rather than a heuristic. `Not` defines `__call__` because
