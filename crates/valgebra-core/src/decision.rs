@@ -860,10 +860,16 @@ impl Schema {
             // and a proof where it holds none, since the empty set is below
             // everything. Reading it as "proved, or not proven" loses the
             // refutation, which a caller acts on as much as the proof:
-            // `{"a": chain, "b": int}` shares no value with either of
-            // `{"a": chain}` and `{"a": chain, "b": str}`, and the dict its own
-            // two keys name is the value that says so.
-            [] => Relation::of_mismatch(self.verdict_rec(cx)),
+            // `dict[str, int]` shares no value with either of `int` and `str`,
+            // and the empty dict is the value that says so.
+            //
+            // Which of the two it is, is read where the goal returns
+            // ([`witnessed`](Self::witnessed)), as every refutation is: the
+            // subject is the goal's, and that reading answers a subject with a
+            // value by its shape before it walks one. Read here as well, the
+            // subject's emptiness would be walked twice, the second time on a
+            // budget the first has spent.
+            [] => Relation::Fails,
             [only] => self.is_subtype_rec(only, cx),
             _ => self.is_subtype_rec(&Schema::Union(narrowed.into()), cx),
         }
