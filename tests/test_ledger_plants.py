@@ -2783,28 +2783,34 @@ PLANTS = (
         trips=("test_the_stub_declares_a_surface_to_check",),
     ),
     Plant(
-        # An accepted bound renamed in the source with its excuse left behind:
-        # the entry names a bound the tree no longer declares.
+        # An excuse for a bound the tree does not declare: the shape a rename in
+        # the source leaves behind, with the entry outliving the name.
         "tests/test_bound_ledger.py",
-        ("crates/valgebra-core/src/descr/regular.rs",),
+        ("tests/test_bound_ledger.py",),
         lambda tree: _edit(
             tree,
-            "crates/valgebra-core/src/descr/regular.rs",
-            "pub(crate) const BUILD_SIZE_LIMIT: usize = 8 * 1024 * 1024;",
-            "pub(crate) const BUILD_BYTES_LIMIT: usize = 8 * 1024 * 1024;",
+            "tests/test_bound_ledger.py",
+            "ACCEPTED: dict[str, str] = {}",
+            'ACCEPTED: dict[str, str] = {\n    "BUILD_BYTES_LIMIT": (\n'
+            '        "headroom for the automaton builder, above the state bound "\n'
+            '        "that decides, so no table inside that bound reaches it"\n'
+            "    ),\n}",
         ),
         trips=("test_every_accepted_bound_exists_and_has_a_reason",),
     ),
     Plant(
-        # A test comes to drive the accepted bound and the excuse stays: an
-        # excuse outliving the gap it excused.
+        # An excuse for a bound a test does drive: an excuse outliving the gap
+        # it excused, which is the shape a test added later leaves behind.
         "tests/test_bound_ledger.py",
-        ("tests/test_adversarial_bounds.py",),
+        ("tests/test_bound_ledger.py",),
         lambda tree: _edit(
             tree,
-            "tests/test_adversarial_bounds.py",
-            f"{BOUND_MARKER}: MAX_MARKER_TYPES",
-            f"{BOUND_MARKER}: MAX_MARKER_TYPES\n{BOUND_MARKER}: BUILD_SIZE_LIMIT",
+            "tests/test_bound_ledger.py",
+            "ACCEPTED: dict[str, str] = {}",
+            'ACCEPTED: dict[str, str] = {\n    "MAX_MARKER_TYPES": (\n'
+            '        "headroom for the mask cache, above the handful of marker "\n'
+            '        "types a program declares, so no program reaches it"\n'
+            "    ),\n}",
         ),
         trips=("test_no_accepted_bound_is_driven",),
     ),

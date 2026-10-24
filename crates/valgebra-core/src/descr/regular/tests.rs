@@ -885,3 +885,20 @@ fn a_product_keeping_a_long_word_is_the_word() {
     let set = one_word(&[b'a'; 4_000]);
     assert_eq!(set.intersect(&language("a*")), Some(set.clone()));
 }
+
+/// The widest table the state bound admits builds inside `BUILD_SIZE_LIMIT`.
+///
+/// A row is widest where every byte is its own class: 256 classes and the end
+/// of input, rounded up to 512 four-byte identifiers. A word cycling every byte
+/// for `MAX_STATES - 3` of them is a chain of `MAX_STATES - 1` states, the
+/// longest the state bound admits, so the state bound is what decides it and
+/// the build limit has to leave it be. About a second and a half on a debug
+/// build.
+#[test]
+fn the_widest_table_the_state_bound_admits_builds() {
+    let word: Vec<u8> = (0u8..=255).cycle().take(MAX_STATES - 3).collect();
+    let set = RegularSet::pattern(&escaped(&word), Alphabet::Bytes)
+        .expect("a table inside the state bound builds");
+    assert_eq!(set.dfa.state_count(), MAX_STATES - 1);
+    assert!(set.holds(&word));
+}

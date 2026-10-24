@@ -39,10 +39,7 @@ use regex_automata::{Anchored, Input};
 use rustc_hash::FxHashMap;
 use std::sync::{Arc, OnceLock};
 
-// The links below name it and the tests count against it; no code here does.
-#[cfg(any(test, doc))]
-use super::automaton::MAX_STATES;
-use super::automaton::{Reached, canonical_order, chain_fits, reaches};
+use super::automaton::{MAX_STATES, Reached, canonical_order, chain_fits, reaches};
 
 /// What `regex-automata` may spend building one pattern's table, in bytes.
 ///
@@ -50,8 +47,13 @@ use super::automaton::{Reached, canonical_order, chain_fits, reaches};
 /// the builder makes on the way to it, which is a different quantity and the
 /// larger of the two. A dense table's row holds four-byte state identifiers,
 /// one per byte class plus one for the end of input, rounded up to a power of
-/// two: 512 at the widest, where eight megabytes is `MAX_STATES` states
-/// exactly. A pattern of few classes has narrow rows, so this bounds the
+/// two: 512 at the widest. The limit is `MAX_STATES` rows of 514: the widest
+/// row, and two identifiers a state for what the builder keeps beside its rows
+/// -- its start table and its match states, 4,160 bytes at the widest, against
+/// the 32 KiB the two leave -- so at every width the state bound is what
+/// refuses a table, and this never refuses one the state bound admits. Written
+/// as a product alone, so no mistyped operator can raise it past what it
+/// says. A pattern of few classes has narrow rows, so this bounds the
 /// memory a build spends rather than its states: `(a|b)*a(a|b){k}` has eight a
 /// row (the bytes below `a`, `a`, `b`, the bytes above, the end of input), and
 /// at `k = 15` the builder makes a table of 65,536 states, sixteen times
@@ -66,7 +68,7 @@ use super::automaton::{Reached, canonical_order, chain_fits, reaches};
 /// descriptor operation already handles -- the relation stays undecided and the
 /// walk still matches the pattern, since the walk runs the regex rather than
 /// the automaton.
-pub(crate) const BUILD_SIZE_LIMIT: usize = 8 * 1024 * 1024;
+pub(crate) const BUILD_SIZE_LIMIT: usize = MAX_STATES * 514 * 4;
 
 /// A byte's equivalence class. Two bytes share a class when no state's
 /// transition tells them apart.
