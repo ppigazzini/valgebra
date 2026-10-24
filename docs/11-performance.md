@@ -630,8 +630,12 @@ program that builds validators per request, and to no validation call.
   each compiled pattern. It is keyed by the address of the schema's own
   buffers, which are stable for the life of the immutable schema, so a copied
   validator never inherits another's index; and a node the build traversal does
-  not reach falls back to reading its own text, so no answer depends on the
-  index being complete.
+  not reach falls back to reading its own text, so no verdict depends on the
+  index being complete. A report does -- a record with no plan is read by its
+  entries, and which branch of a union of records is explained follows that
+  reading -- so the traversal reaches every node a record can sit under. A
+  dataclass instance's attributes are read through the interned names, which
+  `--binding-object-walk` counts.
 
 ### Walking a Python value
 
@@ -747,7 +751,11 @@ program that builds validators per request, and to no validation call.
   margins above](#one-of-those-margins-moves-with-the-interpreter) describe. The
   instruction count of a snapshot reading is *higher* than in place -- the copy
   is instructions, and the stall it removes is not -- which is why the wall
-  clock decides this one.
+  clock decides this one. Before 3.12 allocating the copy may run a collection,
+  and a finalizer it runs may empty the list under the copy, so on 3.10 and
+  3.11 the copy holds the collector off for its own length: three calls, about
+  three hundred instructions a list, 1.4% to 1.6% of a thousand integers on the
+  profiled wheels.
 - **A tuple's elements are borrowed**, because a tuple cannot change while the
   caller holds it; a list cannot be read that way. On CPython,
   `PyTuple_GET_SIZE` and `PyTuple_GET_ITEM` read a tuple's storage whatever its

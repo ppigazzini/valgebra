@@ -796,7 +796,11 @@ whole — so each is ignored, as pydantic ignores msgspec's metadata and msgspec
 pydantic's. A library joins the vocabulary the way its README says, as a
 `GroupedMetadata` yielding the vocabulary's markers, and those are read; a
 class derived from one of the vocabulary's is read as the class it derives
-from.
+from. Its bounds are read as its attributes are, through a `__getattribute__`
+of its own where it has one, and once a class: which names a marker class
+answers is read the first time a marker of it is built into a validator and
+kept for the process, so a class given a bound after that keeps the reading
+it was first given.
 
 ```python
 from typing import Annotated

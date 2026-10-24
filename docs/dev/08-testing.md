@@ -298,6 +298,13 @@ moving a module moves its seed file to the sibling's path --
 seeds are replayed by nothing. `tests/test_proptest_seeds.py` holds every seed
 file to a property test beside it.
 
+**A module imports at its top only what every lane's interpreter ships.** PyPy
+has no `_tracemalloc` and no `gc.set_threshold`, so a test reading CPython's
+allocator or its collection thresholds imports the module inside the test its
+`skipif` stands down. Imported at the top, the module fails to collect on the
+PyPy lane, and every test in it goes with it at exit 2:
+`tests/test_walk_edges.py`'s transient row is the shape.
+
 Every check that tells a test file from a shipped one asks one predicate,
 `is_test_module` in `scripts/_lib.py`, which reads the declaration the way Rust
 does -- the `#[cfg(test)]` on the `mod NAME;` in the file's parent module --
@@ -333,6 +340,15 @@ answers `AttributeError` or a `SyntaxError` the row does not expect. So a row
 states the release it needs as `Since(n)` -- the one spelling the corpora use
 for one -- and stands down below it, which is the `skipif` the Python suite
 writes one layer up.
+
+**A row that reads what a process has imported runs in a process of its own.**
+The interpreter keeps a module it imported for the process, and the frontend
+holds `typing_extensions` once it finds it loaded, so a row asking what a form
+reads where that module was never imported cannot share a process with the
+rows that import it: it answers either way, by the order the rows ran in.
+`rusty_fork_test!` runs such a row in a child process of the test binary,
+`typing_unpack_reads_where_typing_extensions_was_never_loaded` among them, as
+the Python suite runs one through `sys.executable` in a subprocess.
 
 **On CPython 3.15, two corpora can hang each other's first imports.** The defect
 is the interpreter's, and 3.15.0rc2 has it: resolving a `lazy import`
