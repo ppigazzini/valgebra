@@ -685,6 +685,9 @@
     "tomllib": {
       "since": "3.11"
     },
+    "tracemalloc": {
+      "since": "3.10"
+    },
     "types": {
       "since": "3.10"
     },

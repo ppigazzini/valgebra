@@ -18,6 +18,7 @@ import datetime as dt
 import decimal
 import enum
 import fractions
+import sys
 from typing import Annotated, Literal
 
 import annotated_types as at
@@ -357,3 +358,30 @@ def test_a_list_of_scalars_decides_the_same_at_every_width(width: int) -> None:
         schema.validate(spoiled, fail_fast=True)
     assert caught.value.code == "int_type"
     assert caught.value.path == (width - 1,)
+
+
+@pytest.mark.skipif(
+    sys.implementation.name != "cpython",
+    reason="tracemalloc traces CPython's allocator",
+)
+# BOUND: SNAPSHOT_MAX_ELEMENTS
+def test_a_list_past_the_ceiling_is_read_without_a_copy() -> None:
+    """Past the ceiling a list is read in place, so the copy's transient stops there.
+
+    Inside the band a list one test settles is read through a tuple copied from
+    it, eight bytes an element, and the ceiling bounds that copy at two
+    mebibytes. A list four times the ceiling's width is read in place, which
+    allocates nothing its size: read through a copy it would trace eight.
+    """
+    import tracemalloc  # noqa: PLC0415 -- PyPy ships no `_tracemalloc`
+
+    schema = Validator(list[int])
+    wide = [0] * (4 * SNAPSHOT_BAND[1])
+    tracemalloc.start()
+    try:
+        assert schema.is_valid(wide)
+        schema.validate(wide)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert peak < 8 * SNAPSHOT_BAND[1], peak
