@@ -163,7 +163,8 @@ decision steps. None caps time, and four costs grow inside them:
   union(int, [t], [union(t, str)]))` reads a list's element as `t` under both
   list branches. The walk keeps what it answered for the definition at that
   value, for the call, and the next member finds it there, so the walk is
-  linear in the value on every entry point, a JSON document included. A
+  linear in the value on every entry point, a JSON document and the walk a
+  `complement` reads included. A
   definition that reaches a predicate, or a class whose metaclass is not
   `type`, is not kept: the walk calls that code at each occurrence it reaches
   ([refinements](05-refinements.md)), so each level of the value is walked once

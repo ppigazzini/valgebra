@@ -414,6 +414,10 @@ impl Memo {
 #[derive(Default)]
 pub(crate) struct Kept {
     decided: FxHashMap<(usize, usize), Decided>,
+    /// The stops settling walks met, with their rooms. A settling walk reads
+    /// past a stop, so its stop is the third value of the walk it ended, and a
+    /// settling walk with no more room ends the same way.
+    settled: FxHashMap<(usize, usize), Decided>,
     explained: FxHashMap<(usize, usize), Explained>,
     /// One reference per Python value a key names.
     held: Vec<Py<PyAny>>,
@@ -423,7 +427,21 @@ impl Kept {
     /// The answer a deciding walk kept for this pair, where it answers a walk
     /// begun with `room`.
     pub(crate) fn decided(&self, key: (usize, usize), room: Room) -> Option<Answer> {
-        match self.decided.get(&key)? {
+        Self::read(&self.decided, key, room)
+    }
+
+    /// The stop a settling walk kept for this pair, where it answers a settling
+    /// walk begun with `room`.
+    pub(crate) fn settled(&self, key: (usize, usize), room: Room) -> Option<Answer> {
+        Self::read(&self.settled, key, room)
+    }
+
+    fn read(
+        table: &FxHashMap<(usize, usize), Decided>,
+        key: (usize, usize),
+        room: Room,
+    ) -> Option<Answer> {
+        match table.get(&key)? {
             Decided::Answered(answer) => Some(*answer),
             Decided::Stopped(code, rooms) => {
                 rooms
@@ -506,19 +524,32 @@ impl Kept {
         key: (usize, usize),
         value: &Value<'_, '_>,
         answer: Answer,
+        settling: bool,
     ) {
         self.hold(value);
         let Some((code, room)) = answer.stopped.filter(|_| !answer.admitted) else {
             self.decided.insert(key, Decided::Answered(answer));
             return;
         };
-        match self.decided.get_mut(&key) {
+        if settling {
+            Self::keep_stop(&mut self.settled, key, code, room);
+        }
+        Self::keep_stop(&mut self.decided, key, code, room);
+    }
+
+    fn keep_stop(
+        table: &mut FxHashMap<(usize, usize), Decided>,
+        key: (usize, usize),
+        code: Code,
+        room: Room,
+    ) {
+        match table.get_mut(&key) {
             Some(Decided::Stopped(_, rooms)) => {
                 rooms.retain(|kept| !kept.within(room));
                 rooms.push(room);
             }
             _ => {
-                self.decided.insert(key, Decided::Stopped(code, vec![room]));
+                table.insert(key, Decided::Stopped(code, vec![room]));
             }
         }
     }

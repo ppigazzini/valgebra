@@ -1522,15 +1522,25 @@ fn remembered_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -
     } else {
         ctx.state.recall(|kept| kept.decided(key, room))
     };
-    // A settling walk takes an answer and never a stop: a refusal kept with a
-    // stop was met by a walk that ended its scan there, and reading past it
-    // may find a part that decides.
+    // A settling walk takes an answer, and a stop only where a settling walk
+    // met it: a refusal kept with a stop by another walk was met by one that
+    // ended its scan there, and reading past it may find a part that decides.
+    // A settling walk read past it, so its stop answers one with no more room
+    // as the walk that kept it ended, `true` with the stop.
     let settling = ctx.mode == WalkMode::Settle;
-    if let Some(found) = found.filter(|found| !(settling && found.stop().is_some())) {
+    let found = if settling {
+        found
+            .filter(|found| found.stop().is_none())
+            .or_else(|| ctx.state.recall(|kept| kept.settled(key, room)))
+    } else {
+        found
+    };
+    if let Some(found) = found {
         if !found.admitted
             && let Some(code) = found.stop()
         {
             record_stop(code, ctx);
+            return settling;
         }
         return found.admitted;
     }
@@ -1567,7 +1577,8 @@ fn remembered_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -
             ctx.state
                 .keep(|kept| kept.keep_explained(key, value, answer, from, reported));
         } else {
-            ctx.state.keep(|kept| kept.keep_decided(key, value, answer));
+            ctx.state
+                .keep(|kept| kept.keep_decided(key, value, answer, settling));
         }
     }
     admitted

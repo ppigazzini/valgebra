@@ -1143,6 +1143,35 @@ def test_a_definition_two_branches_share_is_walked_once_per_level() -> None:
         assert large < small * 5 + 0.01, (name, small, large)
 
 
+def test_a_complement_of_a_shared_definition_costs_what_the_walk_does() -> None:
+    """A complement over a definition two branches share is linear near its bound.
+
+    A complement reads its inner walk with a stop as a third answer, and near
+    the bound every walk of the shared definition stops. Taking none of the
+    stops the walk kept, the inner walk reads each level below once per path,
+    and every level past the first stop doubles it; it takes the stops a walk
+    reading them the same way kept, as the walk takes its own, so a chain at
+    the bound costs what one inside it does and a chain past the bounds what
+    one at them does.
+    """
+    schema = Validator(
+        complement(recursive(lambda t: union(int, [t], [union(t, str)])))
+    )
+
+    def chain(depth: int) -> object:
+        value: object = 0
+        for _ in range(depth):
+            value = [value]
+        return value
+
+    for short, long in ((96, 100), (200, 400)):
+        for name, check in _every_entry_point(schema).items():
+            assert not schema.is_valid(chain(long))
+            small = _fastest(lambda check=check, short=short: check(chain(short)))
+            large = _fastest(lambda check=check, long=long: check(chain(long)))
+            assert large < small * 5 + 0.01, (name, short, long, small, large)
+
+
 def test_a_value_every_branch_walks_is_linear_where_one_admits_it() -> None:
     """A value the schema admits is linear too, and so are a meet and two clauses.
 

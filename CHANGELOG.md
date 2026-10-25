@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: an attribute a getattr hook answers is code's answer, never missing
 - fix: a goal asked while a reference is resolved reads it positively -- internal
+- fix: a complement walks a definition two members share once per room
 
 -->
 
@@ -33,6 +34,21 @@ answer of its own, or a repair to a change not yet released.
   name neither can hold is the hook's answer: such a pair answers
   `undecided`, and one refuted by a value an assignment puts there -- `a = "x"`
   against a protocol `a: int` -- stays `not_subset`.
+
+### Security
+
+- **A complement walks a definition two members share once per room.** A
+  `complement` reads its inner walk with a stop as a third answer, and took no
+  stop the walk kept for a definition at a value, so where every walk of a
+  shared definition stops -- near the walk's bound, and past it -- each level
+  below was walked once per path. `complement(recursive(lambda t: union(int,
+  [t], [union(t, str)])))` took 0.3 seconds to refuse a list nested 101 deep
+  on the 0.0.17 wheel and 3 seconds at 102, a value its schema admits and that
+  `docs/10-limits.md` states the walk linear in, and a list nested 128 deep
+  took longer than fifteen seconds on every release. The cost inside the
+  bounds reached 0.0.17 through 0.0.20, and the one past them every release. A stop the inner walk kept answers one
+  of its own kind with no more room, as the walk's own stops answer it: the
+  complement costs what the walk costs, on every entry point.
 
 ## [0.0.20] - 2026-10-24
 

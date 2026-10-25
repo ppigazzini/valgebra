@@ -142,8 +142,16 @@ code: the third value. A union reads each branch with the cell cleared
 stops beside it are dropped, and with none the branches' stop is the answer.
 The complement admits on its inner walk's refusal, refuses on a member, and
 refuses with the code on a stop, which it puts back so a complement above
-reads it too. A settling walk takes an answer from the memo and never a stop:
-a refusal kept with a stop was met by a walk that ended its scan there.
+reads it too. A settling walk takes an answer from the memo, and a stop only
+where a settling walk kept it (`Kept::settled`): a stop any other walk kept was
+met by a walk that ended its scan there, where reading past it may find a part
+that decides, and a settling walk read past every stop it met. Its stop answers
+a settling walk with no more room on either count, as the walk that kept it
+ended -- `true`, with the stop -- since a walk with less room stops at least
+where that one did. Taking none, past its bound a complement over a definition
+two members share walks each pair once per path, doubling with each level above
+the stop; `assert_a_settling_walk_costs_what_a_deciding_walk_does` in
+`memo_tests.rs` holds it to the deciding walk's count.
 
 **Every stop answers through `stopped`.** One that answered `false` in a
 settling walk would read as a decided refusal, and the complement over it would

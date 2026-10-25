@@ -333,6 +333,41 @@ fn assert_a_stop_is_found_again(py: Python<'_>) {
     }
 }
 
+/// A settling walk -- a complement's -- that meets a bound enters a shared
+/// definition as often as a deciding walk does: it takes the stops a settling
+/// walk kept, so each pair is walked once for each room its paths reach it
+/// with, where taking none would walk it once per path, doubling with each
+/// level above the stop.
+///
+/// The trail is placed so the unfolding bound is a few levels down, so a memo
+/// that keeps no settling stop fails here in a few thousand entries rather
+/// than running for ever: the tests below that read a value past the bounds
+/// call this first.
+fn assert_a_settling_walk_costs_what_a_deciding_walk_does(py: Python<'_>) {
+    let defs = two_lists();
+    let at = (&[][..], &defs[..]);
+    let none = py.None().into_bound(py);
+    for room in [6, 12] {
+        let value = nested(none.clone(), room + 4, in_a_list);
+        let walked = |mode| {
+            let state = WalkState::new();
+            // Pairs no walk enters: no definition has that index.
+            for open in 0..MAX_RECURSION_DEPTH - room {
+                let opened = state.guard.borrow_mut().enter((open, usize::MAX));
+                assert!(matches!(opened, Entered::Open));
+            }
+            walk_in(py, &state, &reference(), &value, at, mode, true)
+        };
+        let (settled, decided) = (walked(WalkMode::Settle), walked(WalkMode::Fast));
+        // A stop answers `true` in a settling walk and refuses in a deciding
+        // one, and both meet the bound.
+        assert!(settled.admitted && !decided.admitted, "{room} unfoldings");
+        assert_eq!(settled.stopped, Some(RECURSION_LIMIT), "{room} unfoldings");
+        assert_eq!(decided.stopped, Some(RECURSION_LIMIT), "{room} unfoldings");
+        assert_eq!(settled.entered, decided.entered, "{room} unfoldings");
+    }
+}
+
 #[test]
 fn a_shared_definition_is_entered_a_bounded_number_of_times_per_level() {
     Python::attach(|py| {
@@ -381,9 +416,10 @@ fn a_value_one_branch_admits_where_another_stops_is_admitted() {
 
 /// A settling walk reads a stop as a third answer, and the memo keeps it so:
 /// a walk that met a stop and admitted no other way is kept as the refusal it
-/// is to every other walk, and a settling walk takes an answer it finds and
-/// never a stop. With the memo or without, a settling walk admits alike and
-/// meets the same stop, at a loop and at the unfolding bound.
+/// is to every other walk, and a settling walk takes an answer it finds and a
+/// stop only where a settling walk kept it, which read past every stop it met.
+/// With the memo or without, a settling walk admits alike and meets the same
+/// stop, at a loop and at the unfolding bound.
 #[test]
 fn a_settling_walk_meets_the_stop_the_walk_without_the_memo_meets() {
     Python::attach(|py| {
@@ -561,19 +597,22 @@ fn a_union_whose_branches_share_no_definition_arms_nothing() {
     });
 }
 
-/// A value nested past the bounds is refused by the bound, in every mode, and
-/// the entries its walk makes stop growing with its depth.
+/// A value nested past the bounds meets the bound in every mode -- a refusal,
+/// and a stop in a settling walk, which answers `true` -- and the entries its
+/// walk makes stop growing with its depth.
 ///
 /// Past the bounds every walk stops, and each is kept with its room; a value
 /// is reached with a different room by each path to it, and walked once for
 /// each, which the bounds cap. An explaining walk says a stopped report again
 /// where its deciding walk stops too, rather than explaining the levels below
-/// once per room.
+/// once per room, and a settling walk, which a stop does not refuse, takes the
+/// stops a settling walk kept.
 #[test]
 fn a_value_past_the_bounds_is_refused_by_its_stop_at_a_bounded_cost() {
     Python::attach(|py| {
         assert_linear_in_the_depth(py);
         assert_a_stop_is_found_again(py);
+        assert_a_settling_walk_costs_what_a_deciding_walk_does(py);
         let defs = two_lists();
         let none = py.None().into_bound(py);
         let mut entries = Vec::new();
@@ -581,9 +620,14 @@ fn a_value_past_the_bounds_is_refused_by_its_stop_at_a_bounded_cost() {
             let value = nested(none.clone(), depth, in_a_list);
             let at = (&[][..], &defs[..]);
             let mut at_depth = Vec::new();
-            for mode in [WalkMode::Fast, WalkMode::Explain, WalkMode::ExplainFailFast] {
+            for mode in [
+                WalkMode::Fast,
+                WalkMode::Explain,
+                WalkMode::ExplainFailFast,
+                WalkMode::Settle,
+            ] {
                 let walked = walk(py, &reference(), &value, at, mode, true);
-                assert!(!walked.admitted);
+                assert_eq!(walked.admitted, mode == WalkMode::Settle, "{mode:?}");
                 assert_eq!(walked.stopped, Some(RECURSION_LIMIT), "{mode:?}");
                 if mode.explains() {
                     assert_eq!(
@@ -641,7 +685,7 @@ fn an_answer_found_carries_its_stop_and_a_report_its_own_path() {
         };
 
         let state = WalkState::new();
-        state.keep(|kept| kept.keep_decided(key, &Value::Py(&value), stopped));
+        state.keep(|kept| kept.keep_decided(key, &Value::Py(&value), stopped, false));
         state.memo.armed(|| ());
         let (admitted, _) = find(WalkMode::Fast, &state, &mut Vec::new());
         assert!(!admitted);
@@ -892,7 +936,7 @@ fn the_memo_holds_each_value_it_keys_for_the_length_of_the_call() {
             stopped: None,
         };
         let key = (value.as_ptr() as usize, 0);
-        state.keep(|kept| kept.keep_decided(key, &Value::Py(&value), answer));
+        state.keep(|kept| kept.keep_decided(key, &Value::Py(&value), answer, false));
         assert_eq!(held(), before + 1);
         drop(state);
         assert_eq!(held(), before);
@@ -932,7 +976,7 @@ fn a_stop_answers_a_walk_with_no_more_room_on_either_count() {
                 admitted: false,
                 stopped: Some((RECURSION_LIMIT, kept_at)),
             };
-            state.keep(|kept| kept.keep_decided(key, &Value::Py(&value), stopped));
+            state.keep(|kept| kept.keep_decided(key, &Value::Py(&value), stopped, false));
         }
         for (levels, unfolded, answered) in [
             (10, 4, true),
