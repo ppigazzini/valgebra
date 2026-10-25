@@ -149,3 +149,33 @@ def test_a_bound_is_a_checkers_to_hold_and_is_not_read() -> None:
     # the body with the argument in place, as the argument was written.
     aliases = _aliases("type Bounded[T: int] = list[T]\n")
     assert Validator(aliases["Bounded"][str]) == Validator(list[str])  # ty: ignore[not-subscriptable]
+
+
+@needs_the_type_statement
+def test_an_unpacked_alias_splices_the_tuple_it_stands_for() -> None:
+    """`*Tail` under `type Tail = tuple[int, ...]` is that tuple unpacked.
+
+    An alias stands for the form its value names, so unpacked it splices or
+    repeats as the tuple it names would: bare, applied to arguments, a fixed
+    tuple, and an alias of an alias. Two unpacked tails are still one tail too
+    many, as written out.
+    """
+    aliases = _aliases(
+        "type Tail = tuple[int, ...]\n"
+        "type Pairs[T] = tuple[T, ...]\n"
+        "type Fixed = tuple[int, str]\n"
+        "type Again = Tail\n"
+        "Unpack = __import__('typing').Unpack\n"
+    )
+    unpack = aliases["Unpack"]
+    tail, pairs, fixed, again = (
+        aliases[name] for name in ("Tail", "Pairs", "Fixed", "Again")
+    )
+    written = Validator(tuple[str, unpack[tuple[int, ...]]])  # ty: ignore[invalid-type-form]
+    assert Validator(tuple[str, unpack[tail]]) == written  # ty: ignore[invalid-type-form]
+    assert Validator(tuple[str, unpack[again]]) == written  # ty: ignore[invalid-type-form]
+    assert Validator(tuple[str, unpack[pairs[int]]]) == written  # ty: ignore[invalid-type-form, not-subscriptable]
+    assert Validator(tuple[bool, unpack[fixed]]) == Validator(tuple[bool, int, str])  # ty: ignore[invalid-type-form]
+    assert Validator(tuple[str, unpack[tail]]).is_valid(("a", 1, 2))  # ty: ignore[invalid-type-form]
+    with pytest.raises(NotImplementedError, match="nothing may follow the tail"):
+        Validator(tuple[unpack[tail], unpack[tail]])  # ty: ignore[invalid-type-form]

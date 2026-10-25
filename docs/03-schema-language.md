@@ -198,6 +198,10 @@ algebra does not spell — so that form is rejected rather than read as somethin
 else. So is a `...` after a splice, `tuple[*tuple[A, B], ...]`, because `...`
 repeats the one element written before it and a splice is not one element, and
 an unpacked tuple anywhere but a tuple's arguments, such as `list[*tuple[int]]`.
+A `type` alias stands for the form it names, so `*Tail` under `type Tail =
+tuple[int, ...]` is the tuple's unpack, an applied generic alias's with its
+arguments in place; an alias that unpacks itself, `type Rec = tuple[int, *Rec]`,
+holds itself and has no finite length, and is refused.
 
 ```python
 from valgebra import Validator
@@ -375,6 +379,8 @@ with a message instead:
 | `Validator[T]` | annotates a validator for a static checker; the schema, or a compiled `Validator`, is what builds |
 | bare `TypedDict` | the base a `TypedDict` class is declared from; the class is what has a set |
 | bare `NamedTuple` | names every named tuple class, and at runtime it is a function `isinstance` cannot ask |
+| bare `Generic` | the base a generic class is declared from; the class deriving from it is what has a set |
+| `Required[NotRequired[X]]` and `NotRequired[Required[X]]` | the typing spec makes the pair an error, and the two qualifiers name two records: the runtime's key sets read the key as required and pydantic as optional |
 
 A qualifier is the exception that is read rather than refused:
 `Required[X]`, `NotRequired[X]` and `ReadOnly[X]` survive hint resolution

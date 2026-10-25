@@ -611,6 +611,36 @@ def test_a_qualifier_is_unwrapped_wherever_it_is_written() -> None:
         assert not Validator(qualifier[int]).is_valid("1")
 
 
+def test_a_qualifier_nested_in_itself_is_read_as_the_one_qualifier() -> None:
+    """`Required[Required[T]]` is an error the spec names, and names one record.
+
+    A form the typing spec calls an error is read where it names one set, and a
+    qualifier nested in itself says once what it says twice; `ReadOnly` says
+    nothing about presence and nests the same way. Each spelling arrives in a
+    release above the floor, which is what the guards are for.
+    """
+    if sys.version_info >= (3, 11):
+
+        class Twice(typing.TypedDict):
+            a: typing.Required[typing.Required[int]]  # ty: ignore[invalid-type-form]
+            b: typing.NotRequired[typing.NotRequired[int]]  # ty: ignore[invalid-type-form]
+
+        class Once(typing.TypedDict):
+            a: typing.Required[int]
+            b: typing.NotRequired[int]
+
+        assert Validator(Twice) == Validator(Once)
+    if sys.version_info >= (3, 13):
+
+        class Held(typing.TypedDict):
+            a: typing.ReadOnly[typing.ReadOnly[int]]
+
+        class Plain(typing.TypedDict):
+            a: int
+
+        assert Validator(Held) == Validator(Plain)
+
+
 def test_a_union_of_one_member_is_that_member() -> None:
     """`Union[int]` is `int`: typing collapses it before the frontend sees it.
 

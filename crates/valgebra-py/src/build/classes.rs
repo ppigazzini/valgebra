@@ -160,6 +160,16 @@ pub(super) fn build_type_object(
     if ty.is(forms.object.bind(py)) {
         return Ok(Schema::ANYTHING);
     }
+    // `typing.Generic` is the base a generic class derives from, and no type:
+    // the annotation grammar has no production for it, and read as a class it
+    // would be the instances of every generic class, which no annotation means.
+    if ty.is(forms.generic.bind(py)) {
+        return Err(not_implemented(format!(
+            "{} is the base a generic class is declared from, not a type: pass \
+             the generic class itself, applied to the arguments its fields need",
+            summarize(ty.as_any())?
+        )));
+    }
     // A bare typing special form is a class on some Pythons (notably `Union`).
     // It is not a value, so reject it rather than building an instance check that
     // accepts nothing; the special forms that are not types are rejected on the
@@ -871,17 +881,25 @@ pub(super) fn build_typed_dict(
 /// may wrap another -- `ReadOnly[NotRequired[T]]` is legal -- and `Annotated`
 /// may wrap either, so the search goes through the ones that carry no answer
 /// rather than stopping at the first.
+///
+/// It reads on below the first that answers, because the typing spec makes two
+/// spellings of one item an error and they do not name the same set:
+/// `Required[NotRequired[T]]` is a key the runtime's key sets read as required
+/// and pydantic as optional, so it is refused, in either order and with an
+/// `Annotated` between. A qualifier nested in itself, `Required[Required[T]]`,
+/// is an error that names one set, and is read as the one qualifier.
 pub(super) fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<bool>> {
     let py = hint.py();
     let forms = forms(py)?;
     let mut current = hint.clone();
+    let mut stated = None;
     for _ in 0..MAX_BUILD_DEPTH {
         // Asked rather than tried: a field that carries no qualifier is the
         // common one, and an attribute that is absent answers by *raising* --
         // an exception built, thrown and dropped per field. `getattr_opt`
         // reads the same absence without one.
         let Some(origin) = optional_attribute(&current, intern!(py, "__origin__"))? else {
-            return Ok(None);
+            return Ok(stated);
         };
         // An `Annotated` alias's origin is the type it annotates, which may be
         // the qualifier: `Annotated[NotRequired[int], Ge(0)]` says the key is
@@ -893,40 +911,54 @@ pub(super) fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<boo
         // written with. A class it annotates carries no qualifier.
         if current.get_type().is(forms.annotated_alias.bind(py)) {
             if origin.is_instance_of::<PyType>() {
-                return Ok(None);
+                return Ok(stated);
             }
             current = origin;
             continue;
         }
+        let mut says = None;
         for (marker, answer) in [(&forms.required, true), (&forms.not_required, false)] {
             if let Some(marker) = marker
                 && origin.is(marker.bind(py))
             {
-                return Ok(Some(answer));
+                says = Some(answer);
             }
         }
         // `typing_extensions`' spellings, which are forms: the origin of an
         // `Annotated` or a generic field is a class, and asks nothing.
-        if !origin.is_instance_of::<PyType>() {
+        if says.is_none() && !origin.is_instance_of::<PyType>() {
             if is_extension(&origin, |held| &held.required)? {
-                return Ok(Some(true));
-            }
-            if is_extension(&origin, |held| &held.not_required)? {
-                return Ok(Some(false));
+                says = Some(true);
+            } else if is_extension(&origin, |held| &held.not_required)? {
+                says = Some(false);
             }
         }
-        if !is_field_qualifier(&origin)? {
-            return Ok(None);
+        if let Some(again) = says {
+            if *stated.get_or_insert(again) != again {
+                return Err(not_implemented(format!(
+                    "{} says the key is both required and not required, which \
+                     the typing spec makes an error and which names no one \
+                     record: write one of Required and NotRequired",
+                    summarize(hint)?
+                )));
+            }
+        } else if !is_field_qualifier(&origin)? {
+            return Ok(stated);
         }
         let Some(args) = current.getattr_opt(intern!(py, "__args__"))? else {
-            return Ok(None);
+            return Ok(stated);
         };
         let Ok(inner) = args.get_item(0) else {
-            return Ok(None);
+            return Ok(stated);
         };
+        // A class carries no qualifier, and it is what a qualifier most often
+        // wraps: answered by its type, without asking it for an origin.
+        if inner.is_instance_of::<PyType>() {
+            return Ok(stated);
+        }
         current = inner;
     }
-    Ok(None)
+    Ok(stated)
 }
 
 /// Whether `__extra_items__` says its author gave no `extra_items`.

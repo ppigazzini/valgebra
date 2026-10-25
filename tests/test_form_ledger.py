@@ -127,6 +127,9 @@ P = typing.ParamSpec("P")
 #: `ALSO` and the set of such cells all key on it.
 PROTOCOL_BASES = "bare `Protocol`, and a generic `Protocol[T]`"
 
+PRESENCE_PAIR = "`Required[NotRequired[X]]` and `NotRequired[Required[X]]`"
+BOTH_PRESENCES = "says the key is both required and not required"
+
 #: The two rows of `typing` aliases: the five read bare or parametrized, and the
 #: rest read bare and refused parametrized. Each names more than one form.
 TYPING_ALIASES = (
@@ -337,6 +340,17 @@ FORMS: dict[str, Reads | Refuses] = {
     "bare `NamedTuple`": Refuses(
         lambda: typing.NamedTuple, "the base a class is declared from"
     ),
+    "bare `Generic`": Refuses(
+        lambda: Generic, "the base a generic class is declared from"
+    ),
+    PRESENCE_PAIR: Refuses(
+        lambda: TypedDict(
+            "Both",
+            {"a": typing.Required[typing.NotRequired[int]]},  # ty: ignore[invalid-type-form]
+        ),
+        BOTH_PRESENCES,
+        needs=(3, 11),
+    ),
 }
 
 #: The second spelling of a cell that names two forms, so the row is not held by
@@ -367,6 +381,16 @@ ALSO: dict[str, list[Reads | Refuses]] = {
     "a set or frozen set literal": [
         Refuses(lambda: frozenset({int}), "a frozen set literal is not a schema"),
     ],
+    PRESENCE_PAIR: [
+        Refuses(
+            lambda: TypedDict(
+                "Both",
+                {"a": typing.NotRequired[typing.Required[int]]},  # ty: ignore[invalid-type-form]
+            ),
+            BOTH_PRESENCES,
+            needs=(3, 11),
+        ),
+    ],
 }
 if sys.version_info >= (3, 11):
     # The third of that cell's three forms arrives with the release that can
@@ -387,6 +411,7 @@ NAMES_MORE_THAN_ONE_FORM = {
     "`Final`, `ClassVar`",
     PROTOCOL_BASES,
     "a set or frozen set literal",
+    PRESENCE_PAIR,
 }
 
 

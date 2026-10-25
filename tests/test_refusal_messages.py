@@ -302,6 +302,14 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
         NotImplementedError,
         "is the annotation a static checker reads",
     ),
+    # `build/classes.rs`: the base a generic class derives from, which would
+    # otherwise be read as a class whose instances are every generic class's.
+    (
+        "bare Generic",
+        typing.Generic,
+        NotImplementedError,
+        "is the base a generic class is declared from",
+    ),
 ]
 
 if sys.version_info >= (3, 11):
@@ -326,6 +334,60 @@ if sys.version_info >= (3, 11):
             NotImplementedError,
             "of a dict literal is a TypedDict qualifier",
         )
+    )
+    # Two presence qualifiers on one item, which the spec makes an error and
+    # which name two records, in either order and with `Annotated` between.
+    REFUSALS.extend(
+        (
+            f"both presence qualifiers: {spelling}",
+            typing.TypedDict("Both", {"a": spelling}),
+            NotImplementedError,
+            "says the key is both required and not required",
+        )
+        for spelling in (
+            typing.Required[typing.NotRequired[int]],
+            typing.NotRequired[typing.Required[int]],
+            typing.Required[Annotated[typing.NotRequired[int], 0]],  # ty: ignore[invalid-type-form]
+        )
+    )
+
+if sys.version_info >= (3, 12):
+    # A `type` alias unpacked into a tuple is read through to what it names, so
+    # the three ways that can fail each say what the alias stands for. The
+    # `type` statement is 3.12 syntax, and lazy, which the aliases naming
+    # themselves need. The self-unpacking alias is spelled with `Unpack`: an
+    # alias object takes `*` from 3.14 on, which reads it as `Unpack[Rec]`, and
+    # before that `*Rec` raises when the alias's value is read.
+    _aliases: dict[str, object] = {"Unpack": typing.Unpack}
+    exec(  # noqa: S102 - the syntax under test, not user input
+        "type NotTuple = int\n"
+        "type Ping = Pong\n"
+        "type Pong = Ping\n"
+        "type Rec = tuple[int, Unpack[Rec]]\n",
+        _aliases,
+    )
+    _not_tuple, _ping = _aliases["NotTuple"], _aliases["Ping"]
+    REFUSALS.extend(
+        [
+            (
+                "an alias of something that is not a tuple, unpacked",
+                tuple[typing.Unpack[_not_tuple]],  # ty: ignore[invalid-type-form]
+                NotImplementedError,
+                "only a tuple can be unpacked into a tuple schema, and",
+            ),
+            (
+                "aliases that name each other, unpacked",
+                tuple[typing.Unpack[_ping]],  # ty: ignore[invalid-type-form]
+                NotImplementedError,
+                "names itself through the aliases it stands for",
+            ),
+            (
+                "an alias that unpacks itself",
+                _aliases["Rec"],
+                NotImplementedError,
+                "unpacks itself, and a tuple that holds itself has no finite",
+            ),
+        ]
     )
 
 

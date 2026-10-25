@@ -124,6 +124,18 @@ pub(super) fn build_applied_alias(
     lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
+    let (arguments, body) = applied_body(alias, args, spelling)?;
+    tie_alias(alias, Some(&arguments), &body, lits, defs)
+}
+
+/// The arguments a generic alias is applied to, its defaults filled in, and
+/// its body with them substituted: what [`build_applied_alias`] builds, read
+/// without building it.
+fn applied_body<'py>(
+    alias: &Bound<'py, PyAny>,
+    args: &Bound<'py, PyTuple>,
+    spelling: &Bound<'_, PyAny>,
+) -> PyResult<(Bound<'py, PyTuple>, Bound<'py, PyAny>)> {
     let py = alias.py();
     let name = declared_name(alias)?;
     let parameters = type_parameters(alias)?;
@@ -178,7 +190,37 @@ pub(super) fn build_applied_alias(
     let value = alias.getattr(intern!(py, "__value__"))?;
     refuse_a_growing_argument(alias, &name, &value, &parameters)?;
     let body = substitute(&value, &parameters, &arguments.iter().collect::<Vec<_>>())?;
-    tie_alias(alias, Some(&arguments), &body, lits, defs)
+    Ok((arguments, body))
+}
+
+/// The form `form` stands for where it is a PEP 695 alias, bare or applied to
+/// arguments, with the alias read; `None` where it is no alias.
+///
+/// A bare alias stands for its value, a generic one written bare for its value
+/// with its defaults in place, and one applied to arguments for its value with
+/// them substituted, as [`build_applied_alias`] reads each.
+pub(super) fn alias_value<'py>(
+    form: &Bound<'py, PyAny>,
+) -> PyResult<Option<(Bound<'py, PyAny>, Bound<'py, PyAny>)>> {
+    let py = form.py();
+    let (alias, args) = if is_type_alias(form)? {
+        (form.clone(), PyTuple::empty(py))
+    } else if let Some(origin) = form.getattr_opt(intern!(py, "__origin__"))?
+        && is_type_alias(&origin)?
+    {
+        let args = form
+            .getattr(intern!(py, "__args__"))?
+            .cast_into::<PyTuple>()?;
+        (origin, args)
+    } else {
+        return Ok(None);
+    };
+    let value = if args.is_empty() && type_parameters(&alias)?.is_empty() {
+        alias.getattr(intern!(py, "__value__"))?
+    } else {
+        applied_body(&alias, &args, form)?.1
+    };
+    Ok(Some((alias, value)))
 }
 
 /// An open alias as a lookup copies it out of the list: the arguments it is
@@ -628,6 +670,10 @@ struct Forms {
     enum_class: Py<PyAny>,
     callable: Py<PyAny>,
     ellipsis: Py<PyAny>,
+    /// `typing.Generic`, the base a generic class is declared from, which names
+    /// no set: a class deriving from it is the set, and `typing_extensions`
+    /// spells it with the same object.
+    generic: Py<PyAny>,
     /// `typing.Protocol`, the base a protocol is declared from, which names no
     /// set of its own.
     protocol: Py<PyAny>,
@@ -727,6 +773,7 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             enum_class: py.import("enum")?.getattr("Enum")?.unbind(),
             callable: py.import("collections.abc")?.getattr("Callable")?.unbind(),
             ellipsis: builtins.getattr("Ellipsis")?.unbind(),
+            generic: typing.getattr("Generic")?.unbind(),
             protocol: typing.getattr("Protocol")?.unbind(),
             get_protocol_attrs: optional_form(&typing, "_get_protocol_attrs")?,
             class_var: typing.getattr("ClassVar")?.unbind(),

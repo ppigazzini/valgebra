@@ -300,13 +300,21 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    different sort of thing from the sequence node beside it, and neither
    spelling would be decided below the other.
 3. **`object`** is the lattice top, and a bare `Union`/`Optional` — a class on
-   some Pythons — is refused, because it is a form rather than a value.
+   some Pythons — is refused, because it is a form rather than a value. So is
+   bare `Generic`, by identity: it is the base a generic class derives from,
+   the annotation grammar has no production for it, and read as a class it
+   would be the instances of every generic class.
 4. **A `TypedDict`** declares itself by carrying `__required_keys__`, and
    becomes a keyed map. Its fields are what `get_type_hints` returns, not the
    raw `__annotations__` (see the reading below): under `from __future__ import annotations` those are
    strings, so a `NotRequired[...]` is invisible to the class's own key sets,
    which read every such key as required. A qualifier on the resolved hint wins
-   over the key sets, and a qualifier may wrap another. The keys it does not
+   over the key sets, and a qualifier may wrap another. `qualified_required`
+   reads on below the first presence qualifier it meets, through `Annotated`,
+   because a form the typing spec calls an error is read where it names one
+   set and refused where it names two: `Required` and `NotRequired` on one item
+   name two records and are refused, and a qualifier nested in itself,
+   `Required[Required[T]]`, names one and is read as the one. The keys it does not
    name are what PEP 728's two attributes say, read off the class:
    `__closed__` shuts them, `__extra_items__` types them, and neither leaves
    the record open over string keys. The runtime writes both on every class
@@ -524,7 +532,13 @@ which `build_tuple` reads off a worklist as the carrier's own, so a star or a
 one element written before it in its own tuple, so one after a splice is
 refused. An unpacked tuple anywhere but a tuple's arguments is refused in both
 spellings (`unpacked_outside_a_tuple`): read as a type, `*tuple[int]` is
-`tuple[int]`, which is not what either static checker reads.
+`tuple[int]`, which is not what either static checker reads. An unpacked
+operand that is a `type` alias is read through it (`alias_value` in `build.rs`,
+which an applied alias's substitution shares with `build_applied_alias`), and
+through every alias it names, a cycle of aliases standing for no form. A splice
+remembers the alias it came through, and a splice reached through an alias
+already open on the worklist is refused: `type Rec = tuple[int, *Rec]` holds
+itself, and read on, the worklist would never empty.
 
 Five origins are read as containers — `list`, `set`, `frozenset`, `dict` and
 `tuple` — and their arguments become element and key types. A parametrized

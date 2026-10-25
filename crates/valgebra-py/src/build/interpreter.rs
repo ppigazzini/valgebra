@@ -2676,9 +2676,38 @@ fn a_qualifier_states_required_ness_only_from_the_outside() {
                 Some(true),
             ),
             (Since(11), "dict[str, typing.NotRequired[int]]", None),
+            // A qualifier nested in itself says once what it says twice.
+            (
+                Since(11),
+                "typing.Required[typing.Required[int]]",
+                Some(true),
+            ),
+            (
+                Since(11),
+                "typing.NotRequired[typing.NotRequired[int]]",
+                Some(false),
+            ),
         ] {
             if since.met(py) {
                 assert_eq!(answer(expression), wanted, "{expression}");
+            }
+        }
+        // And the walk reads on below the first that answers, so the opposite
+        // one under it is found, through an `Annotated` between, and refused.
+        if Since(11).met(py) {
+            for expression in [
+                "typing.Required[typing.NotRequired[int]]",
+                "typing.NotRequired[typing.Required[int]]",
+                "typing.Required[typing.Annotated[typing.NotRequired[int], 1]]",
+            ] {
+                let hint = py
+                    .eval(
+                        &CString::new(expression).expect("no interior nul"),
+                        Some(&namespace),
+                        None,
+                    )
+                    .expect(expression);
+                assert!(qualified_required(&hint).is_err(), "{expression}");
             }
         }
     });
@@ -2799,6 +2828,22 @@ fn a_typing_extensions_form_reads_as_its_typing_spelling() {
             None,
         )
         .expect("the stand-in is gone");
+    });
+}
+
+/// A generic alias written bare and unpacked into a tuple is refused for the
+/// parameter it leaves without a default, as one written bare outside a
+/// tuple is: its value names a type variable no argument binds.
+#[test]
+fn a_bare_generic_alias_unpacked_names_its_unbound_parameter() {
+    Python::attach(|py| {
+        if !Since(12).met(py) {
+            return;
+        }
+        let unpacked = "(lambda ns: (exec('type Tail[T] = tuple[T, ...]', ns), \
+                        tuple[int, typing.Unpack[ns['Tail']]])[1])({})";
+        let refused = built(py, unpacked).expect_err("the parameter has no default");
+        assert!(refused.to_string().contains("has no default"), "{refused}");
     });
 }
 

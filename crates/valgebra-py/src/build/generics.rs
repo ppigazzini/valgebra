@@ -414,8 +414,9 @@ pub(super) fn build_type_argument(
 /// What an unpacked tuple argument contributes to the tuple that carries it.
 pub(super) enum Unpacked<'py> {
     /// `*tuple[A, B]`: its arguments splice in where it stands, and are read
-    /// as the carrier's own.
-    Fixed(Bound<'py, PyTuple>),
+    /// as the carrier's own; with the `type` alias it was read through, where
+    /// it was written as one.
+    Fixed(Bound<'py, PyTuple>, Option<Bound<'py, PyAny>>),
     /// `*tuple[B, ...]`: the tuple repeats `B` from here on.
     Tail(Bound<'py, PyAny>),
 }
@@ -430,7 +431,10 @@ pub(super) enum Unpacked<'py> {
 ///
 /// Only a tuple can be unpacked into a tuple. `*Ts` over a `TypeVarTuple` binds
 /// no element types at runtime, so it is refused here rather than read as an
-/// empty splice.
+/// empty splice. A `type` alias stands for the form its value names, so
+/// `*Tail` under `type Tail = tuple[int, ...]` is that tuple's unpack: it is read
+/// through every alias on the way, applied ones with their arguments in place,
+/// and aliases that name each other in a cycle stand for no form.
 pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Unpacked<'py>>> {
     let py = arg.py();
     let forms = forms(py)?;
@@ -444,13 +448,35 @@ pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Un
         let wrapped = forms.get_args.bind(py).call1((arg,))?;
         single_arg(wrapped.cast::<PyTuple>()?, arg, UNPACK_INSTEAD)?
     };
-    if !origin_of(&inner)?.is(py.get_type::<PyTuple>()) {
-        return Err(not_implemented(format!(
-            "only a tuple can be unpacked into a tuple schema; {} binds no \
-             element types at runtime",
-            summarize(&inner)?
-        )));
+    let mut inner = inner;
+    let mut through: Vec<Bound<'py, PyAny>> = Vec::new();
+    while let Some((alias, value)) = super::alias_value(&inner)? {
+        if through.iter().any(|met| met.is(&alias)) {
+            return Err(not_implemented(format!(
+                "{} names itself through the aliases it stands for, and so \
+                 stands for no type: write the tuple it means",
+                summarize(&alias)?
+            )));
+        }
+        through.push(alias);
+        inner = value;
     }
+    if !origin_of(&inner)?.is(py.get_type::<PyTuple>()) {
+        return Err(not_implemented(match through.first() {
+            Some(alias) => format!(
+                "only a tuple can be unpacked into a tuple schema, and {} stands \
+                 for {}",
+                summarize(alias)?,
+                summarize(&inner)?
+            ),
+            None => format!(
+                "only a tuple can be unpacked into a tuple schema; {} binds no \
+                 element types at runtime",
+                summarize(&inner)?
+            ),
+        }));
+    }
+    let alias = through.into_iter().next();
     let args = forms.get_args.bind(py).call1((&inner,))?;
     let args = args.cast_into::<PyTuple>()?;
     if args.len() == 2 && is_ellipsis(&args.get_item(1)?) {
@@ -459,9 +485,9 @@ pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Un
     // `*tuple[()]` splices nothing, in the spelling 3.10 gives it too, where
     // its one argument is the empty tuple and would splice in as an element.
     if spells_the_empty_tuple(&args)? {
-        return Ok(Some(Unpacked::Fixed(PyTuple::empty(py))));
+        return Ok(Some(Unpacked::Fixed(PyTuple::empty(py), alias)));
     }
-    Ok(Some(Unpacked::Fixed(args)))
+    Ok(Some(Unpacked::Fixed(args, alias)))
 }
 
 /// Whether `origin` is `typing.Unpack`, or `typing_extensions.Unpack` where it
@@ -525,6 +551,8 @@ struct Reading<'py> {
     /// Whether the argument just read was an element written in this tuple,
     /// which is what a `...` after it repeats.
     element_before: bool,
+    /// The `type` alias this tuple was spliced in through, where it was one.
+    alias: Option<Bound<'py, PyAny>>,
 }
 
 /// `tuple[...]`, in every shape typing spells it.
@@ -568,6 +596,7 @@ pub(super) fn build_tuple(
         args: args.iter(),
         begun: false,
         element_before: false,
+        alias: None,
     }];
     while let Some(reading) = open.last_mut() {
         let Some(arg) = reading.args.next() else {
@@ -584,11 +613,29 @@ pub(super) fn build_tuple(
             ));
         }
         match unpacked_tuple(&arg)? {
-            Some(Unpacked::Fixed(items)) => open.push(Reading {
-                args: items.iter(),
-                begun: false,
-                element_before: false,
-            }),
+            Some(Unpacked::Fixed(items, alias)) => {
+                // An alias spliced inside its own splice holds itself, so the
+                // tuple it names would have no finite length, and the worklist
+                // would grow without end.
+                if let Some(alias) = &alias
+                    && open
+                        .iter()
+                        .any(|reading| reading.alias.as_ref().is_some_and(|held| held.is(alias)))
+                {
+                    return Err(not_implemented(format!(
+                        "{} unpacks itself, and a tuple that holds itself has no \
+                         finite length: write the repeating part as a tail, \
+                         *tuple[T, ...]",
+                        summarize(alias)?
+                    )));
+                }
+                open.push(Reading {
+                    args: items.iter(),
+                    begun: false,
+                    element_before: false,
+                    alias,
+                });
+            }
             Some(Unpacked::Tail(item)) => tail = Some(item),
             None if is_ellipsis(&arg) => {
                 let repeated = if element_before { prefix.pop() } else { None };

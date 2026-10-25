@@ -16,6 +16,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an attribute a getattr hook answers is code's answer, never missing
 - fix: a goal asked while a reference is resolved reads it positively -- internal
 - fix: a complement walks a definition two members share once per room
+- fix: an unpacked type alias is the tuple it names, and two ill forms refuse
 
 -->
 
@@ -34,6 +35,24 @@ answer of its own, or a repair to a change not yet released.
   name neither can hold is the hook's answer: such a pair answers
   `undecided`, and one refuted by a value an assignment puts there -- `a = "x"`
   against a protocol `a: int` -- stays `not_subset`.
+- **A `type` alias unpacked into a tuple is the tuple it names.** `tuple[str,
+  *Tail]` under `type Tail = tuple[int, ...]` builds `tuple[str, *tuple[int,
+  ...]]`, as every type checker reads it, where it was refused with a reason
+  that was false of it: an applied generic alias splices with its arguments in
+  place, a fixed tuple's alias splices its elements, and an alias of an alias
+  is read through. An alias of something that is not a tuple is refused naming
+  what it stands for, and so are aliases naming each other in a cycle and an
+  alias that unpacks itself, `type Rec = tuple[int, *Rec]`, which has no finite
+  length.
+- **`Required` and `NotRequired` on one `TypedDict` item are refused.** The
+  typing spec makes the pair an error, and the two read as different records --
+  the runtime's key sets take the key as required and pydantic as optional --
+  where the outermost was read. A qualifier nested in itself,
+  `Required[Required[int]]`, names one record and is read as the one
+  qualifier.
+- **Bare `typing.Generic` is refused.** It is the base a generic class derives
+  from and no type, and it built an `isinstance` test admitting an instance of
+  every generic class.
 
 ### Security
 
