@@ -16,7 +16,7 @@ use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple, PyType}
 use rustc_hash::FxHashSet;
 use valgebra_core::{Field, MapClause, Schema, SeqShape};
 
-use super::classes::{field_name, is_truthy_attr};
+use super::classes::{build_object, build_typed_dict, declares_fields, field_name, is_truthy_attr};
 use super::{
     Pool, build_applied_alias, build_constant, build_schema, checked_key, forms, is_extension,
     is_forward_reference, is_type_alias, not_implemented,
@@ -142,11 +142,24 @@ pub(super) fn build_parametrized(
     if is_unpack_origin(origin)? {
         return Err(unpacked_outside_a_tuple(alias)?);
     }
+    // A generic `TypedDict`, dataclass or named tuple applied to its arguments
+    // is the class with them in its fields' place: `Box[int]` is a `Box` whose
+    // field of type `T` holds an `int`. A class whose instances are read by
+    // `isinstance` alone has no field the argument reaches, and is refused
+    // below with every other origin.
+    if let Ok(class) = origin.cast::<PyType>() {
+        if class.hasattr(intern!(py, "__required_keys__"))? {
+            return build_typed_dict(class, Some(args), lits, defs);
+        }
+        if declares_fields(class)? {
+            return build_object(class, Some(args), lits, defs);
+        }
+    }
     Err(not_implemented(format!(
         "unsupported typing form with origin {}; the subscripted forms read are \
          list, set, frozenset, dict, tuple, Union, Optional, Literal, Annotated, \
-         Callable, a generic type alias, and the TypedDict qualifiers Required, \
-         NotRequired and ReadOnly",
+         Callable, a generic type alias, a generic TypedDict, dataclass or named \
+         tuple, and the TypedDict qualifiers Required, NotRequired and ReadOnly",
         summarize(origin)?
     )))
 }

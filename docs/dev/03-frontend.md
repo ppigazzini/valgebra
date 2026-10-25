@@ -305,7 +305,12 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    the annotation grammar has no production for it, and read as a class it
    would be the instances of every generic class.
 4. **A `TypedDict`** declares itself by carrying `__required_keys__`, and
-   becomes a keyed map. Its fields are what `get_type_hints` returns, not the
+   becomes a keyed map. Its fields are what `get_type_hints` returns, with the
+   type variables its generic bases bind put in place (`bound_hints`: the
+   arguments it is applied to, each base's arguments read off the original
+   bases depth first since a `TypedDict`'s bases are not on its `__mro__`, a
+   default where nothing binds one, and a variable two bases bind two ways
+   refused; a class with no `Generic` on its `__mro__` binds nothing), not the
    raw `__annotations__` (see the reading below): under `from __future__ import annotations` those are
    strings, so a `NotRequired[...]` is invisible to the class's own key sets,
    which read every such key as required. A qualifier on the resolved hint wins
@@ -329,7 +334,9 @@ order of the questions, and each is asked of an attribute the runtime fills in:
 5. **An enum** is an instance check against the enumeration class.
 6. **A dataclass or a `NamedTuple`** is an instance check *plus* a deep check
    of each declared field, so a value of the right class with a field of the
-   wrong type is not a member. `instance_of` is this step with the declaration
+   wrong type is not a member. Its field types are `bound_hints`, as a
+   `TypedDict`'s are, so a field declared `T` through a base applied to `int`
+   is an `int`. `instance_of` is this step with the declaration
    left unread (`build_instances` in `build/classes.rs`): the class's atom for
    these two, a `TypeError` for a `TypedDict` or a `Protocol`, whose values are
    not instances of the class, and for every other class the node this step
@@ -466,10 +473,11 @@ itself, which no schema reads. The arm sits after every container, union,
 never matches, so a form that builds never reaches it.
 
 **A generic alias applied is its body with the arguments in place.** The last
-origin that builds is a PEP 695 alias, and only the refusal of an `Unpack`
-origin is asked after it, `typing`'s or `typing_extensions`'
-(`build_applied_alias` in `build.rs`), so a form any other arm reads pays
-nothing for it. The runtime keeps the alias, its parameters and its body, and
+origins asked are a PEP 695 alias, then the refusal of an `Unpack` origin,
+`typing`'s or `typing_extensions`' (`build_applied_alias` in `build.rs`), and
+last a generic `TypedDict`, dataclass or named tuple class, built as the class
+with its parameters bound to the arguments (`bound_hints` in
+`build/classes.rs`); so a form any other arm reads pays nothing for them. The runtime keeps the alias, its parameters and its body, and
 checks none of them: `Pair[int, str]` builds. So the arm refuses a parameter
 that is no `TypeVar`, asked by exact type since `typing_extensions`'
 `TypeVarTuple` is an instance of `TypeVar` below 3.11; counts the arguments

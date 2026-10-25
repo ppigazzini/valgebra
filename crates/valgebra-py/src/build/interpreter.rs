@@ -172,6 +172,51 @@ fn an_alias_definition_already_held_is_that_definition() {
     });
 }
 
+/// A class deriving from a generic record class applied reads the base's
+/// arguments in its fields, though it is built with none of its own, and the
+/// generic class written bare is refused for the parameter its field names.
+#[test]
+fn a_class_deriving_a_generic_one_applied_reads_its_arguments() {
+    Python::attach(|py| {
+        let class = |name: &str| {
+            format!(
+                r#"(lambda ns: (exec("import dataclasses, typing\nT = typing.TypeVar('T')\n@dataclasses.dataclass\nclass Box(typing.Generic[T]):\n    item: T\n@dataclasses.dataclass\nclass IntBox(Box[int]):\n    pass\n", ns), ns['{name}'])[1])({{}})"#
+            )
+        };
+        assert_eq!(
+            built(py, &class("IntBox")).expect("the derived class builds"),
+            "IntBox"
+        );
+        let refused = built(py, &class("Box")).expect_err("the bare class is refused");
+        assert!(refused.to_string().contains("is generic in T"), "{refused}");
+    });
+}
+
+/// A generic record class binds each parameter to the argument it is applied
+/// to, and two bases binding one parameter bind it once where they agree and
+/// are refused where they do not.
+#[test]
+fn a_generic_class_binds_each_parameter_once() {
+    Python::attach(|py| {
+        let program = r"import dataclasses, typing\nT = typing.TypeVar('T')\n@dataclasses.dataclass\nclass A(typing.Generic[T]):\n    x: T\n@dataclasses.dataclass\nclass B(A[int]):\n    pass\n@dataclasses.dataclass\nclass C(A[int]):\n    pass\n@dataclasses.dataclass\nclass D(B, C):\n    pass\n@dataclasses.dataclass\nclass E(A[str]):\n    pass\n@dataclasses.dataclass\nclass F(B, E):\n    pass\n";
+        let spelled =
+            |form: &str| format!(r#"(lambda ns: (exec("{program}", ns), {form})[1])({{}})"#);
+        assert_eq!(
+            built(py, &spelled("ns['A'][int]")).expect("the applied class builds"),
+            "A"
+        );
+        assert_eq!(
+            built(py, &spelled("ns['D']")).expect("two bases agreeing build"),
+            "D"
+        );
+        let refused = built(py, &spelled("ns['F']")).expect_err("two bases disagree");
+        assert!(
+            refused.to_string().contains("through one base and to"),
+            "{refused}"
+        );
+    });
+}
+
 /// Every spelling the frontend dispatches on, and the schema it must reach.
 ///
 /// One row per arm rather than per feature: a mutant that folds two arms

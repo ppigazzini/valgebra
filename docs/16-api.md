@@ -110,7 +110,9 @@ declaration it did not make**, the second quiet one:
 `intersection(list[int], Plain)` as `Plain`, and `intersection(Plain, P)` for a
 protocol `P` as `Plain`, because a `NamedTuple` and a dataclass are built as
 exactly that meet and the schema does not record whether the shape or the
-record was the class's own declaration;
+record was the class's own declaration -- and so a generic dataclass or named
+tuple applied to its arguments prints as its name, `Box[int]` as `Box`, which
+reads back as the class's defaults or is refused where a parameter has none;
 and a **schema past the renderer's own depth bound**, which gives up and prints
 `<...>`. The bound is
 within reach: no *single* annotation can be written deep enough, since the

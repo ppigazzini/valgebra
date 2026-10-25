@@ -17,8 +17,23 @@ answer of its own, or a repair to a change not yet released.
 - fix: a goal asked while a reference is resolved reads it positively -- internal
 - fix: a complement walks a definition two members share once per room
 - fix: an unpacked type alias is the tuple it names, and two ill forms refuse
+- feat: a generic record class applied is read with its arguments in place
 
 -->
+
+### Added
+
+- **A generic `TypedDict`, dataclass or `NamedTuple` applied is read with its
+  arguments in place.** `Box[int]` for a dataclass `Box(Generic[T])` with a
+  field `item: T` is a `Box` whose `item` holds an `int`, where it was refused,
+  and so is a class deriving from one applied, `class IntBox(Box[int])`, or a
+  `TypedDict` child of `Pair[int]`, however deep the derivation, which built
+  nothing either: the field read `T` and was refused as a type variable. A
+  parameter neither applied nor bound takes its PEP 696 default; one with none,
+  named by a field of the class written bare, is refused naming the class and
+  the variable, and so is a type variable two bases bind to two types. A
+  generic class `isinstance` alone answers is refused applied, as it was. A
+  generic `TypedDict` and `NamedTuple` need 3.11.
 
 ### Fixed
 

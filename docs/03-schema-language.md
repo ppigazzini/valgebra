@@ -370,7 +370,7 @@ with a message instead:
 | `TypeVar`, `ParamSpec`, `TypeVarTuple` | a variable stands for a type and is not one |
 | `Final`, `ClassVar` | a declaration about a name, not about a value; a dataclass field's `Final[T]` is read as `T` ([classes](#classes)) |
 | `Unpack[X]` | binds element types into a `tuple[...]`, so it has no meaning alone, and nor has `*tuple[...]` outside one |
-| a user `Generic[T]` parametrization | the parameter is erased at runtime, so the type argument narrows nothing |
+| a user `Generic[T]` class read by `isinstance` alone, applied | the parameter is erased at runtime and the class declares no field it reaches, so the type argument narrows nothing |
 | bare `Protocol`, and a generic `Protocol[T]` | the base a protocol is declared from declares no member, and a protocol over a type parameter names one set per argument |
 | a `Protocol` member declared `ClassVar` or `Final` | the qualifier says where the value lives rather than what it is |
 | a set or frozen set literal | `{int}` and `frozenset({int})` name containers, which are `set[T]` and `frozenset[T]` |
@@ -831,6 +831,7 @@ unaffected either way — the walk reads the value.
 | `NewType` | the set of the supertype it wraps |
 | PEP 695 `type` alias | the set of the aliased type, and ties the fixpoint where the alias names itself ([recursion](06-recursion.md)) |
 | a generic alias applied, `Pair[int]` | the set of its body with the arguments in place of its parameters, a missing one taking its default ([recursion](06-recursion.md#a-generic-alias-applied)) |
+| a generic `TypedDict`, dataclass or `NamedTuple` applied, `Box[int]` | the class's set with the arguments in place of its parameters in every field, a parameter left out taking its default ([below](#a-generic-class-applied)) |
 
 ```python
 import enum
@@ -903,6 +904,43 @@ required-ness is read from the qualifier where the field carries one, inside an
 than about which values belong. Reading the qualifier is what makes a class mean
 the same thing under `from __future__ import annotations`, where the class's own
 key sets are computed from strings and cannot see it.
+
+### A generic class applied
+
+A generic `TypedDict`, dataclass or `NamedTuple` names a field's type with its
+parameter, and applied to arguments it is the class with each in its
+parameter's place. A class deriving from one applied is read the same way,
+however deep the derivation, and a parameter neither applied nor bound takes
+its default, as PEP 696 reads a bare generic class:
+
+```python
+import json
+from dataclasses import dataclass
+
+from valgebra import Validator
+
+
+@dataclass
+class Box[T]:
+    item: T
+
+
+@dataclass
+class IntBox(Box[int]):
+    label: str = ""
+
+
+wrong = json.loads('{"item": "one"}')  # nothing checks what `item` holds
+assert Validator(Box[int]).is_valid(Box(1))
+assert not Validator(Box[int]).is_valid(Box("one"))
+assert not Validator(IntBox).is_valid(IntBox(**wrong))
+```
+
+A parameter with no default is refused where the class is written bare and a
+field names it, and so is a type variable two bases bind to two types. A
+generic class whose fields are not read -- one `isinstance` alone answers --
+gains nothing from an argument, and is refused applied
+([above](#the-forms-that-are-refused-rather-than-read-as-a-literal)).
 
 ### A `TypedDict` is open, a dict literal is closed
 

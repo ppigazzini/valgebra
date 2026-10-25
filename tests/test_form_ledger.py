@@ -127,6 +127,7 @@ P = typing.ParamSpec("P")
 #: `ALSO` and the set of such cells all key on it.
 PROTOCOL_BASES = "bare `Protocol`, and a generic `Protocol[T]`"
 
+GENERIC_RECORDS = "a generic `TypedDict`, dataclass or `NamedTuple` applied, `Box[int]`"
 PRESENCE_PAIR = "`Required[NotRequired[X]]` and `NotRequired[Required[X]]`"
 BOTH_PRESENCES = "says the key is both required and not required"
 
@@ -182,6 +183,13 @@ class Pair(NamedTuple):
 
     a: int
     b: str
+
+
+@dataclass
+class Box(Generic[T]):
+    """A generic dataclass, whose field reads its parameter."""
+
+    item: T
 
 
 class Color(enum.Enum):
@@ -315,9 +323,10 @@ FORMS: dict[str, Reads | Refuses] = {
         "unpacks into the arguments",
         needs=(3, 11),
     ),
-    "a user `Generic[T]` parametrization": Refuses(
+    "a user `Generic[T]` class read by `isinstance` alone, applied": Refuses(
         lambda: Parametrized[int], "unsupported typing form with origin"
     ),
+    GENERIC_RECORDS: Reads(Box[int], Box(1), Box("one")),
     PROTOCOL_BASES: Refuses(lambda: Protocol, "the base a protocol is declared from"),
     "a `Protocol` member declared `ClassVar` or `Final`": Refuses(
         lambda: Counted, "declared ClassVar or Final"
@@ -401,6 +410,23 @@ if sys.version_info >= (3, 11):
         Refuses(lambda: Ts, A_TYPING_CONSTRUCT, needs=(3, 11))
     )
 
+    # A generic `TypedDict` and a generic named tuple arrive in 3.11 too, so
+    # before it the cell names the one form a caller can write there.
+    class GenericMovie(TypedDict, Generic[T]):
+        """A generic `TypedDict`, whose key reads its parameter."""
+
+        name: T
+
+    class GenericPair(NamedTuple, Generic[T]):
+        """A generic named tuple, whose position reads its parameter."""
+
+        a: T
+
+    ALSO[GENERIC_RECORDS] = [
+        Reads(GenericMovie[int], {"name": 1}, {"name": "a"}),
+        Reads(GenericPair[int], GenericPair(1), GenericPair("a")),
+    ]
+
 
 #: The cells that name more than one form, so the row above holds one of them
 #: and `ALSO` holds the rest.
@@ -413,6 +439,8 @@ NAMES_MORE_THAN_ONE_FORM = {
     "a set or frozen set literal",
     PRESENCE_PAIR,
 }
+if sys.version_info >= (3, 11):
+    NAMES_MORE_THAN_ONE_FORM.add(GENERIC_RECORDS)
 
 
 def _tables() -> list[tuple[Path, list[str], list[list[str]]]]:
