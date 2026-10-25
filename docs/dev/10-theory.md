@@ -197,7 +197,8 @@ to the `regex` matcher the walk runs.
 decomposition — [FCB08, Lem. 6.5] for pairs, in the backtrack-free form Castagna
 gives as `Φ` [Cas23, §2.1.4], and generalized to a fixed component count as the
 proof of [Cas23, Lem. 4.7] generalizes the pair to every arity, over the
-mappings of the branches to positions [Cas23, App. C.1].
+mappings of the branches to positions [Cas23, App. C.1], which the paper
+explains for the arity-`n` case [Cas23, App. D].
 **[LOAD-BEARING: a-sequence-splits-across-a-union]** — `product_subtype` in
 `decision/products.rs`. It applies in subtyping and nowhere else: emptiness's
 rules do not decompose a product, so the same relation asked as a meet with a
@@ -228,7 +229,7 @@ the heterogeneous mapping and their combination.
 closed record is no default clause and `dict[K, V]` is a single clause with no
 fields. A field is read in `T⊥`, an optional one holding `⊥` [Cas23, §3.2], so
 an absent key is outside a required field [Cas23, §3.2.1]; two map atoms meet
-pointwise [Cas23, (12)] and are empty where a required label is [Cas23, (11)],
+pointwise [Cas23, (12)] and are empty where a required label is empty [Cas23, (11)],
 two mappings always sharing the empty dict [Cas23, fn. 11]; and one map is below
 another one key type at a time [Cas23, Lem. 4.7]. A dict is a member where every
 label holds its value or its absence and every other key what its part's default
@@ -263,7 +264,8 @@ HELD-BY: the_two_spellings_of_the_top_lower_to_one_descriptor, the_two_spellings
 
 **The backtrack-free record rule, [Cas23, (17)] and [Cas23, (22)].** A record
 below a union of records is decided by `Φ`, which narrows the record by one
-member a level and a label at a time and never builds the difference.
+member a level and a label at a time, building the difference at that one label
+alone, and never backtracks [Cas23, §2.1.4].
 **[LOAD-BEARING: a-record-splits-across-a-union]** —
 `keyed_map_splits_across_union` in `decision/records.rs`: the product rule's
 shape one component over, the defaults compared part by part as [Cas23, (22)]
@@ -611,24 +613,39 @@ walk to an accepting state. Minimizing merges the states of the equivalence of
 transitions backwards by class, as the figure reads them by minterm [DV14, §4].
 `equivalent_states` in `descr/regular.rs` is the figure at its lines 5 to 15 --
 from the initial partition [DV14, Fig. 3, l. 2], the predecessors of a splitter
-marked [DV14, Fig. 3, l. 8] and each block they cut split [DV14, Fig. 3, l. 9],
+marked [DV14, Fig. 3, l. 8] and each block they cut split [DV14, Fig. 3, l. 9-10],
 a queued block replaced by both parts [DV14, Fig. 3, l. 14] and an unqueued one
 by its smaller part [DV14, Fig. 3, l. 15], the tie-break included -- with four
 differences that move no partition: line 3 queues both initial blocks, which the
-paper asks only of a partial automaton and which costs a complete one a
-splitter; line 4 reads the byte classes for the minterms; the loop is bounded by
+paper asks only of a partial automaton [DV14, §8] and which costs a complete one
+a splitter; line 4 reads the byte classes for the minterms; the loop is bounded by
 a pop per state; and the start block is renumbered first. The canonical
 numbering then removes the renaming, so two spellings of one word language have
-one table. The sequence automaton refines by Moore's rounds of signatures
-[DV14, §3] and compares the joined guards by equality, which is finer than their
-sets, so two states no sequence tells apart may stay apart: its table names a
-language only up to that, and sequence equality is emptiness of both
-differences. The sequence automaton does not read its transitions backwards,
-which over guards needs the minterms or the minimization of [DV14, Fig. 4].
+one table.
 
-IMPLEMENTED-BY: descr/automaton.rs, descr/automaton.rs::reaches, descr/automaton.rs::canonical_order, descr/automaton.rs::refine, descr/regular.rs, descr/regular.rs::Dfa::is_empty, descr/regular.rs::Dfa::word, descr/regular.rs::Dfa::complement, descr/regular.rs::Dfa::product, descr/regular.rs::Dfa::minimal, descr/regular.rs::Dfa::merge_equivalent, descr/regular.rs::Dfa::equivalent_states, descr/regular.rs::Dfa::coarsen, descr/regular.rs::Dfa::renumber, descr/regular.rs::refine_alphabets, descr/regular.rs::Predecessors::of, descr/regular.rs::Predecessors::leading_to, descr/regular.rs::Partition::by_acceptance, descr/regular.rs::Partition::mark, descr/regular.rs::Partition::cut_marked, descr/regular.rs::RegularSet::compile, descr/regular.rs::RegularSet::intersect, descr/symbolic.rs, descr/symbolic.rs::Guard, descr/symbolic.rs::SymbolicDfa, descr/symbolic.rs::SymbolicDfa::chain, descr/symbolic.rs::SymbolicDfa::emptiness, descr/symbolic.rs::SymbolicDfa::accepts_under, descr/symbolic.rs::SymbolicDfa::complement, descr/symbolic.rs::SymbolicDfa::intersect, descr/symbolic.rs::SymbolicDfa::product, descr/symbolic.rs::SymbolicDfa::merge_targets, descr/symbolic.rs::SymbolicDfa::minimal, descr/symbolic.rs::SymbolicDfa::merge_equivalent, descr/symbolic.rs::SymbolicDfa::signature, descr/symbolic.rs::SymbolicDfa::sorted, descr/symbolic.rs::SymbolicDfa::renumber, descr/symbolic.rs::partition, descr/symbolic.rs::rest_of, descr/regular.rs::Dfa::wtf8, descr/regular.rs::RegularSet
+IMPLEMENTED-BY: descr/automaton.rs::reaches, descr/automaton.rs::canonical_order, descr/regular.rs, descr/regular.rs::Dfa::is_empty, descr/regular.rs::Dfa::word, descr/regular.rs::Dfa::complement, descr/regular.rs::Dfa::product, descr/regular.rs::Dfa::minimal, descr/regular.rs::Dfa::merge_equivalent, descr/regular.rs::Dfa::equivalent_states, descr/regular.rs::Dfa::coarsen, descr/regular.rs::Dfa::renumber, descr/regular.rs::refine_alphabets, descr/regular.rs::Predecessors::of, descr/regular.rs::Predecessors::leading_to, descr/regular.rs::Partition::by_acceptance, descr/regular.rs::Partition::mark, descr/regular.rs::Partition::cut_marked, descr/regular.rs::RegularSet::compile, descr/regular.rs::RegularSet::intersect, descr/symbolic.rs, descr/symbolic.rs::Guard, descr/symbolic.rs::SymbolicDfa, descr/symbolic.rs::SymbolicDfa::chain, descr/symbolic.rs::SymbolicDfa::emptiness, descr/symbolic.rs::SymbolicDfa::accepts_under, descr/symbolic.rs::SymbolicDfa::complement, descr/symbolic.rs::SymbolicDfa::intersect, descr/symbolic.rs::SymbolicDfa::product, descr/symbolic.rs::SymbolicDfa::merge_targets, descr/symbolic.rs::SymbolicDfa::sorted, descr/symbolic.rs::partition, descr/symbolic.rs::rest_of, descr/regular.rs::Dfa::wtf8, descr/regular.rs::RegularSet
 
-HELD-BY: the_halves_cut_where_the_rounds_do, a_cut_moves_the_smaller_part, a_cut_of_a_queued_block_queues_both_parts, two_spellings_of_one_language_are_one_set, being_equal_is_holding_the_same_language, a_complement_is_already_minimal, the_rounds_from_the_distances_end_where_the_rounds_from_one_block_do, a_complement_of_a_sequence_language_is_already_minimal
+HELD-BY: the_halves_cut_where_the_rounds_do, a_cut_moves_the_smaller_part, a_cut_of_a_queued_block_queues_both_parts, two_spellings_of_one_language_are_one_set, being_equal_is_holding_the_same_language, a_complement_is_already_minimal
+
+**The sequence table names a language up to its guards.** Moore's algorithm
+over a symbolic alphabet is a fixpoint over pairs of states, which tells two
+apart where moves into a pair already told apart carry guards whose meet is
+satisfiable [DV14, §3], and reaches the minimal table [DV14, Thm. 2], one per
+language up to renaming and the equivalence of predicates [DV14, Thm. 1]. The
+sequence automaton refines in Moore's rounds instead, toward the equivalence of
+[DV14, Def. 3], telling a round's states apart by a signature of the blocks
+their joined guards lead to -- a device of this tree's, not the paper's -- and
+compares the joined guards by equality, which is finer than their sets, so two
+states no sequence tells apart may stay apart. Its table names a language only
+up to that, and the cost is that sequence equality is the emptiness of both
+differences rather than a comparison of two tables. It does not read its
+transitions backwards, which over guards needs the minterms, the minimization
+of [DV14, Fig. 4], or the pair fixpoint above, which asks only that a meet of two
+guards be satisfiable. **[DEVIATION: the-sequence-table-names-a-language-up-to-its-guards]**
+
+IMPLEMENTED-BY: descr/automaton.rs, descr/automaton.rs::refine, descr/symbolic.rs::SymbolicDfa::minimal, descr/symbolic.rs::SymbolicDfa::merge_equivalent, descr/symbolic.rs::SymbolicDfa::signature, descr/symbolic.rs::SymbolicDfa::renumber
+
+HELD-BY: a_complement_of_a_sequence_language_is_already_minimal, the_rounds_from_the_distances_end_where_the_rounds_from_one_block_do
 
 ## Two representations with no paper here
 
@@ -890,8 +907,10 @@ unfolding it are finitely many, which is the regularity a type is asked
 [Cas23, Def. 2.1]. A rule asks a pair of them or a pair built out
 of them -- a meet of subterms and their complements from the product rule, a
 union of some of a union's members from the union rule, a bound from a fold --
-so every goal is drawn from a finite closure, as the normal forms over the
-atoms a type mentions are finitely many [FCB08, §6.9], and the distinct goals a
+so every goal is drawn from a finite closure, which stands where the normal
+forms over the atoms a type mentions stand [FCB08, §6.9] and is finite by the
+argument of [LN26, §5.1] -- a narrowing builds a record atom no subterm is, and
+finitely many of them -- and the distinct goals a
 query
 reaches are at most its square. With the trail cutting a pair that comes back,
 that is the termination argument the saturating algorithm makes, and the work
@@ -1077,12 +1096,18 @@ HELD-BY: a_decision_leaves_the_trail_it_was_given, an_assumption_is_read_as_the_
 
 **The assumption set is popped, not threaded.** Every relation proved on the
 way is discarded, so a goal reached twice by different paths is decided twice,
-and a decision leaves behind no assumption it did not make. The cost is the one
+and a decision leaves behind no assumption it did not make. The departure is
+from [HVP05, §4.2], whose assumption set serves as a cache of every subtype
+relation verified; [AC93, §4.4] passes its trail down and never returns it,
+the assumption of [AC93, §1.5] held for the path that makes it, which is what
+this does. The cost is the one
 an algorithm that keeps nothing across its calls pays, described here rather
 than cited -- the analysis is Gapeyev, Levin & Pierce's (JFP 2002), which the
 shelf does not hold: a family whose every level reaches the next twice doubles
 its work per level, and the work budget is what caps it, declining the family
 eighteen levels deep. **[DEVIATION: the-assumption-set-is-popped]**
+
+IMPLEMENTED-BY: decision.rs::Cx::assuming
 
 HELD-BY: a_decision_leaves_an_assumption_it_did_not_make, a_decision_leaves_the_trail_it_was_given, a_query_gives_its_stacks_back_as_it_was_given_them, a_goal_reached_by_two_paths_is_derived_twice_until_the_budget_declines
 
@@ -1093,8 +1118,12 @@ holds no dict, and the descriptor reads it that way. **[DEVIATION: the-key-parti
 HELD-BY: an_atom_requiring_a_key_and_its_boolean_holds_no_dict, a_want_with_one_viable_witness_requires_that_key, a_labeled_key_witnesses_a_wanted_key
 
 **The kind partition overlaps at `bool`.** The source's kinds are its three
-constructors [FCB08, §6.1], and no value has two of them. Here the basic kind is split eleven
-ways, and `bool` subclasses `int`, so every boolean is an integer: a meet of the
+constructors [FCB08, §6.1], and no value has two of them; its basic types may
+overlap, two of them having a nonempty intersection [FCB08, §4.2]. The departure
+is making the basic types kinds: `bool`, `int`, `float`, `str`, `bytes` and
+`None` come out of the basic kind, and the containers beside them are
+constructors of their own. `bool` subclasses `int`, so every boolean is an
+integer: a meet of the
 two is the booleans rather than empty, and `bool` met with `~int` is empty. The
 rules read the pair through `Kind::shares_values_with`, the one exception it
 names, and the set representation through the region an integer admits, which

@@ -38,8 +38,8 @@ pub(super) fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
 /// must retract a hypothesis whenever a split fails [Cas23, §2.1.4]. That
 /// section gives the equivalent formulation that does not backtrack, and this
 /// is that function at `n` components rather than two, as the proof of
-/// [Cas23, Lem. 4.7] generalizes the pair to every arity [Cas23, App. C.1], and
-/// reads:
+/// [Cas23, Lem. 4.7] generalizes the pair to every arity [Cas23, App. C.1],
+/// over the mappings of the branches to positions [Cas23, App. D], and reads:
 ///
 /// ```text
 /// Phi(P, [])       = P is empty

@@ -591,8 +591,9 @@ fn measured_pairs() -> Vec<(Schema, Schema, Vec<Schema>)> {
 /// The closure is finite, so the distinct goals number at most its square, and
 /// a recursion whose pairs are drawn from a finite set and whose trail cuts a
 /// pair that comes back terminates without a budget. That is the argument
-/// [FCB08, §6.9] makes over `N(A)` and [HVP05, Thm. 4] makes over its
-/// automaton's states. What a test can hold is the premise: no rule builds a
+/// [FCB08, §6.9] makes over `N(A)`, which the closure stands in for -- finite by
+/// the argument of [LN26, §5.1], since a narrowing builds new atoms and finitely
+/// many -- and [HVP05, Thm. 4] makes over its automaton's states. What a test can hold is the premise: no rule builds a
 /// term outside the closure. The product shapes build one narrowing per branch
 /// and position, and the last shape a union of the branches its subject can
 /// meet, so each is also held to have built something, which keeps the row

@@ -223,7 +223,7 @@ proptest! {
         prop_assert_eq!(shape(&prefix, tail.as_ref()), table.minimal());
     }
 
-    // THEORY: one-language-one-table
+    // THEORY: the-sequence-table-names-a-language-up-to-its-guards
     /// Complementing a minimal table leaves a minimal table.
     ///
     /// The property `SymbolicDfa::complement` relies on to skip a minimization
@@ -254,7 +254,7 @@ proptest! {
         prop_assert_eq!(all.union(&a), all.product(&a, either));
     }
 
-    // THEORY: one-language-one-table
+    // THEORY: the-sequence-table-names-a-language-up-to-its-guards
     /// The merge's rounds started from the distances end at the partition the
     /// rounds started from one block reach.
     ///

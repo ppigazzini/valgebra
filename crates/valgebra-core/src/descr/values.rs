@@ -155,7 +155,7 @@ impl<G: Guard> Field<G> {
 
     /// What is known about something satisfying this field. Being allowed to be
     /// missing settles it whatever the type says, an optional field never being
-    /// empty [Cas23, fn. 11], and a required one is empty where its type is
+    /// empty [Cas23, fn. 11], and a required one is empty where its type is empty
     /// [Cas23, (11)].
     #[must_use]
     pub(crate) fn emptiness(&self) -> Verdict {

@@ -75,7 +75,9 @@ The same line of work models the structural forms valgebra uses:
 
 ## `Any` is the top, spelled
 
-`Any` and `anything` are the same set — every Python value — and the same node.
+`Any` and `anything` are the same set — every Python value — and the same
+variant, carrying the spelling it was written with, which `==` does not read and
+the render keeps.
 The algebra reads the top for both, and every law that holds of one holds of the
 other: `complement(Any)` denotes `nothing`, and `intersection(Any,
 complement(Any))` is decided empty.

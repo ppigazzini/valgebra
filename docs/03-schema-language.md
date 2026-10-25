@@ -567,8 +567,11 @@ assert not beside_a_field.open().is_valid({"name": "Ada", "count": "not an int"}
 ```
 
 Where it is not a round trip, the reason is that the transforms **normalize**,
-and both normalizations are forced. Each drops a declared name that says what
-its record already says of the keys it does not name: `open` writes the
+and both normalizations are forced. Each drops a declared optional name that
+says what its record says of every key it does not name, where that is one of
+the two bounds -- absent beside a closed record, anything beside an open one,
+the cases `dom` reads in the construction -- and an optional name typed like a
+narrower catch-all, `{"a?": int, str: int}`, is kept: `open` writes the
 catch-all beside `{"a?": anything}`, and the `close` after it drops the name --
 and it has to, or `{"a?": anything}` and `{}`, one set once opened, would close
 to two. Two

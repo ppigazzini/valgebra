@@ -16,9 +16,9 @@
 //! the sequence automaton alone reads it. The word automaton cuts its blocks by
 //! the transitions read backwards, which takes `k n log n` work over its byte
 //! classes. Over guards, reading the transitions backwards needs the minterms
-//! of every guard, or the minimization of [DV14, Fig. 4], which does without
-//! them at the cost of a satisfiability check per split; rounds of signatures
-//! need neither. From one block they take a round per state on a chain, so the
+//! of every guard, the minimization of [DV14, Fig. 4], which does without them
+//! at the cost of a satisfiability check per split, or the pair fixpoint of
+//! [DV14, §3], which needs only that check; rounds of signatures need neither. From one block they take a round per state on a chain, so the
 //! sequence automaton starts them from a partition by each state's distances
 //! (`seed` in `symbolic.rs`), which parts a chain before the first round.
 
@@ -111,9 +111,10 @@ pub(super) fn canonical_order<I: IntoIterator<Item = u32>>(
 }
 
 /// The coarsest partition of `count` states that `signature` cannot split,
-/// refined from `block`: Moore's algorithm, by signatures, which D'Antoni &
-/// Veanes lift to guards [DV14, §3], toward the equivalence of
-/// [DV14, Def. 3].
+/// refined from `block`: Moore's rounds, which D'Antoni & Veanes lift to
+/// guards as a fixpoint over pairs [DV14, §3], here telling a round's states
+/// apart by a signature of the blocks their moves lead to, a device of this
+/// tree's, toward the equivalence of [DV14, Def. 3].
 ///
 /// Each round splits every block by its members' signatures under the current
 /// partition -- one more input of lookahead. The part holding a block's first

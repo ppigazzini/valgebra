@@ -432,7 +432,7 @@ fn density_of<'a>(bases: impl IntoIterator<Item = &'a Schema>) -> Density {
 /// constraints, two members of disjoint kinds [FCB08, (5)], refinement bounds
 /// that cannot hold together, and a required key two record members cannot
 /// agree on, the meet of two map atoms being the atom of the meets
-/// [Cas23, (12)] and empty where a required label is [Cas23, (11)].
+/// [Cas23, (12)] and empty where a required label is empty [Cas23, (11)].
 ///
 /// Proving a meet inhabited means finding a value in *every* member, which none
 /// of the seven does. The region settles it exactly over the whole scalar

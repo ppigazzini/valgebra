@@ -803,7 +803,7 @@ impl Partition {
     }
 
     /// Cut each touched block between its marked and unmarked members, give
-    /// the smaller part a new block, and queue it [DV14, Fig. 3, l. 9].
+    /// the smaller part a new block, and queue it [DV14, Fig. 3, l. 9-10].
     ///
     /// The larger part keeps the block's id, and with it the block's place in
     /// the queue where it had one, so both parts of a queued block are queued

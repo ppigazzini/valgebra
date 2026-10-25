@@ -849,8 +849,10 @@ fields, so what either asks is a meet of subterms and their complements.
 The union rule asks the subject against the branches it can meet, a union of
 some members of a union it was handed. And a meet or a complement folds to the
 top or the bottom. So every goal is a pair drawn from a finite closure `C` --
-the `N(A)` of [FCB08, §6.9], the normal forms over the atoms a type mentions,
-read over schemas -- and a query asks at most `|C|²` distinct goals.
+which stands where the `N(A)` of [FCB08, §6.9] stands, the normal forms over
+the atoms a type mentions, read over schemas, though a record narrowing builds a
+record atom no subterm is; that such new types are finitely many is the argument
+of [LN26, §5.1] -- and a query asks at most `|C|²` distinct goals.
 
 That bounds the goals and not yet a path, and the trail is what ends one. Every
 step but an unfolding asks a smaller pair: children are smaller than their
