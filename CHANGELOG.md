@@ -14,6 +14,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: an attribute a getattr hook answers is code's answer, never missing
+- fix: a goal asked while a reference is resolved reads it positively -- internal
 
 -->
 

@@ -777,11 +777,28 @@ definitions, the budget and two stacks of hypotheses travel together in
 `decision::Cx`, built where a query starts and handed down by `&mut`: the trail
 the goal recursion unfolds a reference under, and the `visiting` list the
 emptiness recursion resolves one on. A frame that pushes pops before it returns,
-and no emptiness rule asks a goal, so `visiting` is empty wherever a goal asks
-an emptiness question -- a verdict is about one schema, and starts with nothing
-being resolved. A debug assertion on every goal holds that, and
-`a_query_gives_its_stacks_back_as_it_was_given_them` holds both stacks to coming
-back as they were given, over drawn schemas and definitions. The meets the
+and `a_query_gives_its_stacks_back_as_it_was_given_them` holds both stacks to
+coming back as they were given, over drawn schemas and definitions.
+
+**A goal can meet a reference being resolved, and reads it at positive
+positions only.** Two emptiness rules ask goals -- a record minus records is
+decided by Φ's inclusions, and a pattern beside the complement of one asks
+whether `str` is below the complemented base -- so a goal can be asked with a
+definition on `visiting`. The hypothesis is read in one place, the reference arm
+of the emptiness recursion, and never under a complement, whose arm reads its
+inner's region alone; every verdict a goal reads is of its subject or of a meet
+with its supertype's complement, positive in `S ∧ ¬T`. An answer under the
+hypothesis is then an answer about the schema with that reference's positive
+occurrences read as empty: a proof of the smaller set, or a refutation standing
+on one of its values, which is a value of the real one. The definition's
+emptiness is that smaller schema's, since a value of least height needs no
+value of the definition at a positive position below it, and nothing decided
+under the hypothesis outlives the frame that pushed it: the stacks are popped
+and no goal is remembered. `a_reference_being_resolved_refutes_nothing_that_holds`
+holds the polarity over drawn schemas and definitions -- a goal proved with
+nothing being resolved is never refuted with a definition on the list -- and
+`a_record_minus_records_inside_a_definition_asks_its_goals_there` is the
+definition the deep law suite drew. The meets the
 emptiness recursion unfolds a reference into stay on a thread-local list keyed
 by the query's budget: a list on the context would be built and dropped by
 every query, a teardown that reads 10.6% more instructions on the decision

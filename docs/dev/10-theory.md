@@ -773,13 +773,17 @@ reaches it, the coinductive proof of emptiness [FCB08, Def. 6.9] read over
 finite values --
 and subtyping reads a cycle back to an assumed goal as proved -- the greatest.
 The two are one procedure asked in two directions, and the unfolding is sound
-in both. **[LOAD-BEARING: two-fixpoints-one-procedure]**
+in both. A goal the emptiness recursion asks while it resolves a reference reads
+that reference at positive positions only, so its answer is about the schema
+with those occurrences emptied, whose emptiness is the definition's: a value of
+least height needs no value of the definition at a positive position below it.
+**[LOAD-BEARING: two-fixpoints-one-procedure]**
 
 SOURCE: §13.4 "**Mixed induction and coinduction.**"
 
 IMPLEMENTED-BY: decision/emptiness.rs, decision/emptiness.rs::Schema::empty_and_region_at, decision/emptiness.rs::meet_through_a_reference, decision/emptiness.rs::OpenMeet::open
 
-HELD-BY: detects_uninhabited_recursive_schemas, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, the_fixpoint_laws_hold_over_drawn_definitions, a_proof_over_a_fixpoint_has_no_witness_against_it, an_emptiness_is_refused_by_every_boundary_value, a_meet_with_a_reference_is_its_definition_met_with_the_rest, a_meet_with_a_reference_answers_as_its_values_do
+HELD-BY: detects_uninhabited_recursive_schemas, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, the_fixpoint_laws_hold_over_drawn_definitions, a_reference_being_resolved_refutes_nothing_that_holds, a_record_minus_records_inside_a_definition_asks_its_goals_there, a_proof_over_a_fixpoint_has_no_witness_against_it, an_emptiness_is_refused_by_every_boundary_value, a_meet_with_a_reference_is_its_definition_met_with_the_rest, a_meet_with_a_reference_answers_as_its_values_do
 
 **A clause is a region with its own default.** A keyed map is a quasi-K-step
 function [Cas23, Def. 4.6], named labels and a default per key-type region

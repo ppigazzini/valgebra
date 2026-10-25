@@ -454,10 +454,6 @@ impl Schema {
         // the count below a count of goals the procedure really re-derives.
         #[cfg(test)]
         goal_tests::goals::record(self, other);
-        debug_assert!(
-            cx.visiting.is_empty(),
-            "a goal asked while the emptiness recursion resolves a reference"
-        );
         let answer = self.subtype_by_rules(other, cx);
         self.witnessed(answer, cx)
     }
@@ -1306,9 +1302,21 @@ impl Schema {
 /// **Each stack is a path's, and is given back as it was.** A frame that
 /// pushes pops before it returns, so a stack holds exactly the hypotheses open
 /// above the frame reading it. The goal recursion pushes the trail and nothing
-/// else, and the emptiness recursion pushes `visiting` and asks no goal. So
-/// `visiting` is empty wherever a goal asks an emptiness question: a verdict is
-/// a question about one schema, started with no reference being resolved.
+/// else, and the emptiness recursion pushes `visiting`.
+///
+/// **A goal asked under `visiting` reads it at positive positions only.** The
+/// emptiness recursion asks goals where it subtracts records from a record
+/// (`a_difference_of_sets` in `emptiness.rs`), so a goal can meet a reference
+/// being resolved. The hypothesis is read in one place, the reference arm of
+/// the emptiness recursion, and never under a complement, whose arm reads its
+/// inner's region alone; every verdict a goal reads is of its subject or of a
+/// meet with its supertype's complement, positive in `S ∧ ¬T`. So an answer
+/// under the hypothesis is an answer about the schema with that reference's
+/// positive occurrences read as empty: a proof of the smaller set, and a
+/// refutation standing on one of its values, which is a value of the real one.
+/// The definition's emptiness is that smaller schema's, since a value of least
+/// height needs no value of the definition at a positive position below it, and
+/// nothing decided under the hypothesis outlives the frame that pushed it.
 pub(super) struct Cx<'a> {
     oracle: &'a dyn LeafRelations,
     defs: &'a [Schema],

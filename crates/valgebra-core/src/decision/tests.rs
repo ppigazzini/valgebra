@@ -4,7 +4,7 @@ use super::records::keyed_map_meet_verdict;
 use super::*;
 use crate::descr::classes::{Class, Reach};
 use crate::descr::lower::Operand;
-use crate::ir::{Attribute, CollKind, Field, MapClause, OperandIx, SeqKind};
+use crate::ir::{Attribute, CollKind, Field, MapClause, OperandIx, SeqKind, Spelling};
 use crate::ir::{DefIx, Openness};
 use crate::kind::Kind;
 use crate::oracle::tests::Pure;
@@ -6272,6 +6272,113 @@ proptest! {
         let _ = a.verdict_rec(&mut cx);
         prop_assert_eq!(&cx.visiting, &visiting);
         prop_assert_eq!(&cx.trail, &trail);
+    }
+
+    // THEORY: two-fixpoints-one-procedure
+    /// A reference being resolved is read as empty at positive positions only,
+    /// over drawn schemas and drawn definitions.
+    ///
+    /// Read there, it can only shrink what a question asks about: the meet
+    /// `S ∧ ¬T` a goal decides, or the schema an emptiness reads. So an answer
+    /// with a definition on `visiting` is a proof about a smaller set or a
+    /// refutation standing on one of its values, which is a value of the real
+    /// one, and a goal proved with nothing being resolved is never refuted with
+    /// a definition on the list, nor an emptiness proved found inhabited. A
+    /// hypothesis read at a negative position -- a reference in a supertype, or
+    /// under a complement, read as empty -- refutes what holds, and fails this.
+    #[test]
+    fn a_reference_being_resolved_refutes_nothing_that_holds(
+        a in crate::laws::recursive_schema(),
+        b in crate::laws::recursive_schema(),
+        defs in crate::laws::drawn_defs(),
+        which in 0usize..2,
+    ) {
+        let read = |hypothesis: bool| {
+            let budget = Budget::new(DECISION_BUDGET);
+            let mut cx = Cx::new(&NoLeafRelations, &defs, &budget);
+            if hypothesis {
+                cx.visiting.push(DefIx::new(which));
+            }
+            let relation = a.is_subtype_rec(&b, &mut cx);
+            let budget = Budget::new(DECISION_BUDGET);
+            let mut cx = Cx::new(&NoLeafRelations, &defs, &budget);
+            if hypothesis {
+                cx.visiting.push(DefIx::new(which));
+            }
+            (relation, a.verdict_rec(&mut cx))
+        };
+        let (relation, verdict) = read(false);
+        let (relation_under, verdict_under) = read(true);
+        prop_assert!(
+            relation != Relation::Holds || relation_under != Relation::Fails,
+            "{a:?} <= {b:?} is proved, and refuted with {which} on `visiting`, under {defs:?}"
+        );
+        prop_assert!(
+            verdict != Verdict::Empty || verdict_under != Verdict::Inhabited,
+            "{a:?} is proved empty, and inhabited with {which} on `visiting`, under {defs:?}"
+        );
+    }
+}
+
+// THEORY: two-fixpoints-one-procedure
+/// A record minus records met inside a definition asks its goals while the
+/// definition is being resolved, and answers as the set does.
+///
+/// The definition's one branch without a back edge is a closed record of an
+/// optional `a` met with the complement of the `str`-keyed mapping, which holds
+/// every dict the record holds, so the meet is empty and the definition has no
+/// base case. Deciding the meet subtracts the mapping from the record, asking
+/// whether each of the record's slots is below the mapping's with the
+/// definition on `visiting`. The deep law suite drew it.
+#[test]
+fn a_record_minus_records_inside_a_definition_asks_its_goals_there() {
+    let any = Schema::Anything(Spelling::Any);
+    let mapping = Schema::keyed_map(
+        Vec::new(),
+        vec![MapClause {
+            key: Schema::Str,
+            value: any.clone(),
+        }],
+    );
+    let record = Schema::record(
+        vec![Field {
+            name: "a".into(),
+            schema: any,
+            required: false,
+        }],
+        Openness::Closed,
+    );
+    let body = Schema::Union(
+        vec![
+            Schema::Intersection(vec![Schema::Complement(Arc::new(mapping)), record].into()),
+            Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Ref(DefIx::new(0))])),
+        ]
+        .into(),
+    );
+    let other = Schema::Union(
+        vec![
+            Schema::record(Vec::new(), Openness::Closed),
+            Schema::record(
+                vec![Field {
+                    name: "n".into(),
+                    schema: Schema::Ref(DefIx::new(1)),
+                    required: false,
+                }],
+                Openness::Closed,
+            ),
+        ]
+        .into(),
+    );
+    let defs = vec![body.clone(), other];
+    let reference = Schema::Ref(DefIx::new(0));
+    assert!(reference.is_empty_under(&defs));
+    assert!(body.is_empty_under(&defs));
+    for (sub, sup) in [(&reference, &body), (&body, &reference)] {
+        assert_eq!(
+            sub.subtype_relation_under(sup, &NoLeafRelations, &defs),
+            Relation::Holds,
+            "{sub:?} <= {sup:?}"
+        );
     }
 }
 
