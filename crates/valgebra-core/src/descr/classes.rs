@@ -37,22 +37,23 @@ use crate::kind::Kind;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reach {
     /// Missing, or holding any value: the class defines nothing by the name and
-    /// the instance has a dictionary or a `__getattr__` hook to hold one, or the
-    /// name is a slot, which is missing until it is assigned.
+    /// the instance has a dictionary to hold one, or the name is a slot, which
+    /// is missing until it is assigned.
     Anything,
-    /// Holding any value, through an entry in the instance's own dictionary,
-    /// which a name the class defines without a data descriptor gives way to.
-    /// Whether it can be missing is not read: a class attribute is found
-    /// whenever the instance holds no entry, and a non-data descriptor's getter
-    /// is code.
+    /// Holding any value, through an entry in the instance's own dictionary or
+    /// an assigned slot. Whether it can be missing is not read: a class
+    /// attribute is found whenever the instance holds no entry, a non-data
+    /// descriptor's getter is code, and a `__getattr__` hook answers, with
+    /// code, for an entry the dictionary lacks and a slot left unset.
     AnyValue,
     /// Never there: the class defines no such name, its instances carry no
     /// dictionary, and no hook serves a name.
     Missing,
     /// What it holds is the answer of code -- a data descriptor such as a
-    /// property, or a `__getattribute__` hook -- or a value fixed on a class
-    /// whose instances carry no dictionary to replace it. No direct instance is
-    /// assumed to carry any particular thing here.
+    /// property, a `__getattribute__` hook, or a `__getattr__` hook where the
+    /// instance has no dictionary or slot to hold the name -- or a value fixed
+    /// on a class whose instances carry no dictionary to replace it. No direct
+    /// instance is assumed to carry any particular thing here.
     Unread,
 }
 
@@ -182,11 +183,19 @@ impl Attributes {
             .namespaces
             .iter()
             .find_map(|namespace| namespace.get(name));
+        // A `__getattr__` hook holds nothing: it answers, with code, where a
+        // lookup finds nothing, so a slot left unset and a name the dictionary
+        // lacks are its answer rather than missing, and a name with neither is
+        // its answer alone. An assigned slot or entry holds any value.
+        let served = self.hook == Hook::Getattr;
         match defined {
+            Some(Member::Slot) if served => Reach::AnyValue,
             Some(Member::Slot) => Reach::Anything,
             Some(Member::Plain) if self.carries_dict => Reach::AnyValue,
             Some(Member::Plain | Member::Descriptor) => Reach::Unread,
-            None if self.carries_dict || self.hook == Hook::Getattr => Reach::Anything,
+            None if served && self.carries_dict => Reach::AnyValue,
+            None if served => Reach::Unread,
+            None if self.carries_dict => Reach::Anything,
             None => Reach::Missing,
         }
     }

@@ -475,11 +475,13 @@ field. The class decides whether it can, read off the namespaces of its
 `__mro__` once per relation: a name defined as a property or another data
 descriptor holds what its getter returns, a name defined any other way cannot
 be missing, an instance laid out without a `__dict__` holds nothing its slots
-do not name, and a `__getattribute__` other than the generic lookup answers
-every lookup. Where the class leaves no room, the pair is **undecided**: a
-subclass may carry the record, and may not exist. A dataclass whose field is a
-descriptor, or which defines `__getattribute__`, is where an annotation reaches
-it:
+do not name, a `__getattribute__` other than the generic lookup answers every
+lookup, and a `__getattr__` answers every lookup that finds nothing -- so beside
+one an unset slot or a name the `__dict__` lacks is never missing, and a name
+neither can hold is the hook's answer alone. Where the class leaves no room,
+the pair is **undecided**: a subclass may carry the record, and may not exist.
+A dataclass whose field is a descriptor, or which defines `__getattribute__`,
+is where an annotation reaches it:
 
 ```python
 from dataclasses import dataclass

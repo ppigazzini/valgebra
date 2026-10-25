@@ -167,10 +167,19 @@ fn a_class_says_what_a_direct_instance_can_carry() {
     assert_eq!(slotted.reach("slot"), Reach::Anything);
     assert_eq!(slotted.reach("body"), Reach::Unread);
 
-    // A `__getattr__` hook serves the names a lookup does not find; a
-    // `__getattribute__` hook answers every one.
+    // A `__getattr__` hook answers, with code, for the names a lookup does not
+    // find: a name nothing else can hold is its answer, and a slot or a
+    // dictionary entry holds any value it is assigned and is never missing. A
+    // `__getattribute__` hook answers every lookup.
     let served = Attributes::new(false, Hook::Getattr);
-    assert_eq!(served.reach("unnamed"), Reach::Anything);
+    assert_eq!(served.reach("unnamed"), Reach::Unread);
+    let mut served_slot = Attributes::new(false, Hook::Getattr);
+    served_slot.define("slot", Member::Slot);
+    assert_eq!(served_slot.reach("slot"), Reach::AnyValue);
+    assert_eq!(
+        Attributes::new(true, Hook::Getattr).reach("unnamed"),
+        Reach::AnyValue
+    );
     let mut guarded = Attributes::new(true, Hook::Getattribute);
     guarded.define("slot", Member::Slot);
     assert_eq!(guarded.reach("unnamed"), Reach::Unread);

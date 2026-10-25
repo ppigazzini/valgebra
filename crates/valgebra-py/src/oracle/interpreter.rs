@@ -885,12 +885,14 @@ fn a_class_relation_needs_both_sides_to_denote_a_set() {
 fn a_class_says_what_a_direct_instance_can_carry() {
     // What a direct instance can hold under a name is read off the namespaces
     // of the class's `__mro__`, as a lookup on the instance reads them: a name
-    // nothing defines is free where the instance has a `__dict__` or a
-    // `__getattr__` hook serves it, a slot is free, a plain definition gives
-    // way to the instance's dictionary, and a property, a value fixed on a
-    // class without a dictionary, or a `__getattribute__` hook answers with
-    // code. `object`'s namespace is read too, so its `__class__` is a data
-    // descriptor and its `__init__` a plain definition.
+    // nothing defines is free where the instance has a `__dict__`, a slot is
+    // free, a plain definition gives way to the instance's dictionary, and a
+    // property, a value fixed on a class without a dictionary, a
+    // `__getattribute__` hook, or a `__getattr__` hook with nothing else to
+    // hold the name answers with code. Beside a `__getattr__` hook a slot or a
+    // dictionary holds any value and is never missing, since the hook answers
+    // where either holds nothing. `object`'s namespace is read too, so its
+    // `__class__` is a data descriptor and its `__init__` a plain definition.
     Python::attach(|py| {
         let source = "types.SimpleNamespace(\
              plain=type('Plain', (), {}),\
@@ -908,11 +910,13 @@ fn a_class_says_what_a_direct_instance_can_carry() {
              counted=type('Counted', (int,), {'x': 0}),\
              failure=type('Failure', (Exception,), {'x': 0}),\
              hooked=type('MetaI', (type,), {'__instancecheck__': lambda self, other: True})('HookedI', (), {}),\
+             unset=type('Unset', (), {'__slots__': ('x',), '__getattr__': lambda self, name: 1}),\
+             lacking=type('Lacking', (), {'__getattr__': lambda self, name: 1}),\
          )";
         let built = built(py, source);
         let names = [
             "plain", "body", "below", "prop", "slotted", "closed", "fixed", "served", "guarded",
-            "single", "setter", "deleter", "counted", "failure", "hooked",
+            "single", "setter", "deleter", "counted", "failure", "hooked", "unset", "lacking",
         ];
         let slots: Vec<Py<PyAny>> = names
             .iter()
@@ -928,7 +932,7 @@ fn a_class_says_what_a_direct_instance_can_carry() {
                 Reach::Anything,
                 Reach::Missing,
                 Reach::Unread,
-                Reach::Anything,
+                Reach::Unread,
                 Reach::Unread,
                 // A slot `__slots__` names as one string, and a descriptor
                 // defining either half of what makes one a data descriptor.
@@ -951,6 +955,15 @@ fn a_class_says_what_a_direct_instance_can_carry() {
             assert_eq!(reach(0, "__init__"), Some(Reach::AnyValue));
             // A class whose `isinstance` runs code is not one this reads.
             assert_eq!(reach(14, "x"), None);
+            for (slot, holder) in [(15, "an unset slot"), (16, "a dictionary")] {
+                assert_eq!(
+                    reach(slot, "x"),
+                    Some(Reach::AnyValue),
+                    "{holder} beside a hook"
+                );
+                let snapshot = oracle.class(ClassIx::new(slot)).expect("a pure class");
+                assert_eq!(snapshot.reach("x"), Reach::AnyValue, "{holder}'s snapshot");
+            }
         });
     });
 }

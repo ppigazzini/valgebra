@@ -863,6 +863,65 @@ def test_a_dataclass_is_refuted_only_on_an_instance_that_can_carry_it() -> None:
         assert Validator(read).is_subtype_of(read)
 
 
+def test_a_getattr_hook_answers_where_a_lookup_finds_nothing() -> None:
+    """A `__getattr__` hook holds nothing: it answers a lookup that finds nothing.
+
+    A slot left unset and a name the instance's dictionary lacks are the hook's
+    answer, so a direct instance is never missing them, and a name with
+    neither to hold it is the hook's answer alone. Each class here refuses a
+    subclass, so its direct instances are all its values, and every one is in
+    the protocol of any `a`: a refutation standing on a missing `a` names a
+    value that does not exist. A slot and a dictionary hold any value they are
+    assigned, which refutes the protocol of an `int`.
+    """
+
+    class HoldsInt(Protocol):
+        a: int
+
+    class HoldsAny(Protocol):
+        a: object
+
+    class Served:
+        __slots__ = ()
+
+        def __init_subclass__(cls, **kwargs: object) -> None:
+            raise TypeError(cls)
+
+        def __getattr__(self, name: str) -> int:
+            return 1
+
+    class ServedSlot:
+        __slots__ = ("a",)
+        a: object
+
+        def __init_subclass__(cls, **kwargs: object) -> None:
+            raise TypeError(cls)
+
+        def __getattr__(self, name: str) -> int:
+            return 1
+
+    class ServedDict:
+        a: object
+
+        def __init_subclass__(cls, **kwargs: object) -> None:
+            raise TypeError(cls)
+
+        def __getattr__(self, name: str) -> int:
+            return 1
+
+    for served in (Served, ServedSlot, ServedDict):
+        assert Validator(HoldsInt).is_valid(served())
+        assert Validator(served).relation_to(Validator(HoldsAny)) == "undecided"
+    assert Validator(Served).relation_to(Validator(HoldsInt)) == "undecided"
+    met = intersection(Served, complement(HoldsInt))
+    assert met.relation_to(Validator(complement(anything))) == "undecided"
+    for assignable in (ServedSlot, ServedDict):
+        held = assignable()
+        held.a = "x"
+        assert not Validator(HoldsInt).is_valid(held)
+        assert Validator(assignable).relation_to(Validator(HoldsInt)) == "not_subset"
+
+
 def test_a_dataclass_is_read_against_the_kind_a_reference_names() -> None:
     """A reference denotes its definition's set, so it carries that set's kind.
 

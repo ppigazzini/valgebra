@@ -13,7 +13,25 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: an attribute a getattr hook answers is code's answer, never missing
+
 -->
+
+### Fixed
+
+- **An attribute a `__getattr__` hook answers is never read as missing.** A
+  refutation about a class stands on a direct instance of it, and the
+  relations read a name the instance's `__dict__` lacks, a slot left unset and
+  a name a class without a `__dict__` does not define as able to be missing
+  where the class defines `__getattr__` -- which answers exactly those lookups.
+  So a class whose hook returns `1` for every name, refusing every subclass,
+  was answered `not_subset` of a protocol `a: object` that every instance of
+  it satisfies, and its meet with that protocol's complement was answered
+  inhabited, in 0.0.16 through 0.0.20. Beside such a hook a slot or a
+  dictionary entry holds any value it is assigned and is never missing, and a
+  name neither can hold is the hook's answer: such a pair answers
+  `undecided`, and one refuted by a value an assignment puts there -- `a = "x"`
+  against a protocol `a: int` -- stays `not_subset`.
 
 ## [0.0.20] - 2026-10-24
 

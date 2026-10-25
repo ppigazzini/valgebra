@@ -293,7 +293,9 @@ The soundness is relative to a small, explicit trust base:
   descriptor or a `__getattribute__` hook, a name its body defines that a
   record requires missing, and a name its instances have no `__dict__` or slot
   to hold are not assumed onto it, so a relation that would stand on one is
-  undecided. It moves no `True`: a proof is a proof, and the assumption is only
+  undecided. A `__getattr__` hook answers every lookup that finds nothing, so
+  beside one no name is assumed missing, and a name with no `__dict__` or slot
+  to hold it is the hook's answer. It moves no `True`: a proof is a proof, and the assumption is only
   ever read to believe a refutation.
   [The decidability page](15-decidability.md) states it with the rows it moves.
 - **The JSON parser (jiter) agrees with `json.loads` where both accept.** On a
