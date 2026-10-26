@@ -192,7 +192,6 @@ DECLINED_THOUGH_A_VALUE_DECIDES: dict[tuple[str, str], str] = {
     ("Anything", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,
     ("Instance", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,
     ("Complement", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,
-    ("Intersection", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,
 }
 
 

@@ -973,6 +973,24 @@ fn only_the_bottom_is_disjoint_from_itself() {
     assert!(!refined.disjoint(&refined));
 }
 
+proptest! {
+    // THEORY: kinds-decompose-emptiness
+    /// Two schemas read as disjoint share no value: over the scalar fragment's
+    /// unions, meets and complements, a meet nested in a union's branch among
+    /// them, every sampled value is a member of one of the two at most.
+    #[test]
+    fn a_pair_read_disjoint_shares_no_value(a in scalar_schema(), b in scalar_schema()) {
+        if a.disjoint(&b) {
+            for (at, value) in SAMPLES.into_iter().enumerate() {
+                prop_assert!(
+                    !(member(&a, value) && member(&b, value)),
+                    "{a:?} and {b:?} are read disjoint and share sample {at}"
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn decision_arms_are_pinned_independently_of_the_python_suite() {
     // Each assertion fails under a specific mutation of a decision arm, so the

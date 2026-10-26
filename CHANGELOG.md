@@ -14,8 +14,18 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a refusal for depth is read off the schema before anything is built
+- feat: a meet is disjoint from what one of its members is
 
 -->
+
+### Added
+
+- **A meet is disjoint from what one of its members is.** A schema a union
+  holds as a branch, written as a meet, is read by its kinds as the meet's own
+  members are, so `int` met with a union of two string patterns each guarded to
+  strings, `intersection(str, union(complement(str), Annotated[str,
+  Regex(p)]))` as a translation from JSON Schema writes a `pattern`, is empty
+  where it was `undecided`, and an integer is `not_subset` of such a union.
 
 ### Fixed
 

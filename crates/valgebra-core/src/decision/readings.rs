@@ -32,11 +32,12 @@ impl Schema {
     /// belongs to both. Sound, not complete — it returns true only when the
     /// concrete types cannot overlap, positives of two kinds meeting in nothing
     /// [FCB08, (5)] (distinct builtin scalars, distinct container kinds, a
-    /// refinement's base versus another, a union whose every member is, two
-    /// homogeneous sequences or sets of one container whose elements share no
-    /// value where a length bound rules out the empty one), and
-    /// false (conservatively) where it cannot decide: `Any`, a reference, a meet
-    /// and a complement.
+    /// refinement's base versus another, a union whose every member is, a meet
+    /// one of whose members with a kind of its own is against a schema with a
+    /// kind, two homogeneous sequences or sets of one
+    /// container whose elements share no value where a length bound rules out
+    /// the empty one), and false (conservatively) where it cannot decide:
+    /// `Any`, a reference and a complement.
     ///
     /// A `Literal` and an `Instance` are read through the `oracle`, which holds
     /// the constants and the classes the core cannot: it kinds a literal,
@@ -116,11 +117,53 @@ impl Schema {
             // Distinct concrete types are disjoint, except bool ⊆ int.
             (Some(a), Some(b)) => !a.shares_values_with(b),
             // One side has no tag of its own, which a class never has: only the
-            // bindings read a class, so the kind goes to them as a question.
-            (None, Some(kind)) => self.class_excludes(kind, oracle),
-            (Some(kind), None) => other.class_excludes(kind, oracle),
+            // bindings read a class, so the kind goes to them as a question. A
+            // meet has none either, and is read through its members against the
+            // tagged side, after the union arms above have read a union against
+            // it branch by branch: second in the switch a class takes first,
+            // so a pair the tags settle reads nothing more, and out of line.
+            (None, Some(kind)) => self.excludes_untagged(kind, other, oracle),
+            (Some(kind), None) => other.excludes_untagged(kind, self, oracle),
             (None, None) => false,
         }
+    }
+
+    /// Whether this schema, which has no tag, holds no value of `kind`, the tag
+    /// of `tagged`: a class the oracle says lays down no such value, or a meet
+    /// one of whose members shares none with `tagged`. The class is asked first,
+    /// since it is the untagged side nearly every pair has.
+    #[inline]
+    fn excludes_untagged(&self, kind: Kind, tagged: &Schema, oracle: &dyn LeafRelations) -> bool {
+        match self {
+            Schema::Instance(class) => oracle.class_admits_kind(*class, kind) == Some(false),
+            Schema::Intersection(_) => self.meet_disjoint_with(tagged, oracle),
+            _ => false,
+        }
+    }
+
+    /// [`disjoint_with`](Self::disjoint_with) where one side is a meet: the meet
+    /// shares no value with the other side where one of its members shares
+    /// none, a meet being below each of its members [FCB08, Def. 4.1], so a
+    /// meet a union holds as a branch is read by its kinds, as the meet's own
+    /// members are. Asked after the union arms, which read a union against the
+    /// whole meet branch by branch: `int & str` is disjoint from `str | int`,
+    /// each branch by the other member.
+    ///
+    /// **Only a member with a kind of its own is read.** A schema shares its
+    /// subterms, so a tower of unions of meets of unions is a term of linear
+    /// size and a tree of exponential size, and a reading that went from a meet
+    /// into a union and back would walk the tree, once per goal the decision
+    /// asks. A union and a meet carry no kind, nor does a class or a literal,
+    /// whose kinds are the oracle's, and reading those through every branch of
+    /// a union is a call per branch on every pair the refutations leave.
+    #[inline(never)]
+    fn meet_disjoint_with(&self, other: &Schema, oracle: &dyn LeafRelations) -> bool {
+        let Schema::Intersection(members) = self else {
+            return false;
+        };
+        members
+            .iter()
+            .any(|member| member.type_tag().is_some() && member.disjoint_with(other, oracle))
     }
 
     /// The element of a schema whose values are that element repeated: a

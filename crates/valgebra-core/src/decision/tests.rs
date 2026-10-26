@@ -7872,3 +7872,58 @@ fn a_meet_of_records_beside_another_member_proves_or_declines() {
         Relation::Holds,
     );
 }
+
+// THEORY: kinds-decompose-emptiness
+/// A meet shares no value with what one of its members shares none with, and a
+/// union is read against it branch by branch first.
+///
+/// A pattern guarded to its kind, `str & (~str | P)`, is how a translation from
+/// JSON Schema applies a keyword to its own kind alone. `int` is disjoint from
+/// it by the meet's `str`, so `int` met with a union of two such guards is
+/// empty by the rules' first pass, where the set representation refuses the
+/// whole for its depth. `int & str` is disjoint from `str | int` only when the
+/// union is read first: each branch by the other member, and neither member
+/// from the whole union. Only a member with a kind of its own is read, which
+/// bounds the walk on a shared tower: `(int | bytes) & (int | str)` against
+/// `str | bytes` declines. And a complement member reads nothing: `int & ~str`
+/// shares every integer with `int`.
+#[test]
+fn a_meet_is_disjoint_from_what_one_of_its_members_is() {
+    let pattern = |words: &str| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex(words.into())].into(),
+    };
+    let guarded = |words: &str| {
+        Schema::Intersection(
+            vec![
+                Schema::Str,
+                Schema::Union(
+                    vec![Schema::Complement(Arc::new(Schema::Str)), pattern(words)].into(),
+                ),
+            ]
+            .into(),
+        )
+    };
+    assert!(Schema::Int.disjoint(&guarded("^ga_[a-z0-9]{6}$")));
+    assert!(guarded("^ga_[a-z0-9]{6}$").disjoint(&Schema::Int));
+    let either =
+        Schema::Union(vec![guarded("^ga_[a-z0-9]{6}$"), guarded("^gb_[a-z0-9]{6}$")].into());
+    let meet = Schema::Intersection(vec![Schema::Int, either.clone()].into());
+    assert_eq!(meet.verdict_under(&NoLeafRelations), Verdict::Empty);
+    assert_ne!(either.verdict_under(&NoLeafRelations), Verdict::Empty);
+
+    let both = Schema::Intersection(vec![Schema::Int, Schema::Str].into());
+    let kinds = Schema::Union(vec![Schema::Str, Schema::Int].into());
+    assert!(both.disjoint(&kinds));
+    assert!(kinds.disjoint(&both));
+    let ints_or = |other: Schema| Schema::Union(vec![Schema::Int, other].into());
+    let unions_met =
+        Schema::Intersection(vec![ints_or(Schema::Bytes), ints_or(Schema::Str)].into());
+    let words = Schema::Union(vec![Schema::Str, Schema::Bytes].into());
+    assert!(!unions_met.disjoint(&words));
+
+    let not_str =
+        Schema::Intersection(vec![Schema::Int, Schema::Complement(Arc::new(Schema::Str))].into());
+    assert!(!not_str.disjoint(&Schema::Int));
+    assert!(!Schema::Int.disjoint(&not_str));
+}

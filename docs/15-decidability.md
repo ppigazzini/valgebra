@@ -64,7 +64,11 @@ answers `"undecided"`.
 - **Complement and disjointness across kinds.** An intersection that carries a
   schema together with its complement (`A & ~A`), or two members of provably
   disjoint kinds (a list and a set, an `int` and a `str`), is empty — for the
-  structural kinds, not only the scalars. `Any` is the top, spelled, so the rule
+  structural kinds, not only the scalars. A member is read by its kinds through
+  a union and a meet: `int` met with a union of
+  `intersection(str, union(complement(str), Annotated[str, Regex(p)]))` for
+  two patterns -- each applied to strings alone, as JSON Schema applies a
+  `pattern` -- is empty whatever the patterns are. `Any` is the top, spelled, so the rule
   reaches it like any other set: `intersection(Any, complement(Any))` is decided
   empty.
 - **A bare container class and its parameterized form.** `list` and

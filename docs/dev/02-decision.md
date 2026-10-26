@@ -609,7 +609,13 @@ These are the readings that refute, each with the value it stands on:
 - `disjoint_with` — the two share no value, so any value of the subject is
   outside the supertype. Two distinct kinds are disjoint, except `bool` under
   `int` -- the one pair in the partition that shares values, which
-  `Kind::shares_values_with` is the single place to ask about. Two sequences of
+  `Kind::shares_values_with` is the single place to ask about. A union is
+  disjoint where every branch is, and a meet where one of its members with a
+  kind of its own is, against a side with a kind, the union read first, so a
+  meet a union holds as a branch is read by its kinds as a meet's own members
+  are. A member that is a union, a meet, a class or a literal is not read: a
+  schema shares its subterms, and a tower of unions of meets is a tree of
+  exponential size. Two sequences of
   one container meet in the sequences of their elements' meet — `a* ∩ b* = (a ∩
   b)*`, reading a homogeneous sequence as a regular expression over its element
   — and where the elements share no value that is the star of nothing, which

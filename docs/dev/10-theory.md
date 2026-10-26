@@ -764,13 +764,15 @@ an independent question [FCB08, (4)] -- which is what lets every kind carry its
 own representation and the whole be a product over them. `Kind` is the one
 partition both deciders read; `Region` is derived from it, never maintained
 beside it, and a scalar atom's region is the set of constants its basic type
-denotes [FCB08, §4.2]. **[LOAD-BEARING: kinds-decompose-emptiness]**
+denotes [FCB08, §4.2]. A meet shares no value with what one of its members
+shares none with, being below each [FCB08, Def. 4.1], so a meet a union holds
+as a branch is read by its kinds too. **[LOAD-BEARING: kinds-decompose-emptiness]**
 
 SOURCE: §13.1 "positives of mixed kind make a clause empty outright"
 
-IMPLEMENTED-BY: decision.rs::has_disjoint_pair, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::Schema::atom_region, decision/emptiness.rs::intersection_verdict, decision/products.rs::seq_splits_across_union, descr/mod.rs::Descr::within, descr/mod.rs::Descr::emptiness
+IMPLEMENTED-BY: decision.rs::has_disjoint_pair, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::Schema::meet_disjoint_with, decision/readings.rs::Schema::atom_region, decision/emptiness.rs::intersection_verdict, decision/products.rs::seq_splits_across_union, descr/mod.rs::Descr::within, descr/mod.rs::Descr::emptiness
 
-HELD-BY: the_same_shape_under_two_kinds_does_not_meet, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart, a_kind_is_an_independent_question
+HELD-BY: the_same_shape_under_two_kinds_does_not_meet, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart, a_kind_is_an_independent_question, a_meet_is_disjoint_from_what_one_of_its_members_is, a_pair_read_disjoint_shares_no_value, test_a_meet_with_a_union_of_guarded_patterns_is_empty
 
 **A set type is a powerset, and a line of them is empty where one powerset
 covers it.** `set[T]` and `frozenset[T]` denote the finite sets whose members
@@ -1042,9 +1044,14 @@ The cost is a hole wherever an arm is missing, and the boundary is
 decline the descriptor answers, so every relation the completeness ledger
 records as decided by neither is one past a build or decision bound, each a
 strict row, and the two deciders are measured against each other over a
-corpus. **[DEVIATION: structural-rather-than-reduction]**
+corpus. The rules distribute a union a meet holds only where it holds a
+reference or a meet is already being unfolded (`meet_through_a_reference`),
+where every source decides on the normal form, which distributes every one:
+a meet the rules decline beside a union of guards is answered by the
+descriptor within its depth, and declines past it.
+**[DEVIATION: structural-rather-than-reduction]**
 
-SOURCE: §13.1 "`is_subtype_of` is not that reduction applied uniformly"
+SOURCE: §13.1 "`is_subtype_of` is not that reduction applied uniformly"; §13.1 "That blow-up is why a DNF-based decision needs"
 
 HELD-BY: test_decision_decides_true_relations, test_the_two_deciders_are_measured_against_each_other, the_structural_inclusion_rules_decide_without_the_descriptor
 

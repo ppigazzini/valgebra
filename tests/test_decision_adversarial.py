@@ -530,6 +530,29 @@ def test_a_meet_of_patterns_is_empty_beside_a_predicate() -> None:
     assert Validator(a_and_p).relation_to(Annotated[str, Regex("^b+$")]) == "undecided"
 
 
+# THEORY: kinds-decompose-emptiness
+def test_a_meet_with_a_union_of_guarded_patterns_is_empty() -> None:
+    """A meet with a union of patterns guarded to their kind is empty by kind.
+
+    A translation from JSON Schema applies `pattern` to strings alone, so the
+    string schema it builds is `str & (~str | Regex(p))`. An integer meets no
+    such branch, so it meets no union of them, and the meet is empty whatever
+    the patterns are, which a decision reading the union whole has to see too.
+    """
+
+    def guarded(pattern: str) -> object:
+        return intersection(str, union(complement(str), Annotated[str, Regex(pattern)]))
+
+    integral = union(int, Annotated[float, at.MultipleOf(1)])
+    integer = intersection(integral, complement(bool))
+    either = union(guarded("^ga_[a-z0-9]{6}$"), guarded("^gb_[a-z0-9]{6}$"))
+    assert intersection(integer, guarded("^ga_[a-z0-9]{6}$")).is_empty()
+    assert intersection(integer, either).is_empty()
+    assert Validator(either).is_valid("gb_abc123")
+    assert not Validator(either).is_empty()
+    assert Validator(int).relation_to(either) == "not_subset"
+
+
 # THEORY: a-record-splits-across-a-union
 def test_two_open_records_met_are_one_record() -> None:
     """Open records met in a meet are one record, and are related as one.
