@@ -13,19 +13,32 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: an attribute a getattr hook answers is code's answer, never missing
-- fix: a goal asked while a reference is resolved reads it positively -- internal
-- fix: a complement walks a definition two members share once per room
-- fix: an unpacked type alias is the tuple it names, and two ill forms refuse
-- feat: a generic record class applied is read with its arguments in place
-- fix: a mapping names each key schema once, and an unnamed fixpoint is its body
-- fix: a copy of a validator is the validator itself
-- fix: a meet distributes a union it holds twice with every copy taken out
-- feat: a meet holding a literal is decided one constant at a time
-- feat: a meet proved empty stays empty beside a member no lowering reads
-- feat: records met in a meet are related as one record
-
 -->
+
+## [0.0.21] - 2026-10-26
+
+Four relations decided where they declined, readings the typing spec gives
+that the frontend refused or misread, and a wrong `subset` proof withdrawn:
+four additions, one change, six fixes and two security fixes. A generic
+`TypedDict`, dataclass or `NamedTuple` applied is read with its arguments in
+place, and a meet holding a literal, a meet beside a member the set
+representation cannot read, and a meet of records answer where they answered
+`undecided`. A copy of a validator is the validator. The fixes read a `type`
+alias unpacked into a tuple and a class whose `__getattr__` answers every
+name, and refuse three spellings that name no one set: `Required` and
+`NotRequired` on one item, bare `Generic`, and a dict display whose two keys
+build one key schema. The security fixes are a meet holding a union twice
+beside a recursive reference, answered empty though a value is in it, and a
+complement of a definition two of its members share, whose walk took seconds
+near the depth bound. The entries under Security name the releases each
+reached. Upgrade from any of them.
+
+Against 0.0.20, a fifty-field `TypedDict` whose five optional fields are
+refined compiles in 11% fewer instructions, and explaining a failure and
+relating two validators count up to 0.5% fewer. Every other shape the
+instruction gates count reads within 0.1% of 0.0.20, the profiled wheel's
+flat, but a dataclass's compilation, 0.05% more for the test that reads
+whether the class is generic.
 
 ### Added
 
@@ -3230,7 +3243,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.20...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.21...HEAD
+[0.0.21]: https://github.com/ppigazzini/valgebra/compare/v0.0.20...v0.0.21
 [0.0.20]: https://github.com/ppigazzini/valgebra/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/ppigazzini/valgebra/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/ppigazzini/valgebra/compare/v0.0.17...v0.0.18
