@@ -367,8 +367,12 @@ def test_an_alias_naming_an_annotated_alias_in_metadata_is_refused() -> None:
     t = extensions.TypeVar("T")
     positive = extensions.TypeAliasType("Positive", Annotated[int, at.Gt(0)])
     chained = extensions.TypeAliasType("Chained", positive)
+    # The parameter is built at runtime, as the alias is, so a checker reads it
+    # as a variable rather than a type parameter.
     generic = extensions.TypeAliasType(
-        "Generic", Annotated[t, at.Gt(0)], type_params=(t,)
+        "Generic",
+        Annotated[t, at.Gt(0)],  # ty: ignore[invalid-type-form]
+        type_params=(t,),
     )
     for alias in (positive, chained, generic[int]):
         with pytest.raises(NotImplementedError, match="is an Annotated alias"):

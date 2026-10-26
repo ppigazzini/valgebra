@@ -88,8 +88,10 @@ def test_a_typing_extensions_alias_reads_as_the_statement_does() -> None:
     extensions = pytest.importorskip("typing_extensions")
     t = extensions.TypeVar("T")
     d = extensions.TypeVar("D", default=int)
-    pair = extensions.TypeAliasType("Pair", tuple[t, t], type_params=(t,))
-    defaulted = extensions.TypeAliasType("PairD", tuple[d, d], type_params=(d,))
+    # The parameters are built at runtime, as the alias is, so a checker reads
+    # each as a variable rather than a type parameter.
+    pair = extensions.TypeAliasType("Pair", tuple[t, t], type_params=(t,))  # ty: ignore[invalid-type-form]
+    defaulted = extensions.TypeAliasType("PairD", tuple[d, d], type_params=(d,))  # ty: ignore[invalid-type-form]
     assert Validator(pair[int]) == Validator(tuple[int, int])
     assert Validator(defaulted) == Validator(tuple[int, int])
     with pytest.raises(NotImplementedError, match="has no default"):
