@@ -495,3 +495,25 @@ def test_a_value_answering_two_ways_is_in_no_meet_of_a_set_and_its_complement(
     assert not intersection(schema, complement(schema)).is_empty(), (
         "so a set holding what A and ~A admit holds it"
     )
+
+
+def test_a_fractional_number_met_with_a_recursive_universe_is_inhabited() -> None:
+    """A meet holding `int | float` twice beside a reference is not proved empty.
+
+    `None | NUMBER` holds `int | float` inside `NUMBER`, and the meet holds it
+    bare as well; a recursive universe beside them opens the meet, and every
+    union in it is distributed. A branch that kept the bare copy was the meet
+    already open, reached again with no constructor between, and the meet was
+    proved empty though `0.5` is in it.
+    """
+    not_bool = complement(bool)
+    number = intersection(union(int, float), not_bool)
+    integer = intersection(union(int, Annotated[float, at.MultipleOf(1)]), not_bool)
+    fractional = intersection(number, complement(integer))
+    universe = recursive(
+        lambda j: union(None, bool, int, float, str, [j], {str: j}),
+    )
+    meet = intersection(fractional, union(None, number), universe)
+    assert meet.is_valid(0.5)
+    assert not meet.is_empty()
+    assert meet.relation_to(Validator(complement(object))) != "subset"

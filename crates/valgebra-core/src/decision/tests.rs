@@ -6321,6 +6321,51 @@ proptest! {
 }
 
 // THEORY: two-fixpoints-one-procedure
+/// A union a meet holds twice, once bare and once inside another member, is
+/// distributed with every copy of it taken out of the branch.
+///
+/// A fractional number met with `None | NUMBER` and a recursive universe: the
+/// universe's reference opens the meet, and every union in it is then
+/// distributed. `int | float` is a member and also sits inside `NUMBER`, so the
+/// `float` branch of the copy inside `NUMBER`, met with the rest, is the meet
+/// already open when the bare copy is left in it -- reached again without a
+/// constructor between, and read as empty as a cycle under one is. A branch of
+/// a union is inside it, so the copies go, and the meet holds `0.5`.
+#[test]
+fn a_union_met_twice_is_distributed_once() {
+    let not_bool = Schema::Complement(Arc::new(Schema::Bool));
+    let number = Schema::Intersection(
+        vec![
+            Schema::union([Schema::Int, Schema::Float]),
+            not_bool.clone(),
+        ]
+        .into(),
+    );
+    let integral = Schema::Refine {
+        base: Arc::new(Schema::Float),
+        constraints: vec![Constraint::MultipleOf(OperandIx::new(0))].into(),
+    };
+    let integer =
+        Schema::Intersection(vec![Schema::union([Schema::Int, integral]), not_bool.clone()].into());
+    let universe = Schema::union([
+        Schema::Float,
+        Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+    ]);
+    let defs = vec![universe];
+    let meet = Schema::Intersection(
+        vec![
+            Schema::union([Schema::NoneType, number]),
+            Schema::union([Schema::Int, Schema::Float]),
+            not_bool,
+            Schema::Complement(Arc::new(integer)),
+            Schema::Ref(DefIx::new(0)),
+        ]
+        .into(),
+    );
+    assert!(!meet.is_empty_under(&defs), "{meet:?} holds 0.5");
+}
+
+// THEORY: two-fixpoints-one-procedure
 /// A record minus records met inside a definition asks its goals while the
 /// definition is being resolved, and answers as the set does.
 ///

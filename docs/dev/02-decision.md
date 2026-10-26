@@ -878,7 +878,17 @@ budget while the path below decides it, and it answers only for itself: under
 (None | {"a": None})`, which holds `{"a": None}` and which the reference's goal
 on `visiting` would read empty. A meet's members are subterms of the schema
 and the definitions, so a query has finitely many meet goals, and a goal met
-again on its path is answered by hypothesis as a reference is.
+again on its path is answered by hypothesis as a reference is. That reading is
+the least fixpoint only where the path crossed a constructor since the goal
+opened, so the value the second meeting needs is a smaller one. A branch
+therefore drops every copy of the member it distributes -- a branch is inside
+that member -- since a copy left in makes the branch's meet the open one
+wherever the branch is a member beside it, and the cycle then needs the same
+value. Without the copies, a distribution leaves strictly smaller members and
+an unfolding is guarded by contractivity, so an open goal is met again only
+under a constructor. `a_meet_holding_a_union_twice_is_proved_empty_only_where_it_is`
+draws the shape and `a_union_met_twice_is_distributed_once` is the meet a
+downstream planner found proved empty while it held `0.5`.
 
 `decision/goal_tests.rs` holds the premise: every goal the recorder sees is in
 `C`, over the product rule's widest shapes, the record rule's split, the union

@@ -583,6 +583,17 @@ fn has_a_pattern_and_its_complement(members: &[Schema], cx: &mut Cx<'_>) -> bool
 /// so a query has finitely many, as normal forms over the atoms a type mentions
 /// are [FCB08, §6.9], and a path holds each at most once.
 ///
+/// **A branch drops every copy of the member it distributes.** A branch is
+/// inside that member, so meeting it with another copy says nothing more, and a
+/// copy left in would make the branch's meet the meet already open wherever the
+/// branch is a member beside it: `float` distributed out of `int | float` in a
+/// meet holding `float` and a second `int | float`. Reached again with no
+/// constructor between, the cycle needs the same value rather than a smaller
+/// one, so reading it as empty is not the least fixpoint at all. With the copies
+/// gone, a distribution leaves strictly smaller members and an unfolding is
+/// guarded by the contractivity every definition is built with, so a path
+/// reaches an open meet again only under a constructor.
+///
 /// **The meet is its own goal and never the reference's.** Under `t = None |
 /// {"a": t}` the meet `t ∧ {"a": None | {"a": None}}` asks of its key `t ∧
 /// (None | {"a": None})`, which holds `None`. Reading that `t` as the
@@ -632,12 +643,12 @@ fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdi
             Schema::Intersection(inner) => inner.to_vec(),
             branch => vec![branch.clone()],
         };
+        let distributed = members.get(at);
         meet.extend(
             members
                 .iter()
-                .enumerate()
-                .filter(|(other, _)| *other != at)
-                .map(|(_, member)| member.clone()),
+                .filter(|member| Some(*member) != distributed)
+                .cloned(),
         );
         let (held, _) = Schema::Intersection(meet.into()).empty_and_region(cx);
         verdict = Verdict::any([verdict, held].into_iter());

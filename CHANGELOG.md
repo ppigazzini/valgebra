@@ -20,6 +20,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a generic record class applied is read with its arguments in place
 - fix: a mapping names each key schema once, and an unnamed fixpoint is its body
 - fix: a copy of a validator is the validator itself
+- fix: a meet distributes a union it holds twice with every copy taken out
 
 -->
 
@@ -92,6 +93,17 @@ answer of its own, or a repair to a change not yet released.
 
 ### Security
 
+- **A meet holding a union twice beside a reference is not proved empty.** A
+  meet a recursive reference opens distributes each union it holds, and a
+  branch kept the other copies of the union it came out of, so where the union
+  stood twice -- bare, and inside another member -- a branch could be the meet
+  already being decided, met again with no constructor between, and read as
+  empty as a cycle under one is. So `intersection(FRAC, union(None, NUMBER),
+  JSON)`, a fractional number met with a nullable number and a recursive JSON
+  universe, was answered `is_empty() == True` and `"subset"` of `nothing`
+  though `0.5` is in it, in 0.0.18 through 0.0.20. A branch drops every copy of
+  the member it distributes, which it is inside, and such a meet answers as its
+  values do.
 - **A complement walks a definition two members share once per room.** A
   `complement` reads its inner walk with a stop as a third answer, and took no
   stop the walk kept for a definition at a value, so where every walk of a

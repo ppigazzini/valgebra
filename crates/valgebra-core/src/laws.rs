@@ -6794,6 +6794,50 @@ proptest! {
         }
     }
 
+    // THEORY: two-fixpoints-one-procedure
+    /// A meet holding a union twice -- bare, and inside another member -- beside
+    /// a reference is proved empty only where no value is in it.
+    ///
+    /// The reference opens the meet and its definition's branch `leaf` is one of
+    /// the union's, so distributing the union inside the other member brings the
+    /// bare copy back beside `leaf`: left in the branch, the copy makes the
+    /// branch the meet already open, reached again with no constructor between,
+    /// which the reading of a cycle must not take for empty.
+    #[test]
+    fn a_meet_holding_a_union_twice_is_proved_empty_only_where_it_is(
+        leaf in prop_oneof![
+            Just(Schema::Int),
+            Just(Schema::Str),
+            Just(Schema::Float),
+            Just(Schema::Bool),
+            Just(Schema::Literal(ConstIx::new(0))),
+        ],
+        other in recursive_schema(),
+        beside in recursive_schema(),
+    ) {
+        let defs = vec![union(leaf.clone(), Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))))];
+        let twice = union(leaf, other);
+        let meet = Schema::Intersection(
+            vec![
+                union(Schema::NoneType, intersection(twice.clone(), beside.clone())),
+                twice,
+                beside,
+                Schema::Ref(DefIx::new(0)),
+            ]
+            .into(),
+        );
+        if meet.is_empty_under(&defs) {
+            let pool = const_pool();
+            let (values, subject, _) = drawn_reading(&meet, &meet, &defs);
+            for value in &values {
+                prop_assert!(
+                    !member_full(&subject, value, &pool),
+                    "{value:?} is a member of {meet:?}, decided empty under {defs:?}"
+                );
+            }
+        }
+    }
+
     // THEORY: a-reference-denotes-its-definition
     /// A reference and the definition it names are one set, over drawn
     /// definitions, by the deciders and by the values.
