@@ -7654,10 +7654,10 @@ fn a_meet_is_proved_empty_beside_a_conjunct_the_lowering_refuses() {
     let pool = NoLeafRelations;
     let mut kept = None;
     let thinned = meet(vec![words("^a+$"), deep.clone()]);
-    assert!(lower_widened(&thinned, &[], &pool, &mut kept).is_some());
+    assert!(lower_widened(&thinned, &[], &pool, &mut kept, || false).is_some());
     assert_eq!(kept, Some(vec![words("^a+$")]));
     let mut kept = None;
-    assert!(lower_widened(&pair, &[], &pool, &mut kept).is_some());
+    assert!(lower_widened(&pair, &[], &pool, &mut kept, || false).is_some());
     assert_eq!(kept, None);
 }
 

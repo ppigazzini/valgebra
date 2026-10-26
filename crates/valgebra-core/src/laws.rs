@@ -7096,7 +7096,7 @@ proptest! {
         // Monotone where the set representation proves the pair: a rule that
         // reads a meet by its shape may decline the meet of three, and the
         // reading is what leaves the refused member out.
-        let read = lower_widened(&pair, &defs, &NoLeafRelations, &mut None)
+        let read = lower_widened(&pair, &defs, &NoLeafRelations, &mut None, || false)
             .is_some_and(|set| set.emptiness() == Verdict::Empty);
 
         if read && pair.is_empty_under(&defs) {

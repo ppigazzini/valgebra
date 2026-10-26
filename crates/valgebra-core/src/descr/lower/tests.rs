@@ -1,8 +1,13 @@
+use std::cell::Cell;
 use std::sync::{Arc, LazyLock};
 
 use proptest::prelude::*;
 
-use super::{BUDGET, Bounds, Constants, DEPTH, Operand, WORK, lower, lower_within};
+use super::{
+    BUDGET, Bounds, Constants, DEPTH, Operand, Room, WORK, descend, lower, lower_widened,
+    lower_within, nests_past_the_depth,
+};
+use crate::descr::budget;
 use crate::descr::classes::Class;
 use crate::descr::{Descr, Value};
 use crate::ir::{
@@ -2428,4 +2433,292 @@ fn a_complement_key_opens_the_part_for_a_key_of_no_listed_kind() {
         Schema::Instance(ClassIx::new(0)).descriptor_contained_in(&not_str, &pool, &[]),
         Relation::Fails
     );
+}
+
+/// A pool that counts what a build asks of it, over [`Pool`]'s answers: a
+/// refusal made before the build asks nothing.
+struct Counted {
+    pool: Pool,
+    asked: Cell<usize>,
+}
+
+impl Counted {
+    fn new(operands: Vec<Operand>) -> Self {
+        Self {
+            pool: Pool(operands),
+            asked: Cell::new(0),
+        }
+    }
+
+    fn ask(&self) {
+        self.asked.set(self.asked.get() + 1);
+    }
+}
+
+impl Constants for Counted {
+    fn operand(&self, index: OperandIx) -> Option<Operand> {
+        self.ask();
+        self.pool.operand(index)
+    }
+
+    fn constant(&self, index: ConstIx) -> Option<Operand> {
+        self.ask();
+        self.pool.constant(index)
+    }
+
+    fn class(&self, index: ClassIx) -> Option<Class> {
+        self.ask();
+        self.pool.class(index)
+    }
+}
+
+/// A list of lists, `levels` deep around `int`: past the depth bound from
+/// `levels == DEPTH` on, a meet around it from one level less.
+fn nested_lists(levels: u32) -> Schema {
+    (0..levels).fold(Schema::Int, |inner, _| {
+        Schema::list(SeqShape::homogeneous(inner))
+    })
+}
+
+fn meet(members: Vec<Schema>) -> Schema {
+    Schema::Intersection(members.into())
+}
+
+fn words(pattern: &str) -> Schema {
+    Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex(pattern.into())].into(),
+    }
+}
+
+/// A closed record whose one field, `k`, may be absent: it holds the empty
+/// dict, so it holds a value by its shape whatever the field's type is.
+fn optional_k(schema: Schema) -> Schema {
+    Schema::KeyedMap {
+        fields: vec![Field {
+            name: "k".into(),
+            schema,
+            required: false,
+        }]
+        .into(),
+        defaults: Vec::new().into(),
+    }
+}
+
+/// A schema nesting past the depth bound is refused before anything in it is
+/// built, whatever sits ahead of the deep node.
+///
+/// The literal ahead of it is the build's first read, and the pool is asked
+/// nothing: the refusal is read off the schema. On the widened side the same
+/// schema spelled as a union has no conjunct to leave out, so it is refused
+/// there too, and reads nothing either. Within the bound the literal is read.
+#[test]
+fn a_schema_past_the_depth_is_refused_before_it_is_built() {
+    let pool = Counted::new(vec![Operand::Integer(1)]);
+    let literal = || Schema::Literal(ConstIx::new(0));
+    let deep = nested_lists(DEPTH);
+
+    assert!(lower(&meet(vec![literal(), deep.clone()]), &pool).is_none());
+    assert_eq!(pool.asked.get(), 0, "the literal ahead is never read");
+    let union = Schema::Union(vec![literal(), deep].into());
+    assert!(lower_widened(&union, &[], &pool, &mut None, || true).is_none());
+    assert_eq!(pool.asked.get(), 0, "nor on the widened side");
+
+    assert!(lower(&meet(vec![literal(), Schema::Int]), &pool).is_some());
+    assert_eq!(pool.asked.get(), 1, "a schema within the bound is read");
+}
+
+// THEORY: a-cut-reference-proves
+/// A meet holding a member past the depth bound is read without it whatever
+/// else that member holds.
+///
+/// The member's first node is a literal the pool cannot read, ahead of its
+/// deep node, so a build refuses there, for the literal, and a reading that
+/// thinned only a build refused for depth left the meet unread. The depth is
+/// read off the schema, so the two disjoint patterns beside the member are
+/// read alone, and their meet is empty.
+#[test]
+fn a_member_past_the_depth_is_left_out_whatever_it_holds() {
+    let pool = empty_pool();
+    let unread = Schema::Union(vec![Schema::Literal(ConstIx::new(0)), nested_lists(DEPTH)].into());
+    let three = meet(vec![words("^a+$"), words("^b+$"), unread]);
+    let mut kept = None;
+    let set = lower_widened(&three, &[], &pool, &mut kept, || false).expect("read thinned");
+    assert_eq!(set.emptiness(), Verdict::Empty);
+    assert_eq!(kept, Some(vec![words("^a+$"), words("^b+$")]));
+}
+
+// THEORY: a-cut-reference-proves
+/// A conjunct whose deepest node is a clause's key is kept by a thinned
+/// reading where the build reads it.
+///
+/// A key is read for the labels and parts it covers, never descended, so the
+/// depth the build spends on a map is its values'. A meet leaves its members
+/// one level less, and the complement of a union holding a map whose key
+/// union is one level deeper than its value fits that room by its value.
+#[test]
+fn a_member_whose_key_is_its_deepest_node_is_kept() {
+    let pool = empty_pool();
+    let keyed = Schema::Complement(Arc::new(Schema::Union(
+        vec![
+            Schema::KeyedMap {
+                fields: Vec::new().into(),
+                defaults: vec![MapClause {
+                    key: Schema::Union(vec![Schema::Str, Schema::Bytes].into()),
+                    value: Schema::Int,
+                }]
+                .into(),
+            },
+            Schema::NoneType,
+        ]
+        .into(),
+    )));
+    assert!(lower(&meet(vec![keyed.clone()]), &pool).is_some());
+    let mut kept = None;
+    assert!(
+        lower_widened(
+            &meet(vec![keyed.clone(), nested_lists(DEPTH)]),
+            &[],
+            &pool,
+            &mut kept,
+            || true
+        )
+        .is_some()
+    );
+    assert_eq!(kept, Some(vec![keyed]));
+}
+
+// THEORY: a-cut-reference-proves
+/// A thinned reading that can only be inhabited is built for a caller that
+/// reads an inhabited set, and for no other.
+///
+/// A record whose one field may be absent holds the empty dict, so read alone
+/// beside a member past the depth bound it is an inhabited superset: it
+/// proves no emptiness, and the reading is refused without reading the
+/// literal in it. A relation's subject below a supertype that lowers is the
+/// caller that reads it -- `{"k"?: str}` is below `{"k"?: str | int}` -- and
+/// below a supertype past the depth bound nothing is built at all, the
+/// supertype's refusal read first.
+#[test]
+fn a_thinned_reading_that_can_only_be_inhabited_is_built_where_it_answers() {
+    let pool = Counted::new(vec![Operand::Integer(1)]);
+    let literal = optional_k(Schema::Literal(ConstIx::new(0)));
+    let beside = meet(vec![literal, nested_lists(DEPTH)]);
+
+    assert!(lower_widened(&beside, &[], &pool, &mut None, || false).is_none());
+    assert_eq!(pool.asked.get(), 0, "an emptiness question builds nothing");
+    assert!(lower_widened(&beside, &[], &pool, &mut None, || true).is_some());
+    assert_eq!(pool.asked.get(), 1, "a caller that reads it is given it");
+
+    let pool = Counted::new(vec![Operand::Integer(1)]);
+    assert_eq!(
+        beside.descriptor_contained_in(&nested_lists(DEPTH + 1), &pool, &[]),
+        Relation::Unknown
+    );
+    assert_eq!(pool.asked.get(), 0, "below a refused supertype, nothing");
+
+    let strings = meet(vec![optional_k(Schema::Str), nested_lists(DEPTH)]);
+    let wider = optional_k(Schema::Union(vec![Schema::Str, Schema::Int].into()));
+    assert_eq!(
+        strings.descriptor_contained_in(&wider, &empty_pool(), &[]),
+        Relation::Holds
+    );
+}
+
+/// A member whose deep node lies past the node bound is refused for its nodes,
+/// as the build refuses it, and is not read thinned.
+///
+/// The walk spends the build's nodes, which is what bounds it: a table of a
+/// thousand constants is refused after the build's sixty-four nodes, and a
+/// walk to its end would cost a thousand on every relation asked of it. So a
+/// meet holding such a member declines as the build does, though leaving the
+/// member out would leave two patterns that do not meet.
+#[test]
+fn a_member_deep_only_past_the_node_bound_is_refused_for_its_nodes() {
+    let pool = empty_pool();
+    let wide = core::iter::repeat_n(Schema::Str, BUDGET as usize)
+        .chain([nested_lists(DEPTH)])
+        .collect::<Vec<_>>();
+    let three = meet(vec![
+        words("^a+$"),
+        words("^b+$"),
+        Schema::Union(wide.into()),
+    ]);
+    assert!(!nests_past_the_depth(&three, Bounds::DEFAULT));
+    assert!(lower_widened(&three, &[], &pool, &mut None, || false).is_none());
+}
+
+/// Schemas nested to either side of the depth bound, a clause's key among
+/// their nodes and wide enough at times to spend the node bound first. No
+/// complement: its products are what a work allowance refuses, and the law
+/// below compares builds that refuse for depth or nodes alone.
+fn nested_schema() -> impl Strategy<Value = Schema> {
+    let leaf = prop_oneof![
+        Just(Schema::Int),
+        Just(Schema::Str),
+        Just(Schema::Bytes),
+        Just(Schema::NoneType),
+        Just(Schema::Float),
+    ];
+    // Narrow and deep, a node holding two children at most, so the depth the
+    // draw reaches straddles the bound; width comes from a table of leaves.
+    let leaf = prop_oneof![
+        4 => leaf.clone(),
+        1 => prop::collection::vec(leaf, 1..80).prop_map(|members| Schema::Union(members.into())),
+    ];
+    leaf.prop_recursive(10, 64, 2, |inner| {
+        prop_oneof![
+            prop::collection::vec(inner.clone(), 1..3)
+                .prop_map(|members| Schema::Union(members.into())),
+            prop::collection::vec(inner.clone(), 1..3).prop_map(meet),
+            inner.clone().prop_map(Schema::set),
+            inner
+                .clone()
+                .prop_map(|inner| Schema::list(SeqShape::homogeneous(inner))),
+            (inner.clone(), inner.clone(), inner).prop_map(|(field, key, value)| {
+                Schema::KeyedMap {
+                    fields: vec![Field {
+                        name: "a".into(),
+                        schema: field,
+                        required: true,
+                    }]
+                    .into(),
+                    defaults: vec![MapClause { key, value }].into(),
+                }
+            }),
+        ]
+    })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    /// The depth read off a schema is the depth its build refuses at.
+    ///
+    /// A schema the walk finds past the bound is one the build refuses, and
+    /// one it clears is one the build reads as it would with no depth bound
+    /// at all: the same set, or the same refusal for its nodes. The walk
+    /// spends the build's nodes in the build's order, so a schema whose deep
+    /// node lies past the node bound clears it, as the build refuses it for
+    /// nodes first. Both builds run with no work allowance, so neither
+    /// refuses for a reason the walk does not read.
+    #[test]
+    fn the_depth_read_off_a_schema_is_the_build_s(schema in nested_schema()) {
+        let pool = empty_pool();
+        let built =
+            budget::under(u64::MAX, || descend(&schema, &pool, &Room::new(BUDGET), DEPTH));
+        if nests_past_the_depth(&schema, Bounds::DEFAULT) {
+            prop_assert!(built.is_none(), "{schema:?} is read past the depth and built");
+        } else {
+            let unbounded = Bounds {
+                depth: u32::MAX,
+                work: u64::MAX,
+                ..Bounds::DEFAULT
+            };
+            prop_assert_eq!(built, lower_within(unbounded, &schema, &pool), "{:?}", schema);
+        }
+    }
 }

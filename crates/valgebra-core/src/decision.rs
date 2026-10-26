@@ -251,9 +251,31 @@ impl Schema {
         // **A conjunct the subject's lowering refuses is left out**, as
         // [`lower_widened`] reads it, which is a widening of the same kind:
         // the subject reads as a superset, and the label check reads the
-        // members kept.
+        // members kept. A thinned subject that can only be inhabited answers
+        // nothing against a supertype the lowering refuses, so where the
+        // reading would be one, the supertype is lowered first, and once.
+        //
+        // `¬other` is what the difference meets, and a complement's is its
+        // inner set, read on the widened side: `self ⊆ ¬inner` asks `self ∧
+        // inner = ∅`, a double complement being the set [FCB08, Def. 4.1].
+        // Complementing the lowered `¬inner` would rebuild that set
+        // from a double negation, and where the negation expands -- a record
+        // whose field spans two kinds expands into more atoms than it began
+        // with -- the meet with the rebuilt form spends past the allowance a
+        // meet with the inner set fits in: `{"t": int} ⊆ ¬({"t": str} ∪
+        // {"t": bytes})` declines that way, while three field kinds, whose
+        // complement stays negated, decide.
+        let (read, side) = match other {
+            Schema::Complement(inner) => (&**inner, Polarity::Widen),
+            _ => (other, Polarity::Narrow),
+        };
+        let mut theirs = None;
         let mut kept = None;
-        let Some(mine) = lower_widened(self, defs, pool, &mut kept) else {
+        let Some(mine) = lower_widened(self, defs, pool, &mut kept, || {
+            theirs
+                .insert(lower_unfolded(read, defs, side, pool))
+                .is_some()
+        }) else {
             return Relation::Unknown;
         };
         let cut =
@@ -269,23 +291,8 @@ impl Schema {
             };
             return Relation::proven(stands);
         }
-        // `¬other` is what the difference meets, and a complement's is its
-        // inner set, read on the widened side: `self ⊆ ¬inner` asks `self ∧
-        // inner = ∅`, a double complement being the set [FCB08, Def. 4.1].
-        // Complementing the lowered `¬inner` would rebuild that set
-        // from a double negation, and where the negation expands -- a record
-        // whose field spans two kinds expands into more atoms than it began
-        // with -- the meet with the rebuilt form spends past the allowance a
-        // meet with the inner set fits in: `{"t": int} ⊆ ¬({"t": str} ∪
-        // {"t": bytes})` declines that way, while three field kinds, whose
-        // complement stays negated, decide.
-        let (read, side) = match other {
-            Schema::Complement(inner) => (&**inner, Polarity::Widen),
-            _ => (other, Polarity::Narrow),
-        };
         let negate = side == Polarity::Narrow;
-        let theirs = lower_unfolded(read, defs, side, pool);
-        let Some(theirs) = theirs else {
+        let Some(theirs) = theirs.unwrap_or_else(|| lower_unfolded(read, defs, side, pool)) else {
             return Relation::Unknown;
         };
         budget::under(WORK, || {

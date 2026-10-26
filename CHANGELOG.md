@@ -13,7 +13,25 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: a refusal for depth is read off the schema before anything is built
+
 -->
+
+### Fixed
+
+- **A relation the set representation refuses for depth costs a walk, not a
+  build.** 0.0.21 read a meet nested past the depth the set representation
+  descends without the members past it, building the members it kept, and
+  lowered the supertype as well, where the answer could only be `undecided`. A
+  relation between two records each spelled `OBJ & (~OBJ | R) & (~OBJ | REQ)`,
+  as a JSON Schema translation guards a keyword to its kind, counted 85% more
+  instructions than on 0.0.20. The depth is read off the schema before anything
+  is built, and a reading that can only be inhabited is built only for a
+  relation whose supertype the set representation reads: the same relation
+  counts 73% fewer instructions than on 0.0.20, with the same answer. A meet
+  holding a member past the depth is read without it whatever else the member
+  holds, and a member whose deepest node is a mapping's key is kept, where each
+  was left unread.
 
 ## [0.0.21] - 2026-10-26
 

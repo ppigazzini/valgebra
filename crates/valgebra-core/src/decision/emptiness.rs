@@ -111,10 +111,12 @@ impl Schema {
     ///
     /// A conjunct at the top the lowering refuses -- a predicate, a member
     /// nested past the depth bound -- is left out ([`lower_widened`]), which
-    /// reads a superset, so emptiness is monotone in a meet's members.
+    /// reads a superset, so emptiness is monotone in a meet's members. A
+    /// superset the reading can only find inhabited proves nothing here, and
+    /// is not built.
     pub(super) fn denotes_no_value(&self, pool: &dyn Constants, defs: &[Schema]) -> bool {
         let mut kept = None;
-        lower_widened(self, defs, pool, &mut kept)
+        lower_widened(self, defs, pool, &mut kept, || false)
             .is_some_and(|set| set.emptiness() == Verdict::Empty)
             && match &kept {
                 None => an_empty_reading_stands(&[self], &[], defs, pool),

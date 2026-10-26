@@ -78,12 +78,18 @@ proof, and lowering one costs about three orders of magnitude more than the rule
 that already answered. Its inhabited answer refutes only where no reference was
 cut: where one was, the difference was widened on the left and shrunk on the
 right, so a value found in it need be no value of the real difference. A
-conjunct at the top of the subject the lowering refuses -- a predicate, a meet
-member nested past the depth bound, a refinement's constraint no component
-holds -- is left out the same way (`lower_widened` in `descr/lower.rs`): a meet
+conjunct at the top of the subject no lowering reads -- a refinement's
+predicate, a meet member holding one, a meet member nested past the depth
+bound -- is left out the same way (`lower_widened` in `descr/lower.rs`): a meet
 is below each member, so the reading is a superset, which makes the
 descriptor's emptiness monotone in a meet's members, and an inhabited reading
-of it refutes nothing. Its
+of it refutes nothing. A constraint no component holds that is no predicate --
+a step over the floats -- refuses the reading as it refuses the schema. The
+depth is read off the schema before anything is built (`nests_past_the_depth`),
+so a schema past it costs a walk of the nodes ahead of the deep one rather than
+the sets built from them, and a reading that can only be inhabited -- one
+conjunct holding a value by its shape -- is built only for a relation whose
+supertype lowers, the one question it answers. Its
 empty answer has the mirror condition: a literal key is read as a label, which
 also holds the subclass keys equal to it, so an empty difference proves the
 inclusion only where no such label is subtracted from a dict that can hold a
