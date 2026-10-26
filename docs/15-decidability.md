@@ -96,6 +96,28 @@ answers `"undecided"`.
   `__weakref__`, lays down nothing. The `@disjoint_base` decorator of PEP 800
   is a promise to a checker that the runtime does not enforce, and it is not
   read.
+- **A meet holding a literal.** A meet holding a literal, or a union of them,
+  is read one constant at a time by the same walk: it is inhabited where a
+  constant is a member of every other member, and empty where each constant is
+  refused by one of them, under the condition on equal values above. So a
+  literal met with the complement of its meet with a recursive universe is
+  empty, at a depth the set representation does not reach. A value the walk
+  cannot read, one at which a predicate raises, is refused by a set and by its
+  complement alike, and decides nothing.
+
+    ```python
+    from typing import Literal
+
+    from valgebra import complement, intersection, nothing, recursive, union
+
+    json = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    paid = Literal["paid"]
+    assert intersection(paid, complement(intersection(paid, json))).is_empty()
+    # `paid & list[int]` is empty, so its complement holds "paid".
+    inhabited = intersection(paid, complement(intersection(paid, list[int])))
+    assert inhabited.relation_to(nothing) == "not_subset"
+    ```
+
 - **Literals against other kinds.** A literal pins `type(x)` exactly, so it
   carries the kind of its constant and is decided against another kind:
   `Literal["a"]` is below `~int`, and `Literal["a"] & Literal["b"]` is empty.

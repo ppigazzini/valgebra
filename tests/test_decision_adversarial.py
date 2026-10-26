@@ -17,7 +17,7 @@ from typing import Annotated, Any, Literal, Protocol, runtime_checkable
 
 import annotated_types as at
 import pytest
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 
 from valgebra import (
@@ -26,6 +26,7 @@ from valgebra import (
     Validator,
     complement,
     intersection,
+    nothing,
     recursive,
     union,
 )
@@ -344,6 +345,116 @@ def test_a_literal_that_is_its_whole_class_is_proved_below_a_predicate() -> None
     assert Validator(one_and_a_half).relation_to(Annotated[float, _sign]) == "subset"
     red = Annotated[_Color, lambda color: color.value == 1]
     assert Validator(Literal[_Color.RED]).relation_to(red) == "subset"
+
+
+def _raises(value: object) -> bool:
+    raise ValueError(value)
+
+
+_JSON = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+
+#: A literal beside every value it holds that the law can name: the constant,
+#: and the values `==` joins to it within its type.
+_LITERALS: list[tuple[object, list[object]]] = [
+    (Literal["paid"], ["paid"]),
+    (Literal["a", "b"], ["a", "b"]),
+    (Literal[0], [0]),
+    (Literal[0.0], [0.0, -0.0]),  # ty: ignore[invalid-type-form]
+    (Literal[1.5], [1.5]),  # ty: ignore[invalid-type-form]
+    (
+        Literal[Decimal("1.00")],  # ty: ignore[invalid-type-form]
+        [Decimal("1.00"), Decimal("1.0"), Decimal(1)],
+    ),
+    (Literal[_Color.RED], [_Color.RED]),
+]
+
+_NEGATIVE = Annotated[float, lambda x: not _sign(x)]
+_ONE_PLACE = Annotated[Decimal, lambda d: d.as_tuple().exponent == -1]
+_RAISING = Annotated[Any, _raises]
+
+#: Members that run code on the constant: two sign tests, two tests of a
+#: decimal's places, a predicate that raises, and a recursive universe. Each
+#: test the constant fails admits a value equal to it.
+_CALLBACKS = st.sampled_from(
+    [
+        Annotated[float, _sign],
+        _NEGATIVE,
+        Annotated[Decimal, lambda d: d.as_tuple().exponent == -2],
+        _ONE_PLACE,
+        _RAISING,
+        _JSON,
+    ]
+)
+
+
+# THEORY: a-constant-is-the-values-equal-to-it
+@given(
+    literal=st.sampled_from(_LITERALS),
+    beside=st.lists(
+        st.tuples(st.one_of(_specs.map(_build), _CALLBACKS), st.booleans()),
+        min_size=1,
+        max_size=3,
+    ),
+)
+@example(literal=_LITERALS[3], beside=[(_NEGATIVE, False)])
+@example(literal=_LITERALS[5], beside=[(_ONE_PLACE, False)])
+@example(literal=_LITERALS[0], beside=[(_RAISING, False)])
+def test_a_meet_holding_a_literal_is_decided_as_its_values_are_walked(
+    literal: tuple[object, list[object]], beside: list[tuple[object, bool]]
+) -> None:
+    """A meet holding a literal is empty only where no value of it is admitted.
+
+    The literal's values are named in full, so a meet proved inhabited must
+    admit one of them too, and the literal proved below the complement of the
+    other members must have every value admitted there: a value the walk stops
+    at is refused by a set and its complement alike. A member is drawn bare or
+    as the complement of its meet with the literal, the spelling a universe met
+    into every member of a schema builds.
+    """
+    schema, values = literal
+    members = [
+        complement(intersection(schema, member)) if negated else member
+        for member, negated in beside
+    ]
+    meet = intersection(schema, *members)
+    answer = meet.relation_to(nothing)
+    admitted = [value for value in values if meet.is_valid(value)]
+    if answer == "subset":
+        assert not admitted, f"proved empty, and admits {admitted!r}"
+    if answer == "not_subset":
+        assert admitted, "proved inhabited, and admits none of its values"
+    outside = complement(intersection(*members))
+    if Validator(schema).relation_to(outside) == "subset":
+        refused = [value for value in values if not outside.is_valid(value)]
+        assert not refused, f"proved below the complement, which refuses {refused!r}"
+
+
+# THEORY: a-constant-is-the-values-equal-to-it
+def test_a_literal_met_with_a_deep_complement_is_decided_by_its_constant() -> None:
+    """A literal met beside a universe meets no depth bound.
+
+    `Literal["paid"] & ~(Literal["paid"] & JSON)` nests deeper than the set
+    representation reads, and the constant is in the inner meet, so out of its
+    complement. A literal set minus the complements of the universe met into
+    each piece is the spelling a planner meeting every member with the universe
+    builds, and it is empty the same way. A predicate raising on the constant
+    is refused by itself and by its complement, and decides nothing.
+    """
+    paid = Literal["paid"]
+    assert intersection(paid, complement(intersection(paid, _JSON))).is_empty()
+    status = Literal["open", "paid", "void"]
+    tagged = Annotated[str, Regex(r"^re_[a-z0-9]{8}$")]
+    removed = [Literal["paid"], Literal["open"], union(tagged, Literal["void"])]
+    spelled = intersection(
+        _JSON,
+        status,
+        *(complement(intersection(piece, _JSON)) for piece in removed),
+    )
+    assert spelled.is_empty()
+    assert not any(spelled.is_valid(value) for value in ("open", "paid", "void"))
+    raising = Annotated[str, _raises]
+    assert intersection(paid, raising).relation_to(nothing) == "undecided"
+    assert intersection(paid, complement(raising)).relation_to(nothing) == "undecided"
 
 
 class _WeirdInt(int):

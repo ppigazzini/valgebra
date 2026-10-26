@@ -26,7 +26,7 @@ use crate::oracle::denotes_a_set_within;
 use crate::verdict::Verdict;
 
 use super::constraints::{Density, bounds_unsatisfiable, longest, shortest, tightest_bounds};
-use super::literals::FiniteMeet;
+use super::literals::{FiniteMeet, a_meet_read_by_its_constants};
 use super::records::{keyed_map_meet_verdict, keyed_map_minus_keyed_maps};
 use super::{
     Budget, Cx, DECISION_BUDGET, LeafRelations, NoLeafRelations, descending,
@@ -436,12 +436,14 @@ fn density_of<'a>(bases: impl IntoIterator<Item = &'a Schema>) -> Density {
 ///
 /// Proving a meet inhabited means finding a value in *every* member, which none
 /// of the seven does. The region settles it exactly over the whole scalar
-/// fragment, and past that three shapes do: a direct instance of one class
+/// fragment, and past that four shapes do: a direct instance of one class
 /// carrying the attribute record it is met with ([`class_with_attributes`]),
 /// closed maps whose required keys meet in a value
-/// ([`keyed_map_meet_verdict`]), and a reference among the members unfolded
-/// into the meet ([`meet_through_a_reference`]), which decides it either way.
-/// Any other meet is opaque however inhabited its members are.
+/// ([`keyed_map_meet_verdict`]), a table of constants whose constants are
+/// walked through the other members ([`a_meet_read_by_its_constants`]), and a
+/// reference among the members unfolded into the meet
+/// ([`meet_through_a_reference`]); the last two decide it either way. Any other
+/// meet is opaque however inhabited its members are.
 fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Regions) {
     let mut any_empty = false;
     let mut region = Regions::MEET_UNIT;
@@ -492,8 +494,11 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
         }
     };
     let verdict = match verdict {
-        Verdict::Unknown => meet_through_a_reference(members, cx)
-            .unwrap_or_else(|| a_difference_of_sets(members, cx)),
+        Verdict::Unknown => match a_meet_read_by_its_constants(members, cx.oracle, cx.defs) {
+            Verdict::Unknown => meet_through_a_reference(members, cx)
+                .unwrap_or_else(|| a_difference_of_sets(members, cx)),
+            settled => settled,
+        },
         settled => settled,
     };
     (verdict, region)

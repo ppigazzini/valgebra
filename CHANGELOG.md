@@ -21,6 +21,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a mapping names each key schema once, and an unnamed fixpoint is its body
 - fix: a copy of a validator is the validator itself
 - fix: a meet distributes a union it holds twice with every copy taken out
+- feat: a meet holding a literal is decided one constant at a time
 
 -->
 
@@ -37,6 +38,16 @@ answer of its own, or a repair to a change not yet released.
   the variable, and so is a type variable two bases bind to two types. A
   generic class `isinstance` alone answers is refused applied, as it was. A
   generic `TypedDict` and `NamedTuple` need 3.11.
+- **A meet holding a literal is decided one constant at a time.** Each
+  constant is walked through the other members: the meet is inhabited where
+  every member admits one, and empty where each is refused by some member. So
+  `Literal["paid"] & ~(Literal["paid"] & J)`, for a recursive universe `J` the
+  set representation does not read deep enough, is proved empty where it was
+  undecided, and so is a literal set minus the complements of that universe
+  met into each piece, the schema a planner meeting every member with its
+  universe builds. A refusal speaks for the literal only where nothing the
+  member asks tells equal values apart, as a literal below a schema reads it,
+  and a predicate that raises on the constant decides nothing.
 
 ### Changed
 

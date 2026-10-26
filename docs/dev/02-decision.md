@@ -818,6 +818,18 @@ subject below a table and as an emptiness (`FiniteMeet` in
 is exact, and kept only where the oracle says it is a value apart from every
 taken table, since two positions may hold one value.
 
+A meet holding a table beside members that are no tables is read through the
+walk instead, one constant at a time (`a_meet_read_by_its_constants` in
+`decision/literals.rs`): the meet is the union of each constant's literal met
+with the other members [FCB08, Lem. 6.2], and a literal meets a set in a value
+exactly where a value of it is a member [FCB08, §4.2]. A constant every other
+member admits inhabits the meet; one a member refuses is out, read through the
+member's complement, since the walk refuses a value it stopped at from a set and
+its complement alike; and a refusal is read for the literal only where the
+constant speaks for it. It is asked before a reference among the members is
+distributed, because the walk reads a reference only as far as the constant
+needs.
+
 And one repetition is removed rather than bounded. A record whose fields carry
 one schema, or a tuple whose positions do, asks the *same goal* once per field
 or position -- in one loop, in order, so the repeat is the entry before this

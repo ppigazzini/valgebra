@@ -165,6 +165,11 @@ ROWS: dict[str, Row] = {
         list, list[object], "subset"
     ),
     "Class and literal inclusion.": Decides(_Color.RED, _Color, "subset"),
+    "A meet holding a literal.": Decides(
+        intersection(Literal["paid"], complement(intersection(Literal["paid"], _JSON))),
+        nothing,
+        "subset",
+    ),
     "Literals against other kinds.": Decides(Literal["a"], complement(int), "subset"),
     "An enumeration against the union of its members": Decides(
         _Color, Literal[_Color.RED, _Color.GREEN], "subset"

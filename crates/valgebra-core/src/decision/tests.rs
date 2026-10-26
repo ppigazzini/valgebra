@@ -7429,3 +7429,162 @@ fn a_literal_clause_meets_a_field_through_its_name() {
         "a clause holding every string reads the subclass's key as it reads the name"
     );
 }
+
+/// An oracle that walks a constant through a schema, in Kleene's strong logic,
+/// over the shapes the rows below build, and records every schema it walks.
+///
+/// Constants 0 and 1 are two strings, each the one value of its literal;
+/// constant 2 is a float zero, whose literal `==` joins to the other zero; and
+/// constant 3 is a `nan`, whose literal holds no value. The predicate at index
+/// 0 admits constant 1 alone, and the one at index 1 raises on every value: the
+/// walk stops there, and a stop is neither a member of the set nor of its
+/// complement. The definition at index 0 is `str | float | list[t]`.
+struct Walked {
+    walked: std::cell::RefCell<Vec<Schema>>,
+}
+
+impl Walked {
+    fn new() -> Self {
+        Self {
+            walked: std::cell::RefCell::default(),
+        }
+    }
+
+    fn universe() -> Schema {
+        Schema::union([
+            Schema::Str,
+            Schema::Float,
+            Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+        ])
+    }
+
+    /// The walk's three answers: admitted, refused, or stopped (`None`).
+    fn walk(constant: usize, schema: &Schema) -> Option<bool> {
+        match schema {
+            Schema::Anything(_) => Some(true),
+            Schema::Literal(index) => Some(index.get() == constant && constant != 3),
+            Schema::Str => Some(constant < 2),
+            Schema::Float => Some(constant >= 2),
+            Schema::Ref(_) => Self::walk(constant, &Self::universe()),
+            Schema::Refine { base, constraints } => {
+                let base = Self::walk(constant, base)?;
+                constraints
+                    .iter()
+                    .try_fold(base, |held, constraint| match constraint {
+                        Constraint::Predicate(slot) if slot.get() == 0 => {
+                            Some(held && constant == 1)
+                        }
+                        _ => None,
+                    })
+            }
+            Schema::Union(members) => members.iter().try_fold(false, |held, member| {
+                Some(held || Self::walk(constant, member)?)
+            }),
+            Schema::Intersection(members) => members.iter().try_fold(true, |held, member| {
+                Some(held && Self::walk(constant, member)?)
+            }),
+            Schema::Complement(inner) => Self::walk(constant, inner).map(|held| !held),
+            _ => Some(false),
+        }
+    }
+}
+
+impl Constants for Walked {}
+
+impl LeafRelations for Walked {
+    /// What the bindings' walk answers: admitted or not, a stop refused.
+    fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
+        let Schema::Literal(constant) = sub else {
+            return None;
+        };
+        self.walked.borrow_mut().push(sup.clone());
+        Some(Self::walk(constant.get(), sup) == Some(true))
+    }
+    fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+        Some(left != right || left.get() == 3)
+    }
+    fn constant_is_alone(&self, constant: ConstIx) -> bool {
+        constant.get() != 2
+    }
+}
+
+// THEORY: a-constant-is-the-values-equal-to-it
+/// A meet holding a table is read one constant at a time, through the walk.
+///
+/// The meet is the union of each constant's literal met with the other members
+/// [FCB08, Lem. 6.2], and a literal meets a set exactly where a value of it is
+/// a member [FCB08, §4.2]. The rows hold each answer to the walk: a constant
+/// admitted everywhere inhabits the meet, a constant refused for certain is
+/// out, and a stop, a constant `==` joins to another value, and a constant
+/// whose literal is empty each answer as the set they stand for does.
+#[test]
+fn a_meet_holding_a_table_is_read_by_its_constants() {
+    let literal = |index| Schema::Literal(ConstIx::new(index));
+    let predicate = |slot| Schema::Refine {
+        base: Arc::new(Schema::ANYTHING),
+        constraints: vec![Constraint::Predicate(PredIx::new(slot))].into(),
+    };
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let meet = |members: Vec<Schema>| Schema::Intersection(members.into());
+    let table = Schema::Union(vec![literal(0), literal(1)].into());
+    let defs = [Walked::universe()];
+    let verdict = |schema: &Schema, oracle: &Walked| {
+        schema.verdict_rec(&mut Cx::new(oracle, &defs, &Budget::new(DECISION_BUDGET)))
+    };
+    let rows = [
+        // `Literal[a] & ~(Literal[a] & t)`, the meet a universe met into each
+        // member builds: the constant is in the inner meet, so out of its
+        // complement, read through the inner meet itself.
+        (
+            meet(vec![
+                literal(0),
+                not(meet(vec![literal(0), Schema::Ref(DefIx::new(0))])),
+            ]),
+            Verdict::Empty,
+        ),
+        // The predicate admits constant 1 and refuses constant 0.
+        (meet(vec![table.clone(), predicate(0)]), Verdict::Inhabited),
+        (meet(vec![literal(0), predicate(0)]), Verdict::Empty),
+        (
+            meet(vec![literal(0), not(predicate(0))]),
+            Verdict::Inhabited,
+        ),
+        // A stop is in neither the set nor its complement.
+        (meet(vec![literal(0), predicate(1)]), Verdict::Unknown),
+        (meet(vec![literal(0), not(predicate(1))]), Verdict::Unknown),
+        (meet(vec![table.clone(), predicate(1)]), Verdict::Unknown),
+        // The zero is refused, and its literal holds the other zero, which a
+        // predicate may answer apart.
+        (meet(vec![literal(2), predicate(0)]), Verdict::Unknown),
+        (meet(vec![literal(2), Schema::Float]), Verdict::Inhabited),
+        // The walk admits the `nan`, and its literal holds no value.
+        (
+            meet(vec![literal(3), predicate(0).complement()]),
+            Verdict::Empty,
+        ),
+    ];
+    for (schema, expected) in &rows {
+        assert_eq!(verdict(schema, &Walked::new()), *expected, "{schema:?}");
+    }
+
+    // A member `~Y` is refused through `Y`, never through a complement built
+    // over it, and a positive member through its complement.
+    let oracle = Walked::new();
+    let inner = meet(vec![literal(0), Schema::Ref(DefIx::new(0))]);
+    verdict(&rows[0].0, &oracle);
+    assert!(oracle.walked.borrow().contains(&inner));
+    assert!(!oracle.walked.borrow().contains(&not(not(inner))));
+    let oracle = Walked::new();
+    verdict(&meet(vec![literal(0), predicate(0)]), &oracle);
+    assert!(oracle.walked.borrow().contains(&not(predicate(0))));
+
+    // A meet of tables and complements of tables is the finite meet's, read
+    // by index: the reading declines it and walks nothing.
+    let oracle = Walked::new();
+    let finite = [table, not(literal(1))];
+    assert_eq!(
+        literals::a_meet_read_by_its_constants(&finite, &oracle, &defs),
+        Verdict::Unknown,
+    );
+    assert!(oracle.walked.borrow().is_empty());
+}

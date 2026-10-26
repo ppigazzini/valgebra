@@ -13,6 +13,7 @@
 
 use std::borrow::Cow;
 use std::slice;
+use std::sync::Arc;
 
 use crate::ir::{ConstIx, Schema};
 use crate::oracle::{asks_no_callback, every_node_within};
@@ -285,6 +286,93 @@ pub(super) fn the_constant_speaks_for_the_literal(
         || every_node_within(other, definitions, |node| {
             !matches!(node, Schema::AttrRecord { .. }) && asks_no_callback(node, oracle)
         })
+}
+
+/// A meet holding a table of constants, read one constant at a time.
+///
+/// The table is the union of its constants' literals, so the meet is the union
+/// of each literal met with the other members [FCB08, Lem. 6.2], and a literal
+/// meets a set in a value exactly where one of its values is a member
+/// [FCB08, §4.2]. That is a question about one value, which the oracle's walk
+/// of the constant answers. A constant every other member admits is a value of the
+/// meet, where its literal holds the constant at all (`nan`'s holds nothing),
+/// and the meet is inhabited. A constant some member refuses contributes
+/// nothing, and the meet is empty where every constant is refused.
+///
+/// **A refusal is read through the member's complement.** The walk has a third
+/// answer for a value it cannot read -- one at which a predicate raised -- and
+/// reports such a value outside the set and outside its complement alike, so a
+/// constant is out of a member only where the walk admits it to that member's
+/// complement: through `Y` for a member `~Y`, through `~M` for any other `M`.
+/// A bare non-member read as out would prove `Literal["a"] & P` empty for a `P`
+/// raising on `"a"`, and with it `Literal["a"] <= ~P`, which the walk refutes.
+///
+/// **A refusal speaks for the constant, and for the literal only under
+/// [`the_constant_speaks_for_the_literal`]**: `Literal[0.0]` holds `-0.0`, which
+/// a sign test refusing the constant admits. An admission needs no guard, the
+/// constant being a value of its literal. The guard sits on the opposite answer
+/// from the one the subtyping rule for a literal puts it on, where a walk
+/// admitting the constant is the proof of `Literal[c] <= T`.
+///
+/// A meet of tables and complements of tables is [`FiniteMeet`]'s, read by
+/// index with no walk, and declines here. Asked where the rules have declined
+/// and before a reference among the members is distributed: the walk reads a
+/// reference as far as the constant needs, where the distribution spends a
+/// branch per member of the definition to reach the same answer.
+#[inline(never)]
+pub(super) fn a_meet_read_by_its_constants(
+    members: &[Schema],
+    oracle: &dyn LeafRelations,
+    definitions: &[Schema],
+) -> Verdict {
+    let Some((at, table)) = members
+        .iter()
+        .enumerate()
+        .find_map(|(at, member)| finite_set(member).map(|table| (at, table)))
+    else {
+        return Verdict::Unknown;
+    };
+    if members.iter().all(|member| match member {
+        Schema::Complement(inner) => finite_set(inner).is_some(),
+        other => finite_set(other).is_some(),
+    }) {
+        return Verdict::Unknown;
+    }
+    let mut verdict = Verdict::Empty;
+    for constant in table {
+        let Schema::Literal(index) = constant else {
+            return Verdict::Unknown;
+        };
+        let holds_a_value = oracle.literals_disjoint(*index, *index);
+        if holds_a_value == Some(true) {
+            continue;
+        }
+        let mut admitted = true;
+        let refused = members
+            .iter()
+            .enumerate()
+            .filter(|(place, _)| *place != at)
+            .any(|(_, member)| {
+                if oracle.leaf_subtype(constant, member) == Some(true) {
+                    return false;
+                }
+                admitted = false;
+                the_constant_speaks_for_the_literal(*index, member, oracle, definitions)
+                    && match member {
+                        Schema::Complement(inner) => oracle.leaf_subtype(constant, inner),
+                        member => oracle
+                            .leaf_subtype(constant, &Schema::Complement(Arc::new(member.clone()))),
+                    } == Some(true)
+            });
+        if refused {
+            continue;
+        }
+        if admitted && holds_a_value == Some(false) {
+            return Verdict::Inhabited;
+        }
+        verdict = Verdict::Unknown;
+    }
+    verdict
 }
 
 /// `A ⊆ B` between two finite sets of constants, decided by membership.

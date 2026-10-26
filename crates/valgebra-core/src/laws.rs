@@ -6951,6 +6951,108 @@ fn names_constant(schema: &Schema, index: usize) -> bool {
     }
 }
 
+/// The walk the bindings take, transcribed: a constant of the pool is a member
+/// of a schema where [`member_full`] admits it, the schema's references read
+/// through the definitions as deep as the oracle reads every value.
+///
+/// Every constant of the pool is the one value of its literal, an exact `int`,
+/// `str` or `bool`, so a refusal speaks for the literal.
+struct ConstantWalk {
+    pool: Vec<Obj>,
+    defs: Vec<Schema>,
+}
+
+impl Constants for ConstantWalk {}
+
+impl LeafRelations for ConstantWalk {
+    fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
+        let Schema::Literal(index) = sub else {
+            return None;
+        };
+        let read = unfold_for_oracle(sup, &self.defs, ORACLE_UNFOLDS);
+        Some(member_full(&read, self.pool.get(index.get())?, &self.pool))
+    }
+    fn literal_kind(&self, constant: ConstIx) -> Option<Kind> {
+        Some(match self.pool.get(constant.get())? {
+            Obj::Int(_) => Kind::Int,
+            Obj::Str(_) => Kind::Str,
+            Obj::Bool(_) => Kind::Bool,
+            _ => return None,
+        })
+    }
+    fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+        Some(!typed_eq(
+            self.pool.get(left.get())?,
+            self.pool.get(right.get())?,
+        ))
+    }
+    fn constant_is_alone(&self, _constant: ConstIx) -> bool {
+        true
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    // THEORY: a-constant-is-the-values-equal-to-it
+    /// A meet holding a table of constants is proved empty only where no
+    /// constant of the table is in it, and proved inhabited only where one is,
+    /// over drawn members and drawn definitions.
+    ///
+    /// Every constant of the pool is the one value of its literal, so the
+    /// table's constants are the only values the meet can hold and the check
+    /// is exact. A member is drawn bare, or as the complement of its meet with
+    /// the table: the spelling a universe met into every member builds, which
+    /// nests a reference past the depth the set representation reads.
+    #[test]
+    fn a_meet_holding_a_table_is_decided_as_its_constants_are_walked(
+        first in 0..POOL_LEN,
+        second in 0..POOL_LEN,
+        beside in proptest::collection::vec((recursive_schema(), any::<bool>()), 1..4),
+        defs in drawn_defs(),
+    ) {
+        let pool = const_pool();
+        let table = Schema::union([
+            Schema::Literal(ConstIx::new(first)),
+            Schema::Literal(ConstIx::new(second)),
+        ]);
+        let members: Vec<Schema> = core::iter::once(table.clone())
+            .chain(beside.into_iter().map(|(member, negated)| {
+                if negated {
+                    not(intersection(table.clone(), member))
+                } else {
+                    member
+                }
+            }))
+            .collect();
+        let meet = Schema::Intersection(members.into());
+        let oracle = ConstantWalk { pool: const_pool(), defs: defs.clone() };
+        let read = unfold_for_oracle(&meet, &defs, ORACLE_UNFOLDS);
+        let constants = if first == second { vec![first] } else { vec![first, second] };
+        let admitted: Vec<&Obj> = constants
+            .iter()
+            .map(|index| &pool[*index])
+            .filter(|constant| member_full(&read, constant, &pool))
+            .collect();
+        let answer = meet.subtype_relation_under(&Schema::Nothing, &oracle, &defs);
+        prop_assert!(
+            answer != Relation::Holds || admitted.is_empty(),
+            "{meet:?} is proved empty under {defs:?}, and admits {admitted:?}"
+        );
+        prop_assert!(
+            answer != Relation::Fails || !admitted.is_empty(),
+            "{meet:?} is proved inhabited under {defs:?}, and admits no constant"
+        );
+        prop_assert!(
+            !meet.is_empty_with(&oracle, &defs) || admitted.is_empty(),
+            "{meet:?} is decided empty under {defs:?}, and admits {admitted:?}"
+        );
+    }
+}
+
 proptest! {
     // THEORY: a-record-splits-across-a-union
     /// A record against a union of records: the split agrees with the set
