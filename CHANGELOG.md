@@ -22,6 +22,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a copy of a validator is the validator itself
 - fix: a meet distributes a union it holds twice with every copy taken out
 - feat: a meet holding a literal is decided one constant at a time
+- feat: a meet proved empty stays empty beside a member no lowering reads
 
 -->
 
@@ -48,6 +49,15 @@ answer of its own, or a repair to a change not yet released.
   universe builds. A refusal speaks for the literal only where nothing the
   member asks tells equal values apart, as a literal below a schema reads it,
   and a predicate that raises on the constant decides nothing.
+- **A meet proved empty stays empty beside a member the set representation
+  cannot read.** Two patterns no string matches both of were proved apart,
+  and beside a predicate, or beside a member nested past the depth the set
+  representation reads -- the complement of a literal met with a recursive
+  universe is one -- the meet was undecided. Such a member is left out of the
+  reading, which is a superset of the meet, so its emptiness is a proof, as a
+  meet of three members and as one `Annotated` holding all three constraints.
+  The reading proves emptiness and only that: the meet without the member
+  holding a value refutes nothing.
 
 ### Changed
 

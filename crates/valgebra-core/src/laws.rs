@@ -6,7 +6,7 @@ use crate::carries::{
 };
 use crate::decision::{DECISION_BUDGET, LeafRelations, NoLeafRelations};
 use crate::descr::classes::{Attributes, Class, Hook, Member};
-use crate::descr::lower::{Constants, Operand, lower};
+use crate::descr::lower::{Constants, Operand, lower, lower_widened};
 use crate::ir::{Clauses, Polarity};
 use crate::kind::Kind;
 use crate::verdict::Relation;
@@ -7050,6 +7050,77 @@ proptest! {
             !meet.is_empty_with(&oracle, &defs) || admitted.is_empty(),
             "{meet:?} is decided empty under {defs:?}, and admits {admitted:?}"
         );
+    }
+}
+
+/// A member no lowering reads, beside two drawn ones: a predicate, a member
+/// nested past the depth bound, and its complement.
+fn refused_member() -> impl Strategy<Value = Schema> {
+    let deep =
+        |inner: Schema| (0..6).fold(inner, |inner, _| Schema::list(SeqShape::homogeneous(inner)));
+    prop_oneof![
+        Just(Schema::Refine {
+            base: Arc::new(Schema::ANYTHING),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        }),
+        Just(union(Schema::Str, deep(Schema::Int))),
+        Just(not(deep(Schema::Int))),
+    ]
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    // THEORY: a-cut-reference-proves
+    /// The set representation's emptiness is monotone in a meet's members, and
+    /// a meet proved empty beside a member no lowering reads admits no value.
+    ///
+    /// A meet is below each member, so the reading that leaves a refused member
+    /// out is a superset, and its emptiness is a proof. Held both ways over
+    /// drawn members and definitions: `a & b` the set representation proves
+    /// empty stays proved beside the refused member, and the meet of three
+    /// proved empty is refused by every value of the pair's universe where the
+    /// oracle reads the member.
+    #[test]
+    fn a_meet_stays_empty_beside_a_member_no_lowering_reads(
+        a in recursive_schema(),
+        b in recursive_schema(),
+        refused in refused_member(),
+        defs in drawn_defs(),
+    ) {
+        let pair = Schema::Intersection(vec![a.clone(), b.clone()].into());
+        let three = Schema::Intersection(vec![a, b, refused.clone()].into());
+        // Monotone where the set representation proves the pair: a rule that
+        // reads a meet by its shape may decline the meet of three, and the
+        // reading is what leaves the refused member out.
+        let read = lower_widened(&pair, &defs, &NoLeafRelations, &mut None)
+            .is_some_and(|set| set.emptiness() == Verdict::Empty);
+
+        if read && pair.is_empty_under(&defs) {
+            prop_assert!(
+                three.is_empty_under(&defs),
+                "{pair:?} is proved empty and not beside {refused:?} under {defs:?}"
+            );
+        }
+        // The universe is the pair's: a value refuting the proof is one of
+        // `a & b` the refused member admits, and a value of neither is no
+        // witness however the member reads it.
+        let opaque = matches!(refused, Schema::Refine { .. });
+        if !opaque && three.is_empty_under(&defs) {
+            let pool = const_pool();
+            let (values, _, _) = drawn_reading(&pair, &pair, &defs);
+            let unfolds = 1 + values.iter().map(nesting).max().unwrap_or(0);
+            let subject = unfold_for_oracle(&three, &defs, unfolds);
+            for value in &values {
+                prop_assert!(
+                    !member_full(&subject, value, &pool),
+                    "{value:?} is a member of {three:?}, decided empty under {defs:?}"
+                );
+            }
+        }
     }
 }
 

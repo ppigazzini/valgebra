@@ -457,6 +457,79 @@ def test_a_literal_met_with_a_deep_complement_is_decided_by_its_constant() -> No
     assert intersection(paid, complement(raising)).relation_to(nothing) == "undecided"
 
 
+def _admits(_value: object) -> bool:
+    return True
+
+
+def _admits_none(_value: object) -> bool:
+    return False
+
+
+_ADMITS_NONE = Annotated[Any, _admits_none]
+
+#: Members no lowering reads: predicates answering every value one way, one
+#: that raises, and a member nested past the depth the set representation
+#: reads.
+_UNREAD = st.sampled_from(
+    [
+        Annotated[Any, _admits],
+        _ADMITS_NONE,
+        _RAISING,
+        union(str, list[list[list[list[list[list[int]]]]]]),
+    ]
+)
+
+
+# THEORY: a-cut-reference-proves
+@given(sa=_specs, sb=_specs, unread=_UNREAD, v=_values)
+def test_a_meet_stays_empty_beside_a_member_no_lowering_reads(
+    sa: object, sb: object, unread: object, v: object
+) -> None:
+    """A meet beside a member no lowering reads proves only what it holds.
+
+    The reading that leaves an unread member out is a superset of the meet, so
+    its emptiness is a proof and its inhabitance none: the meet of three proved
+    empty admits no value, and a meet holding a predicate that admits nothing,
+    which is empty, is never answered inhabited and refutes nothing below it.
+    """
+    a, b = _build(sa), _build(sb)
+    three = intersection(a, b, unread)
+    if three.is_empty():
+        assert not three.is_valid(v)
+    admits_none = intersection(a, _ADMITS_NONE)
+    assert admits_none.relation_to(nothing) != "not_subset"
+    assert admits_none.relation_to(b) != "not_subset"
+
+
+# THEORY: a-cut-reference-proves
+def test_a_meet_of_patterns_is_empty_beside_a_predicate() -> None:
+    """Two patterns no string matches both of stay apart beside a predicate.
+
+    As a meet of three and as one refinement holding all three constraints,
+    the two spellings `Annotated` gives one set; and beside the recursive
+    universe a planner meets every member with. A pattern beside a predicate
+    is below the pattern, and is no refutation of another pattern, since the
+    predicate may admit no string.
+    """
+    email = Annotated[str, Regex(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")]
+    tagged = Annotated[str, Regex(r"^re_[a-z0-9]{8}$")]
+    odd = Annotated[str, lambda s: len(s) % 2 == 1]
+    assert intersection(email, tagged, odd).is_empty()
+    tier = Literal["free", "pro"]
+    universe = intersection(
+        str,
+        intersection(email, _JSON),
+        complement(intersection(tier, _JSON)),
+        intersection(tagged, _JSON),
+    )
+    assert universe.is_empty()
+    a_and_p = Annotated[str, Regex("^a+$"), _admits]
+    both = Annotated[str, Regex("^a+$"), Regex("^b+$"), lambda s: len(s) % 2 == 1]
+    assert Validator(both).is_empty()
+    assert Validator(a_and_p).relation_to(Annotated[str, Regex("^a+$")]) == "subset"
+    assert Validator(a_and_p).relation_to(Annotated[str, Regex("^b+$")]) == "undecided"
+
+
 class _WeirdInt(int):
     """An `int` subclass whose comparisons answer `True` whatever they are asked."""
 

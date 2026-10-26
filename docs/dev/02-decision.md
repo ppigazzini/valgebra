@@ -77,7 +77,13 @@ refuted is never lowered, because a sound second reading cannot overturn a
 proof, and lowering one costs about three orders of magnitude more than the rule
 that already answered. Its inhabited answer refutes only where no reference was
 cut: where one was, the difference was widened on the left and shrunk on the
-right, so a value found in it need be no value of the real difference. Its
+right, so a value found in it need be no value of the real difference. A
+conjunct at the top of the subject the lowering refuses -- a predicate, a meet
+member nested past the depth bound, a refinement's constraint no component
+holds -- is left out the same way (`lower_widened` in `descr/lower.rs`): a meet
+is below each member, so the reading is a superset, which makes the
+descriptor's emptiness monotone in a meet's members, and an inhabited reading
+of it refutes nothing. Its
 empty answer has the mirror condition: a literal key is read as a label, which
 also holds the subclass keys equal to it, so an empty difference proves the
 inclusion only where no such label is subtracted from a dict that can hold a
@@ -1212,5 +1218,6 @@ refusal rather than an answer, each with its cost on the published page.
 
 One property outranks the list. **A refutation is a claim that a value exists**,
 so a reading that cannot name one declines instead: an unfolding that cuts a
-reference widens the difference it reads, and a widened difference proves an
-inclusion when it is empty and refutes nothing when it is not.
+reference widens the difference it reads, and so does a reading that leaves out
+a conjunct it refuses, and a widened difference proves an inclusion when it is
+empty and refutes nothing when it is not.

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use super::records::keyed_map_meet_verdict;
 use super::*;
 use crate::descr::classes::{Class, Reach};
-use crate::descr::lower::Operand;
+use crate::descr::lower::{Operand, lower_widened};
 use crate::ir::{Attribute, CollKind, Field, MapClause, OperandIx, SeqKind, Spelling};
 use crate::ir::{DefIx, Openness};
 use crate::kind::Kind;
@@ -7587,4 +7587,96 @@ fn a_meet_holding_a_table_is_read_by_its_constants() {
         Verdict::Unknown,
     );
     assert!(oracle.walked.borrow().is_empty());
+}
+
+// THEORY: a-cut-reference-proves
+/// A meet the set representation proves empty stays proved beside a conjunct
+/// it does not read, and a reading that left one out refutes nothing.
+///
+/// `a+ & b+` holds no string, so neither does it beside a predicate, which no
+/// lowering reads, or beside a member nested past the depth bound -- as a meet
+/// of three and as one refinement holding all three constraints, the two
+/// spellings `Annotated` gives one set. The reading that left the predicate
+/// out is a superset, so it proves emptiness and only emptiness: `str & P` is
+/// no refutation of `<= nothing`, since `P` may admit no string.
+#[test]
+fn a_meet_is_proved_empty_beside_a_conjunct_the_lowering_refuses() {
+    let words = |pattern: &str| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex(pattern.into())].into(),
+    };
+    let predicate = Constraint::Predicate(PredIx::new(0));
+    let opaque = Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![predicate.clone()].into(),
+    };
+    let deep = (0..6).fold(Schema::Int, |inner, _| {
+        Schema::list(SeqShape::homogeneous(inner))
+    });
+    let meet = |members: Vec<Schema>| Schema::Intersection(members.into());
+    let rules = |schema: &Schema| schema.verdict_under(&NoLeafRelations);
+
+    let pair = meet(vec![words("^a+$"), words("^b+$")]);
+    assert!(pair.is_empty());
+    for beside in [
+        opaque.clone(),
+        Schema::union([Schema::Str, deep.clone()]),
+        deep.clone().complement(),
+    ] {
+        let three = meet(vec![words("^a+$"), words("^b+$"), beside]);
+        assert_eq!(rules(&three), Verdict::Unknown, "{three:?}");
+        assert!(three.is_empty(), "{three:?}");
+    }
+    let one = Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![
+            Constraint::Regex("^a+$".into()),
+            Constraint::Regex("^b+$".into()),
+            predicate.clone(),
+        ]
+        .into(),
+    };
+    assert!(one.is_empty());
+
+    let relation =
+        |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &NoLeafRelations, &[]);
+    let thinned = meet(vec![Schema::Str, opaque]);
+    assert_eq!(relation(&thinned, &Schema::Nothing), Relation::Unknown);
+    assert!(!thinned.is_empty());
+    let a_and_p = Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex("^a+$".into()), predicate].into(),
+    };
+    assert_eq!(relation(&a_and_p, &words("^a+$")), Relation::Holds);
+    assert_eq!(relation(&a_and_p, &words("^b+$")), Relation::Unknown);
+
+    // The reading keeps the members it read, and only where it left one out.
+    let pool = NoLeafRelations;
+    let mut kept = None;
+    let thinned = meet(vec![words("^a+$"), deep.clone()]);
+    assert!(lower_widened(&thinned, &[], &pool, &mut kept).is_some());
+    assert_eq!(kept, Some(vec![words("^a+$")]));
+    let mut kept = None;
+    assert!(lower_widened(&pair, &[], &pool, &mut kept).is_some());
+    assert_eq!(kept, None);
+}
+
+// THEORY: a-cut-reference-proves
+/// A reference on the supertype's side is unfolded for the set reading, as one
+/// on the subject's side is: a pattern refinement is below a fixpoint whose
+/// definition holds every string, which only the unfolded supertype says.
+#[test]
+fn a_reference_above_is_unfolded_for_the_sets() {
+    let defs = vec![Schema::union([
+        Schema::Str,
+        Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+    ])];
+    let words = Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex("^a+$".into())].into(),
+    };
+    assert_eq!(
+        words.descriptor_contained_in(&Schema::Ref(DefIx::new(0)), &NoLeafRelations, &defs),
+        Relation::Holds,
+    );
 }

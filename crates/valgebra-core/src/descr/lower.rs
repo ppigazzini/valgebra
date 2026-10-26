@@ -169,6 +169,139 @@ pub(crate) fn lower_unfolded(
     lower(&schema.unfolded(definitions, UNFOLDS, polarity), pool)
 }
 
+/// [`lower_unfolded`] on the widened side, where a schema the lowering refuses
+/// is read without the conjuncts at its top no lowering can read: a predicate
+/// among a refinement's constraints, at the top or as a member, and a meet's
+/// member holding a predicate below its top or nested deeper than the meet
+/// leaves room for.
+///
+/// A meet is below each of its members, and a refinement below the one its
+/// constraints are a subset of, so the thinned schema denotes a superset,
+/// which is what a widened reading may be: proving it empty proves the schema
+/// empty [FCB08, Def. 4.1]. That makes emptiness monotone in a meet's members:
+/// `A & B` proved empty stays proved beside a predicate, or beside a member an
+/// unfolding has nested past [`DEPTH`]. Nothing below a union, a complement or
+/// a container is thinned, since a member there is no conjunct of the whole,
+/// and a refusal of any other kind -- a class the pool cannot read, a key in
+/// part of a kind, a bound on what a build spends -- refuses the reading as it
+/// refuses the schema.
+///
+/// The whole schema is lowered first, so a schema the lowering takes pays
+/// nothing, and neither does one refused for any other reason; the thinned
+/// one is built and lowered, under the same bounds, only where the refusal was
+/// a predicate or the depth bound and a conjunct is thinned.
+///
+/// `kept` is left `None` where the schema lowered whole, and is otherwise the
+/// conjuncts the reading kept, a refinement thinned among them: the schemas a
+/// caller holds a literal key's label against, since a member left out
+/// narrowed nothing and keeps no key exact. An out-parameter, so the schemas
+/// that lower whole return the set as [`lower_unfolded`] does. **A thinned
+/// reading widens like a cut**, so an inhabited answer refutes nothing.
+#[inline]
+pub(crate) fn lower_widened(
+    schema: &Schema,
+    definitions: &[Schema],
+    pool: &dyn Constants,
+    kept: &mut Option<Vec<Schema>>,
+) -> Option<Descr> {
+    let unfolded;
+    let schema = if definitions.is_empty() || !schema.has_reference() {
+        schema
+    } else {
+        unfolded = schema.unfolded(definitions, UNFOLDS, Polarity::Widen);
+        &unfolded
+    };
+    // Returned as built: a set held in a local and then returned is copied,
+    // and the copy is most of what this would cost a schema that lowers.
+    let room = Room::new(BUDGET);
+    budget::under(WORK, || descend(schema, pool, &room, DEPTH)).or_else(|| {
+        room.unread
+            .get()
+            .then(|| thinned_lowering(schema, pool, kept))
+            .flatten()
+    })
+}
+
+/// The refused half of [`lower_widened`], out of line so the schemas that lower
+/// whole carry none of it.
+///
+/// One look at each member first, allocating nothing: most refusals hold no
+/// predicate and nest within the room, and those leave here as they came.
+#[inline(never)]
+fn thinned_lowering(
+    schema: &Schema,
+    pool: &dyn Constants,
+    kept: &mut Option<Vec<Schema>>,
+) -> Option<Descr> {
+    let read: Vec<Schema> = match schema {
+        Schema::Intersection(members) => {
+            let room = DEPTH.checked_sub(1)?;
+            if members.iter().all(|member| readable(member, room)) {
+                return None;
+            }
+            members
+                .iter()
+                .filter_map(|member| {
+                    if readable(member, room) {
+                        return Some(member.clone());
+                    }
+                    without_predicates(member).filter(|thinned| readable(thinned, room))
+                })
+                .collect()
+        }
+        schema => {
+            let thinned = without_predicates(schema)?;
+            if !readable(&thinned, DEPTH) {
+                return None;
+            }
+            vec![thinned]
+        }
+    };
+    let set = lower(&Schema::Intersection(read.clone().into()), pool)?;
+    *kept = Some(read);
+    Some(set)
+}
+
+/// A refinement with its predicates left out, or `None` where `schema` is no
+/// refinement carrying one.
+fn without_predicates(schema: &Schema) -> Option<Schema> {
+    let Schema::Refine { base, constraints } = schema else {
+        return None;
+    };
+    if !constraints
+        .iter()
+        .any(|constraint| matches!(constraint, Constraint::Predicate(_)))
+    {
+        return None;
+    }
+    Some(Schema::Refine {
+        base: base.clone(),
+        constraints: constraints
+            .iter()
+            .filter(|constraint| !matches!(constraint, Constraint::Predicate(_)))
+            .cloned()
+            .collect::<Vec<_>>()
+            .into(),
+    })
+}
+
+/// Whether `schema` is one a lowering can read at all: nested within the
+/// `room` it descends -- a level for the node and the rest for what it holds --
+/// and holding no predicate.
+fn readable(schema: &Schema, room: u32) -> bool {
+    let Some(room) = room.checked_sub(1) else {
+        return false;
+    };
+    if let Schema::Refine { constraints, .. } = schema
+        && constraints
+            .iter()
+            .any(|constraint| matches!(constraint, Constraint::Predicate(_)))
+    {
+        return false;
+    }
+    schema.children().all(|child| readable(child, room))
+}
+
 /// What a lowering may spend, in the three quantities it can run out of.
 ///
 /// They are three because a build can be too big in three ways, and no one of
@@ -288,8 +421,33 @@ pub(crate) const DEPTH: u32 = 5;
 /// which is the only thing that makes asking safe.
 pub fn lower_within(bounds: Bounds, schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
     budget::under(bounds.work, || {
-        descend(schema, pool, &Cell::new(bounds.nodes), bounds.depth)
+        descend(schema, pool, &Room::new(bounds.nodes), bounds.depth)
     })
+}
+
+/// What one lowering has left of the nodes it may read, and whether it refused
+/// at a node no lowering reads: one past the depth it may descend, or a
+/// predicate.
+///
+/// The second is what [`lower_widened`] asks before it thins a refused schema,
+/// so a refusal of any other kind costs it nothing. It is set on the two
+/// refusals alone, which leaves the paths that lower untouched but for the
+/// store that clears it: the matrix decision workload, whose subjects are
+/// refused for a class and an operand its pool cannot read, measures the
+/// whole reading at +0.03%, where a syntactic look at every refused schema
+/// measured +0.2%.
+struct Room {
+    nodes: Cell<u32>,
+    unread: Cell<bool>,
+}
+
+impl Room {
+    fn new(nodes: u32) -> Self {
+        Self {
+            nodes: Cell::new(nodes),
+            unread: Cell::new(false),
+        }
+    }
 }
 
 /// [`lower`] with the nodes left to spend, which every node spends one of.
@@ -297,9 +455,12 @@ pub fn lower_within(bounds: Bounds, schema: &Schema, pool: &dyn Constants) -> Op
 /// Each node lowers to the set it denotes: the bounds to the universe and the
 /// empty set, and a union, a meet and a complement to the union, intersection
 /// and complement of their members' sets [FCB08, Def. 4.1].
-fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>, depth: u32) -> Option<Descr> {
-    budget.set(budget.get().checked_sub(1)?);
-    let depth = depth.checked_sub(1)?;
+fn descend(schema: &Schema, pool: &dyn Constants, budget: &Room, depth: u32) -> Option<Descr> {
+    budget.nodes.set(budget.nodes.get().checked_sub(1)?);
+    let Some(depth) = depth.checked_sub(1) else {
+        budget.unread.set(true);
+        return None;
+    };
     match schema {
         Schema::Anything(_) => Some(Descr::anything()),
         Schema::Nothing => Some(Descr::nothing()),
@@ -364,7 +525,7 @@ fn map(
     fields: &[Field],
     defaults: &[MapClause],
     pool: &dyn Constants,
-    budget: &Cell<u32>,
+    budget: &Room,
     depth: u32,
 ) -> Option<Descr> {
     let mut labels: Vec<(Label, Descr, bool)> = Vec::with_capacity(fields.len());
@@ -673,7 +834,7 @@ fn sequence(
     container: SeqKind,
     shape: &SeqShape,
     pool: &dyn Constants,
-    budget: &Cell<u32>,
+    budget: &Room,
     depth: u32,
 ) -> Option<Descr> {
     let kind = match container {
@@ -702,12 +863,18 @@ fn refine(
     base: &Schema,
     constraints: &[Constraint],
     pool: &dyn Constants,
-    budget: &Cell<u32>,
+    budget: &Room,
     depth: u32,
 ) -> Option<Descr> {
     let mut narrowed = descend(base, pool, budget, depth)?;
     for constraint in constraints {
-        narrowed = narrowed.intersect(&constrained(constraint, &narrowed, pool)?)?;
+        let Some(set) = constrained(constraint, &narrowed, pool) else {
+            if matches!(constraint, Constraint::Predicate(_)) {
+                budget.unread.set(true);
+            }
+            return None;
+        };
+        narrowed = narrowed.intersect(&set)?;
     }
     Some(narrowed)
 }

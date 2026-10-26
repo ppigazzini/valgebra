@@ -20,7 +20,9 @@ mod records;
 use std::cell::Cell;
 
 use crate::descr::budget;
-use crate::descr::lower::{Constants, WORK, an_empty_reading_stands, lower_unfolded};
+use crate::descr::lower::{
+    Constants, WORK, an_empty_reading_stands, lower_unfolded, lower_widened,
+};
 use crate::ir::{Constraint, DefIx, Polarity, Schema, SeqShape};
 use crate::kind::{Region, Regions};
 use crate::unordered_pairs;
@@ -243,12 +245,27 @@ impl Schema {
         // the narrowed side may prove nothing ([`an_empty_reading_stands`]),
         // and is a decline where it does not. Asked only of an empty answer,
         // which is the one it can overturn.
-        let cut = !defs.is_empty() && (self.has_reference() || other.has_reference());
-        let Some(mine) = lower_unfolded(self, defs, Polarity::Widen, pool) else {
+        //
+        // **A conjunct the subject's lowering refuses is left out**, as
+        // [`lower_widened`] reads it, which is a widening of the same kind:
+        // the subject reads as a superset, and the label check reads the
+        // members kept.
+        let mut kept = None;
+        let Some(mine) = lower_widened(self, defs, pool, &mut kept) else {
             return Relation::Unknown;
         };
+        let cut =
+            kept.is_some() || (!defs.is_empty() && (self.has_reference() || other.has_reference()));
+        // The schemas the subject's side reads as widened are itself, or the
+        // conjuncts a thinned reading kept, collected only where read.
         if mine.emptiness() == Verdict::Empty {
-            return Relation::proven(an_empty_reading_stands(&[self], &[], defs, pool));
+            let stands = match &kept {
+                None => an_empty_reading_stands(&[self], &[], defs, pool),
+                Some(kept) => {
+                    an_empty_reading_stands(&kept.iter().collect::<Vec<_>>(), &[], defs, pool)
+                }
+            };
+            return Relation::proven(stands);
         }
         // `¬other` is what the difference meets, and a complement's is its
         // inner set, read on the widened side: `self ⊆ ¬inner` asks `self ∧
@@ -275,14 +292,18 @@ impl Schema {
                 .map(|difference| difference.emptiness())
         })
         .map_or(Relation::Unknown, |emptiness| {
-            let (widened, narrowed): (&[&Schema], &[&Schema]) = if negate {
-                (&[self], &[read])
-            } else {
-                (&[self, read], &[])
+            let stands = || match (&kept, negate) {
+                (None, true) => an_empty_reading_stands(&[self], &[read], defs, pool),
+                (None, false) => an_empty_reading_stands(&[self, read], &[], defs, pool),
+                (Some(kept), true) => {
+                    an_empty_reading_stands(&kept.iter().collect::<Vec<_>>(), &[read], defs, pool)
+                }
+                (Some(kept), false) => {
+                    let widened: Vec<&Schema> = kept.iter().chain([read]).collect();
+                    an_empty_reading_stands(&widened, &[], defs, pool)
+                }
             };
-            if emptiness == Verdict::Empty
-                && !an_empty_reading_stands(widened, narrowed, defs, pool)
-            {
+            if emptiness == Verdict::Empty && !stands() {
                 Relation::Unknown
             } else if cut {
                 Relation::proven(emptiness == Verdict::Empty)

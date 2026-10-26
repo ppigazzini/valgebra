@@ -832,6 +832,22 @@ the shape. What is left below is what the descriptor cannot hold.
   `Annotated[int, Ge(0)] <= Annotated[list[int], Predicate(f)]` is refuted and
   its converse is not.
 
+    A predicate beside the members of a meet hides none of their emptiness:
+    the meet is below the members it holds, so where they share no value
+    neither does the meet, and two patterns no string matches both of stay
+    apart beside a predicate, whether written as three members or as one
+    `Annotated` holding all three. That is a proof of emptiness only: the meet
+    without the predicate holding a value says nothing of the meet with it.
+
+    ```python
+    from typing import Annotated
+
+    from valgebra import Regex, Validator
+
+    letters = Annotated[str, Regex("^a+$"), Regex("^b+$"), lambda s: len(s) > 2]
+    assert Validator(letters).is_empty()
+    ```
+
 `tests/test_completeness_ledger.py` is where a relation that leaves this list
 lands: it enumerates what the procedure must *decide* and fails in both
 directions, so a relation that regresses to conservatism fails there and one

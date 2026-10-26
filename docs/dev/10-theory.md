@@ -741,13 +741,16 @@ where the schema is used positively, the bottom under a complement, which is the
 finite approximation of a recursive type at the depth of the cut [AC93, §3.4].
 The widened difference contains the real one, so its emptiness proves the
 inclusion and its inhabitance proves nothing; a refutation comes only from a
-pair the lowering did not widen. **[LOAD-BEARING: a-cut-reference-proves]**
+pair the lowering did not widen. A conjunct at the top that the lowering
+refuses -- a meet's member, a refinement's constraint -- is left out the same
+way, a meet being below each of its members [FCB08, Def. 4.1], so emptiness is
+monotone in a meet's members. **[LOAD-BEARING: a-cut-reference-proves]**
 
 SOURCE: §13.1 "**The polarity cut is one-directional.**"
 
-IMPLEMENTED-BY: decision.rs::Schema::descriptor_contained_in, ir/transform.rs::Polarity::flipped, ir/transform.rs::Schema::unfolded
+IMPLEMENTED-BY: decision.rs::Schema::descriptor_contained_in, ir/transform.rs::Polarity::flipped, ir/transform.rs::Schema::unfolded, descr/lower.rs::lower_widened
 
-HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding
+HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding, a_meet_is_proved_empty_beside_a_conjunct_the_lowering_refuses, a_reference_above_is_unfolded_for_the_sets, a_meet_stays_empty_beside_a_member_no_lowering_reads, test_a_meet_stays_empty_beside_a_member_no_lowering_reads, test_a_meet_of_patterns_is_empty_beside_a_predicate
 
 **Kinds decompose emptiness.** Positives of two kinds that share no value make a
 clause empty outright [FCB08, (5)] -- every pair but `bool` and `int`, a
