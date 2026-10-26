@@ -725,6 +725,23 @@ the shape. What is left below is what the descriptor cannot hold.
     differently-written fixpoint whose bodies only agree after two steps — and
     there the coinductive rule is the whole of the answer.
 
+
+    **An unfolding spends depth.** The fixpoint's body sits one level below
+    every member that names it, so a member met with a recursive universe under
+    a complement nests past the depth a build descends. Beside the members a
+    proof needs, such a member is left out of the reading and the proof stands,
+    as a [predicate](#undecidable-at-runtime) is; where it is the member the
+    proof needs, the relation declines, so `str & ~(str & json)` is undecided
+    though `str & ~json` is proved:
+
+    ```python
+    from valgebra import complement, intersection, nothing, recursive, union
+
+    json = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    assert intersection(str, complement(json)).relation_to(nothing) == "subset"
+    nested = intersection(str, complement(intersection(str, json)))
+    assert nested.relation_to(nothing) == "undecided"
+    ```
 - **An inhabited meet with a recursive reference, beside an open record or a
   class.** The meet's emptiness is decided ([above](#decided-exactly)), and a
   value is named only where every record in it is closed, so a meet with an
@@ -797,6 +814,28 @@ the shape. What is left below is what the descriptor cannot hold.
     `MultipleOf(5000)` declines, because naming that value takes a
     representation and a rule reading the two steps cannot produce one -- the
     subject's own other constraints may exclude it.
+
+- **A step over floats.** A `MultipleOf` becomes a residue class of the
+  integers, and a float multiple of a step is no integer the classes hold, so a
+  step over a `float` base has no set to land in, and the set representation
+  refuses it rather than narrow the floats to integers. The rules decide two
+  steps against each other and bounds against bounds (above), and what turns
+  on a step and its bounds *together* declines: no float multiple of `1` lies
+  strictly between 30 and 31, and over `float` that meet is not proved empty,
+  where over `int` it is.
+
+    ```python
+    from typing import Annotated
+
+    import annotated_types as at
+
+    from valgebra import Validator, nothing
+
+    floats = Annotated[float, at.MultipleOf(1), at.Gt(30), at.Lt(31)]
+    integers = Annotated[int, at.MultipleOf(1), at.Gt(30), at.Lt(31)]
+    assert Validator(floats).relation_to(nothing) == "undecided"
+    assert Validator(integers).relation_to(nothing) == "subset"
+    ```
 
 - **A schema too large to build.** The descriptor is bounded three ways: the
   nodes it will read, the nesting it will descend, and the work a build may

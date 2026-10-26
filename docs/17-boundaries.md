@@ -225,6 +225,13 @@ program by discipline.
 - **No JSON Schema import or export.** The two describe different value
   universes — JSON has no `bytes`, no `tuple`, and no class identity — so a
   translation would be lossy in both directions rather than merely absent.
+- **No witness.** A refuted relation names no value: `relation_to` answers
+  `"not_subset"`, and no call builds a member of a schema or of a difference.
+  Building one is a constructor per kind -- a string from a pattern, a dict
+  from a record -- with none for a class instance or a predicate, so it would
+  be partial by nature. A value to show is found by sampling and checked with
+  `is_valid`, whose membership is exact, as
+  [inspection](09-inspection.md#what-this-cannot-see) does it.
 - **No static checking.** valgebra runs; a type checker does not run it. The two
   are complementary, and the [foundations](13-foundations.md) page says where
   their models agree and where they part. What a checker reads from a validator,

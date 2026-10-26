@@ -283,6 +283,18 @@ ROWS: dict[str, Row] = {
             "subset",
         ),
     ),
+    "A step over floats.": Declines(
+        Annotated[float, at.MultipleOf(1), at.Gt(30), at.Lt(31)],
+        nothing,
+        "a float component holding the integral floats of a residue class, "
+        "beside the intervals the bounds read",
+        # The pair the page decides beside it: the same meet over `int`.
+        beside=(
+            Annotated[int, at.MultipleOf(1), at.Gt(30), at.Lt(31)],
+            nothing,
+            "subset",
+        ),
+    ),
     "A meet of two moduli the representation cannot hold.": Declines(
         intersection(
             Annotated[int, at.MultipleOf(64)], Annotated[int, at.MultipleOf(81)]
