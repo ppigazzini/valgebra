@@ -286,14 +286,19 @@ read in the if-then form [Cas23, (19)] gives it, in `T⊥` [Cas23, §4.1], a lab
 narrowed as [Cas23, (13)] narrows it and an absence outside a required label
 [Cas23, §3.2.1], with the paper's base case `false` [Cas23, (18)] and
 [Cas23, (17)]'s `R ≤ 0` read as [Cas23, (11)] reads emptiness; its emptiness
-reading is the meet of a record with negated records the paper decides `Φ` on
-[Cas23, §4.3].
+reading is the meet of records with negated records the paper decides `Φ` on
+[Cas23, §4.3], the positive records moved into one record R◦ by their pointwise
+meet [Cas23, (12)] (`record_of_maps`), a label to the meet of what each record
+reads under it and absent only where each allows it [Cas23, §4.1]; and a meet of
+records is asked below a record or a union of them as R◦ (`keyed_meet_below`).
+A member of another shape beside the records is left out, the meet being below
+the records, so both readings then prove and do not refute.
 
 SOURCE: §13.3 "`keyed_map_splits_across_union` runs `Phi` beside the one-map rule"
 
-IMPLEMENTED-BY: decision/records.rs::keyed_map_splits_across_union, decision/records.rs::keyed_map_minus_keyed_maps, decision/records.rs::split_across, decision/records.rs::finite, decision/records.rs::Defaults, decision/records.rs::defaults_against, decision/records.rs::Slot, decision/records.rs::Slot::below, decision/records.rs::Slot::without, decision/records.rs::Labels::names_with, decision/records.rs::Labels::base_case, decision/records.rs::phi
+IMPLEMENTED-BY: decision/records.rs::keyed_map_splits_across_union, decision/records.rs::keyed_map_minus_keyed_maps, decision/records.rs::split_across, decision/records.rs::finite, decision/records.rs::Defaults, decision/records.rs::defaults_against, decision/records.rs::Slot, decision/records.rs::Slot::below, decision/records.rs::Slot::without, decision/records.rs::Labels::names_with, decision/records.rs::Labels::base_case, decision/records.rs::phi, decision/records.rs::record_of_maps, decision/records.rs::keyed_meet_below
 
-HELD-BY: a_record_below_a_union_of_records_is_the_rules_answer, a_record_split_stops_where_the_decision_budget_does, a_record_splits_across_the_records_that_fix_its_tag, a_record_splits_on_whether_a_key_is_present, a_member_apart_at_an_optional_label_is_dropped, a_member_set_aside_on_a_finite_part_keeps_only_the_proof, a_member_whose_default_the_rules_cannot_relate_is_set_aside, a_clause_the_partition_does_not_hold_declines_the_split, a_record_minus_the_records_that_cover_it_is_empty, a_record_split_agrees_with_the_set_reading
+HELD-BY: a_record_below_a_union_of_records_is_the_rules_answer, a_record_split_stops_where_the_decision_budget_does, a_record_splits_across_the_records_that_fix_its_tag, a_record_splits_on_whether_a_key_is_present, a_member_apart_at_an_optional_label_is_dropped, a_member_set_aside_on_a_finite_part_keeps_only_the_proof, a_member_whose_default_the_rules_cannot_relate_is_set_aside, a_clause_the_partition_does_not_hold_declines_the_split, a_record_minus_the_records_that_cover_it_is_empty, a_record_split_agrees_with_the_set_reading, keyed_maps_met_are_one_record, a_map_minus_a_map_above_it_is_empty_beside_a_predicate, a_meet_of_records_beside_another_member_proves_or_declines, a_meet_of_records_splits_as_one_record, test_two_open_records_met_are_one_record
 
 The paper's model is a *quasi K-step function* [Cas23, Def. 4.6], named labels
 and every other key given the default of the key type it falls in, the key types

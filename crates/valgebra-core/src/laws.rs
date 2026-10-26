@@ -7171,6 +7171,49 @@ proptest! {
             }
         }
     }
+
+    // THEORY: a-record-splits-across-a-union
+    /// Two records met are one record, their pointwise meet, and the split
+    /// reads it as it reads one: agreeing with the set reading wherever both
+    /// decide, and with the emptiness of the difference, and a proof holding
+    /// of every value the universe reads.
+    #[test]
+    fn a_meet_of_records_splits_as_one_record(
+        first in split_record(),
+        second in split_record(),
+        members in prop::collection::vec(split_record(), 1..4),
+    ) {
+        let subject = Schema::Intersection(vec![first, second].into());
+        let union = Schema::union(members);
+        let oracle = CorpusOracle;
+        let budget = crate::decision::Budget::new(DECISION_BUDGET);
+        let rules = subject.subtype_relation(&union, &oracle, &[], &budget);
+        let sets = subject.descriptor_contained_in(&union, &oracle, &[]);
+        if rules != Relation::Unknown && sets != Relation::Unknown {
+            prop_assert_eq!(rules, sets, "{:?} <= {:?}", subject, union);
+        }
+        let difference = Schema::Intersection(
+            vec![subject.clone(), union.clone().complement()].into(),
+        )
+        .verdict_under(&oracle);
+        prop_assert!(
+            !matches!(
+                (rules, difference),
+                (Relation::Holds, Verdict::Inhabited) | (Relation::Fails, Verdict::Empty)
+            ),
+            "{:?} <= {:?} is {:?} and its difference {:?}", subject, union, rules, difference
+        );
+        let named = names_constant(&subject, 3) || names_constant(&union, 3);
+        if !named && (rules == Relation::Holds || difference == Verdict::Empty) {
+            let pool = const_pool();
+            for value in &boundary_values(&[&subject, &union]) {
+                prop_assert!(
+                    !member_full(&subject, value, &pool) || member_full(&union, value, &pool),
+                    "{:?} is in {:?} and outside {:?}", value, subject, union
+                );
+            }
+        }
+    }
 }
 
 /// A keyed map over the names `a` and `b` and clauses keyed by literals, a

@@ -635,19 +635,29 @@ pub(super) fn keyed_map_splits_across_union(
     {
         return Relation::Unknown;
     }
-    split_across(fields, defaults, members.iter(), schema, cx)
+    let Some((parts, subject)) = read_map(fields, defaults, cx) else {
+        return Relation::Unknown;
+    };
+    split_across(&subject, &parts, members.iter(), schema, cx)
 }
 
-/// The meet `R ∧ ¬R₁ ∧ … ∧ ¬Rₙ` of one keyed map with the complements of
-/// keyed maps: empty exactly where `R` is below their union, which is
+/// The meet `R₁ ∧ … ∧ Rₘ ∧ ¬N₁ ∧ … ∧ ¬Nₙ` of keyed maps with the complements
+/// of keyed maps: empty exactly where the positive maps, met into one record
+/// R◦, are below the union of the removed ones, which is
 /// [`keyed_map_splits_across_union`] read as emptiness, the form the paper
-/// decides `Φ` on [Cas23, §4.3].
+/// decides `Φ` on [Cas23, §4.3]. The paper moves the positive atoms into one
+/// record by their pointwise meet [Cas23, (12)] ([`record_of_maps`]).
 ///
 /// Without it the two routes to one question part: `a <= b` would decide
 /// where `a & ~b` is left to the set representation, whose difference spends
 /// its allowance on the chain this decides one complement at a time.
-/// `Unknown` for any other meet, and asked only where the meet's own rules
-/// have declined.
+/// `Unknown` for a meet holding no map or no complement, and asked only where
+/// the meet's own rules have declined.
+///
+/// **A member of another shape is left out**, a meet being below the members
+/// it keeps, so the meet read is a superset and the rule proves emptiness
+/// alone: `R ∧ ¬N ∧ P` is empty where `R ∧ ¬N` is, for a predicate `P` no rule
+/// reads.
 ///
 /// **A complement is read here only where its inner denotes a set**, the
 /// guard the complement law takes ([`denotes_a_set_within`]). The rule
@@ -658,23 +668,22 @@ pub(super) fn keyed_map_splits_across_union(
 pub(super) fn keyed_map_minus_keyed_maps(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
     // The shape first, which reads discriminants alone; the walk the set guard
     // takes is paid only by a meet of this shape.
-    let mut subject = None;
-    let mut removed = 0usize;
+    let (mut maps, mut removed, mut others) = (0usize, 0usize, false);
     for member in members {
         match member {
-            Schema::KeyedMap { .. } if subject.is_none() => subject = Some(member),
+            Schema::KeyedMap { .. } => maps += 1,
             Schema::Complement(_) => removed += 1,
-            _ => return Verdict::Unknown,
+            _ => others = true,
         }
     }
-    let Some(schema @ Schema::KeyedMap { fields, defaults }) = subject else {
+    if maps == 0 || removed == 0 {
         return Verdict::Unknown;
-    };
+    }
     let sets = members.iter().all(|member| match member {
         Schema::Complement(inner) => denotes_a_set_within(inner, cx.oracle, cx.defs),
         _ => true,
     });
-    if removed == 0 || !sets {
+    if !sets {
         return Verdict::Unknown;
     }
     // The complement of a union is the meet of its members' complements
@@ -686,30 +695,152 @@ pub(super) fn keyed_map_minus_keyed_maps(members: &[Schema], cx: &mut Cx<'_>) ->
         },
         _ => [].iter(),
     });
-    match split_across(fields, defaults, removed, schema, cx) {
+    let answer = split_the_maps(members, maps, removed, cx);
+    match answer {
         Relation::Holds => Verdict::Empty,
-        Relation::Fails => Verdict::Inhabited,
-        Relation::Unknown => Verdict::Unknown,
+        Relation::Fails if !others => Verdict::Inhabited,
+        _ => Verdict::Unknown,
     }
 }
 
-/// The two readings' shared body: the subject's fields and clauses, the
-/// members of the union it is asked below, and `schema` itself, which a member
-/// set aside is held disjoint from. The subject is the record [Cas23, (17)]
-/// narrows, and the maps among the members are its union.
-fn split_across<'s>(
+/// `meet ⊆ other` for a meet holding two keyed maps or more and `other` a
+/// keyed map or a union holding one: the maps met into one record R◦
+/// [Cas23, (12)], split across the maps of `other` as one record is
+/// [Cas23, (17)]. A member of another shape is left out, the meet being below
+/// the maps it holds, and the answer is then a proof or nothing.
+///
+/// No member is below `other` where this is asked -- the member rule ran
+/// first -- so R◦ is the reading that relates the meet at all. Out of line,
+/// behind the caller's test of `other`'s shape.
+#[inline(never)]
+pub(super) fn keyed_meet_below(members: &[Schema], other: &Schema, cx: &mut Cx<'_>) -> Relation {
+    let maps = members
+        .iter()
+        .filter(|member| matches!(member, Schema::KeyedMap { .. }))
+        .count();
+    let branches = match other {
+        Schema::Union(branches) => &branches[..],
+        other => core::slice::from_ref(other),
+    };
+    if maps < 2
+        || !branches
+            .iter()
+            .any(|branch| matches!(branch, Schema::KeyedMap { .. }))
+    {
+        return Relation::Unknown;
+    }
+    let answer = split_the_maps(members, maps, branches.iter(), cx);
+    if maps < members.len() {
+        answer.proof_only()
+    } else {
+        answer
+    }
+}
+
+/// The keyed maps among `members`, `maps` of them, as one record split across
+/// the maps among `branches`: the record itself where there is one, and R◦
+/// where there are more.
+fn split_the_maps<'s>(
+    members: &'s [Schema],
+    maps: usize,
+    branches: impl Iterator<Item = &'s Schema>,
+    cx: &mut Cx<'_>,
+) -> Relation {
+    let mut positive = members
+        .iter()
+        .filter(|member| matches!(member, Schema::KeyedMap { .. }));
+    let Some(first @ Schema::KeyedMap { fields, defaults }) = positive.next() else {
+        return Relation::Unknown;
+    };
+    if maps == 1 {
+        let Some((parts, subject)) = read_map(fields, defaults, cx) else {
+            return Relation::Unknown;
+        };
+        return split_across(&subject, &parts, branches, first, cx);
+    }
+    let Some(met) = record_of_maps(members, cx) else {
+        return Relation::Unknown;
+    };
+    let parts = met.parts.each_ref().map(Option::as_ref);
+    let subject = Labels {
+        named: met.named,
+        rest: names_read(&parts),
+    };
+    split_across(&subject, &parts, branches, first, cx)
+}
+
+/// A keyed map as `Φ` reads it: what each part of the key partition maps to,
+/// and its labels; `None` where [`parts_of`] or [`Labels::of`] declines.
+fn read_map<'s>(
     fields: &'s [Field],
     defaults: &'s [MapClause],
+    cx: &Cx<'_>,
+) -> Option<([Option<&'s Schema>; PARTS], Labels<'s>)> {
+    let parts = parts_of(defaults, cx)?;
+    let labels = Labels::of(fields, names_read(&parts))?;
+    Some((parts, labels))
+}
+
+/// The keyed maps among `members` met into one record, the R◦ of
+/// [Cas23, §4.3], since two record atoms meet pointwise [Cas23, (12)]. A part
+/// of the key partition maps
+/// to the meet of what each map gives it, and admits no key where one map
+/// admits none; a name to the meet of what each map reads under it, its label
+/// or its part's default, and may be absent only where every map allows its
+/// absence, `⊥` being in a meet of `T⊥` types only where it is in each
+/// [Cas23, §4.1]. `None` where one map declines to be read.
+fn record_of_maps<'s>(members: &'s [Schema], cx: &Cx<'_>) -> Option<Met<'s>> {
+    let read: Vec<([Option<&'s Schema>; PARTS], Labels<'s>)> = members
+        .iter()
+        .filter_map(|member| match member {
+            Schema::KeyedMap { fields, defaults } => Some(read_map(fields, defaults, cx)),
+            _ => None,
+        })
+        .collect::<Option<_>>()?;
+    let parts = core::array::from_fn(|part| {
+        read.iter()
+            .map(|(parts, _)| parts.get(part).copied().flatten().cloned())
+            .collect::<Option<Vec<Schema>>>()
+            .map(Schema::meet)
+    });
+    let mut spelled: Vec<&'s str> = read
+        .iter()
+        .flat_map(|(_, labels)| labels.named.iter().map(|(name, _)| *name))
+        .collect();
+    spelled.sort_unstable();
+    spelled.dedup();
+    let named = spelled
+        .into_iter()
+        .map(|name| {
+            let slots: Vec<Slot> = read.iter().map(|(_, labels)| labels.slot(name)).collect();
+            let absent = slots.iter().all(|slot| slot.absent);
+            let ty = Schema::meet(slots.into_iter().map(|slot| slot.ty));
+            (name, Slot { ty, absent })
+        })
+        .collect();
+    Some(Met { parts, named })
+}
+
+/// R◦ as [`record_of_maps`] builds it, owned, since each part and label is a
+/// meet no map holds.
+struct Met<'s> {
+    parts: [Option<Schema>; PARTS],
+    named: Vec<(&'s str, Slot)>,
+}
+
+/// The two readings' shared body: the subject as `Φ` reads it, its parts and
+/// labels, the members of the union it is asked below, and a schema holding
+/// the subject, which a member set aside is held disjoint from -- the record
+/// itself, or one of the maps R◦ is the meet of, which holds R◦. The subject is
+/// the record [Cas23, (17)] narrows, and the maps among the members are its
+/// union.
+fn split_across<'s>(
+    subject: &Labels<'_>,
+    parts: &[Option<&Schema>; PARTS],
     members: impl Iterator<Item = &'s Schema>,
     schema: &Schema,
     cx: &mut Cx<'_>,
 ) -> Relation {
-    let Some(parts) = parts_of(defaults, cx) else {
-        return Relation::Unknown;
-    };
-    let Some(subject) = Labels::of(fields, names_read(&parts)) else {
-        return Relation::Unknown;
-    };
     let mut branches = Vec::new();
     let mut set_aside_hold_none = true;
     for member in members {
@@ -717,7 +848,7 @@ fn split_across<'s>(
             Schema::KeyedMap { fields, defaults } => parts_of(defaults, cx).and_then(|theirs| {
                 Some(Branch {
                     labels: Labels::of(fields, names_read(&theirs))?,
-                    defaults: defaults_against(&parts, &theirs, cx),
+                    defaults: defaults_against(parts, &theirs, cx),
                 })
             }),
             _ => None,
@@ -732,7 +863,7 @@ fn split_across<'s>(
     if branches.is_empty() {
         return Relation::Unknown;
     }
-    let answer = phi(&subject, &branches, cx);
+    let answer = phi(subject, &branches, cx);
     if set_aside_hold_none {
         answer
     } else {

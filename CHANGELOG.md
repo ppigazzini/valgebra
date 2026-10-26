@@ -23,6 +23,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a meet distributes a union it holds twice with every copy taken out
 - feat: a meet holding a literal is decided one constant at a time
 - feat: a meet proved empty stays empty beside a member no lowering reads
+- feat: records met in a meet are related as one record
 
 -->
 
@@ -58,6 +59,17 @@ answer of its own, or a repair to a change not yet released.
   meet of three members and as one `Annotated` holding all three constraints.
   The reading proves emptiness and only that: the meet without the member
   holding a value refutes nothing.
+- **Records met in a meet are related as one record.** The meet of two open
+  records whose catch-all is a recursive universe -- `{"tier": Literal["free",
+  "pro"], str: json}` and `{"tier": Literal["pro", "enterprise"], str:
+  json}` -- was undecided below `{"tier": Literal["pro"], str: json}`, minus
+  it, and as one record minus the third below the other's complement. The
+  records are met field by field into one record, a field holding what every
+  record gives its name and missing only where every record lets it be, and
+  the record rule relates that record as it relates one, so all three are
+  proved. A member of another shape beside the records leaves the proof
+  standing, and so does a meet below a complement, asked as the meet holding
+  the complement's inner, as any other subject is.
 
 ### Changed
 

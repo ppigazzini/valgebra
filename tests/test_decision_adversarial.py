@@ -530,6 +530,38 @@ def test_a_meet_of_patterns_is_empty_beside_a_predicate() -> None:
     assert Validator(a_and_p).relation_to(Annotated[str, Regex("^b+$")]) == "undecided"
 
 
+# THEORY: a-record-splits-across-a-union
+def test_two_open_records_met_are_one_record() -> None:
+    """Open records met in a meet are one record, and are related as one.
+
+    Each record admits any other key whose value is in the recursive universe,
+    which the set representation cuts and cannot prove anything of. The
+    records met fix `tier` to `"pro"`, so the meet is below a record fixing it
+    so, asked as an inclusion, as the emptiness of the difference, and as one
+    record minus the third below the other's complement. A predicate beside
+    the records leaves the proof standing.
+    """
+    user = {"id": str, "tier": Literal["free", "pro"], str: _JSON}
+    required = {"tier": Literal["pro", "enterprise"], str: _JSON}
+    pro = {"tier": Literal["pro"], str: _JSON}
+    met = intersection(user, required)
+    assert met.is_valid({"id": "a", "tier": "pro", "seen": [1, "b"]})
+    assert met.relation_to(pro) == "subset"
+    assert intersection(user, required, complement(pro)).is_empty()
+    assert intersection(user, complement(pro)).relation_to(complement(required)) == (
+        "subset"
+    )
+    assert intersection(user, required, _ADMITS_NONE).relation_to(pro) == "subset"
+    # A map minus a map it is below stays empty beside a predicate.
+    natural = Annotated[int, at.Ge(0)]
+    apart = intersection(
+        complement({str: complement(natural)}),
+        {str: complement(int)},
+        _ADMITS_NONE,
+    )
+    assert apart.is_empty()
+
+
 class _WeirdInt(int):
     """An `int` subclass whose comparisons answer `True` whatever they are asked."""
 

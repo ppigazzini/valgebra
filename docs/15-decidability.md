@@ -240,6 +240,26 @@ answers `"undecided"`.
     value: an open record whose key takes sixty-four constants, minus the
     record of each, is proved empty.
 
+    Records met in a meet are one record, their field-by-field meet: a field
+    holds what every record gives its name, through the field or through the
+    clause covering it, and may be missing only where every record lets it
+    be. So the meet of open records is related as one record, below a record
+    and minus records alike, and a member of another shape beside them, a
+    predicate say, leaves a proof standing.
+
+    ```python
+    from typing import Literal
+
+    from valgebra import complement, intersection, recursive, union
+
+    json = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    user = {"id": str, "tier": Literal["free", "pro"], str: json}
+    required = {"tier": Literal["pro", "enterprise"], str: json}
+    pro = {"tier": Literal["pro"], str: json}
+    assert intersection(user, required).relation_to(pro) == "subset"
+    assert intersection(user, required, complement(pro)).is_empty()
+    ```
+
     A clause keyed by **literals** is read one constant at a time, each
     constant a key the other map reads through its field of that name or
     through the clause holding it. So `dict[Literal["a"], int]` is below

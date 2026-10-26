@@ -36,7 +36,9 @@ use literals::{
 };
 use products::{linear_subtype, seq_splits_across_union};
 use readings::outside_every_kind;
-use records::{attr_record_subtype, keyed_map_splits_across_union, keyed_map_subtype};
+use records::{
+    attr_record_subtype, keyed_map_splits_across_union, keyed_map_subtype, keyed_meet_below,
+};
 
 pub use crate::oracle::{LeafRelations, NoLeafRelations};
 
@@ -1016,10 +1018,22 @@ impl Schema {
             //
             // A meet of tables and complements of tables is a table, which is
             // what a record's tag narrows to, and is asked as one once the
-            // member rule has not placed it.
+            // member rule has not placed it. A meet of keyed maps is one record,
+            // their pointwise meet, asked below a map or a union of maps; and a
+            // meet below a complement is a meet sharing no value with its inner,
+            // asked as the arm below asks it of any other subject.
             (Schema::Intersection(members), _) => self
                 .meet_below(other, members, cx)
                 .or_else(|| finite_meet_below(members, other, cx.oracle))
+                .or_else(|| match other {
+                    Schema::KeyedMap { .. } | Schema::Union(_) => {
+                        keyed_meet_below(members, other, cx)
+                    }
+                    Schema::Complement(inner) => {
+                        Relation::proven(self.shares_no_value_with(inner, cx))
+                    }
+                    _ => Relation::Unknown,
+                })
                 .or_else(|| self.unstructured(other, cx))
                 .or_else(|| self.below_a_reference(other, cx)),
             (_, Schema::Union(members)) => self

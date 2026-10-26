@@ -7680,3 +7680,195 @@ fn a_reference_above_is_unfolded_for_the_sets() {
         Relation::Holds,
     );
 }
+
+// THEORY: a-record-splits-across-a-union
+/// Keyed maps met in a meet are one record, their pointwise meet, and the
+/// record rule splits it as it splits one map.
+///
+/// Two open records whose catch-all is a recursive universe meet in a record
+/// whose `tier` is a string: below a third record holding a string `tier`,
+/// asked as an inclusion, as the emptiness of the difference, and as the meet
+/// of one with the complement below the other's complement. The set
+/// representation cuts the universe and cannot prove any of the three. Two
+/// closed records meet in one the rule also refutes against a record whose
+/// `tier` is an integer. A member of another shape beside the maps is left
+/// out: the proof stands, and the refutation does not, since the member may
+/// admit nothing.
+#[test]
+fn keyed_maps_met_are_one_record() {
+    let universe = Schema::Ref(DefIx::new(0));
+    let defs = [Schema::union([
+        Schema::Str,
+        Schema::Int,
+        Schema::list(SeqShape::homogeneous(universe.clone())),
+    ])];
+    let open = |fields: Vec<(&str, Schema)>| {
+        Schema::keyed_map(
+            fields
+                .into_iter()
+                .map(|(name, schema)| Field {
+                    name: name.into(),
+                    schema,
+                    required: true,
+                })
+                .collect(),
+            vec![MapClause {
+                key: Schema::Str,
+                value: universe.clone(),
+            }],
+        )
+    };
+    let user = open(vec![
+        ("id", Schema::Str),
+        ("tier", Schema::union([Schema::Int, Schema::Str])),
+    ]);
+    let required = open(vec![("tier", Schema::union([Schema::Str, Schema::Bytes]))]);
+    let pro = open(vec![("tier", Schema::Str)]);
+    let counted = open(vec![("tier", Schema::Int)]);
+    let raw = |members: Vec<Schema>| Schema::Intersection(members.into());
+    let opaque = Schema::Refine {
+        base: Arc::new(Schema::ANYTHING),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    let rules = |sub: &Schema, sup: &Schema| {
+        let budget = Budget::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &defs, &budget)
+    };
+    let both = raw(vec![user.clone(), required.clone()]);
+
+    assert_eq!(rules(&both, &pro), Relation::Holds);
+    assert_eq!(
+        raw(vec![
+            user.clone(),
+            required.clone(),
+            pro.clone().complement()
+        ])
+        .verdict_under_defs(&defs),
+        Verdict::Empty,
+    );
+    assert_eq!(
+        rules(
+            &raw(vec![user.clone(), pro.clone().complement()]),
+            &required.clone().complement()
+        ),
+        Relation::Holds,
+    );
+    // A refutation stands on a value of the meet, which the meet rule proves
+    // of closed maps alone, so between open ones it declines.
+    assert_eq!(rules(&both, &counted), Relation::Unknown);
+    let closed = |tier: Schema| {
+        Schema::record(
+            vec![
+                Field {
+                    name: "id".into(),
+                    schema: Schema::Str,
+                    required: true,
+                },
+                Field {
+                    name: "tier".into(),
+                    schema: tier,
+                    required: true,
+                },
+            ],
+            Openness::Closed,
+        )
+    };
+    let closed_both = raw(vec![
+        closed(Schema::union([Schema::Int, Schema::Str])),
+        closed(Schema::union([Schema::Str, Schema::Bytes])),
+    ]);
+    assert_eq!(rules(&closed_both, &closed(Schema::Str)), Relation::Holds);
+    assert_eq!(rules(&closed_both, &closed(Schema::Int)), Relation::Fails);
+
+    let beside = raw(vec![user, required, opaque.clone()]);
+    assert_eq!(rules(&beside, &pro), Relation::Holds);
+    let closed_beside = raw(vec![
+        closed(Schema::union([Schema::Int, Schema::Str])),
+        closed(Schema::union([Schema::Str, Schema::Bytes])),
+        opaque.clone(),
+    ]);
+    assert_ne!(rules(&closed_beside, &closed(Schema::Int)), Relation::Fails);
+}
+
+// THEORY: a-record-splits-across-a-union
+/// A map minus a map it is below is empty beside a member no rule reads.
+///
+/// `dict[str, ~int]` is below `dict[str, ~(int >= 0)]`, so the meet of one with
+/// the other's complement is empty, and so is that meet beside a predicate:
+/// the record rule leaves the predicate out, a meet being below the members it
+/// keeps.
+#[test]
+fn a_map_minus_a_map_above_it_is_empty_beside_a_predicate() {
+    let opaque = Schema::Refine {
+        base: Arc::new(Schema::ANYTHING),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    let raw = |members: Vec<Schema>| Schema::Intersection(members.into());
+    let mapping = |value: Schema| {
+        Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Str,
+                value,
+            }],
+        )
+    };
+    let positive = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
+    };
+    let apart = raw(vec![
+        mapping(positive.complement()).complement(),
+        mapping(Schema::Int.complement()),
+        opaque,
+    ]);
+    assert_eq!(apart.verdict_under_defs(&[]), Verdict::Empty);
+}
+
+// THEORY: a-record-splits-across-a-union
+/// The record rule answers a meet beside a member of another shape with a
+/// proof or nothing, and a meet of three records as one.
+///
+/// `{a: int}` minus `{a: str}` holds `{"a": 1}`, and beside a predicate the
+/// rule names no value: the split finds one in the records' meet, which the
+/// predicate may refuse. Three closed records whose `a` meets in `str` are below
+/// the record holding a string `a`, R◦ being the meet of every positive record
+/// [Cas23, §4.3] and not of two alone.
+#[test]
+fn a_meet_of_records_beside_another_member_proves_or_declines() {
+    let closed = |ty: Schema| {
+        Schema::record(
+            vec![Field {
+                name: "a".into(),
+                schema: ty,
+                required: true,
+            }],
+            Openness::Closed,
+        )
+    };
+    let opaque = Schema::Refine {
+        base: Arc::new(Schema::ANYTHING),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    let raw = |members: Vec<Schema>| Schema::Intersection(members.into());
+
+    let minus = raw(vec![closed(Schema::Int), closed(Schema::Str).complement()]);
+    assert_eq!(minus.verdict_under_defs(&[]), Verdict::Inhabited);
+    let beside = raw(vec![
+        closed(Schema::Int),
+        closed(Schema::Str).complement(),
+        opaque,
+    ]);
+    assert_eq!(beside.verdict_under_defs(&[]), Verdict::Unknown);
+
+    let three = raw(vec![
+        closed(Schema::union([Schema::Int, Schema::Str])),
+        closed(Schema::union([Schema::Str, Schema::Bytes])),
+        closed(Schema::union([Schema::Str, Schema::NoneType])),
+    ]);
+    let budget = Budget::new(DECISION_BUDGET);
+    assert_eq!(
+        three.subtype_relation(&closed(Schema::Str), &NoLeafRelations, &[], &budget),
+        Relation::Holds,
+    );
+}

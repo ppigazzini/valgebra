@@ -516,13 +516,14 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
 }
 
 /// A meet the rules declined, read as a set minus sets where it is one: a
-/// table met with complements of tables ([`FiniteMeet`]), or a keyed map met
-/// with complements of keyed maps ([`keyed_map_minus_keyed_maps`]).
+/// table met with complements of tables ([`FiniteMeet`]), or keyed maps met
+/// with complements of keyed maps ([`keyed_map_minus_keyed_maps`]), beside
+/// which a member of another shape is left out.
 ///
 /// Out of line, and asked only of a declined meet no reference unfolds, so the
 /// meets the rules decide carry neither reading on their path; and a meet
-/// holding a member of no shape either reads -- a class with its attributes,
-/// say -- leaves at the first look.
+/// holding no keyed map and a member of no shape the table reads -- a class
+/// with its attributes, say -- leaves at the first look.
 #[inline(never)]
 fn a_difference_of_sets(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
     let shaped = members.iter().all(|member| {
@@ -531,13 +532,17 @@ fn a_difference_of_sets(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
             Schema::Literal(_) | Schema::Union(_) | Schema::Complement(_) | Schema::KeyedMap { .. }
         )
     });
-    if !shaped {
-        return Verdict::Unknown;
+    if shaped && let Some(meet) = FiniteMeet::of(members) {
+        return meet.verdict(cx.oracle);
     }
-    match FiniteMeet::of(members) {
-        Some(meet) => meet.verdict(cx.oracle),
-        None => keyed_map_minus_keyed_maps(members, cx),
+    if shaped
+        || members
+            .iter()
+            .any(|member| matches!(member, Schema::KeyedMap { .. }))
+    {
+        return keyed_map_minus_keyed_maps(members, cx);
     }
+    Verdict::Unknown
 }
 
 /// Whether `members` hold a pattern refinement and the complement of one with

@@ -787,8 +787,9 @@ and `a_query_gives_its_stacks_back_as_it_was_given_them` holds both stacks to
 coming back as they were given, over drawn schemas and definitions.
 
 **A goal can meet a reference being resolved, and reads it at positive
-positions only.** Two emptiness rules ask goals -- a record minus records is
-decided by Φ's inclusions, and a pattern beside the complement of one asks
+positions only.** Two emptiness rules ask goals -- records minus records are
+decided by Φ's inclusions on the records' pointwise meet, and a pattern beside
+the complement of one asks
 whether `str` is below the complemented base -- so a goal can be asked with a
 definition on `visiting`. The hypothesis is read in one place, the reference arm
 of the emptiness recursion, and never under a complement, whose arm reads its
