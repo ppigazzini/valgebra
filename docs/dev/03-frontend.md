@@ -330,7 +330,12 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    the `NoExtraItems` sentinel of the implementation that built the class, the
    one in its metaclass's module -- `typing`'s and `typing_extensions`' are two
    objects before 3.15. An implementation older than the sentinel writes `None`
-   for it; with one, `None` is the type the extra values have.
+   for it; with one, `None` is the type the extra values have. An inheritance
+   the spec calls an error -- a child of a closed base written `closed=False`
+   or with an `extra_items`, a `closed=True` child of a base with
+   `extra_items` -- names one set under the same rule as a self-nested
+   qualifier, and is read as the child's own keywords say, as pydantic reads
+   it; the child is what the caller wrote.
 5. **An enum** is an instance check against the enumeration class.
 6. **A dataclass or a `NamedTuple`** is an instance check *plus* a deep check
    of each declared field, so a value of the right class with a field of the

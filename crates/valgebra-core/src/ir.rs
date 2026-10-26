@@ -888,6 +888,12 @@ pub enum Schema {
     /// single `(K, V)` clause with no fields, and a typed catch-all a record's
     /// fields plus a typed clause. The empty closed map denotes only the empty
     /// dict.
+    ///
+    /// A dict is any instance of `dict`, a subclass's included, read by its
+    /// storage as every container node reads one. A `TypedDict` is this node,
+    /// so it admits an `OrderedDict` where the typing spec asks for `dict`
+    /// itself: telling the two apart would take a node for an exact type, which
+    /// no other form the frontend reads asks for.
     KeyedMap {
         /// The declared string-named fields, in order.
         fields: Fields,

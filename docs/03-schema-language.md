@@ -84,7 +84,10 @@ assert Validator(float | int).is_valid(1)  # what a checker accepts there
 shortcut -- "when an argument is annotated as having type float, an argument of
 type int is acceptable" -- so a checker reads a `float` annotation as `float |
 int`. valgebra checks the object a caller holds, and an `int` is not a `float`
-instance: write `float | int` for the set a checker accepts there.
+instance: write `float | int` for the set a checker accepts there. `complex`
+departs the same way: the same shortcut reads it as `complex | float | int`, and
+`Validator(complex)` admits a `complex` instance alone, refusing `1.0` and `1`,
+so write `complex | float | int` for that set.
 
 ## `Any` versus `object`
 
@@ -970,6 +973,13 @@ own spelling, and a schema written as a *shape* means that shape. Both sets are
 spellable both ways: write `closed=True` (PEP 728) for a closed `TypedDict`, and
 `{"name": str, anything: anything}` for an open shape -- or `.open()`, which
 does the same to every record in a schema at once.
+
+**A `TypedDict` admits an instance of a `dict` subclass** -- an `OrderedDict`, a
+`defaultdict`, a class of your own -- read by its storage as every container
+schema reads a subclass instance. The typing spec says values inhabiting a
+`TypedDict` "must be instances of `dict` itself, not a subclass", and the type
+checkers refuse `OrderedDict[str, int]` there; a record and a mapping are one
+node here, and the exact type of a dict is a set no node names.
 
 ### A protocol is the record of its members
 
