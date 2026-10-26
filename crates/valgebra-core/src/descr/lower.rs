@@ -246,7 +246,9 @@ impl Bounds {
 /// what makes this figure re-derivable: the row fails on the commit that
 /// lowers it.
 ///
-/// **This bound is debt**, for the reason `BUDGET`'s documentation gives.
+/// **This bound is cost.** A build multiplies finitely many atoms and ends
+/// without it; what it caps is how long a caller waits on a product that is
+/// finite and exponential, which a memo over equal subtrees would not shrink.
 pub const WORK: u64 = 4096;
 
 /// The schema nesting this will descend before refusing.
@@ -270,7 +272,10 @@ pub const WORK: u64 = 4096;
 /// `lower_sibling_union_difference_{unheld,held}` is the pair that shows what
 /// the bound buys, on one shape, from this number alone.
 ///
-/// **This bound is debt**, for the reason `BUDGET`'s documentation gives.
+/// **This bound is cost.** A lowering is a recursion over a finite tree and ends
+/// without it; nesting multiplies what it builds, over distinct levels, which a
+/// memo over equal subtrees would not shrink, so the bound caps the exponential
+/// rather than standing in for a termination argument.
 pub(crate) const DEPTH: u32 = 5;
 
 /// [`lower`] under explicit bounds, for a caller measuring one of them.

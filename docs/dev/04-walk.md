@@ -758,7 +758,12 @@ at every element, for the tuple the tuple's own arm and a reading of each
 position's schema, and for the named tuple a call into the meet and one into
 each of its two conjuncts, so the readers cost a thousand `date`s 76% fewer
 instructions, a thousand literals 62%, a thousand `tuple[int, str]` 61% and a
-thousand `NamedTuple`s of two scalar fields 76% (81% under `validate`). A list
+thousand `NamedTuple`s of two scalar fields 76% (81% under `validate`). No shape
+of the instruction gate builds such a list, so a reader that stopped firing
+would move no gated count: these figures, and the dataclass reader's below, are
+readings taken against the general loop, the profile-guided wheel's training
+(`scripts/pgo_workload.py`) is what reads the readers, and their corpus cases
+hold each to its answers. A list
 of dataclasses, each element the meet of its class and the record of its fields,
 has a reader too (`class_record_list_matches`): an element of exactly the class
 is walked as its record, with the meet's level and the record's held around it

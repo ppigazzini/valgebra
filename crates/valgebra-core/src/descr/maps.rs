@@ -196,9 +196,12 @@ fn one_key(a: &Label, b: &Label) -> bool {
 /// tries, before it declines.
 ///
 /// Each constraint of `S` is given one of the keys that could meet it, so the
-/// search is a product of those counts. It is small wherever an atom came out
-/// of the schemas a caller writes, and past the bound the atom is *unknown*,
-/// which is sound: nothing is proved empty or inhabited.
+/// search is a product of those counts. It ends without the bound: an atom pins
+/// finitely many constraints and each has finitely many keys that could meet
+/// it, so the product is finite, and the bound caps what that product costs. It
+/// is small wherever an atom came out of the schemas a caller writes, and past
+/// the bound the atom is *unknown*, which is sound: nothing is proved empty or
+/// inhabited.
 pub(crate) const MAX_ASSIGNMENTS: usize = 4096;
 
 /// Every key of a part with finitely many, or `None` for a part with

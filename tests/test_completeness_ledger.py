@@ -717,9 +717,9 @@ _DECIDED = [
     ),
     # A record whose fields each take two types, against the union of the four
     # records that fix both. The union *is* the record, the way a fixed sequence
-    # is the union of the tuples it splits across, and the sets decide it: the
-    # rules have a split rule for a product and none for a record, so the
-    # descriptor answers by emptiness of the difference.
+    # is the union of the tuples it splits across. The rules split a record
+    # across the union as they split a product (`keyed_map_splits_across_union`),
+    # and the descriptor answers the same by emptiness of the difference.
     #
     # Both spellings of that difference are rows, because they are one set and
     # the answer is the set's: the complement of the whole union and the meet of

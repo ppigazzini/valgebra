@@ -63,7 +63,7 @@ the dunder behind a type slot and that is what introspection would show.
 
 | Operator | Method | Meaning |
 | --- | --- | --- |
-| `obj in validator` | `__contains__` | Membership: the operator form of `is_valid`, so a check reads as the set test it is. |
+| `obj in validator` | `__contains__` | Membership: the operator form of `is_valid`, so a check reads as the set test it is. Python spells membership `in` as it spells a union `\|`, which is why both are operators and intersection and complement are not. |
 | `a \| b` | `__or__`, `__ror__` | The union of the two schemas. `\|` is the operator typing already uses for a union; intersection and complement have no typing operator and stay named calls. The reflected form is what makes `None \| validator` work. |
 | `a == b` | `__eq__` | Equality of the **normal form**: the schema trees, recursive definitions, and pooled constants all match, after the lattice laws construction settles — so a difference of member order, of a repeat, or of an identity is not one, and neither is the order the `recursive` definitions were met in: a reference is read through to the definition it names ([the algebra page](04-algebra.md#subtyping-equivalence-and-emptiness)). Ask `is_equivalent` for the semantic question — whether two schemas denote the same set, which needs a containment rather than a law. |
 | `hash(validator)` | `__hash__` | Consistent with `==`, so a validator is a dict key or a set member. It digests the schema shape, each definition a reference names, and each pooled constant's own hash, so `Literal[1]` and `Literal[2]` hash apart; a constant with no hash contributes nothing, so an unhashable constant cannot break it. Computed once and kept, as a `frozenset` keeps its hash. |

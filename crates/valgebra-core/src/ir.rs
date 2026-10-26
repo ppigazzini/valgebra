@@ -1401,6 +1401,10 @@ impl SeqShape {
 /// Comparison and predicate operands live in the validator's object pool; the
 /// payload is an index. Length bounds carry the length directly.
 ///
+/// The variants are the atoms of the generator `Refine` rather than nodes of
+/// their own, so the closure ledger, which reads `Schema`, has no column for
+/// them; `carries.rs` holds each to the bases it narrows.
+///
 /// Every constraint but [`Constraint::Predicate`] is a set under the trust base
 /// (`docs/14-soundness.md`). The comparison, the length and the `%` it reads
 /// are operators Python's rules make facts about the value -- the language

@@ -87,11 +87,17 @@ Two columns, and a third for what is not a set at all;
   `Seq`, `Literal`, `Union`, `Complement` and the rest are here, and admitting a
   new one is the argument this section is about.
 - a **representative** denotes a set the generators do reach, and is kept because
-  the normal form has to name it. `Anything` is `complement(C) | C` for a class
-  `C`, and what `A | ~A` folds to; `Nothing` is `complement(anything)`, `Bool` is
-  `Literal[True] | Literal[False]`, `NoneType` is `Literal[None]`, and
-  `Intersection` is De Morgan of the other two — each is checked against its
-  derivation, in both directions, by that ledger.
+  the normal form has to name it: a fold lands on it, or the kind partition
+  reads it as a kind's top. `Anything` is `complement(C) | C` for a class `C`,
+  and what `A | ~A` folds to; `Nothing` is `complement(anything)`, `NoneType` is
+  `Literal[None]`, which the frontend reads `None` and `Literal[None]` to alike,
+  and `Intersection` is De Morgan of the other two. `Bool` is
+  `Literal[True] | Literal[False]` and is kept for the second reason: no
+  constructor folds to it, and `union(Literal[True], Literal[False])` stays that
+  union, but `bool` is
+  the `Bool` kind's top as `int` is `Int`'s, and the scalar region bitset names
+  the kind by it. Each is checked against its derivation, in both directions, by
+  that ledger.
 - a **marker** is not a set of its own: `Ref` denotes the definition it points
   at, and `SelfRef` marks where a `recursive` body's back edge will go, resolved
   to a `Ref` before a validator is returned -- its doc comment gives it the empty
@@ -857,8 +863,11 @@ syntax writes a union that way -- `int | str` is a union before this library
 sees it, and `__ror__` is what lets `None | validator` work -- so answering `|`
 is answering the language. `&` and `~` would be second spellings of
 `intersection` and `complement`, which the ship-versus-recipe rule refuses:
-shorter is not a reason. A validator does not pickle either, and the refusal
-says what to send instead ([docs/17-boundaries.md](../17-boundaries.md)).
+shorter is not a reason. `in` is kept for the reason `|` is: it is Python's own
+spelling of the one question the product answers, membership, as `|` is
+Python's spelling of a union, where `&` and `~` would spell combinators the
+language has no operator for. A validator does not pickle either, and the
+refusal says what to send instead ([docs/17-boundaries.md](../17-boundaries.md)).
 
 ## The limit
 

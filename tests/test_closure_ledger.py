@@ -102,8 +102,10 @@ GENERATORS = {
     "Complement",
 }
 
-# A set the generators reach, kept because the normal form needs a form to name.
-# Each carries the derivation it stands for, checked below in both directions.
+# A set the generators reach, kept because the normal form needs a form to name:
+# a fold lands on it, or the kind partition reads it as a kind's top, which is
+# `Bool`'s reason, since nothing folds to it. Each carries the derivation it
+# stands for, checked below in both directions.
 REPRESENTATIVES = {
     # The lattice top, and what `A | ~A` folds to. Over a class the union keeps
     # its spelling, so the derivation is read rather than folded away.
