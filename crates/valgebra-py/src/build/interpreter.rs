@@ -2679,7 +2679,7 @@ fn a_qualifier_states_required_ness_only_from_the_outside() {
                     None,
                 )
                 .unwrap_or_else(|error| panic!("{expression} does not evaluate: {error}"));
-            qualified_required(&hint).expect("the walk answers")
+            qualified_required(&hint).expect("the walk answers").0
         };
         for (expression, wanted) in [
             // Not stated: nothing here is a field qualifier.
@@ -2834,7 +2834,7 @@ fn a_typing_extensions_form_reads_as_its_typing_spelling() {
                 )
                 .expect(expression);
             assert_eq!(
-                qualified_required(&hint).expect(expression),
+                qualified_required(&hint).expect(expression).0,
                 wanted,
                 "{expression}"
             );
@@ -2889,6 +2889,73 @@ fn a_bare_generic_alias_unpacked_names_its_unbound_parameter() {
                         tuple[int, typing.Unpack[ns['Tail']]])[1])({})";
         let refused = built(py, unpacked).expect_err("the parameter has no default");
         assert!(refused.to_string().contains("has no default"), "{refused}");
+    });
+}
+
+/// A presence qualifier under an `Annotated` stays under it. A field is built
+/// from the hint below the qualifiers at its top alone, so the alias keeps the
+/// marker it carries, and a qualifier at the top is taken off above one.
+#[test]
+fn a_qualifier_under_an_annotated_keeps_its_marker() {
+    Python::attach(|py| {
+        if !Since(11).met(py) {
+            return;
+        }
+        let record = built(
+            py,
+            "typing.TypedDict('Row', {'a': typing.Annotated[typing.NotRequired[int], at.Ge(0)], \
+             'b': typing.NotRequired[typing.Annotated[int, at.Ge(1)]]})",
+        )
+        .expect("the record builds");
+        assert!(record.contains("'a?': Annotated[int, Ge(0)]"), "{record}");
+        assert!(record.contains("'b?': Annotated[int, Ge(1)]"), "{record}");
+    });
+}
+
+/// A field is built from the hint below the qualifiers at its top, each of
+/// which holds one argument. A qualifier holding two is handed on whole, for the
+/// builder to refuse rather than read as its first, and an `Annotated` is
+/// handed on with what it annotates.
+///
+/// Written against the walk, because the builder reads a qualifier as the type
+/// it wraps: a record reads the same set from either hint, and only the hint
+/// handed on tells them apart.
+#[test]
+fn a_field_is_built_from_the_hint_below_its_top_qualifiers() {
+    Python::attach(|py| {
+        if !Since(11).met(py) {
+            return;
+        }
+        let namespace = namespace(py).expect("the namespace builds");
+        let eval = |expression: &str| {
+            py.eval(
+                &CString::new(expression).expect("no interior nul"),
+                Some(&namespace),
+                None,
+            )
+            .unwrap_or_else(|error| panic!("{expression} does not evaluate: {error}"))
+        };
+        let two = "typing._GenericAlias(typing.NotRequired, (int, str))";
+        for (expression, wanted) in [
+            ("int", "int"),
+            ("typing.NotRequired[int]", "int"),
+            ("typing.Required[typing.Required[int]]", "int"),
+            (
+                "typing.NotRequired[typing.Annotated[int, 1]]",
+                "typing.Annotated[int, 1]",
+            ),
+            (
+                "typing.Annotated[typing.NotRequired[int], 1]",
+                "typing.Annotated[typing.NotRequired[int], 1]",
+            ),
+            (two, two),
+        ] {
+            let below = qualified_required(&eval(expression)).expect(expression).1;
+            assert!(
+                below.eq(eval(wanted)).expect("the hints compare"),
+                "{expression}: {below}"
+            );
+        }
     });
 }
 

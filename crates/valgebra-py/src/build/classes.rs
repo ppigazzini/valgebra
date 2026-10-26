@@ -572,7 +572,7 @@ pub(super) fn bound_hints<'py>(
     let py = ty.py();
     let hints = resolve_type_hints(ty)?.cast_into::<PyDict>()?;
     let generic = forms(py)?.generic.bind(py);
-    if applied.is_none() && !ty.mro().iter().any(|base| base.is(generic)) {
+    if applied.is_none() && !ty.mro().iter_borrowed().any(|base| base.is(generic)) {
         return Ok(hints);
     }
     let binding = Binding::of(ty, applied)?;
@@ -1029,9 +1029,10 @@ pub(super) fn build_typed_dict<'py>(
     let required = ty.getattr(intern!(ty.py(), "__required_keys__"))?;
     let mut fields = Vec::with_capacity(hints.len());
     for (name, hint) in hints.iter() {
+        let (stated, read) = qualified_required(&hint)?;
         fields.push(Field {
             name: field_name(&name.str()?)?.into(),
-            schema: build_schema(&hint, lits, defs)?,
+            schema: build_schema(&read, lits, defs)?,
             // The qualifier on the *resolved* hint wins over the class's key
             // sets. CPython fills `__required_keys__` when the class is created,
             // from the annotations as written -- and under `from __future__
@@ -1040,7 +1041,7 @@ pub(super) fn build_typed_dict<'py>(
             // required.
             // `get_type_hints` resolves the string and keeps the qualifier, so
             // reading it there is reading what the author wrote.
-            required: match qualified_required(&hint)? {
+            required: match stated {
                 Some(stated) => stated,
                 None => required.contains(&name)?,
             },
@@ -1063,18 +1064,30 @@ pub(super) fn build_typed_dict<'py>(
 /// and pydantic as optional, so it is refused, in either order and with an
 /// `Annotated` between. A qualifier nested in itself, `Required[Required[T]]`,
 /// is an error that names one set, and is read as the one qualifier.
-pub(super) fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<bool>> {
+///
+/// **The second half is the hint below the qualifiers at its top**, which is
+/// what the field's type is built from: the builder reads a qualifier as the
+/// type it wraps, and reaches one only after asking the hint every form before
+/// it, so handing it the type this walk has already read saves that and pays
+/// for the walk's look below the first qualifier. Nothing under an `Annotated`
+/// is taken off, since the alias carries the field's metadata, and a qualifier
+/// holding other than one argument is left for the builder to refuse.
+pub(super) fn qualified_required<'py>(
+    hint: &Bound<'py, PyAny>,
+) -> PyResult<(Option<bool>, Bound<'py, PyAny>)> {
     let py = hint.py();
     let forms = forms(py)?;
     let mut current = hint.clone();
     let mut stated = None;
+    let mut below = hint.clone();
+    let mut at_the_top = true;
     for _ in 0..MAX_BUILD_DEPTH {
         // Asked rather than tried: a field that carries no qualifier is the
         // common one, and an attribute that is absent answers by *raising* --
         // an exception built, thrown and dropped per field. `getattr_opt`
         // reads the same absence without one.
         let Some(origin) = optional_attribute(&current, intern!(py, "__origin__"))? else {
-            return Ok(stated);
+            return Ok((stated, below));
         };
         // An `Annotated` alias's origin is the type it annotates, which may be
         // the qualifier: `Annotated[NotRequired[int], Ge(0)]` says the key is
@@ -1086,9 +1099,10 @@ pub(super) fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<boo
         // written with. A class it annotates carries no qualifier.
         if current.get_type().is(forms.annotated_alias.bind(py)) {
             if origin.is_instance_of::<PyType>() {
-                return Ok(stated);
+                return Ok((stated, below));
             }
             current = origin;
+            at_the_top = false;
             continue;
         }
         let mut says = None;
@@ -1118,22 +1132,25 @@ pub(super) fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<boo
                 )));
             }
         } else if !is_field_qualifier(&origin)? {
-            return Ok(stated);
+            return Ok((stated, below));
         }
         let Some(args) = current.getattr_opt(intern!(py, "__args__"))? else {
-            return Ok(stated);
+            return Ok((stated, below));
         };
         let Ok(inner) = args.get_item(0) else {
-            return Ok(stated);
+            return Ok((stated, below));
         };
+        if at_the_top && args.len()? == 1 {
+            below = inner.clone();
+        }
         // A class carries no qualifier, and it is what a qualifier most often
         // wraps: answered by its type, without asking it for an origin.
         if inner.is_instance_of::<PyType>() {
-            return Ok(stated);
+            return Ok((stated, below));
         }
         current = inner;
     }
-    Ok(stated)
+    Ok((stated, below))
 }
 
 /// Whether `__extra_items__` says its author gave no `extra_items`.

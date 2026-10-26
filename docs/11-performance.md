@@ -605,6 +605,15 @@ program that builds validators per request, and to no validation call.
   `MAX_MARKER_TYPES` types, which costs no exceptions on any interpreter: fifty
   `Annotated[int, Ge(0)]` fields compile in about 15 us on CPython 3.14 and 14
   on 3.12, on the machine named above.
+- **A `TypedDict` field's qualifiers are read once.** The reader that says
+  whether a key is required walks the `Required`, `NotRequired` and `ReadOnly`
+  around a field's hint, below the first that answers so that two which
+  disagree are refused, and hands back the type below them, which the field is
+  built from (`qualified_required` in `build/classes.rs`). The builder reaches
+  a qualifier only after asking the hint every form before it, so it is spared
+  that walk: fifty refined fields, five of them `NotRequired`, compile in 12%
+  fewer instructions than built from the hint as written
+  (`--binding-annotated`).
 - **A protocol reads its classes' namespaces once**, and a member annotated
   with a class `type` made is neither `ClassVar` nor `Final` without calling
   `typing.get_origin`, a Python function (`protocol_members` in
