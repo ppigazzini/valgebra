@@ -420,7 +420,13 @@ complement the bottom (`has_complementary_pair_within` in
 not among them**: `A | (A & B)` and `A` are one set and two terms. Absorption is
 one case of `A | B` folding to `A` wherever `A` contains `B`, and a containment
 is what the decision procedures answer rather than what a constructor folds
-([02-decision.md](02-decision.md) draws the line).
+([02-decision.md](02-decision.md) draws the line). A `recursive` whose body
+never names the fixpoint is that body, `μt. A` being `A` where `t` does not occur
+in `A`, rather than a definition no reference reaches. And the clause list
+`open` and `close` rewrite names each key schema once, two clauses over one key
+being one over the join of their values (`clauses_over` in `ir.rs`); the
+constructor reads a clause list as written, and the frontend refuses a dict
+display whose two keys build one key schema.
 
 The three complement laws differ from the rest in what they need. `~~A` holds of
 anything, because a complement is evaluated by negating what is under it, so

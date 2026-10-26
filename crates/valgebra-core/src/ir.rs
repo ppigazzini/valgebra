@@ -580,6 +580,17 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
     // schema: the freed clause folds wherever its value first appears, and an
     // opened map is equal to its own clauses written out again.
     canonical_clauses(&mut kept);
+    // Two clauses the rewrite left over one key schema are one clause over the
+    // join of their values: a key is read by some clause, so `K x V` beside
+    // `K x W` is `K x (V | W)`. Adjacent in that order, and the join moves no
+    // key.
+    kept.dedup_by(|later, earlier| {
+        if later.key != earlier.key {
+            return false;
+        }
+        earlier.value = Schema::union([earlier.value.clone(), later.value.clone()]);
+        true
+    });
     share_clauses(&mut kept)
 }
 

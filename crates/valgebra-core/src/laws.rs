@@ -5482,6 +5482,37 @@ proptest! {
         prop_assert_eq!(close(split), close(merged));
     }
 
+    /// A map `open` or `close` rewrites names each key schema in one clause.
+    ///
+    /// A key is read by some clause, so two clauses over one key schema are one
+    /// clause over the join of their values; left as two, the render prints a
+    /// dict display that repeats a key, which reads back as the last of them.
+    /// The rewrite can leave two -- the top clause narrowed to the keys another
+    /// clause claims, beside that clause -- so it folds them.
+    #[test]
+    fn a_rewritten_map_names_each_key_schema_once(
+        tops in prop::collection::vec(top_clause_key(), 0..3),
+        rest in mixed_clauses(),
+    ) {
+        let clauses: Vec<MapClause> = tops
+            .iter()
+            .map(|key| MapClause { key: key.clone(), value: Schema::ANYTHING })
+            .chain(rest)
+            .collect();
+        for open in [Openness::Open, Openness::Closed] {
+            let rewritten = Schema::keyed_map(Vec::new(), clauses.clone()).with_records_open(open);
+            let Schema::KeyedMap { defaults, .. } = &rewritten else {
+                continue;
+            };
+            for (at, clause) in defaults.iter().enumerate() {
+                prop_assert!(
+                    defaults.iter().take(at).all(|earlier| earlier.key != clause.key),
+                    "{open:?} of {clauses:?} is {rewritten:?}"
+                );
+            }
+        }
+    }
+
     // THEORY: open-and-close-read-the-region
     /// Under a negation the two operators swap, and the swap is exact.
     ///

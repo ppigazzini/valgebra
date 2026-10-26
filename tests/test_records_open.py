@@ -50,3 +50,20 @@ def test_an_opened_mapping_renders_as_its_clauses_written_again() -> None:
     written = Validator({union(int, complement(union(int, str))): object, str: int})
     assert opened == written
     assert repr(opened) == repr(written)
+
+
+def test_a_closed_map_names_each_key_schema_once() -> None:
+    """`close` folds the clauses it leaves over one key into one over their join.
+
+    The `complement(str)` clause closes to the `bytes` keys alone, beside the
+    `bytes: int` clause: one key schema, and a key is read by some clause, so the
+    two are `bytes: anything`. Left as two, the render printed a dict display
+    with the key twice, which reads back as its last value.
+    """
+    closed = Validator(
+        {str: anything, bytes: int, complement(Validator(str)): anything}
+    ).close()
+    assert closed == Validator({bytes: anything})
+    assert closed.is_valid({b"x": "y"})
+    back = Validator(eval(repr(closed), {"bytes": bytes, "anything": anything}))  # noqa: S307 - the render under test
+    assert back == closed

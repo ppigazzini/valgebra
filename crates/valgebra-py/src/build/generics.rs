@@ -824,7 +824,33 @@ pub(super) fn build_dict(
     if optional_seen {
         refuse_a_field_named_twice(&fields)?;
     }
+    refuse_a_key_schema_written_twice(&defaults)?;
     Ok(Schema::keyed_map(fields, defaults))
+}
+
+/// Refuse a mapping two of whose keys build one key schema.
+///
+/// `{Validator(int): str, int: bytes}` is two dict keys and one key schema, and
+/// a key is read by some clause, so the two say one clause over the union of
+/// their values -- a spelling with two places for one fact, whose render would
+/// repeat a key a dict display keeps once and read back as the last. Refused
+/// rather than merged, as two keys that are one field name are, and asked once
+/// over the finished clauses, by pairs: a mapping is written with a few.
+fn refuse_a_key_schema_written_twice(defaults: &[MapClause]) -> PyResult<()> {
+    for (at, clause) in defaults.iter().enumerate() {
+        if defaults
+            .iter()
+            .take(at)
+            .any(|earlier| earlier.key == clause.key)
+        {
+            return Err(PyValueError::new_err(
+                "two keys of this mapping build one key schema, and a key is read \
+                 by any clause that admits it: write the key once, with the union \
+                 of the values each of the two allowed",
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Refuse a record that names one field twice.

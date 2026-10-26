@@ -82,10 +82,19 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
     // The marker is resolved wherever the build put it. A `recursive` inside the
     // body compiles to a definition of its own, and that definition may name
     // *this* fixpoint, so the body is not the only place the marker lands.
+    let mut named = false;
     for definition in &mut definitions {
-        *definition = definition.resolve_self(token, ref_id);
+        let resolved = definition.resolve_self(token, ref_id);
+        named |= resolved != *definition;
+        *definition = resolved;
     }
     let resolved = body.resolve_self(token, ref_id);
+    // A body that never names the fixpoint is its own set -- `μt. A` is `A`
+    // where `t` does not occur in `A` -- and is that body, rather than a
+    // definition no reference reaches beside a reference to it.
+    if !named && resolved == body {
+        return Validator::checked(body, literals.into_items(), definitions);
+    }
     // Contractivity is a property of the whole system of definitions: an inner
     // fixpoint that names this one puts the occurrence behind a `Ref`, which a
     // walk over the body alone reads as a leaf. The definitions the body's build

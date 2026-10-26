@@ -584,3 +584,27 @@ def test_a_cycle_is_caught_by_identity_rather_than_by_equality() -> None:
     assert repeated[0] is not repeated[1]
     assert schema.is_valid(repeated)
     assert schema.is_valid([repeated, repeated])
+
+
+def test_a_body_that_never_names_the_fixpoint_is_that_body() -> None:
+    """`recursive(lambda t: A)` with no `t` in `A` is `A`.
+
+    A fixpoint whose body never names it is its own set, so the build returns
+    the body rather than a definition no reference reaches beside a reference
+    to it: equal to the body, rendered as it, and the same set.
+    """
+    for body in (int, [int], {"a": str}, union(int, str)):
+        unnamed = recursive(lambda _t, body=body: body)
+        assert unnamed == Validator(body)
+        assert repr(unnamed) == repr(Validator(body))
+    named = recursive(lambda t: union(int, [t]))
+    assert repr(named).startswith("recursive(")
+    # An inner fixpoint that never names the outer one is the outer body, so
+    # the result is the inner fixpoint; one that names it makes the outer a
+    # fixpoint too, whose values reach it through the inner.
+    inner = recursive(lambda _t: recursive(lambda u: union(int, [u])))
+    assert inner == recursive(lambda u: union(int, [u]))
+    through = recursive(lambda t: recursive(lambda u: union(None, [u], {"next": t})))
+    assert repr(through).startswith("recursive(lambda X: recursive(")
+    assert through.is_valid({"next": [{"next": None}]})
+    assert not through.is_valid({"next": 1})

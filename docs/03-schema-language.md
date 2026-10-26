@@ -578,8 +578,10 @@ narrower catch-all, `{"a?": int, str: int}`, is kept: `open` writes the
 catch-all beside `{"a?": anything}`, and the `close` after it drops the name --
 and it has to, or `{"a?": anything}` and `{}`, one set once opened, would close
 to two. Two
-clauses carrying one value are one clause over the union of their keys, so
-opening `dict[str, anything]` gives a single clause over every key -- and that
+clauses over one key schema are one clause over the join of their values, as
+closing `{str: anything, bytes: int, complement(str): anything}` gives `{bytes:
+anything}`, and two clauses carrying one value are one clause over the union of
+their keys, so opening `dict[str, anything]` gives a single clause over every key -- and that
 has to be so too: where the keys claimed hold a literal, the long spelling is
 keyed by the literal's complement, a shape [the set representation
 declines](15-decidability.md). Neither is recoverable, so closing afterwards
@@ -688,7 +690,10 @@ precedence over the catch-all.
 Clauses are a disjunction, not a precedence list: a key that is not a named field
 is admitted when **some** clause matches both it and its value. So overlapping
 key schemas widen what the map admits rather than the earlier one winning, and
-writing them in a different order does not change the schema's meaning.
+writing them in a different order does not change the schema's meaning. Two
+keys that build one key schema, `{Validator(int): str, int: bytes}`, say one
+clause twice, and are refused: write the key once, with the union of the
+values.
 
 ```python
 from valgebra import Validator

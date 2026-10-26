@@ -302,6 +302,14 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
         NotImplementedError,
         "is the annotation a static checker reads",
     ),
+    # `build/generics.rs`: two keys of a mapping that build one key schema,
+    # which say one clause over the union of their values twice.
+    (
+        "one key schema written twice",
+        {vg.Validator(int): str, int: bytes},
+        ValueError,
+        "two keys of this mapping build one key schema",
+    ),
     # `build/classes.rs`: the base a generic class derives from, which would
     # otherwise be read as a class whose instances are every generic class's.
     (

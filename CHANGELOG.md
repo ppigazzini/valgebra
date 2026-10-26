@@ -18,6 +18,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a complement walks a definition two members share once per room
 - fix: an unpacked type alias is the tuple it names, and two ill forms refuse
 - feat: a generic record class applied is read with its arguments in place
+- fix: a mapping names each key schema once, and an unnamed fixpoint is its body
 
 -->
 
@@ -65,6 +66,17 @@ answer of its own, or a repair to a change not yet released.
   where the outermost was read. A qualifier nested in itself,
   `Required[Required[int]]`, names one record and is read as the one
   qualifier.
+- **A mapping names each key schema once.** `close()` of `{str: anything,
+  bytes: int, complement(str): anything}` left two clauses over `bytes`, and
+  its `repr`, `{bytes: anything, bytes: int}`, read back as `dict[bytes, int]`,
+  a smaller schema; `open` and `close` fold two clauses over one key schema
+  into one over the join of their values, so it closes to `dict[bytes,
+  anything]`. A dict display whose two keys build one key schema,
+  `{Validator(int): str, int: bytes}`, is refused, as two keys that are one
+  field name are.
+- **A `recursive` body that never names the fixpoint is that body.**
+  `recursive(lambda t: int)` kept a definition no reference reaches and was
+  not `==` to `Validator(int)`; it is `Validator(int)`, rendered as `int`.
 - **Bare `typing.Generic` is refused.** It is the base a generic class derives
   from and no type, and it built an `isinstance` test admitting an instance of
   every generic class.

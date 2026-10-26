@@ -22,6 +22,9 @@ assert json_value.is_valid({"a": [1, "x", {"b": None}], "c": [True, 3.5]})
 assert not json_value.is_valid({"a": object()})
 ```
 
+A body that never names its placeholder is that body: `recursive(lambda t:
+int)` is `Validator(int)`, equal to it and rendered as it.
+
 ## A tree, then composed
 
 A `recursive` schema is an ordinary validator and composes like any other:

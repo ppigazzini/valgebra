@@ -3039,3 +3039,19 @@ rusty_fork_test! {
         });
     }
 }
+
+/// Two keys of a dict display that build one key schema are refused, as two
+/// keys that are one field name are, and two keys of two schemas build two
+/// clauses.
+#[test]
+fn a_key_schema_written_twice_is_refused() {
+    Python::attach(|py| {
+        let refused = built(py, "{int: str, typing.NewType('U', int): bytes}")
+            .expect_err("two keys build one key schema");
+        assert!(
+            refused.to_string().contains("build one key schema"),
+            "{refused}"
+        );
+        assert!(built(py, "{int: str, str: bytes}").is_ok());
+    });
+}
