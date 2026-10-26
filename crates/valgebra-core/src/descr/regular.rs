@@ -329,6 +329,10 @@ impl Dfa {
             let count = Class::try_from(seen.len()).unwrap_or(0);
             seen.entry(*byte).or_insert(count + 1);
         }
+        #[expect(
+            clippy::iter_over_hash_type,
+            reason = "each entry writes its own byte's slot, so no write reads the order"
+        )]
         for (byte, class) in &seen {
             if let Some(slot) = classes.get_mut(usize::from(*byte)) {
                 *slot = *class;

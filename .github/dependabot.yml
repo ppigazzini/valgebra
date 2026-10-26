@@ -12,6 +12,18 @@ updates:
     groups:
       cargo:
         patterns: ["*"]
+    # PyO3 0.30.0 and 0.30.1 recurse dropping a reference in `register_decref`
+    # under the reference-pool cfgs `.cargo/config.toml` sets, which
+    # `a_validator_dropped_while_detached_leaks_its_pool` holds; a later 0.30
+    # is proposed, and that test decides it. jiter 0.18 needs PyO3 0.30, so it
+    # is held with them: lift it with PyO3's.
+    ignore:
+      - dependency-name: "pyo3"
+        versions: ["0.30.0", "0.30.1"]
+      - dependency-name: "pyo3-build-config"
+        versions: ["0.30.0", "0.30.1"]
+      - dependency-name: "jiter"
+        versions: ["0.18.x"]
 
   # The fuzz workspace is a detached crate with its own lockfile (libfuzzer-sys,
   # arbitrary), outside the root workspace, so it needs its own registration or

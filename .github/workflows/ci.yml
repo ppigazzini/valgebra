@@ -63,7 +63,7 @@ env:
   # the monthly maintenance pass (Dependabot does not pin toolchains). The
   # scheduled libFuzzer soak stays on floating `nightly` so it still warns about
   # future nightly/fuzzer breakage.
-  FUZZ_NIGHTLY: nightly-2026-09-25
+  FUZZ_NIGHTLY: nightly-2026-10-25
   # The oldest release the package supports. The python matrix runs it as a
   # leg, and the steps that answer once for every release -- the linters, the
   # type checkers, the stub, the repository audit -- run on that leg and name

@@ -415,6 +415,15 @@ What is guaranteed here is the property a caller depends on: a code is stable an
 does not change meaning across releases, so branching on one written down today
 keeps working. New codes may appear for node kinds that gain a distinct failure.
 
+**The codes are valgebra's.** Twenty-two of them share the spelling of a member
+of pydantic-core's `ErrorType` -- the scalar and container type codes, the
+bounds, `too_short` and `too_long`, `multiple_of`, `string_pattern_mismatch`,
+`literal_error`, `extra_forbidden`, `json_invalid`, `recursion_loop` -- and the
+rest are this library's own: `missing_key`, `instance_type`, `none_type`,
+`tuple_length`, `predicate_failed` and the others. No code is promised to be
+pydantic-core's, and a failure both report may carry two spellings: a `str`
+over its length bound is `too_long` here and `string_too_long` there.
+
 **Every code is reported the same way on both entry paths.** `validate_json` and
 `load` parse the document and then walk the *Python value* the parser built, so
 a document reaches the same codes a value does, with the same `path`. Three are

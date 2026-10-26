@@ -4,8 +4,11 @@
 # The prose documentation lives on the compiled objects themselves (the Rust
 # docstrings) and is rendered on the API reference page, which
 # `scripts/docs_stubs.py` merges with this stub, so each has a single source
-# and cannot drift from a hand-copied duplicate here. Import the public
-# names from the top-level `valgebra` package, not from this module.
+# and cannot drift from a hand-copied duplicate here. The cost is the hover: a
+# compiled module has no source beside it, so an editor that reads this stub
+# alone shows a name's signature and not its prose, which pydantic-core avoids
+# by writing its docstrings in its stub twice. Import the public names from the
+# top-level `valgebra` package, not from this module.
 #
 # Every parameter is positional-only, because the compiled functions take them
 # that way: naming one in a call is a `TypeError` at runtime, and a stub that

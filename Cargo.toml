@@ -16,6 +16,11 @@ repository = "https://github.com/ppigazzini/valgebra"
 [workspace.dependencies]
 # Keep one PyO3 version across the extension: jiter's `python` feature also
 # depends on PyO3, and two PyO3 lines cannot coexist in one extension module.
+# Held at 0.29: under the two reference-pool cfgs `.cargo/config.toml` sets,
+# 0.30.0 and 0.30.1 take a `Py<PyAny>` by value in `register_decref`, drop it on
+# return and re-enter themselves, which
+# `a_validator_dropped_while_detached_leaks_its_pool` holds. `.github/
+# dependabot.yml` ignores those two releases and the jiter that needs them.
 pyo3 = "0.29"
 # FxHash for the internal maps keyed by trusted, build-checked data (field names,
 # pool ids), pinned once so both crates share one hasher version. Pure Rust, so
@@ -64,6 +69,10 @@ or_fun_call = "warn"
 rc_buffer = "warn"
 set_contains_or_insert = "warn"
 large_stack_frames = "warn"
+# No answer and no instruction count may depend on the order a hash table is
+# walked in, which the instruction gates assume and this holds: a walk over one
+# is refused, and the one site whose order is not read says why.
+iter_over_hash_type = "warn"
 
 # Fast local iteration: the Rust side is debugged through the Python test suite,
 # not a native debugger, so the default full debuginfo is build and link cost
