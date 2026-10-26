@@ -214,13 +214,19 @@ fn depth_descends_every_container_arm() {
     );
 }
 
-/// Combining two schemas concatenates their constant pools, so the right
-/// operand's pooled indices shift by the left pool's length. A constraint
-/// that fails to shift resolves to the WRONG pooled constant and silently
-/// compares against the wrong value; a length bound is not a pool index and
-/// must not move.
+/// The interning table of a pool appended after `by` others: every slot moves
+/// along by `by`, over more slots than any row here names.
+fn moved_by(by: usize) -> Vec<usize> {
+    (0..32).map(|slot| slot + by).collect()
+}
+
+/// Combining two schemas interns one constant pool into the other, so the
+/// right operand's pooled indices move to the slots the table gives them. A
+/// constraint that fails to move resolves to the WRONG pooled constant and
+/// silently compares against the wrong value; a length bound is not a pool
+/// index and must not move.
 #[test]
-fn shifted_remaps_pooled_constraint_operands_only() {
+fn reindexed_remaps_pooled_constraint_operands_only() {
     let refined = Schema::refine(
         Schema::Int,
         vec![
@@ -234,11 +240,12 @@ fn shifted_remaps_pooled_constraint_operands_only() {
             Constraint::MaxLen(7),
         ],
     );
-    let Schema::Refine { constraints, .. } = refined.shifted(PoolShift::new(10), DefShift::new(0))
+    let Schema::Refine { constraints, .. } = refined.reindexed(&moved_by(10), DefShift::new(0))
     else {
-        panic!("shifted a Refine into a non-Refine");
+        panic!("reindexed a Refine into a non-Refine");
     };
-    // In the order `Schema::refine` gives, which a shift keeps.
+    // In the order `Schema::refine` gives, which a table that keeps the order
+    // keeps.
     assert_eq!(
         constraints.to_vec(),
         vec![
@@ -250,21 +257,21 @@ fn shifted_remaps_pooled_constraint_operands_only() {
             Constraint::MinLen(6),
             Constraint::MaxLen(7),
             Constraint::MultipleOf(OperandIx::new(15)),
-            // A pooled predicate operand shifts like the numeric bounds.
+            // A pooled predicate operand moves like the numeric bounds.
             Constraint::Predicate(PredIx::new(18)),
         ]
     );
-    // Pooled leaves shift by the pool; definition refs shift by defs.
+    // Pooled leaves move through the table; definition refs by the offset.
     assert_eq!(
-        Schema::Literal(ConstIx::new(1)).shifted(PoolShift::new(10), DefShift::new(3)),
+        Schema::Literal(ConstIx::new(1)).reindexed(&moved_by(10), DefShift::new(3)),
         Schema::Literal(ConstIx::new(11))
     );
     assert_eq!(
-        Schema::Instance(ClassIx::new(1)).shifted(PoolShift::new(10), DefShift::new(3)),
+        Schema::Instance(ClassIx::new(1)).reindexed(&moved_by(10), DefShift::new(3)),
         Schema::Instance(ClassIx::new(11))
     );
     assert_eq!(
-        Schema::Ref(DefIx::new(1)).shifted(PoolShift::new(10), DefShift::new(3)),
+        Schema::Ref(DefIx::new(1)).reindexed(&moved_by(10), DefShift::new(3)),
         Schema::Ref(DefIx::new(4))
     );
     // An attribute record has no index of its own; its fields carry theirs.
@@ -275,8 +282,8 @@ fn shifted_remaps_pooled_constraint_operands_only() {
         }]
         .into(),
     };
-    let Schema::AttrRecord { fields } = record.shifted(PoolShift::new(10), DefShift::new(3)) else {
-        panic!("shifted an attribute record into another variant");
+    let Schema::AttrRecord { fields } = record.reindexed(&moved_by(10), DefShift::new(3)) else {
+        panic!("reindexed an attribute record into another variant");
     };
     assert_eq!(fields[0].schema, Schema::Literal(ConstIx::new(12)));
 }
@@ -1205,12 +1212,12 @@ fn contractivity_requires_a_structural_guard() {
 }
 
 #[test]
-fn shifted_remaps_ref_by_the_definition_offset() {
-    let shifted = Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0))))
-        .shifted(PoolShift::new(7), DefShift::new(4));
-    assert_eq!(homogeneous_elem(&shifted), &Schema::Ref(DefIx::new(4)));
+fn reindexed_moves_a_ref_by_the_definition_offset() {
+    let moved = Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0))))
+        .reindexed(&moved_by(7), DefShift::new(4));
+    assert_eq!(homogeneous_elem(&moved), &Schema::Ref(DefIx::new(4)));
     assert!(matches!(
-        Schema::SelfRef(9).shifted(PoolShift::new(1), DefShift::new(1)),
+        Schema::SelfRef(9).reindexed(&moved_by(1), DefShift::new(1)),
         Schema::SelfRef(9)
     ));
 }
@@ -1395,8 +1402,8 @@ fn sequence_transforms_reach_the_prefix_and_the_tail() {
         Schema::Seq { .. }
     ));
 
-    // shifted moves the prefix's Ref by the definitions offset.
-    let Schema::Seq { shape, .. } = seq.shifted(PoolShift::new(0), DefShift::new(5)) else {
+    // reindexed moves the prefix's Ref by the definitions offset.
+    let Schema::Seq { shape, .. } = seq.reindexed(&moved_by(0), DefShift::new(5)) else {
         panic!("shape preserved")
     };
     assert_eq!(shape.prefix.to_vec(), vec![Schema::Ref(DefIx::new(5))]);
@@ -1425,9 +1432,8 @@ fn keyed_map_transforms_recurse_through_fields_and_defaults() {
     };
     // Both the field's Ref and the default's SelfRef sit under the map guard.
     assert!(!schema.occurs_unguarded(DefIx::new(0), Guarded::No));
-    // shifted moves the field's Ref by the definitions offset.
-    let Schema::KeyedMap { fields, .. } = schema.shifted(PoolShift::new(0), DefShift::new(5))
-    else {
+    // reindexed moves the field's Ref by the definitions offset.
+    let Schema::KeyedMap { fields, .. } = schema.reindexed(&moved_by(0), DefShift::new(5)) else {
         panic!("shape preserved")
     };
     assert_eq!(fields[0].schema, Schema::Ref(DefIx::new(5)));

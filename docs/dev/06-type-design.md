@@ -35,7 +35,7 @@ types, compiles into a wrong answer:
 
 | the swap | what it would do instead of failing |
 |---|---|
-| the two shifts transposed at `Schema::shifted` | pool indices moved by the definitions offset |
+| the two moves transposed at `Schema::reindexed` | pool indices moved by the definitions offset |
 | a class index where a literal's constant belongs | `isinstance` against a pooled number |
 | a definition index where a pool index belongs | a schema read as a Python object |
 | a pool shift applied to a length bound | a length bound moved by a pool length |
@@ -77,16 +77,16 @@ line that decides what the object is being pooled *as*
 class: an attribute record carries fields and no carrier, and a class with
 declared attributes is the meet of the two.
 
-### The shifts
+### The moves
 
 ```
-  PoolShift -- shifted --> ConstIx, ClassIx, OperandIx, PredIx
-  DefShift  -- shifted --> DefIx
+  &[usize] -- remapped --> ConstIx, ClassIx, OperandIx, PredIx
+  DefShift -- shifted  --> DefIx
 ```
 
-`Schema::shifted` takes one of each, so transposing them does not compile, and
-the constraint arms that must not take a pool shift cannot: a length is a
-`usize` and a pattern a `String`, and neither has `shifted(PoolShift)`.
+`Schema::reindexed` takes the interning table and a `DefShift`, so transposing
+them does not compile, and the constraint arms that must not move cannot: a
+length is a `usize` and a pattern a `String`, and neither has a remap.
 
 ### The region set
 

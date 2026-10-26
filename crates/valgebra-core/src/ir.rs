@@ -20,13 +20,11 @@
 //! by [`get`](ConstIx::get), which is the line a reviewer reads. The fifth,
 //! [`DefIx`], addresses the definitions table instead.
 //!
-//! The two *shifts* applied when two validators are composed are typed for the
-//! same reason: [`Schema::shifted`] takes one per space, where two adjacent
-//! `usize` arguments would let a caller transpose them in silence.
-//!
-//! The types stop a shift reaching the wrong space. They say nothing about
-//! whether a payload was shifted at all, which is why one walk serves both ways
-//! of combining two pools ([`Remap`]) and why the child set of each variant is
+//! When two validators are composed, the definitions table moves by a typed
+//! shift ([`DefShift`]) for the same reason, and the constants pool through the
+//! map interning the second pool into the first builds ([`Remap`]), so neither
+//! move can reach the other's space. The types say nothing about whether a
+//! payload was moved at all, which is why the child set of each variant is
 //! stated in two walks and no others: the one a rewrite goes through
 //! ([`Schema::map_children`]) and `push_children`, the one a reading goes
 //! through.
@@ -56,36 +54,19 @@ fn remap(lit_map: &[usize], index: usize) -> usize {
     lit_map.get(index).copied().unwrap_or(index)
 }
 
-/// How far every constants-pool index moves when two pools are appended.
-///
-/// Distinct from [`DefShift`] so the two cannot be transposed at
-/// [`Schema::shifted`], which takes one of each.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[repr(transparent)]
-pub struct PoolShift(usize);
-
-impl PoolShift {
-    /// A shift of `by` pool slots -- in practice the length of the pool the
-    /// second validator's constants are appended to.
-    ///
-    /// There is no accessor: a shift is only ever *applied*, by the index types
-    /// that know which space they belong to, so nothing outside this module has
-    /// a use for the distance as a bare integer.
-    #[must_use]
-    pub const fn new(by: usize) -> Self {
-        Self(by)
-    }
-}
-
 /// How far every definitions-table index moves when a second validator's
-/// definitions are appended to a first. See [`PoolShift`].
+/// definitions are appended to a first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct DefShift(usize);
 
 impl DefShift {
-    /// A shift of `by` definition slots. No accessor, for the reason
-    /// [`PoolShift::new`] gives.
+    /// A shift of `by` definition slots -- in practice the length of the table
+    /// the second validator's definitions are appended to.
+    ///
+    /// There is no accessor: a shift is only ever *applied*, by the index type
+    /// that knows which space it belongs to, so nothing outside this module has
+    /// a use for the distance as a bare integer.
     #[must_use]
     pub const fn new(by: usize) -> Self {
         Self(by)
@@ -122,41 +103,13 @@ macro_rules! pool_index {
                 self.0
             }
 
-            /// This index in a pool that has been appended to another.
-            ///
-            /// The sum cannot overflow: both terms are bounded by a live pool's
-            /// length, so their sum is bounded by the length of the pool they
-            /// are being combined into. The release profile wraps rather than
-            /// traps, so there that bound is the whole argument: a wrapped index
-            /// would read a real object of the wrong kind.
-            #[must_use]
-            fn shifted(self, by: PoolShift) -> Self {
-                debug_assert!(
-                    self.0.checked_add(by.0).is_some(),
-                    "pool index {} shifted by {} overflows",
-                    self.0,
-                    by.0
-                );
-                Self(self.0 + by.0)
-            }
-
             /// This index after the pool was interned into another, collapsing
-            /// identity-shared constants.
+            /// identity-shared constants. The single entry point the schema walk
+            /// calls, so a payload is remapped by asking *this* space how it
+            /// moves rather than by the walk knowing which space it is in.
             #[must_use]
-            fn remapped(self, lit_map: &[usize]) -> Self {
-                Self(remap(lit_map, self.0))
-            }
-
-            /// This index under either way of combining two pools. The single
-            /// entry point the schema walk calls, so a payload is remapped by
-            /// asking *this* space how it moves rather than by the walk knowing
-            /// which combination it is performing.
-            #[must_use]
-            fn remapped_by(self, remap: Remap<'_>) -> Self {
-                match remap {
-                    Remap::Append { pool, .. } => self.shifted(pool),
-                    Remap::Intern { lit_map, .. } => self.remapped(lit_map),
-                }
+            fn remapped_by(self, by: Remap<'_>) -> Self {
+                Self(remap(by.lit_map, self.0))
             }
         }
     };
@@ -260,8 +213,11 @@ impl DefIx {
 
     /// This index in a definitions table that has been appended to another.
     ///
-    /// Cannot overflow, for the reason [`ConstIx::shifted`] gives: both terms
-    /// are bounded by a live definitions table's length.
+    /// The sum cannot overflow: both terms are bounded by a live definitions
+    /// table's length, so their sum is bounded by the length of the table they
+    /// are being combined into. The release profile wraps rather than traps, so
+    /// there that bound is the whole argument: a wrapped index would read a
+    /// real definition of the wrong schema.
     #[must_use]
     fn shifted(self, by: DefShift) -> Self {
         debug_assert!(
@@ -273,45 +229,26 @@ impl DefIx {
         Self(self.0 + by.0)
     }
 
-    /// This index under either way of combining two validators. A definitions
-    /// table is only ever appended to, never interned, so both combinations move
-    /// a definition index the same way -- which is the fact that makes one
-    /// `Remap` enough for both.
+    /// This index after a composition. A definitions table is only ever
+    /// appended to, never interned, so a definition index moves by the shift.
     #[must_use]
-    fn remapped_by(self, remap: Remap<'_>) -> Self {
-        self.shifted(remap.defs())
+    fn remapped_by(self, by: Remap<'_>) -> Self {
+        self.shifted(by.defs)
     }
 }
 
 /// How the two index spaces move when one validator's schema is rebuilt against
-/// another's pools.
+/// another's pools: the second pool is interned into the first, so
+/// identity-shared constants collapse and every pool index moves to the slot
+/// `lit_map` records for it, and the second definitions table is appended to the
+/// first, so every definition index moves along by `defs`.
 ///
-/// The constants pool combines in two ways -- appended, or interned so
-/// identity-shared constants collapse -- and the definitions table in one. Two
-/// whole structural walks over the IR, identical but for the leaf action, would
-/// make a payload site reached by one and missed by the other a wrong index the
-/// compiler cannot see. Naming the difference leaves one walk and puts the
-/// difference at the leaf.
+/// One value for both spaces, so the one structural walk over the IR carries
+/// both moves and each payload site asks its own space how it moves.
 #[derive(Debug, Clone, Copy)]
-enum Remap<'a> {
-    /// The second pool is appended to the first: every pool index moves along by
-    /// the first pool's length.
-    Append { pool: PoolShift, defs: DefShift },
-    /// The second pool is interned into the first: every pool index moves to the
-    /// slot `lit_map` records for it.
-    Intern {
-        lit_map: &'a [usize],
-        defs: DefShift,
-    },
-}
-
-impl Remap<'_> {
-    /// How far the definitions table moves, which both combinations carry.
-    fn defs(self) -> DefShift {
-        match self {
-            Remap::Append { defs, .. } | Remap::Intern { defs, .. } => defs,
-        }
-    }
+struct Remap<'a> {
+    lit_map: &'a [usize],
+    defs: DefShift,
 }
 
 /// Whether a record admits keys it does not declare.
@@ -759,7 +696,7 @@ pub type Members = Arc<[Schema]>;
 pub type Fields = Arc<[Field]>;
 
 /// A map's default clauses, shared for the same reason as [`Members`].
-pub type Clauses = Arc<[MapClause]>;
+pub(crate) type Clauses = Arc<[MapClause]>;
 
 /// A refinement's constraints, shared for the same reason as [`Members`].
 pub type Constraints = Arc<[Constraint]>;

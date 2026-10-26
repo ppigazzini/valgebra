@@ -83,7 +83,7 @@ GATE_RUNS = {
 }
 
 #: The criterion benchmarks the core micro-benchmark table names.
-CRITERION = ("shifted_record_width64", "with_records_open_depth32")
+CRITERION = ("reindexed_record_width64", "with_records_open_depth32")
 
 #: The shapes of the end-to-end table and of the JSON page's table, as
 #: `benches/` groups them, and the comparison shapes the interpreter table

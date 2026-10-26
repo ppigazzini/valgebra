@@ -41,7 +41,8 @@ SHAPES = (
 )
 
 CRITERION_OUTPUT = """\
-shifted_record_width64  time:   [1.1367 µs 1.1387 µs 1.1407 µs]
+reindexed_record_width64
+                        time:   [1.1745 µs 1.1786 µs 1.1825 µs]
 with_records_open_depth32
                         time:   [4.3191 µs 4.3335 µs 4.3537 µs]
 """
@@ -162,7 +163,7 @@ def test_an_estimate_belongs_to_the_last_name_criterion_printed() -> None:
     # A name too long for its column takes a line of its own, and its estimate
     # the next: read line by line alone, it would have none.
     assert figures.criterion_medians(CRITERION_OUTPUT) == {
-        "shifted_record_width64": "1.1387 µs",
+        "reindexed_record_width64": "1.1786 µs",
         "with_records_open_depth32": "4.3335 µs",
     }
 

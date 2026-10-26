@@ -1,7 +1,7 @@
 //! Wall-clock micro-benchmarks for the pure-Rust schema operations.
 //!
 //! These cover the transformations the compiler and combinators lean on:
-//! `shifted` (validator composition), `with_records_open` (the `open`/`close`
+//! `reindexed` (validator composition), `with_records_open` (the `open`/`close`
 //! recursive transform), and the decision procedures over the shapes a real
 //! annotation produces. The walk
 //! over Python values lives in the bindings crate and is benchmarked from
@@ -14,10 +14,10 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use valgebra_core::descr::classes::Class;
 use valgebra_core::descr::lower::{Bounds, Constants, Operand, lower, lower_within};
 use valgebra_core::{
-    ClassIx, ConstIx, Constraint, DefShift, Field, Openness, OperandIx, PoolShift, Schema, SeqShape,
+    ClassIx, ConstIx, Constraint, DefShift, Field, Openness, OperandIx, Schema, SeqShape,
 };
 
-/// A wide record whose fields carry pool-indexed leaves, so `shifted` has to
+/// A wide record whose fields carry pool-indexed leaves, so `reindexed` has to
 /// rewrite many indices in one pass.
 fn wide_record(width: usize) -> Schema {
     let fields = (0..width)
@@ -61,10 +61,11 @@ fn nested_records(depth: usize) -> Schema {
     inner
 }
 
-fn bench_shifted(c: &mut Criterion) {
+fn bench_reindexed(c: &mut Criterion) {
     let schema = wide_record(64);
-    c.bench_function("shifted_record_width64", |b| {
-        b.iter(|| black_box(&schema).shifted(PoolShift::new(100), DefShift::new(0)));
+    let table: Vec<usize> = (0..64).map(|slot| slot + 100).collect();
+    c.bench_function("reindexed_record_width64", |b| {
+        b.iter(|| black_box(&schema).reindexed(&table, DefShift::new(0)));
     });
 }
 
@@ -205,7 +206,7 @@ fn bench_lowering(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    bench_shifted,
+    bench_reindexed,
     bench_with_records_open,
     bench_decision,
     bench_lowering

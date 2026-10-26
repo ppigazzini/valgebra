@@ -250,62 +250,36 @@ fn indices(schema: &Schema, pool: &mut Vec<usize>, defs: &mut Vec<usize>) {
 }
 
 proptest! {
-    /// A shift of zero is the identity. The law that catches the opposite of
-    /// a missed site: a payload moved by a shift nobody asked for.
+    /// Renumbering twice equals renumbering once through the composed table,
+    /// in both index spaces independently. A site moved twice, or not at all,
+    /// breaks this; a site moved by the wrong space's distance breaks it as soon
+    /// as the two distances differ, which the generator's range makes likely.
     #[test]
-    fn a_zero_shift_is_the_identity(schema in indexed_schema()) {
-        prop_assert_eq!(
-            schema.shifted(PoolShift::new(0), DefShift::new(0)),
-            schema.clone()
-        );
-    }
-
-    /// Shifting twice equals shifting once by the sum, in both index spaces
-    /// independently. A site moved twice, or not at all, breaks this; a site
-    /// moved by the wrong space's distance breaks it as soon as the two
-    /// distances differ, which the generator's range makes likely.
-    #[test]
-    fn shifts_compose_by_addition(
+    fn renumbering_twice_is_renumbering_by_the_composed_table(
         schema in indexed_schema(),
         pool_a in 0..MAX_SHIFT,
         pool_b in 0..MAX_SHIFT,
         defs_a in 0..MAX_SHIFT,
         defs_b in 0..MAX_SHIFT,
     ) {
+        let first = shift_table(pool_a);
+        let second: Vec<usize> = (0..POOL_LEN + MAX_SHIFT).map(|slot| slot + pool_b).collect();
+        let composed: Vec<usize> = first.iter().map(|&slot| second[slot]).collect();
         let twice = schema
-            .shifted(PoolShift::new(pool_a), DefShift::new(defs_a))
-            .shifted(PoolShift::new(pool_b), DefShift::new(defs_b));
-        let once = schema.shifted(
-            PoolShift::new(pool_a + pool_b),
-            DefShift::new(defs_a + defs_b),
-        );
+            .reindexed(&first, DefShift::new(defs_a))
+            .reindexed(&second, DefShift::new(defs_b));
+        let once = schema.reindexed(&composed, DefShift::new(defs_a + defs_b));
         prop_assert_eq!(twice, once);
     }
 
-    /// Every payload moves, and moves by its own space's distance.
-    ///
-    /// This is the law that catches a **missed** site, and the two above
-    /// cannot: a payload the remap never touches satisfies both of them, since
-    /// standing still is the identity and composes with itself. It catches one
-    /// by counting the sites independently, so it holds however the remap is
-    /// factored internally.
-    #[test]
-    fn every_index_moves_by_its_own_space(
-        schema in indexed_schema(),
-        pool_by in 1..MAX_SHIFT,
-        defs_by in 1..MAX_SHIFT,
-    ) {
-        let (pool_before, defs_before) = index_sets(&schema);
-        let shifted = schema.shifted(PoolShift::new(pool_by), DefShift::new(defs_by));
-        let (pool_after, defs_after) = index_sets(&shifted);
-
-        prop_assert_eq!(pool_after, image(&pool_before, |slot| slot + pool_by));
-        prop_assert_eq!(defs_after, image(&defs_before, |slot| slot + defs_by));
-    }
-
     /// Interning sends every pool payload through the table, and every
-    /// definitions payload along by the offset. The same independent count as
-    /// above, held against the other entry point.
+    /// definitions payload along by the offset.
+    ///
+    /// This is the law that catches a **missed** site, and the composition law
+    /// above cannot: a payload the remap never touches satisfies it, since
+    /// standing still composes with itself. It catches one by counting the
+    /// sites independently, so it holds however the remap is factored
+    /// internally.
     #[test]
     fn interning_sends_every_index_through_the_table(
         schema in indexed_schema(),
@@ -351,22 +325,6 @@ proptest! {
         prop_assert_eq!(
             schema.reindexed(&shift_table(0), DefShift::new(0)),
             schema.clone()
-        );
-    }
-
-    /// Interning through a table that is itself a shift agrees with shifting.
-    /// The two operations visit the same payload sites by construction, so a
-    /// site one of them handles and the other walks past shows up here and
-    /// nowhere else.
-    #[test]
-    fn reindexing_through_a_shifted_table_is_a_shift(
-        schema in indexed_schema(),
-        pool in 0..MAX_SHIFT,
-        defs in 0..MAX_SHIFT,
-    ) {
-        prop_assert_eq!(
-            schema.reindexed(&shift_table(pool), DefShift::new(defs)),
-            schema.shifted(PoolShift::new(pool), DefShift::new(defs))
         );
     }
 }

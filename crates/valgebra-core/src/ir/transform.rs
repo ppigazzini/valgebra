@@ -17,9 +17,9 @@ use std::sync::Arc;
 
 use super::{
     Attribute, Clauses, Constraint, Constraints, DefIx, DefShift, Fields, MapClause, Members,
-    Openness, OperandIx, PoolShift, Remap, Schema, SeqShape, already_said, canonical_clauses,
-    clauses_over, share_attributes, share_clauses, share_fields, share_members, share_node,
-    with_field_buffer, with_member_buffer,
+    Openness, OperandIx, Remap, Schema, SeqShape, already_said, canonical_clauses, clauses_over,
+    share_attributes, share_clauses, share_fields, share_members, share_node, with_field_buffer,
+    with_member_buffer,
 };
 
 /// Move a constraint list's indices, rebuilding it only where one moves -- and
@@ -503,28 +503,18 @@ impl Schema {
         }
     }
 
-    /// Return a copy with pool indices shifted by `pool` and definition
-    /// references shifted by `defs`.
+    /// Return a copy with pool indices remapped through `lit_map` and
+    /// definition references offset by `def_offset`.
     ///
-    /// Used when composing two compiled validators: their constants pools and
-    /// definitions tables are concatenated, so the second schema's
-    /// `Literal`/`Instance`/`Refine` indices move past the first pool's length
-    /// and its `Ref` indices past the first definitions' length.
-    #[must_use]
-    pub fn shifted(&self, pool: PoolShift, defs: DefShift) -> Schema {
-        self.remapped_by(Remap::Append { pool, defs })
-    }
-
-    /// Like [`shifted`](Self::shifted), but remapping pool indices through
-    /// `lit_map` (an old->new table from interning one pool into another, so
-    /// identity-shared constants collapse to one index) while still offsetting
-    /// definition indices by `def_offset`.
-    ///
-    /// The same walk as `shifted`, over the same payload sites: the two differ
-    /// only in how a pool index moves, which is what `Remap` names.
+    /// Used when composing two compiled validators: the second pool is
+    /// interned into the first, `lit_map` the old->new table that interning
+    /// builds, so identity-shared constants collapse to one index and the second
+    /// schema's `Literal`/`Instance`/`Refine` indices move to theirs, and the
+    /// definitions tables are concatenated, so its `Ref` indices move past the
+    /// first table's length.
     #[must_use]
     pub fn reindexed(&self, lit_map: &[usize], def_offset: DefShift) -> Schema {
-        self.remapped_by(Remap::Intern {
+        self.remapped_by(Remap {
             lit_map,
             defs: def_offset,
         })

@@ -1,7 +1,8 @@
 //! A fixed, deterministic workload over the core schema operations.
 //!
 //! This is the body of the instruction-count regression gate. It runs the
-//! composition index remap and the open/closed record transform a fixed
+//! composition index remap -- the pool interned through a table, as composing
+//! two validators renumbers it -- and the open/closed record transform a fixed
 //! number of times over a fixed corpus, then prints a checksum so the
 //! optimizer cannot discard the work. Run under cachegrind, its
 //! instruction count is deterministic for a given build, so a committed budget
@@ -11,7 +12,7 @@
 //! iteration count is large. Keep the corpus and `ITERATIONS` fixed; changing
 //! either moves the budget and requires re-recording it.
 
-use valgebra_core::{ConstIx, DefShift, Field, Openness, PoolShift, Schema, SeqShape};
+use valgebra_core::{ConstIx, DefShift, Field, Openness, Schema, SeqShape};
 
 /// Iterations per operation. Large enough that startup is a rounding error.
 const ITERATIONS: usize = 2_000;
@@ -54,13 +55,15 @@ fn nested_records(depth: usize) -> Schema {
 fn main() {
     let record = wide_record(64);
     let nested = nested_records(32);
+    // The table composing behind a pool of a hundred constants builds.
+    let table: Vec<usize> = (0..64).map(|slot| slot + 100).collect();
 
     // Fold a checksum through each result so nothing is optimized away.
     let mut checksum: usize = 0;
     for _ in 0..ITERATIONS {
         checksum = checksum.wrapping_add(
             std::hint::black_box(&record)
-                .shifted(PoolShift::new(100), DefShift::new(0))
+                .reindexed(&table, DefShift::new(0))
                 .depth_marker(),
         );
         checksum = checksum.wrapping_add(

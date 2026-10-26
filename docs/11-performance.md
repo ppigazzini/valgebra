@@ -452,8 +452,8 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
 
 | Operation | Corpus | Median |
 | --- | --- | --- |
-| `shifted` | 64-field pool-indexed record | ~1.1 us |
-| `with_records_open` | record spine, depth 32 | ~4.3 us |
+| `reindexed` | 64-field pool-indexed record | ~1.2 us |
+| `with_records_open` | record spine, depth 32 | ~4.6 us |
 
 ## Honest limits
 

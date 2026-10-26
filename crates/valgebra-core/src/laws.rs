@@ -7,7 +7,7 @@ use crate::carries::{
 use crate::decision::{DECISION_BUDGET, LeafRelations, NoLeafRelations};
 use crate::descr::classes::{Attributes, Class, Hook, Member};
 use crate::descr::lower::{Constants, Operand, lower};
-use crate::ir::Polarity;
+use crate::ir::{Clauses, Polarity};
 use crate::kind::Kind;
 use crate::verdict::Relation;
 use proptest::prelude::*;
@@ -1258,9 +1258,6 @@ fn reindexed_remaps_pool_and_definition_indices() {
     ]);
     assert_eq!(remapped, expected);
 
-    // `shifted` is the identity-map case: every index moves by a fixed offset.
-    let shifted = schema.shifted(PoolShift::new(5), DefShift::new(3));
-    assert_eq!(shifted, expected);
     // A constraint operand index is remapped too.
     let refined = Schema::Refine {
         base: Arc::new(Schema::Int),

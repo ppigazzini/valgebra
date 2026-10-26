@@ -337,30 +337,23 @@ comparison operand, a user predicate. Each has its own type, and
 `Constraint::MinLen`, `Constraint::MaxLen` and `Constraint::Regex` sit in the
 same enum and are **not** pool indices at all — they carry the length or the
 pattern inline. That is what the type says: a length or a pattern has no
-`shifted(PoolShift)`, so the arms that must not take a pool shift cannot.
+remap, so the arms that must not move cannot.
 
-## Composition, and the two shifts
+## Composition, and the two moves
 
-Two validators combine by concatenating their constants pools and their
-definitions tables. The second schema's indices move past the first's lengths,
-which `Schema::shifted` does — one shift per index space, and they are distinct
-types so a caller cannot transpose them.
+Two validators combine by interning the second's constants pool into the
+first's and appending the second's definitions table. `Schema::reindexed` moves
+the second schema's indices: a pool index to the slot the interning table gives
+it, so a constant the first pool already holds -- by value for an exact `bool`,
+`int`, `float`, `str` or `bytes`, by identity for anything else -- keeps the slot
+it has there, and a definition index past the first table's length, by a
+`DefShift`, a type of its own so the two moves cannot be transposed.
 
-`Schema::reindexed` is the same operation where the second pool is *interned*
-into the first rather than appended, so a constant the first pool already holds
--- by value for an exact `bool`, `int`, `float`, `str` or `bytes`, by identity
-for anything else -- keeps the slot it has there. It is the one the binding
-actually calls; `shifted` is reached from the
-tests, `crates/valgebra-core/benches/core.rs` and
-`crates/valgebra-core/examples/perf_workload.rs`.
-
-Being the same operation, it is one walk: `Remap` names the difference — append
-by a distance, or intern through a table — and the walk asks each index space how
-it moves. A definitions index moves the same way under both, which is what makes
-one walk enough. Two walks identical but for the leaf action would put every
-payload site in both, and a site reached by one and missed by the other is a
-wrong index neither the types nor an exhaustive `match` can see: the compiler
-forces an arm per variant and cannot check that the arm moved anything. The
+It is one walk: `Remap` carries both moves, and the walk asks each index space
+how it moves. Two walks, one per space, would put every payload site in both,
+and a site reached by one and missed by the other is a wrong index neither the
+types nor an exhaustive `match` can see: the compiler forces an arm per variant
+and cannot check that the arm moved anything. The
 child set holds the other half of that argument. It is written in two places,
 `mapped_children` for a walk that rebuilds (behind `Schema::map_children`) and
 `push_children` for one that only reads, both exhaustive, so a walk that only
