@@ -69,8 +69,9 @@ the dunder behind a type slot and that is what introspection would show.
 | `hash(validator)` | `__hash__` | Consistent with `==`, so a validator is a dict key or a set member. It digests the schema shape, each definition a reference names, and each pooled constant's own hash, so `Literal[1]` and `Literal[2]` hash apart; a constant with no hash contributes nothing, so an unhashable constant cannot break it. Computed once and kept, as a `frozenset` keeps its hash. |
 | `repr(validator)` | `__repr__` | A rendering of the schema as an expression that builds it. |
 
-`copy.copy` and `copy.deepcopy` both return an equivalent validator; a validator
-is immutable, so the copy shares the pool rather than duplicating it.
+`copy.copy` and `copy.deepcopy` both return the validator itself: it is
+immutable and cannot be subclassed, so its copy is the object, as the standard
+library's `copy` gives back a `tuple` or a `frozenset`.
 
 `repr` is a **rendering**, not a serialization. What it gives back is an
 expression that builds the same schema — a recursive schema as the `recursive`

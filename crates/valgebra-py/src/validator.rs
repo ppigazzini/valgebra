@@ -846,21 +846,19 @@ impl Validator {
         ))
     }
 
-    /// Return an equivalent validator. The validator is immutable, so the copy
-    /// shares the pooled constants, classes, and predicates rather than
-    /// duplicating them.
-    fn __copy__(&self, py: Python<'_>) -> Validator {
-        Validator::new(
-            self.schema.clone(),
-            self.literals.iter().map(|o| o.clone_ref(py)).collect(),
-            self.definitions.clone(),
-        )
+    /// Return this validator. It is immutable and cannot be subclassed, so a
+    /// copy is the object itself, as `copy.copy` gives back a `tuple` or a
+    /// `frozenset`: one that kept the schema, the pool and the definitions
+    /// would hold the same set and drop the hash and the per-node tables this
+    /// one has computed.
+    fn __copy__(slf: Bound<'_, Self>) -> Bound<'_, Self> {
+        slf
     }
 
-    /// Deep-copy to an equivalent validator. Since the validator is immutable,
-    /// this shares the pool like `__copy__`; the memo is unused.
-    fn __deepcopy__(&self, py: Python<'_>, _memo: &Bound<'_, PyAny>) -> Validator {
-        self.__copy__(py)
+    /// Return this validator, for the reason `__copy__` gives: nothing in it
+    /// is mutable, so a deep copy is the object itself and the memo is unused.
+    fn __deepcopy__<'py>(slf: Bound<'py, Self>, _memo: &Bound<'py, PyAny>) -> Bound<'py, Self> {
+        slf
     }
 
     /// Open every record and mapping in the schema: a key no clause claims is

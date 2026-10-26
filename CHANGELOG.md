@@ -19,6 +19,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an unpacked type alias is the tuple it names, and two ill forms refuse
 - feat: a generic record class applied is read with its arguments in place
 - fix: a mapping names each key schema once, and an unnamed fixpoint is its body
+- fix: a copy of a validator is the validator itself
 
 -->
 
@@ -35,6 +36,14 @@ answer of its own, or a repair to a change not yet released.
   the variable, and so is a type variable two bases bind to two types. A
   generic class `isinstance` alone answers is refused applied, as it was. A
   generic `TypedDict` and `NamedTuple` need 3.11.
+
+### Changed
+
+- **A copy of a validator is the validator itself.** `copy.copy(v) is v` and
+  `copy.deepcopy(v) is v`, as the standard library gives back an immutable
+  `tuple` or `frozenset`, where each built a new validator over the same
+  schema, which held the same set and computed its hash and its per-node
+  tables again.
 
 ### Fixed
 

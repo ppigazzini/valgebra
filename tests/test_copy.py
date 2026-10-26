@@ -6,22 +6,28 @@ import annotated_types as at
 from valgebra import Validator, recursive, union
 
 
-def test_copy_yields_an_equivalent_validator() -> None:
+def test_a_copy_is_the_validator_itself() -> None:
+    """A validator is immutable, so `copy.copy` gives back the object itself.
+
+    The standard library does the same for an immutable builtin, a `tuple` or a
+    `frozenset`; a fresh validator over the same schema would hold the same set
+    and drop the hash and the tables this one computed.
+    """
     v = Validator({"name": str, "age?": int})
-    c = copy.copy(v)
-    assert c is not v
-    assert c.is_valid({"name": "Ada"})
-    assert not c.is_valid({"name": 1})
-    assert repr(c) == repr(v)
+    assert copy.copy(v) is v
+    assert v.is_valid({"name": "Ada"})
+    assert not v.is_valid({"name": 1})
 
 
-def test_deepcopy_yields_an_equivalent_validator() -> None:
+def test_a_deep_copy_is_the_validator_itself() -> None:
+    """Nothing in a validator is mutable, so a deep copy is the object too."""
     v = Validator(list[dict[str, int]])
-    d = copy.deepcopy(v)
-    assert d is not v
-    assert d.is_valid([{"a": 1}])
-    assert not d.is_valid([{"a": "x"}])
-    assert repr(d) == repr(v)
+    assert copy.deepcopy(v) is v
+    held = [v, v]
+    copied = copy.deepcopy(held)
+    assert copied is not held
+    assert copied[0] is v
+    assert copied[1] is v
 
 
 def test_copy_preserves_pooled_literals_and_predicates() -> None:
