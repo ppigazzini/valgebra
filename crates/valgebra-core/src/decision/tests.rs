@@ -1092,11 +1092,12 @@ fn a_record_meet_is_empty_only_where_a_required_key_cannot_hold() {
         closed(vec![field("a", Schema::Str, false)]),
     ]));
 
-    // The first rule is about types from DIFFERENT maps meeting to nothing.
-    // A required key whose type is uninhabited in a single map empties that
-    // map on its own, and the keyed-map node's own rule decides it -- so
-    // this one declines rather than answering a question already answered.
-    assert!(!meet_is_empty(&[
+    // Beside a map with clauses the meet is read as one record, R◦, whose
+    // required label `a` holds the meet of every map's type for it -- here
+    // nothing -- so the meet is empty by the record's own reading
+    // [Cas23, (11)], which answers what the keyed-map node's own rule answers
+    // of the first map alone.
+    assert!(meet_is_empty(&[
         closed(vec![field("a", Schema::Nothing, true)]),
         open(vec![]),
     ]));
@@ -7754,8 +7755,9 @@ fn keyed_maps_met_are_one_record() {
         Relation::Holds,
     );
     // A refutation stands on a value of the meet, which the meet rule proves
-    // of closed maps alone, so between open ones it declines.
-    assert_eq!(rules(&both, &counted), Relation::Unknown);
+    // of open maps too, by the record they meet in: `{"id": "x", "tier": "y"}`
+    // is in both and outside `counted`.
+    assert_eq!(rules(&both, &counted), Relation::Fails);
     let closed = |tier: Schema| {
         Schema::record(
             vec![
@@ -7926,4 +7928,78 @@ fn a_meet_is_disjoint_from_what_one_of_its_members_is() {
         Schema::Intersection(vec![Schema::Int, Schema::Complement(Arc::new(Schema::Str))].into());
     assert!(!not_str.disjoint(&Schema::Int));
     assert!(!Schema::Int.disjoint(&not_str));
+}
+
+// THEORY: a-record-splits-across-a-union
+/// Keyed maps met in a meet, one of them with clauses, are one record for
+/// their values too: the meet is empty where a label it requires has no value,
+/// and inhabited where each has one [Cas23, (11)], R◦ being their pointwise
+/// meet [Cas23, (12)].
+///
+/// A label's value is read through the field of that name or through the
+/// clause its kind falls under, so `{"tag": str}` met with `dict[str, int]` is
+/// empty, a name a mapping over integers cannot hold is empty with it, and two
+/// open records over a recursive universe requiring two different fields meet
+/// in the dict holding both. A predicate in a label's type declines, and so
+/// does a clause keyed by constants, which the partition of key kinds does not
+/// read.
+#[test]
+fn a_meet_of_maps_is_inhabited_where_the_record_they_meet_in_is() {
+    let verdict = |members: Vec<Schema>, defs: &[Schema]| {
+        keyed_map_meet_verdict(
+            &members,
+            &mut Cx::new(&NoLeafRelations, defs, &Budget::new(DECISION_BUDGET)),
+        )
+    };
+    let mapping = |key: Schema, value: Schema| Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause { key, value }].into(),
+    };
+    let universe = Schema::Ref(DefIx::new(0));
+    let defs = [Schema::union([
+        Schema::Str,
+        Schema::Int,
+        Schema::list(SeqShape::homogeneous(universe.clone())),
+    ])];
+    let open_over = |fields: Vec<Field>| Schema::KeyedMap {
+        fields: fields.into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: universe.clone(),
+        }]
+        .into(),
+    };
+
+    let two_fields = vec![
+        open_over(vec![field("a", Schema::Int, true)]),
+        open_over(vec![field("b", Schema::Str, true)]),
+    ];
+    assert_eq!(verdict(two_fields, &defs), Verdict::Inhabited);
+    let tagged = closed(vec![field("tag", Schema::Str, true)]);
+    assert_eq!(
+        verdict(vec![tagged.clone(), mapping(Schema::Str, Schema::Int)], &[]),
+        Verdict::Empty
+    );
+    assert_eq!(
+        verdict(vec![tagged.clone(), mapping(Schema::Int, Schema::Str)], &[]),
+        Verdict::Empty
+    );
+    assert_eq!(
+        verdict(vec![tagged.clone(), mapping(Schema::Str, Schema::Str)], &[]),
+        Verdict::Inhabited
+    );
+
+    let opaque = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    assert_eq!(
+        verdict(
+            vec![open(vec![field("a", opaque, true)]), open(vec![])],
+            &[]
+        ),
+        Verdict::Unknown
+    );
+    let by_constant = mapping(Schema::Literal(ConstIx::new(0)), Schema::Int);
+    assert_eq!(verdict(vec![tagged, by_constant], &[]), Verdict::Unknown);
 }

@@ -28,9 +28,9 @@ use super::literals::finite_set;
 use super::{Cx, descending, spend};
 
 /// What the keyed maps meeting in an intersection admit between them: `Empty`
-/// where no dict is in every map, `Inhabited` where every member is a closed
-/// map and the dict the rules below name is in all of them, and `Unknown`
-/// otherwise -- every member a map or not.
+/// where no dict is in every map, `Inhabited` where every member is a map and
+/// the dict the rules below name is in all of them, and `Unknown` otherwise --
+/// every member a map or not.
 ///
 /// Two record atoms meet pointwise [Cas23, (12)] -- field by field, clause by
 /// clause -- and the meet is empty when a field's type is [Cas23, (11)]. A dict
@@ -53,15 +53,18 @@ use super::{Cx, descending, spend};
 /// none besides, and admits the value it is given. So the meet is inhabited
 /// where every required key's types meet in a value, and nothing else of a
 /// member needs reading: every closed map declares every required key, or the
-/// meet is empty above, so no key is one map's alone. A map with clauses gives
-/// a key it does not declare a value
-/// the clause decides, which the core cannot read off a name, so the converse
-/// declines on one.
+/// meet is empty above, so no key is one map's alone.
 ///
-/// A map with clauses is not read as closed here. Deciding whether a clause
-/// admits a given name means comparing a bare `String` against a key schema,
-/// which the core cannot do, so any clause at all leaves the map open and the
-/// second rule declines.
+/// **Where a map has clauses, the meet is read as one record.** A map with
+/// clauses gives a key it does not declare the value its clause gives the key's
+/// kind, so the meet is R◦, the pointwise meet [Cas23, (12)] that
+/// [`record_of_maps`] builds -- each name the meet of what every map gives it,
+/// a field's type, its kind's clause value, or nothing where a map admits no
+/// such key -- and a record atom built from schemas wants no value, so it is
+/// empty exactly where a label it requires is [Cas23, (11)]. The dict holding
+/// exactly the required labels, each at a value of its type, is then in every
+/// map. A clause keyed by constants is a name the partition does not read, and
+/// declines as before.
 ///
 /// **The meet of a key's types is read under the caller's `visiting`.** It is a
 /// required position of the node being decided, so a reference already being
@@ -105,11 +108,31 @@ pub(super) fn keyed_map_meet_verdict(members: &[Schema], cx: &mut Cx<'_>) -> Ver
         }
         required_hold = Verdict::every([required_hold, held].into_iter());
     }
-    if maps.len() == members.len() && maps.iter().all(|(_, closed)| *closed) {
+    if maps.len() < members.len() {
+        Verdict::Unknown
+    } else if maps.iter().all(|(_, closed)| *closed) {
         required_hold
     } else {
-        Verdict::Unknown
+        record_of_maps_verdict(members, cx)
     }
+}
+
+/// A meet of keyed maps, one of them with clauses, read as R◦, their pointwise
+/// meet [Cas23, (12)], which is empty where a label it requires has no value
+/// and inhabited where each has one [Cas23, (11)]. Out of line, since the
+/// closed maps above never reach it, and read under the caller's `visiting`,
+/// as the key meets above are.
+#[inline(never)]
+fn record_of_maps_verdict(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
+    let Some(met) = record_of_maps(members, cx) else {
+        return Verdict::Unknown;
+    };
+    Verdict::every(
+        met.named
+            .iter()
+            .filter(|(_, slot)| !slot.absent)
+            .map(|(_, slot)| slot.ty.verdict_rec(cx)),
+    )
 }
 
 /// Whether keyed-map `a` (fields `fa`, default clauses `da`) is a subtype of

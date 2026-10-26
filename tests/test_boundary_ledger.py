@@ -73,8 +73,10 @@ CONSERVATIVE = "Sound but conservative"
 UNDECIDABLE = "Undecidable at runtime"
 _SECTIONS = (DECIDED, CONSERVATIVE, UNDECIDABLE)
 
-#: A bullet's lead-in, which is how the page names an entry.
-_BULLET = re.compile(r"^- \*\*(.+?)\*\*", re.MULTILINE)
+#: A bullet's lead-in, which is how the page names an entry. A title may wrap
+#: onto the next line, so the scan reads across a line break and the title is
+#: read with its whitespace folded: a title that wraps is an entry too.
+_BULLET = re.compile(r"^- \*\*(.+?)\*\*", re.MULTILINE | re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -147,6 +149,10 @@ class _Color(enum.Enum):
 
 _JSON = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
 _CHAIN = recursive(lambda t: union(None, {"next": t}))
+
+
+class _Node(dict):
+    """A dict subclass, a class one of the chain's links can be an instance of."""
 
 
 #: Every bullet the page carries, with the query that drives it.
@@ -233,6 +239,18 @@ ROWS: dict[str, Row] = {
         # The entry's own contrast: a literal key of another kind lands in its
         # part, and the relation is decided.
         beside=(dict[Literal[1], int], dict[int, int], "subset"),
+    ),
+    "An inhabited meet with a recursive reference, beside a class.": Declines(
+        intersection(_CHAIN, _Node),
+        nothing,
+        "a value of a class met with a record, which the rules name only for a "
+        "class read with the attributes its instances carry",
+        # Beside an open record the meet is one record, which holds a value.
+        beside=(
+            intersection(_CHAIN, Validator({"next": None}).open()),
+            nothing,
+            "not_subset",
+        ),
     ),
     "Recursion, past one unfolding.": Declines(
         complement(int),
@@ -349,7 +367,7 @@ def _bullets() -> dict[str, str]:
         ]
         body = text[start : min(after)] if after else text[start:]
         for title in _BULLET.findall(body):
-            found[title] = name
+            found[" ".join(title.split())] = name
     # The scan is the detector: a page this read nothing from would pass both
     # directions having checked nothing at all.
     assert len(found) >= 25, sorted(found)

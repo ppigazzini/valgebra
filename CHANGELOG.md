@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a refusal for depth is read off the schema before anything is built
 - feat: a meet is disjoint from what one of its members is
+- feat: a meet of records holds the dict of the fields they require
 
 -->
 
@@ -26,6 +27,13 @@ answer of its own, or a repair to a change not yet released.
   strings, `intersection(str, union(complement(str), Annotated[str,
   Regex(p)]))` as a translation from JSON Schema writes a `pattern`, is empty
   where it was `undecided`, and an integer is `not_subset` of such a union.
+- **A meet of records holds the dict of the fields they require.** Records met
+  in a meet, open ones among them, are one record whose fields hold what every
+  record gives each name, through its field or the catch-all over its kind, so
+  the meet is empty where a required field has no value and holds the dict of
+  those fields where each has one. Two open records over a recursive universe
+  that fix two different tags are `not_subset` of each other where they were
+  `undecided`, and `{"tag": str}` met with `dict[str, int]` is empty.
 
 ### Fixed
 

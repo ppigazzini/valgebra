@@ -249,7 +249,9 @@ answers `"undecided"`.
     clause covering it, and may be missing only where every record lets it
     be. So the meet of open records is related as one record, below a record
     and minus records alike, and a member of another shape beside them, a
-    predicate say, leaves a proof standing.
+    predicate say, leaves a proof standing. The meet holds a value where every
+    field it requires does -- the dict of those fields is in each record -- so
+    a refutation of it stands on that value.
 
     ```python
     from typing import Literal
@@ -262,6 +264,8 @@ answers `"undecided"`.
     pro = {"tier": Literal["pro"], str: json}
     assert intersection(user, required).relation_to(pro) == "subset"
     assert intersection(user, required, complement(pro)).is_empty()
+    free = {"tier": Literal["free"], str: json}
+    assert intersection(user, required).relation_to(free) == "not_subset"
     ```
 
     A clause keyed by **literals** is read one constant at a time, each
@@ -355,9 +359,10 @@ answers `"undecided"`.
   None | {"a": t}`, asks `t & (None | {"a": None})`, which `{"a": None}` is in,
   and reading that `t` as the reference already open would read the meet
   empty. Emptiness is decided wherever the meet reads, and a value is named
-  only where every record in it is closed: a meet with an open record or with
-  a class -- `intersection(chain, Validator({"next": None}).open())`, which
-  `{"next": None}` is in -- answers `"undecided"` (below). A reference written
+  where its records meet in one record whose required fields hold values, open
+  or closed: `intersection(chain, Validator({"next": None}).open())`, which
+  `{"next": None}` is in, is `not_subset` of `nothing`. A meet with a class
+  answers `"undecided"` (below). A reference written
   inside a key's union, the way a record that names itself is spelled, decides
   the same way:
 
@@ -746,19 +751,27 @@ the shape. What is left below is what the descriptor cannot hold.
     nested = intersection(str, complement(intersection(str, json)))
     assert nested.relation_to(nothing) == "undecided"
     ```
-- **An inhabited meet with a recursive reference, beside an open record or a
-  class.** The meet's emptiness is decided ([above](#decided-exactly)), and a
-  value is named only where every record in it is closed, so a meet with an
-  open record or with a class that holds a value is not proved to:
+- **An inhabited meet with a recursive reference, beside a class.** The
+  meet's emptiness is decided ([above](#decided-exactly)), and a value is named
+  where its records meet in one record whose required fields hold values, open
+  records among them, so a meet with a class that holds a value is not proved
+  to:
 
     ```python
     from valgebra import Validator, intersection, nothing, recursive, union
 
+
+    class Node(dict):
+        pass
+
+
     chain = recursive(lambda t: union(None, {"next": t}))
     opened = intersection(chain, Validator({"next": None}).open())
-    assert opened.is_valid({"next": None})
-    assert opened.relation_to(nothing) == "undecided"
+    assert opened.relation_to(nothing) == "not_subset"
     assert intersection(chain, Validator({"next": int}).open()).is_empty()
+    met = intersection(chain, Node)
+    assert met.is_valid(Node(next=None))
+    assert met.relation_to(nothing) == "undecided"
     ```
 
 - **A length bound over a set or a dict, in the sets.** A length is not a word's alone, and

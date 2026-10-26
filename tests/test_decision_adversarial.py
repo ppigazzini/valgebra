@@ -554,6 +554,28 @@ def test_a_meet_with_a_union_of_guarded_patterns_is_empty() -> None:
 
 
 # THEORY: a-record-splits-across-a-union
+def test_a_meet_of_open_records_holds_the_dict_of_its_required_fields() -> None:
+    """Open records met hold the dict of the fields they require.
+
+    Each record admits any other key whose value is in the recursive universe,
+    so the meet holds `{"tag": "t0"}` and refutes a record fixing another tag on
+    it. A field one record requires and another reads through its catch-all
+    meets that catch-all's type, so `{"tag": str}` beside `dict[str, int]`
+    holds nothing.
+    """
+    record = {str: _JSON}
+
+    def tagged(tag: object) -> object:
+        return intersection(record, {"tag": tag, "kids?": [_JSON], str: _JSON})
+
+    first, second = tagged(Literal["t0"]), tagged(Literal["t1"])
+    assert Validator(first).is_valid({"tag": "t0"})
+    assert Validator(first).relation_to(second) == "not_subset"
+    assert intersection({"tag": str}, {str: int}).is_empty()
+    assert not intersection({"tag": str}, {str: str}).is_empty()
+
+
+# THEORY: a-record-splits-across-a-union
 def test_two_open_records_met_are_one_record() -> None:
     """Open records met in a meet are one record, and are related as one.
 

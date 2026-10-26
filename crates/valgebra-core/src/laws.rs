@@ -6949,6 +6949,118 @@ fn split_record() -> impl Strategy<Value = Schema> {
     })
 }
 
+/// A record over the names `a`, `b` and `c`, each field required or not, and a
+/// clause over `str` keys of a drawn type or none: the spelling a meet's labels
+/// are read through, a name's type its field's or its clause's.
+type RecordSpelling = (
+    std::collections::BTreeMap<&'static str, (Schema, bool)>,
+    Option<Schema>,
+);
+
+fn record_spelling() -> impl Strategy<Value = RecordSpelling> {
+    let literal = |index: usize| Schema::Literal(ConstIx::new(index));
+    let leaf = prop_oneof![
+        Just(Schema::Int),
+        Just(Schema::Str),
+        Just(Schema::Bool),
+        Just(Schema::NoneType),
+        Just(Schema::union([Schema::Int, Schema::Str])),
+        // The two constants the oracle and the value pool read alike.
+        prop::sample::select(vec![0usize, 1]).prop_map(literal),
+    ];
+    let fields = prop::collection::btree_map(
+        prop::sample::select(vec!["a", "b", "c"]),
+        (leaf.clone(), any::<bool>()),
+        0..3,
+    );
+    (fields, prop::option::of(leaf))
+}
+
+fn spelled_record((fields, clause): &RecordSpelling) -> Schema {
+    Schema::keyed_map(
+        fields
+            .iter()
+            .map(|(name, (schema, required))| Field {
+                name: (*name).into(),
+                schema: schema.clone(),
+                required: *required,
+            })
+            .collect(),
+        clause
+            .iter()
+            .map(|value| MapClause {
+                key: Schema::Str,
+                value: value.clone(),
+            })
+            .collect(),
+    )
+}
+
+proptest! {
+    // THEORY: a-record-splits-across-a-union
+    /// A meet of two records, either with a clause, is empty only where no dict
+    /// is in both and inhabited only where the dict of its required names is:
+    /// each name at a value both records admit under it, through the field of
+    /// that name or the clause over its kind, and no other key.
+    #[test]
+    fn a_meet_of_records_holds_the_dict_of_its_required_names(
+        first in record_spelling(),
+        second in record_spelling(),
+    ) {
+        let (x, y) = (spelled_record(&first), spelled_record(&second));
+        let meet = Schema::Intersection(vec![x.clone(), y.clone()].into());
+        let pool = const_pool();
+        match meet.verdict_under(&CorpusOracle) {
+            Verdict::Empty => {
+                for value in &boundary_values(&[&x, &y]) {
+                    prop_assert!(
+                        !(member_full(&x, value, &pool) && member_full(&y, value, &pool)),
+                        "{:?} is in both of {:?}, decided empty", value, meet
+                    );
+                }
+            }
+            Verdict::Inhabited => {
+                let admits = |(fields, clause): &RecordSpelling, name: &str, value: &Obj| {
+                    match fields.get(name) {
+                        Some((schema, _)) => member_full(schema, value, &pool),
+                        None => clause
+                            .as_ref()
+                            .is_some_and(|schema| member_full(schema, value, &pool)),
+                    }
+                };
+                let mut names: Vec<&'static str> = [&first, &second]
+                    .iter()
+                    .flat_map(|(fields, _)| {
+                        fields
+                            .iter()
+                            .filter(|(_, (_, required))| *required)
+                            .map(|(name, _)| *name)
+                    })
+                    .collect();
+                names.sort_unstable();
+                names.dedup();
+                let candidates = kind_edges();
+                let mut entries = Vec::new();
+                for name in names {
+                    let value = candidates
+                        .iter()
+                        .find(|value| admits(&first, name, value) && admits(&second, name, value));
+                    prop_assert!(value.is_some(), "no value of {:?} for {}", meet, name);
+                    if let Some(value) = value {
+                        entries.push((Key::Exact(name), value.clone()));
+                    }
+                }
+                let dict = Obj::Map(entries);
+                prop_assert!(
+                    member_full(&x, &dict, &pool) && member_full(&y, &dict, &pool),
+                    "{:?} is outside {:?}, decided inhabited", dict, meet
+                );
+            }
+            Verdict::Unknown => {}
+        }
+    }
+}
+
 /// Whether `schema` names the constant at `index` anywhere in it.
 fn names_constant(schema: &Schema, index: usize) -> bool {
     match schema {
