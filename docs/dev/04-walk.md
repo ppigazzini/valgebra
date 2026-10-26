@@ -158,7 +158,11 @@ settling walk would read as a decided refusal, and the complement over it would
 admit the value; `a_complement_reads_its_inner_walk_in_kleenes_strong_logic`
 in the corpus holds each site. A move is the one stop that ends its scan as a
 refusal does: `record_move` counts it, and the complement refuses whatever the
-rest decided, since the value it read is not the one it holds.
+rest decided, since the value it read is not the one it holds. A move is what a
+scan's count read again finds changed; a record's field read by name that finds
+its key gone is a missing key, not a move, so a predicate that pops a sibling
+field leaves the record refusing with `missing_key` and its complement
+admitting.
 
 Two clauses of a map reading one entry are read by the first that answers, a
 stop included, rather than as a union. Their order is the schema's canonical

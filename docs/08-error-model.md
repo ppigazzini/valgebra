@@ -246,7 +246,11 @@ and `["x", deep]` alike, `"x"` deciding both, and the answer is the same
 whatever order a dict's keys were inserted in or a record's fields are named.
 A value that moved is the exception: the scan that meets the move ends there,
 and the complement refuses the value with `mutated_during_validation` whatever
-the rest decided.
+the rest decided. A move is met where a scan reads a container against the count
+it took at entry -- a list's positions, a dict's entries, a set's members. A
+record reads its fields by name, so a key a field's predicate pops from the dict
+is read as missing rather than as a move: the record refuses with `missing_key`
+and its complement admits, which is right about the dict as the read found it.
 
 ```python
 from valgebra import ValidationError, complement, recursive, union
