@@ -376,6 +376,32 @@ answers `"undecided"`.
     link = recursive(lambda t: {"next": union(t, None)})
     assert intersection(link, {"next": {"next": int}}).is_empty()
     ```
+- **A meet of a few unions.** A meet holding a union is the union of the
+  meets each branch makes with the rest, so a meet no rule reads whole is read
+  one such clause at a time where its unions span four clauses at most -- the
+  product of their widths, no branch of them a meet or a union. A translation
+  from JSON Schema applies a keyword to its kind alone, so an object schema
+  with two keywords is `OBJ & (~OBJ | R) & (~OBJ | Q)`: two unions of two, and
+  each `~OBJ` meets `OBJ` in nothing. Two tags fixed two ways meet in nothing,
+  and a tag beside a field it requires holds the dict with that field. A meet
+  of more unions, or of a union with a meet for a branch, is left to the set
+  representation, and is decided within the depth it descends.
+
+    ```python
+    from typing import Literal
+
+    from valgebra import complement, intersection, nothing, recursive, union
+
+    json = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    obj = {str: json}
+    t0 = union(complement(obj), {"tag": Literal["t0"], str: json})
+    t1 = union(complement(obj), {"tag": Literal["t1"], str: json})
+    required = union(complement(obj), {"tag": json, str: json})
+    assert intersection(obj, t0, t1).is_empty()
+    tagged = intersection(obj, t0, required)
+    assert tagged.is_valid({"tag": "t0"})
+    assert tagged.relation_to(nothing) == "not_subset"
+    ```
 - **The complement laws, where the constructors reach them.** `complement`
   cancels a complement, `union` folds a join carrying a schema beside its own
   complement, and `intersection` folds the meet of that pair, all where the

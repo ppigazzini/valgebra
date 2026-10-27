@@ -220,6 +220,15 @@ ROWS: dict[str, Row] = {
     "A meet with a recursive reference.": Decides(
         intersection(_CHAIN, {"next": int}), None, "empty"
     ),
+    "A meet of a few unions.": Decides(
+        intersection(
+            {str: _JSON},
+            union(complement({str: _JSON}), {"tag": Literal["t0"], str: _JSON}),
+            union(complement({str: _JSON}), {"tag": Literal["t1"], str: _JSON}),
+        ),
+        None,
+        "empty",
+    ),
     "The complement laws, where the constructors reach them.": Decides(
         union(int, complement(int)), anything, "subset"
     ),
