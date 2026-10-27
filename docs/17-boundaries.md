@@ -304,6 +304,7 @@ validator takes part in the cycle collector so the pair is freed like any other.
 
 ```python
 import gc
+import sys
 import weakref
 
 from valgebra import Validator
@@ -317,8 +318,14 @@ Model.validator = Validator(Model)
 watch = weakref.ref(Model)
 del Model
 gc.collect()
-assert watch() is None
+if sys.implementation.name == "cpython":
+    assert watch() is None
 ```
+
+The pair is freed on CPython. PyPy keeps alive every class an extension module
+is shown, valgebra's or any other's, so there the class outlives its last
+reference whether a validator holds it or not; [PyPy](00-installation.md#pypy)
+on the installation page says what that costs a long-running process.
 
 A validator can also be weakly referenced, so a registry keyed by schema can be
 a `WeakValueDictionary` and let its entries go.

@@ -102,7 +102,8 @@ not loaded (`docs/dev/09-releasing.md` in the repository). There is
 no PyPy wheel for macOS or Windows, where the source distribution is the
 install.
 
-One promise this page makes holds differently there. A validator releases the
+One promise [What it cannot do](17-boundaries.md#it-holds-what-its-schema-names-and-lets-go-of-it)
+makes holds differently there. A validator releases the
 classes, enums and predicates its schema names when nothing else holds them, and
 on PyPy it cannot: `cpyext` builds a `PyTypeObject` proxy for every class an
 extension is shown and never frees it, so a class is kept alive from the first
