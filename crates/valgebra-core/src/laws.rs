@@ -2983,6 +2983,40 @@ fn emptiness_decides_a_deep_intersection_in_linear_time() {
     worker.join().expect("deep emptiness worker panicked");
 }
 
+/// A meet the rules distribute for a small normal form leaves the meets below
+/// it to the same bound, so a level of a tower costs twice the level below it.
+///
+/// Each level of the tower is `(N | set[str]) & (N | set[bytes])`, which reads
+/// `N` once in each union. Counted by its unions' widths alone, a level is four
+/// clauses and `N`'s own unions are distributed inside each of them; and a
+/// union of two sets met with the tower, two clauses, would have the tower
+/// distributed below it if it held itself open as a goal. Either way a level
+/// multiplies the steps by more than four, and three is the midpoint.
+#[test]
+fn a_distributed_meet_leaves_the_meets_below_it_to_the_bound() {
+    let beside = |tower: Schema| {
+        Schema::Intersection(
+            vec![
+                union(Schema::set(Schema::Str), Schema::set(Schema::Bytes)),
+                tower,
+            ]
+            .into(),
+        )
+    };
+    let tower = |depth| intersection_of_unions_tower(depth, Schema::Int);
+    for (name, small, large) in [
+        ("the tower", tower(6), tower(7)),
+        ("a union beside it", beside(tower(6)), beside(tower(7))),
+    ] {
+        let (small, large) = (small.empty_steps(), large.empty_steps());
+        assert!(
+            large < DECISION_BUDGET && u64::from(large) < 3 * u64::from(small),
+            "{name} spent {small} steps at six levels and {large} at seven; a \
+             level that reads the one below twice doubles them"
+        );
+    }
+}
+
 /// An attribute record with an uninhabited attribute is empty: no value can
 /// carry that attribute, so the dataclass-style schema denotes
 /// nothing. The symmetric keyed-map rule already held; this closes the
@@ -7226,7 +7260,7 @@ proptest! {
         // Monotone where the set representation proves the pair: a rule that
         // reads a meet by its shape may decline the meet of three, and the
         // reading is what leaves the refused member out.
-        let read = lower_widened(&pair, &defs, &NoLeafRelations, &mut None, || false)
+        let read = lower_widened(&pair, &defs, &NoLeafRelations, &mut None, |_| true)
             .is_some_and(|set| set.emptiness() == Verdict::Empty);
 
         if read && pair.is_empty_under(&defs) {

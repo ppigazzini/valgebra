@@ -902,22 +902,29 @@ is read under the same list. A meet the rules decline with a reference among
 its members unfolds the reference into itself (`meet_through_a_reference` in
 `decision/emptiness.rs`): each branch of the definition met with the other
 members, and a union among a meet's members distributed the same way where it
-holds a reference or a meet is already being unfolded. The meet is a goal of
+holds a reference, a meet is already being unfolded, or the meet's normal form
+spans four clauses at most -- the product of its unions' widths, the bound ty's
+intersection builder caps its normal form at, where no branch is a meet or a
+union, whose own unions a width does not count -- so a meet of two keywords
+guarded to their kind, `OBJ & (~OBJ | R) & (~OBJ | Q)`, is read clause by
+clause. The meet is a goal of
 its own, its members sorted and without repeats, held open beside the query's
-budget while the path below decides it, and it answers only for itself: under
-`t = None | {"a": t}`, the key of `t ∧ {"a": None | {"a": None}}` asks `t ∧
-(None | {"a": None})`, which holds `{"a": None}` and which the reference's goal
-on `visiting` would read empty. A meet's members are subterms of the schema
-and the definitions, so a query has finitely many meet goals, and a goal met
-again on its path is answered by hypothesis as a reference is. That reading is
-the least fixpoint only where the path crossed a constructor since the goal
-opened, so the value the second meeting needs is a smaller one. A branch
-therefore drops every copy of the member it distributes -- a branch is inside
-that member -- since a copy left in makes the branch's meet the open one
+budget while the path below decides it -- except a meet distributed for its
+normal form alone, which no reference reaches and which, held open, would have
+every meet below it distributed past the bound -- and it answers only for
+itself: under `t = None | {"a": t}`, the key of `t ∧ {"a": None | {"a": None}}`
+asks `t ∧ (None | {"a": None})`, which holds `{"a": None}` and which the
+reference's goal on `visiting` would read empty. A meet's members are subterms
+of the schema and the definitions, so a query has finitely many meet goals, and
+a goal met again on its path is answered by hypothesis as a reference is. That
+reading is the least fixpoint only where the path crossed a constructor since
+the goal opened, so the value the second meeting needs is a smaller one. A
+branch therefore drops every copy of the member it distributes -- a branch is
+inside that member -- since a copy left in makes the branch's meet the open one
 wherever the branch is a member beside it, and the cycle then needs the same
-value. Without the copies, a distribution leaves strictly smaller members and
-an unfolding is guarded by contractivity, so an open goal is met again only
-under a constructor. `a_meet_holding_a_union_twice_is_proved_empty_only_where_it_is`
+value. Without the copies, a distribution leaves strictly smaller members and an
+unfolding is guarded by contractivity, so an open goal is met again only under a
+constructor. `a_meet_holding_a_union_twice_is_proved_empty_only_where_it_is`
 draws the shape and `a_union_met_twice_is_distributed_once` is the meet a
 downstream planner found proved empty while it held `0.5`.
 

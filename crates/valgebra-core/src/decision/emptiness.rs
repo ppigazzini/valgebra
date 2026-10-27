@@ -116,8 +116,10 @@ impl Schema {
     /// is not built.
     pub(super) fn denotes_no_value(&self, pool: &dyn Constants, defs: &[Schema]) -> bool {
         let mut kept = None;
-        lower_widened(self, defs, pool, &mut kept, || false)
-            .is_some_and(|set| set.emptiness() == Verdict::Empty)
+        lower_widened(self, defs, pool, &mut kept, |read| {
+            !the_rules_find_a_value(read)
+        })
+        .is_some_and(|set| set.emptiness() == Verdict::Empty)
             && match &kept {
                 None => an_empty_reading_stands(&[self], &[], defs, pool),
                 Some(kept) => {
@@ -413,6 +415,25 @@ impl Schema {
     }
 }
 
+/// Whether the rules find a value of the meet of `members`, so that a widened
+/// reading of them, a superset, holds one too and proves nothing empty.
+///
+/// The reading the set representation's thinned reading is spared by: asked of
+/// the conjuncts it would keep, where a build costs what the decision workloads
+/// spend in thousands of queries and the rules' verdict is a fraction of one.
+/// Read with no oracle, since a widened reading's conjuncts are the schema's
+/// with every reference cut, and a literal or a class it would need is one the
+/// reading builds as before.
+pub(super) fn the_rules_find_a_value(members: &[Schema]) -> bool {
+    let budget = Budget::new(DECISION_BUDGET);
+    let cx = &mut Cx::new(&NoLeafRelations, &[], &budget);
+    let verdict = match members {
+        [only] => only.verdict_rec(cx),
+        members => Schema::Intersection(members.to_vec().into()).verdict_rec(cx),
+    };
+    verdict == Verdict::Inhabited
+}
+
 /// Whether the values a meet admits are bounded to the integers, so a bound
 /// conjunction over it may count them.
 ///
@@ -591,8 +612,9 @@ fn has_a_pattern_and_its_complement(members: &[Schema], cx: &mut Cx<'_>) -> bool
 /// itself, since the reference is as often written inside one -- `{"next": Node
 /// | None}` -- as around it, and below an unfolding, where the key of a
 /// branch's meet is as often a union of the definition's own -- `t ∧ (None |
-/// {"a": None})` asks `None ∧ (None | {"a": None})`. Elsewhere a union is left
-/// to the rules, so a query with no reference in a meet pays nothing here.
+/// {"a": None})` asks `None ∧ (None | {"a": None})`. Elsewhere a union is
+/// distributed only where the meet's normal form is a few clauses
+/// ([`normal_form_within`]) and is left to the rules past them.
 ///
 /// The meet is the goal, its members sorted and without repeats -- the members
 /// of a meet are a set -- held open while the path below decides it
@@ -605,6 +627,13 @@ fn has_a_pattern_and_its_complement(members: &[Schema], cx: &mut Cx<'_>) -> bool
 /// it. Its members are drawn from the schema's subterms and the definitions',
 /// so a query has finitely many, as normal forms over the atoms a type mentions
 /// are [FCB08, §6.9], and a path holds each at most once.
+///
+/// **A meet distributed for its normal form alone is no goal.** No reference
+/// reaches it, so the path below reaches it again only through a reference
+/// that opens a goal of its own, and a goal it held open would have every meet
+/// below it distributed past the bound: `set[str] | set[bytes]` met with an
+/// intersection-of-unions tower three levels deep reads in 334 steps without
+/// one and in 87 640 with one, a factor every level multiplies.
 ///
 /// **A branch drops every copy of the member it distributes.** A branch is
 /// inside that member, so meeting it with another copy says nothing more, and a
@@ -636,8 +665,8 @@ fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdi
             }),
             _ => None,
         });
-    let (at, branches) = if let Some(unfolding) = unfolding {
-        unfolding
+    let (at, branches, unfolds) = if let Some((at, branches)) = unfolding {
+        (at, branches, true)
     } else {
         let (at, branches) = members
             .iter()
@@ -649,16 +678,22 @@ fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdi
         let holds_a_reference = branches
             .iter()
             .any(|branch| matches!(branch, Schema::Ref(_)));
-        if !(holds_a_reference || OpenMeet::any_open(cx.budget)) {
+        let unfolds = holds_a_reference || OpenMeet::any_open(cx.budget);
+        if !(unfolds || normal_form_within(members, MAX_DISTRIBUTED_TERMS)) {
             return None;
         }
-        (at, branches)
+        (at, branches, unfolds)
     };
-    let mut goal = members.to_vec();
-    goal.sort();
-    goal.dedup();
-    let Some(_open) = OpenMeet::open(cx.budget, goal) else {
-        return Some(Verdict::Empty);
+    let _open = if unfolds {
+        let mut goal = members.to_vec();
+        goal.sort();
+        goal.dedup();
+        let Some(open) = OpenMeet::open(cx.budget, goal) else {
+            return Some(Verdict::Empty);
+        };
+        Some(open)
+    } else {
+        None
     };
     let mut verdict = Verdict::Empty;
     for branch in branches {
@@ -680,6 +715,50 @@ fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdi
         }
     }
     Some(verdict)
+}
+
+/// The clauses a meet with no reference may be read as before it is distributed.
+///
+/// Four, the bound ty's intersection builder caps its normal form at where it
+/// is bounded (`MAX_INTERSECTION_DNF_TERMS`): two keywords guarded to their
+/// kind, `~K | X`, are four clauses, and a branch a guard's kind empties at
+/// once costs a step.
+pub(super) const MAX_DISTRIBUTED_TERMS: usize = 4;
+
+/// Whether the normal form of the meet `members` spans at most `bound`
+/// clauses: the product of the widths of the unions among its members, each
+/// branch of them one clause.
+///
+/// A meet the rules decline is the union of the meets its union members'
+/// branches make with the rest [FCB08, Def. 4.1], which is how every source
+/// decides it, on the normal form, and a branch's meet is strictly smaller, so
+/// the distribution ends. What it costs is the clauses: a meet of `k` unions of
+/// two is `2^k` of them, each a decision, so a decline that spends a step
+/// distributed spends a product, which [`MAX_DISTRIBUTED_TERMS`] bounds.
+///
+/// **A branch that is a meet or a union is not one clause.** Distributed, its
+/// members join the branch's meet and its own unions are distributed in turn,
+/// so the width counts fewer clauses than the distribution reads, and the meet
+/// is left to the rules: a tower whose every level is `(N | A) & (N | B)`,
+/// counted by its widths, is four clauses at each level and a product of them
+/// over its depth.
+fn normal_form_within(members: &[Schema], bound: usize) -> bool {
+    members
+        .iter()
+        .try_fold(1usize, |clauses, member| match member {
+            Schema::Union(branches)
+                if branches.iter().all(|branch| {
+                    !matches!(branch, Schema::Union(_) | Schema::Intersection(_))
+                }) =>
+            {
+                clauses
+                    .checked_mul(branches.len())
+                    .filter(|&clauses| clauses <= bound)
+            }
+            Schema::Union(_) => None,
+            _ => Some(clauses),
+        })
+        .is_some()
 }
 
 thread_local! {

@@ -16,6 +16,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a refusal for depth is read off the schema before anything is built
 - feat: a meet is disjoint from what one of its members is
 - feat: a meet of records holds the dict of the fields they require
+- feat: a meet of a few unions is decided clause by clause
 
 -->
 
@@ -34,6 +35,15 @@ answer of its own, or a repair to a change not yet released.
   those fields where each has one. Two open records over a recursive universe
   that fix two different tags are `not_subset` of each other where they were
   `undecided`, and `{"tag": str}` met with `dict[str, int]` is empty.
+- **A meet of a few unions is decided clause by clause.** A meet whose unions
+  span four clauses at most, no branch of them a meet or a union, is read as
+  their union, each clause decided on its own, where only a union beside a
+  recursive reference was. A translation from JSON Schema guards each keyword to
+  its kind, `OBJ & (~OBJ | R) & (~OBJ | Q)`, so two tags fixed two ways meet in
+  nothing and one tag beside a required one holds a value, where both were
+  `undecided`. A relation whose subject the set representation reads without
+  such a meet, which the rules now find a value of, is not built for the reading
+  that can only find it inhabited.
 
 ### Fixed
 
@@ -44,12 +54,14 @@ answer of its own, or a repair to a change not yet released.
   relation between two records each spelled `OBJ & (~OBJ | R) & (~OBJ | REQ)`,
   as a JSON Schema translation guards a keyword to its kind, counted 85% more
   instructions than on 0.0.20. The depth is read off the schema before anything
-  is built, and a reading that can only be inhabited is built only for a
+  is built, and a reading the rules find a value of is built only for a
   relation whose supertype the set representation reads: the same relation
-  counts 73% fewer instructions than on 0.0.20, with the same answer. A meet
-  holding a member past the depth is read without it whatever else the member
-  holds, and a member whose deepest node is a mapping's key is kept, where each
-  was left unread.
+  counts 54% fewer instructions than on 0.0.20, with the same answer. Its
+  recursive spelling, `$ref`'d as a JSON Schema translation writes it, counts
+  51% fewer than on 0.0.21 and 34% more than on 0.0.20, the rules reading the
+  meets the decision asks on the way. A meet holding a member past the depth is
+  read without it whatever else the member holds, and a member whose deepest
+  node is a mapping's key is kept, where each was left unread.
 
 ## [0.0.21] - 2026-10-26
 

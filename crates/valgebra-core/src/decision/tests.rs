@@ -1253,6 +1253,35 @@ fn a_meet_unfolds_a_reference_under_its_own_goal() {
     );
 }
 
+/// Below an unfolding a union is distributed whatever its width, as the
+/// definition's own branches are: the bound on a meet's normal form is for a
+/// meet no reference reaches.
+///
+/// `t = None | {"a": t}` met with `{"a": None | int | str | bytes | {"a":
+/// None}}` asks of its key `t ∧ (None | int | str | bytes | {"a": None})`, and
+/// the `None` branch of `t` meets that union, five clauses, in `None`.
+#[test]
+fn a_union_below_an_unfolding_is_distributed_past_the_bound() {
+    let t = Schema::Ref(DefIx::new(0));
+    let defs = vec![Schema::union([
+        Schema::NoneType,
+        closed(vec![field("a", t.clone(), true)]),
+    ])];
+    let wide = Schema::union([
+        Schema::NoneType,
+        Schema::Int,
+        Schema::Str,
+        Schema::Bytes,
+        closed(vec![field("a", Schema::NoneType, true)]),
+    ]);
+    let Schema::Union(branches) = &wide else {
+        unreachable!("a union of five branches")
+    };
+    assert!(branches.len() > super::emptiness::MAX_DISTRIBUTED_TERMS);
+    let meet = Schema::Intersection(vec![t, closed(vec![field("a", wide, true)])].into());
+    assert_eq!(rules_verdict(&meet, &defs).0, Verdict::Inhabited);
+}
+
 /// A meet the rules unfold reads a goal it holds open as empty, and that is what
 /// decides two chains with different ends.
 ///
@@ -1359,13 +1388,47 @@ fn a_union_holding_a_reference_is_distributed_into_the_meet() {
         rules_verdict(&meet(next(next(Schema::NoneType))), &defs).0,
         Verdict::Inhabited
     );
-    // A union that holds no reference is left to the rules as it was.
-    let unfolded = Schema::union([
-        closed(vec![field("next", Schema::Int, true)]),
-        Schema::NoneType,
-    ]);
-    let plain = Schema::Intersection(vec![unfolded, next(Schema::Int)].into());
-    assert_eq!(rules_verdict(&plain, &[]).0, Verdict::Unknown);
+    // A union that holds no reference is distributed too, where the meet's
+    // normal form spans four clauses at most, and left to the rules past them:
+    // two unions of two are the bound's four, and a third is past it.
+    assert_eq!(super::emptiness::MAX_DISTRIBUTED_TERMS, 4);
+    let either =
+        |other: Schema| Schema::union([closed(vec![field("next", Schema::Int, true)]), other]);
+    let plain = Schema::Intersection(vec![either(Schema::NoneType), next(Schema::Int)].into());
+    assert_eq!(rules_verdict(&plain, &[]).0, Verdict::Inhabited);
+    let four = Schema::Intersection(
+        vec![
+            either(Schema::NoneType),
+            either(Schema::Bytes),
+            next(Schema::Int),
+        ]
+        .into(),
+    );
+    assert_eq!(rules_verdict(&four, &[]).0, Verdict::Inhabited);
+    let wide = Schema::Intersection(
+        vec![
+            either(Schema::NoneType),
+            either(Schema::Bytes),
+            either(Schema::Float),
+            next(Schema::Int),
+        ]
+        .into(),
+    );
+    assert_eq!(rules_verdict(&wide, &[]).0, Verdict::Unknown);
+    // And a union holding a reference is distributed whatever the normal form
+    // spans: past the bound, its `None` branch meets the other two in `None`.
+    let wide_with_a_reference = Schema::Intersection(
+        vec![
+            Schema::union([node.clone(), Schema::NoneType]),
+            Schema::union([Schema::NoneType, Schema::Bytes]),
+            Schema::union([Schema::NoneType, Schema::Float]),
+        ]
+        .into(),
+    );
+    assert_eq!(
+        rules_verdict(&wide_with_a_reference, &defs).0,
+        Verdict::Inhabited
+    );
 }
 
 /// A meet reached again while it is being decided reads as empty, and the
@@ -7655,10 +7718,10 @@ fn a_meet_is_proved_empty_beside_a_conjunct_the_lowering_refuses() {
     let pool = NoLeafRelations;
     let mut kept = None;
     let thinned = meet(vec![words("^a+$"), deep.clone()]);
-    assert!(lower_widened(&thinned, &[], &pool, &mut kept, || false).is_some());
+    assert!(lower_widened(&thinned, &[], &pool, &mut kept, |_| true).is_some());
     assert_eq!(kept, Some(vec![words("^a+$")]));
     let mut kept = None;
-    assert!(lower_widened(&pair, &[], &pool, &mut kept, || false).is_some());
+    assert!(lower_widened(&pair, &[], &pool, &mut kept, |_| true).is_some());
     assert_eq!(kept, None);
 }
 
@@ -7833,7 +7896,11 @@ fn a_map_minus_a_map_above_it_is_empty_beside_a_predicate() {
 ///
 /// `{a: int}` minus `{a: str}` holds `{"a": 1}`, and beside a predicate the
 /// rule names no value: the split finds one in the records' meet, which the
-/// predicate may refuse. Three closed records whose `a` meets in `str` are below
+/// predicate may refuse. Beside a union of records the meet is proved
+/// inhabited, its union distributed into clauses of records, so a refutation
+/// of the records' meet alone would be believed: `{a: int | str} & {a: int |
+/// str | bytes}` is not below `{a: int}`, and its meet with `{a: int} | {a:
+/// None}` is. Three closed records whose `a` meets in `str` are below
 /// the record holding a string `a`, R◦ being the meet of every positive record
 /// [Cas23, §4.3] and not of two alone.
 #[test]
@@ -7862,6 +7929,16 @@ fn a_meet_of_records_beside_another_member_proves_or_declines() {
         opaque,
     ]);
     assert_eq!(beside.verdict_under_defs(&[]), Verdict::Unknown);
+    let narrowed = raw(vec![
+        closed(Schema::union([Schema::Int, Schema::Str])),
+        closed(Schema::union([Schema::Int, Schema::Str, Schema::Bytes])),
+        Schema::union([closed(Schema::Int), closed(Schema::NoneType)]),
+    ]);
+    assert_eq!(narrowed.verdict_under_defs(&[]), Verdict::Inhabited);
+    assert_eq!(
+        narrowed.subtype_relation_under(&closed(Schema::Int), &NoLeafRelations, &[]),
+        Relation::Holds,
+    );
 
     let three = raw(vec![
         closed(Schema::union([Schema::Int, Schema::Str])),
@@ -8002,4 +8079,51 @@ fn a_meet_of_maps_is_inhabited_where_the_record_they_meet_in_is() {
     );
     let by_constant = mapping(Schema::Literal(ConstIx::new(0)), Schema::Int);
     assert_eq!(verdict(vec![tagged, by_constant], &[]), Verdict::Unknown);
+}
+
+// THEORY: a-cut-reference-proves
+/// A thinned reading whose conjuncts the rules find a value of is not built
+/// for an emptiness question: an inhabited superset proves nothing empty.
+///
+/// The conjuncts kept are an open map and a guard over it, `{str: ⊤} & (~{str:
+/// ⊤} | {"tag": ⊤, str: ⊤})`, a meet no one of them holds a value of alone and
+/// the rules find one of once the guard is distributed: its complement branch
+/// meets the map in nothing, and its record branch meets it in one record. A
+/// map whose values nest past the depth bound is the member left out, and the
+/// meet holds `{"tag": []}`.
+#[test]
+fn a_thinned_reading_the_rules_find_a_value_of_is_not_built() {
+    let object = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: Schema::ANYTHING,
+        }]
+        .into(),
+    };
+    let tagged = open(vec![field("tag", Schema::ANYTHING, true)]);
+    let guard = Schema::Union(vec![object.clone().complement(), tagged].into());
+    let lists = (0..5).fold(Schema::Int, |inner, _| {
+        Schema::list(SeqShape::homogeneous(inner))
+    });
+    let deep = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: lists,
+        }]
+        .into(),
+    };
+    let kept = [object.clone(), guard.clone()];
+    assert!(super::emptiness::the_rules_find_a_value(&kept));
+    let meet = Schema::Intersection(vec![object, guard, deep].into());
+    let mut read = None;
+    assert!(
+        lower_widened(&meet, &[], &NoLeafRelations, &mut read, |kept| {
+            !super::emptiness::the_rules_find_a_value(kept)
+        })
+        .is_none()
+    );
+    assert_eq!(read, None);
+    assert!(!meet.is_empty());
 }

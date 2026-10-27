@@ -30,7 +30,7 @@ use crate::verdict::{Relation, Verdict};
 
 use crate::oracle::has_complementary_pair;
 use constraints::constraint_entailed;
-use emptiness::class_with_attributes;
+use emptiness::{class_with_attributes, the_rules_find_a_value};
 use literals::{
     finite_meet_below, finite_set, finite_set_below, the_constant_speaks_for_the_literal,
 };
@@ -271,10 +271,11 @@ impl Schema {
         };
         let mut theirs = None;
         let mut kept = None;
-        let Some(mine) = lower_widened(self, defs, pool, &mut kept, || {
-            theirs
-                .insert(lower_unfolded(read, defs, side, pool))
-                .is_some()
+        let Some(mine) = lower_widened(self, defs, pool, &mut kept, |kept| {
+            !the_rules_find_a_value(kept)
+                || theirs
+                    .insert(lower_unfolded(read, defs, side, pool))
+                    .is_some()
         }) else {
             return Relation::Unknown;
         };

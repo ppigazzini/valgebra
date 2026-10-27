@@ -2505,6 +2505,13 @@ fn optional_k(schema: Schema) -> Schema {
     }
 }
 
+/// The emptiness question's word on a thinned reading: build it unless it is
+/// one conjunct that holds a value by its shape, an inhabited set that proves
+/// nothing empty. The rules' fuller reading is the decision's to give.
+fn for_emptiness(read: &[Schema]) -> bool {
+    !matches!(read, [only] if only.holds_a_value_shallowly())
+}
+
 /// A schema nesting past the depth bound is refused before anything in it is
 /// built, whatever sits ahead of the deep node.
 ///
@@ -2521,7 +2528,7 @@ fn a_schema_past_the_depth_is_refused_before_it_is_built() {
     assert!(lower(&meet(vec![literal(), deep.clone()]), &pool).is_none());
     assert_eq!(pool.asked.get(), 0, "the literal ahead is never read");
     let union = Schema::Union(vec![literal(), deep].into());
-    assert!(lower_widened(&union, &[], &pool, &mut None, || true).is_none());
+    assert!(lower_widened(&union, &[], &pool, &mut None, |_| true).is_none());
     assert_eq!(pool.asked.get(), 0, "nor on the widened side");
 
     assert!(lower(&meet(vec![literal(), Schema::Int]), &pool).is_some());
@@ -2543,7 +2550,7 @@ fn a_member_past_the_depth_is_left_out_whatever_it_holds() {
     let unread = Schema::Union(vec![Schema::Literal(ConstIx::new(0)), nested_lists(DEPTH)].into());
     let three = meet(vec![words("^a+$"), words("^b+$"), unread]);
     let mut kept = None;
-    let set = lower_widened(&three, &[], &pool, &mut kept, || false).expect("read thinned");
+    let set = lower_widened(&three, &[], &pool, &mut kept, for_emptiness).expect("read thinned");
     assert_eq!(set.emptiness(), Verdict::Empty);
     assert_eq!(kept, Some(vec![words("^a+$"), words("^b+$")]));
 }
@@ -2581,7 +2588,7 @@ fn a_member_whose_key_is_its_deepest_node_is_kept() {
             &[],
             &pool,
             &mut kept,
-            || true
+            |_| true
         )
         .is_some()
     );
@@ -2605,9 +2612,9 @@ fn a_thinned_reading_that_can_only_be_inhabited_is_built_where_it_answers() {
     let literal = optional_k(Schema::Literal(ConstIx::new(0)));
     let beside = meet(vec![literal, nested_lists(DEPTH)]);
 
-    assert!(lower_widened(&beside, &[], &pool, &mut None, || false).is_none());
+    assert!(lower_widened(&beside, &[], &pool, &mut None, for_emptiness).is_none());
     assert_eq!(pool.asked.get(), 0, "an emptiness question builds nothing");
-    assert!(lower_widened(&beside, &[], &pool, &mut None, || true).is_some());
+    assert!(lower_widened(&beside, &[], &pool, &mut None, |_| true).is_some());
     assert_eq!(pool.asked.get(), 1, "a caller that reads it is given it");
 
     let pool = Counted::new(vec![Operand::Integer(1)]);
@@ -2645,7 +2652,7 @@ fn a_member_deep_only_past_the_node_bound_is_refused_for_its_nodes() {
         Schema::Union(wide.into()),
     ]);
     assert!(!nests_past_the_depth(&three, Bounds::DEFAULT));
-    assert!(lower_widened(&three, &[], &pool, &mut None, || false).is_none());
+    assert!(lower_widened(&three, &[], &pool, &mut None, for_emptiness).is_none());
 }
 
 /// Schemas nested to either side of the depth bound, a clause's key among

@@ -759,7 +759,7 @@ SOURCE: §13.1 "**The polarity cut is one-directional.**"
 
 IMPLEMENTED-BY: decision.rs::Schema::descriptor_contained_in, ir/transform.rs::Polarity::flipped, ir/transform.rs::Schema::unfolded, descr/lower.rs::lower_widened
 
-HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding, a_meet_is_proved_empty_beside_a_conjunct_the_lowering_refuses, a_reference_above_is_unfolded_for_the_sets, a_meet_stays_empty_beside_a_member_no_lowering_reads, test_a_meet_stays_empty_beside_a_member_no_lowering_reads, test_a_meet_of_patterns_is_empty_beside_a_predicate, a_member_past_the_depth_is_left_out_whatever_it_holds, a_member_whose_key_is_its_deepest_node_is_kept, a_thinned_reading_that_can_only_be_inhabited_is_built_where_it_answers
+HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding, a_meet_is_proved_empty_beside_a_conjunct_the_lowering_refuses, a_reference_above_is_unfolded_for_the_sets, a_meet_stays_empty_beside_a_member_no_lowering_reads, test_a_meet_stays_empty_beside_a_member_no_lowering_reads, test_a_meet_of_patterns_is_empty_beside_a_predicate, a_member_past_the_depth_is_left_out_whatever_it_holds, a_member_whose_key_is_its_deepest_node_is_kept, a_thinned_reading_that_can_only_be_inhabited_is_built_where_it_answers, a_thinned_reading_the_rules_find_a_value_of_is_not_built
 
 **Kinds decompose emptiness.** Positives of two kinds that share no value make a
 clause empty outright [FCB08, (5)] -- every pair but `bool` and `int`, a
@@ -809,14 +809,15 @@ that reference at positive positions only, so its answer is about the schema
 with those occurrences emptied, whose emptiness is the definition's: a value of
 least height needs no value of the definition at a positive position below it. A
 meet met again on its path is read as empty only where a constructor stands
-between, so a union a meet distributes leaves no copy of itself in a branch.
-**[LOAD-BEARING: two-fixpoints-one-procedure]**
+between, so a union a meet distributes -- the meet being the union of the
+meets each of its branches makes with the rest [FCB08, Def. 4.1] -- leaves no
+copy of itself in a branch. **[LOAD-BEARING: two-fixpoints-one-procedure]**
 
 SOURCE: §13.4 "**Mixed induction and coinduction.**"
 
-IMPLEMENTED-BY: decision/emptiness.rs, decision/emptiness.rs::Schema::empty_and_region_at, decision/emptiness.rs::meet_through_a_reference, decision/emptiness.rs::OpenMeet::open
+IMPLEMENTED-BY: decision/emptiness.rs, decision/emptiness.rs::Schema::empty_and_region_at, decision/emptiness.rs::meet_through_a_reference, decision/emptiness.rs::OpenMeet::open, decision/emptiness.rs::normal_form_within
 
-HELD-BY: detects_uninhabited_recursive_schemas, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, the_fixpoint_laws_hold_over_drawn_definitions, a_reference_being_resolved_refutes_nothing_that_holds, a_record_minus_records_inside_a_definition_asks_its_goals_there, a_proof_over_a_fixpoint_has_no_witness_against_it, an_emptiness_is_refused_by_every_boundary_value, a_meet_with_a_reference_is_its_definition_met_with_the_rest, a_meet_with_a_reference_answers_as_its_values_do, a_meet_holding_a_union_twice_is_proved_empty_only_where_it_is, a_union_met_twice_is_distributed_once
+HELD-BY: detects_uninhabited_recursive_schemas, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, the_fixpoint_laws_hold_over_drawn_definitions, a_reference_being_resolved_refutes_nothing_that_holds, a_record_minus_records_inside_a_definition_asks_its_goals_there, a_proof_over_a_fixpoint_has_no_witness_against_it, an_emptiness_is_refused_by_every_boundary_value, a_meet_with_a_reference_is_its_definition_met_with_the_rest, a_meet_with_a_reference_answers_as_its_values_do, a_meet_holding_a_union_twice_is_proved_empty_only_where_it_is, a_union_met_twice_is_distributed_once, test_a_meet_of_guarded_records_is_decided_clause_by_clause
 
 **A clause is a region with its own default.** A keyed map is a quasi-K-step
 function [Cas23, Def. 4.6], named labels and a default per key-type region
@@ -1048,11 +1049,12 @@ The cost is a hole wherever an arm is missing, and the boundary is
 decline the descriptor answers, so every relation the completeness ledger
 records as decided by neither is one past a build or decision bound, each a
 strict row, and the two deciders are measured against each other over a
-corpus. The rules distribute a union a meet holds only where it holds a
-reference or a meet is already being unfolded (`meet_through_a_reference`),
-where every source decides on the normal form, which distributes every one:
-a meet the rules decline beside a union of guards is answered by the
-descriptor within its depth, and declines past it.
+corpus. The rules distribute a union a meet holds where it holds a
+reference, a meet is already being unfolded, or the meet's normal form spans
+four clauses at most, no branch of its unions a meet or a union
+(`meet_through_a_reference`), where every source decides on the normal form,
+which distributes every one: a meet of more unions the rules decline is
+answered by the descriptor within its depth, and declines past it.
 **[DEVIATION: structural-rather-than-reduction]**
 
 SOURCE: §13.1 "`is_subtype_of` is not that reduction applied uniformly"; §13.1 "That blow-up is why a DNF-based decision needs"

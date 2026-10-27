@@ -575,6 +575,31 @@ def test_a_meet_of_open_records_holds_the_dict_of_its_required_fields() -> None:
     assert not intersection({"tag": str}, {str: str}).is_empty()
 
 
+# THEORY: two-fixpoints-one-procedure
+def test_a_meet_of_guarded_records_is_decided_clause_by_clause() -> None:
+    """A meet of keywords guarded to their kind is decided one clause at a time.
+
+    A translation from JSON Schema applies a keyword to its kind alone, so an
+    object schema is `OBJ & (~OBJ | R) & (~OBJ | Q)`: a meet of two unions of
+    two, four clauses. Each `~OBJ` branch meets `OBJ` in nothing, so two tags
+    fixed two ways meet in nothing, and one tag beside a required one meets in
+    the dict holding it.
+    """
+    record = {str: _JSON}
+
+    def guarded(keyword: object) -> object:
+        return union(complement(record), keyword)
+
+    def tagged(tag: object) -> object:
+        return {"tag": tag, str: _JSON}
+
+    t0, t1 = guarded(tagged(Literal["t0"])), guarded(tagged(Literal["t1"]))
+    assert intersection(record, t0, t1).is_empty()
+    one = intersection(record, t0, guarded({"tag": _JSON, str: _JSON}))
+    assert Validator(one).is_valid({"tag": "t0"})
+    assert Validator(one).relation_to(nothing) == "not_subset"
+
+
 # THEORY: a-record-splits-across-a-union
 def test_two_open_records_met_are_one_record() -> None:
     """Open records met in a meet are one record, and are related as one.

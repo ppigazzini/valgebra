@@ -200,18 +200,19 @@ pub(crate) fn lower_unfolded(
 /// reading widens like a cut**, so an inhabited answer refutes nothing.
 ///
 /// **A reading that can only be inhabited is not built for a caller that
-/// cannot read one.** A thinned reading of one conjunct that holds a value by
-/// its own shape is an inhabited set, which proves nothing empty. It answers
-/// one question, a relation's subject below a supertype that lowers, and
-/// `inhabited_answers` is the caller's word on whether that is its question:
-/// asked there and nowhere else, and the reading is refused where it says no.
+/// cannot read one.** A thinned reading of conjuncts whose meet the rules find a
+/// value of is an inhabited set, which proves nothing empty. It answers one
+/// question, a relation's subject below a supertype that lowers, so `answers`
+/// is the caller's word, given the conjuncts kept, on whether their reading
+/// can answer it -- the rules being the caller's to ask -- and the reading is
+/// refused where it says no.
 #[inline]
 pub(crate) fn lower_widened(
     schema: &Schema,
     definitions: &[Schema],
     pool: &dyn Constants,
     kept: &mut Option<Vec<Schema>>,
-    inhabited_answers: impl FnOnce() -> bool,
+    answers: impl FnOnce(&[Schema]) -> bool,
 ) -> Option<Descr> {
     let unfolded;
     let schema = if definitions.is_empty() || !schema.has_reference() {
@@ -221,7 +222,7 @@ pub(crate) fn lower_widened(
         &unfolded
     };
     if nests_past_the_depth(schema, Bounds::DEFAULT) {
-        return thinned_lowering(schema, pool, kept, inhabited_answers);
+        return thinned_lowering(schema, pool, kept, answers);
     }
     // Returned as built: a set held in a local and then returned is copied,
     // and the copy is most of what this would cost a schema that lowers.
@@ -229,7 +230,7 @@ pub(crate) fn lower_widened(
     budget::under(WORK, || descend(schema, pool, &room, DEPTH)).or_else(|| {
         room.unread
             .get()
-            .then(|| thinned_lowering(schema, pool, kept, inhabited_answers))
+            .then(|| thinned_lowering(schema, pool, kept, answers))
             .flatten()
     })
 }
@@ -244,7 +245,7 @@ fn thinned_lowering(
     schema: &Schema,
     pool: &dyn Constants,
     kept: &mut Option<Vec<Schema>>,
-    inhabited_answers: impl FnOnce() -> bool,
+    answers: impl FnOnce(&[Schema]) -> bool,
 ) -> Option<Descr> {
     let read: Vec<Schema> = match schema {
         Schema::Intersection(members) => {
@@ -270,10 +271,7 @@ fn thinned_lowering(
             vec![thinned]
         }
     };
-    if let [only] = &read[..]
-        && only.holds_a_value_shallowly()
-        && !inhabited_answers()
-    {
+    if !answers(&read) {
         return None;
     }
     let set = lower(&Schema::Intersection(read.clone().into()), pool)?;
