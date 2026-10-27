@@ -13,12 +13,32 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: a refusal for depth is read off the schema before anything is built
-- feat: a meet is disjoint from what one of its members is
-- feat: a meet of records holds the dict of the fields they require
-- feat: a meet of a few unions is decided clause by clause
-
 -->
+
+## [0.0.22] - 2026-10-27
+
+Three meets decided where the relations declined, and a relation 0.0.21 made
+dearer: three additions and one fix. A meet is disjoint from what one of its
+members is, a meet of records holds the dict of the fields they require, and
+a meet of a few unions is decided clause by clause, so the meets a
+translation from JSON Schema writes when it guards each keyword to its kind
+answer where they answered `undecided`. The fix reads the depth the set
+representation refuses off a schema before anything is built, where 0.0.21
+built the reading and lowered the supertype for an answer that could only be
+`undecided`.
+
+Against 0.0.21, two records spelled `OBJ & (~OBJ | R) & (~OBJ | REQ)` are
+related in 76% fewer instructions, and their recursive spelling in 52% fewer,
+which is 32% more than on 0.0.20. The decision pairs that reach the set
+representation count 0.26% more, for the depth read off each schema before
+it is built and the switch that reads a meet by its members' kinds; the
+relations that hold and the corpus asked of the sets count 0.04% and 0.06%
+more, and the refuting and length-bound workloads 0.27% and 0.15% fewer.
+Every other shape the instruction gates count reads within 0.02% of 0.0.21.
+The profiled wheels' walk on CPython 3.12, 3.14 and 3.15 counts what 0.0.21
+built from its tag counts, to the instruction, but where an allocator moves a
+shape that allocates and in the layout 3.15's build gives the walk: a
+literal's check one instruction more, a recursive schema's twelve fewer.
 
 ### Added
 
@@ -56,12 +76,13 @@ answer of its own, or a repair to a change not yet released.
   instructions than on 0.0.20. The depth is read off the schema before anything
   is built, and a reading the rules find a value of is built only for a
   relation whose supertype the set representation reads: the same relation
-  counts 54% fewer instructions than on 0.0.20, with the same answer. Its
-  recursive spelling, `$ref`'d as a JSON Schema translation writes it, counts
-  51% fewer than on 0.0.21 and 34% more than on 0.0.20, the rules reading the
-  meets the decision asks on the way. A meet holding a member past the depth is
-  read without it whatever else the member holds, and a member whose deepest
-  node is a mapping's key is kept, where each was left unread.
+  counts 76% fewer instructions than on 0.0.21 and 55% fewer than on 0.0.20,
+  with the same answer. Its recursive spelling, `$ref`'d as a JSON Schema
+  translation writes it, counts 52% fewer than on 0.0.21 and 32% more than on
+  0.0.20, the rules reading the meets the decision asks on the way. A meet
+  holding a member past the depth is read without it whatever else the member
+  holds, and a member whose deepest node is a mapping's key is kept, where each
+  was left unread.
 
 ## [0.0.21] - 2026-10-26
 
@@ -3291,7 +3312,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.21...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.22...HEAD
+[0.0.22]: https://github.com/ppigazzini/valgebra/compare/v0.0.21...v0.0.22
 [0.0.21]: https://github.com/ppigazzini/valgebra/compare/v0.0.20...v0.0.21
 [0.0.20]: https://github.com/ppigazzini/valgebra/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/ppigazzini/valgebra/compare/v0.0.18...v0.0.19

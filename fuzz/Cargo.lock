@@ -170,7 +170,7 @@ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
 name = "valgebra-core"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "regex-automata",
  "rustc-hash",
