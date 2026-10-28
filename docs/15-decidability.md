@@ -347,7 +347,26 @@ answers `"undecided"`.
   subclass inherits that layout and cannot lay down a second, so a list is
   decided not below it. A class built on no builtin is *not* read this way, and
   the reason is a value: a class deriving from that one and from `str` is a
-  string and an instance of it.
+  string and an instance of it. A meet is read by a member of its own kind, or
+  by a member that is a union of such: `(int | float) & ~bool` holds numbers
+  whatever bounds its other members carry, so a list of anything meets it in
+  nothing.
+- **A kind the supertype holds none of.** Every kind is inhabited, so a subject
+  that holds every value of a kind the supertype holds none of is outside it at
+  a value of that kind. The universe holds every value of every kind, and a
+  complement every value of a kind its inner schema holds none of. A union
+  holds none of a kind where each branch holds none, and a reference none
+  where its definition holds none:
+
+    ```python
+    from valgebra import Validator, anything, complement, recursive, union
+
+    json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    assert Validator(anything).relation_to(json_value) == "not_subset"  # b""
+    assert complement(json_value).relation_to(json_value) == "not_subset"
+    assert Validator(anything).relation_to(complement(json_value)) == "not_subset"  # None
+    ```
+
 - **A subject outside a base.** A refinement is a subset of its base, so a
   subject the base refutes is refuted against every refinement of it -- the
   same value settles both. The proof does not carry, since being inside the
@@ -713,14 +732,21 @@ the shape. What is left below is what the descriptor cannot hold.
   is false:
 
     ```python
-    from valgebra import Validator, complement, recursive, union
+    from valgebra import Validator, complement, intersection, recursive, union
 
     chain = recursive(lambda t: union(None, {"next": t}))
+    neither = intersection(complement(None), complement(dict))
     assert not Validator(chain).is_valid("a")  # the walk is exact
-    assert Validator(complement(int)).is_valid("a")
+    assert Validator(neither).is_valid("a")
     # and the relation declines rather than refuting
-    assert Validator(complement(int)).relation_to(chain) == "undecided"
+    assert Validator(neither).relation_to(chain) == "undecided"
     ```
+
+    One unfolding does reach the kinds a fixpoint admits, and a subject that
+    holds every value of a kind the fixpoint holds none of is refuted on them:
+    `complement(int)` holds every string and the chain holds none, so it is
+    `not_subset` of the chain at `"a"`. A meet of complements is not read for the
+    kinds it holds whole, which is why the pair above declines.
 
     What the **rules** reach is narrower than that and is reached: a branch of a
     union the subject shares no value with is dropped before the rest is asked,

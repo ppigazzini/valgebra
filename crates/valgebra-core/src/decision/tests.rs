@@ -4346,6 +4346,19 @@ fn a_region_outside_a_kind_bound_refutes() {
     // A scalar supertype is the rule the region pair already decided, and it
     // answers the same: this adds a reading, it does not replace one.
     assert_eq!(relation(&not_int, &Schema::Str), Relation::Fails);
+    // A meet of complements is exact in its regions and is no complement, so
+    // the reading of a kind held whole, which reads the universe and a
+    // complement, passes it by: `¬int ∧ ¬str` holds `None`, which no list is,
+    // and this is the reading that names it.
+    let neither = Schema::meet([
+        Schema::complement(Schema::Int),
+        Schema::complement(Schema::Str),
+    ]);
+    assert!(
+        matches!(neither, Schema::Intersection(_)),
+        "the meet is not folded to a complement"
+    );
+    assert_eq!(relation(&neither, &listed), Relation::Fails);
 
     // `bool` is an `int`, so a schema whose values are integers holds every
     // boolean. The kind's own region would refuse this pair; the regions it
@@ -7964,10 +7977,12 @@ fn a_meet_of_records_beside_another_member_proves_or_declines() {
 /// empty by the rules' first pass, where the set representation refuses the
 /// whole for its depth. `int & str` is disjoint from `str | int` only when the
 /// union is read first: each branch by the other member, and neither member
-/// from the whole union. Only a member with a kind of its own is read, which
-/// bounds the walk on a shared tower: `(int | bytes) & (int | str)` against
-/// `str | bytes` declines. And a complement member reads nothing: `int & ~str`
-/// shares every integer with `int`.
+/// from the whole union. A member is read where it has a kind of its own or is
+/// a union of such, one level in and no further, which bounds the walk on a
+/// shared tower: `(int | bytes) & (int | str)`, which is `int`, shares no value
+/// with `str | bytes`, each word kind by the member that lacks it, while a
+/// member that is a meet is not opened. And a complement member reads nothing:
+/// `int & ~str` shares every integer with `int`.
 #[test]
 fn a_meet_is_disjoint_from_what_one_of_its_members_is() {
     let pattern = |words: &str| Schema::Refine {
@@ -8001,7 +8016,12 @@ fn a_meet_is_disjoint_from_what_one_of_its_members_is() {
     let unions_met =
         Schema::Intersection(vec![ints_or(Schema::Bytes), ints_or(Schema::Str)].into());
     let words = Schema::Union(vec![Schema::Str, Schema::Bytes].into());
-    assert!(!unions_met.disjoint(&words));
+    assert!(unions_met.disjoint(&words));
+    // One level and no further: a union holding that meet is not opened, so a
+    // meet of it declines though it is `int | float` and shares no word.
+    let opened_twice =
+        Schema::Intersection(vec![Schema::Union(vec![unions_met, Schema::Float].into())].into());
+    assert!(!opened_twice.disjoint(&words));
 
     let not_str =
         Schema::Intersection(vec![Schema::Int, Schema::Complement(Arc::new(Schema::Str))].into());
@@ -8128,4 +8148,112 @@ fn a_thinned_reading_the_rules_find_a_value_of_is_not_built() {
     );
     assert_eq!(read, None);
     assert!(!meet.is_empty());
+}
+
+/// A kind reading reads at most `KIND_WALK` nodes, and past them answers as
+/// though the schema might hold any kind: a union of `bytes` one short of the
+/// bound is read to hold bytes alone, and one at it is read to hold anything.
+/// The walk ends with the term without the bound; the bound caps a tower of
+/// unions of meets, whose tree is exponential in a term of linear size.
+#[test]
+fn a_kind_reading_stops_at_its_node_bound() {
+    use super::readings::KIND_WALK;
+    let union_of =
+        |members: u32| Schema::Union(vec![Schema::Bytes; usize::try_from(members).unwrap()].into());
+    let every_kind = (1u16 << Kind::ALL.len()) - 1;
+    assert_eq!(
+        union_of(KIND_WALK - 1).kinds_possibly_held(&NoLeafRelations, &[]),
+        1 << Kind::Bytes.position()
+    );
+    assert_eq!(
+        union_of(KIND_WALK).kinds_possibly_held(&NoLeafRelations, &[]),
+        every_kind
+    );
+}
+
+/// A subject holding every value of a kind the supertype holds none of is
+/// refuted by the rules alone, at a value of that kind: the universe against
+/// the JSON values at `b""`, the complement of the JSON values against them at
+/// `b""` too, and the universe against that complement at `None`.
+///
+/// The kinds are read through the reference to the fixpoint, whose body holds
+/// `None`, the booleans, the integers, the floats and the strings whole, and
+/// may hold those, lists and dicts. A union holds what either branch holds
+/// whole, so `int | bool` holds both kinds, every boolean being an integer.
+///
+/// A complement whose inner schema may hold every kind is not read as holding
+/// one. Every string has a length, so `¬(str≥1 ∪ str≤0 ∪ ¬str)` is empty, and
+/// its mismatch with the empty set stands on no value.
+#[test]
+fn a_kind_the_supertype_holds_none_of_refutes() {
+    let json = Schema::Ref(DefIx::new(0));
+    let defs = vec![Schema::union([
+        Schema::NoneType,
+        Schema::Bool,
+        Schema::Int,
+        Schema::Float,
+        Schema::Str,
+        Schema::list(SeqShape::homogeneous(json.clone())),
+        Schema::mapping(MapClause {
+            key: Schema::Str,
+            value: json.clone(),
+        }),
+    ])];
+    let kinds = |kinds: &[Kind]| -> u16 { kinds.iter().map(|kind| 1 << kind.position()).sum() };
+    let scalars = [
+        Kind::NoneType,
+        Kind::Bool,
+        Kind::Int,
+        Kind::Float,
+        Kind::Str,
+    ];
+    assert_eq!(
+        json.kinds_held_whole(&NoLeafRelations, &defs),
+        kinds(&scalars)
+    );
+    assert_eq!(
+        json.kinds_possibly_held(&NoLeafRelations, &defs),
+        kinds(&scalars) | kinds(&[Kind::List, Kind::Dict])
+    );
+    assert_eq!(
+        Schema::Union(vec![Schema::Int, Schema::Bool].into())
+            .kinds_held_whole(&NoLeafRelations, &[]),
+        kinds(&[Kind::Bool, Kind::Int])
+    );
+
+    let rules = |sub: &Schema, sup: &Schema| {
+        let budget = Budget::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &defs, &budget)
+    };
+    let not_json = Schema::Complement(Arc::new(json.clone()));
+    assert_eq!(rules(&Schema::ANYTHING, &json), Relation::Fails);
+    assert_eq!(rules(&not_json, &json), Relation::Fails);
+    assert_eq!(rules(&Schema::ANYTHING, &not_json), Relation::Fails);
+
+    let length = |bound: Constraint| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![bound].into(),
+    };
+    let empty = Schema::Complement(Arc::new(Schema::Union(
+        vec![
+            length(Constraint::MinLen(1)),
+            length(Constraint::MaxLen(0)),
+            Schema::Complement(Arc::new(Schema::Str)),
+        ]
+        .into(),
+    )));
+    assert_ne!(rules(&empty, &Schema::Nothing), Relation::Fails);
+}
+
+/// A class is read for the kinds it lays down by the per-kind readings, where a
+/// dict key's class is the question, and as holding any kind by the walk the
+/// kind refutation reads, where `outside_the_class` asks about the one kind a
+/// subject has. Class 0 of [`Kinded`] is laid out as a list.
+#[test]
+fn a_class_is_read_for_its_kinds_by_the_per_kind_readings_alone() {
+    let class = Schema::Instance(ClassIx::new(0));
+    assert!(class.holds_no_value_of(Kind::Dict, &Kinded));
+    assert!(!class.holds_no_value_of(Kind::List, &Kinded));
+    let every_kind = (1u16 << Kind::ALL.len()) - 1;
+    assert_eq!(class.kinds_possibly_held(&Kinded, &[]), every_kind);
 }

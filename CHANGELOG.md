@@ -15,10 +15,21 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a placement the two terms make is never refused for want of a step
 - feat: a complemented union is read as the meet of the complements
+- feat: a subject holding a whole kind the supertype lacks is refuted
 
 -->
 
 ### Added
+
+- **A subject holding every value of a kind the supertype holds none of is
+  `not_subset`.** Every kind is inhabited, so `anything` and a complement of a
+  schema missing a kind are refuted at a value of that kind against a
+  supertype -- a union, a meet, or a recursive schema read through its
+  definition -- that holds none: `anything` and `complement(J)` are
+  `not_subset` of the JSON universe `J` at `b""`, and `anything` of
+  `complement(J)` at `None`, where all three were `undecided`. A meet is also
+  read by a member that is a union of kinded branches, so a list met with
+  `None | ((int | float) & ~bool & bounds)` is empty.
 
 - **A complemented union or meet is read with its complement pushed in.**
   `complement(union(a, b))` is the meet of the complements and

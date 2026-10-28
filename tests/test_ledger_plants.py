@@ -4921,12 +4921,12 @@ PLANTS = (
         lambda tree: _edits(
             tree,
             "tests/test_relation_ledger.py",
-            ('    ("Anything", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,\n', ""),
+            ('    ("Instance", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,\n', ""),
             (
                 '    ("AttrRecord", "Complement"): THE_CLASS_ORDER_IS_OPEN,\n',
                 (
                     '    ("AttrRecord", "Complement"): THE_CLASS_ORDER_IS_OPEN,\n'
-                    '    ("Anything", "Ref"): THE_CLASS_ORDER_IS_OPEN,\n'
+                    '    ("Instance", "Ref"): THE_CLASS_ORDER_IS_OPEN,\n'
                 ),
             ),
         ),

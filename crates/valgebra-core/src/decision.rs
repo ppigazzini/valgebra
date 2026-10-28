@@ -210,6 +210,24 @@ fn pushed_complement_is_placed(inner: &Schema, sup: &Schema, defs: &[Schema]) ->
     pushed == *sup || placed_by_membership(&pushed, sup)
 }
 
+/// Whether `schema` holds every value of `kind` (`wholly`) or none of them, as
+/// the kind readings answer it with no oracle: the laws hold the two readings
+/// to membership.
+#[cfg(test)]
+pub(crate) fn kind_reading(
+    schema: &Schema,
+    kind: crate::Kind,
+    defs: &[Schema],
+    wholly: bool,
+) -> bool {
+    let bit = 1 << kind.position();
+    if wholly {
+        schema.kinds_held_whole(&NoLeafRelations, defs) & bit != 0
+    } else {
+        schema.kinds_possibly_held(&NoLeafRelations, defs) & bit == 0
+    }
+}
+
 /// Spend one unit of `budget`; returns `false` when it is already exhausted, the
 /// signal a budgeted decision uses to stop and report the conservative answer.
 pub(super) fn spend(budget: &Budget) -> bool {
@@ -518,12 +536,27 @@ impl Schema {
     /// within the crate -- so the reading stands as the cost.
     fn witnessed(&self, answer: Relation, cx: &mut Cx<'_>) -> Relation {
         if answer == Relation::Fails {
-            if self.holds_a_value_shallowly() {
+            if self.holds_a_value_shallowly() || self.holds_a_kind_whole(cx) {
                 return answer;
             }
             return Relation::of_mismatch(self.verdict_rec(cx));
         }
         answer
+    }
+
+    /// Whether this schema is a complement holding every value of a kind,
+    /// which its inner schema holds none of: every kind is inhabited, so such a
+    /// complement has a value to stand a refutation on.
+    ///
+    /// Read here, for the subject of a refutation, and not by emptiness: a
+    /// complement read inhabited inside a record or a meet lets refutations
+    /// stand that the union rule then narrows on, and that work starves a
+    /// proof elsewhere in the query -- a guarded meet against its own split
+    /// spends 835,074 of the budget's million steps without the reading and
+    /// runs out with it.
+    #[inline]
+    fn holds_a_kind_whole(&self, cx: &Cx<'_>) -> bool {
+        matches!(self, Schema::Complement(inner) if inner.misses_a_kind(cx))
     }
 
     /// The rules' answer about this pair, with every refutation read against
@@ -1224,6 +1257,8 @@ impl Schema {
                 }
                 if self.is_subtype_rec(inner, cx).holds() {
                     Relation::of_mismatch(self.verdict_rec(cx))
+                } else if self.spills_a_kind(other, cx) {
+                    Relation::Fails
                 } else {
                     Relation::proven(inner.denotes_no_value(cx.oracle, cx.defs))
                 }
@@ -1277,12 +1312,13 @@ impl Schema {
 
     /// What a pair no structural rule decided is worth, asked in one place.
     ///
-    /// Three readings, in this order. Four **refutations**, each naming a
+    /// Three readings, in this order. Five **refutations**, each naming a
     /// value of the subject outside the supertype: the empty sequence below a
     /// length bound (`shorter_than`), a region the subject reaches past the
     /// supertype's (`spills_past`), a kind whose builtin the supertype's class
-    /// does not derive from (`outside_the_class`), and two schemas that share
-    /// no value (`disjoint_with`) -- the cheap disjointness, two discriminants
+    /// does not derive from (`outside_the_class`), a kind the subject holds
+    /// whole and the supertype holds none of (`spills_a_kind`), and two
+    /// schemas that share no value (`disjoint_with`) -- the cheap disjointness, two discriminants
     /// that cannot overlap, a list beside a tuple, a set beside a mapping. Then
     /// the **oracle**, the only reader of a class or a constant, whose `None`
     /// is the decline it says it is. Then the supertype's own shape: a
@@ -1301,14 +1337,16 @@ impl Schema {
     /// rather than ending the match, because a decline is not an answer: such a
     /// pair has had no rule, and this is what a pair with no rule is worth.
     ///
-    /// **The four refutations are ordered by cost, which is free to choose.**
+    /// **The five refutations are ordered by cost, which is free to choose.**
     /// Each answers `Fails` on its own and none of them proves, so a pair any
     /// two of them refute is refuted whichever ran first -- the order decides
     /// which reading names the value, never whether one is named. What it does
-    /// decide is what an *unrefuted* pair pays, and that pair pays all four.
-    /// Three of them are a discriminant test and an oracle call;
-    /// `disjoint_with` walks both subtrees and reads the kind tags, so it is
-    /// asked last and the pairs the cheap three refute never reach it.
+    /// decide is what an *unrefuted* pair pays, and that pair pays all five.
+    /// Four of them are a discriminant test and an oracle call for every
+    /// subject but the universe and a complement, which `spills_a_kind` reads
+    /// a kind at a time; `disjoint_with` walks both subtrees and reads the kind
+    /// tags, so it is asked last and the pairs the cheap four refute never
+    /// reach it.
     fn unstructured(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
         if self.shorter_than(other) {
             return Relation::Fails;
@@ -1317,6 +1355,9 @@ impl Schema {
             return Relation::Fails;
         }
         if self.outside_the_class(other, cx.oracle) {
+            return Relation::Fails;
+        }
+        if self.spills_a_kind(other, cx) {
             return Relation::Fails;
         }
         if self.disjoint_with(other, cx.oracle) {

@@ -189,9 +189,7 @@ THE_CLASS_ORDER_IS_OPEN = (
 #: a rule that begins refuting one of these moves it out of the table and fails
 #: here until somebody does.
 DECLINED_THOUGH_A_VALUE_DECIDES: dict[tuple[str, str], str] = {
-    ("Anything", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,
     ("Instance", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,
-    ("Complement", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,
 }
 
 
