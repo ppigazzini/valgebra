@@ -23,10 +23,18 @@ answer of its own, or a repair to a change not yet released.
 - feat: a pair every decider declines is asked in its other spellings
 - fix: a Len whose minimum is below zero is refused as MinLen is
 - feat: a type defined in C lays down the layout its instance size says
+- feat: two branches splitting a set by another are read as the set they split
 
 -->
 
 ### Added
+
+- **Two branches splitting a set by another are read as the set they split.**
+  `(r & ~b) | (r & b)` is `r` wherever `b` answers alike however often it is
+  asked, so a union holding two such branches is decided as that set: the
+  recursive JSON value is `subset` of its own split by `bool`, and a list of
+  JSON values of its split by `list[int]`, where both were `undecided`, and a
+  value outside `r` is `not_subset`. A split by a predicate is not merged.
 
 - **A type defined in C lays down the layout its instance size says.** Python
   refuses a class deriving from two types unless the layout one lays down

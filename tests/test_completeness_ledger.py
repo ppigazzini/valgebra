@@ -1731,6 +1731,31 @@ _TRANSLATED: list[object] = [
         nothing,
         id="json:literals-or-json&true-or-record-is-inhabited",
     ),
+    # A guard written once per branch splits a set by another, and the two
+    # branches are the set they split, however the splitting set is spelled.
+    pytest.param(
+        "subtype",
+        _JSON,
+        union(intersection(_JSON, _NOT_BOOL), intersection(_JSON, bool)),
+        id="json:json<=its-split-by-bool",
+    ),
+    pytest.param(
+        "subtype",
+        _ARRAY,
+        union(
+            intersection(_ARRAY, complement(list[int])), intersection(_ARRAY, list[int])
+        ),
+        id="json:array<=its-split-by-list[int]",
+    ),
+    pytest.param(
+        "subtype",
+        Annotated[int, at.Ge(0)],
+        union(
+            intersection(Annotated[int, at.Ge(0)], complement(_NUMBER)),
+            intersection(Annotated[int, at.Ge(0)], _NUMBER),
+        ),
+        id="json:ge0<=its-split-by-number",
+    ),
 ]
 
 

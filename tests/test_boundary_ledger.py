@@ -223,6 +223,11 @@ ROWS: dict[str, Row] = {
     "A kind the supertype holds none of.": Decides(anything, _JSON, "not_subset"),
     "A pair asked another way.": Decides(anything, complement([_JSON]), "not_subset"),
     "A subject outside a base.": Decides(Annotated[int, at.Ge(0)], str, "not_subset"),
+    "A set split by another, as the supertype.": Decides(
+        _JSON,
+        union(intersection(_JSON, complement(bool)), intersection(_JSON, bool)),
+        "subset",
+    ),
     "Inclusion in a complement.": Decides(int, complement(str), "subset"),
     "Recursion.": Decides(_JSON, union(bytes, _JSON), "subset"),
     "A meet with a recursive reference.": Decides(

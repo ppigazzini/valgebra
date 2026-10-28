@@ -1118,6 +1118,15 @@ folding to `A` wherever `A` contains `B`, so `A | (A & B)` and `A` are one set
 and two terms: `is_equivalent` proves it and `==` does not. `is_empty` on a structural schema is true in places
 construction leaves standing, for the same reason.
 
+Two branches splitting a set by another are read rather than built for the
+other reason. `(R & B) | (R & ~B)` is `R`, the union's complement law with `R`
+beside each side, and seeing it takes no containment, only the branches'
+conjuncts compared; the union constructor still leaves it standing, since its
+normal form is what a rule downstream may assume and a fold comparing every
+pair of meets would be paid by every union built. The union arm and the meet
+arm read a union supertype holding such a pair with the two merged
+(`merged_split` in `decision.rs`), the same set, so both answers carry.
+
 ## The bounds are decided by emptiness, not by the atom
 
 `∅ ⊆ B` for every `B`, and `A ⊆ U` for every `A`. Both are decided by asking

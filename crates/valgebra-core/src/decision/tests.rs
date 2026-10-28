@@ -8620,3 +8620,79 @@ fn a_respelled_pair_stops_at_its_allowance() {
         assert_eq!(respelled.holds(), depth == 9, "depth {depth}");
     }
 }
+
+/// Two branches splitting a set by another are the set they split:
+/// `(R ∩ B) ∪ (R ∩ ¬B)` is `R` where `B` is a set, so the rules place below the
+/// union what is below `R` and refute what `R` refutes, a meet subject as well
+/// as any other. A split by a meet holds its conjuncts in the branch, a split
+/// three ways merges a pair at a time, and a predicate, which answers its two
+/// occurrences apart, merges nothing.
+#[test]
+fn two_branches_splitting_a_set_are_the_set() {
+    let json = Schema::Ref(DefIx::new(0));
+    let defs = vec![Schema::union([
+        Schema::NoneType,
+        Schema::Bool,
+        Schema::Int,
+        Schema::Str,
+        Schema::list(SeqShape::homogeneous(json.clone())),
+    ])];
+    let split = |of: &Schema, by: &Schema| {
+        Schema::union_within(
+            [
+                Schema::meet_within([of.clone(), by.clone().complement()], &defs),
+                Schema::meet_within([of.clone(), by.clone()], &defs),
+            ],
+            &defs,
+        )
+    };
+    let rules = |sub: &Schema, sup: &Schema| {
+        let budget = Budget::new(DECISION_BUDGET);
+        sub.is_subtype_rec(sup, &mut Cx::new(&NoLeafRelations, &defs, &budget))
+    };
+    assert_eq!(rules(&json, &split(&json, &Schema::Bool)), Relation::Holds);
+    assert_eq!(
+        rules(&Schema::Str, &split(&Schema::Int, &Schema::Bool)),
+        Relation::Fails
+    );
+    let integer = Schema::meet([Schema::Int, Schema::Bool.complement()]);
+    let number = Schema::meet([
+        Schema::union([Schema::Int, Schema::Float]),
+        Schema::Bool.complement(),
+    ]);
+    assert_eq!(
+        rules(&integer, &split(&integer, &Schema::Str)),
+        Relation::Holds
+    );
+    assert_eq!(
+        rules(&Schema::Int, &split(&Schema::Int, &number)),
+        Relation::Holds
+    );
+    let three_ways = Schema::union_within(
+        [
+            Schema::meet_within([json.clone(), Schema::Bool], &defs),
+            Schema::meet_within(
+                [json.clone(), Schema::Bool.complement(), Schema::Str],
+                &defs,
+            ),
+            Schema::meet_within(
+                [
+                    json.clone(),
+                    Schema::Bool.complement(),
+                    Schema::Str.complement(),
+                ],
+                &defs,
+            ),
+        ],
+        &defs,
+    );
+    assert_eq!(rules(&json, &three_ways), Relation::Holds);
+    let odd = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    assert_eq!(
+        rules(&Schema::Int, &split(&Schema::Int, &odd)),
+        Relation::Unknown
+    );
+}

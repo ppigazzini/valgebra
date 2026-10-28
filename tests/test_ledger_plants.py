@@ -4154,10 +4154,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "docs/dev/10-theory.md",
-            "a_complement_is_below_its_complements_pushed_in\n\n"
-            "**Stone's representation theorem (1936).**",
-            "a_complement_is_below_its_complements_pushed_in\n"
-            "**Stone's representation theorem (1936).**",
+            "\n\n**Stone's representation theorem (1936).**",
+            "\n**Stone's representation theorem (1936).**",
         ),
         trips=("test_the_page_carries_tagged_claims",),
     ),

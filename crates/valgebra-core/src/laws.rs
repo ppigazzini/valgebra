@@ -2659,6 +2659,36 @@ proptest! {
         );
     }
 
+    // THEORY: lattice-theory
+    /// A set is below its own split: `R ⊆ (R ∩ ¬B) ∪ (R ∩ B)` over a drawn `R`,
+    /// built as a caller builds it, and a drawn set `B`, the split written raw
+    /// and built, which no fold merges. And a third schema is placed against
+    /// the split as against `R`: never proved below one and refuted below the
+    /// other. A rule that read the union a branch at a time declines wherever
+    /// `B` cuts `R`, and one that merged two branches splitting no set would
+    /// answer for a set the union is not.
+    #[test]
+    fn a_set_is_below_its_own_split(r in schema(), b in set_schema(), s in schema()) {
+        let whole = built(&r);
+        let raw = union(intersection(whole.clone(), not(b.clone())), intersection(whole.clone(), b));
+        for split in [built(&raw), raw] {
+            let relation = |sub: &Schema, sup: &Schema| {
+                let budget = crate::decision::Budget::new(crate::decision::DECISION_BUDGET);
+                sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+            };
+            prop_assert_eq!(relation(&whole, &split), Relation::Holds, "{:?} below {:?}", whole, split);
+            let (against_split, against_whole) = (relation(&s, &split), relation(&s, &whole));
+            prop_assert!(
+                !matches!(
+                    (against_split, against_whole),
+                    (Relation::Holds, Relation::Fails) | (Relation::Fails, Relation::Holds)
+                ),
+                "{:?} is {:?} below {:?} and {:?} below {:?}",
+                s, against_split, split, against_whole, whole
+            );
+        }
+    }
+
     /// Construction preserves membership, not just structural shape. Over the
     /// scalar-and-set fragment the `member_v` oracle decides exactly, so a
     /// built schema must admit each sample value exactly when the term as

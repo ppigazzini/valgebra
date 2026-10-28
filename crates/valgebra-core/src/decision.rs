@@ -28,7 +28,7 @@ use crate::kind::{Region, Regions};
 use crate::unordered_pairs;
 use crate::verdict::{Relation, Verdict};
 
-use crate::oracle::has_complementary_pair;
+use crate::oracle::{denotes_a_set_within, has_complementary_pair};
 use constraints::constraint_entailed;
 use emptiness::{class_with_attributes, the_rules_find_a_value};
 use literals::{
@@ -217,6 +217,93 @@ fn pushed_complement_is_placed(inner: &Schema, sup: &Schema, defs: &[Schema]) ->
         _ => return false,
     };
     pushed == *sup || placed_by_membership(&pushed, sup)
+}
+
+/// The union `members` denote, with two branches that split one set by another
+/// merged into the set they split, or `None` where no two branches do.
+///
+/// `(R ∩ B) ∪ (R ∩ ¬B)` is `R`: the meet distributes over the join, and the
+/// join of `B` and `¬B` is everything where `B` is a set [FCB08, Def. 4.1].
+/// `B` is asked whether it is one, as the complement law asks, since a
+/// predicate answers its two occurrences apart. Each branch is read as its conjuncts, a nested meet's
+/// among them, since a meet is the set of what it holds however it is spelled:
+/// the constructor flattens `B` into the branch where `B` is a meet, a rule may
+/// not, and either way `Ge(0) ∩ NUMBER` is the conjuncts `Ge(0)`, `int | float`
+/// and `¬bool`, which with `Ge(0) ∩ ¬NUMBER` merge into `Ge(0)`.
+fn merged_split(members: &[Schema], cx: &Cx<'_>) -> Option<Schema> {
+    for (at, holding) in members.iter().enumerate() {
+        // The branch holding `¬B` holds a complement, at its top or in a meet
+        // nested in it, and no other branch is read as that one.
+        let Schema::Intersection(top) = holding else {
+            continue;
+        };
+        if !top
+            .iter()
+            .any(|member| matches!(member, Schema::Complement(_) | Schema::Intersection(_)))
+        {
+            continue;
+        }
+        let holding = conjuncts_of(holding);
+        for &complement in &holding {
+            let Schema::Complement(split) = complement else {
+                continue;
+            };
+            let parts = conjuncts_of(split);
+            let shared: Vec<&Schema> = holding
+                .iter()
+                .copied()
+                .filter(|member| *member != complement)
+                .collect();
+            let splits = |other: &Schema| {
+                if !matches!(other, Schema::Intersection(_)) {
+                    return false;
+                }
+                let other = conjuncts_of(other);
+                other
+                    .iter()
+                    .all(|member| shared.contains(member) || parts.contains(member))
+                    && shared.iter().all(|member| other.contains(member))
+                    && parts.iter().all(|part| other.contains(part))
+            };
+            let Some(paired) = members
+                .iter()
+                .enumerate()
+                .position(|(i, other)| i != at && splits(other))
+            else {
+                continue;
+            };
+            if !denotes_a_set_within(split, cx.oracle, cx.defs) {
+                continue;
+            }
+            let merged = Schema::meet_within(shared.into_iter().cloned(), cx.defs);
+            let rest = members
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != at && *i != paired)
+                .map(|(_, member)| member.clone());
+            return Some(Schema::union_within(rest.chain([merged]), cx.defs));
+        }
+    }
+    None
+}
+
+/// The conjuncts of `schema`, a nested meet's own in its place: a schema that
+/// is no meet is its own one conjunct.
+fn conjuncts_of(schema: &Schema) -> Vec<&Schema> {
+    let mut held = Vec::new();
+    conjuncts(std::slice::from_ref(schema), &mut held);
+    held
+}
+
+/// Push the conjuncts of `members` onto `into`, a nested meet's own in its
+/// place.
+fn conjuncts<'s>(members: &'s [Schema], into: &mut Vec<&'s Schema>) {
+    for member in members {
+        match member {
+            Schema::Intersection(inner) => conjuncts(inner, into),
+            other => into.push(other),
+        }
+    }
 }
 
 /// Whether `schema` holds every value of `kind` (`wholly`) or none of them, as
@@ -1009,6 +1096,17 @@ impl Schema {
             }
             refuted |= answer == Relation::Fails;
         }
+        if members
+            .iter()
+            .filter(|member| matches!(member, Schema::Intersection(_)))
+            .nth(1)
+            .is_some()
+        {
+            let merged = self.below_a_merged_split(members, cx);
+            if merged != Relation::Unknown {
+                return merged;
+            }
+        }
         // The kind tested here and the rules out of line: a split is the rare
         // answer, and the union rule is inlined into the goal recursion, so
         // every union this path reaches would otherwise carry both rules.
@@ -1078,6 +1176,23 @@ impl Schema {
             return Relation::Holds;
         }
         reduced.refutation_only()
+    }
+
+    /// The subject against the union `members` denote with two branches that
+    /// split one set by another merged into the set they split
+    /// ([`merged_split`]): the same set, so its answer, either way, is the
+    /// union's. `Unknown` where no two branches merge.
+    ///
+    /// Asked by the union arm and by the meet arm, which answers a meet subject
+    /// on its own, each behind a count of the meets among the branches, two
+    /// being where such a pair can stand: a split is the rare supertype, and
+    /// both arms are on every union's path.
+    #[inline(never)]
+    fn below_a_merged_split(&self, members: &[Schema], cx: &mut Cx<'_>) -> Relation {
+        match merged_split(members, cx) {
+            Some(merged) => self.is_subtype_rec(&merged, cx),
+            None => Relation::Unknown,
+        }
     }
 
     /// `A ⊆ (Y ∪ Z)` where `A` lands in no single branch and splits across
@@ -1193,20 +1308,35 @@ impl Schema {
         // settles `isinstance(v, D)` through the order alone, and a class
         // deriving from both changes nothing about that value. The guard around
         // this rule reads whether the meet has it.
-        let Some((class, _)) = class_with_attributes(members) else {
-            return placed;
-        };
-        if matches!(other, Schema::Instance(_))
-            && cx.oracle.leaf_subtype(&Schema::Instance(class), other) == Some(false)
-        {
-            return Relation::Fails;
+        if let Some((class, _)) = class_with_attributes(members) {
+            if matches!(other, Schema::Instance(_))
+                && cx.oracle.leaf_subtype(&Schema::Instance(class), other) == Some(false)
+            {
+                return Relation::Fails;
+            }
+            // And against a supertype every value of which has one kind: the
+            // same direct instance either has that kind or does not, and the
+            // oracle reads `type(v) is C` rather than the subtree beneath `C`,
+            // which is what makes the answer a value rather than an open-world
+            // guess.
+            if outside_every_kind(other, class, cx) {
+                return Relation::Fails;
+            }
         }
-        // And against a supertype every value of which has one kind: the same
-        // direct instance either has that kind or does not, and the oracle
-        // reads `type(v) is C` rather than the subtree beneath `C`, which is
-        // what makes the answer a value rather than an open-world guess.
-        if outside_every_kind(other, class, cx) {
-            return Relation::Fails;
+        // A union splitting a set by another is that set, asked last: the
+        // readings above answer the dataclass meets a union of kinds is asked
+        // about, and a split is the rare supertype.
+        if let Schema::Union(branches) = other
+            && branches
+                .iter()
+                .filter(|branch| matches!(branch, Schema::Intersection(_)))
+                .nth(1)
+                .is_some()
+        {
+            let merged = self.below_a_merged_split(branches, cx);
+            if merged != Relation::Unknown {
+                return merged;
+            }
         }
         placed
     }
