@@ -828,7 +828,11 @@ proptest! {
     /// in the code, because the first builds nothing; this holds the two
     /// together so the cheaper one cannot drift from the rule it stands in for.
     ///
-    /// The reading it is held to is [`covers_the_universe`], the complete one.
+    /// The reading it is held to is [`covers_the_universe`], the complete one,
+    /// or a union whose complements, pushed one level in, meet in nothing as
+    /// they are built (`pushed_complement_is_placed` below `nothing`), which is
+    /// how `¬(¬a ∪ a)` built raw reads as empty where the walk passes over an
+    /// opaque member.
     /// The *fast* region fold is a sound lower bound on it and no more: it
     /// stops at the first member the partition cannot read, so `list | object`
     /// covers the universe and folds to an unknown region. Pinning the
@@ -841,7 +845,10 @@ proptest! {
         let budget = Budget::new(DECISION_BUDGET);
         let via_complement = Schema::Complement(Arc::new(s.clone()))
             .is_empty_rec(&mut Cx::new(&NoLeafRelations, &[], &budget));
-        prop_assert_eq!(via_complement, s.covers_the_universe());
+        let covered = s.covers_the_universe()
+            || (matches!(s, Schema::Union(_))
+                && pushed_complement_is_placed(&s, &Schema::Nothing, &[]));
+        prop_assert_eq!(via_complement, covered);
         // And the fast fold is below the complete reading, never past it.
         let budget = Budget::new(DECISION_BUDGET);
         let (_, regions) =
