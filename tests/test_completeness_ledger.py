@@ -1706,6 +1706,31 @@ _TRANSLATED: list[object] = [
         nothing,
         id="json:narrowed&widened-is-inhabited",
     ),
+    # The members of a meet are ordered by the slots their constants were pooled
+    # in, and a meet unfolds the reference held by its first union, so the same
+    # meet built two ways is read through the reference one way only. Taking the
+    # union holding a reference wherever it sits decides both, and starves the
+    # budget of meets the case split builds, so it is not taken.
+    pytest.param(
+        "refutes",
+        intersection(
+            union(Literal[True], {"a": int}), union(Literal[1, "", "b"], _JSON)
+        ),
+        nothing,
+        id="json:true-or-record&literals-or-json-is-inhabited",
+        marks=_missed(
+            "a meet distributes its first union, whose place the pool's order of"
+            " its constants decides"
+        ),
+    ),
+    pytest.param(
+        "refutes",
+        intersection(
+            union(Literal[1, "", "b"], _JSON), union(Literal[True], {"a": int})
+        ),
+        nothing,
+        id="json:literals-or-json&true-or-record-is-inhabited",
+    ),
 ]
 
 
