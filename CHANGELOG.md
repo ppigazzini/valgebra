@@ -14,8 +14,19 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a placement the two terms make is never refused for want of a step
+- feat: a complemented union is read as the meet of the complements
 
 -->
+
+### Added
+
+- **A complemented union or meet is read with its complement pushed in.**
+  `complement(union(a, b))` is the meet of the complements and
+  `complement(intersection(a, b))` the union of them, and a relation with such a
+  subject is decided where that reading is the supertype or has it among its
+  members. `complement(union(str, complement(list[list[int]])))` is `subset` of
+  `list[list[int]]`, and the complement of a union is `subset` of the meet of
+  the complements however its members nest, where both were `undecided`.
 
 ### Fixed
 

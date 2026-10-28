@@ -1096,6 +1096,19 @@ lowering is the dear operation, so the route would put a lowering on the common
 path. `scripts/perf_gate.py --decision-matrix` is the workload that shows it,
 against the count `scripts/perf_budget.json` owns.
 
+**A complemented union or meet as the subject is read one De Morgan step in,
+and only where that reading is placed.** `subtype_decide` pushes the complement
+one level in -- the meet of the complements, or the union of them -- and
+answers where the pushed term is the supertype or holds it as a member, before
+the arms by shape distribute the supertype or unfold it: `¬(X ∪ ¬Y) ⊆ Y` is
+`¬X ∩ Y ⊆ Y`, which no branch of an unfolded `Y` holds alone. The pushed term is
+not handed to the arms as a new subject. Asked of every rule it decides a few
+more pairs in ten thousand and reads every declining pair twice -- a complement
+of a union holding a recursive universe, asked below `str`, takes ten times as
+long to decline -- so the reading stops at its placements.
+`a_complement_is_below_its_complements_pushed_in` holds them with one step to
+spend, over drawn schemas.
+
 **The universe bound reads a union one De Morgan step in, where the region
 walk passes over the member that covers the rest.** The complete walk carries
 what the readable members cover between them and skips a member the partition

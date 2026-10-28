@@ -179,6 +179,37 @@ fn placed_by_membership(sub: &Schema, sup: &Schema) -> bool {
         || matches!(sub, Schema::Intersection(members) if members.contains(sup))
 }
 
+/// Whether `¬inner ⊆ sup` holds as the complements pushed one level in: the
+/// complement of a union is the meet of the complements, and the complement of
+/// a meet the union of them [FCB08, Lem. 6.2], and the pushed term is `sup`
+/// itself or placed in it by membership.
+///
+/// One level, as a rule-based procedure pushes a negation lazily, no further
+/// than the question in hand needs [BBC+26, §6.2, p. 9]. So `¬(X ∪ ¬Y)` is
+/// `¬X ∩ Y`, which is below `Y` by membership, and `¬(X ∪ Y)` below `¬X ∩ ¬Y`
+/// is the one term spelled twice. The two terms denote one set, so a placement
+/// of the pushed one is a proof about the complement as written.
+///
+/// Only the placements, not the rules below them. Asked of every rule, the
+/// pushed term is a new subject each arm reads again, and where the pair
+/// declines it reads it for nothing -- a complement of a union holding a
+/// recursive universe, asked below `str`, takes ten times as long to decline
+/// -- for a few answers in ten thousand. Out of line, behind the caller's test
+/// of the complement's shape, since it builds a term.
+#[inline(never)]
+fn pushed_complement_is_placed(inner: &Schema, sup: &Schema, defs: &[Schema]) -> bool {
+    let pushed = match inner {
+        Schema::Union(branches) => {
+            Schema::meet_within(branches.iter().map(|b| b.clone().complement()), defs)
+        }
+        Schema::Intersection(members) => {
+            Schema::union_within(members.iter().map(|m| m.clone().complement()), defs)
+        }
+        _ => return false,
+    };
+    pushed == *sup || placed_by_membership(&pushed, sup)
+}
+
 /// Spend one unit of `budget`; returns `false` when it is already exhausted, the
 /// signal a budgeted decision uses to stop and report the conservative answer.
 pub(super) fn spend(budget: &Budget) -> bool {
@@ -1019,6 +1050,17 @@ impl Schema {
         // right answers every pair. The other lattice bound is a walk and is
         // asked in `or_bounded`, after the rules have had the pair.
         if supertype_regions == Regions::Known(Region::ALL) {
+            return Relation::Holds;
+        }
+        // A complemented union or meet is read pushed one level in, and taken
+        // where the pushed term is the supertype or placed in it by
+        // membership. Asked before the arms by shape, which would distribute
+        // the supertype or unfold it and reach the complement only branch by
+        // branch, where no branch alone holds it.
+        if let Schema::Complement(inner) = self
+            && matches!(&**inner, Schema::Union(_) | Schema::Intersection(_))
+            && pushed_complement_is_placed(inner, other, cx.defs)
+        {
             return Relation::Holds;
         }
         let answer = self.subtype_by_shape(other, cx);

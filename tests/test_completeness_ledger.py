@@ -1541,25 +1541,19 @@ _TRANSLATED: list[object] = [
         _INTEGER_TREE,
         id="json:tree&nested<=tree",
     ),
-    # A complement of a union is the meet of the complements, and no rule reads it
-    # that way as a subject.
+    # A complement of a union is the meet of the complements, read one level in
+    # and placed by membership: `~(X | ~Y)` is `~X & Y`, below `Y`.
     pytest.param(
         "subtype",
         complement(union(str, complement(list[list[int]]))),
         list[list[int]],
         id="json:~(str|~list[list[int]])<=list[list[int]]",
-        marks=_missed(
-            "no rule reads a complemented union as the meet of its complements"
-        ),
     ),
     pytest.param(
         "subtype",
         complement(union(_ARRAY, _NOT_BOOL)),
         bool,
         id="json:~(array|~bool)<=bool",
-        marks=_missed(
-            "no rule reads a complemented union as the meet of its complements"
-        ),
     ),
     # A union holding a recursive branch and a pattern lowers as one term, and
     # the set representation declines it although each branch alone decides.

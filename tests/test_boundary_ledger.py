@@ -208,6 +208,11 @@ ROWS: dict[str, Row] = {
         nothing,
         "subset",
     ),
+    "A complemented union or meet, as the subject.": Decides(
+        complement(union(str, complement(list[list[int]]))),
+        list[list[int]],
+        "subset",
+    ),
     "A length bound over a base that takes any length.": Decides(
         Annotated[str, at.MinLen(1)], complement(Literal[""]), "subset"
     ),
