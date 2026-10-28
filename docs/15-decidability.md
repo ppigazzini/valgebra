@@ -301,6 +301,24 @@ answers `"undecided"`.
     which of two spellings gets there first depends on the order the parts
     multiply, so a relation the sets decline under one spelling may be decided
     under another. No spelling is *systematically* the one that declines.
+- **A complemented union or meet, as the subject.** `¬(a ∨ b)` is `¬a ∧ ¬b`,
+  and `¬(a ∧ b)` is `¬a ∨ ¬b`. The subject is read with its complement pushed
+  one level in, and decided where that reading is the supertype or has the
+  supertype among its members, so a complement of a union is below the meet
+  of the complements and below what a complemented member's complement is:
+
+    ```python
+    from valgebra import Validator, complement, intersection, union
+
+    nested = Validator(list[list[int]])
+    assert complement(union(str, complement(nested))).is_subtype_of(nested)
+    assert complement(union(int, str)).is_subtype_of(
+        intersection(complement(int), complement(str))
+    )
+    ```
+
+    Only that reading is taken: a complement pushed in and then compared by
+    every rule would be read twice wherever the answer is a decline.
 - **A length bound over a base that takes any length.** A string and a bytes
   take any, so a bound their lengths admit is met by a value: `Annotated[str,
   MinLen(1)]` is the non-empty string and is decided to have one. A list or a

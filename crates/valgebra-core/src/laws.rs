@@ -2601,6 +2601,43 @@ proptest! {
         );
     }
 
+    // THEORY: lattice-theory
+    /// A complemented union or meet is below its complements pushed one level
+    /// in, with one step to spend: `¬(A ∪ B) ⊆ ¬A ∩ ¬B` and
+    /// `¬(A ∩ B) ⊆ ¬A ∪ ¬B`, the subject written raw and the supertype built as
+    /// a caller builds it, over drawn schemas. The step is the query's own; a
+    /// rule that read the pushed term only after the arms by shape would spend
+    /// it on them and decline.
+    #[test]
+    fn a_complement_is_below_its_complements_pushed_in(a in schema(), b in schema()) {
+        let one = || crate::decision::Budget::new(1);
+        let complements = [a.clone().complement(), b.clone().complement()];
+        prop_assert_eq!(
+            not(union(a.clone(), b.clone())).subtype_relation(
+                &Schema::meet_within(complements.clone(), &[]),
+                &NoLeafRelations,
+                &[],
+                &one(),
+            ),
+            Relation::Holds,
+            "the complement of {:?} | {:?} is not below the meet of the complements",
+            a,
+            b
+        );
+        prop_assert_eq!(
+            not(intersection(a.clone(), b.clone())).subtype_relation(
+                &Schema::union_within(complements, &[]),
+                &NoLeafRelations,
+                &[],
+                &one(),
+            ),
+            Relation::Holds,
+            "the complement of {:?} & {:?} is not below the union of the complements",
+            a,
+            b
+        );
+    }
+
     /// Construction preserves membership, not just structural shape. Over the
     /// scalar-and-set fragment the `member_v` oracle decides exactly, so a
     /// built schema must admit each sample value exactly when the term as
