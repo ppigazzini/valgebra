@@ -1017,6 +1017,17 @@ as a list against a length-bounded list of the same element.
   product that keeps its chain is minimized again at the same cost.
   `--decision-sets` reads 6.12% fewer instructions, the signatures the rounds
   allocated.
+- **A pattern is built once a thread.** A lowering reads a schema's patterns
+  and length bounds again for every difference a relation asks, so a thread
+  keeps each word automaton it built under the text it was built from, a
+  refusal among them, up to sixteen mebibytes (`RegularSet::compile` in
+  `descr/regular.rs`). Two JSON Schema documents translated into validators,
+  holding three patterns and three length bounds between them, ask for their
+  automata 322 times and build six, which hold 85,678 bytes: the relation
+  declines in 0.17 s on a release build, against 4.2 s when every request
+  builds. A pair whose one pattern the build refuses decides in 0.46 s against
+  2.14 s, since a refusal spends the most of any build. The instruction gate's
+  decision workloads read no more than before.
 - **A length bound costs a state an element and little else.** A bound over a
   list is an automaton of one letter repeated, so the letter is held by one
   handle and asked whether it takes every value once (`chain` in

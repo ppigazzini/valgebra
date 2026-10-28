@@ -250,6 +250,14 @@ million characters declines for one comparison rather than after a table of a
 million states. A leaf past the bound buys no answer, since the first product
 it meets refuses.
 
+**A thread builds a pattern's table once** (`RegularSet::compile` in
+`descr/regular.rs`). A lowering reads a schema's patterns and length bounds again
+for every difference it is asked, and a build is a function of the text and the
+alphabet alone, so a thread keeps each language it built under the text it was
+built from, a refusal among them, and hands it back for that text again. The
+memo is bounded by the bytes it holds, `COMPILED_BYTES`, and starts over past
+it.
+
 **A map's key lands in the parts of the key partition it holds whole**
 (`key_cover` in `descr/lower.rs`): a kind, a `tuple` or `frozenset` of
 anything, a union of those, and a complement of one, which opens the parts its
