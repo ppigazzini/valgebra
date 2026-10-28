@@ -332,10 +332,7 @@ impl Schema {
         // meet with the inner set fits in: `{"t": int} ⊆ ¬({"t": str} ∪
         // {"t": bytes})` declines that way, while three field kinds, whose
         // complement stays negated, decide.
-        let (read, side) = match other {
-            Schema::Complement(inner) => (&**inner, Polarity::Widen),
-            _ => (other, Polarity::Narrow),
-        };
+        let (read, side) = other.read_as_a_supertype();
         let mut theirs = None;
         let mut kept = None;
         let Some(mine) = lower_widened(self, defs, pool, &mut kept, |kept| {
@@ -390,6 +387,16 @@ impl Schema {
         })
     }
 
+    /// What the set representation lowers of this schema as a supertype, and on
+    /// which side: a complement's inner set on the widened side, since `a ⊆
+    /// ¬inner` asks `a ∧ inner = ∅`, and the schema itself on the narrowed side.
+    fn read_as_a_supertype(&self) -> (&Schema, Polarity) {
+        match self {
+            Schema::Complement(inner) => (inner, Polarity::Widen),
+            _ => (self, Polarity::Narrow),
+        }
+    }
+
     /// The decision steps [`is_subtype_of`](Self::is_subtype_of) spends, by the
     /// same argument as [`empty_steps`](Self::empty_steps).
     #[cfg(test)]
@@ -430,6 +437,7 @@ impl Schema {
     /// build refuses. A `false` can therefore mean "not proven a subtype within
     /// the work bound". A real schema decides far inside both.
     #[must_use]
+    #[inline]
     pub fn is_subtype_of(&self, other: &Schema) -> bool {
         self.is_subtype_of_under(other, &NoLeafRelations, &[])
     }
@@ -440,6 +448,7 @@ impl Schema {
     /// subtyping is decided between recursive schemas too. The oracle's `None`
     /// and an unresolved reference both keep the conservative `false`.
     #[must_use]
+    #[inline]
     pub fn is_subtype_of_under(
         &self,
         other: &Schema,
@@ -459,6 +468,7 @@ impl Schema {
     /// value of the subject -- which the rules' answer is read against, and
     /// which the set reading proves by finding the difference inhabited.
     #[must_use]
+    #[inline]
     pub fn subtype_relation_under(
         &self,
         other: &Schema,
@@ -466,8 +476,96 @@ impl Schema {
         defs: &[Schema],
     ) -> Relation {
         let budget = Budget::new(DECISION_BUDGET);
-        self.subtype_relation(other, oracle, defs, &budget)
-            .or_else(|| self.descriptor_contained_in(other, oracle, defs))
+        let mut cx = Cx::new(oracle, defs, &budget);
+        self.is_subtype_rec(other, &mut cx)
+            .or_else(|| self.decided_by_sets(other, &mut cx, true))
+    }
+
+    /// The set representation of the pair, then both deciders asked of its
+    /// parts, in the query the rules declined: what follows their decline.
+    /// `by_branch` is whether a branch of a union supertype may prove the pair
+    /// alone.
+    ///
+    /// Out of line, and handed the query rather than what it holds, so the
+    /// three public entries above it stay thin and are inlined into a caller's
+    /// loop, which `#[inline]` on each asks for: left to the inliner they are
+    /// not, and the call costs the decision workload 2% of its instructions,
+    /// twice that through a wrapper.
+    #[inline(never)]
+    fn decided_by_sets(&self, other: &Schema, cx: &mut Cx<'_>, by_branch: bool) -> Relation {
+        self.descriptor_contained_in(other, cx.oracle, cx.defs)
+            .or_else(|| self.decided_by_parts(other, cx, by_branch))
+    }
+
+    /// The pair asked of its parts, where both deciders declined it whole.
+    ///
+    /// A union subject is below a supertype where each member is, and outside
+    /// it where one member is [BBC+26, (anyOf-l)], so each member is asked as
+    /// a pair of its own, by both deciders and by its own parts. The rules
+    /// distribute the union already; what this adds is the set representation
+    /// asked of one member, where asked of the whole pair it is refused past
+    /// its node bound: a union of seven tagged records against seven decides a
+    /// record at a time.
+    ///
+    /// A union supertype is narrowed to the branches the subject shares a
+    /// value with, as `below_a_union` narrows it, and the narrowed pair asked
+    /// whole: a branch sharing no value with the subject decides nothing about
+    /// the inclusion. That takes a reference out of a pair the set
+    /// representation could otherwise only prove: `str` against a fixpoint of
+    /// lists beside a pattern is the pattern's question alone, refuted at a
+    /// string the pattern refuses. Where nothing narrows, a branch the set
+    /// representation places the subject in proves the pair
+    /// [BBC+26, (anyOf-r)] -- for a subject that is not a member of a union
+    /// being asked, since a union against a union would lower every member
+    /// against every branch: two hundred patterns against two hundred spend
+    /// three seconds that way, and decide nothing.
+    ///
+    /// The parts are asked in the query, so the rules' work stays bounded by
+    /// its budget in total, and the lowerings are one per member, per
+    /// narrowing and per branch of the one subject, each under its own bounds:
+    /// linear in the two terms.
+    fn decided_by_parts(&self, other: &Schema, cx: &mut Cx<'_>, by_branch: bool) -> Relation {
+        if let Schema::Union(members) = self {
+            // The supertype is every member's, so it is lowered once: where it
+            // refuses, every member's pair refuses on it, after a build of the
+            // member and of the supertype up to its bound -- a millisecond a
+            // member for sixty-four patterns. An empty member is below it all
+            // the same, which is the one answer such a pair gives.
+            let (read, side) = other.read_as_a_supertype();
+            let lowers = lower_unfolded(read, cx.defs, side, cx.oracle).is_some();
+            return Relation::all(members.iter().map(|member| {
+                member
+                    .is_subtype_rec(other, cx)
+                    .or_else(|| {
+                        if lowers {
+                            member.descriptor_contained_in(other, cx.oracle, cx.defs)
+                        } else {
+                            Relation::proven(member.denotes_no_value(cx.oracle, cx.defs))
+                        }
+                    })
+                    .or_else(|| member.decided_by_parts(other, cx, false))
+            }));
+        }
+        let Schema::Union(branches) = other else {
+            return Relation::Unknown;
+        };
+        let met: Vec<Schema> = branches
+            .iter()
+            .filter(|branch| !self.shares_no_value_with(branch, cx))
+            .cloned()
+            .collect();
+        if met.len() == branches.len() {
+            return Relation::proven(
+                by_branch
+                    && branches.iter().any(|branch| {
+                        self.descriptor_contained_in(branch, cx.oracle, cx.defs)
+                            .holds()
+                    }),
+            );
+        }
+        let narrowed = Schema::union(met);
+        self.is_subtype_rec(&narrowed, cx)
+            .or_else(|| self.decided_by_sets(&narrowed, cx, by_branch))
     }
 
     /// The three-valued subtyping answer under an oracle, the definitions, and a
@@ -477,6 +575,7 @@ impl Schema {
     /// decider the public relation asks after this one. Held here so a test can
     /// count what the rules decline rather than reading `false` for both halves
     /// of the conservative contract.
+    #[cfg(test)]
     pub(crate) fn subtype_relation(
         &self,
         other: &Schema,
@@ -529,6 +628,15 @@ impl Schema {
     /// empty element is the empty list and is below a list of anything; the
     /// mismatch its element reports is about no value.
     ///
+    /// A union's refutation is read already. The rules refute a union only
+    /// through a member, whose refutation was read against the member at its
+    /// own level, through its exact regions, or through a constant it lists,
+    /// and each of those is a value the union holds. Reading its emptiness
+    /// again stops at the first member that reading cannot prove empty, which
+    /// need not be the member refuted: a union of a pattern and a fixpoint
+    /// holding `None` is refuted below the empty set by `None`, and the pattern
+    /// read first is unknown to it.
+    ///
     /// It costs the *proving* half of the decision surface 1.4%, measured by
     /// disabling it: sixteen instructions per query that never refutes, which
     /// is the price of reading a refutation honestly on the queries that do. An
@@ -536,7 +644,10 @@ impl Schema {
     /// within the crate -- so the reading stands as the cost.
     fn witnessed(&self, answer: Relation, cx: &mut Cx<'_>) -> Relation {
         if answer == Relation::Fails {
-            if self.holds_a_value_shallowly() || self.holds_a_kind_whole(cx) {
+            if self.holds_a_value_shallowly()
+                || matches!(self, Schema::Union(_))
+                || self.holds_a_kind_whole(cx)
+            {
                 return answer;
             }
             return Relation::of_mismatch(self.verdict_rec(cx));
@@ -1422,11 +1533,10 @@ impl Schema {
     /// is `holds()` of this, which reads a decline as "not proven" -- the
     /// conservative answer.
     ///
-    /// The budget is a parameter for the reason it is one on
-    /// [`subtype_relation`](Self::subtype_relation): a cell the function
-    /// allocates for itself is a path no test can drive at the one value that
-    /// matters, and "the budget declines, it never refutes" is a claim about
-    /// this path too.
+    /// The budget is a parameter, as it is on the rules' own entry the tests
+    /// drive: a cell the function allocates for itself is a path no test can
+    /// drive at the one value that matters, and "the budget declines, it never
+    /// refutes" is a claim about this path too.
     pub(crate) fn equivalence_relation(
         &self,
         other: &Schema,
@@ -1437,7 +1547,7 @@ impl Schema {
         let mut cx = Cx::new(oracle, defs, budget);
         let mut within = |sub: &Schema, sup: &Schema| {
             sub.is_subtype_rec(sup, &mut cx)
-                .or_else(|| sub.descriptor_contained_in(sup, oracle, defs))
+                .or_else(|| sub.decided_by_sets(sup, &mut cx, true))
         };
         within(self, other).and(|| within(other, self))
     }

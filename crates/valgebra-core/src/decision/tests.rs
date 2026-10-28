@@ -8257,3 +8257,90 @@ fn a_class_is_read_for_its_kinds_by_the_per_kind_readings_alone() {
     let every_kind = (1u16 << Kind::ALL.len()) - 1;
     assert_eq!(class.kinds_possibly_held(&Kinded, &[]), every_kind);
 }
+
+// THEORY: semantic-subtyping
+/// A union is decided a part at a time where both deciders decline it whole.
+///
+/// Four exits, each on a pair only that exit decides. Forty patterns past the
+/// set representation's node bound are below a pattern each is below, asked a
+/// member at a time, and a digit pattern is equivalent to forty patterns, one
+/// of them the same set spelled in a group and each below it, both ways round.
+/// A member the set representation empties is below forty patterns too wide
+/// for it to lower, which is lowered once rather than once a member.
+/// `str` against a fixpoint of lists beside a pattern is the pattern's
+/// question once the fixpoint, which shares no value with `str`, is dropped,
+/// and the set representation refutes it at a string the pattern refuses,
+/// where the whole pair holds a reference and could only be proved. A
+/// subject below one branch of forty is proved by that branch where nothing
+/// narrows.
+///
+/// And the rules' own exit: a union is refuted by a member whose refutation
+/// stands, although the union's emptiness, read from the pattern first, is
+/// unknown to them.
+#[test]
+fn a_union_is_decided_a_part_at_a_time() {
+    let pattern = |words: &str| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex(words.into())].into(),
+    };
+    let numbered = |prefix: &str| Schema::union((0..40).map(|i| pattern(&format!("{prefix}{i}"))));
+    let some = numbered("p");
+    let whole =
+        |sub: &Schema, sup: &Schema| sub.descriptor_contained_in(sup, &NoLeafRelations, &[]);
+    assert_eq!(whole(&some, &pattern("p[0-9]+")), Relation::Unknown);
+    assert_eq!(
+        some.subtype_relation_under(&pattern("p[0-9]+"), &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    let digit = pattern("p[0-9]");
+    let spelled = Schema::union(
+        (0..10)
+            .flat_map(|i| [format!("p{i}"), format!("(p{i})"), format!("((p{i}))")])
+            .chain(["(p[0-9])".to_owned(), "p1|p2".to_owned()])
+            .map(|words| pattern(&words)),
+    );
+    assert_eq!(whole(&digit, &spelled), Relation::Unknown);
+    assert!(digit.is_equivalent_under(&spelled, &NoLeafRelations, &[]));
+    let no_string = Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex("a".into()), Constraint::MinLen(2)].into(),
+    };
+    let with_none = Schema::Union(vec![no_string, pattern("p1")].into());
+    assert_eq!(whole(&with_none, &some), Relation::Unknown);
+    assert_eq!(
+        with_none.subtype_relation_under(&some, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+
+    let nested = Schema::Ref(DefIx::new(0));
+    let defs = [Schema::union([
+        Schema::NoneType,
+        Schema::list(SeqShape::homogeneous(nested.clone())),
+    ])];
+    let beside = Schema::Union(vec![pattern("a"), nested].into());
+    assert_eq!(
+        Schema::Str.descriptor_contained_in(&beside, &NoLeafRelations, &defs),
+        Relation::Unknown
+    );
+    assert_eq!(
+        Schema::Str.subtype_relation_under(&beside, &NoLeafRelations, &defs),
+        Relation::Fails
+    );
+
+    let branches = Schema::union(
+        (0..39)
+            .map(|i| pattern(&format!("q{i}")))
+            .chain([pattern("p[0-9]")]),
+    );
+    assert_eq!(whole(&pattern("p1|p2"), &branches), Relation::Unknown);
+    assert_eq!(
+        pattern("p1|p2").subtype_relation_under(&branches, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+
+    let budget = Budget::new(DECISION_BUDGET);
+    assert_eq!(
+        beside.subtype_relation(&Schema::Nothing, &NoLeafRelations, &defs, &budget),
+        Relation::Fails
+    );
+}

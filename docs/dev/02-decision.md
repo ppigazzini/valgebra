@@ -57,7 +57,10 @@ flowchart TD
     W -->|undecided| DESC
     DESC -->|empty| H
     DESC -->|inhabited| F
-    DESC -->|refused| U
+    DESC -->|refused| P["the parts<br/>each a pair of its own"]
+    P -->|proved| H
+    P -->|refuted| F
+    P -->|neither| U
 
     classDef proof fill:#1b5e20,stroke:#a5d6a7,color:#ffffff
     classDef refute fill:#b71c1c,stroke:#ef9a9a,color:#ffffff
@@ -67,7 +70,7 @@ flowchart TD
     class U decline
 ```
 
-Two places carry the design. The **witness guard** is the `W` diamond, and it
+Three places carry the design. The **witness guard** is the `W` diamond, and it
 has three exits rather than two: a refutation whose subject is proved empty
 becomes the *opposite* answer, which is what puts the empty set below
 everything, and one whose subject is undecided becomes a decline rather than a
@@ -97,6 +100,22 @@ subclass key (`an_empty_reading_stands` in `descr/lower.rs`). A union of
 literal keys is read as its labels, as each literal alone is, and
 `a_union_of_literal_keys_proves_nothing_on_the_narrowed_side` holds that arm
 on its own, since the property that draws such keys can miss it.
+
+**The parts** are reached only where both deciders declined the pair whole
+(`decided_by_parts`), and each part is asked through the whole chart again. A
+union subject is asked a member at a time, since it is below where each member
+is and outside where one is; a union supertype is narrowed to the branches the
+subject shares a value with, by the reading `below_a_union` narrows with, and
+the narrowed pair asked whole, or, where nothing narrows, proved by a branch
+the descriptor places the subject in. What it reaches is the descriptor's
+bounds: a union of tagged records is past the node bound as a pair and a record
+and the one branch it meets are not, and a branch holding a reference beside a
+pattern is dropped where the subject meets it nowhere, which leaves the
+descriptor a pair it can refute. The parts share the query's budget, so the
+rules stay bounded in total, and the lowerings are linear in the two terms: one
+per member and per narrowing, the supertype of a union subject lowered once
+rather than once a member, and a branch asked alone only for a subject that is
+not itself a member. `a_union_is_decided_a_part_at_a_time` holds each exit.
 
 **A refutation stands on a value.** The descriptor's is direct: it proves the
 difference `a & ~b` holds one. A rule's is a mismatch of shapes -- two arities
@@ -602,7 +621,12 @@ A proof is a proof of inclusion; a refutation is a claim that **a value exists**
 in the subject and outside the supertype. So every rule that refutes has to be
 able to name that value, and the witness guard drops any refutation whose
 subject is not proven inhabited. A rule that cannot name a value declines
-instead, and the pair stays undecided.
+instead, and the pair stays undecided. A union's refutation is taken as it
+stands: the rules refute a union only through a member, whose refutation was
+read at the member's own level, through its exact regions, or through a
+constant it lists, and each is a value the union holds. Its emptiness read
+again would stop at the first member it cannot prove empty, which need not be
+the one refuted.
 
 These are the readings that refute, each with the value it stands on:
 

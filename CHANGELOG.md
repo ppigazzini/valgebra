@@ -16,10 +16,23 @@ answer of its own, or a repair to a change not yet released.
 - fix: a placement the two terms make is never refused for want of a step
 - feat: a complemented union is read as the meet of the complements
 - feat: a subject holding a whole kind the supertype lacks is refuted
+- feat: a union is decided a part at a time where the pair declines whole
 
 -->
 
 ### Added
+
+- **A union is decided a part at a time where the pair declines whole.** A
+  union subject is asked a member at a time and a union supertype is narrowed to
+  the branches the subject shares a value with, by both deciders, where the set
+  representation refuses the whole pair past its node bound or could only prove
+  it for a reference it holds: a union of seven or more tagged records against
+  the same records shifted is `not_subset`, a union of 32 or more patterns is
+  `subset` of a pattern each is below, and `str` is `not_subset` of a fixpoint
+  of lists beside a pattern, where all three were `undecided`. A union is
+  refuted by a member whose refutation stands, whatever its other members'
+  emptiness reads, so a union of a recursive schema and a pattern is
+  `not_subset` of `nothing`.
 
 - **A subject holding every value of a kind the supertype holds none of is
   `not_subset`.** Every kind is inhabited, so `anything` and a complement of a

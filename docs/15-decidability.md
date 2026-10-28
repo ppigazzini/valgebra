@@ -965,6 +965,38 @@ the shape. What is left below is what the descriptor cannot hold.
   The seventh field's `undecided` is the conservative answer and not a claim
   about the relation: it holds, and proving it takes a larger budget.
 
+  **A union is asked a part at a time** where the pair is past a bound whole. A
+  union subject is below a supertype where each member is and outside it where
+  one member is, so each member is asked on its own; a union supertype is first
+  narrowed to the branches the subject shares a value with. Records told apart
+  by a tag meet one branch each, so a union of them is decided at any width:
+
+  ```python
+  from typing import Annotated, Literal
+
+  from annotated_types import Ge
+
+  from valgebra import Validator, union
+
+
+  def tagged(width, shift=0):
+      return union(
+          *[
+              Validator({"type": Literal[f"t{i}"], "v": Annotated[int, Ge(i + shift)]})
+              for i in range(width)
+          ]
+      )
+
+
+  # refuted at {"type": "t0", "v": 0}
+  assert tagged(40).relation_to(tagged(40, shift=1)) == "not_subset"
+  assert tagged(40, shift=1).relation_to(tagged(40)) == "subset"
+  ```
+
+  A union against a union is not asked a branch at a time: a member that lands
+  in one branch of a supertype too wide to build is left `undecided`, since
+  asking every member against every branch is the product of the two widths.
+
 - **A predicate.** Its satisfiability is undecidable (below), so neither
   representation reasons about one -- and that is a statement about the
   *predicate*, not about every pair carrying one. A refinement is a subset of
