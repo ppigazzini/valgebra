@@ -3,6 +3,7 @@ import dataclasses
 import datetime as dt
 import decimal
 import enum
+import itertools
 import numbers
 import pathlib
 import re
@@ -34,6 +35,7 @@ from valgebra import (
     complement,
     instance_of,
     intersection,
+    nothing,
     recursive,
 )
 
@@ -1291,6 +1293,133 @@ def test_a_disjoint_base_promise_is_not_evidence() -> None:
     assert not intersection(Promised, AlsoPromised).is_empty()
     assert Validator(intersection(Promised, AlsoPromised)).is_valid(Both())
     assert Validator(Promised).relation_to(complement(AlsoPromised)) == "undecided"
+
+
+#: The interpreter the suite runs on. PyPy refuses the classes CPython refuses,
+#: but a type defined in C names no size there, so its layout is not read.
+_CPYTHON = sys.implementation.name == "cpython"
+
+#: `Py_TPFLAGS_HEAPTYPE`: a type defined in Python, or one a C module builds at
+#: runtime, rather than a static type defined in C.
+_HEAP_TYPE = 1 << 9
+
+#: Types defined in C that a class may derive from: the builtin kinds, and the
+#: builtins and standard-library types beside them that lay down a layout of
+#: their own or carry their base's.
+_C_TYPES: tuple[type, ...] = (
+    int,
+    float,
+    complex,
+    str,
+    bytes,
+    bytearray,
+    tuple,
+    list,
+    dict,
+    set,
+    frozenset,
+    BaseException,
+    Exception,
+    ValueError,
+    TypeError,
+    KeyError,
+    OSError,
+    collections.OrderedDict,
+    collections.defaultdict,
+    collections.deque,
+    decimal.Decimal,
+    dt.date,
+    dt.datetime,
+    property,
+)
+
+
+def _a_class_of_both_builds(a: type, b: type) -> bool:
+    """Whether Python builds a class deriving from `a` and from `b`.
+
+    Asked in both orders, since an order can fail for its method resolution
+    alone: `class C(object, int)` is refused and `class C(int, object)` builds.
+    A layout conflict refuses both.
+    """
+    return _derived((a, b)) is not None or _derived((b, a)) is not None
+
+
+def test_complex_shares_no_value_with_a_json_kind() -> None:
+    """`complex` lays down a layout of its own, as a builtin kind does.
+
+    Its instance holds two floats over `object`, so Python refuses a class
+    deriving from it and from `int`, `float`, `str`, `list` or `dict`, and the
+    meet of `complex` with each is empty. A JSON value is none of its instances.
+    PyPy refuses the same classes but names no size, so it declines.
+    """
+    json_kinds = Validator(None | bool | int | float | str | list | dict)
+    for kind in (int, float, str, list, dict):
+        assert intersection(complex, kind).is_empty() is _CPYTHON
+    assert intersection(complex, json_kinds).is_empty() is _CPYTHON
+    answer = Validator(complex).relation_to(complement(json_kinds))
+    assert answer == ("subset" if _CPYTHON else "undecided")
+    assert Validator(complex).is_valid(1j)
+
+
+def test_two_c_types_meet_exactly_where_python_derives_a_class_of_both() -> None:
+    """A static type lays down the layout its instance size says.
+
+    Python builds a class deriving from two types only where the layout one
+    lays down extends the other's, and a type defined in C lays down one of its
+    own where its instance is larger than its base's: `complex` does, and
+    `Exception` does not, so `class Both(ValueError, TypeError)` builds. A meet
+    of two such types is empty exactly where Python refuses every class of both.
+    A heap type -- `collections.deque`, and `decimal.Decimal` from 3.13 -- and
+    every type on PyPy are read by their slots alone, so a refusal there may
+    be declined, and a class Python builds is never a meet called empty.
+    """
+    wrong = []
+    for a, b in itertools.combinations(_C_TYPES, 2):
+        empty = intersection(a, b).is_empty()
+        builds = _a_class_of_both_builds(a, b)
+        static = not (a.__flags__ & _HEAP_TYPE or b.__flags__ & _HEAP_TYPE)
+        if builds and empty:
+            wrong.append(f"{a.__qualname__} & {b.__qualname__} called empty")
+        if not builds and not empty and _CPYTHON and static:
+            wrong.append(f"{a.__qualname__} & {b.__qualname__} not called empty")
+    assert wrong == []
+
+
+class _FakesStatic(type):
+    """Answers `__flags__` without the heap bit, and a `__basicsize__` larger."""
+
+    def __getattribute__(cls, name: str) -> object:
+        value = super().__getattribute__(name)
+        if name == "__flags__":
+            return value & ~_HEAP_TYPE
+        if name == "__basicsize__":
+            return value + 64
+        return value
+
+
+class _ClaimsStatic(metaclass=_FakesStatic):
+    pass
+
+
+class _AlsoClaimsStatic(metaclass=_FakesStatic):
+    pass
+
+
+class _OfBothClaims(_ClaimsStatic, _AlsoClaimsStatic):
+    pass
+
+
+def test_a_layout_is_not_what_a_metaclass_answers() -> None:
+    """A class's flags and sizes are the ones Python laid down.
+
+    A metaclass answering `__flags__` without the heap bit and a larger
+    `__basicsize__` makes no class static and lays no layout down: Python
+    builds a class of both, so their meet holds its instance.
+    """
+    both = intersection(instance_of(_ClaimsStatic), instance_of(_AlsoClaimsStatic))
+    assert both.is_valid(_OfBothClaims())
+    assert not both.is_empty()
+    assert both.relation_to(nothing) != "subset"
 
 
 #: What a drawn class lays down: nothing, no slot, or one slot of its own.

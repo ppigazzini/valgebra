@@ -101,6 +101,14 @@ exclude_re = [
     # interpreter tests read a data descriptor through each body on the
     # releases that compile it.
     "oracle\\.rs:.*: (replace type_has -> .*|.* in type_has)$",
+    # `lays_down_its_own` has a body for CPython, which reads a type defined in
+    # C by its instance size, and one for PyPy, which names no size and reads
+    # the slots alone. The PyPy body is compiled out of the interpreter the
+    # sweep links, where each replacement of it builds and passes, and what
+    # `cargo mutants` offers for the CPython body as a whole is a `PyResult`
+    # no build accepts. The operators inside the CPython body stay in the
+    # sweep, and the interpreter tests kill each.
+    "oracle\\.rs:.*: replace lays_down_its_own -> .*$",
     # `snapshot_of` is the same case one release lower: a body for the releases
     # before 3.12, which holds the collector off around the list's copy, and one
     # for every other release, which copies. The sweep's 3.12 compiles the first

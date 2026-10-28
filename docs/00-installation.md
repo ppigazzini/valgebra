@@ -118,6 +118,13 @@ value. CPython's `object.__new__` refuses a class with a constructor of its
 own; PyPy's does not ask, and no code of valgebra's runs to refuse it. Build a
 validator by calling `Validator`.
 
+And one relation decides less there. A type defined in C, such as `complex`,
+lays down an instance layout no class can combine with `int`'s, and on CPython
+valgebra reads it off the size of the type's instance:
+`intersection(complex, int).is_empty()` is `True`. PyPy refuses the same
+classes but names no size, so there that meet is not called empty, and
+`Validator(complex).relation_to(complement(int))` is `undecided`.
+
 ## Free-threaded CPython
 
 On a free-threaded interpreter a validator is immutable and shares no mutable

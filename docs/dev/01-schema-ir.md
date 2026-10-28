@@ -665,9 +665,16 @@ The layout tag is how disjointness is *proved* rather than guessed, and
 class deriving from two others unless the layout one lays down extends the
 other's: `class C(int, str)` is "multiple bases have instance lay-out conflict",
 and so is `class C(A, B)` for two classes whose own `__slots__` each add a slot
-over `object`. So two classes whose layouts neither extends -- two builtins, or
-two classes laying down slots of their own -- share no value, and no class can
-derive from both. A class that lays down no layout -- built on no builtin, and
+over `object`. A type defined in C lays down a layout where its instance is
+larger than its base's, which is the test CPython's `solid_base` puts to a
+static type. The flags, the base and the sizes are the ones Python set on the
+type object, read through `type`'s own descriptors, which a metaclass does not
+answer for. `complex` lays one down, and `Exception`, holding what
+`BaseException` lays down, carries that one, so `class C(ValueError, TypeError)`
+builds. So two classes whose layouts neither extends -- two builtins, `complex`
+and `int`, or two classes laying down slots of their own -- share no value, and
+no class can derive from both. PyPy refuses the same classes and names no size,
+so there a type defined in C is read by its slots alone. A class that lays down no layout -- built on no builtin, and
 adding no slot -- takes the plain tag, which conflicts with nothing:
 `class Both(Plain, MyStr)` builds, so a plain class and a `str` subclass do
 share values. Everything else is undecided, which is the honest answer -- two
@@ -784,8 +791,9 @@ layout. Placing such a class narrowly would be the one direction that is unsound
 claiming a value does not exist. It stays on every line.
 
 **A class laying down a layout that is no builtin's goes on the kindless slot
-alone.** Its own `__slots__` over `object` lay down a layout no subclass can
-combine with a builtin's, so none of its instances is ever of a listed kind.
+alone.** Its own `__slots__` over `object`, or the instance a type defined in C
+such as `complex` adds to `object`, lay down a layout no subclass can combine
+with a builtin's, so none of its instances is ever of a listed kind.
 `Descr::instance_of` in `crates/valgebra-core/src/descr/mod.rs` places all three.
 
 ## Which representation decides

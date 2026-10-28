@@ -97,7 +97,12 @@ answers `"undecided"`.
   share no instance, so their meet is empty and each is below the other's
   complement, and one laid down over no builtin is below the complement of
   every builtin kind. An empty `__slots__`, or one naming only `__dict__` and
-  `__weakref__`, lays down nothing. The `@disjoint_base` decorator of PEP 800
+  `__weakref__`, lays down nothing. A type defined in C lays down a layout
+  where its instance is larger than its base's, as Python reads it: `complex`
+  meets no JSON kind and is below the complement of each, and `ValueError`
+  meets `TypeError`, both carrying the layout `BaseException` lays down. PyPy
+  names no size, so there a type defined in C is read by its slots alone and
+  such a pair is `undecided`. The `@disjoint_base` decorator of PEP 800
   is a promise to a checker that the runtime does not enforce, and it is not
   read.
 - **A meet holding a literal.** A meet holding a literal, or a union of them,

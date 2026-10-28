@@ -22,10 +22,21 @@ answer of its own, or a repair to a change not yet released.
 - fix: a required key ending in ? renders with a mark that does not parse
 - feat: a pair every decider declines is asked in its other spellings
 - fix: a Len whose minimum is below zero is refused as MinLen is
+- feat: a type defined in C lays down the layout its instance size says
 
 -->
 
 ### Added
+
+- **A type defined in C lays down the layout its instance size says.** Python
+  refuses a class deriving from two types unless the layout one lays down
+  extends the other's, and a static type lays down one of its own where its
+  instance is larger than its base's. `complex` meets no JSON kind, so
+  `intersection(complex, int)` is empty and `Validator(complex)` is `subset` of
+  the complement of a JSON value, where both were `undecided`, and an exception
+  meets no kind either. `ValueError` and `TypeError` carry the layout
+  `BaseException` lays down, and their meet is not called empty. PyPy names no
+  size, so there these pairs are `undecided`.
 
 - **A pair every decider declines is asked in its other spellings.** `a <= b`
   is `a & ~b` holding nothing, so where the rules, the set representation and
