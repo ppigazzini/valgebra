@@ -143,7 +143,11 @@ in `laws.rs` holds over drawn schemas, and
 `the_universe_is_below_the_complement_of_a_set_read_empty` on a union neither
 reading empties whole. The difference against any other supertype is not asked: a
 meet built on every declined pair costs the relation matrix more than it
-decides. The rules asked again share `RESPELLING` steps of what the query has
+decides. A meet subject against a meet supertype is the one pair asked as the
+two together: their meet proved empty and the subject proved to hold a value
+refute it, since `a ⊆ b` with `a ∧ b = ∅` holds only of an empty `a`, and
+neither the member rule on the left nor the member-at-a-time rule on the right
+reads the two meets at once. The rules asked again share `RESPELLING` steps of what the query has
 left, so a pair that declined cheaply does not decline dearly;
 `a_pair_declined_as_written_is_asked_in_its_other_spellings` and
 `a_respelled_pair_stops_at_its_allowance` hold the readings and the allowance.
