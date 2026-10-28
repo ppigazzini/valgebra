@@ -20,10 +20,24 @@ answer of its own, or a repair to a change not yet released.
 - feat: an integer step is refuted by a multiple the other step does not divide
 - feat: a word boundary at a pattern's end is read as the character it asks about
 - fix: a required key ending in ? renders with a mark that does not parse
+- feat: a pair every decider declines is asked in its other spellings
 
 -->
 
 ### Added
+
+- **A pair every decider declines is asked in its other spellings.** `a <= b`
+  is `a & ~b` holding nothing, so where the rules, the set representation and
+  the parts all decline, a difference holding every value of some kind refutes
+  the pair whatever shape the subject has, and against a complement `~c` the
+  pair is asked as the meet with `c` below `nothing`, as `c` below the
+  complement of the subject, and as that meet read empty the way `is_empty`
+  reads it, a union a member at a time, so `anything` is below the complement
+  of a union of members empty to different readings. `anything` is
+  `not_subset` of the complement of a list of JSON values, where it was
+  `undecided`, and on drawn translation shapes the plain spelling of an
+  inclusion, an emptiness, a disjointness or a union subject declines where
+  another spelling decides about a tenth as often.
 
 - **A word boundary at an end of a pattern is read as the character it asks
   about.** A pattern matches the whole text, so a `\b` or `\B` leading or

@@ -8539,3 +8539,142 @@ proptest! {
         prop_assert_ne!(verdict, Verdict::Unknown);
     }
 }
+
+// THEORY: semantic-subtyping
+/// A pair every decider declines as written is asked in the spellings the
+/// algebra gives it, and each pair here is one the rules alone decline.
+///
+/// The difference holding a whole kind: a meet holding every `None` beside a
+/// fixpoint of dicts is outside `str` at `None`. Against a complement, the
+/// meet of the two and the pair from its other side, either of which decides
+/// both pairs below: the universe is outside the complement of a list of JSON
+/// values at the empty list, and a number is outside the complement of the
+/// numbers and the JSON values at any number.
+#[test]
+fn a_pair_declined_as_written_is_asked_in_its_other_spellings() {
+    let dicts = Schema::Ref(DefIx::new(0));
+    let json = Schema::Ref(DefIx::new(1));
+    let defs = [
+        Schema::mapping(MapClause {
+            key: Schema::Str,
+            value: dicts.clone(),
+        }),
+        Schema::union([
+            Schema::NoneType,
+            Schema::Bool,
+            Schema::Int,
+            Schema::Float,
+            Schema::Str,
+            Schema::list(SeqShape::homogeneous(json.clone())),
+            Schema::mapping(MapClause {
+                key: Schema::Str,
+                value: json.clone(),
+            }),
+        ]),
+    ];
+    let rules = |sub: &Schema, sup: &Schema| {
+        sub.subtype_relation(sup, &NoLeafRelations, &defs, &Budget::new(DECISION_BUDGET))
+    };
+    let both =
+        |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &NoLeafRelations, &defs);
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+
+    let only_none = Schema::Intersection(
+        vec![
+            Schema::Union(vec![Schema::NoneType, dicts.clone()].into()),
+            not(dicts.clone()),
+        ]
+        .into(),
+    );
+    assert_eq!(rules(&only_none, &Schema::Str), Relation::Unknown);
+    assert_eq!(both(&only_none, &Schema::Str), Relation::Fails);
+
+    let not_an_array = not(Schema::list(SeqShape::homogeneous(json.clone())));
+    assert_eq!(rules(&Schema::ANYTHING, &not_an_array), Relation::Unknown);
+    assert_eq!(both(&Schema::ANYTHING, &not_an_array), Relation::Fails);
+
+    let number = Schema::Intersection(
+        vec![
+            Schema::Union(vec![Schema::Int, Schema::Float].into()),
+            not(Schema::Bool),
+        ]
+        .into(),
+    );
+    let neither = not(Schema::Union(vec![number.clone(), json].into()));
+    assert_eq!(rules(&number, &neither), Relation::Unknown);
+    assert_eq!(both(&number, &neither), Relation::Fails);
+}
+
+/// A respelled pair spends no more than [`RESPELLING`] steps.
+///
+/// Towers of `(T, list[T])` reach each level twice, so their inclusion costs
+/// twice the steps a level: the one asked as the complement of its supertype
+/// against the complement of its subject is decided by the respelling where
+/// the plain inclusion fits in the allowance, at nine levels, and declined
+/// where it does not, at ten, although the plain question decides both.
+#[test]
+fn a_respelled_pair_stops_at_its_allowance() {
+    let list_of = |element: Schema| Schema::list(SeqShape::homogeneous(element));
+    let level = |inner: Schema| Schema::tuple(SeqShape::fixed([inner.clone(), list_of(inner)]));
+    let not = |schema: &Schema| Schema::Complement(Arc::new(schema.clone()));
+    let (mut sub, mut sup) = (Schema::Int, Schema::union([Schema::Int, Schema::Str]));
+    for depth in 1..=10 {
+        sub = level(sub);
+        sup = level(sup);
+        if depth < 9 {
+            continue;
+        }
+        let budget = Budget::new(DECISION_BUDGET);
+        assert_eq!(
+            sub.subtype_relation(&sup, &NoLeafRelations, &[], &budget),
+            Relation::Holds
+        );
+        let spent = DECISION_BUDGET - budget.left();
+        assert_eq!(
+            spent <= RESPELLING,
+            depth == 9,
+            "depth {depth} spends {spent}"
+        );
+        let query = Budget::new(DECISION_BUDGET);
+        let respelled =
+            not(&sup).decided_as_respelled(&not(&sub), &Cx::new(&NoLeafRelations, &[], &query));
+        assert_eq!(respelled.holds(), depth == 9, "depth {depth}");
+    }
+}
+
+/// The universe is below the complement of a set read empty. `anything ∧ s`
+/// is `s`, so the respelled pair asks `s` below `nothing`, and where the rules
+/// decline that, it reads `s` empty as `is_empty` does: a union a member at a
+/// time. One member is two patterns no word matches both of, which only the
+/// set representation empties. The other is a list and a set met beside a
+/// predicate, which the rules empty by their kinds and the set representation
+/// cannot lower, so neither reading empties the union whole.
+#[test]
+fn the_universe_is_below_the_complement_of_a_set_read_empty() {
+    let pattern = |words: &str| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex(words.into())].into(),
+    };
+    let list = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let called = Schema::Refine {
+        base: Arc::new(list.clone()),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    let no_word = Schema::Intersection(vec![pattern("x.*"), pattern("[^x]*")].into());
+    let no_list = Schema::Intersection(vec![list, Schema::set(Schema::Int), called].into());
+    let both = Schema::Union(vec![no_word, no_list].into());
+    let outside = both.clone().complement();
+    assert_eq!(
+        Schema::ANYTHING.descriptor_contained_in(&outside, &NoLeafRelations, &[]),
+        Relation::Unknown
+    );
+    assert!(both.is_empty());
+    assert_eq!(
+        both.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    assert_eq!(
+        Schema::ANYTHING.subtype_relation_under(&outside, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+}

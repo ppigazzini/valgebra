@@ -2626,18 +2626,28 @@ proptest! {
     /// procedure, `is_empty` being the primitive the relations call into: a
     /// schema is proved below `nothing` exactly where it is read empty, over a
     /// drawn schema and over the union of two, which the relation reads a
-    /// member at a time.
+    /// member at a time. So is the universe proved below its complement, the
+    /// same question one De Morgan step away, since `a ⊆ ¬s` is `a ∧ s = ∅`
+    /// [FCB08, §4.1] and `anything ∧ s` is `s`; the respelled pair reads that
+    /// meet's emptiness as `is_empty` does.
     #[test]
     fn below_nothing_exactly_where_read_empty(a in shaped_schema(), b in shaped_schema()) {
         let _allowance = crate::descr::budget::law();
         for held in [built(&a), Schema::union_within([built(&a), built(&b)], &[])] {
+            let empty = held.is_empty_with(&NoLeafRelations, &[]);
             let below = held.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]);
+            prop_assert_eq!(below.holds(), empty, "{:?}: below nothing {:?}", held, below);
+            let outside = Schema::ANYTHING.subtype_relation_under(
+                &held.clone().complement(),
+                &NoLeafRelations,
+                &[],
+            );
             prop_assert_eq!(
-                below.holds(),
-                held.is_empty_with(&NoLeafRelations, &[]),
-                "{:?}: below nothing {:?}",
+                outside.holds(),
+                empty,
+                "{:?}: anything below its complement {:?}",
                 held,
-                below
+                outside
             );
         }
     }

@@ -82,7 +82,7 @@ impl Schema {
 
     /// [`Self::is_empty_with`] in one query, whose budget and readings a union's
     /// members share.
-    fn empty_under(&self, cx: &mut Cx<'_>) -> bool {
+    pub(super) fn empty_under(&self, cx: &mut Cx<'_>) -> bool {
         // The rules answer in three values and the descriptor is asked where
         // they reach the third -- which is what makes the pair one procedure
         // rather than a second opinion. A proof of *inhabitation* is an answer
