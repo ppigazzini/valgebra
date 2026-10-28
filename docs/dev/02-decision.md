@@ -60,7 +60,10 @@ flowchart TD
     DESC -->|refused| P["the parts<br/>each a pair of its own"]
     P -->|proved| H
     P -->|refuted| F
-    P -->|neither| U
+    P -->|neither| R["the respellings<br/>the difference, a complement's meet and its converse"]
+    R -->|proved| H
+    R -->|refuted| F
+    R -->|neither| U
 
     classDef proof fill:#1b5e20,stroke:#a5d6a7,color:#ffffff
     classDef refute fill:#b71c1c,stroke:#ef9a9a,color:#ffffff
@@ -70,7 +73,7 @@ flowchart TD
     class U decline
 ```
 
-Three places carry the design. The **witness guard** is the `W` diamond, and it
+Four places carry the design. The **witness guard** is the `W` diamond, and it
 has three exits rather than two: a refutation whose subject is proved empty
 becomes the *opposite* answer, which is what puts the empty set below
 everything, and one whose subject is undecided becomes a decline rather than a
@@ -116,6 +119,21 @@ rules stay bounded in total, and the lowerings are linear in the two terms: one
 per member and per narrowing, the supertype of a union subject lowered once
 rather than once a member, and a branch asked alone only for a subject that is
 not itself a member. `a_union_is_decided_a_part_at_a_time` holds each exit.
+
+**The respellings** are reached last, for the query's own pair, where every
+decider declined it (`decided_as_respelled`). `a ⊆ b` is `a ∧ ¬b = ∅`, and the
+rules are written for the shape a pair arrives in, so the same question spelled
+another way reaches arms the first did not. A difference that holds every value
+of some kind refutes the pair, read off the two terms with no meet built: the
+kind refutation `spills_a_kind` asks of the universe and a complement alone,
+asked here of any subject. Against a complement `¬c` the meet `a ∧ c` is asked
+below the empty set and the pair as `c ⊆ ¬a`, both goals over the query's
+signed subterms. The difference against any other supertype is not asked: a
+meet built on every declined pair costs the relation matrix more than it
+decides. The rules asked again share `RESPELLING` steps of what the query has
+left, so a pair that declined cheaply does not decline dearly;
+`a_pair_declined_as_written_is_asked_in_its_other_spellings` and
+`a_respelled_pair_stops_at_its_allowance` hold the readings and the allowance.
 
 **A refutation stands on a value.** The descriptor's is direct: it proves the
 difference `a & ~b` holds one. A rule's is a mismatch of shapes -- two arities

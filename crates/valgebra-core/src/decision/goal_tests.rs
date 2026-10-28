@@ -481,14 +481,16 @@ fn distinct_against_subterm_pairs(sub: &Schema, sup: &Schema, defs: &[Schema]) -
 /// drawn from.
 ///
 /// A rule asks a pair of the children of the pair it was asked, or unfolds a
-/// reference into the definition `subterms` holds, except in three places. The
+/// reference into the definition `subterms` holds, except in four places. The
 /// product rule meets a component with the complement of a branch's
 /// component, one conjunct per narrowing, so what it asks is a meet of
 /// subterms and of their complements. The union rule asks the subject against
 /// the branches it can meet, which is a union of some members of a union among
-/// the subterms. And a complement or a meet folds to a bound, the top or the
-/// bottom. Each of the three is a subset or a sign of the subterms, so the
-/// closure is finite because they are.
+/// the subterms. A pair every decider declined against a complement is asked
+/// as the meet of the subject and the inner set below the bottom, and as the
+/// inner set below the subject's complement. And a complement or a meet folds
+/// to a bound, the top or the bottom. Each of the four is a subset or a sign of
+/// the subterms, so the closure is finite because they are.
 fn in_closure(term: &Schema, subterms: &[Schema]) -> bool {
     let signed = |t: &Schema| {
         subterms.contains(t) || matches!(t, Schema::Complement(inner) if subterms.contains(inner))

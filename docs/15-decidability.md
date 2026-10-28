@@ -382,6 +382,21 @@ answers `"undecided"`.
     assert Validator(anything).relation_to(complement(json_value)) == "not_subset"  # None
     ```
 
+- **A pair asked another way.** Where every rule declines a pair as it is
+  written, it is asked as the algebra respells it. A difference of the two that
+  holds every value of some kind is a value of the subject outside the
+  supertype, whatever shape the subject has, and against a complement `~c` the
+  pair is also asked as the meet with `c` below the empty set and as `c` below
+  the complement of the subject:
+
+    ```python
+    from valgebra import Validator, anything, complement, recursive, union
+
+    json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    # the empty list is a JSON array
+    assert Validator(anything).relation_to(complement([json_value])) == "not_subset"
+    ```
+
 - **A subject outside a base.** A refinement is a subset of its base, so a
   subject the base refutes is refuted against every refinement of it -- the
   same value settles both. The proof does not carry, since being inside the
@@ -750,18 +765,20 @@ the shape. What is left below is what the descriptor cannot hold.
     from valgebra import Validator, complement, intersection, recursive, union
 
     chain = recursive(lambda t: union(None, {"next": t}))
-    neither = intersection(complement(None), complement(dict))
-    assert not Validator(chain).is_valid("a")  # the walk is exact
-    assert Validator(neither).is_valid("a")
+    off_chain = Validator({"next": intersection(dict, complement(chain))})
+    assert not Validator(chain).is_valid({"next": {}})  # the walk is exact
+    assert off_chain.is_valid({"next": {}})
     # and the relation declines rather than refuting
-    assert Validator(neither).relation_to(chain) == "undecided"
+    assert off_chain.relation_to(chain) == "undecided"
     ```
 
     One unfolding does reach the kinds a fixpoint admits, and a subject that
     holds every value of a kind the fixpoint holds none of is refuted on them:
     `complement(int)` holds every string and the chain holds none, so it is
-    `not_subset` of the chain at `"a"`. A meet of complements is not read for the
-    kinds it holds whole, which is why the pair above declines.
+    `not_subset` of the chain at `"a"`, and so is a meet of complements holding
+    every string. The pair above holds no such kind: its values are dicts, a
+    kind the chain holds some of, and which of them are in the chain is a
+    question two levels down.
 
     What the **rules** reach is narrower than that and is reached: a branch of a
     union the subject shares no value with is dropped before the rest is asked,

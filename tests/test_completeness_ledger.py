@@ -1674,14 +1674,12 @@ _TRANSLATED: list[object] = [
         intersection(_JSON, complement(_ARRAY)),
         nothing,
         id="json:json&~array-is-inhabited",
-        marks=_missed("the question through a complement is asked of a meet"),
     ),
     pytest.param(
         "refutes",
         _INTEGER,
         complement(int),
         id="json:integer!<=~int",
-        marks=_missed("the question through a complement is asked of a meet"),
     ),
     pytest.param(
         "refutes",
@@ -1694,14 +1692,12 @@ _TRANSLATED: list[object] = [
         intersection(union(float, int), complement(_ARRAY)),
         nothing,
         id="json:number&~array-is-inhabited",
-        marks=_missed("the question through a complement is asked of a meet"),
     ),
     pytest.param(
         "subtype",
         _JSON,
         complement(_OUTSIDE),
         id="json:json<=~(~json&{a})",
-        marks=_missed("the question through a complement is asked of a meet"),
     ),
     # A meet is commutative and its members are asked in the written order.
     pytest.param(
@@ -1709,7 +1705,6 @@ _TRANSLATED: list[object] = [
         intersection(_NARROWED, _WIDENED),
         nothing,
         id="json:narrowed&widened-is-inhabited",
-        marks=_missed("the members of a meet are asked in the order they are written"),
     ),
 ]
 

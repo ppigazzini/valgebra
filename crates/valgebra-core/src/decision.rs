@@ -94,6 +94,15 @@ pub use crate::oracle::{LeafRelations, NoLeafRelations};
 /// paragraphs above measure what it would save.
 pub(crate) const DECISION_BUDGET: u32 = 1_000_000;
 
+/// The steps a pair respelled may spend, of what its query has left.
+///
+/// **This bound is cost.** A respelled question declines as dearly as the
+/// plain one where it declines too, and drawing on the whole remainder turned a
+/// pair that declined in a millisecond into one that declined in fifty. On the
+/// shapes a translation from JSON Schema writes, a quarter of this decides all
+/// but one in sixty of what this does.
+pub(crate) const RESPELLING: u32 = 4096;
+
 /// The most levels of its own recursion one decision query holds open.
 ///
 /// The step budget bounds what a query costs and never how deep it goes: two
@@ -132,8 +141,8 @@ impl Budget {
         }
     }
 
-    /// The steps not yet spent, which the tests that pin a cost read.
-    #[cfg(test)]
+    /// The steps not yet spent: what a pair respelled may draw on, and what the
+    /// tests that pin a cost read.
     pub(crate) fn left(&self) -> u32 {
         self.steps.get()
     }
@@ -495,6 +504,45 @@ impl Schema {
     fn decided_by_sets(&self, other: &Schema, cx: &mut Cx<'_>, by_branch: bool) -> Relation {
         self.descriptor_contained_in(other, cx.oracle, cx.defs)
             .or_else(|| self.decided_by_parts(other, cx, by_branch))
+            .or_else(|| {
+                if by_branch {
+                    self.decided_as_respelled(other, cx)
+                } else {
+                    Relation::Unknown
+                }
+            })
+    }
+
+    /// The pair asked in the spellings the Boolean algebra gives it, where
+    /// every decider declined it as written.
+    ///
+    /// `a ⊆ b` is `a ∧ ¬b = ∅` [FCB08, §4.1], so a difference holding every
+    /// value of some kind refutes the pair: a kind the subject holds whole and
+    /// the supertype holds none of. The rules read that for the universe and a
+    /// complement alone (`spills_a_kind`), since a walk on every pair costs the
+    /// pairs that never need it; here it is read for any subject, once the
+    /// rules have declined. Against a complement the difference of `a ⊆ ¬c` is
+    /// the meet `a ∧ c`, asked by the rules as a subject of its own, and the
+    /// pair is `c ⊆ ¬a`, asked from its other side. Both are goals over the
+    /// query's signed subterms, so the goals stay in the closure the budget is
+    /// argued over. The difference against any other supertype is a meet the
+    /// constructors build on every pair that declines, which the relation
+    /// matrix pays a seventh of its instructions for, and is not asked.
+    ///
+    /// The rules asked again decline as dearly as they did, so they share
+    /// [`RESPELLING`] steps of what the query has left rather than all of it.
+    pub(super) fn decided_as_respelled(&self, other: &Schema, cx: &Cx<'_>) -> Relation {
+        if readings::spills_a_kind_into(self, other, cx) {
+            return Relation::Fails;
+        }
+        let Schema::Complement(inner) = other else {
+            return Relation::Unknown;
+        };
+        let allowance = Budget::new(cx.budget.left().min(RESPELLING));
+        let cx = &mut Cx::new(cx.oracle, cx.defs, &allowance);
+        Schema::meet_within([self.clone(), (**inner).clone()], cx.defs)
+            .is_subtype_rec(&Schema::Nothing, cx)
+            .or_else(|| inner.is_subtype_rec(&self.clone().complement(), cx))
     }
 
     /// The pair asked of its parts, where both deciders declined it whole.
