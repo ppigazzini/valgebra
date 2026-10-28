@@ -229,7 +229,12 @@ linear-time engine (no catastrophic backtracking), so unlike a `Predicate` it
 stays on the fast path and never crosses into Python per value. An invalid
 pattern is rejected when the validator is built, not at first use, and a pattern
 is read on its own before it is anchored, so `a)|(b` is invalid rather than an
-alternation of two halves. A compiled
+alternation of two halves. A pattern matches the text of a string, and a string
+holding a lone surrogate -- which `json.loads` makes of an escaped `"\ud800"` --
+has no such text, so it is outside every `Regex` refinement, and `str` is never
+below a pattern over it however much text the pattern matches
+([what the soundness argument assumes](14-soundness.md#what-this-argument-assumes)).
+A compiled
 `re.Pattern` works as metadata too:
 
 ```python
@@ -484,11 +489,15 @@ as it and is rejected with it; the message says so.
 **A float step is exact.** `value % n == 0` is Python's own `%`, with no
 tolerance added, and a binary float holds no `0.1`: `0.3 % 0.1` is
 `0.09999999999999998`. So `Annotated[float, MultipleOf(0.1)]` admits `0.1` and
-`0.2` and refuses `0.3` and `1.0`. A step meant in decimal places wants a
-decimal base, whose `%` is exact in those places:
+`0.2` and refuses `0.3` and `1.0`. A `Fraction` step over a float is the same
+`%`, which turns the fraction into the float nearest it: `3.0 % Fraction(1, 3)`
+is `1.6653345369377348e-16`, so a step of a third admits `1 / 3` and refuses
+`3.0`. A step meant in decimal places wants a decimal base, whose `%` is exact
+in those places:
 
 ```python
 from decimal import Decimal
+from fractions import Fraction
 from typing import Annotated
 
 import annotated_types as at
@@ -498,6 +507,9 @@ from valgebra import Validator
 tenths = Validator(Annotated[float, at.MultipleOf(0.1)])
 assert tenths.is_valid(0.2)
 assert not tenths.is_valid(0.3)  # 0.3 % 0.1 is not 0.0
+thirds = Validator(Annotated[float, at.MultipleOf(Fraction(1, 3))])
+assert thirds.is_valid(1 / 3)
+assert not thirds.is_valid(3.0)  # 3.0 % Fraction(1, 3) is not 0.0
 decimal_tenths = Validator(Annotated[Decimal, at.MultipleOf(Decimal("0.1"))])
 assert decimal_tenths.is_valid(Decimal("0.3"))
 assert not decimal_tenths.is_valid(Decimal("0.15"))
