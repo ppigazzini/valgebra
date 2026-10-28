@@ -1,6 +1,7 @@
-use super::{Alphabet, Dfa, MAX_STATES, RegularSet};
+use super::{Alphabet, COMPILED, COMPILED_BYTES, Compiled, Dfa, MAX_STATES, RegularSet};
 use crate::descr::lattice_tests::Algebra;
 use proptest::prelude::*;
+use std::sync::Arc;
 
 /// The words a law is checked over.
 ///
@@ -977,4 +978,75 @@ fn the_widest_table_the_state_bound_admits_builds() {
         .expect("a table inside the state bound builds");
     assert_eq!(set.dfa.state_count(), MAX_STATES - 1);
     assert!(set.holds(&word));
+}
+
+/// A language built once on a thread is the table handed back for the same text
+/// again, a refusal included, and the memo holds the language under the text it
+/// was asked by.
+#[test]
+fn a_built_language_is_handed_back_for_its_text() {
+    let first = language("ab*c");
+    assert!(Arc::ptr_eq(&first.dfa, &language("ab*c").dfa));
+    let held = COMPILED.with_borrow(|memo| memo.utf8.contains_key("(?:ab*c)"));
+    assert!(
+        held,
+        "the language is kept under the text it was built from"
+    );
+    let wide = "(a|b)*a(a|b){24}";
+    assert!(
+        RegularSet::pattern(wide, Alphabet::Text).is_none(),
+        "the build refuses"
+    );
+    let refused = format!("(?:{wide})");
+    let kept = COMPILED.with_borrow(|memo| memo.utf8.get(refused.as_str()).cloned());
+    assert_eq!(kept, Some(None), "the refusal is kept as well as a table");
+}
+
+/// A table weighs the bytes its rows, classes and accepting flags hold: one
+/// letter is three states over two classes.
+#[test]
+fn a_table_weighs_its_rows() {
+    let set = language("a");
+    assert_eq!(set.dfa.state_count(), 3);
+    assert_eq!(set.dfa.bytes(), 256 * 2 + 3 * 2 * 4 + 3);
+}
+
+/// The memo's bound is four tables at the widest a table is: [`MAX_STATES`]
+/// rows of 256 classes, a transition a `u32`.
+#[test]
+fn the_memo_holds_four_of_the_widest_tables() {
+    let widest = MAX_STATES * 256 * size_of::<u32>();
+    assert_eq!(COMPILED_BYTES, 4 * widest);
+    assert_eq!(
+        COMPILED_BYTES,
+        16 << 20,
+        "sixteen mebibytes, as the docs say"
+    );
+}
+
+/// The memo holds no more than [`COMPILED_BYTES`]: a language that fills it
+/// exactly is kept beside what it holds, the next one starts it over, and one
+/// heavier than the bound alone is not kept at all. A refusal weighs its text.
+#[test]
+fn the_memo_starts_over_at_its_bound() {
+    let mut memo = Compiled::default();
+    memo.keep(false, &"a".repeat(COMPILED_BYTES - 1), None);
+    memo.keep(true, "b", None);
+    assert_eq!(memo.held, COMPILED_BYTES);
+    assert_eq!(memo.utf8.len() + memo.raw.len(), 2);
+    memo.keep(true, "c", None);
+    assert_eq!(memo.held, 1);
+    assert_eq!(memo.utf8.len() + memo.raw.len(), 1);
+    memo.keep(false, &"d".repeat(COMPILED_BYTES), None);
+    assert_eq!(
+        memo.held, COMPILED_BYTES,
+        "a language as heavy as the bound is kept alone"
+    );
+    memo.keep(false, &"e".repeat(COMPILED_BYTES + 1), None);
+    assert_eq!(memo.held, COMPILED_BYTES, "a heavier one is not kept");
+    assert!(
+        !memo
+            .raw
+            .contains_key("e".repeat(COMPILED_BYTES + 1).as_str())
+    );
 }

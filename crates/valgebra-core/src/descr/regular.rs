@@ -38,6 +38,7 @@ use regex_automata::util::syntax;
 use regex_automata::{Anchored, Input};
 use regex_syntax::hir::{Hir, HirKind, Look};
 use rustc_hash::FxHashMap;
+use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 
 use super::automaton::{MAX_STATES, Reached, canonical_order, chain_fits, reaches};
@@ -171,6 +172,13 @@ struct Dfa {
 impl Dfa {
     fn state_count(&self) -> usize {
         self.accepting.len()
+    }
+
+    /// The bytes the table's rows, classes and accepting flags hold.
+    fn bytes(&self) -> usize {
+        size_of_val(self.classes.as_slice())
+            + size_of_val(self.transitions.as_slice())
+            + size_of_val(self.accepting.as_slice())
     }
 
     /// Whether every lookup on this table lands inside it: a class for each of
@@ -934,6 +942,53 @@ static STR_WORDS: OnceLock<Arc<Dfa>> = OnceLock::new();
 /// Every byte string, which is the `bytes` kind's universe.
 static EVERY_WORD: OnceLock<Arc<Dfa>> = OnceLock::new();
 
+/// The bytes the languages this thread built are kept up to: four tables at
+/// the widest a table is, [`MAX_STATES`] rows of 256 classes at four bytes a
+/// transition.
+///
+/// **This bound is memory.** The patterns a process meets have no count, so
+/// the memo is bounded by what it holds rather than by its entries, the text
+/// each is kept under included, and starts over where a new language would pass
+/// the bound. A language heavier than the bound alone is built and not kept.
+pub(crate) const COMPILED_BYTES: usize = 4 * MAX_STATES * 256 * 4;
+
+/// The languages this thread built, by the text built from: one map for text
+/// read as UTF-8 and one for text read as bytes, and the bytes they hold
+/// together.
+#[derive(Default)]
+struct Compiled {
+    utf8: FxHashMap<Box<str>, Option<RegularSet>>,
+    raw: FxHashMap<Box<str>, Option<RegularSet>>,
+    held: usize,
+}
+
+impl Compiled {
+    /// The languages built from text read as UTF-8, or as bytes.
+    fn read_as(&mut self, utf8: bool) -> &mut FxHashMap<Box<str>, Option<RegularSet>> {
+        if utf8 { &mut self.utf8 } else { &mut self.raw }
+    }
+
+    /// Keep `built` under `text`, starting over where it would pass
+    /// [`COMPILED_BYTES`].
+    fn keep(&mut self, utf8: bool, text: &str, built: Option<RegularSet>) {
+        let weight = text.len() + built.as_ref().map_or(0, |set| set.dfa.bytes());
+        if weight > COMPILED_BYTES {
+            return;
+        }
+        if self.held + weight > COMPILED_BYTES {
+            self.utf8.clear();
+            self.raw.clear();
+            self.held = 0;
+        }
+        self.held += weight;
+        self.read_as(utf8).insert(text.into(), built);
+    }
+}
+
+thread_local! {
+    static COMPILED: RefCell<Compiled> = RefCell::new(Compiled::default());
+}
+
 /// A set of words: a regular language.
 ///
 /// The table sits behind a handle, so a copy is a reference count. A descriptor
@@ -1017,10 +1072,29 @@ impl RegularSet {
         RegularSet::compile(&format!("(?:{pattern})"), utf8)
     }
 
-    /// Build a language from a pattern the caller of this module wrote, the
-    /// subset construction of the classical algorithm [HVP05, §4.1] done by
-    /// `regex-automata`.
+    /// Build a language from a pattern the caller of this module wrote, or hand
+    /// back the one this thread built from it already.
+    ///
+    /// The build is a function of the text and the alphabet alone, and a
+    /// lowering reads the same patterns and length bounds again for every
+    /// difference it is asked: a relation between two schemas holding three
+    /// patterns and three length bounds builds them 322 times without this,
+    /// nearly all of its time. A refusal is kept as well as a table, since a
+    /// pattern past the build's limit is the dearest one to build again.
     fn compile(anchored: &str, utf8: bool) -> Option<RegularSet> {
+        if let Some(held) =
+            COMPILED.with_borrow_mut(|memo| memo.read_as(utf8).get(anchored).cloned())
+        {
+            return held;
+        }
+        let built = RegularSet::determinize(anchored, utf8);
+        COMPILED.with_borrow_mut(|memo| memo.keep(utf8, anchored, built.clone()));
+        built
+    }
+
+    /// The subset construction of the classical algorithm [HVP05, §4.1], done
+    /// by `regex-automata`.
+    fn determinize(anchored: &str, utf8: bool) -> Option<RegularSet> {
         let syntax = syntax::Config::new().utf8(utf8);
         // Every match, which is the classical construction. The builder's
         // default is leftmost-first, a search semantics: once the thread a

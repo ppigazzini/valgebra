@@ -366,6 +366,7 @@ table's length is outside the scan: it is the table's size, in one place.
 | `crates/valgebra-py/src/errors.rs` | `SUMMARY_CHARS` | `80` | shape | a value summary built in full and then cut, so a huge repr is paid for and thrown away | `tests/test_error_contract.py` |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_EDGES` | `1 << 16` | limit | a table inside both dimensions and still too large: 4,096 states each with a 4,096-wide row is sixteen million edges | its own tests |
 | `crates/valgebra-core/src/descr/regular.rs` | `BUILD_SIZE_LIMIT` | `MAX_STATES * 514 * 4` | limit | a pattern whose determinization is exponential, which reaches `MAX_STATES` only after the table it refuses has been built | its own tests, which build the widest table the state bound admits |
+| `crates/valgebra-core/src/descr/regular.rs` | `COMPILED_BYTES` | `4 * MAX_STATES * 256 * 4` | shape | the languages a thread built growing into a record of every pattern and length bound a process has asked a relation about: past it the memo starts over, and a language heavier than it alone is built and not kept | `the_memo_starts_over_at_its_bound` in `crates/valgebra-core/src/descr/regular/tests.rs` |
 | `crates/valgebra-core/src/descr/integers.rs` | `MAX_PERIOD` | `4096` | limit | a step set holding one interval set per residue, and the period two steps share | its own tests |
 
 Two of them bound a depth for different reasons, and the difference matters
