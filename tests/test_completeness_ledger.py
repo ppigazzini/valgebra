@@ -1647,7 +1647,6 @@ _TRANSLATED: list[object] = [
         Annotated[str, Regex(r"\bab\b")],
         Annotated[str, Regex("ab")],
         id="json:\\bab\\b==ab",
-        marks=_missed("a word boundary at either end of a full match is not reduced"),
     ),
     # One question through a complement's meet, where its plain spelling decides.
     pytest.param(

@@ -36,6 +36,7 @@
 use regex_automata::dfa::{Automaton, dense};
 use regex_automata::util::syntax;
 use regex_automata::{Anchored, Input};
+use regex_syntax::hir::{Hir, HirKind, Look};
 use rustc_hash::FxHashMap;
 use std::sync::{Arc, OnceLock};
 
@@ -69,6 +70,74 @@ use super::automaton::{MAX_STATES, Reached, canonical_order, chain_fits, reaches
 /// walk still matches the pattern, since the walk runs the regex rather than
 /// the automaton.
 pub(crate) const BUILD_SIZE_LIMIT: usize = MAX_STATES * 514 * 4;
+
+/// Which end of a text an assertion sits at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Side {
+    /// Before the first character.
+    First,
+    /// After the last.
+    Last,
+}
+
+/// A word-boundary assertion at either end of a pattern, read as the
+/// character it asks about: what lies between the two ends, printed, and the
+/// language each end asks for.
+///
+/// The walk matches a pattern against the whole text, so an assertion leading
+/// the pattern sits before the first character, where the text has nothing
+/// behind it, and one trailing it sits after the last. There `\b` asks only
+/// that the character on the other side be a word character, and `\B` that
+/// it be none or that there be none, which is a regular language of its own:
+/// a word character and then anything, or anything and then a word character.
+/// The automaton builder has no Unicode word boundary, so without this a
+/// pattern opening or closing on one has no set; with it, the pattern's set is
+/// the set between, met with one language per end. `\bab\b` is `ab`, and
+/// `\Bab` holds nothing.
+///
+/// `None` for a pattern with no such assertion at an end. One inside a pattern
+/// is left where it is, which the build refuses.
+fn word_ends(pattern: &Hir) -> Option<(String, Vec<&'static str>)> {
+    let parts: &[Hir] = match pattern.kind() {
+        HirKind::Concat(parts) => parts,
+        HirKind::Look(_) => core::slice::from_ref(pattern),
+        _ => return None,
+    };
+    let mut between = parts;
+    let mut ends = Vec::new();
+    if let Some((first, rest)) = between.split_first()
+        && let Some(end) = boundary(first, Side::First)
+    {
+        ends.push(end);
+        between = rest;
+    }
+    if let Some((last, rest)) = between.split_last()
+        && let Some(end) = boundary(last, Side::Last)
+    {
+        ends.push(end);
+        between = rest;
+    }
+    if ends.is_empty() {
+        return None;
+    }
+    Some((Hir::concat(between.to_vec()).to_string(), ends))
+}
+
+/// The language a Unicode word-boundary assertion at one end of the text asks
+/// for, or `None` for any other part. An ASCII boundary is the builder's own,
+/// read wherever it sits.
+fn boundary(part: &Hir, side: Side) -> Option<&'static str> {
+    let HirKind::Look(look) = part.kind() else {
+        return None;
+    };
+    Some(match (look, side) {
+        (Look::WordUnicode, Side::First) => r"\w(?s:.)*",
+        (Look::WordUnicode, Side::Last) => r"(?s:.)*\w",
+        (Look::WordUnicodeNegate, Side::First) => r"(?:\W(?s:.)*)?",
+        (Look::WordUnicodeNegate, Side::Last) => r"(?:(?s:.)*\W)?",
+        _ => return None,
+    })
+}
 
 /// A byte's equivalence class. Two bytes share a class when no state's
 /// transition tells them apart.
@@ -938,7 +1007,13 @@ impl RegularSet {
         // The pattern on its own first. One that does not parse alone can parse
         // wrapped -- `a)|(b` closes the group and opens one the wrapper closes
         // -- and would then be a language nobody wrote.
-        syntax::parse_with(pattern, &syntax::Config::new().utf8(utf8)).ok()?;
+        let parsed = syntax::parse_with(pattern, &syntax::Config::new().utf8(utf8)).ok()?;
+        if utf8 && let Some((between, ends)) = word_ends(&parsed) {
+            let between = RegularSet::compile(&format!("(?:{between})"), utf8)?;
+            return ends.into_iter().try_fold(between, |set, end| {
+                set.intersect(&RegularSet::compile(end, utf8)?)
+            });
+        }
         RegularSet::compile(&format!("(?:{pattern})"), utf8)
     }
 

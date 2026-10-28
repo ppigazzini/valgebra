@@ -18,10 +18,18 @@ answer of its own, or a repair to a change not yet released.
 - feat: a subject holding a whole kind the supertype lacks is refuted
 - feat: a union is decided a part at a time where the pair declines whole
 - feat: an integer step is refuted by a multiple the other step does not divide
+- feat: a word boundary at a pattern's end is read as the character it asks about
 
 -->
 
 ### Added
+
+- **A word boundary at an end of a pattern is read as the character it asks
+  about.** A pattern matches the whole text, so a `\b` or `\B` leading or
+  closing it asks only whether the first or the last character is a word
+  character, and the set representation reads it so: `Regex(r"\bab\b")` is the
+  set `Regex("ab")` is, where both directions were `undecided`. A relation
+  turning on a boundary between two parts of a pattern declines.
 
 - **An integer step is refuted by a multiple the other step does not divide.**
   A refinement of `int` by one integer step and integer bounds holds exactly the
