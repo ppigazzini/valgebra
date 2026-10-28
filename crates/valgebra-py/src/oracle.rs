@@ -321,10 +321,10 @@ fn builtin_of(py: Python<'_>, kind: Kind) -> Option<Bound<'_, PyType>> {
 /// instance lay-out conflict", and so is `class C(A, B)` for two classes whose
 /// `__slots__` each add a slot over `object`. The class laying down a layout is
 /// the first on the `__mro__` that does -- one of the nine builtins below, or a
-/// class whose own `__slots__` add one -- and a class built on none of them
-/// carries no layout, which conflicts with nothing and confines nothing:
-/// `class Both(Plain, MyStr)` builds, so a plain class and a `str` subclass do
-/// share instances, and those instances are strings.
+/// class that lays down one of its own ([`lays_down_its_own`]) -- and a class
+/// built on none of them carries no layout, which conflicts with nothing and
+/// confines nothing: `class Both(Plain, MyStr)` builds, so a plain class and a
+/// `str` subclass do share instances, and those instances are strings.
 ///
 /// The kind is the builtin's alone. A class whose `__slots__` add to a `str`
 /// lays down a layout of its own and its instances are still strings; one whose
@@ -346,11 +346,10 @@ fn layout_of<'py>(ty: &Bound<'py, PyType>) -> PyResult<(Option<Bound<'py, PyType
         (PySet::type_object(py), Kind::Set),
         (PyDict::type_object(py), Kind::Dict),
     ];
-    // `bool` derives from `int` and shares its layout, so a `bool` and an
-    // `int` subclass land in one part rather than two -- which is right: the
-    // pair is disjoint for a reason the layout does not carry. It is also why
-    // the kind is `Int` and not `Bool`: `bool` is final, so an `int` subclass
-    // is never a boolean.
+    // `bool` derives from `int`, so its kind is `Int` and not `Bool`, and a
+    // `bool` and an `int` subclass land in one part rather than two -- which is
+    // right: `bool` is final, so an `int` subclass is never a boolean, and the
+    // pair is disjoint for a reason the layout does not carry.
     let mut kind = None;
     for (builtin, of) in &builtins {
         if ty.is_subclass(builtin)? {
@@ -362,11 +361,68 @@ fn layout_of<'py>(ty: &Bound<'py, PyType>) -> PyResult<(Option<Bound<'py, PyType
         let Ok(base) = base.cast_into::<PyType>() else {
             continue;
         };
-        if builtins.iter().any(|(builtin, _)| base.is(builtin)) || adds_slots(&base)? {
+        if builtins.iter().any(|(builtin, _)| base.is(builtin)) || lays_down_its_own(&base)? {
             return Ok((Some(base), kind));
         }
     }
     Ok((None, kind))
+}
+
+/// Whether a class lays down an instance layout of its own over the one its
+/// base carries.
+///
+/// A class defined in Python does where its own `__slots__` add a slot
+/// ([`adds_slots`]). A type defined in C as a static type does where its
+/// instance is larger than its base's, by `__basicsize__` or by
+/// `__itemsize__`: that is the test `CPython` puts to a static type in
+/// `solid_base`, in `Objects/typeobject.c`, on every release this crate builds
+/// for, and the layout Python refuses to combine with one that neither extends
+/// nor is extended by it. `complex` lays down one, so no class derives
+/// from it and from `int`; `Exception` lays down none, its instance being the
+/// one `BaseException` lays down, so `class Both(ValueError, TypeError)` builds
+/// and the two share instances.
+///
+/// A type defined in C as a heap type -- `collections.deque`, and
+/// `decimal.Decimal` from 3.13 -- is read as a class defined in Python is, by
+/// its own `__slots__`, and lays down nothing here: the size of a heap type
+/// counts the `__dict__` and `__weakref__` pointers before 3.12, which lay down
+/// nothing.
+///
+/// The flags, the base and the two sizes are the ones Python laid down, read
+/// through `type`'s own descriptors as `solid_base` reads the type object: a
+/// metaclass answering any of them lays no layout down.
+#[cfg(not(PyPy))]
+fn lays_down_its_own<'py>(ty: &Bound<'py, PyType>) -> PyResult<bool> {
+    let py = ty.py();
+    let readers = PyType::type_object(py).getattr(intern!(py, "__dict__"))?;
+    let read = |name: &Bound<'py, PyString>, of: &Bound<'py, PyType>| {
+        readers
+            .get_item(name)?
+            .call_method1(intern!(py, "__get__"), (of,))
+    };
+    let flags: std::os::raw::c_ulong = read(intern!(py, "__flags__"), ty)?.extract()?;
+    if flags & pyo3::ffi::Py_TPFLAGS_HEAPTYPE != 0 {
+        return adds_slots(ty);
+    }
+    let Ok(base) = read(intern!(py, "__base__"), ty)?.cast_into::<PyType>() else {
+        return Ok(false);
+    };
+    let shape = |of: &Bound<'py, PyType>| -> PyResult<(isize, isize)> {
+        Ok((
+            read(intern!(py, "__basicsize__"), of)?.extract()?,
+            read(intern!(py, "__itemsize__"), of)?.extract()?,
+        ))
+    };
+    Ok(shape(ty)? != shape(&base)?)
+}
+
+/// Whether a class lays down an instance layout of its own: on PyPy, where its
+/// own `__slots__` add a slot. PyPy refuses the classes `CPython` refuses but
+/// names no size, so a type defined in C is read as laying down nothing, and
+/// what `CPython` decides of it PyPy declines.
+#[cfg(PyPy)]
+fn lays_down_its_own(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+    adds_slots(ty)
 }
 
 /// Whether a class's own `__slots__` add an instance slot.
@@ -840,7 +896,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
             return None;
         }
         let (solid, own) = self.heard(layout_of(class))?;
-        // `bool` lays down `int`'s layout, so a class laid out as an int may be
+        // `bool` derives from `int`, so a class laid out as an int may be
         // `bool` itself and hold booleans. Sound and coarse: the pair is never
         // refuted here.
         match own {
@@ -859,7 +915,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
     /// decline.
     ///
     /// A class laid out as a builtin answers by comparing the two, with `bool`
-    /// under `int` for the reason the layout tag gives: a class laid out as an
+    /// under `int` for the reason the kind gives: a class laid out as an
     /// int may be `bool` itself.
     fn direct_instance_of_kind(&self, class: ClassIx, kind: Kind) -> Option<bool> {
         let value = self.literals.get(class.get())?.bind(self.py);

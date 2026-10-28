@@ -836,6 +836,54 @@ fn two_classes_whose_slots_add_a_slot_lay_down_layouts_that_conflict() {
 }
 
 #[test]
+#[cfg(not(PyPy))]
+fn a_type_defined_in_c_lays_down_the_layout_its_size_says() {
+    // A static type lays down a layout of its own where its instance is larger
+    // than its base's. `complex` holds two floats over `object`, so it conflicts
+    // with `int` and holds values of no kind. `Exception` holds what
+    // `BaseException` lays down and nothing more, so `ValueError` and
+    // `TypeError` carry one layout and a class deriving from both builds, and
+    // `OSError` adds fields over it, which extends it. A heap class is read by
+    // its slots, and `object`, which derives from nothing, lays down nothing.
+    Python::attach(|py| {
+        let classes: Vec<_> = [
+            "complex",
+            "int",
+            "ValueError",
+            "TypeError",
+            "OSError",
+            "type('Plain', (), {})",
+            "type('Slotted', (), {'__slots__': ('x',)})",
+            "object",
+        ]
+        .into_iter()
+        .map(|source| built(py, source).unbind())
+        .collect();
+        asking(py, classes, |oracle| {
+            let class = |slot| oracle.class(ClassIx::new(slot)).expect("the class is read");
+            let (complex, integer, value, kind) = (class(0), class(1), class(2), class(3));
+            let (os, plain, slotted, object) = (class(4), class(5), class(6), class(7));
+            assert!(
+                complex.disjoint_from(&integer),
+                "complex lays down a layout"
+            );
+            assert!(complex.disjoint_from(&value) && complex.disjoint_from(&slotted));
+            assert!(
+                !value.disjoint_from(&kind),
+                "ValueError and TypeError carry BaseException's layout"
+            );
+            assert!(!os.disjoint_from(&value), "OSError's layout extends it");
+            assert!(os.disjoint_from(&integer));
+            assert!(!plain.lays_down_a_layout() && !object.lays_down_a_layout());
+            assert!(slotted.disjoint_from(&integer));
+            for kind in Kind::ALL {
+                assert_eq!(oracle.class_admits_kind(ClassIx::new(0), kind), Some(false));
+            }
+        });
+    });
+}
+
+#[test]
 fn a_class_relation_needs_both_sides_to_denote_a_set() {
     // `leaf_subtype` reads the class order for a pair of `Instance` atoms, and
     // the order answers for a class only where `isinstance` is a property of a
