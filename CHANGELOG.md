@@ -27,10 +27,18 @@ answer of its own, or a repair to a change not yet released.
 - fix: is_empty reads a complemented union as the relation reads it below nothing
 - feat: a union in a meet is narrowed by the complements beside it
 - feat: a meet is refuted below a meet it shares no value with
+- feat: a float bound over the integers is read at its floor or its ceiling
 
 -->
 
 ### Added
+
+- **A float bound over the integers is read at its floor or its ceiling.**
+  Python compares an `int` with a `float` exactly, so the set representation
+  reads `Annotated[int, Gt(0.5)]` as the integers from `1`, the set
+  `Annotated[int, Ge(1)]` is, where a float operand over the integers was left
+  unread and the pair `undecided`. `Gt(math.inf)` holds no integer and
+  `Lt(math.inf)` every one.
 
 - **A meet is refuted below a meet it shares no value with.** `a <= b` with
   `a & b` empty holds only of an empty `a`, so where every decider declines a
