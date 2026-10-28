@@ -1,7 +1,7 @@
 import dataclasses
 import enum
 import sys
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypedDict
 
 import annotated_types as at
 import pytest
@@ -211,9 +211,10 @@ def test_a_render_that_is_not_an_expression_refuses_rather_than_rebuilding() -> 
     is not an expression either, and is the one that names its subject rather
     than failing.
 
-    Each fails in its own place: a constant whose `repr` is not an expression
-    and a given-up render are syntax errors where they are parsed, and a
-    predicate parses to a call the frontend refuses where the schema is built.
+    Each fails in its own place: a constant whose `repr` is not an expression,
+    a required key whose name ends in `?`, which no dict display spells, and a
+    given-up render are syntax errors where they are parsed, and a predicate
+    parses to a call the frontend refuses where the schema is built.
     """
 
     class Level(enum.Enum):
@@ -222,6 +223,12 @@ def test_a_render_that_is_not_an_expression_refuses_rather_than_rebuilding() -> 
     member = Validator(Level.LOW)
     with pytest.raises(SyntaxError):
         eval(repr(member), dict(_ROUNDTRIP_NS) | {"Level": Level})  # noqa: S307
+
+    marked = Validator(TypedDict("Marked", {"a?": int}))
+    assert repr(marked) == "{<required: 'a?'>: int, str: anything}"
+    with pytest.raises(SyntaxError):
+        eval(repr(marked), dict(_ROUNDTRIP_NS))  # noqa: S307
+    assert repr(Validator({"a??": int})) == "{'a??': int}"
 
     shape = "a sequence in a union"
     given_up = Validator(_chain(shape, _CHAIN_SHAPES[shape][1]))

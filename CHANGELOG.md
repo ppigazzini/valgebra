@@ -19,6 +19,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a union is decided a part at a time where the pair declines whole
 - feat: an integer step is refuted by a multiple the other step does not divide
 - feat: a word boundary at a pattern's end is read as the character it asks about
+- fix: a required key ending in ? renders with a mark that does not parse
 
 -->
 
@@ -79,6 +80,13 @@ answer of its own, or a repair to a change not yet released.
   recursive record met with a nested closed one is `subset` of that recursive
   record, where 0.0.21 and 0.0.22 spent the budget on the meet's members and
   answered `undecided`.
+
+- **A required key whose name ends in `?` renders marked.** No dict display
+  requires such a key, since the display reads a trailing `?` as optional, and
+  `repr` printed `TypedDict("TD", {"a?": int})` as `{'a?': int, str: anything}`,
+  the display of a record whose `a` is optional. It prints
+  `{<required: 'a?'>: int, str: anything}`, a syntax error where it is read, as
+  a constant whose `repr` would read back as another value does.
 
 ## [0.0.22] - 2026-10-27
 

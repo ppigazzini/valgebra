@@ -266,15 +266,16 @@ def test_a_required_key_ending_in_a_question_mark_is_written_as_a_typed_dict() -
 def test_that_key_is_the_one_form_repr_does_not_rebuild() -> None:
     """`docs/17` names it, so the exception is pinned rather than discovered.
 
-    `repr` renders the field as `{'page?': int, ...}`, which reads back as the
-    *optional* key `page` -- quietly a different set, where a class or a
-    predicate at least rebuilds into something that raises.
+    No dict display spells the field: `{'page?': int, ...}` reads back as the
+    *optional* key `page`, a different set. So `repr` marks it,
+    `<required: 'page?'>`, and the render is a syntax error where it is read
+    rather than a schema that quietly admits `{}`.
     """
     query = Validator(TypedDict("Query", {"page?": int}))
     environment = {"Validator": Validator, "anything": anything}
-    rebuilt = Validator(eval(repr(query), environment))  # noqa: S307
-    assert rebuilt != query
-    assert rebuilt.is_valid({}), "the rebuilt key is optional"
+    assert repr(query) == "{<required: 'page?'>: int, str: anything}"
+    with pytest.raises(SyntaxError):
+        eval(repr(query), environment)  # noqa: S307
     assert not query.is_valid({})
 
     # And the forms that do round-trip still do, including the doubled escape.

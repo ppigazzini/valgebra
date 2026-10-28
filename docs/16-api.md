@@ -85,7 +85,7 @@ prints and read back. A refinement marker prints by its bare name, `Ge(0)` rathe
 `at.Ge(0)`, so that session imports each marker by name, as
 `from annotated_types import Ge` does, rather than through the
 `import annotated_types as at` these pages write. Seven things it cannot render
-as an expression, and two of them read back quietly: a
+as an expression, and one of them reads back quietly: a
 **class**, which is an object rather than syntax and appears as its name -- or
 as `instance_of(Name)` where it stands alone and its name would read back as
 the class met with the fields it declares; a
@@ -102,11 +102,12 @@ record standing apart from its class prints
 as `object(x=int)`, a form no constructor spells -- the schema does not record
 which class each record came from, so the render cannot fold them back, and a
 `Protocol` prints the same way, as the record of its members; a
-**required key whose name ends in `?`**, the quiet one: the dict literal reads
-every trailing `?` as optional, so `TypedDict("TD", {"a?": int})` renders
-`{'a?': int, str: anything}`, which reads back as a record whose `a` is
-optional -- a different schema, with nothing to say so; a **class met with a
-declaration it did not make**, the second quiet one:
+**required key whose name ends in `?`**, which no dict display spells -- the
+dict literal reads every trailing `?` as optional -- and which prints marked,
+`<required: 'a?'>`, a syntax error where it is parsed:
+`TypedDict("TD", {"a?": int})` renders `{<required: 'a?'>: int, str: anything}`
+rather than the display of a record whose `a` is optional; a **class met with a
+declaration it did not make**, the quiet one:
 `intersection(MyTuple, tuple[int, str])` prints as `MyTuple`,
 `intersection(list[int], Plain)` as `Plain`, and `intersection(Plain, P)` for a
 protocol `P` as `Plain`, because a `NamedTuple` and a dataclass are built as
