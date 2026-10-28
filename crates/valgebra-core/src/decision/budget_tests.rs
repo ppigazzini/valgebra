@@ -226,7 +226,7 @@ fn a_budgeted_equivalence_query_decides_the_same_or_declines() {
 
 /// The same obligation, asked of drawn pairs.
 mod drawn {
-    use super::super::{Budget, DECISION_BUDGET, NoLeafRelations, Relation};
+    use super::super::{Budget, DECISION_BUDGET, NoLeafRelations, Relation, placed_by_membership};
     use crate::laws::decidable_schema;
     use proptest::prelude::*;
 
@@ -243,20 +243,23 @@ mod drawn {
         ///
         /// The four chosen pairs above drive one path each. This asks every
         /// pair the decidable fragment draws: with no budget the query answers
-        /// neither way, and at every allowance short of the one the pair
-        /// needs the answer is the one the ceiling gives or it is the decline.
-        /// A refutation is a value of the subject outside the supertype, and
-        /// a budget that ran out found none.
+        /// neither way -- but where the two terms place it, one term or one a
+        /// member of the other, which costs no step -- and at every allowance
+        /// short of the one the pair needs the answer is the one the ceiling
+        /// gives or it is the decline. A refutation is a value of the subject
+        /// outside the supertype, and a budget that ran out found none.
         #[test]
         fn the_budget_declines_on_every_drawn_pair(
             sub in decidable_schema(),
             sup in decidable_schema(),
         ) {
             let none = Budget::new(0);
-            prop_assert_eq!(
-                sub.subtype_relation(&sup, &NoLeafRelations, &[], &none),
+            let free = if sub == sup || placed_by_membership(&sub, &sup) {
+                Relation::Holds
+            } else {
                 Relation::Unknown
-            );
+            };
+            prop_assert_eq!(sub.subtype_relation(&sup, &NoLeafRelations, &[], &none), free);
             let ceiling = Budget::new(DECISION_BUDGET);
             let decided = sub.subtype_relation(&sup, &NoLeafRelations, &[], &ceiling);
             let needed = sub.subtype_steps(&sup);

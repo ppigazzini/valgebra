@@ -2578,6 +2578,29 @@ proptest! {
         }
     }
 
+    // THEORY: semantic-subtyping
+    /// The placements the terms make on their own hold with no step to spend:
+    /// `S ⊆ S ∪ T` and `S ∩ T ⊆ S`, over drawn schemas and the raw join and
+    /// meet, which no fold reaches. A rule that spends before the placement is
+    /// asked refuses both here -- the shape of an answer starved by rules ahead
+    /// of it that have nothing to say about the pair.
+    #[test]
+    fn a_placement_by_identity_spends_no_step(a in schema(), b in schema()) {
+        let spent = crate::decision::Budget::new(0);
+        prop_assert_eq!(
+            a.subtype_relation(&union(a.clone(), b.clone()), &NoLeafRelations, &[], &spent),
+            Relation::Holds,
+            "{:?} is a branch of the union and was not placed in it",
+            a
+        );
+        prop_assert_eq!(
+            intersection(a.clone(), b.clone()).subtype_relation(&a, &NoLeafRelations, &[], &spent),
+            Relation::Holds,
+            "{:?} is a member of the meet and the meet was not placed below it",
+            a
+        );
+    }
+
     /// Construction preserves membership, not just structural shape. Over the
     /// scalar-and-set fragment the `member_v` oracle decides exactly, so a
     /// built schema must admit each sample value exactly when the term as

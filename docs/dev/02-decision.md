@@ -941,6 +941,19 @@ any caller. `DECISION_BUDGET` caps the steps one query spends, past it the
 answer is undecided, and [00-architecture.md](00-architecture.md) names that
 kind of bound.
 
+**A placement the two terms make is never refused for want of a step.** One
+term against itself, a subject among a union's branches, a supertype among a
+meet's members: each is containment read off the terms' first level, and the
+budget counts the work of rules that read below it. So `subtype_by_rules` asks
+equality before it spends -- the discriminants inline first, so a pair of two
+shapes pays no call -- and the two memberships are asked first by the rule for
+each shape (`meet_below` before a member, `below_a_union` before a branch) and
+again by a goal that finds the budget spent, which answers them rather than
+declining. Asked anywhere later, a meet below a union holding it waits behind
+its members, and one member dear enough to spend the budget leaves the
+placement undecided. `a_placement_by_identity_spends_no_step` holds both
+placements decided under a budget of no steps, over drawn schemas.
+
 **Neither bounds the stack, so a third count does.** A path is finite and can
 still be long: two fixpoints nesting 100 and 99 lists around the back edge
 return to a goal on the trail only after `lcm(100, 99)` levels, a few steps

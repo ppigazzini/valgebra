@@ -116,13 +116,18 @@ rules of the kind a rule-based inclusion of JSON Schema states: an uninhabited
 subject is below everything [BBC+26, (uninhabited)], a union is below a schema
 where each member is [BBC+26, (anyOf-l)], a schema is below a union where it is
 below one member [BBC+26, (anyOf-r)], and a sequence is below a sequence
-position by position [BBC+26, (array)].
+position by position [BBC+26, (array)]. The placements the terms make on their
+own -- one term, a subject among a union's branches, a supertype among a meet's
+members -- are never refused for want of a step, as a rule-based inclusion
+proves the reflexive case in linear time [BBC+26, §6, p. 8]. Equality is asked
+before the budget, and the two memberships first among the rules that read a
+union or a meet and again where the budget is spent.
 
 SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
 
-IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below
+IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership
 
-HELD-BY: the_two_deciders_agree_under_an_oracle, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment
+HELD-BY: the_two_deciders_agree_under_an_oracle, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment, a_placement_by_identity_spends_no_step
 
 The distinction is not pedantry. A rule stated as the reduction and implemented
 structurally has a hole wherever an arm is missing, and the reduction's name over
@@ -902,7 +907,9 @@ HELD-BY: test_the_three_answers_agree_with_the_two, the_relation_folds_are_kleen
 **The budget declines; it never refutes.** Exhausting the work budget answers
 neither, on every path a subtyping query can take: through a product, through
 the disjointness reading, and through the shared cell an equivalence query
-carries across its two directions. Reaching the depth bound, which holds the
+carries across its two directions. The one answer it leaves standing is a
+placement the two terms make on their own -- one term, or one a member of the
+other -- which costs no step and holds whatever is left. Reaching the depth bound, which holds the
 recursion inside the stack, answers neither the same way, in the goals and in
 emptiness. **[OBLIGATION: the-budget-declines]**
 

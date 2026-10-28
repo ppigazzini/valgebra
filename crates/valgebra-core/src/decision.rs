@@ -161,6 +161,24 @@ pub(super) fn descending<T>(budget: &Budget, refused: T, descent: impl FnOnce() 
     answer
 }
 
+/// Whether `sub ⊆ sup` holds by membership alone: the subject is a branch of a
+/// union supertype [BBC+26, (anyOf-r)], or the supertype is a member of a meet
+/// subject.
+///
+/// Each is set containment read off the terms -- `X ⊆ X ∪ Y` and `X ∩ Y ⊆ X`
+/// -- and reads nothing below the terms' first level: the reflexive case is the
+/// one a rule-based inclusion proves in linear time [BBC+26, §6, p. 8]. So it is
+/// never refused for want of a step. The rule for each shape asks it before
+/// anything that spends -- a meet before it asks its members, a union
+/// supertype before it asks its branches -- and a goal that reaches a spent
+/// budget asks it rather than declining, since a placement that waits behind
+/// a dear member is a placement the member's work starved.
+#[inline]
+fn placed_by_membership(sub: &Schema, sup: &Schema) -> bool {
+    matches!(sup, Schema::Union(branches) if branches.contains(sub))
+        || matches!(sub, Schema::Intersection(members) if members.contains(sup))
+}
+
 /// Spend one unit of `budget`; returns `false` when it is already exhausted, the
 /// signal a budgeted decision uses to stop and report the conservative answer.
 pub(super) fn spend(budget: &Budget) -> bool {
@@ -493,10 +511,18 @@ impl Schema {
     /// fragment, a goal already on the trail assumed to hold [AC93, §1.5], and
     /// the rules below for the rest.
     fn subtype_by_rules(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
-        // Reflexivity, by identity. The checks below are ordered by what they
-        // cost, and each answers the whole query on its own, so a cheaper one
-        // never hides a verdict a later one would reach.
-        if core::ptr::eq(self, other) {
+        // Reflexivity, by identity and then by structure. The checks below are
+        // ordered by what they cost, and each answers the whole query on its
+        // own, so a cheaper one never hides a verdict a later one would reach.
+        // Both come before the budget: they read the two terms, and a
+        // reflexive pair refused for want of a step is an answer lost to the
+        // work of rules that have nothing to say about it. The discriminants
+        // are compared inline first, so a pair of two shapes -- most pairs --
+        // pays no call: asked bare, the comparison cost the matrix and the
+        // rules corpus 1.2% each, and guarded it costs neither anything.
+        if core::ptr::eq(self, other)
+            || (core::mem::discriminant(self) == core::mem::discriminant(other) && self == other)
+        {
             return Relation::Holds;
         }
         // Bound the total work: the distribution rules below can demand effort
@@ -505,8 +531,9 @@ impl Schema {
         // annotation decides in a few steps; only an adversarial schema reaches
         // the ceiling.
         if !spend(cx.budget) {
-            // The work bound stopping a descent proves nothing about the pair.
-            return Relation::Unknown;
+            // The work bound stopping a descent proves nothing about the pair,
+            // except what the terms place on their own, which costs no step.
+            return Relation::proven(placed_by_membership(self, other));
         }
         // Scalar fragment: exact via the region partition. Subtyping there is
         // set inclusion between the two region sets, and nothing else. A
@@ -528,10 +555,6 @@ impl Schema {
             // read as the sets [FCB08, Def. 4.1], so a region outside the
             // supertype's set is a value outside it.
             return Relation::decided(a.subset_of(b));
-        }
-        // Reflexivity for two equal spellings that are not the same node.
-        if self == other {
-            return Relation::Holds;
         }
         // Coinductive hypothesis: a goal already being proven on this path is
         // assumed to hold, so two recursive types are compared at their greatest
@@ -917,6 +940,12 @@ impl Schema {
     /// class the oracle places it outside or a supertype outside every kind it
     /// has.
     fn meet_below(&self, other: &Schema, members: &[Schema], cx: &mut Cx<'_>) -> Relation {
+        // The placements by membership first, before a member is asked below
+        // the supertype: a member dear enough to spend the budget would leave
+        // the meet unplaced in a union that holds it.
+        if placed_by_membership(self, other) {
+            return Relation::Holds;
+        }
         // Every placement here proves and none refutes: a member that is *not*
         // below the supertype says nothing about the meet, which is a smaller
         // set than that member. So a pair none of them places is handed to the

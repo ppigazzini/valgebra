@@ -1127,7 +1127,10 @@ exhausting it returns the conservative answer (`False`, "not proven") rather
 than running unbounded. The budget counts steps, not time: a step linear in a
 leaf it reads is one step, so a relation over a large leaf takes time in
 proportion to it ([limits](10-limits.md#what-the-bounds-do-not-bound)). This
-preserves soundness: a bail-out is never a wrong `True`.
+preserves soundness: a bail-out is never a wrong `True`. A relation the two
+schemas settle as written -- a schema against itself, a schema against a union
+that holds it, a meet against one of its own members -- is answered whatever
+the budget has left.
 
 The boolean methods answer `True` or `False`, so through them a `False` from an
 exhausted budget reads the same as a `False` the procedure decided. Inside the

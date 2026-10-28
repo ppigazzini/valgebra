@@ -13,7 +13,20 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: a placement the two terms make is never refused for want of a step
+
 -->
+
+### Fixed
+
+- **A relation the two schemas settle as written is never undecided for want
+  of a step.** A schema against a union that holds it, a meet against one of
+  its own members, and a schema against itself are answered before any rule
+  spends the decision budget. Records a translation from JSON Schema guards to
+  objects and nests four deep are `subset` of a union holding them, and a
+  recursive record met with a nested closed one is `subset` of that recursive
+  record, where 0.0.21 and 0.0.22 spent the budget on the meet's members and
+  answered `undecided`.
 
 ## [0.0.22] - 2026-10-27
 

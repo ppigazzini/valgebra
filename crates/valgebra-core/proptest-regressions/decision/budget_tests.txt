@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 1dcc1d7e9e8f05ad20fa606b84293478c5826b88d5b572c641c9ee24a1a604f1 # shrinks to sub = KeyedMap { fields: [], defaults: [] }, sup = KeyedMap { fields: [], defaults: [] }
