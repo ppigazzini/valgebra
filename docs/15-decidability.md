@@ -189,7 +189,10 @@ answers `"undecided"`.
   ordered. That holds however the meet is spelled: on one refinement, or across
   an intersection whose members bound it, since an intersection is a subset of
   every member. A `bool` base counts too, because it subclasses `int`; a `float`
-  base holds `0.5` between the same bounds, so they are not empty.
+  base holds `0.5` between the same bounds, so they are not empty. A float
+  operand over the integers is read at its floor or its ceiling, since Python
+  compares an `int` with a `float` exactly: `Annotated[int, Gt(0.5)]` is the set
+  `Annotated[int, Ge(1)]` is, and `Gt(math.inf)` holds no integer.
   A bound over a **float** base is a set of floats and is decided as one: which
   side a bound lands on is chosen by the base rather than by the operand's type,
   so `Annotated[float, Gt(0)]` carries the integer zero and still orders the

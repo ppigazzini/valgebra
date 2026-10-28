@@ -1177,21 +1177,92 @@ fn a_literal_key_of_every_constant_kind_names_its_key() {
     }
 }
 
-/// An operand the pool cannot read refuses the constraint that names it.
+/// An operand the pool cannot read as a number refuses the constraint that
+/// names it, and so does `nan`, which orders nothing.
 #[test]
 fn an_operand_the_pool_cannot_read_refuses() {
-    let pool = Pool(vec![Operand::Float(0.5)]);
-    assert!(
-        lower(
+    for operand in [Operand::NoneType, Operand::Float(f64::NAN)] {
+        let pool = Pool(vec![operand.clone()]);
+        assert!(
+            lower(
+                &Schema::Refine {
+                    base: Arc::new(Schema::Int),
+                    constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
+                },
+                &pool,
+            )
+            .is_none(),
+            "{operand:?} bounds no integer"
+        );
+    }
+}
+
+/// The comparison a bound makes between an integer and a float, as Python
+/// makes it: exactly, which `f64` does for the small integers drawn here.
+fn compares(constraint: &Constraint, n: i64, x: f64) -> bool {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "the integers drawn are small, so the conversion is exact"
+    )]
+    let n = n as f64;
+    match constraint {
+        Constraint::Gt(_) => n > x,
+        Constraint::Ge(_) => n >= x,
+        Constraint::Lt(_) => n < x,
+        Constraint::Le(_) => n <= x,
+        other => panic!("{other:?} is no comparison"),
+    }
+}
+
+proptest! {
+    /// A float bound over the integers is read at its floor or its ceiling: the
+    /// lowered set admits an integer, and a boolean, exactly where Python's
+    /// comparison of it with the float holds, over operands at, between and
+    /// past the integers drawn, `-0.0`, and both infinities.
+    #[test]
+    fn a_float_bound_over_the_integers_is_read_as_python_compares(
+        whole in -4i64..4,
+        quarter in 0i64..4,
+        special in prop_oneof![
+            Just(None),
+            Just(Some(-0.0)),
+            Just(Some(f64::INFINITY)),
+            Just(Some(f64::NEG_INFINITY)),
+        ],
+        which in 0usize..4,
+        n in -6i64..6,
+    ) {
+        #[expect(clippy::cast_precision_loss, reason = "small integers convert exactly")]
+        let x = special.unwrap_or(whole as f64 + quarter as f64 / 4.0);
+        let at = OperandIx::new(0);
+        let constraint = [
+            Constraint::Gt(at),
+            Constraint::Ge(at),
+            Constraint::Lt(at),
+            Constraint::Le(at),
+        ]
+        .into_iter()
+        .nth(which)
+        .expect("one of four");
+        let set = lower(
             &Schema::Refine {
                 base: Arc::new(Schema::Int),
-                constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
+                constraints: vec![constraint.clone()].into(),
             },
-            &pool,
+            &Pool(vec![Operand::Float(x)]),
         )
-        .is_none(),
-        "a float bound is not an integer set"
-    );
+        .expect("a float bound over the integers lowers");
+        prop_assert_eq!(set.admits(Value::integer(n)), compares(&constraint, n, x), "{} {:?}", n, x);
+        for boolean in [false, true] {
+            prop_assert_eq!(
+                set.admits(Value::boolean(boolean)),
+                compares(&constraint, i64::from(boolean), x),
+                "{} {:?}",
+                boolean,
+                x
+            );
+        }
+    }
 }
 
 /// A length bound lands in the kinds the base has and in no other: the bound

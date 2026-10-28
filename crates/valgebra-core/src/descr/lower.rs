@@ -1036,28 +1036,10 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
         Constraint::Le(index) | Constraint::Lt(index) if base_is_floats => {
             floats(float_bound(constraint, index)?)
         }
-        Constraint::Ge(index) | Constraint::Gt(index) => {
-            let Operand::Integer(bound) = pool.operand(*index)? else {
-                return None;
-            };
-            let lo = if matches!(constraint, Constraint::Gt(_)) {
-                bound.checked_add(1)?
-            } else {
-                bound
-            };
-            integers(IntSet::between(Some(lo), None))
-        }
-        Constraint::Le(index) | Constraint::Lt(index) => {
-            let Operand::Integer(bound) = pool.operand(*index)? else {
-                return None;
-            };
-            let hi = if matches!(constraint, Constraint::Lt(_)) {
-                bound.checked_sub(1)?
-            } else {
-                bound
-            };
-            integers(IntSet::between(None, Some(hi)))
-        }
+        Constraint::Ge(index)
+        | Constraint::Gt(index)
+        | Constraint::Le(index)
+        | Constraint::Lt(index) => integers(integer_bound(constraint, &pool.operand(*index)?)?),
         Constraint::MultipleOf(index) => {
             let Operand::Integer(step) = pool.operand(*index)? else {
                 return None;
@@ -1124,6 +1106,56 @@ fn straddle(value: i64, lower: bool) -> Straddle {
         core::cmp::Ordering::Less => Straddle::Beside(nearest),
     }
 }
+
+/// The integers a comparison bound admits, for a base that is not the floats.
+///
+/// Python compares an `int` with a `float` exactly, so a float operand is read
+/// as the integer on the near side of it, and then as an integer bound is:
+/// `n > x` is `n > floor(x)` and `n >= x` is `n >= ceil(x)`, so `n > 0.5` and
+/// `n > 0.0` are both `n >= 1`; the upper bounds mirror them. An infinite
+/// operand admits every integer or none, and `nan`, which orders nothing,
+/// declines, as does a bound past the range an integer here holds.
+fn integer_bound(constraint: &Constraint, operand: &Operand) -> Option<IntSet> {
+    let lower = matches!(constraint, Constraint::Ge(_) | Constraint::Gt(_));
+    let strict = matches!(constraint, Constraint::Gt(_) | Constraint::Lt(_));
+    let bound = match *operand {
+        Operand::Integer(value) => value,
+        Operand::Float(value) if value.is_infinite() => {
+            return Some(if value.is_sign_positive() == lower {
+                IntSet::empty()
+            } else {
+                IntSet::all()
+            });
+        }
+        Operand::Float(value) => {
+            let near = if lower == strict {
+                value.floor()
+            } else {
+                value.ceil()
+            };
+            if !(-I64_EDGE..I64_EDGE).contains(&near) {
+                return None;
+            }
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "an integral float inside the i64 range converts exactly"
+            )]
+            let near = near as i64;
+            near
+        }
+        _ => return None,
+    };
+    Some(match (lower, strict) {
+        (true, false) => IntSet::between(Some(bound), None),
+        (true, true) => IntSet::between(Some(bound.checked_add(1)?), None),
+        (false, false) => IntSet::between(None, Some(bound)),
+        (false, true) => IntSet::between(None, Some(bound.checked_sub(1)?)),
+    })
+}
+
+/// `2^63`, the first float past the integers an `i64` holds; `-2^63` is the
+/// least one it holds. `nan` is inside no range, so it declines here too.
+const I64_EDGE: f64 = 9_223_372_036_854_775_808.0;
 
 /// The floats a comparison bound admits, for a base that is the floats.
 ///

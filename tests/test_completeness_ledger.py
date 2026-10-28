@@ -380,6 +380,20 @@ _DECIDED = [
         None,
         id="empty:three-guards-tagged-two-ways",
     ),
+    # A float bound over the integers is read at its floor or its ceiling, as
+    # Python compares an int with a float: `int > 0.5` is `int >= 1`.
+    pytest.param(
+        "refutes",
+        intersection(complement(bool), Annotated[int, at.Gt(0.5)]),
+        nothing,
+        id="json:~bool&int>0.5-is-inhabited",
+    ),
+    pytest.param(
+        "equivalent",
+        Annotated[int, at.Gt(0.5)],
+        Annotated[int, at.Ge(1)],
+        id="int>0.5==int>=1",
+    ),
     # A bare container class is its kind, so the two spellings are one schema and
     # each is below the other.
     pytest.param("equivalent", list, list[object], id="list==list[object]"),
