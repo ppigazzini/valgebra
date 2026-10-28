@@ -56,6 +56,7 @@ import pytest
 from _reason import is_a_reason
 from _tree import ROOT
 from valgebra import (
+    Regex,
     Validator,
     anything,
     complement,
@@ -325,6 +326,18 @@ ROWS: dict[str, Row] = {
         beside=(
             Annotated[int, at.MultipleOf(1), at.Gt(30), at.Lt(31)],
             nothing,
+            "subset",
+        ),
+    ),
+    "A word boundary inside a pattern.": Declines(
+        Annotated[str, Regex(r"a\bb")],
+        nothing,
+        "an automaton reading the characters on both sides of a position, a "
+        "lookaround the builder has no table for",
+        # The pair the page decides beside it: the boundaries at the two ends.
+        beside=(
+            Annotated[str, Regex(r"\bab\b")],
+            Annotated[str, Regex("ab")],
             "subset",
         ),
     ),

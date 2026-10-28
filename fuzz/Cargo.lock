@@ -173,6 +173,7 @@ name = "valgebra-core"
 version = "0.0.22"
 dependencies = [
  "regex-automata",
+ "regex-syntax",
  "rustc-hash",
 ]
 

@@ -201,9 +201,13 @@ the binding already depends on; the three set operations and the emptiness
 decision are valgebra's, because that crate builds automata for searching and
 offers no complement. It is asked for every match rather than for its default,
 leftmost-first, which keeps only the match a search prefers: `a|ab` would lose
-`ab`, and `a*?` every word but the empty one. A law in
-`crates/valgebra-core/src/descr/regular/tests.rs` holds each pattern's table
-to the `regex` matcher the walk runs.
+`ab`, and `a*?` every word but the empty one. The builder has no table for a
+Unicode word boundary, and a pattern matched whole needs none at its ends: a
+`\b` or `\B` leading or closing it asks about the first or last character
+alone, so its set is the set between the ends met with one regular language per
+end (`word_ends`). A law in `crates/valgebra-core/src/descr/regular/tests.rs`
+holds each pattern's table to the `regex` matcher the walk runs, boundaries at
+the ends included.
 
 **The rule that splits a fixed-length sequence across a union** is the product
 decomposition — [FCB08, Lem. 6.5] for pairs, in the backtrack-free form Castagna

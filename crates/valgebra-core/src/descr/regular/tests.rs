@@ -123,6 +123,62 @@ fn ranked_pattern() -> impl Strategy<Value = String> {
     })
 }
 
+/// Every word over `{a, -, é}` of up to three letters: a word character, a
+/// character that is none, and a word character past ASCII.
+fn bounded_words() -> Vec<String> {
+    let mut words = vec![String::new()];
+    let mut layer = vec![String::new()];
+    for _ in 0..3 {
+        layer = layer
+            .iter()
+            .flat_map(|word| ["a", "-", "é"].map(|letter| format!("{word}{letter}")))
+            .collect();
+        words.extend(layer.iter().cloned());
+    }
+    words
+}
+
+/// Patterns over `{a, -, é}` whose two ends may each assert a word boundary or
+/// its negation, Unicode or ASCII: the first read as the character it asks
+/// about, the second by the builder.
+fn bounded_pattern() -> impl Strategy<Value = String> {
+    let leaf = prop_oneof![
+        Just(String::new()),
+        Just("a".to_owned()),
+        Just("-".to_owned()),
+        Just("é".to_owned()),
+        Just("[a-]".to_owned()),
+    ];
+    let between = leaf.prop_recursive(2, 8, 2, |inner| {
+        prop_oneof![
+            (inner.clone(), inner.clone()).prop_map(|(x, y)| format!("{x}{y}")),
+            (inner.clone(), inner.clone()).prop_map(|(x, y)| format!("(?:{x}|{y})")),
+            inner.prop_map(|x| format!("(?:{x})*")),
+        ]
+    });
+    let end = || prop::sample::select(vec!["", r"\b", r"\B", r"(?-u:\b)", r"(?-u:\B)"]);
+    (end(), between, end()).prop_map(|(first, between, last)| format!("{first}{between}{last}"))
+}
+
+/// A word boundary at an end of a pattern is read as the character it asks
+/// about, under the whole-text match the walk runs: `\bab\b` is `ab`, `\Bab`
+/// and a bare `\b` hold nothing, and a bare `\B` holds the empty word.
+///
+/// One inside a pattern is refused, as the builder refuses it, and so is one in
+/// a pattern over bytes, which this reading does not take.
+#[test]
+fn a_word_boundary_at_an_end_is_the_character_it_asks_about() {
+    assert_eq!(language(r"\bab\b"), language("ab"));
+    assert_eq!(language(r"(?-u:\b)ab"), language("ab"));
+    assert!(language(r"\Bab").is_empty());
+    assert!(language(r"\b").is_empty());
+    assert_eq!(language(r"\B"), one_word(b""));
+    assert_eq!(language(r"\b(?:a|-)"), language("a"));
+    assert_eq!(language(r"(?:a|-)\B"), language("-"));
+    assert!(RegularSet::pattern(r"a\bb", Alphabet::Text).is_none());
+    assert!(RegularSet::pattern(r"\bab\b", Alphabet::Bytes).is_none());
+}
+
 /// Languages over the three-letter alphabet the universe covers.
 fn regular_set() -> impl Strategy<Value = RegularSet> {
     let leaf = prop_oneof![
@@ -298,6 +354,26 @@ proptest! {
     fn an_empty_language_holds_no_word(a in regular_set()) {
         if a.is_empty() {
             prop_assert!(universe().into_iter().all(|w| !a.holds(w)));
+        }
+    }
+
+    /// A pattern opening or closing on a word boundary holds the words the
+    /// walk's matcher admits whole, the boundary read as the character it asks
+    /// about.
+    #[test]
+    fn a_word_boundary_at_an_end_holds_the_words_its_matcher_admits(
+        pattern in bounded_pattern()
+    ) {
+        let set = language(&pattern);
+        let whole = matcher(&pattern);
+        for word in bounded_words() {
+            prop_assert_eq!(
+                set.holds(word.as_bytes()),
+                whole.is_match(&word),
+                "{} against {:?}",
+                pattern,
+                word
+            );
         }
     }
 

@@ -938,6 +938,24 @@ the shape. What is left below is what the descriptor cannot hold.
     assert Validator(integers).relation_to(nothing) == "subset"
     ```
 
+- **A word boundary inside a pattern.** A pattern matches the whole text, so a
+  `\b` or `\B` at either end of it asks about the first or the last character
+  alone, and is read as that: `\bab\b` is the set `ab` is. One between two
+  parts of a pattern asks about the characters on both sides of a position,
+  which the set representation's automata do not read, so a relation turning
+  on it declines -- `a\bb` included, although no string matches it.
+
+    ```python
+    from typing import Annotated
+
+    from valgebra import Regex, Validator, nothing
+
+    bounded = Validator(Annotated[str, Regex(r"\bab\b")])
+    assert bounded.is_equivalent(Annotated[str, Regex("ab")])
+    inside = Validator(Annotated[str, Regex(r"a\bb")])
+    assert inside.relation_to(nothing) == "undecided"
+    ```
+
 - **A schema too large to build.** The descriptor is bounded three ways: the
   nodes it will read, the nesting it will descend, and the work a build may
   spend. Past any of them it refuses, and the caller keeps the rules' answer.

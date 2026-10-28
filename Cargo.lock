@@ -1052,6 +1052,7 @@ dependencies = [
  "proptest",
  "regex",
  "regex-automata",
+ "regex-syntax",
  "rustc-hash",
 ]
 
