@@ -463,8 +463,17 @@ fn render_keyed_map(
     let mut entries: Vec<String> = fields
         .iter()
         .map(|field| {
-            let suffix = if field.required { "" } else { "?" };
-            let name = python_repr(py, &format!("{}{suffix}", field.name));
+            let name = if field.required && field.name.ends_with('?') {
+                // A dict display reads every trailing `?` as optional, so no
+                // display requires this key, and printed as one it would read
+                // back as the record whose key lacks the `?` and is optional.
+                // It prints marked instead, a syntax error where it is read, as
+                // a constant whose `repr` would read back as another value does.
+                format!("<required: {}>", python_repr(py, &field.name))
+            } else {
+                let suffix = if field.required { "" } else { "?" };
+                python_repr(py, &format!("{}{suffix}", field.name))
+            };
             Ok(format!("{name}: {}", r(&field.schema)?))
         })
         .collect::<PyResult<_>>()?;
