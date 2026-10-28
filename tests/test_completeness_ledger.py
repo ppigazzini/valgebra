@@ -357,6 +357,16 @@ _DECIDED = [
         "empty", intersection(Any, complement(Any)), None, id="empty:Any&~Any"
     ),
     pytest.param("empty", complement(Any), None, id="empty:~Any"),
+    # A complemented union is read with the complement pushed in, as the relation
+    # reads it below `nothing`: `str & json & ~str` folds to the empty set.
+    pytest.param(
+        "empty",
+        complement(
+            union(complement(str), complement(intersection(_JSON, complement(str))))
+        ),
+        None,
+        id="empty:~(~str|~(json&~str))",
+    ),
     # A bare container class is its kind, so the two spellings are one schema and
     # each is below the other.
     pytest.param("equivalent", list, list[object], id="list==list[object]"),

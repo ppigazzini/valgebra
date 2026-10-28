@@ -325,16 +325,24 @@ answers `"undecided"`.
   and `¬(a ∧ b)` is `¬a ∨ ¬b`. The subject is read with its complement pushed
   one level in, and decided where that reading is the supertype or has the
   supertype among its members, so a complement of a union is below the meet
-  of the complements and below what a complemented member's complement is:
+  of the complements and below what a complemented member's complement is.
+  Emptiness reads a complemented union the same way, so one whose
+  complements, pushed in, meet in nothing as they are built is empty to
+  `is_empty` as it is below `nothing`:
 
     ```python
-    from valgebra import Validator, complement, intersection, union
+    from valgebra import Validator, complement, intersection, recursive, union
 
     nested = Validator(list[list[int]])
     assert complement(union(str, complement(nested))).is_subtype_of(nested)
     assert complement(union(int, str)).is_subtype_of(
         intersection(complement(int), complement(str))
     )
+    json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    # str & json_value & ~str, once the complement is pushed in
+    assert complement(
+        union(complement(str), complement(intersection(json_value, complement(str))))
+    ).is_empty()
     ```
 
     Only that reading is taken: a complement pushed in and then compared by

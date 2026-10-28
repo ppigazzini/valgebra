@@ -32,7 +32,7 @@ use super::literals::{FiniteMeet, a_meet_read_by_its_constants};
 use super::records::{keyed_map_meet_verdict, keyed_map_minus_keyed_maps};
 use super::{
     Budget, Cx, DECISION_BUDGET, LeafRelations, NoLeafRelations, descending,
-    has_complementary_pair, has_disjoint_pair, spend,
+    has_complementary_pair, has_disjoint_pair, pushed_complement_is_placed, spend,
 };
 
 impl Schema {
@@ -352,6 +352,17 @@ impl Schema {
             // is a divergence between two paths a test holds together
             // (`empty_and_region_folds_the_same_region_as_region_set`). The
             // emptiness verdict has no such second reader.
+            //
+            // Where the regions leave it open, the complement is empty where
+            // its inner covers the universe by the region walk past an opaque
+            // member, or where its inner is a union whose complements, pushed
+            // one level in [FCB08, Lem. 6.2], meet in nothing as they are
+            // built: `¬(¬s ∪ ¬(j ∩ ¬s))` is `s ∩ j ∩ ¬s`. That is the relation's
+            // reading of the same subject below `nothing`
+            // (`pushed_complement_is_placed`), so `is_empty` and a relation to
+            // the empty set read it alike; the fold alone, which spends no
+            // step, since a step spent here is one a relation asking this
+            // emptiness inside its own query no longer has.
             Schema::Complement(inner) => {
                 let (_, inner_region) = inner.empty_and_region(cx);
                 let region = match inner_region {
@@ -359,7 +370,17 @@ impl Schema {
                     Regions::Unknown => Regions::Unknown,
                 };
                 let verdict = match region.verdict() {
-                    Verdict::Unknown if inner.covers_the_universe() => Verdict::Empty,
+                    Verdict::Unknown
+                        if inner.covers_the_universe()
+                            || (matches!(&**inner, Schema::Union(_))
+                                && pushed_complement_is_placed(
+                                    inner,
+                                    &Schema::Nothing,
+                                    cx.defs,
+                                )) =>
+                    {
+                        Verdict::Empty
+                    }
                     settled => settled,
                 };
                 (verdict, region)

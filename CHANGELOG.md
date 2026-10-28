@@ -24,6 +24,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a Len whose minimum is below zero is refused as MinLen is
 - feat: a type defined in C lays down the layout its instance size says
 - feat: two branches splitting a set by another are read as the set they split
+- fix: is_empty reads a complemented union as the relation reads it below nothing
 
 -->
 
@@ -102,6 +103,13 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **`is_empty` reads a complemented union as a relation below `nothing` does.**
+  A complemented union is empty where its complements, pushed one level in,
+  meet in nothing as they are built, which is how the relation reads it below
+  `nothing`, so `complement(union(complement(str),
+  complement(intersection(json, complement(str))))).is_empty()` is `True`,
+  where it was `False` beside `relation_to(nothing) == "subset"`.
 
 - **A relation the two schemas settle as written is never undecided for want
   of a step.** A schema against a union that holds it, a meet against one of

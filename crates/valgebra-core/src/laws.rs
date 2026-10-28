@@ -2623,6 +2623,30 @@ proptest! {
     }
 
     // THEORY: lattice-theory
+    /// Emptiness reads a complemented union as the relation reads it below
+    /// `nothing`: where the relation proves `¬(¬a ∪ ¬(y ∩ ¬a))` below the
+    /// empty set, pushing the complement in, the emptiness reading proves it
+    /// empty, over a drawn set `a` and a drawn `y`, each built as a caller
+    /// builds it, which leaves the complement of the union standing.
+    #[test]
+    fn a_complement_the_relation_empties_is_read_empty(a in set_schema(), y in schema()) {
+        let (a, y) = (built(&a), built(&y));
+        let held = Schema::union_within(
+            [a.clone().complement(), Schema::meet_within([y, a.complement()], &[]).complement()],
+            &[],
+        )
+        .complement();
+        let budget = crate::decision::Budget::new(crate::decision::DECISION_BUDGET);
+        if held.subtype_relation(&Schema::Nothing, &NoLeafRelations, &[], &budget).holds() {
+            prop_assert!(
+                held.is_empty_with(&NoLeafRelations, &[]),
+                "{:?} is below nothing and not read empty",
+                held
+            );
+        }
+    }
+
+    // THEORY: lattice-theory
     /// A complemented union or meet is below its complements pushed one level
     /// in, with one step to spend: `¬(A ∪ B) ⊆ ¬A ∩ ¬B` and
     /// `¬(A ∩ B) ⊆ ¬A ∪ ¬B`, the subject written raw and the supertype built as
