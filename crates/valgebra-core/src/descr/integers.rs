@@ -396,7 +396,7 @@ fn lcm(a: i64, b: i64) -> Option<i64> {
 }
 
 /// The greatest common divisor of two positive integers, by Euclid.
-fn gcd(a: i64, b: i64) -> i64 {
+pub(crate) fn gcd(a: i64, b: i64) -> i64 {
     let (mut a, mut b) = (a, b);
     while b != 0 {
         let remainder = a.rem_euclid(b);

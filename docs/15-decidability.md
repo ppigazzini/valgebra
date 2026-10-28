@@ -157,8 +157,23 @@ answers `"undecided"`.
   the two steps, and it carries to the values where `%` reads a value and both
   steps as one kind of number: two `int` steps over `int`, two `float` steps
   over `int` or `float`, and over `float` any two steps a float holds exactly.
-  The *other* direction is a refutation and needs a value rather than a rule,
-  which is the conservative entry below.
+  The *other* direction is a refutation, and the subject's own multiples name
+  its value where its constraints are its step and integer bounds: of two
+  consecutive multiples of `a`, a step that does not divide `a` divides at most
+  one. A subject narrowed by anything else leaves the value to the residues, the
+  conservative entry below:
+
+    ```python
+    from typing import Annotated
+
+    from annotated_types import MultipleOf
+
+    from valgebra import Validator
+
+    fives = Validator(Annotated[int, MultipleOf(5000)])
+    assert fives.relation_to(Annotated[int, MultipleOf(2500)]) == "subset"
+    assert fives.relation_to(Annotated[int, MultipleOf(3)]) == "not_subset"  # 5000
+    ```
 - **Refinements.** A refinement is a subtype of its base and of a refinement with
   looser bounds — a tighter numeric or length bound entails a looser one, not only
   a verbatim-contained constraint set; a bound conjunction that cannot be satisfied
@@ -894,13 +909,12 @@ the shape. What is left below is what the descriptor cannot hold.
   refuses instead.
 
     The **inclusion** between two moduli does not go that way and is decided
-    above: the steps settle it between them, whatever their size. What the
-    period still bounds is the *refutation*. `MultipleOf(2)` is decided **not**
-    below `MultipleOf(4)`, because the residues hold both and 2 is a multiple of
-    one and not the other; the same question at `MultipleOf(2500)` against
-    `MultipleOf(5000)` declines, because naming that value takes a
-    representation and a rule reading the two steps cannot produce one -- the
-    subject's own other constraints may exclude it.
+    above: the steps settle it between them, whatever their size, and so does
+    the refutation where the subject's constraints are its step and integer
+    bounds, `MultipleOf(2500)` being outside `MultipleOf(5000)` at 2500. What
+    the period still bounds is a refutation the subject's other constraints take
+    part in -- a float bound beside the step, or a meet of two steps -- since the
+    value has to satisfy them too and naming it takes the residues.
 
 - **A step over floats.** A `MultipleOf` becomes a residue class of the
   integers, and a float multiple of a step is no integer the classes hold, so a

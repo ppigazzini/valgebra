@@ -17,10 +17,19 @@ answer of its own, or a repair to a change not yet released.
 - feat: a complemented union is read as the meet of the complements
 - feat: a subject holding a whole kind the supertype lacks is refuted
 - feat: a union is decided a part at a time where the pair declines whole
+- feat: an integer step is refuted by a multiple the other step does not divide
 
 -->
 
 ### Added
+
+- **An integer step is refuted by a multiple the other step does not divide.**
+  A refinement of `int` by one integer step and integer bounds holds exactly the
+  multiples of its step between its bounds, so its emptiness is read exactly,
+  and it is `not_subset` of a refinement carrying an integer step where one of
+  those multiples is no multiple of that step: `MultipleOf(5000)` against
+  `MultipleOf(3)` at 5000, and `MultipleOf(6)` against `MultipleOf(2500)` at 6,
+  where both were `undecided`.
 
 - **A union is decided a part at a time where the pair declines whole.** A
   union subject is asked a member at a time and a union supertype is narrowed to

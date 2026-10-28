@@ -510,16 +510,20 @@ everywhere are undecided, since deciding them means deciding whether two Python
 callables agree. Two refinements compare as refined base types do under
 Sub-Base, by an entailment of their predicates [JV20, Fig. 3.4], here without a
 solver: a bound or a step is entailed through the oracle one constraint at a
-time, and a predicate only by itself. A refinement whose predicate is not well
+time, and a predicate only by itself. The other direction needs a value: where a
+refinement of `int` is narrowed by one integer step and integer bounds alone,
+its values are the multiples of the step between the bounds, so its emptiness
+is read exactly and one of those multiples that the other's step does not
+divide refutes the pair. A refinement whose predicate is not well
 sorted over its base is not a type at all [JV20, Fig. 3.3], and the frontend
 refuses a constraint no value of the base can answer.
 **[LOAD-BEARING: a-refinement-narrows-its-base]**
 
 SOURCE: §10 "the runtime check; the static/SMT side is"
 
-IMPLEMENTED-BY: decision.rs::refinement_subtype, decision/constraints.rs::constraint_entailed, ir.rs::Schema::refine, valgebra-py/src/check/walk/scalar.rs::check_refine, valgebra-py/src/build/refine.rs::check_constraint_fits, descr/lower.rs::refine
+IMPLEMENTED-BY: decision.rs::refinement_subtype, decision/constraints.rs::constraint_entailed, decision/readings.rs::refuted_by_a_multiple, decision/constraints.rs::Multiples, ir.rs::Schema::refine, valgebra-py/src/check/walk/scalar.rs::check_refine, valgebra-py/src/build/refine.rs::check_constraint_fits, descr/lower.rs::refine
 
-HELD-BY: test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker, test_every_cell_narrows_its_base_or_is_refused
+HELD-BY: test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker, test_every_cell_narrows_its_base_or_is_refused, a_step_is_refuted_where_one_of_its_multiples_is_outside
 
 ## Decision procedures, for widening the decided fragment
 
@@ -1249,9 +1253,12 @@ than by the sets they name: two steps by the oracle's `%`, where the base and
 both steps meet in one kind of number, and two order bounds by the oracle's
 comparison. So `MultipleOf(5000)` is proved below `MultipleOf(2500)` and
 `Ge(2**70 + 1)` below `Ge(2**70)`, at any size, with no interval and no residue
-materialized to say so. What wants the representation is the **refutation**,
-which needs a value the two schemas disagree on, and the meet, whose period is
-the one the two steps share.
+materialized to say so. A **refutation** needs a value the two schemas
+disagree on, and where the subject is narrowed by its step and integer bounds
+alone the steps name that value too: `MultipleOf(2500)` is outside
+`MultipleOf(5000)` at 2500, at any size. What wants the representation is a
+refutation the subject's other constraints take part in, and the meet, whose
+period is the one the two steps share.
 **[DEVIATION: the-carriers-are-i64-and-f64]**
 
 HELD-BY: a_step_past_the_period_bound_is_refused, test_every_edge_of_the_integer_carrier_has_a_row, test_the_relation_is_the_one_recorded, test_a_multiple_is_a_remainder_of_zero, test_a_bound_past_the_carrier_is_proved_by_the_order, steps_entail_only_where_the_remainder_reads_them_alike

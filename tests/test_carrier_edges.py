@@ -169,11 +169,12 @@ def test_a_step_past_the_period_bound_declines() -> None:
     multiple of 2,500 because 2,500 divides 5,000, and no residue is
     materialized to say so.
 
-    What the period bounds is the **refutation**, which needs a value rather
-    than a rule. `MultipleOf(2)` is refuted below `MultipleOf(4)` by the
-    residues holding both; the same question at the larger pair declines,
-    because naming the value takes a representation and the subject's own other
-    constraints may exclude it. And a *meet* of two steps is the period they
+    A **refutation** needs a value, and where the subject is narrowed by its
+    step alone the steps name one too: `2500` is a multiple of 2,500 and of no
+    5,000, so the larger pair is refuted at any size, as `MultipleOf(2)` is
+    below `MultipleOf(4)`. What the period bounds is a refutation the subject's
+    other constraints take part in, since the value has to satisfy them as well
+    and naming it takes the residues: a *meet* of two steps is the period they
     share, which is where the bound bites first.
     """
     assert (
@@ -192,14 +193,17 @@ def test_a_step_past_the_period_bound_declines() -> None:
         Validator(Annotated[int, at.MultipleOf(2500)]).relation_to(
             Annotated[int, at.MultipleOf(5000)]
         )
-        == "undecided"
+        == "not_subset"
     )
     # Two steps whose least common multiple is past the bound meet undecided
-    # rather than being rounded to a period that is not theirs.
+    # rather than being rounded to a period that is not theirs, in both
+    # directions: 5,184 is the meet's least member, so the meet is below
+    # `MultipleOf(5184)` and outside `MultipleOf(10368)`, and neither is named.
     meet = intersection(
         Annotated[int, at.MultipleOf(64)], Annotated[int, at.MultipleOf(81)]
     )
     assert meet.relation_to(Annotated[int, at.MultipleOf(5184)]) == "undecided"
+    assert meet.relation_to(Annotated[int, at.MultipleOf(10368)]) == "undecided"
     # And a step inside the bound is decided, in the direction that holds.
     assert (
         Validator(Annotated[int, at.MultipleOf(4)]).relation_to(

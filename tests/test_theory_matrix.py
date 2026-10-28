@@ -359,11 +359,20 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
         [0, 2500, 5000, 7500, 10000],
     ),
     (
-        "while the refutation above the period wants a value and declines",
+        "and one above it is refuted by the subject's own multiple",
         Annotated[int, at.MultipleOf(2500)],
         Annotated[int, at.MultipleOf(5000)],
-        "undecided",
+        "not_subset",
         [0, 2500, 5000, 7500, 10000],
+    ),
+    (
+        "while a meet of two steps past the period wants a value and declines",
+        intersection(
+            Annotated[int, at.MultipleOf(64)], Annotated[int, at.MultipleOf(81)]
+        ),
+        Annotated[int, at.MultipleOf(10368)],
+        "undecided",
+        [0, 64, 81, 5184, 10368],
     ),
     # -- the open world, inside a container ----------------------------------
     (
@@ -505,7 +514,8 @@ def test_every_edge_of_the_integer_carrier_has_a_row() -> None:
         "and the kind is not below it",
         "a modulus the period holds is decided",
         "and one above it is decided by the steps themselves",
-        "while the refutation above the period wants a value and declines",
+        "and one above it is refuted by the subject's own multiple",
+        "while a meet of two steps past the period wants a value and declines",
     }
     missing = sorted(edges - set(IDS))
     assert not missing, f"the carrier's edges have no row: {missing}"
