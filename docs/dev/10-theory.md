@@ -89,16 +89,18 @@ the complement of a union the meet of the complements [FCB08, Lem. 6.2]. The
 relation reads a complemented union or meet as a subject with its complement
 pushed one level in, as a lazy normalization pushes a negation no further than
 the question in hand needs [BBC+26, §6.2, p. 9], and takes that reading where it
-is the supertype or holds it as a member.
+is the supertype or holds it as a member. Two branches of a union splitting one
+set by another, `(R ∩ B) ∪ (R ∩ ¬B)`, are read as the set `R` they split, by
+distributivity and `B ∪ ¬B` being everything where `B` is a set.
 **[LOAD-BEARING: lattice-theory]** — `crates/valgebra-core/src/ir.rs`, where a
 schema is built in the lattice normal form, and the property suites that check
 each claimed equivalence against membership rather than asserting it.
 
 SOURCE: §13.2 "**The laws hold by construction**"; §2 "every combinator builds the normal"
 
-IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend, ir.rs::Schema::union_within, ir.rs::Schema::meet_within, ir.rs::Schema::complement, kind.rs::Region::union, kind.rs::Region::intersect, kind.rs::Region::complement, oracle.rs::has_complementary_pair_within, valgebra-py/src/check/walk.rs::check_intersection, decision.rs::pushed_complement_is_placed
+IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend, ir.rs::Schema::union_within, ir.rs::Schema::meet_within, ir.rs::Schema::complement, kind.rs::Region::union, kind.rs::Region::intersect, kind.rs::Region::complement, oracle.rs::has_complementary_pair_within, valgebra-py/src/check/walk.rs::check_intersection, decision.rs::pushed_complement_is_placed, decision.rs::merged_split
 
-HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference, a_complement_is_below_its_complements_pushed_in
+HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference, a_complement_is_below_its_complements_pushed_in, a_set_is_below_its_own_split
 
 **Stone's representation theorem (1936).** Every Boolean algebra is isomorphic to
 an algebra of sets. **[GUIDING: stone-duality]** — the license for treating the scalar fragment

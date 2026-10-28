@@ -339,6 +339,25 @@ answers `"undecided"`.
 
     Only that reading is taken: a complement pushed in and then compared by
     every rule would be read twice wherever the answer is a decline.
+- **A set split by another, as the supertype.** `(r ∧ ¬b) ∨ (r ∧ b)` is `r`
+  where `b` answers alike however often it is asked, so two branches of a
+  union that split one set by another are read as the set they split, and the
+  pair is decided as against that set. It is the shape a guard written once per
+  branch takes:
+
+    ```python
+    from valgebra import Validator, complement, intersection, recursive, union
+
+    json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    split = union(
+        intersection(json_value, complement(bool)), intersection(json_value, bool)
+    )
+    assert Validator(json_value).relation_to(split) == "subset"
+    assert Validator(bytes).relation_to(split) == "not_subset"
+    ```
+
+    A split by a predicate is not merged, since a predicate may answer its two
+    occurrences apart.
 - **A length bound over a base that takes any length.** A string and a bytes
   take any, so a bound their lengths admit is met by a value: `Annotated[str,
   MinLen(1)]` is the non-empty string and is decided to have one. A list or a
