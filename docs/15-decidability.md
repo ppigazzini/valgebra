@@ -1090,6 +1090,21 @@ the shape. What is left below is what the descriptor cannot hold.
   in one branch of a supertype too wide to build is left `undecided`, since
   asking every member against every branch is the product of the two widths.
 
+  **Two schemas sharing no value are asked as one below the other's
+  complement**, `a.relation_to(complement(b))`, which needs no meet of the two
+  to be built. Two schemas near the node bound can each build where their
+  meet is past it -- `intersection(a, b)` raises `ValueError` -- and the
+  relation still returns, `undecided` where deciding it needs the meet's set.
+  An `is_disjoint(a, b)` entry point would answer the same `undecided`, so
+  there is none:
+
+  ```python
+  from valgebra import Validator, complement
+
+  assert Validator(list[int]).relation_to(complement(str)) == "subset"
+  assert Validator(int).relation_to(complement(float)) == "subset"
+  ```
+
 - **A predicate.** Its satisfiability is undecidable (below), so neither
   representation reasons about one -- and that is a statement about the
   *predicate*, not about every pair carrying one. A refinement is a subset of
