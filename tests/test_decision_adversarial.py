@@ -803,3 +803,49 @@ def test_a_fractional_number_met_with_a_recursive_universe_is_inhabited() -> Non
     assert meet.is_valid(0.5)
     assert not meet.is_empty()
     assert meet.relation_to(Validator(complement(object))) != "subset"
+
+
+def test_a_narrowed_meet_left_open_is_distributed_as_written() -> None:
+    """A meet its guards narrow and leave undecided is read through its reference.
+
+    Dropping a branch a complement beside it excludes gives the same set, so a
+    narrowed meet that ends undecided is no answer, and the readings after it are
+    asked of the meet as written, whose guard union distributes through the
+    reference into a shape they decide: no list, word or `bool` is an integer
+    from 2, and a record whose `tag` holds `tag: 1` is no record every value of
+    whose `tag` is a `str`.
+    """
+    integer = intersection(
+        union(int, Annotated[float, at.MultipleOf(1)]), complement(bool)
+    )
+    from_two = union(Annotated[int, at.Ge(2)], Annotated[float, at.Ge(2)])
+    words = recursive(
+        lambda t: union(str, Validator(list[t]))  # ty: ignore[invalid-type-form]
+    )
+    lists = union(Validator(list[int]), union(words, bool))
+    numbers = intersection(lists, intersection(integer, from_two))
+    assert numbers.relation_to(nothing) == "subset"
+    assert numbers.is_empty()
+
+    values = recursive(
+        lambda j: union(
+            None,
+            bool,
+            int,
+            float,
+            str,
+            Validator(list[j]),  # ty: ignore[invalid-type-form]
+            Validator({str: j}),
+        )
+    )
+    tagged = intersection(
+        union(str, Validator({"tag": {"tag": Literal[1], str: values}}).open()),
+        Validator({"tag": {str: str}}).open(),
+        values,
+        union(
+            complement(Validator(dict[str, values])),  # ty: ignore[invalid-type-form]
+            Validator({"tag": complement(str)}).open(),
+        ),
+    )
+    assert tagged.relation_to(nothing) == "subset"
+    assert tagged.is_empty()

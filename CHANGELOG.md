@@ -25,10 +25,20 @@ answer of its own, or a repair to a change not yet released.
 - feat: a type defined in C lays down the layout its instance size says
 - feat: two branches splitting a set by another are read as the set they split
 - fix: is_empty reads a complemented union as the relation reads it below nothing
+- feat: a union in a meet is narrowed by the complements beside it
 
 -->
 
 ### Added
+
+- **A union in a meet is narrowed by the complements beside it.** `k & (~k |
+  x)` is `k & x`, so a branch that is the complement of a member beside its
+  union is dropped before anything is distributed, and any number of keywords
+  a translation from JSON Schema guards to one kind is read as the meet of
+  what they guard: an object schema with three guarded keywords, two of them
+  tags fixed two ways, is empty, where a meet of more than two such guards was
+  `undecided`. A narrowed meet the readings leave undecided hands the meet as
+  written to the readings after it, which distribute it through a reference.
 
 - **Two branches splitting a set by another are read as the set they split.**
   `(r & ~b) | (r & b)` is `r` wherever `b` answers alike however often it is
