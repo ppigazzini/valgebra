@@ -537,7 +537,7 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
     let mut maps_hold = Verdict::Unknown;
     let empty = any_empty
         || region.known().is_some_and(Region::is_empty)
-        || has_complementary_pair(members, cx.oracle)
+        || has_complementary_pair(members, cx.oracle, &[])
         || has_a_pattern_and_its_complement(members, cx)
         || has_disjoint_pair(members, cx.oracle)
         || intersection_bounds_unsatisfiable(members, cx.oracle)
@@ -565,6 +565,14 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
         }
     };
     let verdict = match verdict {
+        // The complement law again, with the definitions: a reference is a set
+        // where its definition is one, which a walk of the definition says, and
+        // the walk is paid only by a meet the readings above left open.
+        Verdict::Unknown
+            if !cx.defs.is_empty() && has_complementary_pair(members, cx.oracle, cx.defs) =>
+        {
+            Verdict::Empty
+        }
         Verdict::Unknown => match a_meet_read_by_its_constants(members, cx.oracle, cx.defs) {
             // A narrowed meet the readings leave undecided is no answer: the
             // meet as written, the same set, is handed to the readings after it,

@@ -268,16 +268,23 @@ impl Constants for NoLeafRelations {}
 /// A predicate that alternates puts a value in `A` and in `¬A` at once, and the
 /// law would report the meet empty with that value as a witness against it.
 ///
-/// The emptiness decision's reading of the complement law, with no definitions,
-/// decided structurally on the (small) member list. The constructors read
-/// [`has_complementary_pair_within`] with the definitions they hold, so the two
-/// apply one statement of the law, and construction does not fold to `nothing`
-/// what the decision declines to call empty.
+/// The emptiness decision's reading of the complement law, decided
+/// structurally on the (small) member list, with `definitions` for a reference
+/// to be read through. The constructors read [`has_complementary_pair_within`]
+/// with the definitions they hold, and the decision asks it twice: with none,
+/// which the meets holding no reference need and which walks no definition,
+/// and with the query's where the meet is left open, so the two apply one
+/// statement of the law and `json & ~json` meets in nothing to the decision as
+/// it does to construction.
 ///
 /// A member list here may be in any order -- a rule or a law builds a meet
 /// directly -- so a member is found by a scan rather than a search.
-pub(crate) fn has_complementary_pair(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
-    has_complementary_pair_within(members, Connective::Meet, oracle, &[], |wanted| {
+pub(crate) fn has_complementary_pair(
+    members: &[Schema],
+    oracle: &dyn LeafRelations,
+    definitions: &[Schema],
+) -> bool {
+    has_complementary_pair_within(members, Connective::Meet, oracle, definitions, |wanted| {
         members.contains(wanted)
     })
 }
