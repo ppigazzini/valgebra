@@ -142,9 +142,11 @@ EXPECTED: tuple[Expected, ...] = (
         "ty",
         "docs/15-decidability.md",
         "invalid-type-form",
-        14,
+        15,
         "float and `Decimal` `Literal`s and validators inside `list[...]` and "
-        "`dict[...]`, the two extensions of the spelling the page decides over",
+        "`dict[...]`, the two extensions of the spelling the page decides over, "
+        "and a `Literal` of a computed tag, which a union of tagged records is "
+        "built from",
     ),
     Expected("ty", "docs/16-api.md", "invalid-argument-type", 1, _WRONG_JSON),
     Expected("ty", "docs/17-boundaries.md", "unresolved-attribute", 1, _UNDECLARED),

@@ -2622,6 +2622,26 @@ proptest! {
         );
     }
 
+    /// The relation below `nothing` and the emptiness reading are one
+    /// procedure, `is_empty` being the primitive the relations call into: a
+    /// schema is proved below `nothing` exactly where it is read empty, over a
+    /// drawn schema and over the union of two, which the relation reads a
+    /// member at a time.
+    #[test]
+    fn below_nothing_exactly_where_read_empty(a in shaped_schema(), b in shaped_schema()) {
+        let _allowance = crate::descr::budget::law();
+        for held in [built(&a), Schema::union_within([built(&a), built(&b)], &[])] {
+            let below = held.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]);
+            prop_assert_eq!(
+                below.holds(),
+                held.is_empty_with(&NoLeafRelations, &[]),
+                "{:?}: below nothing {:?}",
+                held,
+                below
+            );
+        }
+    }
+
     // THEORY: lattice-theory
     /// A complemented union or meet is below its complements pushed one level
     /// in, with one step to spend: `¬(A ∪ B) ⊆ ¬A ∩ ¬B` and

@@ -125,13 +125,16 @@ own -- one term, a subject among a union's branches, a supertype among a meet's
 members -- are never refused for want of a step, as a rule-based inclusion
 proves the reflexive case in linear time [BBC+26, §6, p. 8]. Equality is asked
 before the budget, and the two memberships first among the rules that read a
-union or a meet and again where the budget is spent.
+union or a meet and again where the budget is spent. Where both deciders
+decline a pair whole, they are asked of its parts by the same two rules: each
+member of a union subject, and the subject against the branches of a union it
+shares a value with.
 
 SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
 
-IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership
+IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts
 
-HELD-BY: the_two_deciders_agree_under_an_oracle, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment, a_placement_by_identity_spends_no_step
+HELD-BY: the_two_deciders_agree_under_an_oracle, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment, a_placement_by_identity_spends_no_step, a_union_is_decided_a_part_at_a_time
 
 The distinction is not pedantry. A rule stated as the reduction and implemented
 structurally has a hole wherever an arm is missing, and the reduction's name over

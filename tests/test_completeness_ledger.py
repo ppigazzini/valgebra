@@ -1555,42 +1555,52 @@ _TRANSLATED: list[object] = [
         bool,
         id="json:~(array|~bool)<=bool",
     ),
-    # A union holding a recursive branch and a pattern lowers as one term, and
-    # the set representation declines it although each branch alone decides.
+    # A union is refuted by one member, and a member's refutation stands at the
+    # union whatever the other members' emptiness reads; a union supertype is
+    # narrowed to the branches the subject meets before the sets are asked, and
+    # a union subject is asked of the sets a member at a time.
     pytest.param(
         "refutes",
         union(_NULL_TREE, _LETTER_A),
         nothing,
         id="json:null-tree|pattern-is-inhabited",
-        marks=_missed("the sets are asked of the whole union, never of one branch"),
+    ),
+    pytest.param(
+        "refutes",
+        union(
+            [_JSON, _JSON],
+            [int, Validator({"a": Annotated[str, Regex("[0-9]+")]}).open()],
+        ),
+        nothing,
+        id="json:two-fixed-lists-are-inhabited",
     ),
     pytest.param(
         "refutes",
         str,
         union(_NULL_TREE, _LETTER_A),
         id="json:str!<=null-tree|pattern",
-        marks=_missed("the sets are asked of the whole union, never of one branch"),
     ),
     pytest.param(
         "refutes",
         {"a": int},
         _OUTER,
         id="json:{a:int}!<=outer-tree",
-        marks=_missed("the sets are asked of the whole union, never of one branch"),
+        marks=_missed(
+            "a union supertype is refuted at a value outside every branch, and the"
+            " sets, which could name it, refute no pair holding a reference"
+        ),
     ),
     pytest.param(
         "refutes",
         _tagged(7),
         _tagged(7, 1),
         id="json:seven-tagged!<=shifted",
-        marks=_missed("the sets are asked of the whole union, never of one branch"),
     ),
     pytest.param(
         "subtype",
         _patterns(32),
         Annotated[str, Regex("p[0-9]+")],
         id="json:thirty-two-patterns<=p[0-9]+",
-        marks=_missed("the sets are asked of the whole union, never of one branch"),
     ),
     # A kind the supertype holds none of is a value the subject has outside it,
     # read through the fixpoint's one unfolding.

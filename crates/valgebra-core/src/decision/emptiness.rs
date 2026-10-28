@@ -75,6 +75,12 @@ impl Schema {
     /// bound conjunction (a lower bound above an upper bound) is detected.
     #[must_use]
     pub fn is_empty_with(&self, oracle: &dyn LeafRelations, defs: &[Schema]) -> bool {
+        self.empty_under(&mut Cx::new(oracle, defs, &Budget::new(DECISION_BUDGET)))
+    }
+
+    /// [`Self::is_empty_with`] in one query, whose budget and readings a union's
+    /// members share.
+    fn empty_under(&self, cx: &mut Cx<'_>) -> bool {
         // The rules answer in three values and the descriptor is asked where
         // they reach the third -- which is what makes the pair one procedure
         // rather than a second opinion. A proof of *inhabitation* is an answer
@@ -84,10 +90,18 @@ impl Schema {
         // asked it on every inhabited schema, and lowering one determinizes
         // automata and takes products -- a third of the decision workload,
         // spent on a question already answered.
-        match self.verdict_rec(&mut Cx::new(oracle, defs, &Budget::new(DECISION_BUDGET))) {
+        match self.verdict_rec(cx) {
             Verdict::Empty => true,
             Verdict::Inhabited => false,
-            Verdict::Unknown => self.denotes_no_value(oracle, defs),
+            // A union a member at a time, as the relation below `Nothing` reads
+            // it, so the two answer alike: a union is empty where each member
+            // is, which a reading of the whole can miss where one member's
+            // emptiness is the rules' and another's the descriptor's.
+            Verdict::Unknown => {
+                self.denotes_no_value(cx.oracle, cx.defs)
+                    || matches!(self, Schema::Union(members)
+                        if members.iter().all(|member| member.empty_under(cx)))
+            }
         }
     }
 
