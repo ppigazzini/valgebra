@@ -529,7 +529,10 @@ answers `"undecided"`.
   `denotes_a_set_within` in `crates/valgebra-core/src/oracle.rs` reads a class
   as a set only on the oracle's word. A plain class denotes a set all the same,
   and the law holds of it: `intersection(C, complement(C))` keeps its spelling
-  and `is_empty()` decides it `True`. A union holding a union beside that
+  and `is_empty()` decides it `True`. A recursive schema is a set where its
+  definition is one, to the decision as to construction, so a class inside the
+  definition does not stop the law: the meet of `recursive(lambda t:
+  union(complex, [t]))` with its complement is empty. A union holding a union beside that
   union's complement folds too, since construction reads the flattened
   members: `int | str | ~(int | str)` **is** `anything`.
   The decision procedure has no rule for a folded shape and never meets one

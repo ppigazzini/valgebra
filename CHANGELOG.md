@@ -28,6 +28,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a union in a meet is narrowed by the complements beside it
 - feat: a meet is refuted below a meet it shares no value with
 - feat: a float bound over the integers is read at its floor or its ceiling
+- fix: emptiness reads a reference in the complement law as construction does
 
 -->
 
@@ -128,6 +129,13 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **The emptiness decision reads a reference in the complement law as
+  construction does.** A recursive schema is a set where its definition is
+  one, and the decision reads it through its definitions, so a meet of a
+  recursive schema holding a class with its own complement is empty:
+  `x & ~x` with `x = intersection(json, list[complex])` is `is_empty()`, where
+  it was `False`.
 
 - **`is_empty` reads a complemented union as a relation below `nothing` does.**
   A complemented union is empty where its complements, pushed one level in,

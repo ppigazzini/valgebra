@@ -394,6 +394,18 @@ _DECIDED = [
         Annotated[int, at.Ge(1)],
         id="int>0.5==int>=1",
     ),
+    # A recursive schema holding a class meets its complement in nothing: the
+    # constructor cannot vouch for the class, and the decision reads the
+    # reference through its definition.
+    pytest.param(
+        "empty",
+        intersection(
+            intersection(_JSON, list[complex]),
+            complement(intersection(_JSON, list[complex])),
+        ),
+        None,
+        id="empty:json&list[complex]&~itself",
+    ),
     # A bare container class is its kind, so the two spellings are one schema and
     # each is below the other.
     pytest.param("equivalent", list, list[object], id="list==list[object]"),

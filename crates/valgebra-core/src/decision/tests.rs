@@ -8821,3 +8821,32 @@ fn a_meet_disjoint_from_a_meet_it_holds_a_value_of_is_refuted() {
     ]);
     assert_eq!(relation(&guarded(0), &unread), Relation::Unknown);
 }
+
+/// A reference and its complement meet in nothing where its definition is a
+/// set: the decision reads the reference through the definitions it holds, as
+/// construction does, so a meet built raw from a recursive schema and the
+/// complement of it -- or of a meet holding it, beside that meet's members --
+/// is empty. A definition holding a predicate is no set, and the pair stands.
+#[test]
+fn the_complement_law_reads_a_reference_through_its_definition() {
+    let reference = Schema::Ref(DefIx::new(0));
+    let set = vec![Schema::union([
+        Schema::NoneType,
+        Schema::list(SeqShape::homogeneous(reference.clone())),
+    ])];
+    let raw = |members: Vec<Schema>| Schema::Intersection(members.into());
+    let negated = |schema: &Schema| Schema::Complement(Arc::new(schema.clone()));
+    let with_itself = raw(vec![reference.clone(), negated(&reference)]);
+    assert_eq!(rules_verdict(&with_itself, &set).0, Verdict::Empty);
+    let held = raw(vec![reference.clone(), Schema::Str]);
+    let beside_its_members = raw(vec![reference.clone(), Schema::Str, negated(&held)]);
+    assert_eq!(rules_verdict(&beside_its_members, &set).0, Verdict::Empty);
+    let odd = vec![Schema::union([
+        Schema::Refine {
+            base: Arc::new(Schema::Int),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        },
+        Schema::list(SeqShape::homogeneous(reference.clone())),
+    ])];
+    assert_ne!(rules_verdict(&with_itself, &odd).0, Verdict::Empty);
+}

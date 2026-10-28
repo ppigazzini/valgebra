@@ -2623,6 +2623,22 @@ proptest! {
     }
 
     // THEORY: lattice-theory
+    /// A reference and its complement meet in nothing, the decision reading the
+    /// reference through its definition: over a definition holding a drawn set,
+    /// `t = None ∪ list[t] ∪ x`, the raw meet `t ∩ ¬t` is empty, as the meet
+    /// constructor holding the same definitions folds it.
+    #[test]
+    fn a_reference_and_its_complement_meet_in_nothing(x in set_schema()) {
+        let reference = Schema::Ref(DefIx::new(0));
+        let defs = [union(
+            union(Schema::NoneType, Schema::list(SeqShape::homogeneous(reference.clone()))),
+            built(&x),
+        )];
+        let met = intersection(reference.clone(), not(reference));
+        prop_assert_eq!(met.verdict_under_defs(&defs), Verdict::Empty);
+    }
+
+    // THEORY: lattice-theory
     /// A meet of a set and three guards over it reads as the meet of the set
     /// and the guards' branches: `k ∩ (¬k ∪ x₁) ∩ (¬k ∪ x₂) ∩ (¬k ∪ x₃)` is
     /// `k ∩ x₁ ∩ x₂ ∩ x₃`, eight clauses distributed, past the bound, over a
