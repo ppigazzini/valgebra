@@ -481,10 +481,14 @@ answers `"undecided"`.
   product of their widths, no branch of them a meet or a union. A translation
   from JSON Schema applies a keyword to its kind alone, so an object schema
   with two keywords is `OBJ & (~OBJ | R) & (~OBJ | Q)`: two unions of two, and
-  each `~OBJ` meets `OBJ` in nothing. Two tags fixed two ways meet in nothing,
-  and a tag beside a field it requires holds the dict with that field. A meet
-  of more unions, or of a union with a meet for a branch, is left to the set
-  representation, and is decided within the depth it descends.
+  each `~OBJ` meets `OBJ` in nothing. A branch that is the complement of a
+  member beside its union is dropped before anything is distributed, so any
+  number of keywords on one kind is read as the meet of what they guard:
+  three are eight clauses distributed and one meet narrowed. Two tags fixed
+  two ways meet in nothing, and a tag beside a field it requires holds the
+  dict with that field. A meet of more unions no complement narrows, or of a
+  union with a meet for a branch, is left to the set representation, and is
+  decided within the depth it descends.
 
     ```python
     from typing import Literal
@@ -497,6 +501,7 @@ answers `"undecided"`.
     t1 = union(complement(obj), {"tag": Literal["t1"], str: json})
     required = union(complement(obj), {"tag": json, str: json})
     assert intersection(obj, t0, t1).is_empty()
+    assert intersection(obj, t0, t1, required).is_empty()
     tagged = intersection(obj, t0, required)
     assert tagged.is_valid({"tag": "t0"})
     assert tagged.relation_to(nothing) == "not_subset"

@@ -552,13 +552,86 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
     };
     let verdict = match verdict {
         Verdict::Unknown => match a_meet_read_by_its_constants(members, cx.oracle, cx.defs) {
-            Verdict::Unknown => meet_through_a_reference(members, cx)
+            Verdict::Unknown => narrowed_by_its_members(members, cx)
+                .or_else(|| meet_through_a_reference(members, cx))
                 .unwrap_or_else(|| a_difference_of_sets(members, cx)),
             settled => settled,
         },
         settled => settled,
     };
     (verdict, region)
+}
+
+/// The verdict of the meet `members` with every branch of a union member
+/// dropped that shares no value with another member, or `None` where no
+/// branch is.
+///
+/// `A ∩ (B ∪ C)` is `(A ∩ B) ∪ (A ∩ C)` [FCB08, Def. 4.1], which is `A ∩ C`
+/// where `A ∩ B` is empty, so the narrowed meet is the same set and its verdict
+/// is the meet's, either way. A branch is dropped where a complement says so
+/// ([`shares_nothing_beside`]), which is what the guard a translation from
+/// JSON Schema writes needs: `~K | X` met with `K` is `X` met with `K`,
+/// with no clause distributed, where three guards distributed are eight
+/// clauses and past [`MAX_DISTRIBUTED_TERMS`]. A union is narrowed only by the
+/// members beside it, never by itself: a branch meets its own union in itself.
+///
+/// Out of line: asked of every meet the rules decline, it answers `None` at the
+/// first look where no member is a union.
+#[inline(never)]
+fn narrowed_by_its_members(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdict> {
+    let drops = |at: usize, branch: &Schema| shares_nothing_beside(branch, members, at, cx);
+    let narrows = members.iter().enumerate().any(|(at, member)| {
+        matches!(member, Schema::Union(branches) if branches.iter().any(|b| drops(at, b)))
+    });
+    if !narrows {
+        return None;
+    }
+    let kept: Vec<Schema> = members
+        .iter()
+        .enumerate()
+        .map(|(at, member)| match member {
+            Schema::Union(branches) => {
+                Schema::union_within(branches.iter().filter(|b| !drops(at, b)).cloned(), cx.defs)
+            }
+            other => other.clone(),
+        })
+        .collect();
+    Some(Schema::meet_within(kept, cx.defs).empty_and_region(cx).0)
+}
+
+/// Whether `branch` shares no value with the members of a meet other than the
+/// one at `at`, by a complement and nothing else: it is the complement of one of
+/// them, of a meet whose conjuncts are among them, or of a union holding one of
+/// them; or one of them is its complement, or the complement of a union holding
+/// it, which a guard's own union flattens `¬¬(a ∪ b)` into. Each of those must
+/// be a set. The kinds are left to the rules the narrowed meet reaches: a branch
+/// dropped for its kind can take with it the half of a complementary pair the
+/// meet's constructor would fold.
+fn shares_nothing_beside(branch: &Schema, members: &[Schema], at: usize, cx: &Cx<'_>) -> bool {
+    let beside = || {
+        members
+            .iter()
+            .enumerate()
+            .filter(move |(i, _)| *i != at)
+            .map(|(_, m)| m)
+    };
+    let a_set = |schema: &Schema| denotes_a_set_within(schema, cx.oracle, cx.defs);
+    if let Schema::Complement(inner) = branch {
+        let held = match &**inner {
+            Schema::Intersection(parts) => parts.iter().all(|part| beside().any(|m| m == part)),
+            Schema::Union(parts) => beside().any(|m| m == &**inner || parts.contains(m)),
+            single => beside().any(|m| m == single),
+        };
+        if held && a_set(inner) {
+            return true;
+        }
+    }
+    beside().any(|member| {
+        let complements = matches!(member, Schema::Complement(inner)
+            if **inner == *branch
+                || matches!(&**inner, Schema::Union(parts) if parts.contains(branch)));
+        complements && a_set(member)
+    })
 }
 
 /// A meet the rules declined, read as a set minus sets where it is one: a

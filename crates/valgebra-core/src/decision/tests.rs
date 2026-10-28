@@ -1371,6 +1371,72 @@ fn an_open_map_or_a_class_beside_closed_maps_names_no_value() {
     assert_ne!(rules_verdict(&with_a_class, &[]).0, Verdict::Inhabited);
 }
 
+/// A union in a meet is narrowed by the members beside it: `K ∩ (¬K ∪ X)` is
+/// `K ∩ X`, read with no clause distributed, so three guards over one kind --
+/// eight clauses distributed, past the bound -- decide as their branches do. A
+/// branch goes beside the member it complements and beside a meet whose
+/// conjuncts its complement's are; never on a predicate's complement, which may
+/// answer its two occurrences apart.
+#[test]
+fn a_union_in_a_meet_is_narrowed_by_the_members_beside_it() {
+    let object = open(Vec::new());
+    let guard = |kind: &Schema, x: Schema| Schema::union([kind.clone().complement(), x]);
+    let tagged = |tag: Schema| open(vec![field("tag", tag, true)]);
+    let guarded = |tags: &[Schema]| {
+        Schema::meet(
+            std::iter::once(object.clone())
+                .chain(tags.iter().map(|tag| guard(&object, tagged(tag.clone())))),
+        )
+    };
+    let two_tags = guarded(&[Schema::Int, Schema::Str, Schema::ANYTHING]);
+    assert_eq!(rules_verdict(&two_tags, &[]).0, Verdict::Empty);
+    let one_tag = guarded(&[Schema::Int, Schema::Int, Schema::ANYTHING]);
+    assert_eq!(rules_verdict(&one_tag, &[]).0, Verdict::Inhabited);
+    let integer = Schema::meet([Schema::Int, Schema::Bool.complement()]);
+    let beside_its_conjuncts = Schema::meet([
+        integer.clone(),
+        guard(&integer, Schema::Str),
+        guard(&integer, Schema::Bytes),
+        guard(&integer, Schema::Float),
+    ]);
+    assert_eq!(rules_verdict(&beside_its_conjuncts, &[]).0, Verdict::Empty);
+    let odd = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    let beside_a_predicate = Schema::meet([
+        odd.clone(),
+        guard(&odd, Schema::Str),
+        guard(&odd, Schema::Bytes),
+        guard(&odd, Schema::Float),
+    ]);
+    assert_ne!(rules_verdict(&beside_a_predicate, &[]).0, Verdict::Empty);
+    // And a complement whose inner is not beside the union drops nothing, which
+    // the regions do not settle for records: a record tagged by `bytes` is
+    // outside the meet of `object` and a record tagged by `int`, and outside
+    // the union of records tagged by `int` and by `float`, so beside either
+    // guard it is a value of the meet, and it is no record tagged by `str`.
+    let by_bytes = tagged(Schema::Bytes);
+    let not_beside = Schema::meet([
+        object.clone(),
+        by_bytes.clone(),
+        guard(
+            &Schema::meet([object.clone(), tagged(Schema::Int)]),
+            tagged(Schema::Str),
+        ),
+    ]);
+    assert_ne!(rules_verdict(&not_beside, &[]).0, Verdict::Empty);
+    let outside_a_union = Schema::meet([
+        object.clone(),
+        by_bytes,
+        guard(
+            &Schema::union([tagged(Schema::Int), tagged(Schema::Float)]),
+            tagged(Schema::Str),
+        ),
+    ]);
+    assert_ne!(rules_verdict(&outside_a_union, &[]).0, Verdict::Empty);
+}
+
 /// A chain spelled as a recursive record, its reference inside the key's
 /// union, decides as the chain spelled around the union does.
 ///

@@ -367,6 +367,19 @@ _DECIDED = [
         None,
         id="empty:~(~str|~(json&~str))",
     ),
+    # Three keywords on one kind, each guarded to it, read as the meet of what
+    # they guard: eight clauses distributed, one meet narrowed.
+    pytest.param(
+        "empty",
+        intersection(
+            {str: _JSON},
+            union(complement({str: _JSON}), {"tag": int, str: _JSON}),
+            union(complement({str: _JSON}), {"tag": str, str: _JSON}),
+            union(complement({str: _JSON}), {"tag": _JSON, str: _JSON}),
+        ),
+        None,
+        id="empty:three-guards-tagged-two-ways",
+    ),
     # A bare container class is its kind, so the two spellings are one schema and
     # each is below the other.
     pytest.param("equivalent", list, list[object], id="list==list[object]"),

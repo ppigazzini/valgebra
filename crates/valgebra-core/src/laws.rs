@@ -2623,6 +2623,37 @@ proptest! {
     }
 
     // THEORY: lattice-theory
+    /// A meet of a set and three guards over it reads as the meet of the set
+    /// and the guards' branches: `k ∩ (¬k ∪ x₁) ∩ (¬k ∪ x₂) ∩ (¬k ∪ x₃)` is
+    /// `k ∩ x₁ ∩ x₂ ∩ x₃`, eight clauses distributed, past the bound, over a
+    /// drawn set `k` and three drawn schemas, built as a caller builds them,
+    /// the meets built and each guard written raw. Where the emptiness reading
+    /// decides the plain meet, it decides the guarded one alike.
+    #[test]
+    fn a_meet_of_guards_reads_as_the_meet_of_their_branches(
+        // A guard over the universe or the empty set guards nothing: its
+        // complement is the other bound, and the meet drops `k` itself.
+        k in set_schema().prop_filter("a bound guards nothing", |k| {
+            !matches!(built(k), Schema::Anything(_) | Schema::Nothing)
+        }),
+        x1 in schema(),
+        x2 in schema(),
+        x3 in schema(),
+    ) {
+        let (k, xs) = (built(&k), [built(&x1), built(&x2), built(&x3)]);
+        let plain = Schema::meet_within(std::iter::once(k.clone()).chain(xs.iter().cloned()), &[]);
+        // Each guard written raw, so no constructor folds it -- `x` holding `k`
+        // would make `¬k ∪ x` the universe -- and the guarded meet is the
+        // plain one respelled.
+        let guards = xs.iter().map(|x| union(k.clone().complement(), x.clone()));
+        let guarded = Schema::meet_within(std::iter::once(k.clone()).chain(guards), &[]);
+        let verdict = plain.verdict();
+        if verdict != Verdict::Unknown {
+            prop_assert_eq!(guarded.verdict(), verdict, "{:?} against {:?}", guarded, plain);
+        }
+    }
+
+    // THEORY: lattice-theory
     /// Emptiness reads a complemented union as the relation reads it below
     /// `nothing`: where the relation proves `¬(¬a ∪ ¬(y ∩ ¬a))` below the
     /// empty set, pushing the complement in, the emptiness reading proves it
