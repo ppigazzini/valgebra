@@ -140,7 +140,7 @@ whether a type is empty — is decidable **in EXPTIME**, and the bound is older
 than either citation below is usually read as saying. For a language of regular
 tree types, with no arrows and no type variables, it follows from containment of
 tree automata, which **Seidl** proved EXPTIME-complete in 1990; Hosoya, Vouillon
-& Pierce state it for their type language as Theorem 1 and import the result
+& Pierce state it for their type language [HVP05, Thm. 1] and import the result
 from him. That is the language valgebra's fragment sits closest to. Gesbert,
 Genevès & Layaïda establish `2^O(n)` for a **larger** language — the
 Castagna & Xu relation, with function types and type variables — which is the
@@ -230,9 +230,9 @@ The essential reading, in the order it maps onto valgebra:
    deferred.
 3. **Hosoya, Vouillon & Pierce — "Regular Expression Types for XML", *TOPLAS*
    27(1), 2005.** Regular-tree types — the model behind sequences as one regex
-   node. Their Theorem 1 states EXPTIME-completeness for that type language and
-   takes the result from Seidl's 1990 proof for tree-automata containment, which
-   is where it belongs.
+   node. They state EXPTIME-completeness for that type language
+   [HVP05, Thm. 1] and take the result from Seidl's 1990 proof for tree-automata
+   containment, which is where it belongs.
 4. **Castagna — "Typing Records, Maps, and Structs", *ICFP* 2023.**
    [doi:10.1145/3607838](https://doi.org/10.1145/3607838). Records and maps as
    keyed-default functions.

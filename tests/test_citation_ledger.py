@@ -77,6 +77,7 @@ SHELF = ROOT / ("__" + "DEV") / "papers"
 #: The files the citation rule holds, as globs from the root. A file joins when
 #: its citations are written in the form, which is the commit that writes them.
 SCOPE = (
+    "docs/*.md",
     "docs/dev/*.md",
     "crates/valgebra-core/src/decision.rs",
     "crates/valgebra-core/src/decision/*.rs",
