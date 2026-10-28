@@ -616,17 +616,38 @@ impl Schema {
     /// constructors build on every pair that declines, which the relation
     /// matrix pays a seventh of its instructions for, and is not asked.
     ///
+    /// A meet against a meet is asked as the two together: `a ⊆ b` with
+    /// `a ∧ b = ∅` holds only where `a` is empty, so a subject the rules find a
+    /// value of is refuted where the meet of the two is proved empty. No rule
+    /// reads the two together -- a meet subject is placed by its members and a
+    /// meet supertype is asked a member at a time -- and two guarded records a
+    /// translation from JSON Schema writes, told apart by a tag, are that pair.
+    ///
     /// The rules asked again decline as dearly as they did, so they share
     /// [`RESPELLING`] steps of what the query has left rather than all of it.
     pub(super) fn decided_as_respelled(&self, other: &Schema, cx: &Cx<'_>) -> Relation {
         if readings::spills_a_kind_into(self, other, cx) {
             return Relation::Fails;
         }
-        let Schema::Complement(inner) = other else {
+        let meets = matches!(
+            (self, other),
+            (Schema::Intersection(_), Schema::Intersection(_))
+        );
+        if !meets && !matches!(other, Schema::Complement(_)) {
             return Relation::Unknown;
-        };
+        }
         let allowance = Budget::new(cx.budget.left().min(RESPELLING));
         let cx = &mut Cx::new(cx.oracle, cx.defs, &allowance);
+        let Schema::Complement(inner) = other else {
+            let disjoint = Schema::meet_within([self.clone(), other.clone()], cx.defs)
+                .is_empty_rec(cx)
+                && self.verdict_rec(cx) == Verdict::Inhabited;
+            return if disjoint {
+                Relation::Fails
+            } else {
+                Relation::Unknown
+            };
+        };
         Schema::meet_within([self.clone(), (**inner).clone()], cx.defs)
             .is_subtype_rec(&Schema::Nothing, cx)
             .or_else(|| inner.is_subtype_rec(&self.clone().complement(), cx))

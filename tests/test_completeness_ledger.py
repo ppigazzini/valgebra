@@ -1779,6 +1779,34 @@ _TRANSLATED: list[object] = [
         ),
         id="json:ge0<=its-split-by-number",
     ),
+    # Two objects guarded to their kind, each a recursive record with a tag of
+    # its own: the two meets share no value, and the subject holds one.
+    pytest.param(
+        "refutes",
+        intersection(
+            _OBJECT,
+            union(
+                complement(_OBJECT),
+                recursive(
+                    lambda r: Validator(
+                        {"tag": Literal["t0"], "kids?": [r], str: _JSON}
+                    )
+                ),
+            ),
+        ),
+        intersection(
+            _OBJECT,
+            union(
+                complement(_OBJECT),
+                recursive(
+                    lambda r: Validator(
+                        {"tag": Literal["t1"], "kids?": [r], str: _JSON}
+                    )
+                ),
+            ),
+        ),
+        id="json:guarded-t0!<=guarded-t1",
+    ),
 ]
 
 

@@ -26,10 +26,18 @@ answer of its own, or a repair to a change not yet released.
 - feat: two branches splitting a set by another are read as the set they split
 - fix: is_empty reads a complemented union as the relation reads it below nothing
 - feat: a union in a meet is narrowed by the complements beside it
+- feat: a meet is refuted below a meet it shares no value with
 
 -->
 
 ### Added
+
+- **A meet is refuted below a meet it shares no value with.** `a <= b` with
+  `a & b` empty holds only of an empty `a`, so where every decider declines a
+  meet against a meet, a subject that holds a value is `not_subset` where the
+  two meet in nothing. Two objects a translation from JSON Schema guards to
+  their kind, each a recursive record with a tag of its own, are `not_subset`
+  of each other, where all 28 pairs of eight such schemas were `undecided`.
 
 - **A union in a meet is narrowed by the complements beside it.** `k & (~k |
   x)` is `k & x`, so a branch that is the complement of a member beside its

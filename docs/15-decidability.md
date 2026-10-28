@@ -397,7 +397,11 @@ answers `"undecided"`.
   string and an instance of it. A meet is read by a member of its own kind, or
   by a member that is a union of such: `(int | float) & ~bool` holds numbers
   whatever bounds its other members carry, so a list of anything meets it in
-  nothing.
+  nothing. Two meets are read together where every decider declined the pair:
+  a meet subject with a value is refuted below a meet it shares no value with,
+  so two objects a translation from JSON Schema guards to their kind, `OBJ &
+  (~OBJ | R)`, each `R` a recursive record with a tag of its own, are each
+  `not_subset` of the other.
 - **A kind the supertype holds none of.** Every kind is inhabited, so a subject
   that holds every value of a kind the supertype holds none of is outside it at
   a value of that kind. The universe holds every value of every kind, and a

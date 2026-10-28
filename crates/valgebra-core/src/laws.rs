@@ -2714,6 +2714,54 @@ proptest! {
         );
     }
 
+    // THEORY: semantic-subtyping
+    /// A meet is refuted below a meet it shares no value with, where it holds a
+    /// value: `a ⊆ b` with `a ∩ b = ∅` holds only of an empty `a`. Over objects
+    /// guarded to their kind, `OBJ ∩ (¬OBJ ∪ R)`, each `R` a recursive record
+    /// tagged by a drawn kind -- a pair no rule reads together, which the set
+    /// representation cannot lower -- the relation refutes every pair whose
+    /// tags share no value and holds every pair whose tags are one.
+    #[test]
+    fn a_meet_disjoint_from_a_meet_is_refuted(
+        first in prop_oneof![
+            Just(Schema::Int), Just(Schema::Str), Just(Schema::Bytes),
+            Just(Schema::Float), Just(Schema::NoneType)
+        ],
+        second in prop_oneof![
+            Just(Schema::Int), Just(Schema::Str), Just(Schema::Bytes),
+            Just(Schema::Float), Just(Schema::NoneType)
+        ],
+    ) {
+        let open = |fields: Vec<Field>| Schema::KeyedMap {
+            fields: fields.into(),
+            defaults: vec![MapClause { key: Schema::Str, value: Schema::ANYTHING }].into(),
+        };
+        let defs: Vec<Schema> = [&first, &second]
+            .into_iter()
+            .enumerate()
+            .map(|(at, tag)| {
+                open(vec![
+                    Field { name: "tag".into(), schema: tag.clone(), required: true },
+                    Field {
+                        name: "kids".into(),
+                        schema: Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(at)))),
+                        required: false,
+                    },
+                ])
+            })
+            .collect();
+        let object = open(Vec::new());
+        let guarded = |at: usize| {
+            Schema::meet([
+                object.clone(),
+                Schema::union([object.clone().complement(), Schema::Ref(DefIx::new(at))]),
+            ])
+        };
+        let answer = guarded(0).subtype_relation_under(&guarded(1), &NoLeafRelations, &defs);
+        let expected = if first == second { Relation::Holds } else { Relation::Fails };
+        prop_assert_eq!(answer, expected, "tagged {:?} against {:?}", first, second);
+    }
+
     // THEORY: lattice-theory
     /// A set is below its own split: `R ⊆ (R ∩ ¬B) ∪ (R ∩ B)` over a drawn `R`,
     /// built as a caller builds it, and a drawn set `B`, the split written raw

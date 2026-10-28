@@ -8769,3 +8769,55 @@ fn two_branches_splitting_a_set_are_the_set() {
         Relation::Unknown
     );
 }
+
+/// A meet subject is refuted against a meet supertype it shares no value with,
+/// where it holds a value: `a ⊆ b` with `a ∩ b = ∅` holds only of an empty `a`.
+/// Two objects guarded to their kind, `OBJ ∩ (¬OBJ ∪ R)`, each `R` a recursive
+/// record requiring a tag of its own kind, are that pair: no rule reads the two
+/// meets together, and the set representation cannot lower a reference. A
+/// subject with no value is below everything, and a pair whose meet holds a
+/// value is no such pair.
+#[test]
+fn a_meet_disjoint_from_a_meet_it_holds_a_value_of_is_refuted() {
+    let object = open(Vec::new());
+    let tags = [Schema::Int, Schema::Str, Schema::Bytes];
+    let defs: Vec<Schema> = (0..tags.len())
+        .map(|at| {
+            open(vec![
+                field("tag", tags[at].clone(), true),
+                field(
+                    "kids",
+                    Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(at)))),
+                    false,
+                ),
+            ])
+        })
+        .collect();
+    let guarded = |at: usize| {
+        Schema::meet([
+            object.clone(),
+            Schema::union([object.clone().complement(), Schema::Ref(DefIx::new(at))]),
+        ])
+    };
+    let relation =
+        |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &NoLeafRelations, &defs);
+    assert_eq!(relation(&guarded(0), &guarded(1)), Relation::Fails);
+    assert_eq!(relation(&guarded(1), &guarded(0)), Relation::Fails);
+    let empty = Schema::meet([guarded(0), guarded(1)]);
+    assert_eq!(relation(&empty, &guarded(2)), Relation::Holds);
+    let wider = Schema::meet([
+        object.clone(),
+        Schema::union([object.clone().complement(), open(Vec::new())]),
+    ]);
+    assert_ne!(relation(&guarded(0), &wider), Relation::Fails);
+    // A pair every decider declines whose meet is not proved empty is no such
+    // pair, however surely the subject holds a value.
+    let unread = Schema::meet([
+        object.clone(),
+        Schema::Refine {
+            base: Arc::new(object.clone()),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        },
+    ]);
+    assert_eq!(relation(&guarded(0), &unread), Relation::Unknown);
+}
