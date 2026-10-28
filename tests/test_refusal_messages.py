@@ -246,6 +246,20 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
         ValueError,
         "must be a length a value can have",
     ),
+    # The same minimum inside a grouped marker, which `annotated_types` unpacks
+    # to no bound at all for a minimum below one.
+    (
+        "a negative length in a group",
+        Annotated[str, at.Len(-1)],
+        ValueError,
+        "must be a length a value can have",
+    ),
+    (
+        "a negative length in a group with a maximum",
+        Annotated[list[int], at.Len(-1, 2)],
+        ValueError,
+        "must be a length a value can have",
+    ),
     # A marker from the vocabulary this frontend reads, naming a constraint it
     # does not check. Ignored, it would admit every value the marker excludes.
     (

@@ -517,7 +517,9 @@ assert not decimal_tenths.is_valid(Decimal("0.15"))
 
 The compound markers `Interval` and `Len` expand to the bounds they carry, so
 `Interval(ge=0, le=10)` contributes `Ge(0)` and `Le(10)`, and `Len(2, 4)`
-contributes `MinLen(2)` and `MaxLen(4)`. They are read through the grouping
+contributes `MinLen(2)` and `MaxLen(4)`. A `Len` whose minimum is below zero is
+refused as a `MinLen` of it is, although `annotated_types` unpacks it to no
+lower bound at all. They are read through the grouping
 protocol `annotated_types` documents — a marker that stands for several
 constraints answers for them — so **a marker of your own written that way is
 read the same way**:

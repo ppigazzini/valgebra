@@ -47,9 +47,12 @@ fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     for module in ["typing", "dataclasses", "enum", "re", "types", "warnings"] {
         namespace.set_item(module, py.import(module)?)?;
     }
-    py.run(
-        &CString::new(
-            "import types\n\
+    py.run(&CString::new(STAND_INS)?, Some(&namespace), None)?;
+    Ok(namespace)
+}
+
+/// The markers and classes the tests' annotations name, written in Python.
+const STAND_INS: &str = "import types\n\
              class namespace(types.SimpleNamespace):\n\
              \x20   pass\n\
              class at:\n\
@@ -120,6 +123,15 @@ fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
              \x20       self.items = items\n\
              \x20       self.__is_annotated_types_grouped_metadata__ = True\n\
              \x20   def __iter__(self): return iter(self.items)\n\
+             class Len:\n\
+             \x20   __is_annotated_types_grouped_metadata__ = True\n\
+             \x20   def __init__(self, min_length=0, max_length=None):\n\
+             \x20       self.min_length, self.max_length = min_length, max_length\n\
+             \x20   def __iter__(self):\n\
+             \x20       if self.min_length > 0: yield at.MinLen(self.min_length)\n\
+             \x20       if self.max_length is not None: yield namespace(max_length=self.max_length)\n\
+             Len.__module__ = 'annotated_types'\n\
+             at.Len = Len\n\
              def nest(depth):\n\
              \x20   marker = at.Ge(0)\n\
              \x20   for _ in range(depth): marker = grouped(marker)\n\
@@ -136,13 +148,7 @@ fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
              \x20   def kind(raised):\n\
              \x20       class Meta(type):\n\
              \x20           def __repr__(cls): raise raised\n\
-             \x20       return Meta('Kind', (), {})\n",
-        )?,
-        Some(&namespace),
-        None,
-    )?;
-    Ok(namespace)
-}
+             \x20       return Meta('Kind', (), {})\n";
 
 /// Build a schema from an annotation expression and render it back.
 fn built(py: Python<'_>, expression: &str) -> PyResult<String> {
@@ -863,6 +869,34 @@ fn a_bound_or_a_step_python_cannot_apply_is_refused() {
                 .to_owned(),
         ] {
             built(py, &expression).unwrap_or_else(|error| panic!("{expression}: {error}"));
+        }
+    });
+}
+
+/// A length no value can have is refused inside a grouped marker as it is on its
+/// own: `annotated_types` unpacks a `Len` whose minimum is below one to no lower
+/// bound at all, so the minimum is read before the group unpacks.
+#[test]
+fn a_group_naming_no_length_is_refused_as_its_bound_is() {
+    Python::attach(|py| {
+        for expression in [
+            "typing.Annotated[str, at.MinLen(-1)]",
+            "typing.Annotated[str, at.Len(-1)]",
+            "typing.Annotated[list[int], at.Len(-1, 2)]",
+        ] {
+            match built(py, expression) {
+                Err(error) => assert!(
+                    error.to_string().contains("a length a value can have"),
+                    "{expression} refused with {error}"
+                ),
+                Ok(schema) => panic!("{expression} built {schema} instead of refusing"),
+            }
+        }
+        for expression in [
+            "typing.Annotated[str, at.Len(0, 2)]",
+            "typing.Annotated[str, at.Len(2)]",
+        ] {
+            built(py, expression).unwrap_or_else(|error| panic!("{expression}: {error}"));
         }
     });
 }
