@@ -3774,19 +3774,41 @@ const CROSS_DEPTH: usize = 2;
 /// map and the non-members a clause admitting no value is probed with, and the
 /// quarter-cap a position reads through cut it.
 fn crossed_position(mine: &Schema, theirs: &Schema, out: &mut Vec<Obj>, fuel: usize) -> Vec<Obj> {
-    let (
-        Schema::Seq {
-            container,
-            shape: ours,
-        },
-        Schema::Seq { shape: other, .. },
-    ) = (mine, theirs)
-    else {
-        return Vec::new();
-    };
     if fuel == 0 {
         return Vec::new();
     }
+    match (mine, theirs) {
+        (
+            Schema::Seq {
+                container,
+                shape: ours,
+            },
+            Schema::Seq { shape: other, .. },
+        ) => crossed_shape(*container, ours, other, out, fuel),
+        (
+            Schema::KeyedMap { fields, defaults },
+            Schema::KeyedMap {
+                fields: their_fields,
+                defaults: their_defaults,
+            },
+        ) => crossed_record(
+            (fields, defaults),
+            (their_fields, their_defaults),
+            out,
+            fuel,
+        ),
+        _ => Vec::new(),
+    }
+}
+
+/// [`crossed_position`] at a pair of sequence shapes.
+fn crossed_shape(
+    container: SeqKind,
+    ours: &SeqShape,
+    other: &SeqShape,
+    out: &mut Vec<Obj>,
+    fuel: usize,
+) -> Vec<Obj> {
     let Some(mut base): Option<Vec<Obj>> = ours
         .prefix
         .iter()
@@ -3823,8 +3845,59 @@ fn crossed_position(mine: &Schema, theirs: &Schema, out: &mut Vec<Obj>, fuel: us
         for value in fill {
             let mut items = base.clone();
             items[position] = value;
-            made.push(hold(*container, items));
+            made.push(hold(container, items));
         }
+    }
+    made.truncate(CAP_PER_NODE);
+    made
+}
+
+/// The same crossing at a key of a record, as [`crossed_shape`] makes it at a
+/// position of a sequence.
+///
+/// A record is separated from another at a key one level down as often as a
+/// sequence is at a position: `list[{a?: {str: Any}}, X]` is refuted below
+/// `list[{str: {"a": Any, str: None}}, X]` by a list whose head is
+/// `{"a": {"b": 0}}`, the subject's inner record holding a name its clause
+/// takes anything at and the other's takes only `None` at. The subject's own
+/// record holds that value two levels down, behind the probes and inherited
+/// values each level interleaves with its own, and caps read at three levels
+/// cut it at the second.
+///
+/// So the value at a key is the subject's record with that key filled from the
+/// other record's schema there, and the crossing recurses into the two schemas
+/// the records read the key with. The keys are the subject's own -- each
+/// field's name and the names [`record_edges`] probes its clauses under -- and
+/// a key the other record reads with nothing is skipped, since every value
+/// there separates the two and [`record_edges`] builds one.
+fn crossed_record(
+    (fields, defaults): (&Fields, &Clauses),
+    (their_fields, their_defaults): (&Fields, &Clauses),
+    out: &mut Vec<Obj>,
+    fuel: usize,
+) -> Vec<Obj> {
+    let base = required_entries(fields);
+    let names = fields
+        .iter()
+        .filter_map(|field| static_name(&field.name))
+        .chain(undeclared_names(fields));
+    let mut made = Vec::new();
+    for name in names {
+        let (Some(own), Some(element)) = (
+            schema_at(fields, defaults, name),
+            schema_at(their_fields, their_defaults, name),
+        ) else {
+            continue;
+        };
+        let mut fill: Vec<Obj> = candidates(&element, out)
+            .into_iter()
+            .take(CAP_PER_NODE / 4)
+            .collect();
+        fill.extend(crossed_position(&own, &element, out, fuel - 1));
+        made.extend(
+            fill.into_iter()
+                .map(|value| probed(&base, Key::Exact(name), value)),
+        );
     }
     made.truncate(CAP_PER_NODE);
     made
@@ -4057,6 +4130,70 @@ fn the_universe_separates_a_pair_at_the_tail_of_a_position() {
         fields: Vec::new().into(),
         defaults: Vec::new().into(),
     });
+    // The premise the law carries: a pair that is not refuted asserts nothing.
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
+}
+
+// THEORY: each-kind-is-closed
+/// The universe separates a pair at a key of a record inside a position.
+///
+/// The rows above at a record rather than a sequence. `list[{a?: R}, t]`, with
+/// `R` taking anything under every name, is refuted below `list[{str: S}, t]`,
+/// with `S` taking anything under `"a"` and only `None` under any other name,
+/// because `R` admits `{"b": 1}` and `S` does not. The witness is a list whose
+/// head is `{"a": {"b": 1}}`: the subject's record with its field filled from
+/// the schema the other record reads that key with.
+///
+/// The subject's own record holds that value two records down, behind the
+/// probes and inherited values each level interleaves with its own, and the
+/// caps cut it at the second level. That is what [`crossed_record`] is for.
+/// Held as drawn, with the reference at the second position crowding the caps.
+#[test]
+fn the_universe_separates_a_pair_at_a_key_of_a_position() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let record = |fields: Vec<Field>, defaults: Vec<MapClause>| Schema::KeyedMap {
+        fields: fields.into(),
+        defaults: defaults.into(),
+    };
+    let optional = |schema: Schema| Field {
+        name: "a".into(),
+        schema,
+        required: false,
+    };
+    let any_name = |value: Schema| MapClause {
+        key: Schema::Str,
+        value,
+    };
+    let head = |map: Schema| Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape::fixed([map, Schema::Ref(DefIx::new(1))]),
+    };
+    let anything = record(vec![optional(Schema::ANY)], vec![any_name(Schema::ANY)]);
+    let a = head(record(vec![optional(anything)], Vec::new()));
+    let none_past_a = record(
+        Vec::new(),
+        vec![
+            MapClause {
+                key: Schema::Literal(ConstIx::new(3)),
+                value: Schema::ANY,
+            },
+            any_name(Schema::NoneType),
+        ],
+    );
+    let b = head(record(Vec::new(), vec![any_name(none_past_a)]));
     // The premise the law carries: a pair that is not refuted asserts nothing.
     assert_eq!(
         a.subtype_relation_under(&b, &NoLeafRelations, &defs),
@@ -4767,27 +4904,8 @@ fn sequence_edges(container: SeqKind, shape: &SeqShape, out: &mut Vec<Obj>) -> V
 /// The mappings one record puts a boundary at: the three widths its own clauses
 /// separate, and each field and default clause probed under a key it governs.
 fn record_edges(fields: &Fields, defaults: &Clauses, out: &mut Vec<Obj>) -> Vec<Obj> {
-    // Every probe sits in a mapping that carries the record's required fields,
-    // because a mapping missing one is refused before the probed entry is read.
-    let base: Vec<(Key, Obj)> = fields
-        .iter()
-        .filter(|field| field.required)
-        .filter_map(|field| {
-            Some((
-                Key::Exact(static_name(&field.name)?),
-                a_member(&field.schema, MEMBER_FUEL)?,
-            ))
-        })
-        .collect();
-    let with = |key: Key, value: Obj| {
-        let mut entries: Vec<(Key, Obj)> = base
-            .iter()
-            .filter(|(held, _)| held.name() != key.name())
-            .cloned()
-            .collect();
-        entries.push((key, value));
-        Obj::Map(entries)
-    };
+    let base = required_entries(fields);
+    let with = |key: Key, value: Obj| probed(&base, key, value);
     let mut mine = Vec::new();
     let mut groups: Vec<Vec<Obj>> = Vec::new();
     // Each field is probed under its name spelled both ways. The field reads
@@ -4809,22 +4927,7 @@ fn record_edges(fields: &Fields, defaults: &Clauses, out: &mut Vec<Obj>) -> Vec<
             );
         }
     }
-    // A default clause governs the keys no field declares, so its probes go
-    // under names this record does not declare: under a declared one the field
-    // decides and the clause is never read. Three names, for two different
-    // separations. The first two this record leaves free are the names another
-    // drawn record is likeliest to declare, which is where a clause is told
-    // from a field over the same key. The last is one no drawn record declares,
-    // because the key that separates a catch-all from a closed record is one
-    // *neither* declares: a record of no fields probing under its own first two
-    // free names reaches exactly the two the other record declares, and every
-    // value it builds is admitted by both.
-    let undeclared: Vec<&'static str> = NAMES
-        .into_iter()
-        .filter(|name| !fields.iter().any(|field| &*field.name == *name))
-        .take(2)
-        .chain(["z"])
-        .collect();
+    let undeclared = undeclared_names(fields);
     for clause in defaults.iter() {
         // Built once and laid under each name: the values are the clause's,
         // and the names are only where they are read.
@@ -4854,6 +4957,76 @@ fn record_edges(fields: &Fields, defaults: &Clauses, out: &mut Vec<Obj>) -> Vec<
     mine.push(Obj::Map(short));
     mine.push(Obj::Map(wide));
     mine
+}
+
+/// The record's required fields, each with a member: every probe sits in a
+/// mapping that carries them, because a mapping missing one is refused before
+/// the probed entry is read.
+fn required_entries(fields: &Fields) -> Vec<(Key, Obj)> {
+    fields
+        .iter()
+        .filter(|field| field.required)
+        .filter_map(|field| {
+            Some((
+                Key::Exact(static_name(&field.name)?),
+                a_member(&field.schema, MEMBER_FUEL)?,
+            ))
+        })
+        .collect()
+}
+
+/// The mapping `base` with `value` under `key`, in place of the entry `base`
+/// holds under that name.
+fn probed(base: &[(Key, Obj)], key: Key, value: Obj) -> Obj {
+    let mut entries: Vec<(Key, Obj)> = base
+        .iter()
+        .filter(|(held, _)| held.name() != key.name())
+        .cloned()
+        .collect();
+    entries.push((key, value));
+    Obj::Map(entries)
+}
+
+/// The names a record's default clauses are probed under.
+///
+/// A default clause governs the keys no field declares, so its probes go under
+/// names this record does not declare: under a declared one the field decides
+/// and the clause is never read. Three names, for two different separations.
+/// The first two this record leaves free are the names another drawn record is
+/// likeliest to declare, which is where a clause is told from a field over the
+/// same key. The last is one no drawn record declares, because the key that
+/// separates a catch-all from a closed record is one *neither* declares: a
+/// record of no fields probing under its own first two free names reaches
+/// exactly the two the other record declares, and every value it builds is
+/// admitted by both.
+fn undeclared_names(fields: &Fields) -> Vec<&'static str> {
+    NAMES
+        .into_iter()
+        .filter(|name| !fields.iter().any(|field| &*field.name == *name))
+        .take(2)
+        .chain(["z"])
+        .collect()
+}
+
+/// The schema a record reads a name's value with: its field's where it
+/// declares the name, and otherwise any of the values of the default clauses
+/// whose key holds the name. `None` where nothing reads it, which leaves the
+/// name outside the record at every value.
+fn schema_at(fields: &Fields, defaults: &Clauses, name: &'static str) -> Option<Schema> {
+    if let Some(field) = fields.iter().find(|field| &*field.name == name) {
+        return Some(field.schema.clone());
+    }
+    let pool = const_pool();
+    let values: Vec<Schema> = defaults
+        .iter()
+        .filter(|clause| member_full(&clause.key, &Key::Exact(name).value(), &pool))
+        .map(|clause| clause.value.clone())
+        .collect();
+    match values.len() {
+        0 => None,
+        1 => values.into_iter().next(),
+        _ => Some(Schema::Union(values.into())),
+    }
 }
 
 /// The definitions the soundness laws draw against.
