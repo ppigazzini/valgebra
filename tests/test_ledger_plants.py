@@ -4549,33 +4549,50 @@ PLANTS = (
         trips=("test_the_generator_draws_a_reference_wider_than_its_table",),
     ),
     Plant(
-        # The soundness direction read backwards: a gained proof reported as a
+        # The soundness direction read backwards: a gained answer reported as a
         # lost one, and a lost one passed.
         "tests/test_metamorphic_gate.py",
         ("scripts/metamorphic_gate.py",),
         lambda tree: _edit(
             tree,
             "scripts/metamorphic_gate.py",
-            'if reference[key] == "y" and measured[key] == "n"',
-            'if reference[key] == "n" and measured[key] == "y"',
+            'if reference[key] in DECIDED and measured[key] == "u"',
+            'if reference[key] == "u" and measured[key] in DECIDED',
         ),
         trips=(
             "test_a_lost_proof_fails",
-            "test_a_widening_is_not_a_lost_proof",
+            "test_a_lost_refutation_fails",
+            "test_a_widening_is_not_a_lost_decision",
         ),
     ),
     Plant(
-        # A condition reading one recording: every proof the reference holds is
-        # reported lost, whatever this build proves.
+        # A condition reading one recording: every answer the reference holds
+        # is reported lost, whatever this build decides.
         "tests/test_metamorphic_gate.py",
         ("scripts/metamorphic_gate.py",),
         lambda tree: _edit(
             tree,
             "scripts/metamorphic_gate.py",
-            'if reference[key] == "y" and measured[key] == "n"',
-            'if reference[key] == "y"',
+            'if reference[key] in DECIDED and measured[key] == "u"',
+            "if reference[key] in DECIDED",
         ),
         trips=("test_an_unchanged_recording_holds_every_relation",),
+    ),
+    Plant(
+        # A contradiction read as agreement: every answer both builds share is
+        # reported, and the two that turned pass.
+        "tests/test_metamorphic_gate.py",
+        ("scripts/metamorphic_gate.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/metamorphic_gate.py",
+            "        and reference[key] != measured[key]\n",
+            "        and reference[key] == measured[key]\n",
+        ),
+        trips=(
+            "test_a_contradicted_decision_fails_in_both_directions",
+            "test_an_unchanged_recording_holds_every_relation",
+        ),
     ),
     Plant(
         # The witness searched for on the wrong side of the claim.
@@ -4609,17 +4626,20 @@ PLANTS = (
         trips=("test_a_widening_no_corpus_value_reaches_is_not_refuted",),
     ),
     Plant(
-        # The emptiness guard dropped, so an emptiness row is unpacked as a
-        # subtyping claim.
+        # An emptiness proof searched for a non-member: the refuted proof
+        # passes, and the one no member contradicts is reported.
         "tests/test_metamorphic_gate.py",
         ("scripts/metamorphic_gate.py",),
         lambda tree: _edit(
             tree,
             "scripts/metamorphic_gate.py",
-            "        if claim is None:\n            continue\n",
-            "",
+            'membership.get(f"{empty} @ {v}") == "y"',
+            'membership.get(f"{empty} @ {v}") == "n"',
         ),
-        trips=("test_an_emptiness_row_is_not_read_as_a_subtyping_claim",),
+        trips=(
+            "test_an_emptiness_proof_a_member_refutes_fails",
+            "test_an_emptiness_proof_no_member_refutes_passes",
+        ),
     ),
     Plant(
         "tests/test_metamorphic_gate.py",

@@ -15,24 +15,29 @@ a reference build and the build under test:
   two builds accept and reject exactly the same pairs. Membership is the
   denotation, so a single flip is a semantic change -- which may be intended,
   but is never a refactor.
-* **Decisions only widen.** A relation the reference proved must still be
-  proven: the procedure is sound, so losing a `True` loses a proof. Gaining one
-  is allowed, because the procedure is deliberately incomplete and a change
-  to it may make it decide more.
+* **Decisions only widen.** A relation the reference decided must still be
+  decided, and decided the same way. A decision is one of three answers --
+  `subset`, `not_subset`, `undecided` -- for every ordered pair, and for every
+  schema against `nothing`, which is its emptiness. A proof or a refutation
+  that becomes `undecided` is an answer lost; one that becomes the other is a
+  contradiction, since the procedure is sound and at most one of the two
+  builds can be right. Gaining an answer is allowed, because the procedure is
+  deliberately incomplete and a change to it may make it decide more.
 
 The second relation has an escape the first does not, and this gate closes it: a
-build that answered `True` to everything would satisfy "only widens" perfectly.
-So every new `True` is checked against the corpus values. A subtyping claim
-`A <= B` with a corpus value in `A` and not in `B` is a false proof, and the
-gate fails on it rather than recording the widening.
+build that answered `subset` to everything would satisfy "only widens"
+perfectly. So every new `subset` is checked against the corpus values. A claim
+`A <= B` with a corpus value in `A` and not in `B` is a false proof, and so is an
+emptiness proof for a schema a corpus value is a member of; the gate fails on
+either rather than recording the widening.
 
 Usage:
     python scripts/metamorphic_gate.py            # compare against the reference
     python scripts/metamorphic_gate.py --record   # write the reference from this build
 
 Three outcomes, three exit codes: **0** membership held and no decision was
-lost, **1** a value moved, a proof was lost, or a new proof has a
-counterexample, **2** the gate **could not run** -- no built extension, no
+lost, **1** a value moved, a decision was lost or contradicted, or a new proof
+has a counterexample, **2** the gate **could not run** -- no built extension, no
 readable reference, or a corpus the reference does not describe. A gate that
 could not run has proven nothing and must not read as one that passed.
 """
@@ -65,6 +70,11 @@ class Recording(TypedDict):
     decisions: dict[str, str]
 
 
+# A decision as the recording spells it: the three answers of `relation_to`.
+ANSWERS = {"subset": "s", "not_subset": "n", "undecided": "u"}
+DECIDED = frozenset("sn")
+
+
 # How many failing pairs to print before stopping. A refactor that moves
 # membership usually moves it for a whole class of values at once, and a
 # thousand lines of the same flip says no more than a dozen.
@@ -84,6 +94,7 @@ def _schemas() -> dict[str, object]:
 
     from valgebra import (  # noqa: PLC0415
         Regex,
+        Validator,
         anything,
         complement,
         intersection,
@@ -108,6 +119,32 @@ def _schemas() -> dict[str, object]:
     json_value = recursive(
         lambda ref: union(None, bool, int, float, str, listed(ref), keyed(ref))
     )
+    json_object = keyed(json_value)
+
+    def guarded(field: object) -> object:
+        """Guard a record to objects, as a JSON Schema `properties` is written.
+
+        Any value that is not an object passes the guard; an object must carry a
+        `tag` of `field` and a `tag` of any JSON value.
+        """
+        return intersection(
+            json_object,
+            union(complement(json_object), Validator({"tag": field}).open()),
+            union(complement(json_object), Validator({"tag": json_value}).open()),
+        )
+
+    guarded_4 = guarded(guarded(guarded(guarded(int))))
+    integer = intersection(
+        union(int, Annotated[float, MultipleOf(1)]), complement(bool)
+    )
+    integer_tree = recursive(lambda ref: union({"a": integer}, str, keyed(ref)))
+    nested_closed = Validator(
+        {
+            "a": Validator(
+                {"a": Validator({"tag": Validator({"a": json_value}).open()}).open()}
+            ).close()
+        }
+    ).close()
 
     scalars: dict[str, object] = {
         "bool": bool,
@@ -168,6 +205,25 @@ def _schemas() -> dict[str, object]:
         "json": json_value,
         "tree": recursive(lambda ref: union(int, listed(ref))),
     }
+    # The shapes a translation from JSON Schema writes, which the small schemas
+    # above never compose: records guarded to objects and nested four deep, a
+    # recursive record met with a nested closed one, a meet of two unions, a
+    # literal set met with a complement, two open records met. A relation
+    # between such shapes is answered by the rules that read a meet, and a
+    # change to one of them moves answers here that nothing above can reach.
+    composites: dict[str, object] = {
+        "guarded-1": guarded(int),
+        "guarded-4": guarded_4,
+        "guarded-4|str": union(guarded_4, str),
+        "integer-tree": integer_tree,
+        "nested-closed": nested_closed,
+        "integer-tree&nested-closed": intersection(integer_tree, nested_closed),
+        "(int|str)&(str|none)": intersection(union(int, str), union(str, None)),
+        "lit-a-1&~str": intersection(Literal["a", 1], complement(str)),
+        "open-a&open-b": intersection(
+            Validator({"a": int}).open(), Validator({"b": str}).open()
+        ),
+    }
     return {
         **scalars,
         **lattice,
@@ -176,6 +232,7 @@ def _schemas() -> dict[str, object]:
         **records,
         **refinements,
         **recursive_schemas,
+        **composites,
     }
 
 
@@ -223,6 +280,11 @@ def _values() -> dict[str, object]:
         "dict-xyz": {"x": 1, "y": 2, "z": 3},
         "dict-int-key": {1: 1},
         "json-object": {"a": [1, None, {"b": "c"}]},
+        "dict-tag": {"tag": 1},
+        "dict-tag-4": {"tag": {"tag": {"tag": {"tag": 1}}}},
+        "dict-a-1": {"a": 1},
+        "dict-a-nested": {"a": {"a": {"tag": {"a": 1}}}},
+        "dict-a-b": {"a": 1, "b": "a"},
     }
 
 
@@ -256,6 +318,13 @@ class MinLen:
         self.min_length = min_length
 
 
+class MultipleOf:
+    __module__ = "annotated_types"
+
+    def __init__(self, multiple_of: int) -> None:
+        self.multiple_of = multiple_of
+
+
 def _membership(schemas: dict[str, Any], values: dict[str, object]) -> dict[str, str]:
     """Every schema against every value: `y`, `n`, or the error the walk raised.
 
@@ -278,17 +347,23 @@ def _membership(schemas: dict[str, Any], values: dict[str, object]) -> dict[str,
 
 
 def _decisions(schemas: dict[str, Any]) -> dict[str, str]:
-    """Every ordered pair under subtyping, and every schema under emptiness."""
+    """Every ordered pair under subtyping, and every schema under emptiness.
+
+    Each in the three answers of `relation_to`, and emptiness as the schema
+    against `nothing`: a boolean reads a refutation and a decline as one `False`,
+    so a refutation lost to a decline would not move it.
+    """
+    from valgebra import nothing  # noqa: PLC0415
+
     verdicts = {}
     for name, validator in schemas.items():
         if validator is None:
             continue
-        verdicts[f"empty {name}"] = "y" if validator.is_empty() else "n"
+        verdicts[f"empty {name}"] = ANSWERS[validator.relation_to(nothing)]
         for other_name, other in schemas.items():
             if other is None:
                 continue
-            answer = validator.is_subtype_of(other)
-            verdicts[f"{name} <= {other_name}"] = "y" if answer else "n"
+            verdicts[f"{name} <= {other_name}"] = ANSWERS[validator.relation_to(other)]
     return verdicts
 
 
@@ -366,17 +441,35 @@ def moved_membership(reference: dict[str, str], measured: dict[str, str]) -> lis
     ]
 
 
-def lost_proofs(reference: dict[str, str], measured: dict[str, str]) -> list[str]:
-    """List the decisions that were proven and no longer are.
+def lost_decisions(reference: dict[str, str], measured: dict[str, str]) -> list[str]:
+    """List the decisions the reference made and this build declines.
 
-    Soundness makes this one-directional. A `y` that became `n` lost a proof the
-    reference had, which no refactor should do; an `n` that became `y` is the
-    procedure deciding more, which a change to the procedure does on purpose.
+    Soundness makes this one-directional. A proof or a refutation that became
+    `undecided` lost an answer the reference had, which no refactor should do;
+    an `undecided` that became an answer is the procedure deciding more, which a
+    change to the procedure does on purpose.
     """
     return [
-        f"{key}: proven by the reference, not by this build"
+        f"{key}: decided by the reference, not by this build"
         for key in sorted(reference)
-        if reference[key] == "y" and measured[key] == "n"
+        if reference[key] in DECIDED and measured[key] == "u"
+    ]
+
+
+def contradicted_decisions(
+    reference: dict[str, str], measured: dict[str, str]
+) -> list[str]:
+    """List the decisions the two builds make the opposite way.
+
+    Both builds claim to be sound, so a `subset` against a `not_subset` means
+    one of them is wrong, whichever direction the change went.
+    """
+    return [
+        f"{key}: {reference[key]} on the reference, {measured[key]} on this build"
+        for key in sorted(reference)
+        if reference[key] in DECIDED
+        and measured[key] in DECIDED
+        and reference[key] != measured[key]
     ]
 
 
@@ -384,6 +477,12 @@ def _subtype_claim(key: str) -> tuple[str, str] | None:
     """Read `A <= B` back out of a decision key, or `None` for an emptiness row."""
     left, separator, right = key.partition(" <= ")
     return (left, right) if separator else None
+
+
+def _emptiness_claim(key: str) -> str | None:
+    """Read the schema an emptiness row is about, or `None` for a subtyping row."""
+    prefix, separator, name = key.partition("empty ")
+    return name if separator and not prefix else None
 
 
 def unwitnessed_widenings(
@@ -402,7 +501,15 @@ def unwitnessed_widenings(
     """
     refuted = []
     for key in sorted(reference):
-        if reference[key] != "n" or measured[key] != "y":
+        if reference[key] == "s" or measured[key] != "s":
+            continue
+        empty = _emptiness_claim(key)
+        if empty is not None:
+            member = next(
+                (v for v in values if membership.get(f"{empty} @ {v}") == "y"), None
+            )
+            if member is not None:
+                refuted.append(f"{key}: {member} is in {empty}")
             continue
         claim = _subtype_claim(key)
         if claim is None:
@@ -464,25 +571,27 @@ def main(argv: list[str]) -> int:
         return EXIT_CANNOT_RUN
 
     moved = moved_membership(reference_membership, membership)
-    lost = lost_proofs(reference_decisions, decisions)
+    lost = lost_decisions(reference_decisions, decisions)
+    contradicted = contradicted_decisions(reference_decisions, decisions)
     refuted = unwitnessed_widenings(
         reference_decisions, decisions, membership, _values()
     )
     widened = sum(
         1
         for key in reference_decisions
-        if reference_decisions[key] == "n" and decisions[key] == "y"
+        if reference_decisions[key] == "u" and decisions[key] in DECIDED
     )
 
     print(f"reference: {reference['commit']}")
     print(f"corpus:    {len(membership)} value pairs, {len(decisions)} decisions")
     _report("membership moved", moved)
-    _report("proofs lost", lost)
+    _report("decisions lost", lost)
+    _report("decisions contradicted", contradicted)
     _report("widenings refuted by a value", refuted)
     print(f"widenings: {widened}")
-    if moved or lost or refuted:
+    if moved or lost or contradicted or refuted:
         return EXIT_FAIL
-    print("OK: membership held and no proof was lost.")
+    print("OK: membership held and no decision was lost.")
     return EXIT_OK
 
 

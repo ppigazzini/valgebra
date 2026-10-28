@@ -1299,6 +1299,96 @@ _DECIDED = [
     ),
 ]
 
+# The shapes a translation from JSON Schema writes: the JSON universe, the number
+# kinds with `bool` taken out, objects guarded by `~object | record`, records
+# nested and met, and the same question asked through a complement. Each row is
+# a relation such a translation asks, reduced until it stays a row.
+_ARRAY = Validator([_JSON])
+_OBJECT = Validator({str: _JSON})
+_NOT_BOOL = complement(bool)
+_NUMBER = intersection(union(int, float), _NOT_BOOL)
+_INTEGER = intersection(union(int, Annotated[float, at.MultipleOf(1)]), _NOT_BOOL)
+
+
+def _guarded(field: object) -> Validator:
+    """Guard a record to objects: any non-object passes, an object carries `tag`."""
+    return intersection(
+        _OBJECT,
+        union(complement(_OBJECT), Validator({"tag": field}).open()),
+        union(complement(_OBJECT), Validator({"tag": _JSON}).open()),
+    )
+
+
+def _guarded_deep(depth: int) -> Validator:
+    schema: object = int
+    for _ in range(depth):
+        schema = _guarded(schema)
+    return Validator(schema)
+
+
+def _tagged(members: int, shift: int = 0) -> Validator:
+    """Build records told apart by a constant tag, as a `oneOf` writes them."""
+    return union(
+        *[
+            Validator({"type": Literal[f"t{i}"], "v": Annotated[int, at.Ge(i + shift)]})  # ty: ignore[invalid-type-form]
+            for i in range(members)
+        ]
+    )
+
+
+def _patterns(members: int) -> Validator:
+    return union(*[Annotated[str, Regex(f"p{i}")] for i in range(members)])
+
+
+# An integer tree beside a closed record nested three deep, and their meet.
+_INTEGER_TREE = recursive(lambda t: union({"a": _INTEGER}, str, {str: t}))
+_NESTED_CLOSED = Validator(
+    {
+        "a": Validator(
+            {"a": Validator({"tag": Validator({"a": _JSON}).open()}).open()}
+        ).close()
+    }
+).close()
+# A record of the universe, outside it, and the JSON universe widened by a
+# constant two ways.
+_OUTSIDE = intersection(complement(_JSON), Validator({"a": _JSON}).open())
+_WIDENED = union(_JSON, Literal[0.5, True])  # ty: ignore[invalid-type-form]
+_NARROWED = union(intersection(_JSON, _NUMBER), Literal["paid", ""])
+# A recursive universe beside a pattern, and the inner universe a complement of
+# which is a branch of a recursive one.
+_NULL_TREE = recursive(lambda t: union(None, [t]))
+_LETTER_A = Annotated[str, Regex("a")]
+_INNER = recursive(lambda t: union(int, [t], {str: t}))
+_OUTER = recursive(lambda t: union(complement(_INNER), [t], {str: t}))
+_WINDOW = intersection(
+    union(int, float),
+    _NOT_BOOL,
+    union(Annotated[int, at.Ge(5000)], Annotated[float, at.Ge(5000)]),
+    union(Annotated[int, at.Le(5001)], Annotated[float, at.Le(5001)]),
+)
+# The smallest guarded shape a drawn case left undecided, met with the universe.
+_GUARDED_MEET = intersection(
+    union(
+        _NUMBER,
+        Validator(
+            {
+                "tag": intersection(
+                    Validator(
+                        {
+                            "tag": intersection(
+                                _JSON, complement(intersection(_NUMBER, _JSON))
+                            )
+                        }
+                    ).open(),
+                    union(_OBJECT, _JSON),
+                )
+            }
+        ).open(),
+    ),
+    _JSON,
+)
+
+
 # Known decision-completeness misses: true relations neither the rules nor the
 # descriptor decides.
 #
@@ -1383,7 +1473,246 @@ _LEDGERED: list[object] = [
 
 
 # THEORY: an-exhaustible-procedure-is-searched, structural-rather-than-reduction
-@pytest.mark.parametrize(("operation", "left", "right"), _DECIDED + _LEDGERED)
+# The translation's relations: the ones decided are gates, the ones declined
+# are strict, each with the limit that leaves it.
+_TRANSLATED: list[object] = [
+    pytest.param("subtype", _JSON, union(_JSON, str), id="json:json<=json|str"),
+    pytest.param("refutes", _JSON, nothing, id="json:json-is-inhabited"),
+    pytest.param("refutes", _ARRAY, nothing, id="json:array-is-inhabited"),
+    pytest.param("refutes", _JSON, complement(_ARRAY), id="json:json!<=~array"),
+    pytest.param("refutes", _JSON, _ARRAY, id="json:json!<=array"),
+    pytest.param("refutes", _JSON, int, id="json:json!<=int"),
+    pytest.param("refutes", union(float, int), _ARRAY, id="json:number!<=array"),
+    pytest.param(
+        "refutes",
+        intersection(_INTEGER, int),
+        nothing,
+        id="json:integer&int-is-inhabited",
+    ),
+    pytest.param(
+        "refutes",
+        intersection(anything, _JSON),
+        nothing,
+        id="json:anything&json-is-inhabited",
+    ),
+    pytest.param("subtype", _OUTSIDE, complement(_JSON), id="json:~json&{a}<=~json"),
+    pytest.param(
+        "refutes",
+        intersection(_WIDENED, _NARROWED),
+        nothing,
+        id="json:widened&narrowed-is-inhabited",
+    ),
+    pytest.param(
+        "subtype",
+        _guarded_deep(3),
+        union(_guarded_deep(3), str),
+        id="json:guarded-3<=guarded-3|str",
+    ),
+    pytest.param(
+        "subtype",
+        intersection(_INTEGER_TREE, _NESTED_CLOSED),
+        _NESTED_CLOSED,
+        id="json:tree&nested<=nested",
+    ),
+    pytest.param("refutes", _tagged(6), _tagged(6, 1), id="json:six-tagged!<=shifted"),
+    pytest.param(
+        "subtype",
+        _patterns(31),
+        Annotated[str, Regex("p[0-9]+")],
+        id="json:thirty-one-patterns<=p[0-9]+",
+    ),
+    # A meet's own members placed only after every member was asked below the
+    # supertype, and a dear member spends the budget the identity needed.
+    pytest.param(
+        "subtype",
+        _guarded_deep(4),
+        union(_guarded_deep(4), str),
+        id="json:guarded-4<=guarded-4|str",
+        marks=_missed("the meet asks its members before it finds itself in the union"),
+    ),
+    pytest.param(
+        "subtype",
+        _GUARDED_MEET,
+        union(_GUARDED_MEET, _NUMBER),
+        id="json:guarded-meet<=guarded-meet|number",
+        marks=_missed("the meet asks its members before it finds itself in the union"),
+    ),
+    pytest.param(
+        "subtype",
+        intersection(_INTEGER_TREE, _NESTED_CLOSED),
+        _INTEGER_TREE,
+        id="json:tree&nested<=tree",
+        marks=_missed(
+            "the meet asks its members before it finds the supertype among them"
+        ),
+    ),
+    # A complement of a union is the meet of the complements, and no rule reads it
+    # that way as a subject.
+    pytest.param(
+        "subtype",
+        complement(union(str, complement(list[list[int]]))),
+        list[list[int]],
+        id="json:~(str|~list[list[int]])<=list[list[int]]",
+        marks=_missed(
+            "no rule reads a complemented union as the meet of its complements"
+        ),
+    ),
+    pytest.param(
+        "subtype",
+        complement(union(_ARRAY, _NOT_BOOL)),
+        bool,
+        id="json:~(array|~bool)<=bool",
+        marks=_missed(
+            "no rule reads a complemented union as the meet of its complements"
+        ),
+    ),
+    # A union holding a recursive branch and a pattern lowers as one term, and
+    # the set representation declines it although each branch alone decides.
+    pytest.param(
+        "refutes",
+        union(_NULL_TREE, _LETTER_A),
+        nothing,
+        id="json:null-tree|pattern-is-inhabited",
+        marks=_missed("the sets are asked of the whole union, never of one branch"),
+    ),
+    pytest.param(
+        "refutes",
+        str,
+        union(_NULL_TREE, _LETTER_A),
+        id="json:str!<=null-tree|pattern",
+        marks=_missed("the sets are asked of the whole union, never of one branch"),
+    ),
+    pytest.param(
+        "refutes",
+        {"a": int},
+        _OUTER,
+        id="json:{a:int}!<=outer-tree",
+        marks=_missed("the sets are asked of the whole union, never of one branch"),
+    ),
+    pytest.param(
+        "refutes",
+        _tagged(7),
+        _tagged(7, 1),
+        id="json:seven-tagged!<=shifted",
+        marks=_missed("the sets are asked of the whole union, never of one branch"),
+    ),
+    pytest.param(
+        "subtype",
+        _patterns(32),
+        Annotated[str, Regex("p[0-9]+")],
+        id="json:thirty-two-patterns<=p[0-9]+",
+        marks=_missed("the sets are asked of the whole union, never of one branch"),
+    ),
+    # A kind the supertype cannot hold is a value the subject has outside it.
+    pytest.param(
+        "refutes",
+        anything,
+        _JSON,
+        id="json:anything!<=json",
+        marks=_missed("no rule refutes by a kind the supertype cannot hold"),
+    ),
+    pytest.param(
+        "refutes",
+        complement(_JSON),
+        _JSON,
+        id="json:~json!<=json",
+        marks=_missed("no rule refutes by a kind the supertype cannot hold"),
+    ),
+    pytest.param(
+        "empty",
+        intersection(_ARRAY, union(None, _WINDOW)),
+        None,
+        id="json:empty:array&(None|window)",
+        marks=_missed("a branch that is a meet of two unions is not read by its kinds"),
+    ),
+    # A step that is no multiple of the other's is its own witness.
+    pytest.param(
+        "refutes",
+        Annotated[int, at.MultipleOf(5000)],
+        Annotated[int, at.MultipleOf(3)],
+        id="json:step-5000!<=step-3",
+        marks=_missed("a step is refuted by no value of its own"),
+    ),
+    # Under a full match the two ends of the text are word boundaries before and
+    # after a word character.
+    pytest.param(
+        "equivalent",
+        Annotated[str, Regex(r"\bab\b")],
+        Annotated[str, Regex("ab")],
+        id="json:\\bab\\b==ab",
+        marks=_missed("a word boundary at either end of a full match is not reduced"),
+    ),
+    # One question through a complement's meet, where its plain spelling decides.
+    pytest.param(
+        "refutes",
+        anything,
+        complement(_JSON),
+        id="json:anything!<=~json",
+        marks=_missed("the question through a complement is asked of a meet"),
+    ),
+    pytest.param(
+        "empty",
+        intersection(_JSON, complement(union(_JSON, str))),
+        None,
+        id="json:empty:json&~(json|str)",
+        marks=_missed("the question through a complement is asked of a meet"),
+    ),
+    pytest.param(
+        "refutes",
+        intersection(_JSON, _ARRAY),
+        nothing,
+        id="json:json&array-is-inhabited",
+        marks=_missed("the question through a complement is asked of a meet"),
+    ),
+    pytest.param(
+        "refutes",
+        intersection(_JSON, complement(_ARRAY)),
+        nothing,
+        id="json:json&~array-is-inhabited",
+        marks=_missed("the question through a complement is asked of a meet"),
+    ),
+    pytest.param(
+        "refutes",
+        _INTEGER,
+        complement(int),
+        id="json:integer!<=~int",
+        marks=_missed("the question through a complement is asked of a meet"),
+    ),
+    pytest.param(
+        "refutes",
+        anything,
+        union(complement(_JSON), int),
+        id="json:anything!<=~json|int",
+        marks=_missed("the question through a complement is asked of a meet"),
+    ),
+    pytest.param(
+        "refutes",
+        intersection(union(float, int), complement(_ARRAY)),
+        nothing,
+        id="json:number&~array-is-inhabited",
+        marks=_missed("the question through a complement is asked of a meet"),
+    ),
+    pytest.param(
+        "subtype",
+        _JSON,
+        complement(_OUTSIDE),
+        id="json:json<=~(~json&{a})",
+        marks=_missed("the question through a complement is asked of a meet"),
+    ),
+    # A meet is commutative and its members are asked in the written order.
+    pytest.param(
+        "refutes",
+        intersection(_NARROWED, _WIDENED),
+        nothing,
+        id="json:narrowed&widened-is-inhabited",
+        marks=_missed("the members of a meet are asked in the order they are written"),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("operation", "left", "right"), _DECIDED + _LEDGERED + _TRANSLATED
+)
 def test_decision_decides_true_relations(
     operation: str, left: object, right: object
 ) -> None:

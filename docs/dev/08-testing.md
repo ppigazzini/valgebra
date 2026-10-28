@@ -97,6 +97,7 @@ Two more are refused, each by a test:
 | Algebra laws | every claimed equivalence, against membership | a law nobody thought to claim |
 | Completeness ledger | that the procedure *decides* an enumerated relation | a relation nobody enumerated |
 | Completeness probe | that every `False` has a value witnessing it | a gap no value in its universe can expose |
+| Metamorphic gate | every membership and every decision against a recorded build: no value moves, no answer is lost or turned | a shape its corpus does not compose |
 | Snapshots | error messages and `repr` | whether the message is *right* |
 | Fuzzing | panic-freedom, idempotence, the order laws | anything outside the budget |
 
@@ -687,9 +688,17 @@ preservation is oracle-tested over the decidable fragment in the core law suite.
 Duplicating it in the fuzzer would only cover the sub-fragment its wide generator
 is built to exceed.
 
-**Completeness cannot be fuzzed.** Over a finite universe only the sound
-direction is assertable, so enumeration is the instrument: the ledger lists
-relations true by construction and asserts the procedure decides each.
+**Completeness is held by what is known, not by what is drawn.** A pair drawn at
+random has no known answer, so its `undecided` cannot be told from a gap. Three
+things are known: a relation true by construction, which the ledger asserts
+decided; a `False` with no witness in a universe, which the probe reports; and
+the answer a recorded build gave, which the metamorphic gate holds without
+knowing whether it is right. The last is the one that sees an answer lost on a
+shape nobody listed as a relation -- as far as its corpus reaches. The rules that
+read a meet are where answers move, so the corpus composes the shapes a
+translation from JSON Schema writes: guarded records nested four deep, a
+recursive record met with a closed one, a meet of two unions, a literal set met
+with a complement.
 
 **Another language's type system is not a differential oracle.** Elixir's
 `Module.Types.Descr` decides the same algebra over BEAM values, where a boolean

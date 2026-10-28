@@ -49,8 +49,9 @@ VALUES = {"one": 1, "two": 2}
 
 def test_an_unchanged_recording_holds_every_relation() -> None:
     assert gate.moved_membership(MEMBERSHIP, MEMBERSHIP) == []
-    decisions = {"narrow <= wide": "y", "wide <= narrow": "n"}
-    assert gate.lost_proofs(decisions, decisions) == []
+    decisions = {"narrow <= wide": "s", "wide <= narrow": "n", "empty wide": "u"}
+    assert gate.lost_decisions(decisions, decisions) == []
+    assert gate.contradicted_decisions(decisions, decisions) == []
     assert gate.unwitnessed_widenings(decisions, decisions, MEMBERSHIP, VALUES) == []
 
 
@@ -76,26 +77,49 @@ def test_a_raised_error_is_a_verdict_like_any_other() -> None:
 
 
 def test_a_lost_proof_fails() -> None:
-    reference = {"narrow <= wide": "y"}
-    measured = {"narrow <= wide": "n"}
-    assert gate.lost_proofs(reference, measured) == [
-        "narrow <= wide: proven by the reference, not by this build"
+    reference = {"narrow <= wide": "s"}
+    measured = {"narrow <= wide": "u"}
+    assert gate.lost_decisions(reference, measured) == [
+        "narrow <= wide: decided by the reference, not by this build"
     ]
 
 
-def test_a_widening_is_not_a_lost_proof() -> None:
-    # The relation is one-directional by soundness: gaining a proof is what
-    # every milestone after this one does on purpose.
-    reference = {"wide <= narrow": "n"}
-    measured = {"wide <= narrow": "y"}
-    assert gate.lost_proofs(reference, measured) == []
+def test_a_lost_refutation_fails() -> None:
+    # A refutation is an answer a caller acts on, and a boolean reads it and a
+    # decline as one `False`: a recording of booleans cannot see it go.
+    reference = {"wide <= narrow": "n", "empty narrow": "n"}
+    measured = {"wide <= narrow": "u", "empty narrow": "u"}
+    assert gate.lost_decisions(reference, measured) == [
+        "empty narrow: decided by the reference, not by this build",
+        "wide <= narrow: decided by the reference, not by this build",
+    ]
+
+
+def test_a_contradicted_decision_fails_in_both_directions() -> None:
+    # Both builds claim soundness, so one of them is wrong whichever way the
+    # answer turned.
+    reference = {"narrow <= wide": "s", "wide <= narrow": "n"}
+    measured = {"narrow <= wide": "n", "wide <= narrow": "s"}
+    assert gate.contradicted_decisions(reference, measured) == [
+        "narrow <= wide: s on the reference, n on this build",
+        "wide <= narrow: n on the reference, s on this build",
+    ]
+
+
+def test_a_widening_is_not_a_lost_decision() -> None:
+    # The relation is one-directional by soundness: gaining an answer is what
+    # a change to the procedure does on purpose.
+    reference = {"wide <= narrow": "u", "narrow <= wide": "u"}
+    measured = {"wide <= narrow": "n", "narrow <= wide": "s"}
+    assert gate.lost_decisions(reference, measured) == []
+    assert gate.contradicted_decisions(reference, measured) == []
 
 
 def test_a_widening_the_values_support_passes() -> None:
     # `narrow <= wide` is true, so no corpus value is in `narrow` and outside
     # `wide`. The gate records the widening and does not fail on it.
-    reference = {"narrow <= wide": "n"}
-    measured = {"narrow <= wide": "y"}
+    reference = {"narrow <= wide": "u"}
+    measured = {"narrow <= wide": "s"}
     assert gate.unwitnessed_widenings(reference, measured, MEMBERSHIP, VALUES) == []
 
 
@@ -103,8 +127,8 @@ def test_a_widening_a_value_refutes_fails() -> None:
     # `wide <= narrow` is false, and the corpus has the witness: `two` is in
     # `wide` and not in `narrow`. This is the case that stops a build proving
     # everything from reading as a clean widening.
-    reference = {"wide <= narrow": "n"}
-    measured = {"wide <= narrow": "y"}
+    reference = {"wide <= narrow": "u"}
+    measured = {"wide <= narrow": "s"}
     assert gate.unwitnessed_widenings(reference, measured, MEMBERSHIP, VALUES) == [
         "wide <= narrow: two is in wide and not in narrow"
     ]
@@ -115,19 +139,27 @@ def test_a_widening_no_corpus_value_reaches_is_not_refuted() -> None:
     # claim, and the gate does not pretend otherwise. This is why the corpus is
     # the gate's real subject -- the search is only as strong as the values in
     # it.
-    reference = {"wide <= narrow": "n"}
-    measured = {"wide <= narrow": "y"}
+    reference = {"wide <= narrow": "u"}
+    measured = {"wide <= narrow": "s"}
     thin = {"wide @ one": "y", "narrow @ one": "y"}
     assert gate.unwitnessed_widenings(reference, measured, thin, {"one": 1}) == []
 
 
-def test_an_emptiness_row_is_not_read_as_a_subtyping_claim() -> None:
-    # The decision recording holds both, keyed differently. An emptiness
-    # widening has no `A <= B` to refute, and parsing one out of it would
-    # compare a schema against a name that is not there.
-    reference = {"empty narrow": "n"}
-    measured = {"empty narrow": "y"}
-    assert gate.unwitnessed_widenings(reference, measured, MEMBERSHIP, VALUES) == []
+def test_an_emptiness_proof_a_member_refutes_fails() -> None:
+    # An emptiness row has no `A <= B` to parse, and its witness is any member
+    # of the schema: `one` is in `narrow`, so `narrow` is not empty.
+    reference = {"empty narrow": "u"}
+    measured = {"empty narrow": "s"}
+    assert gate.unwitnessed_widenings(reference, measured, MEMBERSHIP, VALUES) == [
+        "empty narrow: one is in narrow"
+    ]
+
+
+def test_an_emptiness_proof_no_member_refutes_passes() -> None:
+    reference = {"empty narrow": "u"}
+    measured = {"empty narrow": "s"}
+    hollow = {"narrow @ one": "n", "narrow @ two": "n"}
+    assert gate.unwitnessed_widenings(reference, measured, hollow, VALUES) == []
 
 
 def test_the_reference_the_gate_ships_with_describes_a_commit() -> None:
@@ -149,9 +181,9 @@ def test_the_corpus_asks_both_answers_of_both_relations() -> None:
     import json  # noqa: PLC0415
 
     reference = json.loads(gate.REFERENCE_FILE.read_text(encoding="utf-8"))
-    for name, recorded in (
-        ("membership", reference["membership"]),
-        ("decisions", reference["decisions"]),
+    for name, recorded, wanted in (
+        ("membership", reference["membership"], {"y", "n"}),
+        ("decisions", reference["decisions"], {"s", "n"}),
     ):
         answers = set(recorded.values())
-        assert {"y", "n"} <= answers, f"the {name} corpus only ever answers {answers}"
+        assert wanted <= answers, f"the {name} corpus only ever answers {answers}"
