@@ -149,13 +149,16 @@ impl Schema {
     /// whole meet branch by branch: `int & str` is disjoint from `str | int`,
     /// each branch by the other member.
     ///
-    /// **Only a member with a kind of its own is read.** A schema shares its
-    /// subterms, so a tower of unions of meets of unions is a term of linear
-    /// size and a tree of exponential size, and a reading that went from a meet
-    /// into a union and back would walk the tree, once per goal the decision
-    /// asks. A union and a meet carry no kind, nor does a class or a literal,
-    /// whose kinds are the oracle's, and reading those through every branch of
-    /// a union is a call per branch on every pair the refutations leave.
+    /// **Only a member with a kind of its own is read, or a union whose
+    /// branches each have one.** A schema shares its subterms, so a tower of
+    /// unions of meets of unions is a term of linear size and a tree of
+    /// exponential size, and a reading that went from a meet into a union and
+    /// back would walk the tree, once per goal the decision asks. A union of
+    /// kinded branches goes one level in and no further -- `(int | float) &
+    /// ~bool` is a number however its bounds read -- and a meet holding no such
+    /// member, a class or a literal, whose kinds are the oracle's, is not read:
+    /// reading those through every branch of a union is a call per branch on
+    /// every pair the refutations leave.
     #[inline(never)]
     fn meet_disjoint_with(&self, other: &Schema, oracle: &dyn LeafRelations) -> bool {
         let Schema::Intersection(members) = self else {
@@ -163,7 +166,7 @@ impl Schema {
         };
         members
             .iter()
-            .any(|member| member.type_tag().is_some() && member.disjoint_with(other, oracle))
+            .any(|member| read_by_kind(member) && member.disjoint_with(other, oracle))
     }
 
     /// The element of a schema whose values are that element repeated: a
@@ -221,7 +224,8 @@ impl Schema {
     }
 
     /// Whether every value of `kind` belongs to this schema, read off the
-    /// constructors.
+    /// constructors: [`kinds_held_whole`](Self::kinds_held_whole) at one kind,
+    /// with no reference unfolded.
     ///
     /// The reading a dict key needs before it can name a witness. A key schema
     /// that holds every value of a kind holds the plain one a refutation picks
@@ -238,78 +242,55 @@ impl Schema {
     /// member by member, so `Literal[True, False]` is not seen to hold every
     /// boolean.
     pub(super) fn holds_every_value_of(&self, kind: Kind, oracle: &dyn LeafRelations) -> bool {
-        match self {
-            Schema::Anything(_) => true,
-            Schema::NoneType => kind == Kind::NoneType,
-            Schema::Bool => kind == Kind::Bool,
-            // `bool` subclasses `int`, so every boolean is an integer.
-            Schema::Int => matches!(kind, Kind::Int | Kind::Bool),
-            Schema::Float => kind == Kind::Float,
-            Schema::Str => kind == Kind::Str,
-            Schema::Bytes => kind == Kind::Bytes,
-            Schema::Seq {
-                container: SeqKind::Tuple,
-                shape,
-            } => {
-                kind == Kind::Tuple
-                    && shape.prefix.is_empty()
-                    && matches!(shape.tail.as_deref(), Some(Schema::Anything(_)))
-            }
-            Schema::Coll {
-                container: CollKind::FrozenSet,
-                element,
-            } => kind == Kind::FrozenSet && matches!(**element, Schema::Anything(_)),
-            Schema::Union(members) => members
-                .iter()
-                .any(|member| member.holds_every_value_of(kind, oracle)),
-            Schema::Intersection(members) => members
-                .iter()
-                .all(|member| member.holds_every_value_of(kind, oracle)),
-            Schema::Complement(inner) => inner.holds_no_value_of(kind, oracle),
-            _ => false,
-        }
+        whole(self, &mut KindWalk::new(oracle, &[], true)) & bit(kind) != 0
     }
 
-    /// Whether no value of `kind` belongs to this schema.
+    /// Whether no value of `kind` belongs to this schema:
+    /// [`kinds_possibly_held`](Self::kinds_possibly_held) at one kind, with no
+    /// reference unfolded.
     ///
     /// The dual of [`holds_every_value_of`](Self::holds_every_value_of), and the
     /// two meet at a complement: `¬k` holds every value of a kind exactly where
-    /// `k` holds none. Off the connectives it is [`disjoint_with`]'s reading of
-    /// a node against a whole kind -- its tag where the core can read one, the
-    /// oracle's answer for a class -- and a refinement is read through its
-    /// base, which it is a subset of. Sound and incomplete in the same way:
-    /// `bool` holds no plain integer, and is not seen to, because the two
-    /// kinds share values.
-    ///
-    /// [`disjoint_with`]: Self::disjoint_with
+    /// `k` holds none. Sound and incomplete in the same way: `bool` holds no
+    /// plain integer, and is not seen to, because the two kinds share values.
     pub(super) fn holds_no_value_of(&self, kind: Kind, oracle: &dyn LeafRelations) -> bool {
-        match self {
-            Schema::Nothing => true,
-            Schema::Union(members) => members
-                .iter()
-                .all(|member| member.holds_no_value_of(kind, oracle)),
-            Schema::Intersection(members) => members
-                .iter()
-                .any(|member| member.holds_no_value_of(kind, oracle)),
-            Schema::Complement(inner) => inner.holds_every_value_of(kind, oracle),
-            Schema::Refine { base, .. } => base.holds_no_value_of(kind, oracle),
-            _ => match self.type_tag_with(oracle) {
-                Some(tag) => !tag.shares_values_with(kind),
-                None => self.class_excludes(kind, oracle),
-            },
-        }
+        possibly(self, &mut KindWalk::new(oracle, &[], true)) & bit(kind) == 0
     }
 
-    /// Whether this schema is a class the oracle says holds no value of `kind`.
+    /// The kinds every value of which this schema holds, one bit per place in
+    /// [`Kind::ALL`]: the universe holds every kind whole, a builtin's bare
+    /// atom its own -- `int` `bool`'s too, every boolean being an integer --
+    /// as does a tuple or frozenset of anything, a union what one branch holds
+    /// whole, a meet what every member does, and a complement every kind its
+    /// inner schema may hold no value of [FCB08, Def. 4.1]. A reference is read
+    /// through its definition in `defs`, which it denotes. The walk enters no
+    /// constructor, and a contractive table puts one on every cycle, so a chain
+    /// of references ends; in a table that is not contractive, the bound below
+    /// ends it, and each half answers conservatively there, the other half's
+    /// answer read through a complement being conservative too.
     ///
-    /// A class is the one atom the core cannot read at all, and the answer is
-    /// the bindings' -- `false` for a class laid out as another kind, since a
-    /// subclass inherits the layout and cannot lay down a second. A class
-    /// laying down none is declined there rather than refuted: a subclass of it
-    /// may derive from a builtin too, and its instances are then of that kind.
-    fn class_excludes(&self, kind: Kind, oracle: &dyn LeafRelations) -> bool {
-        matches!(self, Schema::Instance(class)
-            if oracle.class_admits_kind(*class, kind) == Some(false))
+    /// One walk for every kind rather than a walk per kind: the pairs that reach
+    /// the kind refutation are many, and eleven walks each cost the relation
+    /// matrix a fourteenth of its instructions. The walk reads at most
+    /// [`KIND_WALK`] nodes and is conservative past them, so a tower of unions
+    /// of meets, a tree of exponential size over a term of linear size, ends.
+    /// A class is read as holding any kind here; `outside_the_class` asks the
+    /// oracle about the one kind a subject has.
+    pub(super) fn kinds_held_whole(&self, oracle: &dyn LeafRelations, defs: &[Schema]) -> Kinds {
+        whole(self, &mut KindWalk::new(oracle, defs, false))
+    }
+
+    /// The kinds this schema may hold a value of; a kind outside it is one the
+    /// schema holds none of. An atom may hold its kind's values and those
+    /// sharing them [FCB08, (5)], a refinement no more than its base, a class
+    /// what the oracle says it lays down, a union what any branch may, a meet
+    /// no more than each member may [FCB08, Def. 4.1], and a complement every
+    /// kind its inner schema does not hold whole. The same walk as
+    /// [`kinds_held_whole`](Self::kinds_held_whole), on the same bound, and a
+    /// class read the same way: as any kind, the oracle asked about classes by
+    /// the per-kind readings alone, where a key's class is the question.
+    pub(super) fn kinds_possibly_held(&self, oracle: &dyn LeafRelations, defs: &[Schema]) -> Kinds {
+        possibly(self, &mut KindWalk::new(oracle, defs, false))
     }
 
     /// A concrete type tag for nodes whose disjointness the core can decide
@@ -539,6 +520,183 @@ impl Schema {
         other
             .type_tag_with(oracle)
             .is_some_and(|kind| !mine.subset_of(kind.admitted_regions()))
+    }
+}
+
+/// Whether a meet member has a kind to read: its own, or one per branch of a
+/// union, whose kinds are its branches'.
+fn read_by_kind(member: &Schema) -> bool {
+    member.type_tag().is_some()
+        || matches!(member, Schema::Union(branches)
+            if branches.iter().all(|branch| branch.type_tag().is_some()))
+}
+
+impl Schema {
+    /// Whether the subject holds every value of a kind the supertype holds
+    /// none of. Every kind is inhabited -- `None`, `False`, `0`, `0.0`, `""`,
+    /// `b""`, `[]`, `()`, `set()`, `frozenset()`, `{}` -- and each kind is a
+    /// question of its own [FCB08, (4)], so such a kind names a value of the
+    /// subject outside the supertype: `anything` is outside the JSON values at
+    /// `b""`, and so is the complement of the JSON values.
+    ///
+    /// Asked of a subject that can hold a whole kind, the universe or a
+    /// complement, and out of line behind that test, so a pair of any other
+    /// shape pays one match.
+    pub(super) fn spills_a_kind(&self, other: &Schema, cx: &Cx<'_>) -> bool {
+        matches!(self, Schema::Anything(_) | Schema::Complement(_))
+            && spills_a_kind_into(self, other, cx)
+    }
+
+    /// Whether this schema holds no value of some kind, which makes its
+    /// complement inhabited: the complement holds every value of that kind
+    /// [FCB08, Def. 4.1], and every kind has one. Read by the witness guard
+    /// for a complement subject, and not by emptiness.
+    #[inline(never)]
+    pub(super) fn misses_a_kind(&self, cx: &Cx<'_>) -> bool {
+        self.kinds_possibly_held(cx.oracle, cx.defs) != EVERY_KIND
+    }
+}
+
+/// [`Schema::spills_a_kind`] past its shape test: the kinds the subject holds
+/// whole, less those the supertype may hold any value of.
+///
+/// The supertype is read first: a refutation needs a kind it holds none of,
+/// and a supertype that may hold every kind -- a complement, a schema the
+/// reading cannot open -- ends the question before the subject is walked.
+#[inline(never)]
+fn spills_a_kind_into(subject: &Schema, other: &Schema, cx: &Cx<'_>) -> bool {
+    let held = other.kinds_possibly_held(cx.oracle, cx.defs);
+    held != EVERY_KIND && subject.kinds_held_whole(cx.oracle, cx.defs) & !held != 0
+}
+
+/// A set of kinds, one bit per place in [`Kind::ALL`].
+pub(super) type Kinds = u16;
+
+/// Every kind.
+const EVERY_KIND: Kinds = (1 << Kind::ALL.len()) - 1;
+
+/// The nodes one kind reading may read before it answers conservatively.
+///
+/// **This bound is cost.** The reading is a walk of a finite term, which ends
+/// without it; what it caps is a tower of unions of meets, whose tree is
+/// exponential in a term of linear size, read on a pair the rules declined.
+/// The schemas a kind is read off -- a map's key, a JSON universe, a guard --
+/// read in a few dozen nodes.
+pub(super) const KIND_WALK: u32 = 64;
+
+/// The kind's own bit.
+const fn bit(kind: Kind) -> Kinds {
+    1 << kind.position()
+}
+
+/// The kinds a value of `kind` may also have: itself, and `int` and `bool`
+/// for each other, every boolean being an integer. The two bits are distinct,
+/// so their sum is their union.
+const fn sharing(kind: Kind) -> Kinds {
+    match kind {
+        Kind::Bool | Kind::Int => bit(Kind::Bool) + bit(Kind::Int),
+        other => bit(other),
+    }
+}
+
+/// One kind reading's oracle, definitions, whether it asks the oracle about a
+/// class, and the nodes it has left.
+struct KindWalk<'a> {
+    oracle: &'a dyn LeafRelations,
+    defs: &'a [Schema],
+    classes: bool,
+    left: u32,
+}
+
+impl<'a> KindWalk<'a> {
+    fn new(oracle: &'a dyn LeafRelations, defs: &'a [Schema], classes: bool) -> Self {
+        Self {
+            oracle,
+            defs,
+            classes,
+            left: KIND_WALK,
+        }
+    }
+
+    /// Read one more node, or `false` where the bound is spent.
+    fn read(&mut self) -> bool {
+        self.left.checked_sub(1).is_some_and(|left| {
+            self.left = left;
+            true
+        })
+    }
+}
+
+/// [`Schema::kinds_held_whole`].
+fn whole(schema: &Schema, walk: &mut KindWalk<'_>) -> Kinds {
+    if !walk.read() {
+        return 0;
+    }
+    match schema {
+        Schema::Anything(_) => EVERY_KIND,
+        Schema::NoneType | Schema::Bool | Schema::Float | Schema::Str | Schema::Bytes => {
+            schema.type_tag().map_or(0, bit)
+        }
+        // `bool` subclasses `int`, so every boolean is an integer.
+        Schema::Int => sharing(Kind::Int),
+        Schema::Seq {
+            container: SeqKind::Tuple,
+            shape,
+        } if shape.prefix.is_empty()
+            && matches!(shape.tail.as_deref(), Some(Schema::Anything(_))) =>
+        {
+            bit(Kind::Tuple)
+        }
+        Schema::Coll {
+            container: CollKind::FrozenSet,
+            element,
+        } if matches!(**element, Schema::Anything(_)) => bit(Kind::FrozenSet),
+        Schema::Union(members) => members
+            .iter()
+            .fold(0, |held, member| held | whole(member, walk)),
+        Schema::Intersection(members) => members
+            .iter()
+            .fold(EVERY_KIND, |held, member| held & whole(member, walk)),
+        Schema::Complement(inner) => EVERY_KIND & !possibly(inner, walk),
+        Schema::Ref(at) => walk.defs.get(at.get()).map_or(0, |body| whole(body, walk)),
+        _ => 0,
+    }
+}
+
+/// [`Schema::kinds_possibly_held`], on the same walk as [`whole`].
+fn possibly(schema: &Schema, walk: &mut KindWalk<'_>) -> Kinds {
+    if !walk.read() {
+        return EVERY_KIND;
+    }
+    match schema {
+        Schema::Nothing => 0,
+        Schema::Union(members) => members
+            .iter()
+            .fold(0, |held, member| held | possibly(member, walk)),
+        Schema::Intersection(members) => members
+            .iter()
+            .fold(EVERY_KIND, |held, member| held & possibly(member, walk)),
+        Schema::Complement(inner) => EVERY_KIND & !whole(inner, walk),
+        Schema::Refine { base, .. } => possibly(base, walk),
+        Schema::Ref(at) => walk
+            .defs
+            .get(at.get())
+            .map_or(EVERY_KIND, |body| possibly(body, walk)),
+        // A class is the one atom the core cannot read at all, and the answer
+        // is the bindings' -- `false` for a class laid out as another kind,
+        // since a subclass inherits the layout and cannot lay down a second. A
+        // class laying down none is declined there rather than read as holding
+        // none: a subclass of it may derive from a builtin too, and its
+        // instances are then of that kind. Each kind's bit is distinct, so the
+        // sum is their union.
+        Schema::Instance(class) if walk.classes => Kind::ALL
+            .iter()
+            .filter(|&&kind| walk.oracle.class_admits_kind(*class, kind) != Some(false))
+            .map(|&kind| bit(kind))
+            .sum(),
+        _ => schema
+            .type_tag_with(walk.oracle)
+            .map_or(EVERY_KIND, sharing),
     }
 }
 

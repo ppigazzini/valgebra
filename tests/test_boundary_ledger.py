@@ -219,6 +219,7 @@ ROWS: dict[str, Row] = {
     "Two schemas that share no value.": Decides(
         list[int], tuple[int, int], "not_subset"
     ),
+    "A kind the supertype holds none of.": Decides(anything, _JSON, "not_subset"),
     "A subject outside a base.": Decides(Annotated[int, at.Ge(0)], str, "not_subset"),
     "Inclusion in a complement.": Decides(int, complement(str), "subset"),
     "Recursion.": Decides(_JSON, union(bytes, _JSON), "subset"),
@@ -267,7 +268,7 @@ ROWS: dict[str, Row] = {
         ),
     ),
     "Recursion, past one unfolding.": Declines(
-        complement(int),
+        intersection(complement(None), complement(dict)),
         _CHAIN,
         "an unfolding of the supertype past one level before the reference is cut",
         # What one unfolding does reach: the kinds a fixpoint admits. A value of

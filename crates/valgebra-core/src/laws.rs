@@ -975,6 +975,27 @@ fn only_the_bottom_is_disjoint_from_itself() {
 
 proptest! {
     // THEORY: kinds-decompose-emptiness
+    /// A schema read to hold every value of a kind admits each sampled value of
+    /// it, and one read to hold none admits none, over drawn schemas: the two
+    /// readings a refutation by kind stands on, and the one a complement's
+    /// inhabitance does.
+    #[test]
+    fn a_kind_read_whole_or_absent_agrees_with_membership(a in decidable_schema()) {
+        let pool = const_pool();
+        let universe = boundary_values(&[&a]);
+        for kind in Kind::ALL {
+            let every = crate::decision::kind_reading(&a, kind, &[], true);
+            let none = crate::decision::kind_reading(&a, kind, &[], false);
+            prop_assert!(!(every && none), "{a:?} is read to hold every value of {kind:?} and none");
+            for value in universe.iter().filter(|value| is_of_kind(value, kind)) {
+                let held = member_full(&a, value, &pool);
+                prop_assert!(!every || held, "{a:?} holds every {kind:?} and not {value:?}");
+                prop_assert!(!none || !held, "{a:?} holds no {kind:?} and holds {value:?}");
+            }
+        }
+    }
+
+    // THEORY: kinds-decompose-emptiness
     /// Two schemas read as disjoint share no value: over the scalar fragment's
     /// unions, meets and complements, a meet nested in a union's branch among
     /// them, every sampled value is a member of one of the two at most.
@@ -3381,6 +3402,25 @@ fn seq_matches(shape: &SeqShape, items: &[Obj], pool: &[Obj]) -> bool {
 
 /// Reference membership over the non-opaque fragment, transcribing each node's
 /// denotation directly.
+/// Whether `value` is of `kind`: its type derives from the kind's builtin, so a
+/// boolean is of `int`'s kind too.
+fn is_of_kind(value: &Obj, kind: Kind) -> bool {
+    matches!(
+        (value, kind),
+        (Obj::None, Kind::NoneType)
+            | (Obj::Bool(_), Kind::Bool | Kind::Int)
+            | (Obj::Int(_), Kind::Int)
+            | (Obj::Float(_), Kind::Float)
+            | (Obj::Str(_) | Obj::SubStr(_), Kind::Str)
+            | (Obj::Bytes(_), Kind::Bytes)
+            | (Obj::List(_), Kind::List)
+            | (Obj::Tuple(_), Kind::Tuple)
+            | (Obj::Set(_), Kind::Set)
+            | (Obj::FrozenSet(_), Kind::FrozenSet)
+            | (Obj::Map(_), Kind::Dict)
+    )
+}
+
 fn member_full(schema: &Schema, value: &Obj, pool: &[Obj]) -> bool {
     match schema {
         Schema::Anything(_) => true,

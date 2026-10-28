@@ -613,9 +613,11 @@ These are the readings that refute, each with the value it stands on:
   disjoint where every branch is, and a meet where one of its members with a
   kind of its own is, against a side with a kind, the union read first, so a
   meet a union holds as a branch is read by its kinds as a meet's own members
-  are. A member that is a union, a meet, a class or a literal is not read: a
-  schema shares its subterms, and a tower of unions of meets is a tree of
-  exponential size. Two sequences of
+  are. A member that is a union of kinded branches is read one level in, so
+  `(int | float) & ~bool` is a number whatever bounds its other members carry;
+  a member that is a meet, a union holding one, a class or a literal is not
+  read: a schema shares its subterms, and a tower of unions of meets is a tree
+  of exponential size. Two sequences of
   one container meet in the sequences of their elements' meet — `a* ∩ b* = (a ∩
   b)*`, reading a homogeneous sequence as a regular expression over its element
   — and where the elements share no value that is the star of nothing, which
@@ -624,6 +626,20 @@ These are the readings that refute, each with the value it stands on:
   refinement carries one (`star_element`, `holds_an_element`).
 - `spills_past` — the subject's regions are exact and reach outside the bound
   the supertype's kind puts on its own.
+- `spills_a_kind` — the subject holds every value of a kind the supertype holds
+  none of, read for the eleven kinds in one walk: the universe holds every value
+  of each, a complement every value of a kind its inner schema holds none of,
+  and a supertype holds none of a kind where each union branch, one meet member,
+  or a reference's definition holds none. Every kind is inhabited, so such a
+  kind names the value. The same reading tells the witness guard a complement
+  subject has a value (`misses_a_kind`), and only the guard: read by emptiness,
+  a complement inside a record or a meet makes refutations stand that the union
+  rule then narrows on, and a proof elsewhere in the query starves -- a guarded
+  meet against its own split spends 835,074 of the million steps without it and
+  runs out with it. `a_kind_read_whole_or_absent_agrees_with_membership` holds
+  both halves of the reading to membership over drawn schemas, and
+  `a_kind_the_supertype_holds_none_of_refutes` the refutations and the guard on
+  a JSON fixpoint and an empty complement.
 - `outside_the_class` — the subject's kind holds a value the supertype's class
   does not, asked of the kind's own builtin so the answer is one `issubclass`
   over the order. A *complement* has no kind of its own and something better:
@@ -695,8 +711,9 @@ folds agree on every proof; `a_conjunct_refutes_beside_one_the_rules_decline`
 in `decision/tests.rs` holds both sites.
 
 **They run in a cost order, and the order is free to choose.** `unstructured`
-asks the four any pair can take -- `shorter_than`, `spills_past`,
-`outside_the_class`, then `disjoint_with` -- and the other two are asked where
+asks the five any pair can take -- `shorter_than`, `spills_past`,
+`outside_the_class`, `spills_a_kind`, then `disjoint_with` -- and the other two
+are asked where
 their shape is: `outside_every_kind` by the meet rule (`meet_below`), and
 `clause_by_key` by `keyed_map_subtype`. Each answers
 `Fails` on its own, and none proves but `clause_by_key` over a key naming

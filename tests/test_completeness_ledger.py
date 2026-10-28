@@ -1592,27 +1592,25 @@ _TRANSLATED: list[object] = [
         id="json:thirty-two-patterns<=p[0-9]+",
         marks=_missed("the sets are asked of the whole union, never of one branch"),
     ),
-    # A kind the supertype cannot hold is a value the subject has outside it.
+    # A kind the supertype holds none of is a value the subject has outside it,
+    # read through the fixpoint's one unfolding.
     pytest.param(
         "refutes",
         anything,
         _JSON,
         id="json:anything!<=json",
-        marks=_missed("no rule refutes by a kind the supertype cannot hold"),
     ),
     pytest.param(
         "refutes",
         complement(_JSON),
         _JSON,
         id="json:~json!<=json",
-        marks=_missed("no rule refutes by a kind the supertype cannot hold"),
     ),
     pytest.param(
         "empty",
         intersection(_ARRAY, union(None, _WINDOW)),
         None,
         id="json:empty:array&(None|window)",
-        marks=_missed("a branch that is a meet of two unions is not read by its kinds"),
     ),
     # A step that is no multiple of the other's is its own witness.
     pytest.param(
@@ -1637,7 +1635,6 @@ _TRANSLATED: list[object] = [
         anything,
         complement(_JSON),
         id="json:anything!<=~json",
-        marks=_missed("the question through a complement is asked of a meet"),
     ),
     pytest.param(
         "empty",
@@ -1672,7 +1669,6 @@ _TRANSLATED: list[object] = [
         anything,
         union(complement(_JSON), int),
         id="json:anything!<=~json|int",
-        marks=_missed("the question through a complement is asked of a meet"),
     ),
     pytest.param(
         "refutes",
