@@ -1109,6 +1109,15 @@ fn parse_constraint_within<'py>(
     // would hand that pattern to this frontend's whole-string reading. The flag
     // is a probe, so a marker that carries none answers without a lookup.
     if groups_other_markers(marker, &probes)? {
+        // A group's minimum length is read before it unpacks: `annotated_types`
+        // yields no `MinLen` from a `Len` whose minimum is below one, so
+        // `Len(-1)` would unpack to no bound at all where `MinLen(-1)` is
+        // refused for naming no length a value can have.
+        if let Some(bound) = probes.get(marker, Probe::MinLength)?
+            && !bound.is_none()
+        {
+            length_bound(Probe::MinLength, &bound)?;
+        }
         return parse_grouped(marker, out, sets, lits, depth);
     }
 

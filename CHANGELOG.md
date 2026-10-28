@@ -21,6 +21,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a word boundary at a pattern's end is read as the character it asks about
 - fix: a required key ending in ? renders with a mark that does not parse
 - feat: a pair every decider declines is asked in its other spellings
+- fix: a Len whose minimum is below zero is refused as MinLen is
 
 -->
 
@@ -91,6 +92,11 @@ answer of its own, or a repair to a change not yet released.
   recursive record met with a nested closed one is `subset` of that recursive
   record, where 0.0.21 and 0.0.22 spent the budget on the meet's members and
   answered `undecided`.
+
+- **A `Len` whose minimum is below zero is refused.** `annotated_types` unpacks
+  `Len(-1)` to no lower bound, so `Annotated[str, Len(-1)]` built the bare
+  `str` while `MinLen(-1)` was refused for naming no length a value can have.
+  Both raise that `ValueError`.
 
 - **A required key whose name ends in `?` renders marked.** No dict display
   requires such a key, since the display reads a trailing `?` as optional, and
