@@ -1521,30 +1521,25 @@ _TRANSLATED: list[object] = [
         Annotated[str, Regex("p[0-9]+")],
         id="json:thirty-one-patterns<=p[0-9]+",
     ),
-    # A meet's own members placed only after every member was asked below the
-    # supertype, and a dear member spends the budget the identity needed.
+    # A meet placed in a union that holds it, and below a member it holds, by
+    # the terms alone and before any member's rule spends the budget.
     pytest.param(
         "subtype",
         _guarded_deep(4),
         union(_guarded_deep(4), str),
         id="json:guarded-4<=guarded-4|str",
-        marks=_missed("the meet asks its members before it finds itself in the union"),
     ),
     pytest.param(
         "subtype",
         _GUARDED_MEET,
         union(_GUARDED_MEET, _NUMBER),
         id="json:guarded-meet<=guarded-meet|number",
-        marks=_missed("the meet asks its members before it finds itself in the union"),
     ),
     pytest.param(
         "subtype",
         intersection(_INTEGER_TREE, _NESTED_CLOSED),
         _INTEGER_TREE,
         id="json:tree&nested<=tree",
-        marks=_missed(
-            "the meet asks its members before it finds the supertype among them"
-        ),
     ),
     # A complement of a union is the meet of the complements, and no rule reads it
     # that way as a subject.

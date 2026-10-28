@@ -6088,8 +6088,10 @@ fn an_exhausted_budget_declines_and_does_not_refute() {
 /// equivalence that reads both is conservative rather than a claim.
 #[test]
 fn a_shared_budget_declines_the_direction_it_cannot_reach() {
+    // A pair the terms alone do not place, so each direction needs a rule: a
+    // member of the union would be placed in it with nothing to spend.
     let left = Schema::union(vec![Schema::Int, Schema::Str]);
-    let right = Schema::Int;
+    let right = Schema::Bool;
     // One budget for both directions, which is the shape `is_equivalent` spends.
     let shared = Budget::new(0);
     assert_eq!(

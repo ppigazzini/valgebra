@@ -798,6 +798,43 @@ fn a_goal_reached_by_two_paths_is_derived_twice_until_the_budget_declines() {
     assert_eq!(spent[17], (Relation::Unknown, DECISION_BUDGET));
 }
 
+/// A union subject stops asking members once one declines with the budget
+/// spent. A goal asked on a spent budget answers by the terms' membership or
+/// declines, and is never refuted, so the members after that decline change
+/// nothing, and asked anyway each scans the supertype's branches. With steps
+/// left a decline is not the end: a member after it may refute the union.
+#[test]
+fn a_union_stops_at_a_decline_its_budget_cannot_follow() {
+    let members = Schema::union([
+        Schema::Int,
+        Schema::Str,
+        Schema::Bytes,
+        Schema::Float,
+        Schema::NoneType,
+    ]);
+    let lists = Schema::union([list_of(Schema::Int), list_of(Schema::Str)]);
+    let (verdict, counts) =
+        goals::counted(|| members.subtype_relation(&lists, &PlainClasses, &[], &Budget::new(1)));
+    assert_eq!(verdict, Relation::Unknown);
+    // The pair, which spends the one step, and its first member, which finds
+    // none left: the four members after it are not asked.
+    assert_eq!(counts.asked, 2);
+
+    let pattern = |words: &str| refined(Schema::Str, Constraint::Regex(words.into()));
+    let steps = || Budget::new(DECISION_BUDGET);
+    assert_eq!(
+        pattern("a").subtype_relation(&pattern("b"), &PlainClasses, &[], &steps()),
+        Relation::Unknown,
+        "the rules decline one pattern below another"
+    );
+    // Written raw, so the member the rules decline is asked first.
+    let declined_first = Schema::Union(vec![pattern("a"), Schema::Int].into());
+    assert_eq!(
+        declined_first.subtype_relation(&pattern("b"), &PlainClasses, &[], &steps()),
+        Relation::Fails
+    );
+}
+
 /// The same bound, asked of drawn pairs over drawn definitions.
 mod drawn {
     use super::{distinct_against_subterm_pairs, outside_the_closure};

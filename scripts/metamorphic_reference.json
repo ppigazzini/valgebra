@@ -55,7 +55,7 @@
   "~int&~str": true,
   "~~int": true
  },
- "commit": "c0ed4c2893e99cfe01ff07aa74a36347b046d9a2",
+ "commit": "e630de8ffff7acd9da254bf244f5ac096c52a1db",
  "decisions": {
   "(int|str)&(str|none) <= (int|str)&(str|none)": "s",
   "(int|str)&(str|none) <= (int|str)&~str": "n",
@@ -662,7 +662,7 @@
   "guarded-4 <= frozenset[str]": "n",
   "guarded-4 <= guarded-1": "u",
   "guarded-4 <= guarded-4": "s",
-  "guarded-4 <= guarded-4|str": "u",
+  "guarded-4 <= guarded-4|str": "s",
   "guarded-4 <= int": "n",
   "guarded-4 <= int&str": "n",
   "guarded-4 <= int&~int": "n",
@@ -1155,7 +1155,7 @@
   "integer-tree&nested-closed <= int-ge-0": "n",
   "integer-tree&nested-closed <= int-ge-0-le-9": "n",
   "integer-tree&nested-closed <= int-ge-5-le-1": "n",
-  "integer-tree&nested-closed <= integer-tree": "u",
+  "integer-tree&nested-closed <= integer-tree": "s",
   "integer-tree&nested-closed <= integer-tree&nested-closed": "s",
   "integer-tree&nested-closed <= int|bool": "n",
   "integer-tree&nested-closed <= int|str": "n",
