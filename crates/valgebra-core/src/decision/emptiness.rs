@@ -25,7 +25,9 @@ use crate::kind::{Kind, Region, Regions};
 use crate::oracle::denotes_a_set_within;
 use crate::verdict::Verdict;
 
-use super::constraints::{Density, bounds_unsatisfiable, longest, shortest, tightest_bounds};
+use super::constraints::{
+    Density, Multiples, bounds_unsatisfiable, longest, shortest, tightest_bounds,
+};
 use super::literals::{FiniteMeet, a_meet_read_by_its_constants};
 use super::records::{keyed_map_meet_verdict, keyed_map_minus_keyed_maps};
 use super::{
@@ -945,6 +947,16 @@ fn refinement_verdict(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>)
 /// the refinement *empty*, which is what the fold above does with the same
 /// pair, and unsound for proving it has a value.
 fn bounded_integer_verdict(constraints: &Constraints, oracle: &dyn LeafRelations) -> Verdict {
+    // One integer step beside integer bounds is read exactly: the set is the
+    // multiples of the step between the bounds, and a range of them is empty
+    // or holds a value.
+    if let Some(multiples) = Multiples::of(constraints, oracle) {
+        return if multiples.is_empty() {
+            Verdict::Empty
+        } else {
+            Verdict::Inhabited
+        };
+    }
     // A constraint that is not an order bound narrows the set by something this
     // cannot read, so it names no value.
     if !constraints.iter().all(|c| {

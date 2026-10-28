@@ -675,6 +675,16 @@ These are the readings that refute, each with the value it stands on:
   bare sequence shape, which holds the empty sequence that the bound leaves out.
   Read as a bare shape on purpose: a constraint on the subject may exclude the
   empty sequence too, and then there is no value left to stand on.
+- `refuted_by_a_multiple` — the subject is a refinement of `int` by one
+  integer step and integer bounds, which holds exactly the multiples of the step
+  between the bounds (`Multiples`), and one of them is no multiple of an integer
+  step the supertype carries. Of two consecutive multiples of `a`, a step that
+  does not divide `a` divides at most one, so two in range are enough and one is
+  asked at itself. The same reading answers the subject's emptiness exactly,
+  which is what the witness guard reads. A float bound, a second step or a
+  predicate narrows the subject by what the arithmetic cannot read, and the
+  pair declines. `a_step_is_refuted_where_one_of_its_multiples_is_outside`
+  holds both readings to the multiples drawn steps and bounds admit.
 - `outside_every_kind` — the meet of a class and its attributes holds a *direct*
   instance of the class, where the class leaves room for the attributes
   (`Attributes::reach`; the meet is unknown where it does not, and the witness

@@ -13,6 +13,7 @@
 //! looser one, which is what makes a refinement a subtype of a weaker
 //! refinement of the same base.
 
+use crate::descr::integers::gcd;
 use crate::descr::lower::Operand;
 use crate::ir::{Constraint, OperandIx, Schema};
 use crate::kind::Kind;
@@ -157,6 +158,103 @@ pub(super) fn bounds_unsatisfiable<'a>(
         }
     }
     false
+}
+
+/// The values of a refinement of `int` whose constraints are one integer step
+/// and order bounds at integers: the multiples `k * step` for `k` from `first`
+/// to `last`, an end that no bound closes being `None`.
+///
+/// Read only where every constraint is one of those and every operand is an
+/// integer the pool carries, because then the set the refined base type
+/// denotes [JV20, §3.2] is exactly this: `%` divides an `int` by an `int`
+/// without rounding, and an integer bound cuts the integers at a point this
+/// arithmetic names. Any other constraint -- a second
+/// step, a float bound, a predicate -- narrows the set by what this cannot
+/// read, and the reading declines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Multiples {
+    step: i64,
+    first: Option<i128>,
+    last: Option<i128>,
+}
+
+impl Multiples {
+    /// The multiples `constraints` admit, or `None` where they are not one
+    /// integer step and integer bounds.
+    ///
+    /// A list holding no step is passed over before any operand is read: the
+    /// bounds alone are the common refinement, and reading one is a call into
+    /// the pool.
+    pub(super) fn of(constraints: &[Constraint], oracle: &dyn LeafRelations) -> Option<Multiples> {
+        if !constraints
+            .iter()
+            .any(|c| matches!(c, Constraint::MultipleOf(_)))
+        {
+            return None;
+        }
+        let mut step = None;
+        let mut lowest: Option<i128> = None;
+        let mut highest: Option<i128> = None;
+        for constraint in constraints {
+            let (value, end) = match constraint {
+                Constraint::MultipleOf(index) if step.is_none() => {
+                    step = Some(integer(*index, oracle)?);
+                    continue;
+                }
+                Constraint::Ge(index) => (integer(*index, oracle)?.into(), End::Lower),
+                Constraint::Gt(index) => (i128::from(integer(*index, oracle)?) + 1, End::Lower),
+                Constraint::Le(index) => (integer(*index, oracle)?.into(), End::Upper),
+                Constraint::Lt(index) => (i128::from(integer(*index, oracle)?) - 1, End::Upper),
+                _ => return None,
+            };
+            match end {
+                End::Lower => lowest = Some(lowest.map_or(value, |low| low.max(value))),
+                End::Upper => highest = Some(highest.map_or(value, |high| high.min(value))),
+            }
+        }
+        let step = step?.checked_abs().filter(|&step| step != 0)?;
+        let wide = i128::from(step);
+        Some(Multiples {
+            step,
+            first: lowest.map(|low| -(-low).div_euclid(wide)),
+            last: highest.map(|high| high.div_euclid(wide)),
+        })
+    }
+
+    /// Whether no multiple of the step lies between the bounds.
+    pub(super) fn is_empty(self) -> bool {
+        matches!((self.first, self.last), (Some(first), Some(last)) if first > last)
+    }
+
+    /// Whether one of these multiples is no multiple of `other`.
+    ///
+    /// `k * step` is a multiple of `other` exactly where `other / gcd(step,
+    /// other)` divides `k`. Of two consecutive `k`, a divisor past one divides
+    /// at most one, so a range of two `k` or more holds such a multiple, and a
+    /// range of one is asked at its one `k`.
+    pub(super) fn one_outside(self, other: i64) -> bool {
+        let Some(other) = other.checked_abs().filter(|&other| other != 0) else {
+            return false;
+        };
+        let period = i128::from(other / gcd(self.step, other));
+        period > 1
+            && match (self.first, self.last) {
+                (Some(first), Some(last)) => {
+                    first < last || (first == last && first.rem_euclid(period) != 0)
+                }
+                _ => true,
+            }
+    }
+}
+
+/// An operand the pool carries as an integer, a `bool` read as the integer it
+/// is.
+pub(super) fn integer(index: OperandIx, oracle: &dyn LeafRelations) -> Option<i64> {
+    match oracle.operand(index)? {
+        Operand::Integer(value) => Some(value),
+        Operand::Boolean(value) => Some(i64::from(value)),
+        _ => None,
+    }
 }
 
 /// Whether a single supertype refinement constraint is *entailed* by the

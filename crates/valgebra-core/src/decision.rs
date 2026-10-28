@@ -35,7 +35,7 @@ use literals::{
     finite_meet_below, finite_set, finite_set_below, the_constant_speaks_for_the_literal,
 };
 use products::{linear_subtype, seq_splits_across_union};
-use readings::outside_every_kind;
+use readings::{outside_every_kind, refuted_by_a_multiple};
 use records::{
     attr_record_subtype, keyed_map_splits_across_union, keyed_map_subtype, keyed_meet_below,
 };
@@ -1392,7 +1392,9 @@ impl Schema {
                 // the one pair kept from it, and a list refinement against an
                 // integer one would walk the sets to learn that a list is not an
                 // integer.
-                .or_else(|| self.unstructured(other, cx)),
+                .or_else(|| self.unstructured(other, cx))
+                // And the refutation that reads the two constraint lists together.
+                .or_else(|| refuted_by_a_multiple(narrow_base, narrow_cons, wide_cons, cx.oracle)),
             // Against a non-refinement, a refinement inherits its base's
             // supertypes -- and inherits nothing else, so a pair this leaves
             // unproven is a pair with no rule of its own.

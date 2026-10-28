@@ -1026,16 +1026,21 @@ _DECIDED = [
         Annotated[int, at.MultipleOf(2500)],
         id="divides:5000<=2500",
     ),
-    # The refutation is the residues' to make, and only where they fit: `2500`
-    # is a multiple of 2500 and not of 5000, and producing that value takes a
-    # representation rather than a rule -- the subject's own other constraints
-    # may exclude it. Small steps are refuted by the residue table below; past
-    # the period the pair declines, which the decidability page records.
+    # The refutation needs a value, and a subject narrowed by its step alone
+    # names one at any size: `2500` is a multiple of 2500 and not of 5000. What
+    # the residues are needed for is a refutation the subject's other
+    # constraints take part in, which the decidability page records.
     pytest.param(
         "refutes",
         Annotated[int, at.MultipleOf(2)],
         Annotated[int, at.MultipleOf(4)],
         id="divides:2!<=4",
+    ),
+    pytest.param(
+        "refutes",
+        Annotated[int, at.MultipleOf(2500)],
+        Annotated[int, at.MultipleOf(5000)],
+        id="divides:2500!<=5000",
     ),
     # And the divisors a caller writes that are not integers: the question is
     # Python's `%`, so a step reads as the kind it is.
@@ -1628,7 +1633,12 @@ _TRANSLATED: list[object] = [
         Annotated[int, at.MultipleOf(5000)],
         Annotated[int, at.MultipleOf(3)],
         id="json:step-5000!<=step-3",
-        marks=_missed("a step is refuted by no value of its own"),
+    ),
+    pytest.param(
+        "refutes",
+        Annotated[int, at.MultipleOf(6)],
+        Annotated[int, at.MultipleOf(2500)],
+        id="json:step-6!<=step-2500",
     ),
     # Under a full match the two ends of the text are word boundaries before and
     # after a word character.

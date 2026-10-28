@@ -8344,3 +8344,177 @@ fn a_union_is_decided_a_part_at_a_time() {
         Relation::Fails
     );
 }
+
+/// An oracle carrying operand `i` as the integer `i - 64`, which reads every
+/// operand as an `int` and divides two the way `%` does.
+struct Shifted;
+
+impl Shifted {
+    fn index(value: i64) -> OperandIx {
+        OperandIx::new(usize::try_from(value + 64).unwrap())
+    }
+
+    fn value(index: OperandIx) -> Option<i64> {
+        Some(i64::try_from(index.get()).ok()? - 64)
+    }
+}
+
+impl Constants for Shifted {
+    fn operand(&self, index: OperandIx) -> Option<Operand> {
+        Shifted::value(index).map(Operand::Integer)
+    }
+}
+
+impl LeafRelations for Shifted {
+    fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+        None
+    }
+    fn operand_kind(&self, _: OperandIx) -> Option<Kind> {
+        Some(Kind::Int)
+    }
+    fn divides(&self, step: OperandIx, multiple: OperandIx) -> Option<bool> {
+        let step = Shifted::value(step).filter(|&step| step != 0)?;
+        Some(Shifted::value(multiple)? % step == 0)
+    }
+}
+
+/// A refinement of `int` by a step and integer bounds, against another step.
+fn stepped(step: i64, bounds: &[Constraint]) -> Schema {
+    Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: [Constraint::MultipleOf(Shifted::index(step))]
+            .into_iter()
+            .chain(bounds.iter().cloned())
+            .collect::<Vec<_>>()
+            .into(),
+    }
+}
+
+/// A step is refuted by one of its own multiples that the other step does not
+/// divide: 30 below 7 at 30, 6 below 25 at 6, and between 4 and 6 the multiples
+/// of 2 are 4 and 6, and 6 is no multiple of 4. One multiple between the
+/// bounds is asked alone: 4 is a multiple of 4, so nothing refutes it, and 6
+/// is not. A float bound narrows by what the arithmetic cannot read, and the
+/// pair is left to the other rules, as are two steps on one subject: no
+/// multiple of 3 and 2 lies at 2, which 2 alone would read as a value.
+///
+/// The emptiness of the same refinements is read exactly: no multiple of 10
+/// lies strictly between 0 and 10, and 10 lies at or under it.
+///
+/// And against an oracle that divides nothing, where no proof comes first: a
+/// step dividing the other's is no refutation, and `True` is the step 1.
+#[test]
+fn a_step_is_refuted_by_one_of_its_multiples() {
+    /// Operand 0 is the float 0.5 and operand 1 is `True`, and the oracle
+    /// divides nothing.
+    struct Mixed;
+    impl Constants for Mixed {
+        fn operand(&self, index: OperandIx) -> Option<Operand> {
+            Some(match Shifted::value(index)? {
+                0 => Operand::Float(0.5),
+                1 => Operand::Boolean(true),
+                value => Operand::Integer(value),
+            })
+        }
+    }
+    impl LeafRelations for Mixed {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            None
+        }
+    }
+
+    let at = |value: i64| Shifted::index(value);
+    let rules = |sub: &Schema, sup: &Schema| {
+        sub.subtype_relation(sup, &Shifted, &[], &Budget::new(DECISION_BUDGET))
+    };
+    let between = |low: i64, high: i64| [Constraint::Ge(at(low)), Constraint::Le(at(high))];
+    assert_eq!(rules(&stepped(30, &[]), &stepped(7, &[])), Relation::Fails);
+    assert_eq!(rules(&stepped(6, &[]), &stepped(25, &[])), Relation::Fails);
+    assert_eq!(rules(&stepped(4, &[]), &stepped(2, &[])), Relation::Holds);
+    assert_eq!(
+        rules(&stepped(2, &between(4, 6)), &stepped(4, &[])),
+        Relation::Fails
+    );
+    assert_ne!(
+        rules(&stepped(2, &between(4, 4)), &stepped(4, &[])),
+        Relation::Fails
+    );
+    assert_eq!(
+        rules(&stepped(2, &between(6, 6)), &stepped(4, &[])),
+        Relation::Fails
+    );
+    assert_eq!(
+        rules(&stepped(2, &between(-6, -6)), &stepped(4, &[])),
+        Relation::Fails
+    );
+    let strictly = [Constraint::Gt(at(0)), Constraint::Lt(at(10))];
+    assert_eq!(
+        stepped(10, &strictly).verdict_under(&Shifted),
+        Verdict::Empty
+    );
+    let closed = [Constraint::Gt(at(0)), Constraint::Le(at(10))];
+    assert_eq!(
+        stepped(10, &closed).verdict_under(&Shifted),
+        Verdict::Inhabited
+    );
+    assert_eq!(
+        rules(&stepped(10, &closed), &stepped(4, &[])),
+        Relation::Fails
+    );
+
+    let two_steps = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: [Constraint::MultipleOf(at(3)), Constraint::MultipleOf(at(2))]
+            .into_iter()
+            .chain(between(2, 2))
+            .collect::<Vec<_>>()
+            .into(),
+    };
+    assert_ne!(two_steps.verdict_under(&Shifted), Verdict::Inhabited);
+
+    let mixed = |sub: &Schema, sup: &Schema| {
+        sub.subtype_relation(sup, &Mixed, &[], &Budget::new(DECISION_BUDGET))
+    };
+    let above_a_half = stepped(3, &[Constraint::Ge(at(0))]);
+    assert_eq!(mixed(&above_a_half, &stepped(2, &[])), Relation::Unknown);
+    assert_eq!(mixed(&stepped(4, &[]), &stepped(2, &[])), Relation::Unknown);
+    assert_eq!(mixed(&stepped(1, &[]), &stepped(2, &[])), Relation::Fails);
+}
+
+proptest! {
+    // THEORY: a-refinement-narrows-its-base
+    /// A refinement of `int` by one step and integer bounds is refuted below
+    /// another step exactly where one of its multiples is no multiple of that
+    /// step, and its emptiness is read exactly.
+    ///
+    /// The values are read in a window past every bound drawn, wide enough to
+    /// hold a run of multiples of each step on an open side: two steps of at
+    /// most thirty between two hundred and its negation.
+    #[test]
+    fn a_step_is_refuted_where_one_of_its_multiples_is_outside(
+        step in 1i64..=30,
+        other in 1i64..=30,
+        low in proptest::option::of((-40i64..=40, any::<bool>())),
+        high in proptest::option::of((-40i64..=40, any::<bool>())),
+    ) {
+        let at = |value: i64| Shifted::index(value);
+        let mut bounds = Vec::new();
+        if let Some((value, strict)) = low {
+            bounds.push(if strict { Constraint::Gt(at(value)) } else { Constraint::Ge(at(value)) });
+        }
+        if let Some((value, strict)) = high {
+            bounds.push(if strict { Constraint::Lt(at(value)) } else { Constraint::Le(at(value)) });
+        }
+        let subject = stepped(step, &bounds);
+        let lowest = low.map_or(-200, |(value, strict)| value + i64::from(strict));
+        let highest = high.map_or(200, |(value, strict)| value - i64::from(strict));
+        let held: Vec<i64> = (lowest..=highest).filter(|value| value % step == 0).collect();
+        let outside = held.iter().any(|value| value % other != 0);
+        let answer =
+            subject.subtype_relation(&stepped(other, &[]), &Shifted, &[], &Budget::new(DECISION_BUDGET));
+        prop_assert_eq!(answer == Relation::Fails, outside, "{:?}", answer);
+        let verdict = subject.verdict_under(&Shifted);
+        prop_assert_eq!(verdict == Verdict::Empty, held.is_empty(), "{:?}", verdict);
+        prop_assert_ne!(verdict, Verdict::Unknown);
+    }
+}

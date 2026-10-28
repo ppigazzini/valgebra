@@ -16,7 +16,9 @@
 
 use crate::ir::{ClassIx, CollKind, Constraint, Schema, SeqKind};
 use crate::kind::{Kind, Region, Regions};
+use crate::verdict::Relation;
 
+use super::constraints::{Multiples, integer};
 use super::literals::literal_constants;
 use super::{Cx, LeafRelations, NoLeafRelations};
 
@@ -739,5 +741,38 @@ pub(super) fn outside_every_kind(other: &Schema, class: ClassIx, cx: &Cx<'_>) ->
             .and_then(|body| body.type_tag_with(cx.oracle))
             .is_some_and(outside),
         _ => other.type_tag_with(cx.oracle).is_some_and(outside),
+    }
+}
+
+/// Refuted where a refinement of `int` holds a multiple of its step that is no
+/// multiple of an integer step the other refinement carries; a decline
+/// otherwise.
+///
+/// The multiple is the witness, and it is outside the other refinement
+/// whatever its base and its other constraints, since every value of that
+/// refinement satisfies its step [JV20, §3.2] and `%` reads an `int` against an
+/// `int` exactly.
+/// `MultipleOf(5000)` is outside `MultipleOf(3)` at 5000, and `MultipleOf(6)`
+/// outside `MultipleOf(2500)` at 6.
+pub(super) fn refuted_by_a_multiple(
+    narrow_base: &Schema,
+    narrow: &[Constraint],
+    wide: &[Constraint],
+    oracle: &dyn LeafRelations,
+) -> Relation {
+    let outside = matches!(narrow_base, Schema::Int)
+        && wide.iter().any(|c| matches!(c, Constraint::MultipleOf(_)))
+        && Multiples::of(narrow, oracle).is_some_and(|multiples| {
+            wide.iter().any(|constraint| match constraint {
+                Constraint::MultipleOf(index) => {
+                    integer(*index, oracle).is_some_and(|other| multiples.one_outside(other))
+                }
+                _ => false,
+            })
+        });
+    if outside {
+        Relation::Fails
+    } else {
+        Relation::Unknown
     }
 }
