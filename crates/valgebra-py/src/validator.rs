@@ -885,7 +885,14 @@ impl Validator {
     /// `union({}, {"a": int})` admit the same dicts, and opening the first keeps
     /// `a` an integer while opening the second admits every dict -- because the
     /// branch declaring no field opens to every dict on its own. Apply them to
-    /// the record you mean rather than to a union of spellings of it.
+    /// the record you mean rather than to a union of spellings of it. One
+    /// record has two spellings of the same kind: an optional field saying
+    /// what the record says of every key it does not name is the record's own
+    /// default, so the closed `{"a?": nothing}` is the closed `{}` and opens to
+    /// every dict, while `{"a?": intersection(int, str)}`, the same set spelled
+    /// as a field, opens with `a` refused. A key stays refused in the record
+    /// opened where it is written beside a clause that frees the rest, as
+    /// `{"a?": nothing, str: anything}` is.
     ///
     /// Returns:
     ///     A validator whose every record and mapping admits the keys no clause
