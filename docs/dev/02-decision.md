@@ -957,6 +957,14 @@ constant speaks for it. It is asked before a reference among the members is
 distributed, because the walk reads a reference only as far as the constant
 needs.
 
+A meet of sequences of one kind, each with no prefix and under no bound that
+leaves the empty one out, holds the empty sequence, a value of every member
+read off its shape with no element read (`the_empty_sequence_in_every_member`
+in `decision/emptiness.rs`). It is the first reading a meet the regions leave
+open is handed to, one discriminant test a member, and it answers where an
+element is a definition being resolved, which reads as empty inside its own
+body: `recursive(lambda t: intersection([], [t]))` holds `[]`.
+
 And one repetition is removed rather than bounded. A record whose fields carry
 one schema, or a tuple whose positions do, asks the *same goal* once per field
 or position -- in one loop, in order, so the repeat is the entry before this

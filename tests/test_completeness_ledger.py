@@ -81,6 +81,8 @@ _CHAIN_WITH_A_FIELD = recursive(lambda t: union(None, {"next": t, "v?": int}))
 # that names itself is spelled, and a chain of one key the meets below ask of.
 _LINK = recursive(lambda t: {"next": union(t, None)})
 _NESTED = recursive(lambda t: union(None, {"a": t}))
+# The integers and the lists of them, nested to any depth.
+_NESTED_INTS = recursive(lambda t: union(int, [t]))
 
 
 class _Color(enum.Enum):
@@ -335,6 +337,20 @@ _DECIDED = [
         union(intersection(int, union(float, bool)), list[_MEET_MEMBER_FIXPOINT]),  # ty: ignore[invalid-type-form]
         _MEET_MEMBER_FIXPOINT,
         id="recursion:unfolding-with-a-meet-member<=its-fixpoint",
+    ),
+    # The empty list is a value of every list shape with no prefix, so of a
+    # meet of them, whatever the element reads as while it is resolved.
+    pytest.param(
+        "refutes",
+        intersection([], _NESTED_INTS),
+        nothing,
+        id="recursion:[]&RI-is-inhabited",
+    ),
+    pytest.param(
+        "refutes",
+        recursive(lambda t: intersection([], [t])),
+        nothing,
+        id="recursion:fix(t:[]&[t])-is-inhabited",
     ),
     # A fixpoint every unfolding of which needs one more element: each element
     # is a value of the same fixpoint, so no finite value satisfies it. Decided
@@ -1871,7 +1887,6 @@ _TRANSLATED: list[object] = [
         intersection(_JSON, _ARRAY),
         nothing,
         id="json:json&array-is-inhabited",
-        marks=_missed("the question through a complement is asked of a meet"),
     ),
     pytest.param(
         "refutes",

@@ -4516,6 +4516,38 @@ fn a_length_is_read_off_a_sequence_shape_at_both_ends() {
     );
 }
 
+/// A meet of sequences each holding the empty one holds it, with no element
+/// read.
+///
+/// `RI = int | list[RI]`: `[] & RI` holds `[]`, the branch `list[RI]` met with
+/// `[]` reading as the empty list whatever `RI` is; and `t = [] & list[t]` holds
+/// `[]` though `t`, resolved, reads as empty inside its own body. A member
+/// with a prefix holds no empty sequence, and the reading leaves the meet to the
+/// others.
+#[test]
+fn a_meet_of_sequences_holding_the_empty_one_holds_it() {
+    let verdict = |schema: &Schema, defs: &[Schema]| {
+        let budget = Budget::new(DECISION_BUDGET);
+        schema.verdict_rec(&mut Cx::new(&NoLeafRelations, defs, &budget))
+    };
+    let empty = Schema::list(SeqShape::fixed([]));
+    let t = Schema::Ref(DefIx::new(0));
+    let list_of_t = Schema::list(SeqShape::homogeneous(t.clone()));
+
+    let ri = vec![Schema::Union(vec![Schema::Int, list_of_t.clone()].into())];
+    let meet = Schema::Intersection(vec![empty.clone(), t.clone()].into());
+    assert_eq!(verdict(&meet, &ri), Verdict::Inhabited);
+
+    let itself = vec![Schema::Intersection(
+        vec![empty.clone(), list_of_t.clone()].into(),
+    )];
+    assert_eq!(verdict(&t, &itself), Verdict::Inhabited);
+
+    let a_pair = Schema::list(SeqShape::fixed([Schema::Int, Schema::Int]));
+    let prefixed = Schema::Intersection(vec![empty, a_pair].into());
+    assert_ne!(verdict(&prefixed, &[]), Verdict::Inhabited);
+}
+
 /// A subject whose regions are exact is refuted by a bound on the other side.
 ///
 /// The scalar rule decides a pair only where both region sets are known, and a

@@ -38,10 +38,18 @@ answer of its own, or a repair to a change not yet released.
 - feat: a refinement of a union is the union of its refined branches
 - feat: a sequence's length is read at both ends of a relation
 - feat: the set representation reads scalars nested past its depth
+- feat: a meet of sequences each holding the empty one holds it
 
 -->
 
 ### Added
+
+- **A meet of sequences each holding the empty one holds it.** The empty list
+  is a value of every list shape with no prefix and of every length bound that
+  admits zero, so `intersection([], RI)` with `RI = recursive(lambda t:
+  union(int, [t]))` is `not_subset` of `nothing`, and so is `recursive(lambda
+  t: intersection([], [t]))`, where both were `undecided` while the element
+  was a definition being resolved.
 
 - **The set representation reads scalars nested past its depth.** Its depth
   bound exists for the containers a build starts -- an automaton, a powerset, a
