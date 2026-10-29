@@ -478,6 +478,17 @@ def test_a_code_carries_its_path_under_every_location_shape(
     assert code in _codes_of(every)
 
 
+def test_a_repr_entry_can_equal_a_string_keys_entry() -> None:
+    """A key of another type is written as text, which a `str` key can be.
+
+    The path keeps `str | int`, every item JSON-serializable, so `None` and
+    `"None"` fail at one path, and the container says which key it was.
+    """
+    spec = {object: int}
+    assert _fail_fast(spec, {None: "x"}).path == ("None",)
+    assert _fail_fast(spec, {"None": "x"}).path == ("None",)
+
+
 # THEORY: the-depth-bound-reports-itself
 def test_a_value_past_the_depth_bound_reports_the_bound() -> None:
     """A value nested deeper than the walk descends reports the bound.
