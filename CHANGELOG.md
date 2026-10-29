@@ -60,6 +60,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a meet two of whose members share no value is below anything at once
 - fix: a string a type alias substitutes is refused as a forward reference
 - fix: annotated-types' documentation marker is ignored under its new name
+- fix: opening or closing a schema twice gives the schema once did
 
 -->
 
@@ -284,6 +285,13 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **Opening or closing a schema twice gives the schema once did.**
+  `Validator({"a": int, "b?": anything}).open()` kept `b`, which the closed
+  record says something of, beside the catch-all the opening wrote, which says
+  the same of `b`; a second `open` dropped it, so `o.open() != o` by `==` and
+  their hashes differed. The first rewrite drops a name the clauses it writes
+  already say, and either operator applied twice is the term it gave once.
 
 - **`annotated_types.doc()` is ignored under annotated-types 0.8.0.** Where
   `typing_extensions` has no `Doc` to lend, the release makes a class of its

@@ -524,10 +524,10 @@ only the key-types beside it.
 
 They apply at any depth -- a record a mapping maps its keys to, and inside a
 recursive definition. They are projections rather than inverses: applying
-either twice gives the set it gave the first time, though a second `open` or
-`close` may drop a name the first one made redundant, so the term can differ by
-`==`. And `close` after `open` is **at most** `close` -- it returns the regions
-`open` freed everywhere but the two shapes below.
+either twice gives the schema it gave the first time, equal by `==`: a name
+saying what the new catch-all says is dropped by the first rewrite. And `close`
+after `open` is **at most** `close` -- it returns the regions `open` freed
+everywhere but the two shapes below.
 
 Both rewrite the records a schema *writes*, not the set it denotes, so two
 spellings of one set can close apart. Close the records, not their meet: a meet

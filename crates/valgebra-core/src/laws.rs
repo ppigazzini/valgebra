@@ -5800,24 +5800,40 @@ proptest! {
     }
 
     // THEORY: open-and-close-read-the-region
-    /// Applying either operator a second time gives the set the first gave.
+    /// Applying either operator a second time gives the term the first gave,
+    /// and so the set.
     ///
-    /// Of the set, not of the term: a second `open` may drop an optional name
-    /// the first one's catch-all made redundant, so `{"a"?: anything}` opens to
-    /// a record still naming `a` and then to one that does not -- two terms,
-    /// one set, and `==` tells them apart where `is_equivalent` does not.
+    /// A name the rewritten clauses say is said twice in the result, so the
+    /// first pass drops it rather than leaving it to the second:
+    /// `{"a"?: anything}` opens to the record naming no field, once and twice.
+    ///
+    /// The draw is asked as well beside an optional name of each bound under
+    /// each openness, which the generator rarely writes and which is the name
+    /// one rewrite can leave said twice.
     #[test]
-    fn opening_or_closing_twice_gives_the_set_once_did(schema in decidable_schema()) {
-        let pool = const_pool();
-        for openness in [Openness::Open, Openness::Closed] {
-            let once = schema.with_records_open(openness);
-            let twice = once.with_records_open(openness);
-            for value in &boundary_values(&[&schema, &once, &twice]) {
-                prop_assert_eq!(
-                    member_full(&once, value, &pool),
-                    member_full(&twice, value, &pool),
-                    "{:?} a second time is another set, parting at {:?}", openness, value
-                );
+    fn opening_or_closing_twice_gives_the_term_once_did(schema in decidable_schema()) {
+        let beside = |bound: Schema, openness| {
+            let field = |name: &str, schema, required| Field {
+                name: name.into(),
+                schema,
+                required,
+            };
+            Schema::record(
+                vec![field("a", schema.clone(), true), field("b", bound, false)],
+                openness,
+            )
+        };
+        let mut spellings = vec![schema.clone()];
+        for bound in [Schema::ANYTHING, Schema::Nothing] {
+            for openness in [Openness::Open, Openness::Closed] {
+                spellings.push(beside(bound.clone(), openness));
+            }
+        }
+        for spelled in &spellings {
+            for openness in [Openness::Open, Openness::Closed] {
+                let once = spelled.with_records_open(openness);
+                let twice = once.with_records_open(openness);
+                prop_assert_eq!(&twice, &once, "{:?} a second time is another term", openness);
             }
         }
     }

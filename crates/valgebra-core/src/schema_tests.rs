@@ -750,6 +750,38 @@ fn opening_drops_a_field_the_record_already_said() {
     );
 }
 
+/// The operators are idempotent as terms, not only as sets: a name the
+/// rewritten clauses say is dropped in the rewrite, where a second pass would
+/// drop it.
+///
+/// Closed, `{"b?": anything}` says something of `b`; opened, the catch-all
+/// frees `b` too, so the field is said twice. Kept by the first opening and
+/// judged by the second, it parted `open` from `open` twice by `==`.
+#[test]
+fn the_projections_are_idempotent_as_terms() {
+    let required = Field {
+        name: "a".into(),
+        schema: Schema::Int,
+        required: true,
+    };
+    let free = Field {
+        name: "b".into(),
+        schema: Schema::ANYTHING,
+        required: false,
+    };
+    let closed = Schema::record(vec![required.clone(), free], Openness::Closed);
+    let opened = closed.with_records_open(Openness::Open);
+    assert_eq!(
+        opened,
+        Schema::record(vec![required.clone()], Openness::Open)
+    );
+    assert_eq!(opened.with_records_open(Openness::Open), opened);
+    let shut = opened.with_records_open(Openness::Closed);
+    assert_eq!(shut, Schema::record(vec![required], Openness::Closed));
+    assert_eq!(shut.with_records_open(Openness::Closed), shut);
+    assert_eq!(closed.with_records_open(Openness::Closed), closed);
+}
+
 /// Whether a name survives `open` or `close` turns on that name alone.
 ///
 /// The name and the clauses are both read as they stand once their own

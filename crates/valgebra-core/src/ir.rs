@@ -1431,6 +1431,15 @@ impl MapClause {
         }
     }
 
+    /// Whether this is [`top`](Self::top), either spelling of the top on
+    /// either side, read in place.
+    pub(crate) fn is_top(&self) -> bool {
+        matches!(
+            (&self.key, &self.value),
+            (Schema::Anything(_), Schema::Anything(_))
+        )
+    }
+
     /// A clause from a key and a value schema.
     ///
     /// Spelled here rather than at each pass over a clause list, for the reason
@@ -1454,13 +1463,19 @@ impl MapClause {
 ///
 /// A *required* field is never covered: it says the key must be there, and no
 /// clause says that of a key it does not name.
+///
+/// Asked of every field of every record an operator rewrites, twice, so the
+/// clause is read in place rather than compared with a top clause built and
+/// dropped for each field: `open` over a chain of records read 8% more
+/// instructions that way.
+#[inline]
 fn already_said(field: &Field, defaults: &[MapClause]) -> bool {
     if field.required {
         return false;
     }
     match defaults {
-        [] => field.schema == Schema::Nothing,
-        [clause] if *clause == MapClause::top() => field.schema == Schema::ANYTHING,
+        [] => matches!(field.schema, Schema::Nothing),
+        [clause] if clause.is_top() => matches!(field.schema, Schema::Anything(_)),
         _ => false,
     }
 }
