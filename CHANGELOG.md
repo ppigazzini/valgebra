@@ -58,6 +58,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: an order bound over str or bytes is decided as the words it admits
 - feat: a schema meeting a complement's inner set is refuted below the complement
 - fix: a meet two of whose members share no value is below anything at once
+- fix: a string a type alias substitutes is refused as a forward reference
 
 -->
 
@@ -282,6 +283,13 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A string a `type` alias substitutes is refused as a forward reference.**
+  `type Keyed[T] = dict[str, T]` applied to `""` raised `SyntaxError` from
+  `typing`, which reads a string it substitutes as the text of an annotation
+  and finds no expression in that one, where `Keyed["int"]` was refused as the
+  forward reference it is. Both raise `NotImplementedError`; a string for a
+  parameter the alias's value does not name is never read.
 
 - **A meet two of whose members share no value is below anything at once.** A
   meet subject asked each member against the supertype before reading its own

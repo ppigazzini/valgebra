@@ -799,10 +799,30 @@ fn a_typing_form_is_refused_where_a_constant_or_a_type_argument_is_read() {
                 "typing.TypeAliasType('A', 'int')",
                 "forward reference",
             ),
+            // And so is a string an alias substitutes, refused before `typing`
+            // reads the text and raises `SyntaxError` at one that is no
+            // expression.
+            (
+                Since(12),
+                "typing.TypeAliasType('G', dict[str, (T := typing.TypeVar('T'))], \
+                 type_params=(T,))['']",
+                "'' is a forward reference",
+            ),
         ] {
             if since.met(py) {
                 refuses(expression, wanted);
             }
+        }
+        // A parameter the value does not use substitutes nothing.
+        if Since(12).met(py) {
+            assert_eq!(
+                built(
+                    py,
+                    "typing.TypeAliasType('U', int, type_params=(typing.TypeVar('T'),))['x']"
+                )
+                .expect("an unused parameter's argument is never read"),
+                "int"
+            );
         }
     });
 }

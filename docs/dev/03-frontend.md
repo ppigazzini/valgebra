@@ -489,7 +489,11 @@ that is no `TypeVar`, asked by exact type since `typing_extensions`'
 against the parameters; fills a missing one from its default, which may name
 an earlier parameter; and substitutes through the body's own `__parameters__`,
 which lists its type variables in the order the body first names them -- in
-the alias's order `type Swap[T, U] = dict[U, T]` comes out transposed. A form
+the alias's order `type Swap[T, U] = dict[U, T]` comes out transposed. A string
+it would substitute is refused as the forward reference it is, before `typing`
+reads it: `typing` makes a `ForwardRef` of the text and raises `SyntaxError`
+where the text is no expression, as `Keyed[""]` does. A string for a parameter
+the body does not name is never read. A form
 naming none of the alias's parameters is left as written, since a generic
 class carries `__parameters__` of its own and indexing it would apply it. A
 bare generic alias is its defaults, and refused naming `Pair[...]` where a

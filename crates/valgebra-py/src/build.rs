@@ -475,6 +475,16 @@ fn substitute<'py>(
         .iter()
         .map(|variable| argument_for(&variable).cloned().unwrap_or(variable))
         .collect();
+    // A string substituted is a forward reference, refused before `typing`
+    // reads it: it makes a `ForwardRef` of the text, and raises `SyntaxError`
+    // where the text is no expression, as `type A[T] = list[T]` does at
+    // `A[""]`.
+    if let Some(reference) = replaced
+        .iter()
+        .find(|argument| argument.is_instance_of::<PyString>())
+    {
+        return Err(forward_reference(reference)?);
+    }
     value.get_item(PyTuple::new(value.py(), replaced)?)
 }
 
@@ -1365,12 +1375,7 @@ fn build_unrecognized(
     // matching nothing a caller has. The same refusal a type *argument* already
     // gives, reached at the top level too.
     if is_forward_reference(obj)? {
-        return Err(not_implemented(format!(
-            "{} is a forward reference, and a schema is built from the types \
-             themselves: resolve the annotation first with typing.get_type_hints(\
-             ..., include_extras=True), or write the type rather than its name",
-            summarize(obj)?
-        )));
+        return Err(forward_reference(obj)?);
     }
 
     if let Some(schema) = read_extension(obj, lits, defs)? {
@@ -1839,6 +1844,17 @@ fn narrows_its_keys(schema: &Schema) -> bool {
 /// as it was built: a `format!` at the call site is moved in, not copied.
 pub(crate) fn not_implemented(message: impl Into<String>) -> PyErr {
     PyNotImplementedError::new_err(message.into())
+}
+
+/// The refusal of `reference`, a forward reference: it names a type rather
+/// than being one, and the namespace that resolves the name is the caller's.
+fn forward_reference(reference: &Bound<'_, PyAny>) -> PyResult<PyErr> {
+    Ok(not_implemented(format!(
+        "{} is a forward reference, and a schema is built from the types \
+         themselves: resolve the annotation first with typing.get_type_hints(\
+         ..., include_extras=True), or write the type rather than its name",
+        summarize(reference)?
+    )))
 }
 
 mod classes;

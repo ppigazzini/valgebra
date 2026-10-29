@@ -385,7 +385,8 @@ if sys.version_info >= (3, 12):
         "type NotTuple = int\n"
         "type Ping = Pong\n"
         "type Pong = Ping\n"
-        "type Rec = tuple[int, Unpack[Rec]]\n",
+        "type Rec = tuple[int, Unpack[Rec]]\n"
+        "type Keyed[T] = dict[str, T]\n",
         _aliases,
     )
     _not_tuple, _ping = _aliases["NotTuple"], _aliases["Ping"]
@@ -408,6 +409,14 @@ if sys.version_info >= (3, 12):
                 _aliases["Rec"],
                 NotImplementedError,
                 "unpacks itself, and a tuple that holds itself has no finite",
+            ),
+            # `typing` reads a string it substitutes as a forward reference, and
+            # raises `SyntaxError` where the text is no expression.
+            (
+                "a string an alias substitutes",
+                _aliases["Keyed"][""],  # ty: ignore[not-subscriptable]
+                NotImplementedError,
+                "'' is a forward reference",
             ),
         ]
     )
