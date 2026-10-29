@@ -34,6 +34,7 @@
 //! preference among its members.
 
 use regex_automata::dfa::{Automaton, dense};
+use regex_automata::nfa::thompson;
 use regex_automata::util::syntax;
 use regex_automata::{Anchored, Input};
 use regex_syntax::hir::{Hir, HirKind, Look};
@@ -82,7 +83,7 @@ enum Side {
 }
 
 /// A word-boundary assertion at either end of a pattern, read as the
-/// character it asks about: what lies between the two ends, printed, and the
+/// character it asks about: what lies between the two ends, as a tree, and the
 /// language each end asks for.
 ///
 /// The walk matches a pattern against the whole text, so an assertion leading
@@ -96,9 +97,14 @@ enum Side {
 /// the set between, met with one language per end. `\bab\b` is `ab`, and
 /// `\Bab` holds nothing.
 ///
+/// The part between is handed back as the parsed tree and never as text printed
+/// off it: `regex-syntax`'s printer writes a repetition of a repetition as two
+/// suffixes with no group between, so `(?:b+)?` prints as `b+?`, which reads
+/// back as the lazy `+` -- one `b` or more, the empty word gone.
+///
 /// `None` for a pattern with no such assertion at an end. One inside a pattern
 /// is left where it is, which the build refuses.
-fn word_ends(pattern: &Hir) -> Option<(String, Vec<&'static str>)> {
+fn word_ends(pattern: &Hir) -> Option<(Hir, Vec<&'static str>)> {
     let parts: &[Hir] = match pattern.kind() {
         HirKind::Concat(parts) => parts,
         HirKind::Look(_) => core::slice::from_ref(pattern),
@@ -121,7 +127,7 @@ fn word_ends(pattern: &Hir) -> Option<(String, Vec<&'static str>)> {
     if ends.is_empty() {
         return None;
     }
-    Some((Hir::concat(between.to_vec()).to_string(), ends))
+    Some((Hir::concat(between.to_vec()), ends))
 }
 
 /// The language a Unicode word-boundary assertion at one end of the text asks
@@ -1063,17 +1069,27 @@ impl RegularSet {
         // wrapped -- `a)|(b` closes the group and opens one the wrapper closes
         // -- and would then be a language nobody wrote.
         let parsed = syntax::parse_with(pattern, &syntax::Config::new().utf8(utf8)).ok()?;
-        if utf8 && let Some((between, ends)) = word_ends(&parsed) {
-            let between = RegularSet::compile(&format!("(?:{between})"), utf8)?;
-            return ends.into_iter().try_fold(between, |set, end| {
-                set.intersect(&RegularSet::compile(end, utf8)?)
-            });
-        }
-        RegularSet::compile(&format!("(?:{pattern})"), utf8)
+        RegularSet::memoized(&format!("(?:{pattern})"), utf8, || {
+            if utf8 && let Some((between, ends)) = word_ends(&parsed) {
+                let between = RegularSet::determinize(&between)?;
+                return ends.into_iter().try_fold(between, |set, end| {
+                    set.intersect(&RegularSet::compile(end, utf8)?)
+                });
+            }
+            RegularSet::determinize(&parsed)
+        })
     }
 
-    /// Build a language from a pattern the caller of this module wrote, or hand
-    /// back the one this thread built from it already.
+    /// The language of a pattern this module writes, anchored as it is written.
+    fn compile(anchored: &str, utf8: bool) -> Option<RegularSet> {
+        RegularSet::memoized(anchored, utf8, || {
+            let parsed = syntax::parse_with(anchored, &syntax::Config::new().utf8(utf8)).ok()?;
+            RegularSet::determinize(&parsed)
+        })
+    }
+
+    /// The language `text` denotes, as this thread built it already, or as
+    /// `build` builds it.
     ///
     /// The build is a function of the text and the alphabet alone, and a
     /// lowering reads the same patterns and length bounds again for every
@@ -1081,21 +1097,31 @@ impl RegularSet {
     /// patterns and three length bounds builds them 322 times without this,
     /// nearly all of its time. A refusal is kept as well as a table, since a
     /// pattern past the build's limit is the dearest one to build again.
-    fn compile(anchored: &str, utf8: bool) -> Option<RegularSet> {
-        if let Some(held) =
-            COMPILED.with_borrow_mut(|memo| memo.read_as(utf8).get(anchored).cloned())
-        {
+    fn memoized(
+        text: &str,
+        utf8: bool,
+        build: impl FnOnce() -> Option<RegularSet>,
+    ) -> Option<RegularSet> {
+        if let Some(held) = COMPILED.with_borrow_mut(|memo| memo.read_as(utf8).get(text).cloned()) {
             return held;
         }
-        let built = RegularSet::determinize(anchored, utf8);
-        COMPILED.with_borrow_mut(|memo| memo.keep(utf8, anchored, built.clone()));
-        built
+        let language = build();
+        COMPILED.with_borrow_mut(|memo| memo.keep(utf8, text, language.clone()));
+        language
     }
 
     /// The subset construction of the classical algorithm [HVP05, §4.1], done
-    /// by `regex-automata`.
-    fn determinize(anchored: &str, utf8: bool) -> Option<RegularSet> {
-        let syntax = syntax::Config::new().utf8(utf8);
+    /// by `regex-automata`, from a parsed pattern.
+    ///
+    /// The steps are the dense builder's own for a pattern's text -- its tree
+    /// compiled to an automaton with no capture groups, which a table has no
+    /// use for, then determinized -- with the parse left to the caller, which
+    /// holds the tree already or rewrites it first.
+    fn determinize(pattern: &Hir) -> Option<RegularSet> {
+        let nfa = thompson::Compiler::new()
+            .configure(thompson::Config::new().which_captures(thompson::WhichCaptures::None))
+            .build_from_hir(pattern)
+            .ok()?;
         // Every match, which is the classical construction. The builder's
         // default is leftmost-first, a search semantics: once the thread a
         // backtracking engine prefers has matched, the threads ranked below it
@@ -1110,9 +1136,8 @@ impl RegularSet {
             .dfa_size_limit(Some(BUILD_SIZE_LIMIT))
             .determinize_size_limit(Some(BUILD_SIZE_LIMIT));
         let built = dense::Builder::new()
-            .syntax(syntax)
             .configure(config)
-            .build(anchored)
+            .build_from_nfa(&nfa)
             .ok()?;
         Dfa::from_automaton(&built).map(|dfa| RegularSet {
             dfa: Arc::new(dfa.minimal()),

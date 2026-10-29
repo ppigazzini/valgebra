@@ -29,6 +29,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet is refuted below a meet it shares no value with
 - feat: a float bound over the integers is read at its floor or its ceiling
 - fix: emptiness reads a reference in the complement law as construction does
+- fix: the part of a pattern between its word boundaries is built from its tree -- internal
 
 -->
 
