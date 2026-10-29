@@ -3078,7 +3078,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            '          python-version: "3.12"\n      # Binding coverage combines',
+            '          python-version: "3.13"\n      # Binding coverage combines',
             '          python-version: "3.14t"\n      # Binding coverage combines',
         ),
         trips=("test_no_coverage_lane_runs_a_free_threaded_interpreter",),
