@@ -45,6 +45,18 @@ pub trait LeafRelations: Constants {
     /// relation conservatively undecided.
     fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool>;
 
+    /// Which of `texts`, each read as a `str`, are values of `schema` by the
+    /// walk a validator of it runs, or `None` where the oracle cannot say.
+    ///
+    /// The question [`leaf_subtype`](Self::leaf_subtype) asks of a literal's
+    /// constant, asked of a text the core holds rather than one the pool does:
+    /// the words of a pattern whose table is past the build's limit are read
+    /// this way, the walk's own matcher answering for each. Asked once for
+    /// every text of one question, so the schema's patterns compile once.
+    fn strings_admitted(&self, _schema: &Schema, _texts: &[&str]) -> Option<Vec<bool>> {
+        None
+    }
+
     /// Order the two pool values behind refinement bounds at indices `left` and
     /// `right`, or `None` when the core cannot or the values are not comparable.
     /// The default decides nothing, so bound satisfiability stays conservative.

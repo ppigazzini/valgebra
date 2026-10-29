@@ -89,7 +89,13 @@ impl Schema {
         match self.verdict_rec(&mut Cx::new(oracle, defs, &Budget::new(DECISION_BUDGET))) {
             Verdict::Empty => true,
             Verdict::Inhabited => false,
-            Verdict::Unknown => self.denotes_no_value(oracle, defs),
+            // A string subject's texts last, as the relation below `Nothing`
+            // reads them, so the two answer alike.
+            Verdict::Unknown => {
+                self.denotes_no_value(oracle, defs)
+                    || (matches!(self, Schema::Refine { .. } | Schema::Intersection(_))
+                        && self.decided_by_its_texts(&Schema::Nothing, oracle).holds())
+            }
         }
     }
 

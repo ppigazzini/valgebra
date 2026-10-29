@@ -39,10 +39,21 @@ answer of its own, or a repair to a change not yet released.
 - feat: a sequence's length is read at both ends of a relation
 - feat: the set representation reads scalars nested past its depth
 - feat: a meet of sequences each holding the empty one holds it
+- feat: a pattern too large to build is read by its texts
 
 -->
 
 ### Added
+
+- **A pattern too large to build is read by its texts.** A counted Unicode
+  class under a repetition, `Regex(r"(?:\w{3,4})+")`, is past the size the set
+  representation builds an automaton to, so every relation against it was
+  `undecided`. A string subject's texts are put to the validator's own
+  matcher, as a literal's value is: every text of a pattern that has at most
+  64, so `Regex("a")` is `not_subset` of it and `Regex("abc|abcd")` is
+  `subset`, and otherwise a guess at one text, which names a value where the
+  matcher admits it, so the pattern is `not_subset` of `nothing`. A guess the
+  matcher refuses names nothing: `Regex(r"a\bb")` stays `undecided`.
 
 - **A meet of sequences each holding the empty one holds it.** The empty list
   is a value of every list shape with no prefix and of every length bound that

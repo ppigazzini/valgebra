@@ -334,7 +334,6 @@ impl ValidatorIndex {
 /// exception: a record with no plan is read by its entries rather than its
 /// keys, and which branch of a union of records is explained follows that
 /// reading, so the traversal descends into every node a record can sit under.
-#[cfg(all(test, feature = "interpreter-tests"))]
 pub(crate) fn build_index(
     py: Python<'_>,
     schema: &Schema,

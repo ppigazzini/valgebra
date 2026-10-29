@@ -278,6 +278,7 @@ fn the_default_oracle_declines_every_question() {
     );
     assert_eq!(oracle.kind_derives_from(Kind::Int, ClassIx::new(0)), None);
     assert!(!oracle.constant_is_alone(ConstIx::new(0)));
+    assert_eq!(oracle.strings_admitted(&Schema::Str, &["a"]), None);
 }
 
 /// The default answers what an attribute of a direct instance can be from the

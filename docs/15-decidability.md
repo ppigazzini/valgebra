@@ -1035,6 +1035,28 @@ the shape. What is left below is what the descriptor cannot hold.
     assert inside.relation_to(nothing) == "undecided"
     ```
 
+- **A pattern too large to build.** A counted Unicode class under a
+  repetition, `(?:\w{3,4})+`, is past the size an automaton is built to, and
+  the set representation does not hold it. A pattern of at most 64 texts on the
+  other side is read a text at a time, each put to the validator's own matcher
+  as a literal is, and a pattern of more by a guess at one text of it -- each
+  repetition its fewest times, each class its first character -- which names a
+  value where the matcher admits it and nothing where it refuses, which is why
+  `a\bb` above stays `undecided`. A proof needs every text, and a supertype
+  that judges a `str` by more than its text -- a literal, a class, a predicate --
+  proves nothing this way.
+
+    ```python
+    from typing import Annotated
+
+    from valgebra import Regex, Validator, nothing
+
+    wide = Annotated[str, Regex(r"(?:\w{3,4})+")]
+    assert Validator(Annotated[str, Regex("a")]).relation_to(wide) == "not_subset"
+    assert Validator(Annotated[str, Regex("abc|abcd")]).relation_to(wide) == "subset"
+    assert Validator(wide).relation_to(nothing) == "not_subset"
+    ```
+
 - **A schema too large to build.** The descriptor is bounded three ways: the
   nodes it will read, the depth at which it will still start a container, and
   the work a build may spend. Past any of them it refuses, and the caller keeps the rules' answer.

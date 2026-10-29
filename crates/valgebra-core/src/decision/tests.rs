@@ -4,6 +4,7 @@ use super::records::keyed_map_meet_verdict;
 use super::*;
 use crate::descr::classes::{Class, Reach};
 use crate::descr::lower::{Operand, lower_widened};
+use crate::descr::regular::{Alphabet, RegularSet};
 use crate::ir::{Attribute, CollKind, Field, MapClause, OperandIx, SeqKind, Spelling};
 use crate::ir::{DefIx, Openness};
 use crate::kind::Kind;
@@ -9133,4 +9134,157 @@ fn the_complement_law_reads_a_reference_through_its_definition() {
         Schema::list(SeqShape::homogeneous(reference.clone())),
     ])];
     assert_ne!(rules_verdict(&with_itself, &odd).0, Verdict::Empty);
+}
+
+/// The walk, for a schema of string patterns, lengths and kinds: the `regex`
+/// matcher over the whole text, as the bindings run it, and a predicate that
+/// admits every text. It counts the questions it is asked.
+#[derive(Default)]
+struct Walk {
+    asked: core::cell::Cell<usize>,
+}
+
+impl Constants for Walk {
+    fn operand(&self, _index: OperandIx) -> Option<Operand> {
+        None
+    }
+
+    fn constant(&self, _index: ConstIx) -> Option<Operand> {
+        None
+    }
+}
+
+impl LeafRelations for Walk {
+    fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
+        None
+    }
+
+    fn strings_admitted(&self, schema: &Schema, texts: &[&str]) -> Option<Vec<bool>> {
+        fn admits(schema: &Schema, text: &str) -> Option<bool> {
+            match schema {
+                Schema::Str | Schema::Anything(_) => Some(true),
+                Schema::Nothing | Schema::Int | Schema::Instance(_) => Some(false),
+                Schema::Refine { base, constraints } if matches!(**base, Schema::Str) => {
+                    constraints.iter().try_fold(true, |held, constraint| {
+                        Some(
+                            held && match constraint {
+                                Constraint::Regex(pattern) => {
+                                    regex::Regex::new(&format!(r"\A(?:{pattern})\z"))
+                                        .ok()?
+                                        .is_match(text)
+                                }
+                                Constraint::MinLen(n) => text.chars().count() >= *n,
+                                Constraint::MaxLen(n) => text.chars().count() <= *n,
+                                Constraint::Predicate(_) => true,
+                                _ => return None,
+                            },
+                        )
+                    })
+                }
+                Schema::Complement(inner) => admits(inner, text).map(|held| !held),
+                Schema::Union(members) => members
+                    .iter()
+                    .try_fold(false, |held, member| Some(held | admits(member, text)?)),
+                Schema::Intersection(members) => members
+                    .iter()
+                    .try_fold(true, |held, member| Some(held & admits(member, text)?)),
+                _ => None,
+            }
+        }
+        self.asked.set(self.asked.get() + 1);
+        texts.iter().map(|text| admits(schema, text)).collect()
+    }
+}
+
+/// A string subject is read by its texts, each put to the walk, where its
+/// pattern's table is past the build's limit.
+///
+/// `(?:\w{3,4})+` builds no table, and the walk reads one text of it as fast as
+/// any other pattern. `Regex("a")` holds the one text `a`, which the walk
+/// refuses to it, so the pair is refuted; `abc` it admits, and both sides read
+/// the text alone, so that pair is proved, and `a | abc` refuted by `a`. A
+/// supertype holding a class or a predicate judges a `str` subclass apart from
+/// the `str` of its text, so a pair every text admits is not proved there; a
+/// union with a kind no `str` is, and a complement, judge by the text. A
+/// pattern of more texts than are read is read by a guess, which refutes and
+/// proves nothing, and a guess the walk refuses -- `ab` of `a\bb` -- names no
+/// value. A pattern over `bytes` holds no text and asks the walk nothing, and
+/// the oracle that cannot run the walk answers nothing.
+#[test]
+fn a_string_subject_is_read_by_its_texts() {
+    use super::readings::TEXTS_READ;
+    let pattern = |text: &str| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex(text.into())].into(),
+    };
+    let wide = pattern(r"(?:\w{3,4})+");
+    assert!(RegularSet::pattern(r"(?:\w{3,4})+", Alphabet::Text).is_none());
+    let walk = Walk::default();
+    let relation = |sub: &Schema, sup: &Schema| sub.decided_by_its_texts(sup, &walk);
+
+    assert_eq!(relation(&pattern("a"), &wide), Relation::Fails);
+    assert_eq!(relation(&pattern("abc"), &wide), Relation::Holds);
+    assert_eq!(relation(&pattern("a|abc"), &wide), Relation::Fails);
+    assert_eq!(
+        relation(&pattern("abc"), &wide.clone().complement()),
+        Relation::Fails
+    );
+    let classed = Schema::Union(vec![wide.clone(), Schema::Instance(ClassIx::new(0))].into());
+    assert_eq!(relation(&pattern("abc"), &classed), Relation::Unknown);
+
+    assert_eq!(relation(&wide, &Schema::Nothing), Relation::Fails);
+    let both = Schema::Intersection(vec![pattern("a"), wide.clone()].into());
+    assert_eq!(relation(&both, &Schema::Nothing), Relation::Holds);
+    assert_eq!(relation(&pattern("[a-z]{3}"), &wide), Relation::Unknown);
+    assert_eq!(
+        relation(&pattern("[a-z]{3}"), &pattern("[a-y]+")),
+        Relation::Unknown
+    );
+    assert_eq!(
+        relation(&pattern(r"a\bb"), &Schema::Nothing),
+        Relation::Unknown
+    );
+
+    // A supertype the text alone places: a union with a kind no `str` is, and a
+    // complement. One whose predicate reads the value proves nothing.
+    let with_a_kind = Schema::Union(vec![pattern("a"), Schema::Int].into());
+    assert_eq!(relation(&pattern("a"), &with_a_kind), Relation::Holds);
+    assert_eq!(
+        relation(&pattern("a"), &wide.clone().complement()),
+        Relation::Holds
+    );
+    let predicated = Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![
+            Constraint::Regex("a".into()),
+            Constraint::Predicate(PredIx::new(0)),
+        ]
+        .into(),
+    };
+    assert_eq!(relation(&pattern("a"), &predicated), Relation::Unknown);
+
+    // A pattern over `bytes` holds no text, and the walk is asked nothing.
+    let bytes = Schema::Refine {
+        base: Arc::new(Schema::Bytes),
+        constraints: vec![Constraint::Regex("a".into())].into(),
+    };
+    let asked = walk.asked.get();
+    assert_eq!(relation(&bytes, &wide), Relation::Unknown);
+    assert_eq!(walk.asked.get(), asked);
+
+    // Every text is read up to the bound, and a pattern of one more is guessed.
+    let a_run = |longest: usize| pattern(&format!("a{{1,{longest}}}"));
+    assert_eq!(
+        relation(&a_run(TEXTS_READ), &pattern("a+")),
+        Relation::Holds
+    );
+    assert_eq!(
+        relation(&a_run(TEXTS_READ + 1), &pattern("a+")),
+        Relation::Unknown
+    );
+
+    assert_eq!(
+        pattern("a").decided_by_its_texts(&wide, &NoLeafRelations),
+        Relation::Unknown
+    );
 }

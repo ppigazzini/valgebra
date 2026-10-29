@@ -598,7 +598,8 @@ impl Schema {
     /// The set representation of the pair, then both deciders asked of its
     /// parts, in the query the rules declined: what follows their decline.
     /// `by_branch` is whether a branch of a union supertype may prove the pair
-    /// alone.
+    /// alone. Last, a string subject's texts put to the walk, which a meet or a
+    /// refinement can carry and the shape test reads before the call.
     ///
     /// Out of line, and handed the query rather than what it holds, so the
     /// three public entries above it stay thin and are inlined into a caller's
@@ -612,6 +613,13 @@ impl Schema {
             .or_else(|| {
                 if by_branch {
                     self.decided_as_respelled(other, cx)
+                } else {
+                    Relation::Unknown
+                }
+            })
+            .or_else(|| {
+                if matches!(self, Schema::Refine { .. } | Schema::Intersection(_)) {
+                    self.decided_by_its_texts(other, cx.oracle)
                 } else {
                     Relation::Unknown
                 }

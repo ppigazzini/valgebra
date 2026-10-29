@@ -228,6 +228,31 @@ fn two_sets_of_constants_are_disjoint_when_no_member_is_shared() {
 }
 
 #[test]
+fn each_text_is_walked_as_a_str_of_the_schema() {
+    // `strings_admitted` puts texts the core holds to the walk a validator of
+    // the schema runs, one answer a text in the order given: a literal admits
+    // its own text alone, and `str` every text.
+    Python::attach(|py| {
+        let values = vec!["ab".into_pyobject(py).unwrap().into_any().unbind()];
+        asking(py, values, |oracle| {
+            let literal = Schema::Literal(ConstIx::new(0));
+            assert_eq!(
+                oracle.strings_admitted(&literal, &["ab", "a", ""]),
+                Some(vec![true, false, false])
+            );
+            assert_eq!(
+                oracle.strings_admitted(&Schema::Str, &["ab", "a"]),
+                Some(vec![true, true])
+            );
+            assert_eq!(
+                oracle.strings_admitted(&Schema::Int, &["1"]),
+                Some(vec![false])
+            );
+        });
+    });
+}
+
+#[test]
 fn two_bounds_are_ordered_where_python_orders_them() {
     // `compare` orders two refinement operands. Python orders numbers with
     // numbers and text with text and raises across the two, and a bound whose

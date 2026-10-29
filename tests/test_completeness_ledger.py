@@ -81,6 +81,10 @@ _CHAIN_WITH_A_FIELD = recursive(lambda t: union(None, {"next": t, "v?": int}))
 # that names itself is spelled, and a chain of one key the meets below ask of.
 _LINK = recursive(lambda t: {"next": union(t, None)})
 _NESTED = recursive(lambda t: union(None, {"a": t}))
+# A counted Unicode class under a repetition, past the size an automaton of
+# the set representation is built to.
+_COUNTED_CLASS = Annotated[str, Regex(r"(?:\w{3,4})+")]
+
 # The integers and the lists of them, nested to any depth.
 _NESTED_INTS = recursive(lambda t: union(int, [t]))
 
@@ -1167,6 +1171,33 @@ _DECIDED = [
         Annotated[str, Regex("a")],
         Annotated[str, Regex("a|b")],
         id="Regex(a)<=Regex(a|b)",
+    ),
+    # A pattern past the size an automaton is built to is read a text at a
+    # time, each put to the validator's matcher: every text of a pattern that
+    # has few, or a guess at one text of a pattern that has many.
+    pytest.param(
+        "refutes",
+        Annotated[str, Regex("a")],
+        _COUNTED_CLASS,
+        id="Regex(a)<=Regex((?:\\w{3,4})+)-is-refuted",
+    ),
+    pytest.param(
+        "subtype",
+        Annotated[str, Regex("abc|abcd")],
+        _COUNTED_CLASS,
+        id="Regex(abc|abcd)<=Regex((?:\\w{3,4})+)",
+    ),
+    pytest.param(
+        "refutes",
+        _COUNTED_CLASS,
+        nothing,
+        id="Regex((?:\\w{3,4})+)-is-inhabited",
+    ),
+    pytest.param(
+        "empty",
+        intersection(Annotated[str, Regex("a")], _COUNTED_CLASS),
+        None,
+        id="Regex(a)&Regex((?:\\w{3,4})+)-is-empty",
     ),
     pytest.param(
         "subtype",

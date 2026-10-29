@@ -347,6 +347,19 @@ ROWS: dict[str, Row] = {
             "subset",
         ),
     ),
+    "A pattern too large to build.": Declines(
+        Annotated[str, Regex(r"(?:\w{3,4})+")],
+        Annotated[str, Regex(r"(?:\w{3,5})+")],
+        "an automaton past the size one is built to, or a counted class read "
+        "without unrolling its counts into states",
+        # The pair the page decides beside it: a subject of two texts, each put
+        # to the validator's own matcher.
+        beside=(
+            Annotated[str, Regex("abc|abcd")],
+            Annotated[str, Regex(r"(?:\w{3,4})+")],
+            "subset",
+        ),
+    ),
     "A meet of two moduli the representation cannot hold.": Declines(
         intersection(
             Annotated[int, at.MultipleOf(64)], Annotated[int, at.MultipleOf(81)]
