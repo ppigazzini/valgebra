@@ -354,7 +354,7 @@ except ValueError as err:
 assert raised
 ```
 
-Four more are quiet, and each is in a class or an anchor a ported pattern is
+Five more are quiet, and each is in a class or an anchor a ported pattern is
 likely to carry:
 
 - **`\s`**: `re` counts the separators `\x1c` to `\x1f` as whitespace, as
@@ -367,10 +367,18 @@ likely to carry:
   so `a$\n` admits `"a\n"` there and nothing here. `\z` is the end of the text
   in both, from Python 3.14.
 - **`\B` on the empty string**: it matches here, and in `re` only from 3.14.
+- **The Unicode version**: this engine's classes, case folding and properties
+  are Unicode 16.0's, and `re`'s are the interpreter's own
+  (`unicodedata.unidata_version`), 13.0 on Python 3.10 up to 17.0 on 3.15. A
+  character one version assigns and the other does not is read apart: `\w`
+  admits U+1C89, a letter 16.0 adds, here and in `re` from 3.14, and `(?i)`
+  folds U+A7CE and U+A7CF, a case pair 17.0 adds, in `re` from 3.15 and not
+  here.
 
 ```python
 import re
 import sys
+import unicodedata
 from typing import Annotated
 
 from valgebra import Regex, Validator
@@ -393,6 +401,12 @@ assert re.fullmatch("a$\n", "a\n") is not None
 
 assert admits(r"\B", "")
 assert (re.fullmatch(r"\B", "") is not None) == (sys.version_info >= (3, 14))
+
+unicode = tuple(int(part) for part in unicodedata.unidata_version.split("."))
+assert admits(r"\w", "\u1c89")
+assert (re.fullmatch(r"\w", "\u1c89") is not None) == (unicode >= (16,))
+assert not admits("(?i)\ua7ce", "\ua7cf")
+assert (re.fullmatch("(?i)\ua7ce", "\ua7cf") is not None) == (unicode >= (17,))
 ```
 
 The third of the first four is the loud case: `re.compile(r"\p{L}+")` raises,
