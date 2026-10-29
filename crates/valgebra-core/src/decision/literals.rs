@@ -377,6 +377,9 @@ fn reads_the_type_alone(node: &Schema, oracle: &dyn LeafRelations) -> bool {
 
 /// A meet holding a table of constants, read one constant at a time.
 ///
+/// `None`'s kind is such a table: its one value is `None`, alone in its
+/// literal, which is how `Literal[None]` is built ([`values_listed`]).
+///
 /// The table is the union of its constants' literals, so the meet is the union
 /// of each literal met with the other members [FCB08, Lem. 6.2], and a literal
 /// meets a set in a value exactly where one of its values is a member
@@ -415,7 +418,7 @@ pub(super) fn a_meet_read_by_its_constants(
     let Some((at, table)) = members
         .iter()
         .enumerate()
-        .find_map(|(at, member)| finite_set(member).map(|table| (at, table)))
+        .find_map(|(at, member)| values_listed(member).map(|table| (at, table)))
     else {
         return Verdict::Unknown;
     };
@@ -427,10 +430,11 @@ pub(super) fn a_meet_read_by_its_constants(
     }
     let mut verdict = Verdict::Empty;
     for constant in table {
-        let Schema::Literal(index) = constant else {
-            return Verdict::Unknown;
+        let (holds_a_value, index) = match constant {
+            Schema::Literal(index) => (oracle.literals_disjoint(*index, *index), Some(*index)),
+            Schema::NoneType => (Some(false), None),
+            _ => return Verdict::Unknown,
         };
-        let holds_a_value = oracle.literals_disjoint(*index, *index);
         if holds_a_value == Some(true) {
             continue;
         }
@@ -440,11 +444,17 @@ pub(super) fn a_meet_read_by_its_constants(
             .enumerate()
             .filter(|(place, _)| *place != at)
             .any(|(_, member)| {
-                if oracle.leaf_subtype(constant, member) == Some(true) {
+                let admits = oracle.leaf_subtype(constant, member);
+                if admits == Some(true) {
                     return false;
                 }
                 admitted = false;
-                the_constant_speaks_for_the_literal(*index, member, oracle, definitions)
+                // An oracle that cannot read the member reads no complement
+                // built over it, and the build is spared.
+                admits.is_some()
+                    && index.is_none_or(|index| {
+                        the_constant_speaks_for_the_literal(index, member, oracle, definitions)
+                    })
                     && match member {
                         Schema::Complement(inner) => oracle.leaf_subtype(constant, inner),
                         member => oracle
@@ -460,6 +470,17 @@ pub(super) fn a_meet_read_by_its_constants(
         verdict = Verdict::Unknown;
     }
     verdict
+}
+
+/// The values of a meet member, where they are finitely many and each read as
+/// a constant's literal is, the model's singleton [FCB08, §4.2] widened by
+/// `==`: a finite set of constants, or `None`'s kind, which is the literal of
+/// `None` and holds `None` alone.
+fn values_listed(member: &Schema) -> Option<&[Schema]> {
+    match member {
+        Schema::NoneType => Some(slice::from_ref(member)),
+        other => finite_set(other),
+    }
 }
 
 /// `A ⊆ B` between two finite sets of constants, decided by membership.

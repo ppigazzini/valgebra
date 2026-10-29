@@ -515,7 +515,7 @@ corpus of its own driving every question below
 (`oracle/interpreter.rs`, [08-testing.md](08-testing.md)). The questions:
 
 - `leaf_subtype` — is this literal a member of that set, is this class a subclass
-  of that one;
+  of that one, is `None`, the one value of its kind, a member of it;
 - `literal_sets_disjoint` — do these two *sets* of constants share a value. The
   same relation `literals_disjoint` answers for one pair, asked of every pair at
   once: the core compares a union with a union member by member, which is
@@ -699,6 +699,12 @@ costs completeness and nothing else: membership is unaffected, and the relations
 stay undecided. `tests/test_enums.py` holds each refused kind to the value
 that would refute the union reading, so a kind read as its members again fails
 there.
+
+`None`'s kind is the literal of its one value with no condition, since
+`NoneType` admits no subclass: it is below a set where the walk admits `None`,
+and it is the table of that value where a meet holding it is read one constant
+at a time (`a_meet_read_by_its_constants`). `bool`'s two values need no question
+here, the parts reading taking the kind a literal at a time.
 
 ## The two routes to a subtype answer, and where they part
 

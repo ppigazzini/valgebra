@@ -8004,7 +8004,8 @@ fn a_literal_clause_meets_a_field_through_its_name() {
 ///
 /// Constants 0 and 1 are two strings, each the one value of its literal;
 /// constant 2 is a float zero, whose literal `==` joins to the other zero; and
-/// constant 3 is a `nan`, whose literal holds no value. The predicate at index
+/// constant 3 is a `nan`, whose literal holds no value; and `None`, the one
+/// value of its kind, is walked as constant 4. The predicate at index
 /// 0 admits constant 1 alone, and the one at index 1 raises on every value: the
 /// walk stops there, and a stop is neither a member of the set nor of its
 /// complement. The definition at index 0 is `str | float | list[t]`.
@@ -8033,7 +8034,8 @@ impl Walked {
             Schema::Anything(_) => Some(true),
             Schema::Literal(index) => Some(index.get() == constant && constant != 3),
             Schema::Str => Some(constant < 2),
-            Schema::Float => Some(constant >= 2),
+            Schema::Float => Some((2..4).contains(&constant)),
+            Schema::NoneType => Some(constant == 4),
             Schema::Ref(_) => Self::walk(constant, &Self::universe()),
             Schema::Refine { base, constraints } => {
                 let base = Self::walk(constant, base)?;
@@ -8063,11 +8065,13 @@ impl Constants for Walked {}
 impl LeafRelations for Walked {
     /// What the bindings' walk answers: admitted or not, a stop refused.
     fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
-        let Schema::Literal(constant) = sub else {
-            return None;
+        let constant = match sub {
+            Schema::Literal(constant) => constant.get(),
+            Schema::NoneType => 4,
+            _ => return None,
         };
         self.walked.borrow_mut().push(sup.clone());
-        Some(Self::walk(constant.get(), sup) == Some(true))
+        Some(Self::walk(constant, sup) == Some(true))
     }
     fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
         Some(left != right || left.get() == 3)
@@ -8134,6 +8138,14 @@ fn a_meet_holding_a_table_is_read_by_its_constants() {
             meet(vec![literal(3), predicate(0).complement()]),
             Verdict::Empty,
         ),
+        // `None`'s kind is the table of its one value, and `None` is alone in
+        // its literal, so a refusal speaks for the kind.
+        (
+            meet(vec![Schema::NoneType, not(literal(0))]),
+            Verdict::Inhabited,
+        ),
+        (meet(vec![Schema::NoneType, predicate(0)]), Verdict::Empty),
+        (meet(vec![Schema::NoneType, predicate(1)]), Verdict::Unknown),
     ];
     for (schema, expected) in &rows {
         assert_eq!(verdict(schema, &Walked::new()), *expected, "{schema:?}");

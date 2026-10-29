@@ -139,7 +139,10 @@ answers `"undecided"`.
   them stays conservative. Whatever its constants are, a finite set of them is
   not a kind with infinitely many values, and its complement holds a value --
   an object of a type none of the constants has: `int` is not below
-  `Literal[Color.RED]`, and `~Literal[Color.RED]` is not empty.
+  `Literal[Color.RED]`, and `~Literal[Color.RED]` is not empty. `None`'s kind
+  is the literal of its one value, walked through the other side: `None` is
+  not below `Literal[Color.RED]`, and `intersection(None, ~Literal[Color.RED])`
+  is not empty.
 - **An enumeration against the union of its members**, when every instance of
   the class really is one of them -- made through the class, which
   `object.__new__` steps past
