@@ -1100,3 +1100,23 @@ def test_a_narrowed_meet_left_open_leaves_steps_to_the_readings_after_it() -> No
         {"a": complement(guard(Validator({"tag": guard(tag_int)}).open()))}
     )
     assert guarded.relation_to(union(obj, complement(Validator(str)))) == "subset"
+
+
+def test_a_complemented_union_is_read_by_de_morgan_below_any_supertype() -> None:
+    """A complement of a union is the meet of its branches' complements.
+
+    `~(~X | Y)` is `X & ~Y`, a set of dicts here, so it is below `dict`, and
+    below the complement of a schema whose complement folds to `dict`, as the
+    meet spelling is.
+    """
+    no_bytes = intersection(
+        Validator({str: complement(bytes)}),
+        complement(Validator({"a?": bytes}).open()),
+    )
+    de_morgan = complement(union(complement(no_bytes), Validator(dict[str, str])))
+    not_a_dict = intersection(
+        complement(Validator({"a?": complement(nothing)}).open()), complement(dict)
+    )
+    assert de_morgan.relation_to(dict) == "subset"
+    assert de_morgan.relation_to(complement(not_a_dict)) == "subset"
+    assert de_morgan.relation_to(list) == "not_subset"

@@ -353,6 +353,9 @@ answers `"undecided"`.
   one level in, and decided where that reading is the supertype or has the
   supertype among its members, so a complement of a union is below the meet
   of the complements and below what a complemented member's complement is.
+  Where every decider declines the pair, a complement of a union is asked
+  once more as the meet of the complements, whatever the supertype:
+  `¬(¬x ∨ y)` below `dict` is `x ∧ ¬y` below it, which a member of `x` places.
   Emptiness reads a complemented union the same way, so one whose
   complements, pushed in, meet in nothing as they are built is empty to
   `is_empty` as it is below `nothing`:

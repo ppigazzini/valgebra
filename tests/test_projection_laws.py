@@ -88,6 +88,18 @@ def test_the_projections_are_idempotent() -> None:
     assert record.close().close().is_equivalent(record.close())
     assert repr(record.open().open()) == repr(record.open())
     assert repr(record.close().close()) == repr(record.close())
+    # As terms too: a field the opened record's catch-all also frees is said
+    # twice, and is dropped by the first opening rather than by the second.
+    free = Validator({"a": int, "b?": anything}).open()
+    assert free.open() == free
+    assert hash(free.open()) == hash(free)
+    assert free == Validator({"a": int}).open()
+    # As terms too: a field the open record's catch-all also frees is kept by
+    # a second opening, as construction keeps it, rather than judged again.
+    free = Validator({"a": int, "b?": anything}).open()
+    assert free.open() == free
+    assert hash(free.open()) == hash(free)
+    assert free.close().close() == free.close()
     # And closing an opened record gives the record back, which is what makes
     # them projections rather than inverses.
     assert record.open().close().is_equivalent(record)
@@ -311,14 +323,15 @@ def test_opening_reaches_the_record_a_mapping_maps_to() -> None:
     assert not mapping.open().close().is_valid(value)
 
 
-def test_opening_twice_gives_the_set_once_did_and_may_respell_it() -> None:
-    """Idempotent of the set, not of the term.
+def test_opening_twice_is_opening_once_as_a_term() -> None:
+    """Idempotent of the term, and so of the set.
 
-    The first `open` writes the catch-all and keeps the optional name; the
-    second finds the name saying what the catch-all says and drops it. Two
-    terms, one set: `==` parts them and `is_equivalent` does not.
+    The catch-all `open` writes says of `a` what the optional name says, so the
+    name is said twice in the result and the first `open` drops it, where a
+    second one would. `==` reads the two alike.
     """
     once = Validator({"a?": Any}).open()
     twice = once.open()
     assert once.is_equivalent(twice)
-    assert once != twice
+    assert once == twice
+    assert once == Validator({}).open()

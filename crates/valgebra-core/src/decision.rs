@@ -778,6 +778,25 @@ impl Schema {
         if readings::spills_a_kind_into(self, other, cx) {
             return Relation::Fails;
         }
+        // A complement of a union is the meet of its branches' complements
+        // [FCB08, Def. 4.1], whatever the supertype, so the pair is asked again
+        // that way under an allowance of its own: `¬(¬X ∪ Y)` below `dict` is
+        // `X ∩ ¬Y` below it, which a member of `X` places. The meet is of the
+        // subject's own branches and their signs, so the goals a query asks
+        // stay drawn from its terms.
+        if let Schema::Complement(inner) = self
+            && let Schema::Union(branches) = &**inner
+        {
+            let pushed = Schema::meet_within(
+                branches.iter().map(|branch| branch.clone().complement()),
+                cx.defs,
+            );
+            let allowance = Budget::new(cx.budget.left().min(RESPELLING));
+            let answer = pushed.is_subtype_rec(other, &mut cx.within_this_query(&allowance));
+            if answer != Relation::Unknown {
+                return answer;
+            }
+        }
         let meets = matches!(
             (self, other),
             (Schema::Intersection(_), Schema::Intersection(_))

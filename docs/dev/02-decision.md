@@ -1377,7 +1377,11 @@ the arms by shape distribute the supertype or unfold it: `¬(X ∪ ¬Y) ⊆ Y` i
 not handed to the arms as a new subject. Asked of every rule it decides a few
 more pairs in ten thousand and reads every declining pair twice -- a complement
 of a union holding a recursive universe, asked below `str`, takes ten times as
-long to decline -- so the reading stops at its placements.
+long to decline -- so the reading stops at its placements. Where every decider
+declines the pair, the respelling asks a complement of a union once more as the
+meet of the complements, against any supertype and under an allowance of its
+own (`decided_as_respelled`): `¬(¬X ∪ Y) ⊆ dict` is `X ∩ ¬Y ⊆ dict`, which a
+member of `X` places, and the meet is of the subject's own signed branches.
 `a_complement_is_below_its_complements_pushed_in` holds them with one step to
 spend, over drawn schemas.
 

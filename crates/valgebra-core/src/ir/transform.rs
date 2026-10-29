@@ -16,10 +16,10 @@
 use std::sync::Arc;
 
 use super::{
-    Attribute, Clauses, Constraint, Constraints, DefIx, DefShift, Fields, MapClause, Members,
-    Openness, OperandIx, Remap, Schema, SeqShape, already_said, canonical_clauses, clauses_over,
-    share_attributes, share_clauses, share_fields, share_members, share_node, with_field_buffer,
-    with_member_buffer,
+    Attribute, Clauses, Constraint, Constraints, DefIx, DefShift, Field, Fields, MapClause,
+    Members, Openness, OperandIx, Remap, Schema, SeqShape, already_said, canonical_clauses,
+    clauses_over, share_attributes, share_clauses, share_fields, share_members, share_node,
+    with_field_buffer, with_member_buffer,
 };
 
 /// Move a constraint list's indices, rebuilding it only where one moves -- and
@@ -590,8 +590,13 @@ impl Schema {
                 // clauses, and this one test decides both whether the node is
                 // rebuilt and which names the rebuilt node keeps. So whether a
                 // name survives turns on what that name says alone, never on
-                // another name beside it.
-                let dropping = updated.iter().any(|field| already_said(field, current));
+                // another name beside it. It is judged against the clauses the
+                // rewrite leaves as well: a name they say is said twice in the
+                // result, and judged on a second pass it would be dropped there,
+                // so the operators would not be idempotent by `==`.
+                let said =
+                    |field: &Field| already_said(field, current) || already_said(field, &wanted);
+                let dropping = updated.iter().any(said);
                 if !dropping && opened.is_none() && *defaults == wanted {
                     return None;
                 }
@@ -608,13 +613,8 @@ impl Schema {
                 // the catch-all the openness adds -- is dropped, and the list
                 // has to be assembled again around the hole.
                 Some(with_field_buffer(|kept| {
-                    kept.extend(
-                        updated
-                            .iter()
-                            .filter(|field| !already_said(field, current))
-                            .cloned(),
-                    );
-                    Schema::keyed_map_from(kept, wanted)
+                    kept.extend(updated.iter().filter(|field| !said(field)).cloned());
+                    Schema::keyed_map_from(kept, Arc::clone(&wanted))
                 }))
             }
             // Every other node carries the transform to its children and keeps

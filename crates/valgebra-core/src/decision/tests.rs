@@ -10155,3 +10155,31 @@ fn a_capped_reading_is_charged_to_the_query() {
     short.within(10, || spend(&short));
     assert_eq!(short.left(), 3, "a cap past what is left caps nothing");
 }
+
+/// A complement of a union is the meet of its branches' complements, whatever
+/// the supertype: `¬(¬(M ∩ ¬N) ∪ S)` is `M ∩ ¬N ∩ ¬S`, below the dicts by `M`
+/// and outside the words, where no other reading places the complement of the
+/// union against either.
+#[test]
+fn a_complemented_union_is_asked_as_the_meet_of_its_branches_complements() {
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let words_to = |value: Schema| {
+        Schema::mapping(MapClause {
+            key: Schema::Str,
+            value,
+        })
+    };
+    let dicts = Schema::mapping(MapClause {
+        key: Schema::ANYTHING,
+        value: Schema::ANYTHING,
+    });
+    let no_bytes = Schema::Intersection(
+        vec![words_to(not(Schema::Bytes)), not(words_to(Schema::Bytes))].into(),
+    );
+    let pushed_in = not(Schema::Union(
+        vec![not(no_bytes), words_to(Schema::Str)].into(),
+    ));
+    let relation = |sup: &Schema| pushed_in.subtype_relation_under(sup, &NoLeafRelations, &[]);
+    assert_eq!(relation(&dicts), Relation::Holds);
+    assert_eq!(relation(&Schema::Str), Relation::Fails);
+}
