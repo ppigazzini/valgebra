@@ -574,22 +574,61 @@ fn layout_of<'py>(ty: &Bound<'py, PyType>) -> PyResult<(Option<Bound<'py, PyType
     // `bool` and an `int` subclass land in one part rather than two -- which is
     // right: `bool` is final, so an `int` subclass is never a boolean, and the
     // pair is disjoint for a reason the layout does not carry.
-    let mut kind = None;
-    for (builtin, of) in &builtins {
-        if ty.is_subclass(builtin)? {
+    //
+    // Walked along `__base__`, the chain Python lays an instance out on, and
+    // never along `__mro__` or `issubclass`, which read the order a
+    // metaclass's `mro()` writes: one that leaves `int` out of it makes no
+    // instance of the class less of an `int`.
+    let (mut solid, mut kind) = (None, None);
+    let mut at = Some(ty.clone());
+    while let Some(class) = at {
+        if let Some((_, of)) = builtins.iter().find(|(builtin, _)| class.is(builtin)) {
             kind = Some(*of);
+            solid.get_or_insert(class);
             break;
         }
-    }
-    for base in ty.mro().iter() {
-        let Ok(base) = base.cast_into::<PyType>() else {
-            continue;
-        };
-        if builtins.iter().any(|(builtin, _)| base.is(builtin)) || lays_down_its_own(&base)? {
-            return Ok((Some(base), kind));
+        if solid.is_none() && lays_down_its_own(&class)? {
+            solid = Some(class.clone());
         }
+        at = base_of(&class)?;
     }
-    Ok((None, kind))
+    Ok((solid, kind))
+}
+
+/// `type.__base__`, the descriptor read once.
+static TYPE_BASE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
+/// The class Python lays `ty`'s instances out on, or `None` for `object`: its
+/// `__base__`, read through `type`'s own descriptor, so a metaclass defining
+/// an attribute of that name does not answer for it.
+fn base_of<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Bound<'py, PyType>>> {
+    let py = ty.py();
+    let descriptor = TYPE_BASE.get_or_try_init(py, || {
+        Ok::<_, PyErr>(
+            PyType::type_object(py)
+                .getattr(intern!(py, "__dict__"))?
+                .get_item(intern!(py, "__base__"))?
+                .unbind(),
+        )
+    })?;
+    let base = descriptor
+        .bind(py)
+        .call_method1(intern!(py, "__get__"), (ty,))?;
+    Ok(base.cast_into::<PyType>().ok())
+}
+
+/// `types.MemberDescriptorType`, read once.
+static MEMBER_DESCRIPTOR: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+
+/// Whether `value`, found in `ty`'s own namespace, is a slot Python laid down
+/// for `ty`: a member descriptor whose `__objclass__` is `ty`. Python makes one
+/// for each name a class's `__slots__` lists when it makes the class, and no
+/// assignment makes another -- naming `__slots__` afterwards lays nothing down,
+/// and one class's descriptor copied into another names its own class.
+fn is_own_slot(value: &Bound<'_, PyAny>, ty: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = value.py();
+    let member = MEMBER_DESCRIPTOR.import(py, "types", "MemberDescriptorType")?;
+    Ok(value.get_type().is(member) && value.getattr(intern!(py, "__objclass__"))?.is(ty))
 }
 
 /// Whether a class lays down an instance layout of its own over the one its
@@ -649,14 +688,16 @@ fn lays_down_its_own(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     adds_slots(ty)
 }
 
-/// Whether a class's own `__slots__` add an instance slot.
+/// Whether a class's own `__slots__` add an instance slot Python laid down.
 ///
 /// Read from the class's own namespace rather than inherited, because a slot is
-/// laid down once and a subclass without `__slots__` of its own adds none.
-/// `__dict__` and `__weakref__` name no slot: they ask for the two pointers a
-/// plain instance has anyway, and Python lays down no layout for them -- a
-/// class listing only those meets any other. A name is one slot, and a sequence
-/// of names is each of them; an empty sequence is no slot at all.
+/// laid down once and a subclass without `__slots__` of its own adds none, and
+/// read off the member descriptor each slot is ([`is_own_slot`]) rather than
+/// off the names: `__slots__` assigned after the class is made lays nothing
+/// down. `__dict__` and `__weakref__` name no slot: they ask for the two
+/// pointers a plain instance has anyway, and Python lays down no member for
+/// them -- a class listing only those meets any other. A name is one slot, and
+/// a sequence of names is each of them; an empty sequence is no slot at all.
 ///
 /// A class without `__slots__` of its own adds none; any other error reading
 /// them -- the namespace through a metaclass's hook, the names through an
@@ -671,20 +712,29 @@ fn adds_slots(ty: &Bound<'_, PyType>) -> PyResult<bool> {
         return Ok(false);
     }
     let slots = namespace.get_item(intern!(py, "__slots__"))?;
-    let adds = |name: &Bound<'_, PyAny>| {
-        !name
-            .cast::<PyString>()
-            .is_ok_and(|name| name == "__dict__" || name == "__weakref__")
-    };
-    if slots.is_instance_of::<PyString>() {
-        return Ok(adds(&slots));
-    }
-    for name in slots.try_iter()? {
-        if adds(&name?) {
+    for name in slot_names(&slots)? {
+        let value = namespace.call_method1(intern!(py, "get"), (slot_key(ty, &name)?,))?;
+        if is_own_slot(&value, ty)? {
             return Ok(true);
         }
     }
     Ok(false)
+}
+
+/// The key a slot named `name` is stored under in `ty`'s namespace: the name,
+/// or for a private one -- two leading underscores and not two trailing --
+/// the name mangled with the class's, as Python stores it.
+fn slot_key(ty: &Bound<'_, PyType>, name: &str) -> PyResult<String> {
+    if !name.starts_with("__") || name.ends_with("__") {
+        return Ok(name.to_owned());
+    }
+    let owner: String = ty.getattr(intern!(ty.py(), "__name__"))?.extract()?;
+    let owner = owner.trim_start_matches('_');
+    Ok(if owner.is_empty() {
+        name.to_owned()
+    } else {
+        format!("_{owner}{name}")
+    })
 }
 
 /// The names a class's own `__slots__` -- one name, or a sequence of them --
@@ -802,9 +852,11 @@ struct NamespaceReading {
 /// unless `generic` says it is the generic lookup.
 ///
 /// A name is a [`Member::Slot`] where the namespace's own `__slots__` names
-/// it, a [`Member::Descriptor`] where its value's type defines `__set__` or
-/// `__delete__`, and a [`Member::Plain`] otherwise. A slot is read by its
-/// name rather than by its descriptor's type, so a mangled slot name, which
+/// it and holds the member descriptor Python laid down for it
+/// ([`is_own_slot`]), a [`Member::Descriptor`] where its value's type defines
+/// `__set__` or `__delete__`, and a [`Member::Plain`] otherwise. A slot whose
+/// descriptor an assignment replaced is read as what replaced it: every
+/// instance then reads the class's value. A mangled slot name, which
 /// `__slots__` spells unmangled, reads as a descriptor: the conservative
 /// direction. `__slots__` is found among the items rather than asked for,
 /// because asking a namespace without it raises a `KeyError` for every
@@ -848,7 +900,7 @@ fn read_namespace<'py>(
             "__getattribute__" => getattribute = !generic,
             _ => {}
         }
-        let member = if slots.contains(&name) {
+        let member = if slots.contains(&name) && is_own_slot(&value, base)? {
             Member::Slot
         } else if is_data_descriptor(&value, descriptors)? {
             Member::Descriptor

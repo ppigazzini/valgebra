@@ -418,6 +418,63 @@ fn a_class_admits_the_kind_its_layout_lays_down() {
 }
 
 #[test]
+fn a_layout_and_a_slot_are_read_from_what_python_laid_down() {
+    // Python lays a class's slots down when it makes the class, and lays its
+    // instances out along `__base__`. `__slots__` assigned afterwards lays
+    // nothing down; a slot whose descriptor an assignment replaced reads the
+    // class's value, as one written in the body does; and a metaclass's `mro()`
+    // leaving `int` out of the order leaves every instance an `int`.
+    Python::attach(|py| {
+        let program = r"class Late:
+    pass
+Late.__slots__ = ('x',)
+class Slotted:
+    __slots__ = ('y',)
+class LeaveInt(type):
+    def mro(cls):
+        return [cls, object]
+class Cint(int, metaclass=LeaveInt):
+    pass
+class Replaced:
+    __slots__ = ('x',)
+Replaced.x = 's'
+class Written:
+    __slots__ = ()
+    x = 's'
+";
+        let module = PyModule::from_code(
+            py,
+            &CString::new(program).expect("no interior nul"),
+            c"layouts.py",
+            c"layouts",
+        )
+        .expect("the module compiles");
+        let classes: Vec<Py<PyAny>> = ["Late", "Slotted", "Cint", "Replaced", "Written"]
+            .iter()
+            .map(|name| module.getattr(*name).expect("the class").unbind())
+            .collect();
+        asking(py, classes, |oracle| {
+            let admits = |slot, kind| oracle.class_admits_kind(ClassIx::new(slot), kind);
+            assert_eq!(
+                admits(0, Kind::Str),
+                None,
+                "a late __slots__ lays nothing down"
+            );
+            assert_eq!(admits(1, Kind::Str), Some(false), "a slot laid down");
+            assert_eq!(admits(2, Kind::Int), Some(true), "laid out on int");
+            assert_eq!(admits(2, Kind::Str), Some(false));
+            let reach = |slot: usize| oracle.attribute_reach(ClassIx::new(slot), "x");
+            assert_eq!(
+                reach(3),
+                reach(4),
+                "a replaced slot is the value replacing it"
+            );
+            assert_ne!(reach(3), Some(Reach::Anything));
+        });
+    });
+}
+
+#[test]
 fn a_direct_instance_is_read_from_the_class_itself() {
     // `direct_instance_of_kind` asks about instances of *this* class rather
     // than of the subtree below it, so a plain class is answerable where

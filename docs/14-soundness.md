@@ -213,8 +213,10 @@ The soundness is relative to a small, explicit trust base:
   walk admits a proxy -- a `wrapt.ObjectProxy`, a
   `unittest.mock.Mock(spec=C)`, any object whose `__class__` answers another
   class -- to the class it names, as pydantic, msgspec, typeguard and beartype
-  do. The relations read a class by its bases and the layout it lays down,
-  which a proxy does not share: two classes with distinct `__slots__` are
+  do. The relations read a class by its bases and the layout it lays down --
+  the one Python built, along `__base__` and from the slots it made with the
+  class, not a `__slots__` or an `mro()` code writes afterwards -- which a proxy
+  does not share: two classes with distinct `__slots__` are
   decided disjoint, and an instance of one that declares itself the other is
   admitted by both, so their meet is decided empty beside a value it admits. A
   proxy is outside every class relation. Reading the real type in the walk

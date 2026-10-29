@@ -1788,3 +1788,83 @@ def test_a_final_field_without_a_type_is_refused() -> None:
 
     with pytest.raises(NotImplementedError, match=r"typing\.Final"):
         Validator(Inferred)
+
+
+_Class = typing.TypeVar("_Class", bound=type)
+
+
+def _slots_after(cls: _Class) -> _Class:
+    """Name a class's annotations as its ``__slots__`` after it is made."""
+    cls.__slots__ = tuple(cls.__annotations__)  # ty: ignore[unresolved-attribute]
+    return cls
+
+
+@_slots_after
+class _LateSlots:
+    x: int
+
+
+class _OwnSlot:
+    __slots__ = ("y",)
+
+
+class _BothLayouts(_LateSlots, _OwnSlot):
+    pass
+
+
+class _LateAndInt(_LateSlots, int):
+    pass
+
+
+class _LeaveIntOut(type):
+    def mro(cls) -> list[type]:
+        return [cls, object]
+
+
+class _LaidOutOnInt(int, metaclass=_LeaveIntOut):
+    pass
+
+
+class _ReplacedSlot:
+    __slots__ = ("x",)
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        raise TypeError("final")
+
+
+_ReplacedSlot.x = "s"  # ty: ignore[invalid-assignment]
+
+
+@runtime_checkable
+class _HoldsS(Protocol):
+    x: Literal["s"]
+
+
+def test_a_layout_is_read_from_what_python_laid_down() -> None:
+    """A class's layout is what Python built: at creation, along ``__base__``.
+
+    ``__slots__`` assigned after the class is made lays nothing down, so the
+    class meets a slotted one and an ``int``; a slot an assignment replaced
+    holds the class's value for every instance; and a metaclass's ``mro()``
+    leaving ``int`` out of the order leaves every instance laid out as one.
+    PyPy reads ``__new__`` and the subtype test off that order, and builds no
+    instance of such a class at all, which is below ``int`` as well.
+    """
+    late = instance_of(_LateSlots)
+    assert late.is_valid(_BothLayouts())
+    assert instance_of(_OwnSlot).is_valid(_BothLayouts())
+    assert late.relation_to(complement(instance_of(_OwnSlot))) != "subset"
+    assert late.is_valid(_LateAndInt(3))
+    assert Validator(int).is_valid(_LateAndInt(3))
+    assert late.relation_to(complement(int)) != "subset"
+
+    if _CPYTHON:
+        assert Validator(int).is_valid(_LaidOutOnInt(5))
+    else:
+        with pytest.raises(TypeError):
+            _LaidOutOnInt(5)
+    assert instance_of(_LaidOutOnInt).relation_to(int) != "not_subset"
+
+    assert _ReplacedSlot().x == "s"
+    assert Validator(_HoldsS).is_valid(_ReplacedSlot())
+    assert instance_of(_ReplacedSlot).relation_to(_HoldsS) != "not_subset"
