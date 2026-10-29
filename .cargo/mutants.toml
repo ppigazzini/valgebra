@@ -17,10 +17,10 @@
 # mutant reads as unviable.
 #
 # The sweep's verdict is the *embedded interpreter's*, and `ci.yml` pins CPython
-# 3.12 for it: a mutant 3.14 reports as a survivor is one 3.12 kills, because the
-# two answer a C accessor differently. Point `PYO3_PYTHON` at a 3.12 before
-# running this by hand, or read a verdict that is about the interpreter --
-# `docs/dev/07-tooling-ci.md` carries the whole invocation.
+# 3.13 for it: a mutant one release reports as a survivor can be one another
+# kills, because releases answer a C accessor differently. Point `PYO3_PYTHON`
+# at a 3.13 before running this by hand, or read a verdict that is about the
+# interpreter -- `docs/dev/07-tooling-ci.md` carries the whole invocation.
 #
 # The files excluded below are reached only through pytest, which *this* harness
 # cannot observe: `cargo test` never loads the extension, so their mutants would
@@ -80,7 +80,7 @@ exclude_re = [
     # `scan_held_list` and `scan_held_dict` are the same case for the
     # free-threaded build: compiled under `#[cfg(Py_GIL_DISABLED)]` alone, where
     # each scan holds its container's critical section once rather than once
-    # per element, and so absent from the 3.12 the sweep links. Built against
+    # per element, and so absent from the 3.13 the sweep links. Built against
     # 3.14t, the interpreter tests kill each of their mutants -- a count read as
     # moved, a position or an entry count that steps backwards or stands still,
     # and a stop at the count taken never or at once -- and the 3.15t lane's
@@ -94,7 +94,7 @@ exclude_re = [
     "check/walk/record\\.rs:.*: (replace (scan_dict|scan_held_dict) -> .*|.* in scan_held_dict)$",
     # A function with a body for each side of 3.13 -- `type_has`, which asks
     # PyO3's `hasattr` from 3.13 and the builtin `hasattr` below it -- has one
-    # body compiled out of the 3.12 the binding sweep links, where every mutant
+    # body compiled out of the 3.13 the binding sweep links, where every mutant
     # of it builds and passes, which says nothing about a test. What `cargo
     # mutants` offers for either body is a `PyResult` no build accepts, so the
     # exclusion takes no mutant a build could judge out of the sweep. The
@@ -111,22 +111,22 @@ exclude_re = [
     "oracle\\.rs:.*: replace lays_down_its_own -> .*$",
     # `snapshot_of` is the same case one release lower: a body for the releases
     # before 3.12, which holds the collector off around the list's copy, and one
-    # for every other release, which copies. The sweep's 3.12 compiles the first
+    # for every other release, which copies. The sweep's 3.13 compiles the first
     # out, and what `cargo mutants` offers for either is a `PyResult` no build
     # accepts. `tests/test_mutation.py` holds the first on the 3.10 and 3.11
     # lanes with a collection that empties the list inside the copy.
     "check/walk/sequence\\.rs:.*: (replace snapshot_of -> .*|.* in snapshot_of)$",
     # `optional_attribute` is the same case one release over: a body for 3.12,
     # which asks a class through the builtin `getattr`, and one for every other
-    # release, which is PyO3's `getattr_opt`. The sweep's 3.12 compiles the
-    # second out, and what `cargo mutants` offers for either is a `PyResult` no
+    # release, which is PyO3's `getattr_opt`. The sweep's 3.13 compiles the
+    # first out, and what `cargo mutants` offers for either is a `PyResult` no
     # build accepts. An interpreter test holds the 3.12 body to `getattr_opt`
     # on every kind of object a build asks.
     "build/classes\\.rs:.*: (replace optional_attribute -> .*|.* in optional_attribute)$",
     # `own_annotations` is the same case for 3.14: compiled under `Py_3_14`
     # alone, where a class's own annotations are read through `type`'s
     # descriptor as `annotationlib.get_annotations` reads them first, and absent
-    # from the 3.12 the sweep links, which reads a class's namespace instead.
+    # from the 3.13 the sweep links, which reads a class's namespace instead.
     # What `cargo mutants` offers for it is a `PyResult` no build accepts. The
     # annotation corpus in `build/tests.rs` holds it to `get_type_hints` on
     # every release that compiles it.

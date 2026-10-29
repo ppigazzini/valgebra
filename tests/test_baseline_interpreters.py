@@ -79,7 +79,7 @@ def _notes(path: str) -> dict[str, str]:
 def test_the_baselines_and_the_workflow_are_read_at_all() -> None:
     # A scan that finds nothing makes every assertion below vacuous, which is
     # the failure mode a ledger has: it passes loudest when it is broken.
-    assert _pinned("nightly-mutants-walk") == "3.12"
+    assert _pinned("nightly-mutants-walk") == "3.13"
     assert _pinned("nightly-mutants") is None
     for path in BASELINES:
         assert len(_notes(path)) >= 5, f"{path} carries no accepted notes"
@@ -138,12 +138,12 @@ def test_a_sweep_starts_its_embedded_interpreter_from_the_venv() -> None:
     """A note about what the lock installs holds only where the sweep imports it.
 
     The walk baseline accepts the mutants of the arms for `typing_extensions`'
-    own objects, because on 3.12 that module's `Required`, `NotRequired`,
-    `Unpack`, `Any` and `Never` are `typing`'s own: the notes argue from 3.12
+    own objects, because on 3.13 that module's `Required`, `NotRequired`,
+    `Unpack`, `Any` and `Never` are `typing`'s own: the notes argue from 3.13
     *with the module installed from the lock*. The embedded interpreter takes
     its prefix from the first `python3` on `PATH`, and `PYO3_PYTHON` only
     configures the build. With the venv named by `PYO3_PYTHON` alone, uv's build
-    of 3.12 starts on its bare prefix, imports no `typing_extensions`, the
+    of 3.13 starts on its bare prefix, imports no `typing_extensions`, the
     corpus installs its stand-in, and all four mutants are caught: the nightly
     reads four entries stale while the notes are correct.
 

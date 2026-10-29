@@ -331,7 +331,7 @@ jobs:
           # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
           # is `.venv/bin/python` whichever build stands behind it, so a cache
           # saved on another release would link this lane against that one.
-          key: python-3.12
+          key: python-3.13
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: cargo-llvm-cov@0.9.1
@@ -340,7 +340,7 @@ jobs:
         # snapshot arm as unreached code rather than as a path with tests.
       - uses: $/.github/actions/setup-uv
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       # Binding coverage combines two drivers under one instrumentation
       # environment: the Python suite exercising the extension, and the
       # binding-internal Rust unit tests (interner, index remap, fast-path
@@ -365,7 +365,7 @@ jobs:
           export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
           # And start the embedded interpreter from the venv, as the sweeps do:
           # it takes its prefix from the first `python3` on `PATH`, which
-          # `setup-uv` makes uv's bare 3.12, and `PYO3_PYTHON` configures the
+          # `setup-uv` makes uv's bare 3.13, and `PYO3_PYTHON` configures the
           # build alone. From the bare prefix the corpus would import no
           # `typing_extensions` and install its stand-in, and the figure would
           # measure the stand-in's arms where the Python suite above reads the
@@ -401,7 +401,7 @@ jobs:
           # floor sits about a point under its figure, which is the tolerance a
           # figure carries between machines and no more; the region floor sits
           # nearer, because the arms for `typing_extensions`' own objects go
-          # unreached on 3.12 with the module installed, as the walk baseline's
+          # unreached on 3.13 with the module installed, as the walk baseline's
           # notes say of their mutants.
           # `tests/test_coverage_scope.py` holds this scope to the corpus files
           # the tree has, in both directions.
@@ -1510,7 +1510,7 @@ jobs:
           # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
           # is `.venv/bin/python` whichever build stands behind it, so a cache
           # saved on another release would link this lane against that one.
-          key: python-3.12
+          key: python-3.13
       # Pinned for the reason the nightly sweep gives: the mutant set is compared
       # against a committed baseline.
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
@@ -1521,7 +1521,7 @@ jobs:
         # 3.14, so the same mutant is killable on one and unviable on the next.
       - uses: $/.github/actions/setup-uv
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       - name: List the Rust files the diff touches
         id: diff
         # Both values reach the script through the environment rather than
@@ -2347,7 +2347,7 @@ jobs:
           # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
           # is `.venv/bin/python` whichever build stands behind it, so a cache
           # saved on another release would link this lane against that one.
-          key: python-3.12
+          key: python-3.13
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: cargo-mutants@27.1.0
@@ -2362,7 +2362,7 @@ jobs:
         # the interpreter the extension is built against.
         uses: $/.github/actions/setup-uv
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       # The recursion-depth case leaves the SWEEP -- not the test lane, where it
       # runs on every push. It drives a 130-level chain through a two-branch
       # union, so any mutation that removes a short-circuit turns it exponential
@@ -2502,16 +2502,16 @@ jobs:
           # Moved with the lane's interpreter, as `bench` argues: `PYO3_PYTHON`
           # is `.venv/bin/python` whichever build stands behind it, so a cache
           # saved on another release would link this lane against that one.
-          key: python-3.12
+          key: python-3.13
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: cargo-mutants@27.1.0
       # The interpreter the verdict is about, pinned as the walk sweep pins it:
-      # a mutant 3.14 reports as a survivor is one 3.12 kills, because the two
-      # answer a C accessor differently.
+      # a mutant one release reports as a survivor can be one another kills,
+      # because releases answer a C accessor differently.
       - uses: $/.github/actions/setup-uv
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       - name: Name where the sweep's environments live, and warm the cache
         # Outside the checkout: a sweep runs from a *copy* of the tree, so a
         # path inside one names a different directory per mutant and a `.venv`
