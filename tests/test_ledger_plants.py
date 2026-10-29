@@ -4931,19 +4931,20 @@ PLANTS = (
         trips=("test_a_proof_is_not_refuted_by_the_corpus",),
     ),
     Plant(
-        # An incompleteness filed as a necessity: a decline the corpus refutes,
-        # moved to the table of the ones nothing decides.
+        # A necessity filed as an incompleteness: a decline nothing decides,
+        # moved to the table of the ones a corpus value refutes.
         "tests/test_relation_ledger.py",
         ("tests/test_relation_ledger.py",),
         lambda tree: _edits(
             tree,
             "tests/test_relation_ledger.py",
-            ('    ("Instance", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,\n', ""),
+            ('    ("Instance", "Complement"): THE_CLASS_ORDER_IS_OPEN,\n', ""),
             (
-                '    ("AttrRecord", "Complement"): THE_CLASS_ORDER_IS_OPEN,\n',
+                "DECLINED_THOUGH_A_VALUE_DECIDES: dict[tuple[str, str], str] = {}\n",
                 (
-                    '    ("AttrRecord", "Complement"): THE_CLASS_ORDER_IS_OPEN,\n'
-                    '    ("Instance", "Ref"): THE_CLASS_ORDER_IS_OPEN,\n'
+                    "DECLINED_THOUGH_A_VALUE_DECIDES: dict[tuple[str, str], str] = {\n"
+                    '    ("Instance", "Complement"): THE_CLASS_ORDER_IS_OPEN,\n'
+                    "}\n"
                 ),
             ),
         ),

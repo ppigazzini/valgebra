@@ -50,10 +50,19 @@ answer of its own, or a repair to a change not yet released.
 - feat: a finite set of constants misses a value of every kind with infinitely many
 - feat: None's kind is the literal of its one value
 - feat: a sentinel compares by identity
+- feat: a set reading's difference refutes at a kind no cut reaches
 
 -->
 
 ### Added
+
+- **A set reading's difference refutes at a kind no cut reaches.** A
+  recursive reference read by the set representation is unfolded once and
+  cut beneath the container that holds it, which changes that container's
+  values alone, so a value the difference holds at another kind refutes. `str`
+  is `not_subset` of `recursive(lambda t: union(Annotated[str, Regex("a")],
+  [t]))`, and so is `int` of the same fixpoint over `Ge(0)`, `MultipleOf(2)` or
+  a dict, record or tuple of `t`, where each was `undecided`.
 
 - **A sentinel compares by identity.** Python 3.15's `sentinel` defines an
   `__eq__` that answers as identity does, so two sentinels are two values:

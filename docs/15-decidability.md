@@ -475,7 +475,10 @@ answers `"undecided"`.
   many unfoldings — while the *comparison* assumes its goal and is coinductive;
   the two agree because a value is finite. A fixpoint is decided below its own
   unfolding, so a `recursive` schema and the body written out around it relate
-  in both directions.
+  in both directions. A value outside a fixpoint is named where its kind is
+  none of the containers its reference sits beneath: `str` is not below
+  `recursive(lambda t: union(Annotated[str, Regex("a")], [t]))`, which `"b"`
+  is outside.
 - **A meet with a recursive reference.** A reference denotes its definition,
   so a meet with one is the definition met with the rest, and a definition that
   is a union is the union of its branches each met with the rest. The meet of

@@ -6223,20 +6223,24 @@ fn a_complement_names_a_witness_from_the_kinds_its_inner_schema_is_not() {
 }
 
 // THEORY: a-cut-reference-proves, the-decision-has-three-answers
-/// A difference over a cut reference proves an inclusion and refutes nothing.
+/// A difference over a cut reference proves an inclusion, and refutes only
+/// at a kind no cut reaches.
 ///
 /// The descriptor holds no cycle, so a recursive schema reaches it unfolded
 /// once with a lattice bound where the reference was -- the top on the subject's
 /// side, the bottom on the supertype's. That widens the difference the reading
 /// takes: `self⁺ ∧ ¬other⁻` contains `self ∧ ¬other` and is not contained by it.
 /// An empty widening still proves the inclusion, and an inhabited one names a
-/// value of the wider set rather than of the real one, so it decides nothing.
+/// value of the wider set rather than of the real one, so it decides nothing
+/// at a kind a cut reaches.
 ///
 /// The pair below is that shape: every list of `a`-strings is a value of the
 /// fixpoint, and the cut leaves the supertype's own element empty, so the
-/// widened difference holds the very lists the inclusion is about.
+/// widened difference holds the very lists the inclusion is about. A string
+/// the pattern refuses is outside it at the strings, which the cut beneath the
+/// lists leaves as they are, and that refutes.
 #[test]
-fn an_inhabited_difference_over_a_cut_reference_refutes_nothing() {
+fn an_inhabited_difference_over_a_cut_reference_refutes_only_past_the_cut() {
     let words = |pattern: &str| Schema::Refine {
         base: Arc::new(Schema::Str),
         constraints: vec![Constraint::Regex(pattern.into())].into(),
@@ -6253,6 +6257,16 @@ fn an_inhabited_difference_over_a_cut_reference_refutes_nothing() {
         lists.subtype_relation_under(&fixpoint, &NoLeafRelations, &defs),
         Relation::Fails,
         "no list of a-strings lies outside the fixpoint"
+    );
+    assert_eq!(
+        lists.descriptor_contained_in(&fixpoint, &NoLeafRelations, &defs),
+        Relation::Unknown,
+        "the widened difference holds lists, which the cut reaches"
+    );
+    assert_eq!(
+        Schema::Str.descriptor_contained_in(&fixpoint, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "\"b\" is a string outside the fixpoint, and no cut reaches the strings"
     );
 
     // Definitions in scope are not by themselves a cut. Neither side below
@@ -6272,6 +6286,141 @@ fn an_inhabited_difference_over_a_cut_reference_refutes_nothing() {
         ),
         Relation::Fails,
         "the empty list is a list of ints and is shorter than two"
+    );
+}
+
+// THEORY: a-cut-reference-proves
+/// A cut reaches the kind of the constructor nearest the root above it, and
+/// every part of the universe where no constructor is: a reference cut at the
+/// root of an unfolding, or beneath a refinement, a complement or an attribute
+/// record, none of which builds values of one kind.
+#[test]
+fn a_cut_reaches_the_kind_of_the_constructor_above_it() {
+    use crate::descr::lower::parts_a_cut_reaches;
+    use crate::descr::{EVERY_PART, part};
+    let at = |index| Schema::Ref(DefIx::new(index));
+    let missing = at(9);
+    let defs = [
+        Schema::union([Schema::Int, Schema::list(SeqShape::homogeneous(at(0)))]),
+        Schema::union([Schema::NoneType, at(0)]),
+    ];
+    let reach = |schema: &Schema| parts_a_cut_reaches(schema, &defs);
+    let collection = |container, element: Schema| Schema::Coll {
+        container,
+        element: Arc::new(element),
+    };
+    assert_eq!(reach(&Schema::Int), 0, "no reference, no cut");
+    assert_eq!(reach(&at(0)), part(Kind::List));
+    assert_eq!(
+        reach(&Schema::SelfRef(0)),
+        EVERY_PART,
+        "a build marker is cut"
+    );
+    assert_eq!(
+        reach(&Schema::list(SeqShape::homogeneous(Schema::SelfRef(0)))),
+        part(Kind::List)
+    );
+    assert_eq!(reach(&at(1)), EVERY_PART, "a definition named at the root");
+    // A definition naming itself under no constructor unfolds once and is
+    // cut, and a definition naming a wide union of itself stays inside the
+    // walk's guard.
+    let wide = Schema::union((0..100_usize).map(|least| Schema::Refine {
+        base: Arc::new(Schema::list(SeqShape::homogeneous(at(0)))),
+        constraints: vec![Constraint::MinLen(least)].into(),
+    }));
+    assert_eq!(
+        reach(&wide),
+        part(Kind::List),
+        "a wide schema is walked whole"
+    );
+    let past_the_guard = Schema::union((0..40_000_usize).map(|least| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::MinLen(least)].into(),
+    }));
+    // `CUT_WALK` is the figure the walk reads up to.
+    assert_eq!(reach(&past_the_guard), EVERY_PART, "past the walk's guard");
+    assert_eq!(
+        reach(&Schema::tuple(SeqShape::homogeneous(at(1)))),
+        part(Kind::Tuple),
+        "the constructor nearest the root names the part"
+    );
+    assert_eq!(
+        reach(&collection(CollKind::Set, missing.clone())),
+        part(Kind::Set)
+    );
+    assert_eq!(
+        reach(&collection(CollKind::FrozenSet, missing.clone())),
+        part(Kind::FrozenSet)
+    );
+    assert_eq!(
+        reach(&closed(vec![field("a", missing.clone(), true)])),
+        part(Kind::Dict)
+    );
+    assert_eq!(
+        reach(&Schema::Complement(Arc::new(at(0)))),
+        part(Kind::List)
+    );
+    assert_eq!(
+        reach(&Schema::AttrRecord {
+            fields: vec![attribute("a", missing.clone())].into(),
+        }),
+        EVERY_PART
+    );
+    assert_eq!(
+        reach(&Schema::Refine {
+            base: Arc::new(missing),
+            constraints: Vec::new().into(),
+        }),
+        EVERY_PART
+    );
+}
+
+// THEORY: a-cut-reference-proves
+/// A value of no kind refutes a pair past a cut as a value of a kind does: a
+/// direct instance of a plain class is outside a fixpoint holding every kind
+/// whole but the lists its cut sits under.
+#[test]
+fn a_value_of_no_kind_refutes_past_a_cut() {
+    struct Plain;
+    impl Constants for Plain {
+        fn class(&self, _index: ClassIx) -> Option<Class> {
+            Some(Class::plain(0))
+        }
+    }
+    impl LeafRelations for Plain {
+        fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
+            None
+        }
+        fn atom_denotes_a_set(&self, _atom: &Schema) -> Option<bool> {
+            Some(true)
+        }
+    }
+    let any = || Arc::new(Schema::ANYTHING);
+    let defs = [Schema::union([
+        Schema::NoneType,
+        Schema::Int,
+        Schema::Float,
+        Schema::Str,
+        Schema::Bytes,
+        Schema::tuple(SeqShape::homogeneous(Schema::ANYTHING)),
+        Schema::Coll {
+            container: CollKind::Set,
+            element: any(),
+        },
+        Schema::Coll {
+            container: CollKind::FrozenSet,
+            element: any(),
+        },
+        Schema::mapping(MapClause {
+            key: Schema::ANYTHING,
+            value: Schema::ANYTHING,
+        }),
+        Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+    ])];
+    let instance = Schema::Instance(ClassIx::new(0));
+    assert_eq!(
+        instance.descriptor_contained_in(&Schema::Ref(DefIx::new(0)), &Plain, &defs),
+        Relation::Fails
     );
 }
 
@@ -8775,7 +8924,8 @@ fn a_class_is_read_for_its_kinds_by_the_per_kind_readings_alone() {
 /// `str` against a fixpoint of lists beside a pattern is the pattern's
 /// question once the fixpoint, which shares no value with `str`, is dropped,
 /// and the set representation refutes it at a string the pattern refuses,
-/// where the whole pair holds a reference and could only be proved. A
+/// where the whole pair holds a reference cut at the root of its unfolding --
+/// a definition naming another beside `None` -- and could only be proved. A
 /// subject below one branch of forty is proved by that branch where nothing
 /// narrows.
 ///
@@ -8818,10 +8968,10 @@ fn a_union_is_decided_a_part_at_a_time() {
     );
 
     let nested = Schema::Ref(DefIx::new(0));
-    let defs = [Schema::union([
-        Schema::NoneType,
+    let defs = [
+        Schema::union([Schema::NoneType, Schema::Ref(DefIx::new(1))]),
         Schema::list(SeqShape::homogeneous(nested.clone())),
-    ])];
+    ];
     let beside = Schema::Union(vec![pattern("a"), nested].into());
     assert_eq!(
         Schema::Str.descriptor_contained_in(&beside, &NoLeafRelations, &defs),

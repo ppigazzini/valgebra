@@ -164,13 +164,6 @@ CORPUS: list[Any] = [
 #: bottom, which is what keeps the difference sound. The difference then
 #: contains the refuting value and is not proved to, so the refutation the
 #: corpus has is not one the procedure can reach.
-A_FIXPOINT_IS_LOWERED_ONCE = (
-    "the supertype of an inclusion appears under a complement, and a reference "
-    "there is lowered to a bound rather than to a set, so the difference holds "
-    "the refuting value without being proved inhabited -- the unfolding entry "
-    "under `docs/15-decidability.md`'s conservative list"
-)
-
 #: Two classes neither of which derives from the other may still share an
 #: instance, through a class deriving from both -- which is a class that may be
 #: written after the question is asked. The kind stands as the second class
@@ -188,9 +181,7 @@ THE_CLASS_ORDER_IS_OPEN = (
 #: an incompleteness rather than a necessity, and the list may only shrink --
 #: a rule that begins refuting one of these moves it out of the table and fails
 #: here until somebody does.
-DECLINED_THOUGH_A_VALUE_DECIDES: dict[tuple[str, str], str] = {
-    ("Instance", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,
-}
+DECLINED_THOUGH_A_VALUE_DECIDES: dict[tuple[str, str], str] = {}
 
 
 #: The declines nothing decides: the open world, where the answer is not a gap

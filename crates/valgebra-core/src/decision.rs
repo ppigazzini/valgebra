@@ -20,7 +20,9 @@ mod records;
 use std::cell::{Cell, OnceCell};
 
 use crate::descr::budget;
-use crate::descr::lower::{Constants, WORK, an_empty_reading_stands, lower_unfolded, read_widened};
+use crate::descr::lower::{
+    Constants, WORK, an_empty_reading_stands, lower_unfolded, parts_a_cut_reaches, read_widened,
+};
 use crate::ir::{Constraint, DefIx, Polarity, Schema, SeqShape};
 use crate::kind::{Region, Regions};
 use crate::unordered_pairs;
@@ -389,7 +391,11 @@ impl Schema {
         // the widened reading need be no value of `self ∧ ¬other` at all, and
         // the inhabited answer refutes nothing. Where a reference was cut, as a
         // finite approximation cuts a recursive type [AC93, §3.4], an empty
-        // difference proves the inclusion and an inhabited one is a decline.
+        // difference proves the inclusion and an inhabited one is a decline,
+        // but at a kind no cut reaches: a cut beneath a constructor changes that
+        // constructor's kind of values alone, the difference being read a kind
+        // at a time [FCB08, (4)], so a value it holds at another kind is a
+        // value of the real difference (`parts_a_cut_reaches`).
         //
         // A side this reading cannot lower, and a difference it cannot build,
         // are declines rather than refutations: nothing about the inclusion is
@@ -441,7 +447,13 @@ impl Schema {
                 .as_ref()
         };
         let negate = side == Polarity::Narrow;
-        let unfolded = !defs.is_empty() && (self.has_reference() || other.has_reference());
+        // The parts of the universe a cut reaches, on either side: past them
+        // the difference is the real one, read a kind at a time. A side with no
+        // reference is cut nowhere, so it reaches none.
+        let cut = OnceCell::new();
+        let cut = || {
+            *cut.get_or_init(|| parts_a_cut_reaches(self, defs) | parts_a_cut_reaches(read, defs))
+        };
         read_widened(
             self,
             defs,
@@ -464,7 +476,7 @@ impl Schema {
                     return stands.then_some(Relation::Holds);
                 }
                 let theirs = theirs()?;
-                let emptiness = budget::under(WORK, || {
+                let (emptiness, refuted) = budget::under(WORK, || {
                     let complemented;
                     let outside = if negate {
                         complemented = theirs.complement();
@@ -472,8 +484,18 @@ impl Schema {
                     } else {
                         theirs
                     };
-                    mine.intersect(outside)
-                        .map(|difference| difference.emptiness())
+                    mine.intersect(outside).map(|difference| {
+                        let emptiness = difference.emptiness();
+                        // With no definitions nothing was unfolded: a
+                        // reference none resolves is a set no lowering reads,
+                        // so a difference built here holds none, and the one
+                        // comparison keeps the cut's walk off every pair with
+                        // no fixpoint.
+                        let refuted = kept.is_none()
+                            && emptiness == Verdict::Inhabited
+                            && (defs.is_empty() || difference.holds_a_value_outside(cut()));
+                        (emptiness, refuted)
+                    })
                 })?;
                 let stands = || match (kept, negate) {
                     (None, true) => an_empty_reading_stands(&[self], &[read], defs, pool),
@@ -491,10 +513,10 @@ impl Schema {
                 };
                 let relation = if emptiness == Verdict::Empty && !stands() {
                     Relation::Unknown
-                } else if kept.is_some() || unfolded {
-                    Relation::proven(emptiness == Verdict::Empty)
+                } else if refuted {
+                    Relation::Fails
                 } else {
-                    Relation::of_difference(emptiness)
+                    Relation::proven(emptiness == Verdict::Empty)
                 };
                 (relation != Relation::Unknown).then_some(relation)
             },

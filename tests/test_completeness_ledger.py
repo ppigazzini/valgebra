@@ -1966,9 +1966,9 @@ _TRANSLATED: list[object] = [
     ),
     # The members of a meet are ordered by the slots their constants were pooled
     # in, and a meet unfolds the reference held by its first union, so the same
-    # meet built two ways is read through the reference one way only. Taking the
-    # union holding a reference wherever it sits decides both, and starves the
-    # budget of meets the case split builds, so it is not taken.
+    # meet built two ways is read through the reference one way only. The way
+    # the rules do not read is the set reading's, whose difference holds `True`
+    # at the booleans, which no cut reaches.
     pytest.param(
         "refutes",
         intersection(
@@ -1976,10 +1976,6 @@ _TRANSLATED: list[object] = [
         ),
         nothing,
         id="json:true-or-record&literals-or-json-is-inhabited",
-        marks=_missed(
-            "a meet distributes its first union, whose place the pool's order of"
-            " its constants decides"
-        ),
     ),
     pytest.param(
         "refutes",

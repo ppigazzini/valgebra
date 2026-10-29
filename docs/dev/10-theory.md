@@ -777,23 +777,27 @@ IMPLEMENTED-BY: decision.rs::Schema::equivalence_relation
 
 HELD-BY: subtyping_is_sound_over_the_structural_fragment, a_refutation_is_a_value, a_map_relation_stands_on_a_dict, a_proof_over_a_fixpoint_has_no_witness_against_it, test_no_proof_is_refuted_by_a_value, test_a_claimed_refutation_stands_on_a_value
 
-**A cut reference proves and never refutes.** The descriptor decides `a <= b` by
+**A cut reference proves, and refutes past the kinds it reaches.** The
+descriptor decides `a <= b` by
 lowering the difference, `a ∧ ¬b = ∅` [FCB08, §4.1], and a recursive reference
 is cut to a bound: the top
 where the schema is used positively, the bottom under a complement, which is the
 finite approximation of a recursive type at the depth of the cut [AC93, §3.4].
 The widened difference contains the real one, so its emptiness proves the
-inclusion and its inhabitance proves nothing; a refutation comes only from a
-pair the lowering did not widen. A conjunct at the top that the lowering
+inclusion and its inhabitance proves nothing at a kind a cut reaches. A cut
+beneath a constructor reaches that constructor's kind alone, the difference
+being read a kind at a time [FCB08, (4)], so a value it holds at any other
+kind is a value of the real difference and refutes; a cut beneath no
+constructor reaches every kind. A conjunct at the top that the lowering
 refuses -- a meet's member, a refinement's constraint -- is left out the same
 way, a meet being below each of its members [FCB08, Def. 4.1], so emptiness is
 monotone in a meet's members. **[LOAD-BEARING: a-cut-reference-proves]**
 
 SOURCE: §13.1 "**The polarity cut is one-directional.**"
 
-IMPLEMENTED-BY: decision.rs::Schema::descriptor_contained_in, ir/transform.rs::Polarity::flipped, ir/transform.rs::Schema::unfolded, descr/lower.rs::read_widened
+IMPLEMENTED-BY: decision.rs::Schema::descriptor_contained_in, ir/transform.rs::Polarity::flipped, ir/transform.rs::Schema::unfolded, descr/lower.rs::read_widened, descr/lower.rs::parts_a_cut_reaches, descr/mod.rs::Descr::holds_a_value_outside
 
-HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding, a_meet_is_proved_empty_beside_a_conjunct_the_lowering_refuses, a_reference_above_is_unfolded_for_the_sets, a_meet_stays_empty_beside_a_member_no_lowering_reads, test_a_meet_stays_empty_beside_a_member_no_lowering_reads, test_a_meet_of_patterns_is_empty_beside_a_predicate, a_member_past_the_depth_is_left_out_whatever_it_holds, a_member_whose_key_is_its_deepest_node_is_kept, a_thinned_reading_that_can_only_be_inhabited_is_built_where_it_answers, a_thinned_reading_the_rules_find_a_value_of_is_not_built, a_meet_holding_a_deep_scalar_is_read_first_without_it, a_deep_scalar_is_built_whole_where_the_caller_can_read_it
+HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_only_past_the_cut, a_cut_reaches_the_kind_of_the_constructor_above_it, a_value_of_no_kind_refutes_past_a_cut, test_a_value_of_a_kind_no_cut_reaches_refutes_a_fixpoint, a_cut_reference_widens_the_subject_and_narrows_the_other, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding, a_meet_is_proved_empty_beside_a_conjunct_the_lowering_refuses, a_reference_above_is_unfolded_for_the_sets, a_meet_stays_empty_beside_a_member_no_lowering_reads, test_a_meet_stays_empty_beside_a_member_no_lowering_reads, test_a_meet_of_patterns_is_empty_beside_a_predicate, a_member_past_the_depth_is_left_out_whatever_it_holds, a_member_whose_key_is_its_deepest_node_is_kept, a_thinned_reading_that_can_only_be_inhabited_is_built_where_it_answers, a_thinned_reading_the_rules_find_a_value_of_is_not_built, a_meet_holding_a_deep_scalar_is_read_first_without_it, a_deep_scalar_is_built_whole_where_the_caller_can_read_it
 
 **Kinds decompose emptiness.** Positives of two kinds that share no value make a
 clause empty outright [FCB08, (5)] -- every pair but `bool` and `int`, a
@@ -937,7 +941,7 @@ stands on a value, and a decline is reported as itself rather than as either.
 
 SOURCE: §14.1 "The decision's return type destroys the contract's only observable"
 
-HELD-BY: test_the_three_answers_agree_with_the_two, the_relation_folds_are_kleenes_strong_connectives, the_verdict_folds_are_the_relation_folds_read_as_inhabitation, an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_negated_set_the_allowance_cannot_expand_declines, a_union_narrowed_to_one_branch_refutes_where_that_branch_does, test_every_predicate_is_the_proof_answer_of_a_relation
+HELD-BY: test_the_three_answers_agree_with_the_two, the_relation_folds_are_kleenes_strong_connectives, the_verdict_folds_are_the_relation_folds_read_as_inhabitation, an_inhabited_difference_over_a_cut_reference_refutes_only_past_the_cut, a_negated_set_the_allowance_cannot_expand_declines, a_union_narrowed_to_one_branch_refutes_where_that_branch_does, test_every_predicate_is_the_proof_answer_of_a_relation
 
 **The budget declines; it never refutes.** Exhausting the work budget answers
 neither, on every path a subtyping query can take: through a product, through

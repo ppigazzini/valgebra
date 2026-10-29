@@ -18,7 +18,7 @@ use super::budget;
 use super::classes::Class;
 use super::floats::FloatSet;
 use super::maps::{KEY_KINDS, Label};
-use super::{BoolSet, Descr, integers::IntSet};
+use super::{BoolSet, Descr, EVERY_PART, Parts, integers::IntSet, part};
 use crate::ir::{
     ClassIx, CollKind, ConstIx, Constraint, Field, MapClause, OperandIx, Polarity, Schema, SeqKind,
     SeqShape,
@@ -167,6 +167,83 @@ pub(crate) fn lower_unfolded(
         return lower(schema, pool);
     }
     lower(&schema.unfolded(definitions, UNFOLDS, polarity), pool)
+}
+
+/// The parts of the universe whose values the unfolding of `schema` cuts a
+/// reference beneath: for each cut, the kind of the constructor nearest the
+/// root it sits under, or every part for a cut beneath none.
+///
+/// A constructor builds values of its one kind, and a union, a meet and a
+/// complement are read a kind at a time [FCB08, (4)], so a cut beneath a
+/// `list[...]` widens or narrows the lists and leaves every other kind's values
+/// as the schema denotes them: a finite approximation of a recursive type is
+/// exact up to the depth it cuts at [AC93, §3.4], and the depth starts at the
+/// constructor. A refinement, a meet's member and an attribute record are no
+/// constructor of a kind, the last holding values of every kind.
+///
+/// The unfolding is [`lower_unfolded`]'s and [`read_widened`]'s, [`UNFOLDS`]
+/// deep, and a reference to a definition `definitions` does not hold is cut
+/// where it stands, as theirs is. The walk reads at most [`CUT_WALK`] nodes,
+/// past which it answers every part, which refutes nothing.
+pub(crate) fn parts_a_cut_reaches(schema: &Schema, definitions: &[Schema]) -> Parts {
+    let mut reached = 0;
+    let mut left = CUT_WALK;
+    let mut pending = vec![(schema, None, UNFOLDS)];
+    while let Some((node, under, unfolds)) = pending.pop() {
+        let Some(rest) = left.checked_sub(1) else {
+            return EVERY_PART;
+        };
+        left = rest;
+        let cut = || under.map_or(EVERY_PART, part);
+        match node {
+            Schema::Ref(index) => match definitions.get(index.get()) {
+                Some(body) if unfolds > 0 => pending.push((body, under, unfolds - 1)),
+                _ => reached |= cut(),
+            },
+            Schema::SelfRef(_) => reached |= cut(),
+            _ => {
+                let below = under.or_else(|| constructed_kind(node));
+                let mut children = Vec::new();
+                node.push_children(&mut children);
+                pending.extend(children.into_iter().map(|child| (child, below, unfolds)));
+            }
+        }
+    }
+    reached
+}
+
+/// The nodes [`parts_a_cut_reaches`] reads before it answers every part.
+///
+/// **This bound is cost.** The walk unfolds each reference once and so ends
+/// without it; what it caps is the walk of a schema far past any a lowering
+/// reads -- one the set representation lowers whole is read in [`BUDGET`]
+/// nodes of the lowering's own count, which reads fewer children than this
+/// walk does, and is far inside the figure.
+const CUT_WALK: u32 = 1 << 16;
+
+/// The kind of the values a constructor builds, or `None` for a node that
+/// builds none of its own.
+fn constructed_kind(schema: &Schema) -> Option<Kind> {
+    Some(match schema {
+        Schema::Seq {
+            container: SeqKind::List,
+            ..
+        } => Kind::List,
+        Schema::Seq {
+            container: SeqKind::Tuple,
+            ..
+        } => Kind::Tuple,
+        Schema::Coll {
+            container: CollKind::Set,
+            ..
+        } => Kind::Set,
+        Schema::Coll {
+            container: CollKind::FrozenSet,
+            ..
+        } => Kind::FrozenSet,
+        Schema::KeyedMap { .. } => Kind::Dict,
+        _ => return None,
+    })
 }
 
 /// [`lower_unfolded`] on the widened side, decided by the caller one reading
