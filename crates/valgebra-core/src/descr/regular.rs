@@ -1229,11 +1229,15 @@ impl RegularSet {
         // holds no surrogate -- as the kind's universe does and the walk's
         // answer says.
         let utf8 = alphabet == Alphabet::Text;
-        // The pattern on its own first. One that does not parse alone can parse
-        // wrapped -- `a)|(b` closes the group and opens one the wrapper closes
-        // -- and would then be a language nobody wrote.
-        let parsed = syntax::parse_with(pattern, &syntax::Config::new().utf8(utf8)).ok()?;
+        // Found before it is parsed, since a lowering asks for one pattern again
+        // for every difference and a parse is linear in the text. The memo holds
+        // nothing else under a text that opens on `(?:` and closes on `)`, so
+        // what it finds there this function built from the same pattern.
         RegularSet::memoized(&format!("(?:{pattern})"), utf8, || {
+            // The pattern on its own first. One that does not parse alone can
+            // parse wrapped -- `a)|(b` closes the group and opens one the
+            // wrapper closes -- and would then be a language nobody wrote.
+            let parsed = syntax::parse_with(pattern, &syntax::Config::new().utf8(utf8)).ok()?;
             if utf8 && let Some((between, ends)) = word_ends(&parsed) {
                 let between = RegularSet::determinize(&between)?;
                 return ends.into_iter().try_fold(between, |set, end| {

@@ -287,9 +287,9 @@ it meets refuses.
 `descr/regular.rs`). A lowering reads a schema's patterns and length bounds again
 for every difference it is asked, and a build is a function of the text and the
 alphabet alone, so a thread keeps each language it built under the text it was
-built from, a refusal among them, and hands it back for that text again. The
-memo is bounded by the bytes it holds, `COMPILED_BYTES`, and starts over past
-it.
+built from, a refusal among them, and hands it back for that text again,
+found before the text is parsed. The memo is bounded by the bytes it holds,
+`COMPILED_BYTES`, and starts over past it.
 
 **A map's key lands in the parts of the key partition it holds whole**
 (`key_cover` in `descr/lower.rs`): a kind, a `tuple` or `frozenset` of
