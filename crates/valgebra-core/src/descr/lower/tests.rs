@@ -3142,22 +3142,23 @@ proptest! {
     /// at all: the same set, or the same refusal for its nodes. The walk
     /// spends the build's nodes in the build's order, so a schema whose deep
     /// node lies past the node bound clears it, as the build refuses it for
-    /// nodes first. Both builds run with no work allowance, so neither
-    /// refuses for a reason the walk does not read.
+    /// nodes first. Both builds run under one work allowance, a law's
+    /// ([`budget::law`]): a schema within the depth is read by the same steps
+    /// with the depth bound or without it, so the two spend alike and a
+    /// refusal for work is the other's refusal too. Unheld, a mutation that
+    /// makes a passing case's build dear runs it past a sweep's timeout.
     #[test]
     fn the_depth_read_off_a_schema_is_the_build_s(schema in nested_schema()) {
         let pool = empty_pool();
-        let built =
-            budget::under(u64::MAX, || descend(&schema, &pool, &Room::new(BUDGET), DEPTH));
+        let built = budget::under(WORK, || descend(&schema, &pool, &Room::new(BUDGET), DEPTH));
         if nests_past_the_depth(&schema, Bounds::DEFAULT) {
             prop_assert!(built.is_none(), "{schema:?} is read past the depth and built");
         } else {
-            let unbounded = Bounds {
+            let past_any_depth = Bounds {
                 depth: u32::MAX,
-                work: u64::MAX,
                 ..Bounds::DEFAULT
             };
-            prop_assert_eq!(built, lower_within(unbounded, &schema, &pool), "{:?}", schema);
+            prop_assert_eq!(built, lower_within(past_any_depth, &schema, &pool), "{:?}", schema);
         }
     }
 }
