@@ -484,7 +484,15 @@ narrows the integers.
 `typing` caches `Annotated` by equality, and `MultipleOf(2 + 0j)` equals
 `MultipleOf(2)` as `MultipleOf(Decimal("0.5"))` equals `MultipleOf(0.5)`. In a
 process that built the complex or `Decimal` spelling first, the real one arrives
-as it and is rejected with it; the message says so.
+as it and is rejected with it; the message says so. A whole float step equals
+the integer one too, and is not the same set over the integers: `%` reads an
+`int` against a `float` as the float nearest it, so `MultipleOf(2.0)` admits
+`2**53 + 1`, whose nearest float is `2**53`, and `MultipleOf(2)` does not. In a
+process that wrote `MultipleOf(2.0)` first, `Annotated[int, MultipleOf(2)]` is
+that marker and admits `2**53 + 1` as well, with nothing to say so, since both
+are valid. Write a step over the integers as an `int`. The step is read as the
+number it is, not by its value: reading `2.0` as `2` would refuse a value the
+marker's own `%` admits.
 
 **A float step is exact.** `value % n == 0` is Python's own `%`, with no
 tolerance added, and a binary float holds no `0.1`: `0.3 % 0.1` is
