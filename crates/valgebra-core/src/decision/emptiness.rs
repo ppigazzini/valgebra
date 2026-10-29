@@ -592,7 +592,8 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
         // and on at most `RESPELLING` of the query's steps: the narrowing has
         // spent its share already, and a distribution that declines on all the
         // rest leaves the readings after it none to decide with.
-        Verdict::Unknown => a_meet_read_by_its_constants(members, cx.oracle, cx.defs)
+        Verdict::Unknown => the_empty_sequence_in_every_member(members)
+            .or_else(|| a_meet_read_by_its_constants(members, cx.oracle, cx.defs))
             .or_else(|| match narrowed_by_its_members(members, cx) {
                 Some(narrowed) => narrowed.or_else(|| {
                     let budget = cx.budget;
@@ -604,6 +605,32 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
         settled => settled,
     };
     (verdict, region)
+}
+
+/// `Inhabited` where every member of the meet is a sequence of one kind that
+/// holds the empty sequence, which is then a value of every member;
+/// `Unknown` otherwise.
+///
+/// A sequence shape with no prefix holds the empty sequence whatever its
+/// element admits, and a refinement of one keeps it under length bounds that
+/// admit zero ([`Schema::admits_the_empty_sequence`]), so the meet holds it with
+/// no element read: `[] & list[t]` has the empty list as a value where `t` is a
+/// definition the recursion is resolving and reads as empty.
+fn the_empty_sequence_in_every_member(members: &[Schema]) -> Verdict {
+    let Some(kind) = members.iter().find_map(|member| match member {
+        Schema::Seq { container, .. } => Some(*container),
+        _ => None,
+    }) else {
+        return Verdict::Unknown;
+    };
+    if members
+        .iter()
+        .all(|member| member.admits_the_empty_sequence(kind))
+    {
+        Verdict::Inhabited
+    } else {
+        Verdict::Unknown
+    }
 }
 
 /// The verdict of the meet `members` with every branch of a union member
