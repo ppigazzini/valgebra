@@ -32,6 +32,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the part of a pattern between its word boundaries is built from its tree -- internal
 - fix: a reading that cannot decide a meet hands it to the next
 - fix: a definition being resolved drops no part of a supertype
+- fix: a length or a bound equal to a whole number is read as that number
 
 -->
 
@@ -132,6 +133,17 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A length bound equal to a whole number is that length, and a truth value
+  bounding a number is the integer it is.** `len` is an `int`, so
+  `Annotated[str, MaxLen(2.0)]` admits what `MaxLen(2)` does, and is built as
+  it, where it was refused; and `typing` caches `Annotated` by equality, so a
+  correct `MaxLen(2)` was refused in a process that wrote `MaxLen(2.0)` first.
+  An integral `Fraction` or `Decimal` length reads the same way, and one equal
+  to no whole length is refused, as is a number of any other type, whose
+  `int()` and `==` are its own. `Le(True)` is `Le(1)` to the decision, so
+  `Annotated[float, Le(True)]` is `not_subset` of `nothing`, where it was
+  `undecided`.
 
 - **A recursive definition being resolved is read as empty at positive
   positions only.** The emptiness decision reads a definition it is resolving

@@ -901,6 +901,44 @@ fn a_group_naming_no_length_is_refused_as_its_bound_is() {
     });
 }
 
+/// A length bound equal to a whole number is that length: `len` is an `int`, and
+/// Python compares one with a `float`, a `Fraction` or a `Decimal` exactly. A
+/// number with a fraction, a complex one, and an object of any other type --
+/// however its `__int__` and `__eq__` answer -- name no length, and are refused.
+#[test]
+fn a_number_equal_to_a_whole_length_is_that_length() {
+    Python::attach(|py| {
+        for expression in [
+            "typing.Annotated[str, at.MinLen(2.0)]",
+            "typing.Annotated[str, at.MinLen(__import__('fractions').Fraction(4, 2))]",
+            "typing.Annotated[str, at.MinLen(__import__('decimal').Decimal('2.0'))]",
+        ] {
+            let schema =
+                built(py, expression).unwrap_or_else(|error| panic!("{expression}: {error}"));
+            assert_eq!(schema, "Annotated[str, MinLen(2)]", "{expression}");
+        }
+        for expression in [
+            "typing.Annotated[str, at.MinLen(2.5)]",
+            "typing.Annotated[str, at.MinLen(float('nan'))]",
+            "typing.Annotated[str, at.MinLen(complex(2, 0))]",
+            "typing.Annotated[str, at.MinLen(type('Counted', (), {'__int__': lambda self: 2, \
+             '__eq__': lambda self, other: other == 2, '__hash__': lambda self: 0})())]",
+            "typing.Annotated[str, at.MinLen(type('EqualToAll', (float,), {'__eq__': \
+             lambda self, other: True, '__hash__': float.__hash__})(2.5))]",
+            "typing.Annotated[str, at.MinLen(type('Whole', (float,), {})(2.0))]",
+            "typing.Annotated[str, at.MinLen(__import__('fractions').Fraction(5, 2))]",
+        ] {
+            match built(py, expression) {
+                Err(error) => assert!(
+                    error.to_string().contains("a length a value can have"),
+                    "{expression} refused with {error}"
+                ),
+                Ok(schema) => panic!("{expression} built {schema} instead of refusing"),
+            }
+        }
+    });
+}
+
 /// The forms the frontend refuses, and the message each refusal carries.
 ///
 /// A refusal is a decision about the algebra -- a construct that names no

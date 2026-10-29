@@ -1265,6 +1265,37 @@ proptest! {
     }
 }
 
+proptest! {
+    /// A truth value bounding a number is the integer it is to every comparison
+    /// Python makes, over the integers and over the floats: the set it lowers
+    /// to is the one `0` or `1` lowers to. `Le(True)` equals `Le(1)` and hashes
+    /// alike, so `typing` hands either spelling the other's marker.
+    #[test]
+    fn a_boolean_bound_is_read_as_the_integer_it_is(
+        boolean in any::<bool>(),
+        which in 0usize..4,
+        base in prop_oneof![Just(Schema::Int), Just(Schema::Float)],
+    ) {
+        let at = OperandIx::new(0);
+        let constraint = [
+            Constraint::Gt(at),
+            Constraint::Ge(at),
+            Constraint::Lt(at),
+            Constraint::Le(at),
+        ]
+        .into_iter()
+        .nth(which)
+        .expect("one of four");
+        let refined = Schema::Refine {
+            base: Arc::new(base),
+            constraints: vec![constraint].into(),
+        };
+        let read = lower(&refined, &Pool(vec![Operand::Boolean(boolean)]));
+        prop_assert!(read.is_some(), "a boolean bound lowers");
+        prop_assert_eq!(read, lower(&refined, &Pool(vec![Operand::Integer(i64::from(boolean))])));
+    }
+}
+
 /// A length bound lands in the kinds the base has and in no other: the bound
 /// over a word admits no sequence, and the bound over a sequence no word.
 #[test]

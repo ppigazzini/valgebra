@@ -527,7 +527,13 @@ The compound markers `Interval` and `Len` expand to the bounds they carry, so
 `Interval(ge=0, le=10)` contributes `Ge(0)` and `Le(10)`, and `Len(2, 4)`
 contributes `MinLen(2)` and `MaxLen(4)`. A `Len` whose minimum is below zero is
 refused as a `MinLen` of it is, although `annotated_types` unpacks it to no
-lower bound at all. They are read through the grouping
+lower bound at all. A length is a whole number, and Python compares one with a
+`float`, a `Fraction` or a `Decimal` exactly, so a length bound equal to a whole
+number is that length: `MaxLen(2.0)`, `MaxLen(Fraction(2))` and `MaxLen(True)`
+are `MaxLen(2)` and `MaxLen(1)`, which `typing`'s cache would hand them anyway,
+and a bound equal to no whole length, `MaxLen(2.5)`, is refused. So is a number
+of any other type, a subclass of those three included, whose `int()` and `==`
+are its own code rather than the arithmetic `len` is compared by. They are read through the grouping
 protocol `annotated_types` documents — a marker that stands for several
 constraints answers for them — so **a marker of your own written that way is
 read the same way**:

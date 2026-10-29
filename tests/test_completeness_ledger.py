@@ -1702,6 +1702,20 @@ _TRANSLATED: list[object] = [
         None,
         id="json:records-met-with-~dict-are-empty",
     ),
+    # A truth value bounding a number is the integer it is to every comparison,
+    # and `typing` hands `Le(1)` and `Le(True)` one marker.
+    pytest.param(
+        "refutes",
+        Annotated[float, at.Le(True)],
+        nothing,
+        id="json:float-Le(True)-is-inhabited",
+    ),
+    pytest.param(
+        "refutes",
+        intersection(complement(bool), Annotated[int, at.Le(True)]),
+        nothing,
+        id="json:int-Le(True)-without-bool-is-inhabited",
+    ),
     # Under a full match the two ends of the text are word boundaries before and
     # after a word character.
     pytest.param(

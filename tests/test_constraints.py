@@ -482,6 +482,11 @@ def test_a_marker_equal_to_a_real_one_is_refused_wherever_it_arrives() -> None:
             lambda: Annotated[float, at.Ge(3)],
             ValueError,
         ),
+        (
+            lambda: Annotated[str, at.MaxLen(2 + 0j)],  # ty: ignore[invalid-argument-type]
+            lambda: Annotated[str, at.MaxLen(2)],
+            ValueError,
+        ),
     ]
     try:
         for written, real, raises in collisions:
@@ -549,6 +554,63 @@ def test_a_truth_value_is_read_as_the_length_it_equals() -> None:
     assert repr(Validator(Annotated[str, at.MinLen(True)])) == (
         "Annotated[str, MinLen(1)]"
     )
+
+
+class _EqualToAll(float):
+    """A `float` whose `==` holds every value, ordered as the float it stores."""
+
+    __slots__ = ()
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    __hash__ = float.__hash__
+
+
+class _ThreeAsInt(_EqualToAll):
+    """The same, whose `int()` is 3."""
+
+    __slots__ = ()
+
+    def __int__(self) -> int:
+        return 3
+
+
+def test_a_number_equal_to_a_length_is_read_as_that_length() -> None:
+    """`MaxLen(2.0)` is `MaxLen(2)`, for the reason `MinLen(True)` is `MinLen(1)`.
+
+    A length is an `int`, and Python compares it with a `float`, a `Fraction`
+    or a `Decimal` exactly, so a bound equal to a whole length admits what that
+    length admits. `MaxLen(2.0)` equals `MaxLen(2)` and hashes alike, so
+    `typing` hands one spelling the other's marker: refusing the float would
+    refuse a correct `MaxLen(2)` wherever the float was written first. A bound
+    equal to no whole length is refused as before, and so is one of any other
+    type, whose `int()` and `==` are its own: `len("ab") >= _EqualToAll(2.5)`
+    reads the float it stores, which is no length.
+    """
+    try:
+        for whole in (2.0, Fraction(2), Decimal("2.0")):
+            built = _fresh(lambda w=whole: Annotated[str, at.MaxLen(w)])  # ty: ignore[invalid-argument-type]
+            assert repr(built) == "Annotated[str, MaxLen(2)]"
+        _fresh(lambda: Annotated[str, at.MaxLen(2.0)])  # ty: ignore[invalid-argument-type]
+        written = (at.MaxLen(2.0),)  # ty: ignore[invalid-argument-type]
+        assert Annotated[str, at.MaxLen(2)].__metadata__ == written
+        assert Validator(Annotated[str, at.MaxLen(2)]).is_valid("ab")
+        for no_length in (
+            2.5,
+            Fraction(5, 2),
+            Decimal("2.5"),
+            float("nan"),
+            Decimal("NaN"),
+            -2.0,
+            _EqualToAll(2.5),
+            _ThreeAsInt(2.5),
+        ):
+            with pytest.raises(ValueError, match="must be a length a value can have"):
+                _fresh(lambda n=no_length: Annotated[str, at.MaxLen(n)])  # ty: ignore[invalid-argument-type]
+    finally:
+        for cleanup in getattr(typing, "_cleanups", ()):
+            cleanup()
 
 
 def test_the_lengths_a_value_can_have_still_build() -> None:

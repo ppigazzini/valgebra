@@ -1120,6 +1120,7 @@ fn integer_bound(constraint: &Constraint, operand: &Operand) -> Option<IntSet> {
     let strict = matches!(constraint, Constraint::Gt(_) | Constraint::Lt(_));
     let bound = match *operand {
         Operand::Integer(value) => value,
+        Operand::Boolean(value) => i64::from(value),
         Operand::Float(value) if value.is_infinite() => {
             return Some(if value.is_sign_positive() == lower {
                 IntSet::empty()
@@ -1173,6 +1174,7 @@ fn float_bound(constraint: &Constraint, operand: &Operand) -> Option<FloatSet> {
     let value = match *operand {
         Operand::Float(value) => Straddle::Exact(value),
         Operand::Integer(value) => straddle(value, lower),
+        Operand::Boolean(value) => straddle(i64::from(value), lower),
         _ => return None,
     };
     // No float equals an inexact bound, so `>` and `>=` admit the same ones and
