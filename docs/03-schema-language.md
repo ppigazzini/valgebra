@@ -725,6 +725,27 @@ assert extensible.is_valid({"name": "Ada", "age": 36})
 assert not extensible.is_valid({"name": "Ada", "age": "old"})
 ```
 
+A constant key that is not a `str` -- `1`, `None`, `b"x"` -- is read as the
+literal it spells ([anything unrecognized is a literal](#anything-unrecognized-is-a-literal)),
+so it keys a clause like any other schema: `{"a": int, 1: str}` is
+`{"a": int, Literal[1]: str}`. A clause governs the keys it matches rather than
+requiring them, so the key `1` is optional, and a literal reads its constant's
+exact type, so `True` and `1.0`, which a dict stores as the same key as `1`, are
+not it. The string keys are the fields, and the only keys a dict literal
+requires.
+
+```python
+from typing import Literal
+
+from valgebra import Validator
+
+coded = Validator({"a": int, 1: str})
+assert coded.is_equivalent({"a": int, Literal[1]: str})
+assert coded.is_valid({"a": 0})  # the clause does not require its key
+assert coded.is_valid({"a": 0, 1: "x"})
+assert not coded.is_valid({"a": 0, True: "x"})  # `True` is not the literal `1`
+```
+
 The one shape that separates a clause from a field is a literal-keyed clause
 beside a kind clause that covers the same key. Both clauses read `"k"`, so
 `"k"` may carry what either admits, and the schema is below the record whose
