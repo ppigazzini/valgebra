@@ -2067,6 +2067,28 @@ fn two_sets_of_literals_are_asked_as_sets() {
     assert_eq!(oracle.asked.take(), Vec::new());
 }
 
+/// A table of constants below the complement of another is one question, the
+/// two tables' disjointness, asked with both tables whole: a shared constant is
+/// a value of the subject outside the supertype, and none shared places it.
+/// Distributed, the subject asks it once a constant against the whole other
+/// table, which is quadratic across the boundary.
+#[test]
+fn a_table_below_a_complemented_table_is_one_question() {
+    let lit = |i: usize| Schema::Literal(ConstIx::new(i));
+    let oracle = Sets::default();
+    let relation = |sub: &Schema, sup: &Schema| {
+        sub.subtype_relation(sup, &oracle, &[], &Budget::new(DECISION_BUDGET))
+    };
+    let table = Schema::union([lit(0), lit(2)]);
+
+    let apart = Schema::union([lit(1), lit(3)]).complement();
+    assert_eq!(relation(&table, &apart), Relation::Holds);
+    assert_eq!(oracle.asked.take(), vec![(vec![0, 2], vec![1, 3])]);
+    let sharing = Schema::union([lit(2), lit(3)]).complement();
+    assert_eq!(relation(&table, &sharing), Relation::Fails);
+    assert_eq!(oracle.asked.take(), vec![(vec![0, 2], vec![2, 3])]);
+}
+
 /// An oracle treating each pool index as its own value, so comparing indices
 /// orders the bound values they stand for.
 struct ByIndex;

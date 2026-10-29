@@ -40,6 +40,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: the set representation reads scalars nested past its depth
 - feat: a meet of sequences each holding the empty one holds it
 - feat: a pattern too large to build is read by its texts
+- fix: a table of constants below a complemented table is one question
 
 -->
 
@@ -184,6 +185,14 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A table of constants below a complemented table is one question.**
+  `Literal[0, ..., 3999]` against `complement(Literal[-1, ..., -4000])` is the
+  two tables sharing no value, which the bindings answer for both tables at
+  once: it is decided in 3 ms, where each constant was asked against the whole
+  other table and the relation took 1.2 s, quadratic in the width. The meet's
+  emptiness, `intersection(A, B)` below `nothing`, read the tables whole
+  already.
 
 - **A counted Unicode class written as an ordinary bound builds.** The walk's
   pattern compiles under a size limit of 32 MiB, three times the `regex`

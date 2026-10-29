@@ -33,7 +33,7 @@ use literals::{
     finite_meet_below, finite_set, finite_set_below, the_constant_speaks_for_the_literal,
 };
 use products::{linear_subtype, seq_splits_across_union};
-use readings::{outside_every_kind, refuted_by_a_multiple};
+use readings::{outside_every_kind, refuted_by_a_multiple, tables_disjoint};
 use records::{
     attr_record_subtype, keyed_map_splits_across_union, keyed_map_subtype, keyed_meet_below,
 };
@@ -1459,6 +1459,23 @@ impl Schema {
         self.or_bounded(answer, other, cx)
     }
 
+    /// A union below `other`, member by member, as the arm calling this states.
+    ///
+    /// A table of constants below the complement of another is the two tables
+    /// sharing no value, which the oracle answers for both at once, and a
+    /// constant they share is a value of the subject outside the supertype. Distributed, each constant asks it against the whole other
+    /// table, which is quadratic across the boundary.
+    fn union_below(&self, members: &[Schema], other: &Schema, cx: &mut Cx<'_>) -> Relation {
+        if let Schema::Complement(inner) = other
+            && matches!(members.first(), Some(Schema::Literal(_)))
+            && matches!(**inner, Schema::Literal(_) | Schema::Union(_))
+            && let Some(disjoint) = tables_disjoint(self, inner, cx.oracle)
+        {
+            return Relation::decided(disjoint);
+        }
+        Relation::all(members.iter().map(|m| m.is_subtype_rec(other, cx)))
+    }
+
     /// The arms that match a pair by the shapes on its two sides.
     ///
     /// They are rules of the kind a rule-based inclusion states: a union is
@@ -1474,9 +1491,7 @@ impl Schema {
         match (self, other) {
             // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z [BBC+26, (anyOf-l)]; A ⊆ (Y ∩ Z)
             // iff A ⊆ Y and A ⊆ Z.
-            (Schema::Union(members), _) => {
-                Relation::all(members.iter().map(|m| m.is_subtype_rec(other, cx)))
-            }
+            (Schema::Union(members), _) => self.union_below(members, other, cx),
             (_, Schema::Intersection(members)) => {
                 Relation::all(members.iter().map(|m| self.is_subtype_rec(m, cx)))
             }

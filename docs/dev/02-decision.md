@@ -521,7 +521,8 @@ corpus of its own driving every question below
   quadratic in the oracle, and two twenty-thousand-member literal unions are
   four hundred million calls. An implementor that can hash its
   constants answers in one pass; the default declines and the member walk
-  stands;
+  stands. A table below the complement of another is the same question, asked
+  before the union rule distributes the subject (`tables_disjoint`);
 - `literals_disjoint` — do these two constants share a value, the one-pair form
   of the question above;
 - `constant_is_alone` — is this constant the only value its literal denotes,
