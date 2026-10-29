@@ -669,9 +669,9 @@ def test_the_two_deciders_are_measured_against_each_other(
     holds is that the gap does not *grow* -- a change that made either less
     complete would show up here rather than in a caller's undecided relation.
     """
-    assert len(disagreements) <= 3, (
+    assert len(disagreements) <= 1, (
         f"{len(disagreements)} pairs where the two deciders disagree, up from "
-        "the recorded 3:\n" + "\n".join(disagreements[:10])
+        "the recorded 1:\n" + "\n".join(disagreements[:10])
     )
     # Every one of them is about a fixpoint, which is the whole of the known
     # gap: a rule that assumes its goal decides more about a recursive schema

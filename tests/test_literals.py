@@ -4,7 +4,14 @@ from typing import Literal
 
 import pytest
 
-from valgebra import ValidationError, Validator, complement, nothing, union
+from valgebra import (
+    ValidationError,
+    Validator,
+    complement,
+    intersection,
+    nothing,
+    union,
+)
 
 
 def test_literal_accepts_the_exact_value() -> None:
@@ -120,3 +127,17 @@ def test_a_finite_set_of_constants_misses_a_value_of_every_boundless_kind() -> N
             assert Validator(kind).is_valid(witness)
             assert not Validator(table).is_valid(witness)
             assert Validator(kind).relation_to(table) == "not_subset", (kind, table)
+
+
+# THEORY: a-constant-is-the-values-equal-to-it
+def test_none_is_below_a_schema_where_its_value_is() -> None:
+    """`None`'s kind is its one value, so walking it decides the kind.
+
+    A table holding an enumeration member is no set the set representation
+    holds, and `None` is the value standing against it.
+    """
+    member = Literal[_Member.A]
+    assert not Validator(member).is_valid(None)
+    assert Validator(None).relation_to(member) == "not_subset"
+    assert intersection(None, complement(member)).relation_to(nothing) == "not_subset"
+    assert Validator(None).relation_to(union(member, None)) == "subset"

@@ -48,10 +48,18 @@ answer of its own, or a repair to a change not yet released.
 - fix: an enumeration making an instance past its members is not their union
 - fix: a class's layout is the one Python laid down
 - feat: a finite set of constants misses a value of every kind with infinitely many
+- feat: None's kind is the literal of its one value
 
 -->
 
 ### Added
+
+- **`None`'s kind is the literal of its one value.** `NoneType` admits no
+  subclass, so `None` is its one value, and the kind is below a set exactly
+  where the walk admits `None`: `None` is `not_subset` of
+  `Literal[Color.RED]`, and `intersection(None,
+  complement(Literal[Color.RED]))` is `not_subset` of `nothing`, where both were
+  `undecided` beside a constant the set representation cannot hold.
 
 - **A finite set of constants misses a value of every kind with infinitely
   many.** A literal holds values of its constant's exact type alone, so a fresh

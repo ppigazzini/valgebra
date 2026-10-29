@@ -706,6 +706,42 @@ class Valued(enum.Enum):
     });
 }
 
+// THEORY: a-constant-is-the-values-equal-to-it
+#[test]
+fn none_is_below_a_schema_where_its_value_is() {
+    // `leaf_subtype` of `None`'s kind walks its one value: below a table
+    // holding `None`, outside one that does not. `bool`'s values are pooled
+    // literals the parts reading asks, and any other kind holds values past
+    // counting, so neither is asked here.
+    Python::attach(|py| {
+        let member = built(py, "enum.Enum('One', {'A': 1}).A").unbind();
+        let truth = true
+            .into_pyobject(py)
+            .unwrap()
+            .to_owned()
+            .into_any()
+            .unbind();
+        asking(py, vec![member, py.None(), truth], |oracle| {
+            let table = |slots: &[usize]| {
+                Schema::union(
+                    slots
+                        .iter()
+                        .map(|&slot| Schema::Literal(ConstIx::new(slot))),
+                )
+            };
+            let below = |kind: &Schema, slots: &[usize]| oracle.leaf_subtype(kind, &table(slots));
+            assert_eq!(
+                below(&Schema::NoneType, &[0]),
+                Some(false),
+                "None is no member"
+            );
+            assert_eq!(below(&Schema::NoneType, &[0, 1]), Some(true));
+            assert_eq!(below(&Schema::Bool, &[0, 1, 2]), None);
+            assert_eq!(below(&Schema::Int, &[0, 1, 2]), None);
+        });
+    });
+}
+
 #[test]
 fn a_fatal_signal_a_probe_raises_is_the_querys_answer() {
     // A probe runs user code, and one interrupted there has answered nothing:

@@ -270,9 +270,12 @@ def test_every_cell_narrows_its_base_or_is_refused(constraint: str, kind: str) -
     base = get_args(cell.spec)[0]
     # A refinement is its base narrowed: below the base whatever the
     # constraint says, and the base is not below it, since that would need
-    # the constraint to hold of every value of the base.
+    # the constraint to hold of every value of the base -- which the
+    # predicate cell's does of `None`'s one value, `== None` walked as the
+    # literal of `None` is.
     assert compiled.relation_to(base) == "subset", f"{constraint} over {kind}"
-    assert Validator(base).relation_to(compiled) != "subset", (
+    holds_of_the_base = (constraint, kind) == ("Predicate", "NoneType")
+    assert (Validator(base).relation_to(compiled) == "subset") == holds_of_the_base, (
         f"{constraint} over {kind} is decided equal to its base"
     )
     with pytest.raises(ValidationError) as caught:

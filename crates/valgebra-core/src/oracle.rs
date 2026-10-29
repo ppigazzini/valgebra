@@ -31,8 +31,9 @@ use crate::kind::Kind;
 /// Resolve the leaf relations the structural subtyping decision cannot.
 ///
 /// Those are the ones that depend on the Python class hierarchy (an `Instance`)
-/// or on a concrete value (a `Literal`). The bindings implement it with
-/// `issubclass` and membership; the core defaults to [`NoLeafRelations`].
+/// or on a concrete value (a `Literal`, and `None`'s kind, which is the
+/// literal of its one value). The bindings implement it with `issubclass` and
+/// membership; the core defaults to [`NoLeafRelations`].
 ///
 /// It carries [`Constants`] because both are the same question asked twice: the
 /// object table lives in the bindings, and an implementor that can answer what a

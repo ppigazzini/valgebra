@@ -1292,6 +1292,11 @@ impl LeafRelations for PoolRelations<'_, '_> {
                 let members = self.enum_members(class)?;
                 Some(members.iter().all(|member| self.is_member(sup, member)))
             }
+            // `None`'s kind is the literal of its one value: `NoneType` admits
+            // no subclass, so the walk of `None` is the kind's. `bool`'s two
+            // values are each a pooled literal, which the parts reading asks
+            // one at a time, and no kind with more is a set of values to walk.
+            Schema::NoneType => Some(self.is_member(sup, &self.py.None().into_bound(self.py))),
             _ => None,
         }
     }
