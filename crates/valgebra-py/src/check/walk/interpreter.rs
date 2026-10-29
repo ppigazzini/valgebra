@@ -836,6 +836,186 @@ fn a_signal_a_later_branch_raises_stops_an_earlier_record_report() {
     });
 }
 
+/// The fast walk `is_valid` runs, with the fatal signal it recorded.
+fn walked_fast(
+    py: Python<'_>,
+    schema: &Schema,
+    value: &Bound<'_, PyAny>,
+    pool: &[Py<PyAny>],
+) -> (bool, Option<PyErr>) {
+    let index = build_index(py, schema, &[], pool);
+    let state = WalkState::new();
+    let ctx = Ctx {
+        pool,
+        defs: &[],
+        index: &index,
+        state: &state,
+        mode: WalkMode::Fast,
+    };
+    let admitted = member(
+        schema,
+        &Value::Py(value),
+        &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
+    );
+    (admitted, state.take_fatal())
+}
+
+/// The tags `"a"`, `"b"` and `"c"` and the text `"z"`, as a pool.
+fn tags(py: Python<'_>) -> Vec<Py<PyAny>> {
+    ["a", "b", "c", "z"]
+        .iter()
+        .map(|text| PyString::new(py, text).into_any().unbind())
+        .collect()
+}
+
+/// A record whose required `t` is the pool's constant `at`, beside `x`.
+fn tagged(at: usize, payload: Schema) -> Schema {
+    Schema::record(
+        vec![
+            field("t", Schema::Literal(ConstIx::new(at)), true),
+            field("x", payload, true),
+        ],
+        Openness::Closed,
+    )
+}
+
+/// Three records tagged `"a"`, `"b"` and `"c"` at `t`.
+fn three_tagged() -> Schema {
+    Schema::Union(
+        vec![
+            tagged(0, Schema::Int),
+            tagged(1, Schema::Int),
+            tagged(2, Schema::Str),
+        ]
+        .into(),
+    )
+}
+
+/// A union of records one key tags is read at that key, in the fast walk
+/// `is_valid` runs: the record the tag names decides the value, and a union
+/// whose key one record leaves optional has no tag, so every record is read.
+#[test]
+fn a_tagged_union_walks_the_record_its_tag_names() {
+    Python::attach(|py| {
+        let pool = tags(py);
+        let union = three_tagged();
+        let dict = |t: &str, x: Bound<'_, PyAny>| {
+            let value = PyDict::new(py);
+            value.set_item("t", t).expect("a field");
+            value.set_item("x", x).expect("a field");
+            value.into_any()
+        };
+        let int = PyInt::new(py, 1i64).into_any();
+        let text = PyString::new(py, "s").into_any();
+        for (value, admitted) in [
+            (dict("a", int.clone()), true),
+            (dict("a", text.clone()), false),
+            (dict("c", text.clone()), true),
+            (dict("d", int.clone()), false),
+        ] {
+            let (read, fatal) = walked_fast(py, &union, &value, &pool);
+            assert_eq!(read, admitted, "{value}");
+            assert!(fatal.is_none(), "{value}: {fatal:?}");
+            assert_eq!(decide(py, &union, &value, &pool, &[]), admitted, "{value}");
+        }
+        // `t` optional in one record: no tag, and `{"u": "z"}` is that record's.
+        let untagged = Schema::Union(
+            vec![
+                tagged(0, Schema::Int),
+                tagged(1, Schema::Int),
+                Schema::record(
+                    vec![
+                        field("t", Schema::Literal(ConstIx::new(2)), false),
+                        field("u", Schema::Literal(ConstIx::new(3)), true),
+                    ],
+                    Openness::Closed,
+                ),
+            ]
+            .into(),
+        );
+        let only_u = PyDict::new(py);
+        only_u.set_item("u", "z").expect("a field");
+        let (read, fatal) = walked_fast(py, &untagged, only_u.as_any(), &pool);
+        assert!(read && fatal.is_none(), "{fatal:?}");
+    });
+}
+
+/// The tagged reading looks the tag up once, and a key comparing to it by a
+/// method of its own runs that method once, where a scan of the records would
+/// run it for each. A fatal signal raised there is recorded and refuses, since a
+/// signal is delivered once and the scan, looking the key up again, would not
+/// see it raised; an ordinary error is the scan's to read, and records nothing.
+/// Each key below raises at most once and then compares unequal. One lookup is
+/// counted as the interpreter's own `dict.get` counts it: `CPython` 3.12 asks
+/// a key colliding with a `str` twice per lookup, and 3.13 on once.
+#[test]
+fn the_tag_is_looked_up_once_and_a_signal_there_is_recorded() {
+    use pyo3::exceptions::{PyKeyboardInterrupt, PyValueError};
+    Python::attach(|py| {
+        let pool = tags(py);
+        let union = three_tagged();
+        let module = PyModule::from_code(
+            py,
+            c"class Raising:\n\
+              \x20   calls = 0\n\
+              \x20   def __init__(self, error):\n\
+              \x20       self.error = error\n\
+              \x20   def __hash__(self):\n\
+              \x20       return hash('t')\n\
+              \x20   def __eq__(self, other):\n\
+              \x20       Raising.calls += 1\n\
+              \x20       error, self.error = self.error, None\n\
+              \x20       if error is not None:\n\
+              \x20           raise error\n\
+              \x20       return False\n\
+              def one_lookup():\n\
+              \x20   before = Raising.calls\n\
+              \x20   {Raising(None): 1}.get('t')\n\
+              \x20   return Raising.calls - before\n",
+            c"tagged_keys.py",
+            c"tagged_keys",
+        )
+        .expect("the module compiles");
+        let raising = |error: Bound<'_, PyAny>| {
+            let value = PyDict::new(py);
+            let key = module
+                .getattr("Raising")
+                .and_then(|class| class.call1((error,)))
+                .expect("a key");
+            value.set_item(key, 1i64).expect("a key hashing as 't'");
+            value.into_any()
+        };
+        let one_lookup = module
+            .getattr("one_lookup")
+            .and_then(|lookup| lookup.call0())
+            .and_then(|count| count.extract::<i64>())
+            .expect("a dict lookup counts");
+        let before = count_of(&module, "Raising", "calls");
+        let quiet = raising(py.None().into_bound(py));
+        let (admitted, fatal) = walked_fast(py, &union, &quiet, &pool);
+        assert!(!admitted && fatal.is_none(), "{fatal:?}");
+        assert_eq!(
+            count_of(&module, "Raising", "calls") - before,
+            one_lookup,
+            "one lookup"
+        );
+        let ordinary = raising(py.get_type::<PyValueError>().into_any());
+        let (admitted, fatal) = walked_fast(py, &union, &ordinary, &pool);
+        assert!(!admitted);
+        assert!(
+            fatal.is_none(),
+            "an ordinary error is the scan's: {fatal:?}"
+        );
+        let interrupt = raising(py.get_type::<PyKeyboardInterrupt>().into_any());
+        let (admitted, fatal) = walked_fast(py, &union, &interrupt, &pool);
+        assert!(!admitted);
+        assert!(
+            fatal.is_some_and(|err| err.is_instance_of::<PyKeyboardInterrupt>(py)),
+            "the tag's lookup raised it"
+        );
+    });
+}
+
 /// `(schema, value, expected)` over an empty pool and no definitions.
 fn case(py: Python<'_>, schema: &Schema, value: &Bound<'_, PyAny>, expected: bool) {
     assert_eq!(

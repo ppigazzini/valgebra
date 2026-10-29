@@ -303,7 +303,7 @@ the caller's to choose.
 
 ## What is precomputed, and what correctness may not depend on
 
-Five per-validator indexes -- `ValidatorIndex` in
+Six per-validator indexes -- `ValidatorIndex` in
 `crates/valgebra-py/src/check/index.rs` -- are built once on first use and keyed
 by the address of a node's own buffer:
 
@@ -311,6 +311,9 @@ by the address of a node's own buffer:
 - interned attribute names per attribute record;
 - value sets for unions whose members are all literals, with the addresses of
   the pooled constants behind them;
+- the record each constant names, for unions of at least three records that
+  each require one key pinned to `int` or `str` constants no two records share
+  (`TaggedPlan`; two records read in turn cost less than the tag read twice);
 - compiled patterns per pattern constraint;
 - the memo's plan: which definitions the walk may remember, and the unions,
   meets and clause lists two of whose members reach one in common (`MemoPlan`
@@ -324,6 +327,11 @@ attached would never reach. Once built, the read is the same load either way.
 **A verdict never depends on one being present.** A node absent from an index
 falls back to building the map, scanning the branches, or recompiling the
 pattern. The literal-union plan answers only for an exact int or str. The
+tagged plan answers only for an exact dict whose tag is an exact int or str:
+the tag names the one record the dict can belong to, or none, and the deciding
+walk walks that record alone where the scan reads the tag once a record -- a
+lookup and then one branch, the shape of `pydantic-core`'s tagged union. The
+explaining walk scans, so every report is the scan's. The literal plan's
 deciding walk takes its answer either way; the explaining walk takes only its
 *yes*, for the elements of a list of the union (`literal_list_matches`), and
 walks every other element. A non-literal union, another value type and a JSON
