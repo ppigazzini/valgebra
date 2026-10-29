@@ -1062,17 +1062,67 @@ fn parse_grouped<'py>(
 ///
 /// `__index__` answers the extraction, and a fatal signal it raises is the
 /// interpreter unwinding rather than a bound that is no length.
+///
+/// A real number equal to a whole length is that length: `len` is an `int`
+/// and Python compares it with a `float`, a `Fraction` or a `Decimal` exactly,
+/// so `MaxLen(2.0)` admits what `MaxLen(2)` does. And `typing` caches
+/// `Annotated` by equality, `MaxLen(2.0)` equal to `MaxLen(2)`, so refusing the
+/// float would refuse a correct `MaxLen(2)` wherever the float was written
+/// first -- the reason a truth value is read as the length it equals.
 fn length_bound(probe: Probe, bound: &Bound<'_, PyAny>) -> PyResult<usize> {
     let py = bound.py();
     match bound.extract::<usize>() {
         Ok(n) => Ok(n),
         Err(err) if is_fatal(&err, py) => Err(err),
-        Err(_) => Err(PyValueError::new_err(format!(
-            "{} must be a length a value can have, and {} is not",
-            probe.name(py),
-            summarize(bound)?
-        ))),
+        Err(_) => {
+            if let Some(n) = whole_length(bound)? {
+                return Ok(n);
+            }
+            // A complex number equal to a whole length is no length -- `len`
+            // orders nothing against it -- and equals the real one, which is
+            // how a caller who wrote that one meets it.
+            let note = if unless_fatal(is_complex(bound), py, false)? {
+                equal_to_a_real(bound, bound.getattr(intern!(py, "real")))?
+            } else {
+                String::new()
+            };
+            Err(PyValueError::new_err(format!(
+                "{} must be a length a value can have, and {} is not{note}",
+                probe.name(py),
+                summarize(bound)?
+            )))
+        }
     }
+}
+
+/// `fractions.Fraction`, resolved once per process.
+static FRACTION: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+
+/// The length a real number other than an `int` names, where it is exactly a
+/// whole one: an exact `float`, `Decimal` or `Fraction` whose own exact
+/// arithmetic, `as_integer_ratio`, gives a denominator of one. `None` for one
+/// with a fraction or no finite value, and for any other type: a subclass or a
+/// number of the program's own answers `int()` and `==` with code of its own,
+/// so `MinLen(EqF(2.5))`, whose `==` holds every value, is not `MinLen(2)` to
+/// `len`, which reads `2 >= EqF(2.5)` through the float it stores.
+fn whole_length(bound: &Bound<'_, PyAny>) -> PyResult<Option<usize>> {
+    let py = bound.py();
+    let ty = bound.get_type();
+    if !(bound.is_exact_instance_of::<PyFloat>()
+        || ty.is(DECIMAL.import(py, "decimal", "Decimal")?)
+        || ty.is(FRACTION.import(py, "fractions", "Fraction")?))
+    {
+        return Ok(None);
+    }
+    let ratio = bound.call_method0(intern!(py, "as_integer_ratio"));
+    let Some(ratio) = unless_fatal(ratio.map(Some), py, None)? else {
+        return Ok(None);
+    };
+    let (whole, denominator): (Bound<'_, PyAny>, Bound<'_, PyAny>) = ratio.extract()?;
+    if denominator.extract::<u64>().ok() != Some(1) {
+        return Ok(None);
+    }
+    Ok(whole.extract::<usize>().ok())
 }
 
 fn parse_constraint_within<'py>(
