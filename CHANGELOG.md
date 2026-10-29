@@ -41,10 +41,17 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet of sequences each holding the empty one holds it
 - feat: a pattern too large to build is read by its texts
 - fix: a table of constants below a complemented table is one question
+- feat: the complement of a meet holds a complemented member's values
 
 -->
 
 ### Added
+
+- **The complement of a meet holds a complemented member's values.** Pushed
+  in, the complement of a meet is the union of its members' complements, so
+  `complement(intersection(complement({"a": None}), complement({})))` holds
+  `{}` and is `not_subset` of `nothing`, where it was `undecided` after a
+  second spent on the records, which have no region to read it by.
 
 - **A pattern too large to build is read by its texts.** A counted Unicode
   class under a repetition, `Regex(r"(?:\w{3,4})+")`, is past the size the set
