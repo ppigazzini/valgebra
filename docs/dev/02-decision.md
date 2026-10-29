@@ -1048,13 +1048,16 @@ constant speaks for it. It is asked before a reference among the members is
 distributed, because the walk reads a reference only as far as the constant
 needs.
 
-A meet of sequences of one kind, each with no prefix and under no bound that
-leaves the empty one out, holds the empty sequence, a value of every member
-read off its shape with no element read (`the_empty_sequence_in_every_member`
-in `decision/emptiness.rs`). It is the first reading a meet the regions leave
-open is handed to, one discriminant test a member, and it answers where an
-element is a definition being resolved, which reads as empty inside its own
-body: `recursive(lambda t: intersection([], [t]))` holds `[]`.
+A meet of containers of one kind, each holding the empty one under no bound
+that leaves it out -- a sequence shape with no prefix, a set shape, a mapping
+requiring no field -- holds it, a value of every member read off its shape
+with no element read (`the_empty_container_in_every_member` in
+`decision/emptiness.rs`). It is the first reading a meet the regions leave open
+is handed to, one discriminant test a member, and it answers where an element
+is a definition being resolved, which reads as empty inside its own body:
+`recursive(lambda t: intersection([], [t]))` holds `[]`. It answers where the
+elements share nothing too: `set[Literal["a"]] & Annotated[set[int],
+MaxLen(1)]` holds the empty set.
 
 And one repetition is removed rather than bounded. A record whose fields carry
 one schema, or a tuple whose positions do, asks the *same goal* once per field
@@ -1437,6 +1440,33 @@ refinement empty -- would be answered not below it by the rules asked next.
 seed `below-the-complement-of-a-length-the-shape-cannot-take` keeps the input,
 and `every_set_is_below_the_complement_of_an_empty_set` in `decision/tests.rs`
 keeps the pair.
+
+**A set's and a record's lengths are read off their shapes.** The set
+representation has no part for either length, so the rules read what the shape
+keeps to without writing it (`lengths_held` in `decision/readings.rs`): a set
+holds each member once, every member a value of its element, so it is at most
+as long as the values the element holds apart; a record's keys are its fields,
+every value holding the required ones and a closed one nothing past its
+declared ones. Each count is the walk's, which reads a set's or a dict's length
+from its storage. Those lengths entail a written bound as a narrower written
+one does -- Sub-Base [JV20, Fig. 3.4] with the shape's lengths among the
+subject's constraints, the step the property-count rule [BBC+26, (object)]
+cannot take for a record whose fields keep it short -- so a proof below a
+bound's base carries to the refinement. The refutations name a value:
+`longer_than` a set of one member past a maximum where the element holds that
+many apart (`holds_apart` in `decision/emptiness.rs`, which counts a union's
+literals within one kind, since `1 == True` across two), and
+`required_fields_refused` the value of a record's required fields alone. And a
+refinement at most zero long is the empty container of its base's kind,
+`read_by_length` holding it below every shape that admits it
+(`admits_the_empty`). Two counts are left loose: an optional field that can
+hold no value counts toward a closed record's most, and a refinement of a set
+is not split into the sets its length leaves, so `Annotated[set[Literal[1,
+2]], Len(1, 1)]` is not read as `{1}` or `{2}` against a union of sets.
+`a_set_is_as_long_as_the_values_its_element_holds_apart`,
+`literals_count_apart_within_one_kind`, `a_record_is_as_long_as_its_fields`
+and `the_empty_set_and_the_empty_dict_are_read_off_the_shapes` in
+`decision/tests.rs` hold the four.
 
 ## Three more places a shape would stand in for the question
 

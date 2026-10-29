@@ -1826,12 +1826,14 @@ impl Schema {
     /// is the decline it says it is. Then the supertype's own shape: a
     /// **refinement** is a subset of its base, so a subject outside the base is
     /// outside the refinement -- the value that refutes the one refutes the
-    /// other, and it is the same value. Its proof does not carry, since being
-    /// inside the base says nothing about the constraints, so only the
-    /// refutation is taken. Last, what a **length** settles
+    /// other, and it is the same value. Its proof carries only where the
+    /// subject's own lengths entail every constraint
+    /// ([`lengths_held`](Self::lengths_held)), since being inside the base says
+    /// nothing else about the constraints. Last, what a **length** settles
     /// ([`read_by_length`](Self::read_by_length)): a refinement whose length is
-    /// at most zero is the empty sequence, and a sequence shape holds one
-    /// longer than a supertype's maximum. Last because the pairs it reads are
+    /// at most zero is the empty container, a sequence or a set shape holds one
+    /// longer than a supertype's maximum, and a record's required fields alone
+    /// may be a length it refuses. Last because the pairs it reads are
     /// rare and every pair before them would pay for asking first: on the
     /// matrix workload, asked beside `shorter_than`, it cost 0.95% of the
     /// instructions, and asked here, 0.27%.
@@ -1888,13 +1890,33 @@ impl Schema {
             Some(true) => Relation::Holds,
             Some(false) => Relation::Fails,
             None => match other {
-                Schema::Refine { base, .. } => self.is_subtype_rec(base, cx).refutation_only(),
+                // The proof carries where the subject's own lengths entail every
+                // bound ([`Schema::lengths_entail`]): a closed record below a
+                // mapping, and a set below a set, are below the refinement
+                // wherever their lengths are its lengths. Only those two shapes
+                // hold lengths, so every other subject pays the one test.
+                Schema::Refine { base, constraints } => {
+                    let below = self.is_subtype_rec(base, cx);
+                    if matches!(self, Schema::Coll { .. } | Schema::KeyedMap { .. })
+                        && self.lengths_entail(constraints, cx.oracle)
+                    {
+                        below
+                    } else {
+                        below.refutation_only()
+                    }
+                }
                 _ => Relation::Unknown,
             }
             // Last, and out of line behind the subject's discriminant: what a
             // length settles is read only of a pair everything above left open.
             .or_else(|| {
-                if matches!(self, Schema::Refine { .. } | Schema::Seq { .. }) {
+                if matches!(
+                    self,
+                    Schema::Refine { .. }
+                        | Schema::Seq { .. }
+                        | Schema::Coll { .. }
+                        | Schema::KeyedMap { .. }
+                ) {
                     self.read_by_length(other, cx)
                 } else {
                     Relation::Unknown
@@ -2175,9 +2197,12 @@ fn has_disjoint_pair(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
 /// subtype value, Sub-Base's entailment [JV20, Fig. 3.4] without a solver:
 /// either it appears verbatim, or it is entailed by the subtype's bounds (a
 /// tighter lower, upper or length bound entails a looser one, decided through
-/// the ordering oracle). A bound the oracle cannot compare and a non-order
-/// constraint stay on the verbatim path, so a constraint neither written nor
-/// entailed leaves the pair unproven rather than refuted.
+/// the ordering oracle), or a length bound is entailed by the lengths a set or
+/// a record base keeps to without writing them
+/// ([`lengths_entail`](Schema::lengths_entail)). A bound the oracle cannot
+/// compare and a non-order constraint stay on the verbatim path, so a
+/// constraint neither written nor entailed leaves the pair unproven rather
+/// than refuted.
 fn refinement_subtype(
     narrow_base: &Schema,
     narrow_cons: &[Constraint],
@@ -2192,6 +2217,8 @@ fn refinement_subtype(
             Relation::proven(wide_cons.iter().all(|constraint| {
                 narrow_cons.contains(constraint)
                     || constraint_entailed(constraint, narrow_base, narrow_cons, cx.oracle)
+                    || (matches!(narrow_base, Schema::Coll { .. } | Schema::KeyedMap { .. })
+                        && narrow_base.lengths_entail(core::slice::from_ref(constraint), cx.oracle))
             }))
         })
 }

@@ -531,7 +531,10 @@ everywhere are undecided, since deciding them means deciding whether two Python
 callables agree. Two refinements compare as refined base types do under
 Sub-Base, by an entailment of their predicates [JV20, Fig. 3.4], here without a
 solver: a bound or a step is entailed through the oracle one constraint at a
-time, and a predicate only by itself. The other direction needs a value: where a
+time, and a predicate only by itself. A set's shape and a closed record's keep
+to lengths they do not write -- a set to the values its element holds apart, a
+record to its fields -- and those entail a length bound as a written one does.
+The other direction needs a value: where a
 refinement of `int` is narrowed by one integer step and integer bounds alone,
 its values are the multiples of the step between the bounds, so its emptiness
 is read exactly and one of those multiples that the other's step does not
@@ -551,9 +554,9 @@ complete table [DV14, §2] the set representation reads as it reads a pattern.
 
 SOURCE: §10 "the runtime check; the static/SMT side is"
 
-IMPLEMENTED-BY: decision.rs::refinement_subtype, decision/constraints.rs::constraint_entailed, decision/readings.rs::refuted_by_a_multiple, decision/constraints.rs::Multiples, ir.rs::Schema::refine, valgebra-py/src/check/walk/scalar.rs::check_refine, valgebra-py/src/build/refine.rs::check_constraint_fits, descr/lower.rs::refine, descr/regular.rs::Dfa::ordered_from
+IMPLEMENTED-BY: decision.rs::refinement_subtype, decision/constraints.rs::constraint_entailed, decision/readings.rs::Schema::lengths_held, decision/readings.rs::refuted_by_a_multiple, decision/constraints.rs::Multiples, ir.rs::Schema::refine, valgebra-py/src/check/walk/scalar.rs::check_refine, valgebra-py/src/build/refine.rs::check_constraint_fits, descr/lower.rs::refine, descr/regular.rs::Dfa::ordered_from
 
-HELD-BY: an_ordered_language_holds_the_words_python_orders_so, an_order_bound_over_words_lowers_to_the_words_it_admits, test_an_order_bound_over_words_is_decided_as_the_words_it_admits, test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker, test_every_cell_narrows_its_base_or_is_refused, a_step_is_refuted_where_one_of_its_multiples_is_outside, a_bound_over_a_union_is_asked_of_each_branch, none_under_a_constraint_is_empty
+HELD-BY: a_set_is_as_long_as_the_values_its_element_holds_apart, a_record_is_as_long_as_its_fields, an_ordered_language_holds_the_words_python_orders_so, an_order_bound_over_words_lowers_to_the_words_it_admits, test_an_order_bound_over_words_is_decided_as_the_words_it_admits, test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker, test_every_cell_narrows_its_base_or_is_refused, a_step_is_refuted_where_one_of_its_multiples_is_outside, a_bound_over_a_union_is_asked_of_each_branch, none_under_a_constraint_is_empty
 
 ## Decision procedures, for widening the decided fragment
 

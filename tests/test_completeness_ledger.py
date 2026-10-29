@@ -585,6 +585,53 @@ _DECIDED = [
         [],
         id="MaxLen(0)list[int]==[]",
     ),
+    # A set holds each member once and a record's keys are its fields, so each
+    # shape keeps to lengths it does not write: a set is no longer than the
+    # values its element holds apart, and a closed record runs from its required
+    # fields to all of them. The empty set is in every set shape a bound leaves
+    # it in, so a meet of two is never empty for want of a shared member.
+    pytest.param(
+        "refutes",
+        set[Literal[1, 2]],
+        Annotated[set[int], at.Len(0, 1)],
+        id="refute:set[1|2]<=Len(0,1)set[int]",
+    ),
+    pytest.param(
+        "subtype",
+        frozenset[Literal[1, 2]],
+        Annotated[frozenset[int], at.MaxLen(2)],
+        id="frozenset[1|2]<=MaxLen(2)frozenset[int]",
+    ),
+    pytest.param(
+        "subtype",
+        {"a": int},
+        Annotated[dict[str, int], at.Len(1, 1)],
+        id="map:{a:int}<=Len(1,1)dict[str,int]",
+    ),
+    pytest.param(
+        "equivalent",
+        Annotated[dict[str, int], at.MaxLen(0)],
+        {},
+        id="MaxLen(0)dict[str,int]=={}",
+    ),
+    pytest.param(
+        "refutes",
+        {"a": int, "b": int},
+        Annotated[dict[str, int], at.MaxLen(1)],
+        id="refute:map:{a:int,b:int}<=MaxLen(1)dict[str,int]",
+    ),
+    pytest.param(
+        "refutes",
+        {"a?": int},
+        Annotated[dict[str, int], at.MinLen(1)],
+        id="refute:map:{a?:int}<=MinLen(1)dict[str,int]",
+    ),
+    pytest.param(
+        "refutes",
+        intersection(set[Literal["a"]], Annotated[set[int], at.MaxLen(1)]),
+        nothing,
+        id="refute:set[a]&MaxLen(1)set[int]<=nothing",
+    ),
     # A bound over floats is a set of floats, so the descriptor holds it and the
     # relations that turn on one are decided. Which side a bound lands on is
     # chosen by the *base*: `Annotated[float, Gt(0)]` carries the integer zero

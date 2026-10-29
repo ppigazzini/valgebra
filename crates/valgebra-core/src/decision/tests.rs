@@ -9750,6 +9750,319 @@ fn a_string_subject_is_read_by_its_texts() {
     );
 }
 
+/// The rules alone, under an oracle: what a length reading answers before the
+/// descriptor is asked.
+fn under_lengths(sub: &Schema, sup: &Schema, oracle: &dyn LeafRelations) -> Relation {
+    let budget = Budget::new(DECISION_BUDGET);
+    sub.subtype_relation(sup, oracle, &[], &budget)
+}
+
+/// A refinement of `base` under `constraints`.
+fn length_bounded(base: Schema, constraints: &[Constraint]) -> Schema {
+    Schema::refine(base, constraints.to_vec())
+}
+
+/// `dict[str, int]`.
+fn str_to_int() -> Schema {
+    Schema::mapping(MapClause {
+        key: Schema::Str,
+        value: Schema::Int,
+    })
+}
+
+// THEORY: a-refinement-narrows-its-base
+/// A set holds each member once, so it is never longer than the values its
+/// element holds apart, and is as long as that many where the element holds
+/// them.
+///
+/// The most is a bound the shape keeps to without writing it, so it entails a
+/// written maximum as a narrower written one does; the least of what the
+/// element holds apart names a set the bound refuses. Under [`Kinded`], `0` and
+/// `2` are two integers, so a set of them is at most two long and `{0, 2}` is
+/// a value `MaxLen(1)` refuses.
+#[test]
+fn a_set_is_as_long_as_the_values_its_element_holds_apart() {
+    let two_ints = Schema::union([
+        Schema::Literal(ConstIx::new(0)),
+        Schema::Literal(ConstIx::new(2)),
+    ]);
+    for set in [Schema::set, Schema::frozen_set] {
+        let of_ints = |most: usize| length_bounded(set(Schema::Int), &[Constraint::MaxLen(most)]);
+        let subject = set(two_ints.clone());
+        // The base is the subject's own, so the proof turns on the length alone.
+        let of_them = length_bounded(subject.clone(), &[Constraint::MaxLen(2)]);
+        assert_eq!(under_lengths(&subject, &of_them, &Kinded), Relation::Holds);
+        assert_eq!(
+            under_lengths(&subject, &of_ints(1), &Kinded),
+            Relation::Fails
+        );
+        // Without the oracle the two constants may be one value, and the set
+        // one member long: neither answer stands.
+        assert_eq!(
+            under_lengths(&subject, &of_ints(1), &NoLeafRelations),
+            Relation::Unknown
+        );
+        // `bool` holds two values with no constant to ask.
+        let flags = set(Schema::Bool);
+        let of_flags = |most: usize| length_bounded(set(Schema::Bool), &[Constraint::MaxLen(most)]);
+        assert_eq!(
+            under_lengths(&flags, &of_flags(2), &NoLeafRelations),
+            Relation::Holds
+        );
+        assert_eq!(
+            under_lengths(&flags, &of_flags(1), &NoLeafRelations),
+            Relation::Fails
+        );
+        // An integer element holds as many values as any bound names.
+        assert_eq!(
+            under_lengths(&set(Schema::Int), &of_ints(5), &NoLeafRelations),
+            Relation::Fails
+        );
+        // And a refinement's base lends its lengths to the refinement's own --
+        // the lengths it holds, and no bound past them.
+        let narrowed = length_bounded(subject.clone(), &[Constraint::MinLen(1)]);
+        assert_eq!(under_lengths(&narrowed, &of_them, &Kinded), Relation::Holds);
+        let at_least =
+            |least: usize| length_bounded(set(Schema::Int), &[Constraint::MinLen(least)]);
+        assert_ne!(
+            under_lengths(&at_least(1), &at_least(2), &NoLeafRelations),
+            Relation::Holds
+        );
+    }
+}
+
+/// An oracle over five constants, for the count of literals apart: `0` and `1`
+/// are one integer written twice, `2` another, `3` a string, and `4` an integer
+/// constant equal to nothing, so its literal has no value.
+struct Apart;
+impl Constants for Apart {}
+
+impl LeafRelations for Apart {
+    fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+        None
+    }
+    fn literal_kind(&self, constant: ConstIx) -> Option<Kind> {
+        Some(if constant.get() == 3 {
+            Kind::Str
+        } else {
+            Kind::Int
+        })
+    }
+    fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+        let value = |constant: ConstIx| match constant.get() {
+            0 | 1 => Some(0),
+            4 => None,
+            other => Some(other),
+        };
+        Some(match (value(left), value(right)) {
+            (Some(left), Some(right)) => left != right,
+            _ => true,
+        })
+    }
+}
+
+/// A union's literals count as members a set holds apart only where they are
+/// values of one kind and no two of them equal.
+///
+/// Two constants written apart may be one value, and a set keeps one of them;
+/// a constant equal to nothing is no value at all; and two kinds are not added,
+/// since `1 == True` across them. Each of those leaves a set of two members
+/// unproven, and the emptiness of one that needs two follows the count.
+#[test]
+fn literals_count_apart_within_one_kind() {
+    let literals = |constants: &[usize]| {
+        Schema::union(
+            constants
+                .iter()
+                .map(|constant| Schema::Literal(ConstIx::new(*constant))),
+        )
+    };
+    let two_long = |constants: &[usize]| {
+        length_bounded(Schema::set(literals(constants)), &[Constraint::MinLen(2)])
+            .verdict_under(&Apart)
+    };
+    assert_eq!(two_long(&[0, 2]), Verdict::Inhabited);
+    assert_eq!(
+        two_long(&[0, 1]),
+        Verdict::Unknown,
+        "one value, written twice"
+    );
+    assert_eq!(
+        two_long(&[0, 4, 1]),
+        Verdict::Unknown,
+        "a literal with no value"
+    );
+    assert_eq!(two_long(&[0, 3]), Verdict::Unknown, "two kinds, not added");
+    assert_eq!(two_long(&[0, 1, 2]), Verdict::Inhabited);
+    // Three need three apart, and the most the union names is the bound.
+    let three_long = length_bounded(Schema::set(literals(&[0, 2])), &[Constraint::MinLen(3)]);
+    assert_eq!(three_long.verdict_under(&Apart), Verdict::Empty);
+}
+
+// THEORY: a-refinement-narrows-its-base
+/// A record's lengths are its field counts: every value holds its required
+/// fields, and a closed one nothing past its declared fields.
+///
+/// So a closed record below a mapping is below a length bound on the mapping
+/// wherever its counts keep to it, and a record whose required fields alone
+/// are a length the bound refuses is refuted by the value holding just those.
+#[test]
+fn a_record_is_as_long_as_its_fields() {
+    let closed = |fields: Vec<Field>| Schema::record(fields, Openness::Closed);
+    let exactly = |length: usize| {
+        length_bounded(
+            str_to_int(),
+            &[Constraint::MinLen(length), Constraint::MaxLen(length)],
+        )
+    };
+    let one = closed(vec![field("a", Schema::Int, true)]);
+    assert_eq!(
+        under_lengths(&one, &exactly(1), &NoLeafRelations),
+        Relation::Holds
+    );
+    assert_eq!(
+        under_lengths(&closed(vec![]), &exactly(0), &NoLeafRelations),
+        Relation::Holds
+    );
+    // Two required fields are one past `MaxLen(1)`; an optional field alone
+    // leaves the empty dict, one short of `MinLen(1)`.
+    let two = closed(vec![
+        field("a", Schema::Int, true),
+        field("b", Schema::Int, true),
+    ]);
+    let at_most_one = length_bounded(str_to_int(), &[Constraint::MaxLen(1)]);
+    assert_eq!(
+        under_lengths(&two, &at_most_one, &NoLeafRelations),
+        Relation::Fails
+    );
+    let maybe = closed(vec![field("a", Schema::Int, false)]);
+    let at_least_one = length_bounded(str_to_int(), &[Constraint::MinLen(1)]);
+    assert_eq!(
+        under_lengths(&maybe, &at_least_one, &NoLeafRelations),
+        Relation::Fails
+    );
+    // A record exactly as long as the minimum is no value the bound refuses,
+    // asked where the base leaves the pair open: a class the rules cannot read.
+    let classed = length_bounded(Schema::Instance(ClassIx::new(0)), &[Constraint::MinLen(1)]);
+    assert_eq!(
+        under_lengths(&one, &classed, &NoLeafRelations),
+        Relation::Unknown
+    );
+    // A refinement of a mapping is no shorter than its written minimum, and a
+    // longer one is not entailed.
+    let keys = |least: usize| length_bounded(str_to_int(), &[Constraint::MinLen(least)]);
+    assert_ne!(
+        under_lengths(&keys(1), &keys(2), &NoLeafRelations),
+        Relation::Holds
+    );
+    // An open record has no most, so a maximum is not entailed.
+    let open = Schema::record(vec![field("a", Schema::Int, true)], Openness::Open);
+    let anything = length_bounded(Schema::mapping(MapClause::top()), &[Constraint::MaxLen(1)]);
+    assert_ne!(
+        under_lengths(&open, &anything, &NoLeafRelations),
+        Relation::Holds
+    );
+    // A record with no value refutes nothing: the value of its required fields
+    // is not there to stand on.
+    let barren = closed(vec![
+        field("a", Schema::Nothing, true),
+        field("b", Schema::Int, true),
+    ]);
+    assert_ne!(
+        under_lengths(&barren, &at_most_one, &NoLeafRelations),
+        Relation::Fails
+    );
+    // The most counts an optional field that can hold no value, so this record
+    // of one key is not proved below `MaxLen(1)` -- and its required field
+    // alone is no length the bound refuses.
+    let never = closed(vec![
+        field("a", Schema::Int, true),
+        field("b", Schema::Nothing, false),
+    ]);
+    assert_eq!(
+        under_lengths(&never, &at_most_one, &NoLeafRelations),
+        Relation::Unknown
+    );
+}
+
+/// A refinement admits its base's empty container only where the base admits
+/// it and every bound admits zero: a minimum of one leaves it out over a base
+/// holding it, and no maximum puts it back where the base has a position to
+/// fill. Built as written, so no fold settles a bound before it is read.
+#[test]
+fn a_refinement_admits_the_empty_container_where_its_base_and_bounds_do() {
+    let refined = |base: Schema, constraint: Constraint| Schema::Refine {
+        base: Arc::new(base),
+        constraints: vec![constraint].into(),
+    };
+    let list = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let one = Schema::list(SeqShape::fixed([Schema::Int]));
+    assert!(refined(list.clone(), Constraint::MaxLen(1)).admits_the_empty(Kind::List));
+    assert!(
+        !refined(list, Constraint::MinLen(1)).admits_the_empty(Kind::List),
+        "the bound leaves it out"
+    );
+    assert!(
+        !refined(one, Constraint::MaxLen(1)).admits_the_empty(Kind::List),
+        "the base leaves it out"
+    );
+}
+
+/// A refinement at most zero long is the empty container of its base's kind,
+/// below every supertype holding that container; and a meet of members that
+/// each hold it is inhabited by it, though the elements share nothing.
+#[test]
+fn the_empty_set_and_the_empty_dict_are_read_off_the_shapes() {
+    let no_set = length_bounded(Schema::set(Schema::Int), &[Constraint::MaxLen(0)]);
+    assert_eq!(
+        under_lengths(&no_set, &Schema::set(Schema::Str), &NoLeafRelations),
+        Relation::Holds
+    );
+    assert_ne!(
+        under_lengths(&no_set, &Schema::frozen_set(Schema::Int), &NoLeafRelations),
+        Relation::Holds,
+        "another kind's empty container"
+    );
+    let no_dict = length_bounded(str_to_int(), &[Constraint::MaxLen(0)]);
+    assert_eq!(
+        under_lengths(
+            &no_dict,
+            &Schema::record(vec![field("a", Schema::Str, false)], Openness::Closed),
+            &NoLeafRelations
+        ),
+        Relation::Holds
+    );
+    assert_ne!(
+        under_lengths(
+            &no_dict,
+            &Schema::record(vec![field("a", Schema::Str, true)], Openness::Closed),
+            &NoLeafRelations
+        ),
+        Relation::Holds,
+        "a required field the empty dict lacks"
+    );
+
+    let met = Schema::meet([
+        Schema::set(Schema::Literal(ConstIx::new(1))),
+        length_bounded(Schema::set(Schema::Int), &[Constraint::MaxLen(1)]),
+    ]);
+    assert_eq!(met.verdict_under(&Kinded), Verdict::Inhabited);
+    let maps = Schema::meet([
+        Schema::record(vec![field("a", Schema::Int, false)], Openness::Closed),
+        length_bounded(str_to_int(), &[Constraint::MaxLen(1)]),
+    ]);
+    assert_eq!(maps.verdict(), Verdict::Inhabited);
+    let without = Schema::meet([
+        Schema::set(Schema::Str),
+        length_bounded(Schema::set(Schema::Int), &[Constraint::MinLen(1)]),
+    ]);
+    assert_ne!(
+        without.verdict(),
+        Verdict::Inhabited,
+        "the bound leaves it out"
+    );
+}
+
 /// A string between three and one long: a refinement the set representation
 /// proves empty and the rules do not.
 fn three_to_one_long() -> Schema {

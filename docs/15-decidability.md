@@ -405,9 +405,18 @@ answers `"undecided"`.
   more than the bound lets through, so `list[int]` is `not_subset` of
   `Annotated[list[int], MaxLen(1)]`, on `[0, 0]`. A
   set holds each member once, so a bound over one asks how many values its
-  element has: `set[bool]` under `MinLen(3)` is empty, `set[int]` under it has
-  a value, and an element the rules cannot count declines. A dict's bound is
-  not counted, and declines. A bound over a list is an automaton with a
+  element holds apart: `set[bool]` under `MinLen(3)` is empty, `set[int]` under
+  it has a value, and `set[Literal[1, 2]]` is `not_subset` of
+  `Annotated[set[int], MaxLen(1)]`, on `{1, 2}`, and `subset` of
+  `Annotated[set[Literal[1, 2]], MaxLen(2)]`. Literals are counted apart within
+  one kind, since `1 == True` across two, and an element the rules cannot count
+  declines. A dict's keys are a record's fields, so a closed record's length
+  runs from its required fields to all of them: `{"a": int}` is `subset` of
+  `Annotated[dict[str, int], Len(1, 1)]`, and `{"a": int, "b": int}`
+  `not_subset` of `Annotated[dict[str, int], MaxLen(1)]`. A set or a dict
+  bounded to length zero is the empty one, below every shape that holds it, and
+  a meet whose members each hold it is not empty. A bound over a mapping's
+  clauses is not counted, and declines. A bound over a list is an automaton with a
   state per element, and the sets compare two such bounds up to about 1,340
   elements over a list of integers before the work a relation may spend runs
   out; past that they decline. That decides a
@@ -966,9 +975,11 @@ the shape. What is left below is what the descriptor cannot hold.
   MinLen(3)]` is decided empty and `Annotated[list[int], MaxLen(0)]` is the
   empty list. A set and a dict have a length their components do not count, and
   a bound over one of those refuses rather than being lowered as if it did.
-  Whether a set under a bound *has a value* is a different question and the
-  rules answer it, from how many values the element has, as the bullet on a
-  length bound above says.
+  What the rules read of one -- whether a set under a bound has a value, and
+  the lengths a set's element and a record's fields keep to -- is the bullet on
+  a length bound above. What they do not read is which members a length leaves:
+  `Annotated[set[Literal[1, 2]], Len(1, 1)]` holds `{1}` and `{2}` alone and is
+  below `set[Literal[1]] | set[Literal[2]]`, and the pair answers `undecided`.
 
 - **A set that needs two members Python's `==` makes one.** A set of `int | str`
   is not below `set[int] | set[str]`: `{1, "a"}` is in neither. That refutation
@@ -1230,11 +1241,17 @@ class Pair(NamedTuple):
     y: int
 
 
-# A length bound over a set or a dict is opaque to the relations: their
-# representations do not count one. Whether a set under one has a value is
-# counted from its element's values. Over a word or a sequence it is decided.
+# A length bound over a set or a dict is opaque to the sets: their
+# representations do not count one. The rules count what the shapes keep to, a
+# set's members from its element's values and a record's keys from its fields.
+# Over a word or a sequence it is decided.
 assert not Validator(Annotated[set[int], at.MinLen(3)]).is_empty()
 assert Validator(Annotated[set[bool], at.MinLen(3)]).is_empty()
+assert (
+    Validator(set[Literal[1, 2]]).relation_to(Annotated[set[int], at.MaxLen(1)])
+    == "not_subset"
+)
+assert Validator({"a": int}).is_subtype_of(Annotated[dict[str, int], at.Len(1, 1)])
 assert Validator(Annotated[tuple[int, int], at.MinLen(3)]).is_empty()
 # A named tuple's positions are its fields, and the schema says so, so the
 # relation is structural.

@@ -20,7 +20,7 @@ use std::cell::RefCell;
 
 use crate::descr::classes::Reach;
 use crate::descr::lower::{Constants, an_empty_reading_stands, read_widened};
-use crate::ir::{Attribute, ClassIx, Constraint, Constraints, Schema};
+use crate::ir::{Attribute, ClassIx, ConstIx, Constraint, Constraints, Schema};
 use crate::kind::{Kind, Region, Regions};
 use crate::oracle::denotes_a_set_within;
 use crate::verdict::Verdict;
@@ -616,7 +616,7 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
         // set, read with its own unions distributed already, and distributing
         // the meet reads the branches it dropped, which meet nothing, at the
         // distribution's cost.
-        Verdict::Unknown => the_empty_sequence_in_every_member(members)
+        Verdict::Unknown => the_empty_container_in_every_member(members)
             .or_else(|| a_meet_read_by_its_constants(members, cx.oracle, cx.defs))
             .or_else(|| match narrowed_by_its_members(members, cx) {
                 Some(narrowed) => narrowed,
@@ -628,26 +628,25 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
     (verdict, region)
 }
 
-/// `Inhabited` where every member of the meet is a sequence of one kind that
-/// holds the empty sequence, which is then a value of every member;
-/// `Unknown` otherwise.
+/// `Inhabited` where every member of the meet holds the empty container of one
+/// kind, which is then a value of every member; `Unknown` otherwise.
 ///
 /// A sequence shape with no prefix holds the empty sequence whatever its
-/// element admits, and a refinement of one keeps it under length bounds that
-/// admit zero ([`Schema::admits_the_empty_sequence`]), so the meet holds it with
-/// no element read: `[] & list[t]` has the empty list as a value where `t` is a
-/// definition the recursion is resolving and reads as empty.
-fn the_empty_sequence_in_every_member(members: &[Schema]) -> Verdict {
+/// element admits, a set shape the empty set, and a mapping that requires no
+/// field the empty dict, and a refinement of one keeps it under length bounds
+/// that admit zero ([`Schema::admits_the_empty`]), so the meet holds it with no
+/// element read: `[] & list[t]` has the empty list as a value where `t` is a
+/// definition the recursion is resolving and reads as empty, and
+/// `set[Literal["a"]] & Annotated[set[int], MaxLen(1)]` the empty set, though
+/// no member is in both elements.
+fn the_empty_container_in_every_member(members: &[Schema]) -> Verdict {
     let Some(kind) = members.iter().find_map(|member| match member {
-        Schema::Seq { container, .. } => Some(*container),
+        Schema::Seq { .. } | Schema::Coll { .. } | Schema::KeyedMap { .. } => member.type_tag(),
         _ => None,
     }) else {
         return Verdict::Unknown;
     };
-    if members
-        .iter()
-        .all(|member| member.admits_the_empty_sequence(kind))
-    {
+    if members.iter().all(|member| member.admits_the_empty(kind)) {
         Verdict::Inhabited
     } else {
         Verdict::Unknown
@@ -1207,10 +1206,62 @@ fn distinct_members(element: &Schema, wanted: usize, oracle: &dyn LeafRelations)
     if most < wanted {
         return Verdict::Empty;
     }
-    if least >= wanted {
+    if least >= wanted || literals_apart(element, wanted, oracle) {
         return Verdict::Inhabited;
     }
     Verdict::Unknown
+}
+
+/// Whether this schema holds `wanted` values a set keeps apart, proved: the
+/// members of a set that long, and so the set.
+pub(super) fn holds_apart(schema: &Schema, wanted: usize, oracle: &dyn LeafRelations) -> bool {
+    value_count_bounds(schema, oracle).0 >= wanted || literals_apart(schema, wanted, oracle)
+}
+
+/// Whether a union holds `wanted` literals of one kind, each a value and no
+/// two of them equal.
+///
+/// The lower count [`value_count_bounds`] gives a union is its largest
+/// member's, since two members may name one value. Two literals of one exact
+/// type name one value only where their constants are equal, which the oracle
+/// answers under an equality it trusts ([`LeafRelations::literals_disjoint`]),
+/// and a literal disjoint from itself names none. So within one kind, each
+/// literal that is a value and disjoint from every one kept is one more member
+/// a set can hold beside them. Two kinds are not added together: `1 == True`,
+/// and a set keeps one of the two.
+///
+/// A member is asked against the fewer than `wanted` literals of its kind kept
+/// before it, and a union with fewer members than it wants is asked nothing.
+fn literals_apart(schema: &Schema, wanted: usize, oracle: &dyn LeafRelations) -> bool {
+    let Schema::Union(members) = schema else {
+        return false;
+    };
+    if members.len() < wanted {
+        return false;
+    }
+    let mut kept: Vec<(Kind, ConstIx)> = Vec::new();
+    for member in members.iter() {
+        let Schema::Literal(constant) = member else {
+            continue;
+        };
+        let Some(kind) = oracle.literal_kind(*constant) else {
+            continue;
+        };
+        if oracle.literals_disjoint(*constant, *constant) != Some(false) {
+            continue;
+        }
+        let of_its_kind = kept.iter().filter(|(theirs, _)| *theirs == kind);
+        if of_its_kind
+            .clone()
+            .all(|(_, other)| oracle.literals_disjoint(*constant, *other) == Some(true))
+        {
+            if of_its_kind.count() + 1 >= wanted {
+                return true;
+            }
+            kept.push((kind, *constant));
+        }
+    }
+    false
 }
 
 /// How many values a schema denotes, counted up to `==`, as a lower and an
@@ -1223,7 +1274,7 @@ fn distinct_members(element: &Schema, wanted: usize, oracle: &dyn LeafRelations)
 /// read in one direction each: the upper bound proves a set empty, the lower
 /// one proves it inhabited, and a schema this cannot count reports `(0, MAX)`,
 /// which proves neither.
-fn value_count_bounds(schema: &Schema, oracle: &dyn LeafRelations) -> (usize, usize) {
+pub(super) fn value_count_bounds(schema: &Schema, oracle: &dyn LeafRelations) -> (usize, usize) {
     match schema {
         Schema::Anything(_) | Schema::Int | Schema::Float | Schema::Str | Schema::Bytes => {
             (usize::MAX, usize::MAX)

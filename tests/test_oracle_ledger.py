@@ -152,6 +152,12 @@ def test_the_sweep_excuses_no_oracle_default() -> None:
 
 # A reading named on the page as one that refutes, in backticks at a list item.
 _READING = re.compile(r"^- `([a-z_][a-z0-9_]*)` [-—]", re.MULTILINE)
+# A reading `unstructured` refutes on: the whole condition of an `if` whose body
+# returns `Relation::Fails`. A call that guards a proof -- the subject's own
+# lengths entailing a refinement's bounds -- refutes nothing.
+_REFUTES = re.compile(
+    r"\bif self\.([a-z_][a-z0-9_]*)\([^)]*\)\s*\{\s*return Relation::Fails;"
+)
 
 
 def _readings() -> list[str]:
@@ -187,7 +193,8 @@ def test_every_rule_that_refutes_is_on_the_page() -> None:
     source = RULES.read_text(encoding="utf-8")
     body = source[source.index("    fn unstructured(") :]
     body = body[: body.index("\n    }\n")]
-    asked = set(re.findall(r"self\.([a-z_]+)\([^)]*\)\s*\{", body))
+    asked = set(_REFUTES.findall(body))
+    assert len(asked) >= 5, f"the scan of `unstructured` found only {sorted(asked)}"
     missing = sorted(asked - set(_readings()))
     assert not missing, (
         f"`unstructured` asks {missing}, and the page does not name them"
