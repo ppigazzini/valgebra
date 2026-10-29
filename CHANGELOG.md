@@ -47,10 +47,20 @@ answer of its own, or a repair to a change not yet released.
 - fix: two bounds over lists or tuples are not compared
 - fix: an enumeration making an instance past its members is not their union
 - fix: a class's layout is the one Python laid down
+- feat: a finite set of constants misses a value of every kind with infinitely many
 
 -->
 
 ### Added
+
+- **A finite set of constants misses a value of every kind with infinitely
+  many.** A literal holds values of its constant's exact type alone, so a fresh
+  `object()` is in no literal of a set and its complement holds a value, and a
+  kind other than `None` and `bool` holds one no constant equals. So
+  `complement(Literal[Color.RED])` is `not_subset` of `nothing`, and `int` is
+  `not_subset` of `Literal[Color.RED]`, where both were `undecided` for a
+  constant the set representation cannot hold: an enumeration member, an
+  `object()`, a `Fraction`.
 
 - **The complement of a meet holds a complemented member's values.** Pushed
   in, the complement of a meet is the union of its members' complements, so

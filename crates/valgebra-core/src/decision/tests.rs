@@ -2016,6 +2016,36 @@ fn a_literal_is_disjoint_by_its_constants_then_by_its_kind() {
     assert!(Schema::union(Vec::new()).disjoint_with(&Schema::Int, &Kinded));
 }
 
+proptest! {
+    // THEORY: a-constant-is-the-values-equal-to-it
+    /// A finite set of constants holds no kind of infinitely many values whole,
+    /// and its complement holds a value, whatever its constants are: asked with
+    /// no oracle, which reads none of them.
+    ///
+    /// `None` and `bool` are the kinds a set of constants may hold whole, and
+    /// against one the constants are the question, so nothing is refuted
+    /// without them.
+    #[test]
+    fn a_finite_set_of_constants_misses_a_value_of_every_boundless_kind(
+        constants in proptest::collection::btree_set(0usize..16, 1..5),
+    ) {
+        let table = Schema::union(constants.iter().map(|&at| Schema::Literal(ConstIx::new(at))));
+        let below = |subject: &Schema| {
+            subject.subtype_relation(&table, &NoLeafRelations, &[], &Budget::new(DECISION_BUDGET))
+        };
+        prop_assert_eq!(
+            Schema::Complement(Arc::new(table.clone())).verdict_under(&NoLeafRelations),
+            Verdict::Inhabited
+        );
+        for boundless in [Schema::Int, Schema::Float, Schema::Str, Schema::Bytes, Schema::ANYTHING] {
+            prop_assert_eq!(below(&boundless), Relation::Fails, "{:?}", boundless);
+        }
+        for finite in [Schema::NoneType, Schema::Bool] {
+            prop_assert_ne!(below(&finite), Relation::Fails, "{:?}", finite);
+        }
+    }
+}
+
 /// An oracle that answers the *set* question, recording what it was handed.
 ///
 /// `literal_sets_disjoint` is the whole-question form of `literals_disjoint`:

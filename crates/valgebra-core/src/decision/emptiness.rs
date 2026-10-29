@@ -28,7 +28,7 @@ use crate::verdict::Verdict;
 use super::constraints::{
     Density, Multiples, bounds_unsatisfiable, longest, shortest, tightest_bounds,
 };
-use super::literals::{FiniteMeet, a_meet_read_by_its_constants};
+use super::literals::{FiniteMeet, a_meet_read_by_its_constants, misses_a_fresh_object};
 use super::records::{keyed_map_meet_verdict, keyed_map_minus_keyed_maps};
 use super::{
     Budget, Cx, DECISION_BUDGET, LeafRelations, NoLeafRelations, descending,
@@ -384,6 +384,10 @@ impl Schema {
             // no region, so `¬(¬{"a": None} ∩ ¬{})` is read this way or not at
             // all. The member's inner is read by its own shape, which spends
             // no step, as the fold above spends none.
+            //
+            // And it holds a value where its inner is a finite set of
+            // constants, which a fresh `object()` is no value of
+            // ([`misses_a_fresh_object`]).
             Schema::Complement(inner) => {
                 let (_, inner_region) = inner.empty_and_region(cx);
                 let region = match inner_region {
@@ -402,6 +406,7 @@ impl Schema {
                     {
                         Verdict::Empty
                     }
+                    Verdict::Unknown if misses_a_fresh_object(inner) => Verdict::Inhabited,
                     Verdict::Unknown => a_complemented_member_holds_a_value(inner),
                     settled => settled,
                 };

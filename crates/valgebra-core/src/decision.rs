@@ -30,7 +30,8 @@ use crate::oracle::{denotes_a_set_within, has_complementary_pair};
 use constraints::constraint_entailed;
 use emptiness::{class_with_attributes, the_rules_find_a_value};
 use literals::{
-    finite_meet_below, finite_set, finite_set_below, the_constant_speaks_for_the_literal,
+    a_union_spilled_past_as_a_table, finite_meet_below, finite_set, finite_set_below,
+    spills_past_a_table, the_constant_speaks_for_the_literal,
 };
 use products::{linear_subtype, seq_splits_across_union};
 use readings::{outside_every_kind, refuted_by_a_multiple, tables_disjoint};
@@ -1522,8 +1523,12 @@ impl Schema {
                 })
                 .or_else(|| self.unstructured(other, cx))
                 .or_else(|| self.below_a_reference(other, cx)),
+            // A table of constants is a union of literals, and holds no kind of
+            // infinitely many values whole, which the branches read alone
+            // cannot say; asked where the branches have declined.
             (_, Schema::Union(members)) => self
                 .below_a_union(other, members, cx)
+                .or_else(|| a_union_spilled_past_as_a_table(self, members, other, cx))
                 .or_else(|| self.unstructured(other, cx)),
             // A refinement carrying no constraint denotes exactly its base, so
             // it is decided as its base on whichever side it sits.
@@ -1664,6 +1669,7 @@ impl Schema {
             (Schema::Refine { .. }, _) => self
                 .left_reduces_below(other, cx)
                 .or_else(|| self.unstructured(other, cx)),
+            (_, Schema::Literal(_)) if spills_past_a_table(self, other, cx) => Relation::Fails,
             _ => self.unstructured(other, cx),
         }
     }

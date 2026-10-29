@@ -1,6 +1,10 @@
+import enum
+from fractions import Fraction
+from typing import Literal
+
 import pytest
 
-from valgebra import ValidationError, Validator, union
+from valgebra import ValidationError, Validator, complement, nothing, union
 
 
 def test_literal_accepts_the_exact_value() -> None:
@@ -87,3 +91,32 @@ def test_a_proof_between_constants_needs_a_transitive_equality() -> None:
     assert first.is_valid(witness), "the witness equals the first constant"
     assert not second.is_valid(witness), "and not the second"
     assert first.relation_to(second) != "subset"
+
+
+class _Member(enum.Enum):
+    A = 1
+
+
+# THEORY: a-constant-is-the-values-equal-to-it
+def test_a_finite_set_of_constants_misses_a_value_of_every_boundless_kind() -> None:
+    """A literal holds values of its constant's exact type alone.
+
+    So a fresh `object()` is in no literal of a set, which its complement
+    holds, and of the pairwise unequal values of a kind with infinitely many,
+    a set of constants misses one: whatever the constants are, an enumeration
+    member, an object, a `Fraction` or an `int` among them, which the set
+    representation cannot hold.
+    """
+    witnesses = {int: 2, float: 0.5, str: "b", bytes: b"b"}
+    for table in (
+        Literal[_Member.A],
+        Literal[_Member.A, 1],
+        Validator(object()),
+        Validator(Fraction(1, 3)),
+    ):
+        assert complement(table).relation_to(nothing) == "not_subset", table
+        assert Validator(complement(table)).is_valid(object())
+        for kind, witness in witnesses.items():
+            assert Validator(kind).is_valid(witness)
+            assert not Validator(table).is_valid(witness)
+            assert Validator(kind).relation_to(table) == "not_subset", (kind, table)
