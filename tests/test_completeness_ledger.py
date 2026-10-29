@@ -1951,6 +1951,26 @@ _TRANSLATED: list[object] = [
         nothing,
         id="json:number&~array-is-inhabited",
     ),
+    # The guard a translation writes for an object keyword, as a subject: the
+    # meet is narrowed by the complement beside its union to the record the
+    # guard holds, the same set, which a reference the set representation cuts
+    # leaves to the rules.
+    pytest.param(
+        "subtype",
+        intersection(_OBJECT, union(complement(_OBJECT), {"k0": _JSON, str: _JSON})),
+        {"k0": _JSON, str: _JSON},
+        id="json:guarded-object<=the-record-it-guards",
+    ),
+    pytest.param(
+        "subtype",
+        intersection(
+            _OBJECT,
+            union(complement(_OBJECT), {"k0": _JSON, str: _JSON}),
+            union(complement(_OBJECT), {"k1": _JSON, str: _JSON}),
+        ),
+        {"k0": _JSON, "k1": _JSON, str: _JSON},
+        id="json:two-guards<=the-record-they-guard",
+    ),
     pytest.param(
         "subtype",
         _JSON,

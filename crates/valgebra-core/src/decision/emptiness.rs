@@ -669,6 +669,13 @@ fn the_empty_sequence_in_every_member(members: &[Schema]) -> Verdict {
 /// first look where no member is a union.
 #[inline(never)]
 fn narrowed_by_its_members(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdict> {
+    Some(narrowed_meet(members, cx)?.empty_and_region(cx).0)
+}
+
+/// The meet of `members` with every branch of a union member dropped that
+/// shares no value with another member ([`shares_nothing_beside`]), which is
+/// the same set [FCB08, Def. 4.1], or `None` where no branch is.
+pub(super) fn narrowed_meet(members: &[Schema], cx: &Cx<'_>) -> Option<Schema> {
     let drops = |at: usize, branch: &Schema| shares_nothing_beside(branch, members, at, cx);
     let narrows = members.iter().enumerate().any(|(at, member)| {
         matches!(member, Schema::Union(branches) if branches.iter().any(|b| drops(at, b)))
@@ -686,7 +693,7 @@ fn narrowed_by_its_members(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdic
             other => other.clone(),
         })
         .collect();
-    Some(Schema::meet_within(kept, cx.defs).empty_and_region(cx).0)
+    Some(Schema::meet_within(kept, cx.defs))
 }
 
 /// Whether `branch` shares no value with the members of a meet other than the

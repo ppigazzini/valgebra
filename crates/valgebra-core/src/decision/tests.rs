@@ -1393,7 +1393,8 @@ fn an_open_map_or_a_class_beside_closed_maps_names_no_value() {
 
 /// A union in a meet is narrowed by the members beside it: `K ∩ (¬K ∪ X)` is
 /// `K ∩ X`, read with no clause distributed, so three guards over one kind --
-/// eight clauses distributed, past the bound -- decide as their branches do. A
+/// eight clauses distributed, past the bound -- decide as their branches do,
+/// and a guarded meet as a subject is the record its guard holds. A
 /// branch goes beside the member it complements and beside a meet whose
 /// conjuncts its complement's are; never on a predicate's complement, which may
 /// answer its two occurrences apart.
@@ -1455,6 +1456,12 @@ fn a_union_in_a_meet_is_narrowed_by_the_members_beside_it() {
         ),
     ]);
     assert_ne!(rules_verdict(&outside_a_union, &[]).0, Verdict::Empty);
+    // As a subject the meet is asked narrowed, the same set: a guarded record
+    // is below the record its guard holds by the rules alone, and outside
+    // another.
+    let guarded_once = Schema::meet([object.clone(), guard(&object, tagged(Schema::Int))]);
+    assert!(structural(&guarded_once, &tagged(Schema::Int)));
+    assert!(!structural(&guarded_once, &tagged(Schema::Str)));
 }
 
 /// A chain spelled as a recursive record, its reference inside the key's

@@ -516,7 +516,8 @@ answers `"undecided"`.
   each `~OBJ` meets `OBJ` in nothing. A branch that is the complement of a
   member beside its union is dropped before anything is distributed, so any
   number of keywords on one kind is read as the meet of what they guard:
-  three are eight clauses distributed and one meet narrowed. Two tags fixed
+  three are eight clauses distributed and one meet narrowed, as a subject as
+  well as alone: the guarded meet is below the record it guards. Two tags fixed
   two ways meet in nothing, and a tag beside a field it requires holds the
   dict with that field. A meet of more unions no complement narrows, or of a
   union with a meet for a branch, is left to the set representation, and is
@@ -537,6 +538,7 @@ answers `"undecided"`.
     tagged = intersection(obj, t0, required)
     assert tagged.is_valid({"tag": "t0"})
     assert tagged.relation_to(nothing) == "not_subset"
+    assert tagged.relation_to({"tag": json, str: json}) == "subset"
     ```
 - **The complement laws, where the constructors reach them.** `complement`
   cancels a complement, `union` folds a join carrying a schema beside its own

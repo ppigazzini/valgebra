@@ -52,10 +52,18 @@ answer of its own, or a repair to a change not yet released.
 - feat: a sentinel compares by identity
 - feat: a set reading's difference refutes at a kind no cut reaches
 - feat: a meet supertype is decided a member at a time
+- feat: a meet subject is asked narrowed by the complements beside its unions
 
 -->
 
 ### Added
+
+- **A meet subject is asked narrowed by the complements beside its unions.**
+  `K & (~K | R)` is `K & R`, and a meet on the left is now asked in that form:
+  the guard a JSON Schema translation writes for an object keyword over a
+  recursive JSON value, `intersection(OBJ, union(complement(OBJ), R0))`, is
+  `subset` of `R0`, and two such guards are below the record holding both
+  keys, where each was `undecided`.
 
 - **A meet supertype is decided a member at a time.** Where both deciders
   decline a pair whole, a meet on the right is asked one member at a time, and

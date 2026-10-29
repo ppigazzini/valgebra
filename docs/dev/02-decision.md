@@ -1123,7 +1123,11 @@ rather than answering for it
 the same set, read with its own unions distributed, so it goes to the
 difference and is not distributed again: distributing the meet reads the
 branches the narrowing dropped, which meet nothing, and spends steps the
-respelled questions after it share.
+respelled questions after it share. A meet *subject* the member rule does not
+place is narrowed the same way and asked in its own place
+(`narrowed_meet_below`), after the readings of the meet as written: the same set, so its relation to the supertype is the
+meet's, and the guard a translation writes, `K ∩ (¬K ∪ R)`, is the record `R`
+met with `K`.
 
 `decision/goal_tests.rs` holds the premise: every goal the recorder sees is in
 `C`, over the product rule's widest shapes, the record rule's split, the union

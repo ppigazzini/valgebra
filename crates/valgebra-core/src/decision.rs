@@ -30,7 +30,7 @@ use crate::verdict::{Relation, Verdict};
 
 use crate::oracle::{denotes_a_set_within, has_complementary_pair};
 use constraints::constraint_entailed;
-use emptiness::{class_with_attributes, the_rules_find_a_value};
+use emptiness::{class_with_attributes, narrowed_meet, the_rules_find_a_value};
 use literals::{
     a_union_spilled_past_as_a_table, finite_meet_below, finite_set, finite_set_below,
     spills_past_a_table, the_constant_speaks_for_the_literal,
@@ -360,6 +360,18 @@ impl SeqShape {
             cx,
         )
     }
+}
+
+/// A meet narrowed by the complements beside its unions ([`narrowed_meet`]),
+/// the same set, below `other`; `Unknown` where nothing narrows.
+///
+/// Out of line, since the meet arm it is asked from is inlined into the goal
+/// recursion, and a meet with no union answers at the first look.
+#[inline(never)]
+fn narrowed_meet_below(members: &[Schema], other: &Schema, cx: &mut Cx<'_>) -> Relation {
+    narrowed_meet(members, cx).map_or(Relation::Unknown, |narrowed| {
+        narrowed.is_subtype_rec(other, cx)
+    })
 }
 
 impl Schema {
@@ -1523,6 +1535,25 @@ impl Schema {
         Relation::all(members.iter().map(|m| m.is_subtype_rec(other, cx)))
     }
 
+    /// A meet the member rule and the table reading leave, read by the rest of
+    /// its readings: as one record below a map or a union of maps, as sharing
+    /// no value with a complement's inner set, then as a pair with no rule of
+    /// its own, then through a reference.
+    ///
+    /// The meet arm asks the narrowed meet after these, and never before:
+    /// asked before them, a narrowed meet that declines has spent the steps
+    /// they share, and asked in their place, its readings miss what the
+    /// meet's own spelling gives them.
+    fn a_meet_read_whole(&self, members: &[Schema], other: &Schema, cx: &mut Cx<'_>) -> Relation {
+        match other {
+            Schema::KeyedMap { .. } | Schema::Union(_) => keyed_meet_below(members, other, cx),
+            Schema::Complement(inner) => Relation::proven(self.shares_no_value_with(inner, cx)),
+            _ => Relation::Unknown,
+        }
+        .or_else(|| self.unstructured(other, cx))
+        .or_else(|| self.below_a_reference(other, cx))
+    }
+
     /// The arms that match a pair by the shapes on its two sides.
     ///
     /// They are rules of the kind a rule-based inclusion states: a union is
@@ -1551,24 +1582,17 @@ impl Schema {
             //
             // A meet of tables and complements of tables is a table, which is
             // what a record's tag narrows to, and is asked as one once the
-            // member rule has not placed it. A meet of keyed maps is one record,
+            // member rule has not placed it, and a meet a complement beside its
+            // union narrows is the narrowed meet, the same set, asked after
+            // every other reading (`narrowed_meet_below`). A meet of keyed maps is one record,
             // their pointwise meet, asked below a map or a union of maps; and a
             // meet below a complement is a meet sharing no value with its inner,
             // asked as the arm below asks it of any other subject.
             (Schema::Intersection(members), _) => self
                 .meet_below(other, members, cx)
                 .or_else(|| finite_meet_below(members, other, cx.oracle))
-                .or_else(|| match other {
-                    Schema::KeyedMap { .. } | Schema::Union(_) => {
-                        keyed_meet_below(members, other, cx)
-                    }
-                    Schema::Complement(inner) => {
-                        Relation::proven(self.shares_no_value_with(inner, cx))
-                    }
-                    _ => Relation::Unknown,
-                })
-                .or_else(|| self.unstructured(other, cx))
-                .or_else(|| self.below_a_reference(other, cx)),
+                .or_else(|| self.a_meet_read_whole(members, other, cx))
+                .or_else(|| narrowed_meet_below(members, other, cx)),
             // A table of constants is a union of literals, and holds no kind of
             // infinitely many values whole, which the branches read alone
             // cannot say; asked where the branches have declined.
