@@ -738,7 +738,13 @@ impl Schema {
     /// [BBC+26, (anyOf-r)] -- for a subject that is not a member of a union
     /// being asked, since a union against a union would lower every member
     /// against every branch: two hundred patterns against two hundred spend
-    /// three seconds that way, and decide nothing.
+    /// three seconds that way, and decide nothing. A branch of one constant is
+    /// not asked: it holds the subject only where the subject is that one
+    /// value, and a subject of one value is inside every branch it shares the
+    /// value with, so narrowing leaves that constant alone or beside branches
+    /// that hold the subject too. Asked a constant at a time, a table lowers
+    /// the subject once a constant: a millisecond each for a pattern of a
+    /// thousand words, and a table of a thousand names decides nothing for it.
     ///
     /// A meet supertype is above a subject where each member is, and refuted
     /// where one member is, a meet being the intersection of its members'
@@ -759,8 +765,8 @@ impl Schema {
     ///
     /// The parts are asked in the query, so the rules' work stays bounded by
     /// its budget in total, and the lowerings are one per member, per
-    /// narrowing, per shared field and per branch of the one subject, each
-    /// under its own bounds: linear in the two terms.
+    /// narrowing, per shared field and per branch of the one subject that is
+    /// not a constant, each under its own bounds.
     fn decided_by_parts(&self, other: &Schema, cx: &mut Cx<'_>, by_branch: bool) -> Relation {
         if let Schema::Union(members) = self {
             // The supertype is every member's, so it is lowered once: where it
@@ -815,10 +821,13 @@ impl Schema {
         if met.len() == branches.len() {
             return Relation::proven(
                 by_branch
-                    && branches.iter().any(|branch| {
-                        self.descriptor_contained_in(branch, cx.oracle, cx.defs)
-                            .holds()
-                    }),
+                    && branches
+                        .iter()
+                        .filter(|branch| !matches!(branch, Schema::Literal(_)))
+                        .any(|branch| {
+                            self.descriptor_contained_in(branch, cx.oracle, cx.defs)
+                                .holds()
+                        }),
             );
         }
         let narrowed = Schema::union(met);
