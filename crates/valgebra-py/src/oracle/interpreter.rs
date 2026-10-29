@@ -111,6 +111,34 @@ fn a_literal_is_asked_of_a_pattern_the_probe_compiles_itself() {
     });
 }
 
+/// Each constant of a table is asked of one pattern the probe compiles once:
+/// the query keeps it for every constant after the first, and drops it with
+/// the oracle.
+#[test]
+fn a_table_asked_of_one_pattern_compiles_it_once_a_query() {
+    Python::attach(|py| {
+        let texts = ["a0", "a1", "b2"]
+            .into_iter()
+            .map(|text| text.into_pyobject(py).unwrap().into_any().unbind())
+            .collect();
+        asking(py, texts, |oracle| {
+            let words = Schema::Refine {
+                base: Schema::Str.into(),
+                constraints: vec![valgebra_core::Constraint::Regex("a0|a1".to_owned())].into(),
+            };
+            let admitted = [0, 1, 2]
+                .map(|slot| oracle.leaf_subtype(&Schema::Literal(ConstIx::new(slot)), &words));
+            assert_eq!(admitted, [Some(true), Some(true), Some(false)]);
+            assert_eq!(crate::check::unindexed_held(), 1);
+        });
+        assert_eq!(
+            crate::check::unindexed_held(),
+            0,
+            "the query's patterns go with its oracle"
+        );
+    });
+}
+
 #[test]
 fn a_literal_reports_the_kind_its_value_has() {
     // `literal_kind` places a constant in the partition. A `bool` is its own

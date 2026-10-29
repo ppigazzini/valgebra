@@ -6,6 +6,7 @@ use pyo3::types::{PyInt, PyString};
 use regex_automata::util::syntax;
 use regex_automata::{MatchKind, meta};
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
 use valgebra_core::{Constraint, Schema};
@@ -313,6 +314,45 @@ pub(crate) fn compile_patterns(
         }
     }
     Ok(compiled)
+}
+
+thread_local! {
+    /// The patterns a walk met outside any index, each compiled under its text,
+    /// a refusal among them, for the query that walked it.
+    static UNINDEXED: RefCell<FxHashMap<Box<str>, Option<Regex>>> = RefCell::default();
+}
+
+/// Whether `text` is in the language of `pattern`, a pattern no index holds.
+///
+/// Only the relation oracle walks a schema no validator built an index for,
+/// and it walks every constant of a table through one supertype: compiled per
+/// value, a table against the alternation of its own words compiles the
+/// pattern once a constant, quadratic in the table. So a pattern compiles once
+/// a query, under its text -- a schema the query builds holds a copy of the
+/// text at an address of its own, which no address key would find again -- and
+/// [`forget_unindexed`] drops what the query compiled when its oracle goes.
+pub(crate) fn matches_unindexed(pattern: &str, text: &str) -> bool {
+    UNINDEXED.with_borrow_mut(|compiled| {
+        if let Some(regex) = compiled.get(pattern) {
+            return regex.as_ref().is_some_and(|regex| regex.is_match(text));
+        }
+        let regex = compile_pattern(pattern).ok();
+        let matched = regex.as_ref().is_some_and(|regex| regex.is_match(text));
+        compiled.insert(pattern.into(), regex);
+        matched
+    })
+}
+
+/// Drop the patterns [`matches_unindexed`] compiled on this thread: the query
+/// that walked them is over, and nothing outside one misses an index.
+pub(crate) fn forget_unindexed() {
+    UNINDEXED.take();
+}
+
+/// How many patterns [`matches_unindexed`] holds on this thread.
+#[cfg(test)]
+pub(crate) fn unindexed_held() -> usize {
+    UNINDEXED.with_borrow(FxHashMap::len)
 }
 
 /// The memory a validator's patterns may cost: 32 MiB, three times the `regex`

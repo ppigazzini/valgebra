@@ -1028,6 +1028,13 @@ as a list against a length-bounded list of the same element.
   builds. A pair whose one pattern the build refuses decides in 0.46 s against
   2.14 s, since a refusal spends the most of any build. The instruction gate's
   decision workloads read no more than before.
+- **A pattern the oracle walks is compiled once a query.** A literal is
+  asked of a pattern by walking its constant through a schema no validator
+  built an index for, so a table of strings compiled the pattern once a
+  constant: 1,024 strings against the alternation of the same words took 1.4 s
+  on a release build. The query keeps each pattern it compiled under its text
+  and drops them when it is answered (`matches_unindexed` in
+  `check/index.rs`), and the pair takes 2 ms.
 - **A length bound costs a state an element and little else.** A bound over a
   list is an automaton of one letter repeated, so the letter is held by one
   handle and asked whether it takes every value once (`chain` in

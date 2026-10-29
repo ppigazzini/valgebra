@@ -15,6 +15,30 @@ fn compile_pattern_anchors_the_whole_string() {
     assert!(!digits.is_match(""));
 }
 
+/// A pattern no index holds compiles once on a thread, a refusal among them,
+/// and answers every text after from what it kept, until the query forgets it.
+#[test]
+fn a_pattern_no_index_holds_compiles_once_until_forgotten() {
+    assert!(matches_unindexed("a.*", "abc"));
+    assert!(!matches_unindexed("a.*", "xa"));
+    assert_eq!(
+        unindexed_held(),
+        1,
+        "the second text reads the kept pattern"
+    );
+    assert!(!matches_unindexed("(", "("), "a refusal matches nothing");
+    assert!(!matches_unindexed("(", ""));
+    assert_eq!(unindexed_held(), 2, "a refusal is kept beside the pattern");
+    assert!(matches_unindexed("b|c", "c"));
+    assert!(
+        !matches_unindexed("b|c", "bc"),
+        "the kept pattern is anchored"
+    );
+    forget_unindexed();
+    assert_eq!(unindexed_held(), 0);
+    assert!(matches_unindexed("a.*", "a"));
+}
+
 /// A counted Unicode class written as an ordinary bound compiles: the program
 /// is past the crate's default and inside [`PATTERN_SIZE_LIMIT`], and one four
 /// times larger is refused.
