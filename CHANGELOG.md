@@ -31,6 +31,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: emptiness reads a reference in the complement law as construction does
 - fix: the part of a pattern between its word boundaries is built from its tree -- internal
 - fix: a reading that cannot decide a meet hands it to the next
+- fix: a definition being resolved drops no part of a supertype
 
 -->
 
@@ -131,6 +132,15 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A recursive definition being resolved is read as empty at positive
+  positions only.** The emptiness decision reads a definition it is resolving
+  as empty, the least fixpoint, and a relation it asks on the way could drop a
+  branch, a component or a slot of the relation's supertype by that reading,
+  which narrows the supertype and can refute a relation that holds. While a
+  definition is being resolved, such a part is told apart from the subject by
+  the kinds each may hold, a reference read through its definition. No
+  released answer is known to have been refuted this way.
 
 - **A reading that cannot decide a meet hands it to the next.** A meet's
   readings are each sound alone, so one that ends undecided passes the meet on

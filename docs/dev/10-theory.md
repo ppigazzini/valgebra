@@ -838,7 +838,11 @@ The two are one procedure asked in two directions, and the unfolding is sound
 in both. A goal the emptiness recursion asks while it resolves a reference reads
 that reference at positive positions only, so its answer is about the schema
 with those occurrences emptied, whose emptiness is the definition's: a value of
-least height needs no value of the definition at a positive position below it. A
+least height needs no value of the definition at a positive position below it.
+A goal that drops a part of its supertype the subject shares no value with --
+a branch, a component, a slot -- reads that part at a negative position, so
+while a reference is being resolved it drops the part by kinds alone, which
+read no reference. A
 meet met again on its path is read as empty only where a constructor stands
 between, so a union a meet distributes -- the meet being the union of the
 meets each of its branches makes with the rest [FCB08, Def. 4.1] -- leaves no
@@ -846,9 +850,9 @@ copy of itself in a branch. **[LOAD-BEARING: two-fixpoints-one-procedure]**
 
 SOURCE: §13.4 "**Mixed induction and coinduction.**"
 
-IMPLEMENTED-BY: decision/emptiness.rs, decision/emptiness.rs::Schema::empty_and_region_at, decision/emptiness.rs::meet_through_a_reference, decision/emptiness.rs::OpenMeet::open, decision/emptiness.rs::normal_form_within
+IMPLEMENTED-BY: decision/emptiness.rs, decision/emptiness.rs::Schema::empty_and_region_at, decision/emptiness.rs::meet_through_a_reference, decision/emptiness.rs::OpenMeet::open, decision/emptiness.rs::normal_form_within, decision.rs::Schema::shares_no_value_with_a_part_of_the_supertype
 
-HELD-BY: detects_uninhabited_recursive_schemas, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, the_fixpoint_laws_hold_over_drawn_definitions, a_reference_being_resolved_refutes_nothing_that_holds, a_record_minus_records_inside_a_definition_asks_its_goals_there, a_proof_over_a_fixpoint_has_no_witness_against_it, an_emptiness_is_refused_by_every_boundary_value, a_meet_with_a_reference_is_its_definition_met_with_the_rest, a_meet_with_a_reference_answers_as_its_values_do, a_meet_holding_a_union_twice_is_proved_empty_only_where_it_is, a_union_met_twice_is_distributed_once, test_a_meet_of_guarded_records_is_decided_clause_by_clause
+HELD-BY: detects_uninhabited_recursive_schemas, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, the_fixpoint_laws_hold_over_drawn_definitions, a_reference_being_resolved_refutes_nothing_that_holds, a_record_minus_records_inside_a_definition_asks_its_goals_there, a_proof_over_a_fixpoint_has_no_witness_against_it, an_emptiness_is_refused_by_every_boundary_value, a_meet_with_a_reference_is_its_definition_met_with_the_rest, a_meet_with_a_reference_answers_as_its_values_do, a_meet_holding_a_union_twice_is_proved_empty_only_where_it_is, a_union_met_twice_is_distributed_once, test_a_meet_of_guarded_records_is_decided_clause_by_clause, a_definition_being_resolved_drops_no_branch_of_the_supertype, a_part_of_the_supertype_is_told_apart_by_kinds_while_a_definition_is_resolved
 
 **A clause is a region with its own default.** A keyed map is a quasi-K-step
 function [Cas23, Def. 4.6], named labels and a default per key-type region

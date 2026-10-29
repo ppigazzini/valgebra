@@ -1028,6 +1028,29 @@ impl Schema {
         Schema::meet_within([self.clone(), other.clone()], cx.defs).is_empty_rec(cx)
     }
 
+    /// Whether `self` shares no value with `part`, a part of the supertype: a
+    /// branch of its union, a component of a product branch, a slot of a
+    /// record branch.
+    ///
+    /// The meet reads `part` at a positive position, and `part` sits at a
+    /// negative one of the question `self ∧ ¬T` a goal decides. A definition
+    /// the emptiness recursion is resolving is read as empty [LN26, §5.1],
+    /// which narrows a subject soundly and a supertype not at all: read inside `part`, it
+    /// drops a branch the subject's values fall in and refutes what holds.
+    /// So where a definition is being resolved the meet is not asked, and the
+    /// two are told apart by the kinds each may hold, a reference read through
+    /// its definition: an over-approximation of each set, and one that reads
+    /// no hypothesis.
+    fn shares_no_value_with_a_part_of_the_supertype(&self, part: &Schema, cx: &mut Cx<'_>) -> bool {
+        if cx.visiting.is_empty() {
+            return self.shares_no_value_with(part, cx);
+        }
+        self.disjoint_with(part, cx.oracle)
+            || self.kinds_possibly_held(cx.oracle, cx.defs)
+                & part.kinds_possibly_held(cx.oracle, cx.defs)
+                == 0
+    }
+
     /// Whether `self` reduces to something below `other` by a rule that reads
     /// only the left side: a reference unfolds to its definition, and a
     /// refinement drops to its base.
@@ -1248,7 +1271,7 @@ impl Schema {
     ) -> Relation {
         let mut meets = |member: &Schema| {
             if full {
-                !self.shares_no_value_with(member, cx)
+                !self.shares_no_value_with_a_part_of_the_supertype(member, cx)
             } else {
                 !self.disjoint_with(member, cx.oracle)
             }
@@ -1776,7 +1799,11 @@ impl Schema {
 /// being resolved. The hypothesis is read in one place, the reference arm of
 /// the emptiness recursion, and never under a complement, whose arm reads its
 /// inner's region alone; every verdict a goal reads is of its subject or of a
-/// meet with its supertype's complement, positive in `S ∧ ¬T`. So an answer
+/// meet with its supertype's complement, positive in `S ∧ ¬T`. The one meet a
+/// goal builds with a part of its supertype itself -- a branch, a component, a
+/// slot the subject shares no value with -- reads that part at a negative
+/// position, and is asked only where no definition is being resolved
+/// ([`Schema::shares_no_value_with_a_part_of_the_supertype`]). So an answer
 /// under the hypothesis is an answer about the schema with that reference's
 /// positive occurrences read as empty: a proof of the smaller set, and a
 /// refutation standing on one of its values, which is a value of the real one.

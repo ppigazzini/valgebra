@@ -6473,6 +6473,78 @@ proptest! {
 }
 
 // THEORY: two-fixpoints-one-procedure
+/// A supertype's branch is not dropped by reading a definition being resolved
+/// as empty.
+///
+/// `D0 = set | list[D0]` and `D1 = frozenset | list[D0]`, so `D1` is below
+/// `frozenset | D0`: its list branch is one of `D0`'s. With `D0` on `visiting`
+/// the meet of `D1`'s list branch and the supertype's branch `D0` reads that
+/// `D0` as empty, the branch is dropped, and the pair is refuted -- the
+/// hypothesis read at a negative position the law above draws. A supertype's
+/// part is told apart from the subject by kinds alone while a definition is
+/// being resolved, and the pair is not refuted.
+#[test]
+fn a_definition_being_resolved_drops_no_branch_of_the_supertype() {
+    let list_of_d0 = Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0))));
+    let frozen = Schema::frozen_set(Schema::ANYTHING);
+    let defs = vec![
+        Schema::Union(vec![Schema::set(Schema::ANYTHING), list_of_d0.clone()].into()),
+        Schema::Union(vec![frozen.clone(), list_of_d0].into()),
+    ];
+    let subject = Schema::Ref(DefIx::new(1));
+    let supertype = Schema::Union(vec![frozen, Schema::Ref(DefIx::new(0))].into());
+    for resolving in [false, true] {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &defs, &budget);
+        if resolving {
+            cx.visiting.push(DefIx::new(0));
+        }
+        let relation = subject.is_subtype_rec(&supertype, &mut cx);
+        if resolving {
+            assert_ne!(relation, Relation::Fails, "refuted with D0 being resolved");
+        } else {
+            assert_eq!(relation, Relation::Holds);
+        }
+    }
+}
+
+// THEORY: two-fixpoints-one-procedure
+/// While a definition is being resolved, a part of the supertype is told apart
+/// from the subject by the kinds each may hold, a reference read through its
+/// definition.
+///
+/// `t = ({"a": list[list[[]]]} | dict[str, t]) & ~dict[str, t]` holds the
+/// record: its field is a list, and every value of `t` is a dict. Resolving `t`
+/// asks whether the record is below `dict[str, t]`, which turns on whether the
+/// list is apart from `t` -- asked while `t` is being resolved, so its meet is
+/// not built, and the kinds answer: a list against the dicts `t` holds.
+#[test]
+fn a_part_of_the_supertype_is_told_apart_by_kinds_while_a_definition_is_resolved() {
+    let by_str = |value: Schema| Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause::of(Schema::Str, value)].into(),
+    };
+    let empty_list = Schema::list(SeqShape {
+        prefix: Vec::new().into(),
+        tail: None,
+    });
+    let nested = Schema::list(SeqShape::homogeneous(Schema::list(SeqShape::homogeneous(
+        empty_list,
+    ))));
+    let t = Schema::Ref(DefIx::new(0));
+    let defs = vec![Schema::Intersection(
+        vec![
+            Schema::Union(vec![closed(vec![field("a", nested, true)]), by_str(t.clone())].into()),
+            Schema::Complement(Arc::new(by_str(t.clone()))),
+        ]
+        .into(),
+    )];
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &defs, &budget);
+    assert_eq!(t.verdict_rec(&mut cx), Verdict::Inhabited);
+}
+
+// THEORY: two-fixpoints-one-procedure
 /// A union a meet holds twice, once bare and once inside another member, is
 /// distributed with every copy of it taken out of the branch.
 ///
