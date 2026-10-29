@@ -801,3 +801,25 @@ def test_a_bound_of_a_class_of_its_own_is_not_compared() -> None:
     later = Validator(Annotated[dt.date, at.Ge(dt.date(2020, 1, 2))])
     earlier = Annotated[dt.date, at.Ge(dt.date(2020, 1, 1))]
     assert later.relation_to(earlier) == "subset"
+
+
+def test_two_list_or_tuple_bounds_are_not_compared() -> None:
+    """A sequence orders item by item, and an item ordered against nothing breaks it.
+
+    ``[2 + 0j] >= [2]`` holds, its one item equal to the bound's, and
+    ``[2 + 0j] >= [1]`` orders a complex number against an integer, which
+    raises, so the value is in the tighter bound and out of the looser one. Two
+    sets order by inclusion, which raises for no value, and stay compared.
+    """
+    tighter = Validator(Annotated[list[object], at.Ge([2])])
+    looser = Validator(Annotated[list[object], at.Ge([1])])
+    assert tighter.is_valid([2 + 0j])
+    assert not looser.is_valid([2 + 0j])
+    assert tighter.relation_to(looser) != "subset"
+    below = Validator(Annotated[list[object], at.Le([1])])
+    assert below.is_valid([1 + 0j])
+    assert below.relation_to(Annotated[list[object], at.Le([2])]) != "subset"
+    pairs = Validator(Annotated[tuple[object, ...], at.Ge((2,))])
+    assert pairs.relation_to(Annotated[tuple[object, ...], at.Ge((1,))]) != "subset"
+    supersets = Validator(Annotated[set[int], at.Ge({1, 2})])
+    assert supersets.relation_to(Annotated[set[int], at.Ge({1})]) == "subset"

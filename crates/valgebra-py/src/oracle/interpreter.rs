@@ -339,6 +339,30 @@ fn a_bound_is_ordered_only_as_the_walk_reads_it() {
 }
 
 #[test]
+fn a_list_or_a_tuple_bound_is_ordered_with_no_other() {
+    // A sequence orders by its items, and a value's item may equal one bound's
+    // and order against nothing, so `compare` declines a list or a tuple
+    // operand; two sets order by inclusion, which raises for no value.
+    Python::attach(|py| {
+        let source = "types.SimpleNamespace(values=[[2], [1], (2,), (1,), {1, 2}, {1}])";
+        let values: Vec<Py<PyAny>> = built(py, source)
+            .getattr("values")
+            .unwrap()
+            .try_iter()
+            .unwrap()
+            .map(|value| value.unwrap().unbind())
+            .collect();
+        asking(py, values, |oracle| {
+            let cmp = |a, b| oracle.compare(OperandIx::new(a), OperandIx::new(b));
+            assert_eq!(cmp(0, 1), None, "two lists");
+            assert_eq!(cmp(2, 3), None, "two tuples");
+            assert_eq!(cmp(1, 0), None);
+            assert_eq!(cmp(4, 5), Some(core::cmp::Ordering::Greater), "two sets");
+        });
+    });
+}
+
+#[test]
 fn two_bounds_are_ordered_where_python_orders_them() {
     // `compare` orders two refinement operands. Python orders numbers with
     // numbers and text with text and raises across the two, and a bound whose
