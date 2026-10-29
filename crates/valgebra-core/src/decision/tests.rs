@@ -6375,6 +6375,43 @@ fn a_cut_reaches_the_kind_of_the_constructor_above_it() {
     );
 }
 
+// THEORY: semantic-subtyping
+/// A meet supertype is asked a member at a time where both deciders decline it
+/// whole: a member the set representation refutes refutes the meet beside a
+/// member no lowering reads, and a member that holds proves nothing beside it.
+///
+/// `str` is outside a pattern of `a`s at `""`, which the set representation
+/// reads and the rules do not, and the predicate beside it refuses the whole
+/// meet a lowering.
+#[test]
+fn a_meet_supertype_is_decided_a_member_at_a_time() {
+    let refine = |base: Schema, constraint| Schema::Refine {
+        base: Arc::new(base),
+        constraints: vec![constraint].into(),
+    };
+    let pattern = refine(Schema::Str, Constraint::Regex("a+".into()));
+    let opaque = refine(Schema::ANYTHING, Constraint::Predicate(PredIx::new(0)));
+    let meet = Schema::Intersection(vec![pattern.clone(), opaque.clone()].into());
+    assert!(
+        !structural(&Schema::Str, &pattern),
+        "the rules do not refute it"
+    );
+    assert_eq!(
+        Schema::Str.descriptor_contained_in(&meet, &NoLeafRelations, &[]),
+        Relation::Unknown,
+        "the predicate refuses the meet a lowering"
+    );
+    assert_eq!(
+        Schema::Str.subtype_relation_under(&meet, &NoLeafRelations, &[]),
+        Relation::Fails
+    );
+    // A member neither reads, beside one that holds, leaves the meet open.
+    assert_eq!(
+        pattern.subtype_relation_under(&meet, &NoLeafRelations, &[]),
+        Relation::Unknown
+    );
+}
+
 // THEORY: a-cut-reference-proves
 /// A value of no kind refutes a pair past a cut as a value of a kind does: a
 /// direct instance of a plain class is outside a fixpoint holding every kind

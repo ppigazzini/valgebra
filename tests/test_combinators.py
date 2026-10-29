@@ -498,3 +498,26 @@ def test_emptiness_has_a_third_answer_and_where_to_ask_for_it() -> None:
     crossing = Validator(Annotated[int, at.Gt(0), at.Lt(1)])
     assert crossing.is_empty() is True
     assert crossing.relation_to(nothing) == "subset"
+
+
+# THEORY: semantic-subtyping
+def test_a_meet_is_refuted_by_one_member_beside_one_no_decider_reads() -> None:
+    """A value outside one member of a meet is outside the meet.
+
+    `int` is outside `Ge(0)` at `-1`, which the set representation reads, and
+    a predicate beside it is a member no lowering reads: the meet is refused a
+    lowering whole and is refuted a member at a time. Beside a member that
+    holds, the predicate leaves it undecided, as nothing reads the predicate.
+    """
+    opaque = Annotated[object, at.Predicate(lambda _value: True)]
+    natural = Annotated[int, at.Ge(0)]
+    assert Validator(int).is_valid(-1)
+    assert not Validator(natural).is_valid(-1)
+    for supertype in (
+        intersection(natural, opaque),
+        intersection(opaque, natural),
+        intersection(natural, recursive(lambda t: union(opaque, [t]))),
+    ):
+        assert Validator(int).relation_to(supertype) == "not_subset"
+    positive = Annotated[int, at.Ge(1)]
+    assert Validator(positive).relation_to(intersection(natural, opaque)) == "undecided"

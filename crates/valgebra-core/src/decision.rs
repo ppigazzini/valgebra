@@ -725,6 +725,18 @@ impl Schema {
     /// against every branch: two hundred patterns against two hundred spend
     /// three seconds that way, and decide nothing.
     ///
+    /// A meet supertype is above a subject where each member is, and refuted
+    /// where one member is, a meet being the intersection of its members'
+    /// sets [FCB08, Def. 4.1], in Kleene's strong conjunction: a member refuted
+    /// by either decider refutes the meet beside a member neither reads. The
+    /// rules ask each member already, by their own readings alone; what this
+    /// adds is the set representation asked of one member, where a member that
+    /// runs a callback -- a predicate, a class whose `isinstance` is code --
+    /// refuses the whole meet a lowering: `int` is outside `Ge(0)` at `-1`, and
+    /// so outside `Ge(0)` met with a predicate. A meet of sets was read whole,
+    /// and is not read again a member at a time, which would lower each member
+    /// for an answer the whole reading did not find.
+    ///
     /// The parts are asked in the query, so the rules' work stays bounded by
     /// its budget in total, and the lowerings are one per member, per
     /// narrowing and per branch of the one subject, each under its own bounds:
@@ -749,6 +761,18 @@ impl Schema {
                         }
                     })
                     .or_else(|| member.decided_by_parts(other, cx, false))
+            }));
+        }
+        if let Schema::Intersection(members) = other {
+            if members
+                .iter()
+                .all(|member| denotes_a_set_within(member, cx.oracle, cx.defs))
+            {
+                return Relation::Unknown;
+            }
+            return Relation::all(members.iter().map(|member| {
+                self.is_subtype_rec(member, cx)
+                    .or_else(|| self.descriptor_contained_in(member, cx.oracle, cx.defs))
             }));
         }
         let Schema::Union(branches) = other else {

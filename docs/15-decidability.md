@@ -1113,7 +1113,9 @@ the shape. What is left below is what the descriptor cannot hold.
   **A union is asked a part at a time** where the pair is past a bound whole. A
   union subject is below a supertype where each member is and outside it where
   one member is, so each member is asked on its own; a union supertype is first
-  narrowed to the branches the subject shares a value with. Records told apart
+  narrowed to the branches the subject shares a value with. A meet supertype is
+  asked a member at a time too: `int` is outside `Ge(0)` met with a predicate,
+  `-1` being outside the first member whatever the predicate says. Records told apart
   by a tag meet one branch each, so a union of them is decided at any width:
 
   ```python

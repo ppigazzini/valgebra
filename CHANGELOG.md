@@ -51,10 +51,18 @@ answer of its own, or a repair to a change not yet released.
 - feat: None's kind is the literal of its one value
 - feat: a sentinel compares by identity
 - feat: a set reading's difference refutes at a kind no cut reaches
+- feat: a meet supertype is decided a member at a time
 
 -->
 
 ### Added
+
+- **A meet supertype is decided a member at a time.** Where both deciders
+  decline a pair whole, a meet on the right is asked one member at a time, and
+  a member either refutes refutes the meet: `int` is `not_subset` of
+  `intersection(Annotated[int, Ge(0)], Annotated[object, Predicate(f)])`, where
+  the predicate refused the whole meet a lowering and the answer was
+  `undecided`.
 
 - **A set reading's difference refutes at a kind no cut reaches.** A
   recursive reference read by the set representation is unfolded once and
