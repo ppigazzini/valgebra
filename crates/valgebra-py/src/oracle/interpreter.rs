@@ -818,6 +818,47 @@ fn the_interpreters_sentinel_compares_by_identity() {
     });
 }
 
+/// A kind's constants are counted apart in one pass under the equality the
+/// pair question trusts: three integers are three, two equal integers held as
+/// two objects are one, two objects of a class comparing by identity are two,
+/// and a class with an `__eq__` of its own is not counted at all.
+#[test]
+fn a_kinds_constants_are_counted_apart_in_one_pass() {
+    Python::attach(|py| {
+        let plain = built(py, "type('Plain', (), {})");
+        let always = built(
+            py,
+            "type('Always', (), {'__eq__': lambda a, b: True, '__hash__': object.__hash__})",
+        );
+        let made = |class: &Bound<'_, PyAny>| class.call0().expect("an instance").unbind();
+        let pool = vec![
+            built(py, "1").unbind(),
+            built(py, "2").unbind(),
+            built(py, "3").unbind(),
+            built(py, "10 ** 30").unbind(),
+            built(py, "10 ** 30").unbind(),
+            made(&plain),
+            made(&plain),
+            made(&always),
+        ];
+        asking(py, pool, |oracle| {
+            let counted = |slots: &[usize]| {
+                let constants: Vec<ConstIx> =
+                    slots.iter().map(|slot| ConstIx::new(*slot)).collect();
+                oracle.literals_counted_apart(&constants)
+            };
+            assert_eq!(counted(&[0, 1, 2]), Some(3));
+            assert_eq!(counted(&[3, 4]), Some(1), "one value held twice");
+            assert_eq!(
+                counted(&[5, 6]),
+                Some(2),
+                "two objects compared by identity"
+            );
+            assert_eq!(counted(&[5, 7]), None, "an equality of the class's own");
+        });
+    });
+}
+
 #[test]
 fn a_fatal_signal_a_probe_raises_is_the_querys_answer() {
     // A probe runs user code, and one interrupted there has answered nothing:

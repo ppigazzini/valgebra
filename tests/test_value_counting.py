@@ -32,7 +32,7 @@ from typing import Annotated, Literal
 
 import annotated_types as at
 
-from valgebra import Validator
+from valgebra import Validator, nothing
 
 
 class Color(Enum):
@@ -137,3 +137,24 @@ def test_a_sequence_repeats_one_element_where_a_set_does_not() -> None:
     assert Validator(Annotated[list[None], at.MinLen(5)]).is_valid([None] * 5) is True
     # A set of the same element cannot.
     assert Validator(Annotated[set[None], at.MinLen(5)]).is_empty() is True
+
+
+def test_a_wide_set_of_literals_is_counted_in_one_pass() -> None:
+    """Four thousand literals are counted apart once, not each against the rest.
+
+    Asked a pair at a time, a set over four thousand constants put eight
+    million equality questions to the interpreter before its length bound was
+    read; counted in one pass, the answer comes at once, and it is the same:
+    the set holding every constant is longer than the bound one below it, and a
+    set of that many is a value.
+    """
+    many = Literal[tuple(range(4000))]  # ty: ignore[invalid-type-form]
+    assert (
+        Validator(set[many]).relation_to(Annotated[set, at.MaxLen(3999)])
+        == "not_subset"
+    )
+    assert (
+        Validator(Annotated[set[many], at.MinLen(4000)]).relation_to(nothing)
+        == "not_subset"
+    )
+    assert Validator(set[many]).relation_to(Annotated[set, at.MaxLen(4000)]) == "subset"

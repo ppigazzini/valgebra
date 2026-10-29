@@ -269,6 +269,10 @@ fn the_default_oracle_declines_every_question() {
         oracle.literals_disjoint(ConstIx::new(0), ConstIx::new(1)),
         None
     );
+    assert_eq!(
+        oracle.literals_counted_apart(&[ConstIx::new(0), ConstIx::new(1)]),
+        None
+    );
     assert_eq!(oracle.literal_kind(ConstIx::new(0)), None);
     assert_eq!(oracle.operand_kind(one), None);
     assert_eq!(oracle.class_admits_kind(ClassIx::new(0), Kind::Int), None);

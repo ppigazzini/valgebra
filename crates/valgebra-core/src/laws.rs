@@ -3895,6 +3895,7 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
                     out,
                     CROSS_DEPTH,
                 ));
+                fill.extend(sized_past(&mine.prefix[position], &element));
                 for value in fill {
                     let mut items = base.clone();
                     items[position] = value;
@@ -3943,6 +3944,31 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
     made.truncate(cap);
     out.extend(made.iter().cloned());
     made
+}
+
+/// Values of `mine` at each width a length bound in `theirs` names, and the
+/// widths beside it: the values a bound is told from a sized schema by.
+///
+/// A bound narrows what its base holds, and a base holding every container
+/// narrows a set and a record too, so a sized schema is told from it by a
+/// value of its own at a width the bound refuses. The bound builds its widths
+/// out of a fixed item, which is no member of the schema, and the schema
+/// builds its own widths alone: `list[set[int], R]` below the same list whose
+/// first position is `Any` of at most one is refuted by a list whose head is a
+/// set of two integers, and neither side spells one. The members come from
+/// [`sized_like`], so a set's are distinct, and each value is kept only where
+/// it is a member of `mine`, since a value of `mine` is the one a refutation
+/// stands on.
+fn sized_past(mine: &Schema, theirs: &Schema) -> Vec<Obj> {
+    let pool = const_pool();
+    let mut widths = Vec::new();
+    widths_named_by(theirs, &mut widths);
+    widths
+        .into_iter()
+        .flat_map(|(_, len)| len.saturating_sub(EDGE_SPAN)..=(len + EDGE_SPAN))
+        .flat_map(|width| sized_like(mine, width, MEMBER_FUEL))
+        .filter(|value| member_full(mine, value, &pool))
+        .collect()
 }
 
 /// How deep the crossing goes past the position it starts at.
@@ -4414,6 +4440,52 @@ fn the_universe_separates_a_pair_at_a_key_of_a_position() {
     );
     let b = head(record(Vec::new(), vec![any_name(none_past_a)]));
     // The premise the law carries: a pair that is not refuted asserts nothing.
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
+}
+
+// THEORY: each-kind-is-closed
+/// A length bound at a position is separated from a set there by a set of the
+/// position's own at a width the bound refuses.
+///
+/// The pair, as the law drew it: `list[set[int], R]` against the same list
+/// whose first position is a meet of one member, `Any` of at most one. It is
+/// refuted by a list whose head is a set of two integers. The bound builds its
+/// widths from one integer repeated, and a set of those is one member long;
+/// the subject's position builds its own member at the width of none.
+#[test]
+fn a_length_bound_at_a_position_is_separated_by_a_set_of_its_own() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let list = |head: Schema| Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape {
+            prefix: vec![head, Schema::Ref(DefIx::new(1))].into(),
+            tail: None,
+        },
+    };
+    let a = list(Schema::Coll {
+        container: CollKind::Set,
+        element: Arc::new(Schema::Int),
+    });
+    let b = list(Schema::Intersection(
+        vec![Schema::Refine {
+            base: Arc::new(Schema::ANYTHING),
+            constraints: vec![Constraint::MaxLen(1)].into(),
+        }]
+        .into(),
+    ));
     assert_eq!(
         a.subtype_relation_under(&b, &NoLeafRelations, &defs),
         Relation::Fails,

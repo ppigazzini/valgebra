@@ -1435,6 +1435,25 @@ impl LeafRelations for PoolRelations<'_, '_> {
         Some(true)
     }
 
+    /// [`literal_sets_disjoint`](LeafRelations::literal_sets_disjoint)'s one
+    /// pass, counting: the constants' `(type, value)` pairs held in one set,
+    /// whose size is how many values they hold apart. Only where every
+    /// constant's equality is one this oracle trusts, the condition the pair
+    /// form applies; the core has asked each to be a value, equal to itself.
+    fn literals_counted_apart(&self, constants: &[ConstIx]) -> Option<usize> {
+        let seen = PySet::empty(self.py).ok()?;
+        for index in constants {
+            let value = self.literals.get(index.get())?.bind(self.py);
+            if self.literal_kind(*index).is_none()
+                && !self.heard(compares_by_identity(&value.get_type()))?
+            {
+                return None;
+            }
+            self.heard(seen.add((value.get_type(), value)))?;
+        }
+        Some(seen.len())
+    }
+
     /// Whether the constant is the only value of its exact type that `==` it,
     /// which makes its literal the model's singleton [FCB08, §4.2].
     ///

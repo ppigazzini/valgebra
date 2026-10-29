@@ -62,10 +62,22 @@ answer of its own, or a repair to a change not yet released.
 - fix: annotated-types' documentation marker is ignored under its new name
 - fix: opening or closing a schema twice gives the schema once did
 - fix: a bound whose operand orders on its own renders marked
+- feat: a set's and a record's lengths are read off their shapes
 
 -->
 
 ### Added
+
+- **A set's and a record's lengths are read off their shapes.** A set holds
+  each member once, so it is no longer than the values its element holds
+  apart, and a closed record's length runs from its required fields to all of
+  them. `set[Literal[1, 2]]` is `not_subset` of `Annotated[set[int], Len(0,
+  1)]`, `{"a": int}` is `subset` of `Annotated[dict[str, int], Len(1, 1)]`,
+  `{}` and `Annotated[dict[str, int], Len(0, 0)]` are each `subset` of the
+  other, and `set[Literal["a"]] & Annotated[set[int], Len(0, 1)]` is
+  `not_subset` of `nothing`, the empty set being in both, where each was
+  `undecided`. Literals are counted apart within one kind, since `1 == True`
+  across two.
 
 - **A schema meeting a complement's inner set is refuted below the
   complement.** `A <= ~B` asked the meet `A & B` for emptiness and read only

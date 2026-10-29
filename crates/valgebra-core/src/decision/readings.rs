@@ -19,7 +19,8 @@ use crate::ir::{ClassIx, CollKind, Constraint, Schema, SeqKind};
 use crate::kind::{Kind, Region, Regions};
 use crate::verdict::{Relation, Verdict};
 
-use super::constraints::{Multiples, integer};
+use super::constraints::{Multiples, integer, longest, shortest};
+use super::emptiness::{holds_apart, value_count_bounds};
 use super::literals::literal_constants;
 use super::{Cx, LeafRelations, NoLeafRelations};
 
@@ -219,28 +220,31 @@ impl Schema {
             && self.star_element().is_some()
     }
 
-    /// What a sequence's length settles of the pair, where a sequence or a
+    /// What a container's length settles of the pair, where a container or a
     /// refinement of one is the subject: `Holds` for a refinement whose length
-    /// is at most zero -- the empty sequence of its kind and nothing else --
-    /// below a supertype admitting that sequence, `Fails` for a sequence shape
-    /// that holds one longer than the supertype's maximum length
-    /// ([`longer_than`](Self::longer_than)), `Unknown` otherwise.
+    /// is at most zero -- the empty container of its kind and nothing else --
+    /// below a supertype admitting that container, `Fails` for a shape that
+    /// holds one longer than the supertype's maximum length
+    /// ([`longer_than`](Self::longer_than)) or a record whose required fields
+    /// alone are a length the supertype refuses
+    /// ([`required_fields_refused`](Self::required_fields_refused)), `Unknown`
+    /// otherwise.
     ///
     /// Out of line behind the discriminant test its caller asks, so a pair of
     /// any other shape pays the one test.
     #[inline(never)]
     pub(super) fn read_by_length(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
         if let Schema::Refine { base, constraints } = self
-            && let Schema::Seq { container, shape } = &**base
-            && shape.prefix.is_empty()
+            && let Some(kind) = base.type_tag()
+            && base.admits_the_empty(kind)
             && constraints
                 .iter()
                 .any(|constraint| matches!(constraint, Constraint::MaxLen(0)))
-            && other.admits_the_empty_sequence(*container)
+            && other.admits_the_empty(kind)
         {
             return Relation::Holds;
         }
-        if self.longer_than(other, cx) {
+        if self.longer_than(other, cx) || self.required_fields_refused(other, cx) {
             return Relation::Fails;
         }
         Relation::Unknown
@@ -259,10 +263,20 @@ impl Schema {
     /// empty list alone. Read off the bare shape, for the reason
     /// `shorter_than` gives: a constraint this does not read may bound the
     /// subject's own length.
+    ///
+    /// A set holds each member once, so its value one past the bound is that
+    /// many members its element holds apart under `==`
+    /// ([`holds_apart`]): `{1, 2}` is a
+    /// `set[Literal[1, 2]]` that `MaxLen(1)` refuses.
     pub(super) fn longer_than(&self, other: &Schema, cx: &mut Cx<'_>) -> bool {
         let Schema::Refine { constraints, .. } = other else {
             return false;
         };
+        if let Schema::Coll { element, .. } = self {
+            return longest(constraints.iter())
+                .and_then(|most| most.checked_add(1))
+                .is_some_and(|wanted| holds_apart(element, wanted, cx.oracle));
+        }
         let Schema::Seq { shape, .. } = self else {
             return false;
         };
@@ -281,19 +295,109 @@ impl Schema {
             .all(|position| position.verdict_rec(cx) == Verdict::Inhabited)
     }
 
-    /// Whether the empty sequence of `kind` is a value of this schema, read off
-    /// the constructors: `false` is "not seen", never "refused".
+    /// Whether a record's value of its required fields alone has a length the
+    /// supertype's bounds refuse.
     ///
-    /// A shape with no prefix admits it, and a refinement of one keeps it under
-    /// length bounds that admit zero; a predicate says nothing. The other
-    /// supertypes never reach this: the rules settle the universe before any
-    /// reading, and split a union and a meet into the members this reads.
-    #[inline(never)]
-    pub(super) fn admits_the_empty_sequence(&self, kind: SeqKind) -> bool {
+    /// A record's length is the count of its keys, and the value holding its
+    /// required fields and nothing else is one of its values wherever the
+    /// record holds any: its required fields then each hold a value, and no
+    /// key is left for a clause to cover. So a record requiring more fields
+    /// than the supertype's maximum length, or fewer than its minimum, holds a
+    /// value the bound refuses -- `{"a": int, "b": int}` below
+    /// `Annotated[dict[str, int], MaxLen(1)]`, or `{"a?": int}` below one with
+    /// `MinLen(1)`, whose value `{}` is shorter.
+    fn required_fields_refused(&self, other: &Schema, cx: &mut Cx<'_>) -> bool {
+        let (Schema::KeyedMap { fields, .. }, Schema::Refine { constraints, .. }) = (self, other)
+        else {
+            return false;
+        };
+        let required = fields.iter().filter(|field| field.required).count();
+        let refused = required < shortest(constraints.iter())
+            || longest(constraints.iter()).is_some_and(|most| required > most);
+        refused && self.verdict_rec(cx) == Verdict::Inhabited
+    }
+
+    /// The lengths of this schema's values, as the least and, where there is
+    /// one, the most: `None` where a value may have no length, or one this
+    /// does not count.
+    ///
+    /// Read off the two constructors whose lengths no component of the set
+    /// representation counts. A set holds each member once and every member is
+    /// a value of its element, so it holds at most the values the element holds
+    /// apart under `==` ([`value_count_bounds`]), and none at least: the empty
+    /// set is one of its values. A record's keys are its fields, every value
+    /// holding the required ones, and where it is closed -- no clause to cover
+    /// an undeclared key -- nothing beyond them, so its length runs from its
+    /// required fields to all of them; an open one has no most. Each count is
+    /// the walk's: the length of a set or a dict is read from its storage,
+    /// which holds the members and the keys these count.
+    ///
+    /// The lengths are the bounds the shape says without writing them, so they
+    /// entail a length bound as a written one does, Sub-Base's entailment
+    /// [JV20, Fig. 3.4] with them among the subject's constraints
+    /// ([`lengths_entail`](Self::lengths_entail)).
+    pub(super) fn lengths_held(
+        &self,
+        oracle: &dyn LeafRelations,
+    ) -> Option<(usize, Option<usize>)> {
         match self {
-            Schema::Seq { container, shape } => *container == kind && shape.prefix.is_empty(),
+            Schema::Coll { element, .. } => {
+                let (_, most) = value_count_bounds(element, oracle);
+                Some((0, (most != usize::MAX).then_some(most)))
+            }
+            Schema::KeyedMap { fields, defaults } => Some((
+                fields.iter().filter(|field| field.required).count(),
+                defaults.is_empty().then_some(fields.len()),
+            )),
+            _ => None,
+        }
+    }
+
+    /// Whether the lengths this schema holds entail every one of
+    /// `constraints` ([`lengths_held`](Self::lengths_held)): a minimum at or
+    /// below the least, a maximum at or above the most, as a written length
+    /// bound entails a looser one; any other constraint is not entailed.
+    ///
+    /// Out of line behind the discriminant test its callers ask, so a schema
+    /// that holds no lengths pays the one test.
+    #[inline(never)]
+    pub(super) fn lengths_entail(
+        &self,
+        constraints: &[Constraint],
+        oracle: &dyn LeafRelations,
+    ) -> bool {
+        let Some((least, most)) = self.lengths_held(oracle) else {
+            return false;
+        };
+        constraints.iter().all(|constraint| match constraint {
+            Constraint::MinLen(wanted) => least >= *wanted,
+            Constraint::MaxLen(allowed) => most.is_some_and(|most| most <= *allowed),
+            _ => false,
+        })
+    }
+
+    /// Whether every empty container of `kind` is a value of this schema, read
+    /// off the constructors: `false` is "not seen", never "refused".
+    ///
+    /// A sequence shape with no prefix admits the empty sequence of its kind, a
+    /// set shape the empty set of its kind whatever its element admits, and a
+    /// mapping the empty dict where it requires no field -- no key is missing,
+    /// and none is left for a clause to cover. A subclass's empty instance
+    /// is admitted with the rest, since each node reads its container by the
+    /// storage. A refinement of one keeps it under length bounds that admit
+    /// zero; a predicate says nothing. The other supertypes never reach this:
+    /// the rules settle the universe before any reading, and split a union and
+    /// a meet into the members this reads.
+    #[inline(never)]
+    pub(super) fn admits_the_empty(&self, kind: Kind) -> bool {
+        match self {
+            Schema::Seq { shape, .. } => self.type_tag() == Some(kind) && shape.prefix.is_empty(),
+            Schema::Coll { .. } => self.type_tag() == Some(kind),
+            Schema::KeyedMap { fields, .. } => {
+                kind == Kind::Dict && fields.iter().all(|field| !field.required)
+            }
             Schema::Refine { base, constraints } => {
-                base.admits_the_empty_sequence(kind)
+                base.admits_the_empty(kind)
                     && constraints.iter().all(|constraint| {
                         matches!(constraint, Constraint::MinLen(0) | Constraint::MaxLen(_))
                     })

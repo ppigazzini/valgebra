@@ -78,6 +78,20 @@ pub trait LeafRelations: Constants {
         None
     }
 
+    /// How many values `constants` hold apart under `==`, each a constant of
+    /// one kind that is a value, or `None` to leave it to the pairwise
+    /// question.
+    ///
+    /// The count a set drawn from their literals can reach, which
+    /// [`literals_disjoint`](Self::literals_disjoint) answers one pair at a
+    /// time: asked so, n constants cost n squared questions, a set over four
+    /// thousand literals a third of a second before a length bound is read. An
+    /// implementor that can hash its constants under an equality it trusts
+    /// counts them in one pass; the default declines, and the pairs stand.
+    fn literals_counted_apart(&self, _constants: &[ConstIx]) -> Option<usize> {
+        None
+    }
+
     /// Whether no integer lies between the pool values at `lo` and `hi`, under the
     /// strictness of each bound (`lo_strict` excludes `lo`, `hi_strict` excludes
     /// `hi`). The core asks this only for an integer-discrete refinement base, and
