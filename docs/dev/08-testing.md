@@ -184,7 +184,7 @@ for and misses the other. The ledgers:
 | `tests/test_form_ledger.py` | every form the schema-language pages tabulate is driven by a test |
 | `tests/test_surface_outcomes.py` | every outcome the binding's docstrings name is asserted by a test |
 | `tests/test_citation_ledger.py` | every citation is a label the theory page tables, at a number its paper prints |
-| `tests/test_boundary_ledger.py` | every entry of the published decidability boundary is driven by a test |
+| `tests/test_boundary_ledger.py` | every entry of the published decidability boundary is driven by a test, in every spelling it names |
 | `tests/test_constraint_matrix.py` | every constraint is driven against every kind, narrowing it or refused |
 | `tests/test_python_lifecycle.py` | every supported interpreter is one CPython's calendar supports today |
 | `tests/test_release_smoke.py` | every wheel the release builds is loaded, its ends tested; PyPy's is plain |
