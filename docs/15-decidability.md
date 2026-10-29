@@ -208,7 +208,11 @@ answers `"undecided"`.
   floats. `nan` is outside every interval, which is the comparison Python makes.
   No float lies between a float and the next one, so `Gt(1.0)` is decided equal
   to `Ge(math.nextafter(1.0, math.inf))`, and a pair of bounds with no float
-  between them is empty.
+  between them is empty. A bound over **`str`** or **`bytes`** is a set of
+  words and is decided as one: Python orders two words symbol by symbol, a
+  prefix first, so `Annotated[str, Gt("a")]` is `Annotated[str, Ge("a\x00")]`
+  and `Annotated[str, Lt("")]` is empty; a lone surrogate is ordered where its
+  code point puts it.
   A constraint is asked of one value at a time, so a refinement of a union is
   the union of its refined branches: `Annotated[int | float, Ge(0)]` is the
   non-negative ints and the non-negative floats, decided as each is, and a

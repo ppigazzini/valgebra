@@ -151,7 +151,8 @@ orders against a complex number or is a multiple of one. Two bounds over lists
 or tuples are not compared by the relations: a sequence orders item by item,
 so `[2 + 0j]` is at least `[2]` and orders against `[1]` not at all, which
 puts it in `Ge([2])` and out of `Ge([1])`. Two sets compare by inclusion and
-are decided.
+are decided, and so is a bound over `str` or `bytes`, the words on one side
+of a word being a regular set.
 
 A marker put to a base outside its row is refused when the validator is built,
 for the reason above: the check would raise at every value, the walk reads a

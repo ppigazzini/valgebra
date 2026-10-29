@@ -564,6 +564,22 @@ impl Descr {
         Some(descr)
     }
 
+    /// The words of a word kind ordered against `bound`, its bytes as the
+    /// kind spells a value: past it where `above`, short of it otherwise, and
+    /// `bound` itself where `inclusive` ([`RegularSet::ordered`]).
+    #[must_use]
+    pub(crate) fn words_ordered(
+        bound: &[u8],
+        kind: Kind,
+        above: bool,
+        inclusive: bool,
+    ) -> Option<Descr> {
+        let language = RegularSet::ordered(bound, above, inclusive, alphabet_of(kind)?)?;
+        let mut descr = Descr::nothing();
+        descr.put(kind, Component::Words(language));
+        Some(descr)
+    }
+
     /// The words of at most `most` symbols, for a word kind.
     ///
     /// The upper half of [`Descr::words_at_least`], on the same alphabet.

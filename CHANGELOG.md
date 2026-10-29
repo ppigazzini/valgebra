@@ -55,10 +55,19 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet subject is asked narrowed by the complements beside its unions
 - feat: a record the key partition cannot hold is left out of a meet of records
 - feat: a record is refuted a shared field at a time past the node bound
+- feat: an order bound over str or bytes is decided as the words it admits
 
 -->
 
 ### Added
+
+- **An order bound over `str` or `bytes` is decided as the words it admits.**
+  Python orders two words symbol by symbol, a prefix first, and the words on
+  one side of a word are a regular set the set representation holds, so
+  `Annotated[str, Ge("a")]` is `not_subset` of `Annotated[str, Ge("b")]`,
+  `Annotated[str, Gt("a")]` is equivalent to `Annotated[str, Ge("a\x00")]`,
+  `Annotated[str, Lt("")]` is `subset` of `nothing`, and `str` is below
+  `Ge("a") | Lt("a")`, where each was `undecided`.
 
 - **A record is refuted a shared field at a time past the node bound.** Where
   both deciders decline a record against a record, each field the two declare

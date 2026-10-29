@@ -1139,3 +1139,74 @@ fn a_guess_reads_each_part_at_its_least() {
     assert_eq!(counted(WITNESS_BYTES + 1), None);
     assert_eq!(RegularSet::a_text_of("a)|(b"), None);
 }
+
+/// The WTF-8 spelling of `points`, a lone surrogate spelled the way the
+/// three-byte form spells every other code point.
+fn wtf8(points: &[u32]) -> Vec<u8> {
+    // Every value handed over is masked to a byte first.
+    let byte = |value: u32| u8::try_from(value & 0xFF).unwrap_or(0);
+    let mut bytes = Vec::new();
+    for &point in points {
+        match point {
+            0..=0x7F => bytes.push(byte(point)),
+            0x80..=0x7FF => bytes.extend([0xC0 | byte(point >> 6), 0x80 | byte(point & 0x3F)]),
+            0x800..=0xFFFF => bytes.extend([
+                0xE0 | byte(point >> 12),
+                0x80 | byte((point >> 6) & 0x3F),
+                0x80 | byte(point & 0x3F),
+            ]),
+            _ => bytes.extend([
+                0xF0 | byte(point >> 18),
+                0x80 | byte((point >> 12) & 0x3F),
+                0x80 | byte((point >> 6) & 0x3F),
+                0x80 | byte(point & 0x3F),
+            ]),
+        }
+    }
+    bytes
+}
+
+proptest! {
+    // THEORY: a-refinement-narrows-its-base
+    /// A word ordered against a bound is in the language exactly where Python
+    /// orders the two that way: `bytes` byte by byte, and `str` code point by
+    /// code point, a lone surrogate among them, a prefix before what extends
+    /// it.
+    #[test]
+    fn an_ordered_language_holds_the_words_python_orders_so(
+        bound in proptest::collection::vec(proptest::sample::select(vec![0u32, 0x61, 0x62, 0xE9, 0xD7FF, 0xD800, 0xE000, 0x1F600]), 0..4),
+        word in proptest::collection::vec(proptest::sample::select(vec![0u32, 0x61, 0x62, 0xE9, 0xD7FF, 0xD800, 0xE000, 0x1F600]), 0..5),
+        above in any::<bool>(),
+        inclusive in any::<bool>(),
+    ) {
+        let ordered = |held: core::cmp::Ordering| match (above, inclusive) {
+            (true, true) => held.is_ge(),
+            (true, false) => held.is_gt(),
+            (false, true) => held.is_le(),
+            (false, false) => held.is_lt(),
+        };
+        let text = RegularSet::ordered(&wtf8(&bound), above, inclusive, Alphabet::Text).unwrap();
+        prop_assert_eq!(text.holds(&wtf8(&word)), ordered(word.cmp(&bound)));
+        let narrow = |points: &[u32]| {
+            points
+                .iter()
+                .map(|point| u8::try_from(point & 0xFF).unwrap_or(0))
+                .collect::<Vec<u8>>()
+        };
+        let bytes = RegularSet::ordered(&narrow(&bound), above, inclusive, Alphabet::Bytes).unwrap();
+        prop_assert_eq!(bytes.holds(&narrow(&word)), ordered(narrow(&word).cmp(&narrow(&bound))));
+    }
+}
+
+/// The words short of a bound are the kind's words short of it: no byte
+/// string that is no `str` is in the text language.
+#[test]
+fn an_ordered_text_language_holds_no_word_a_str_cannot_spell() {
+    let below = RegularSet::ordered(b"b", false, false, Alphabet::Text).unwrap();
+    assert!(below.holds(b"a"));
+    assert!(!below.holds(&[0xFF]), "a byte no str spells");
+    assert!(
+        !below.holds(&[0x61, 0x80]),
+        "a continuation with nothing before it"
+    );
+}
