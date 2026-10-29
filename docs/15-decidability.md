@@ -136,7 +136,10 @@ answers `"undecided"`.
   compares by *identity* -- which an enumeration does unless it says otherwise,
   so two of its members are two values and a meet of them is empty. An `IntEnum`
   says otherwise: its members equal the integers they carry, and a meet of two of
-  them stays conservative.
+  them stays conservative. Whatever its constants are, a finite set of them is
+  not a kind with infinitely many values, and its complement holds a value --
+  an object of a type none of the constants has: `int` is not below
+  `Literal[Color.RED]`, and `~Literal[Color.RED]` is not empty.
 - **An enumeration against the union of its members**, when every instance of
   the class really is one of them -- made through the class, which
   `object.__new__` steps past

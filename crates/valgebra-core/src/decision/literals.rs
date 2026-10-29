@@ -19,7 +19,7 @@ use crate::ir::{ConstIx, Schema};
 use crate::oracle::{asks_no_callback, every_node_within};
 use crate::verdict::{Relation, Verdict};
 
-use super::LeafRelations;
+use super::{Cx, LeafRelations};
 
 /// The constants of a schema that is a literal, or a union of nothing but
 /// literals; `None` for anything else.
@@ -235,6 +235,58 @@ enum Placed {
     In,
     /// Neither is proved.
     Unread,
+}
+
+/// Whether `schema` is a finite set of constants, of which a fresh `object()`
+/// is no value, so that its complement holds one.
+///
+/// A literal is the model's singleton [FCB08, §4.2] widened to the values of
+/// its constant's exact type that `==` joins to it ([`Schema::Literal`]). A
+/// constant whose exact type is `object` equals nothing but itself, and one of
+/// any other type holds no `object()`, so a fresh one is in no literal of the
+/// set. Which constants the set holds is not asked, so no oracle is.
+pub(super) fn misses_a_fresh_object(schema: &Schema) -> bool {
+    finite_set(schema).is_some()
+}
+
+/// Whether `subject` holds every value of a kind no finite set of constants
+/// holds whole, against `other`, which is one.
+///
+/// A literal holds values of its constant's exact type that equal the
+/// constant, the model's singleton [FCB08, §4.2] widened by `==`
+/// ([`Schema::Literal`]), so of the values whose type is a builtin, a finite set
+/// holds those equal to one of its constants of that builtin and no others.
+/// Every kind but `None` and `bool` has infinitely many such values no two of
+/// which are equal -- `0`, `1`, `2`; `""`, `"a"`, `"aa"`; `()`, `((),)` -- and
+/// a constant equals at most one of them, so the set misses one, and a subject
+/// holding the kind whole holds that value outside it. Which constants the set
+/// holds is not asked, so no oracle is.
+///
+/// Out of line, asked by the arm a literal supertype reaches and by the union
+/// arm once its branches have declined, so a pair of any other shape pays
+/// nothing for it.
+#[inline(never)]
+pub(super) fn spills_past_a_table(subject: &Schema, other: &Schema, cx: &Cx<'_>) -> bool {
+    finite_set(other).is_some() && subject.holds_a_boundless_kind_whole(cx)
+}
+
+/// [`spills_past_a_table`] for a union supertype, as the answer it gives: a
+/// refutation, or none. Its first member is read inline, so a union of any
+/// other members pays one discriminant test and no call.
+#[inline]
+pub(super) fn a_union_spilled_past_as_a_table(
+    subject: &Schema,
+    members: &[Schema],
+    other: &Schema,
+    cx: &Cx<'_>,
+) -> Relation {
+    if matches!(members.first(), Some(Schema::Literal(_)))
+        && spills_past_a_table(subject, other, cx)
+    {
+        Relation::Fails
+    } else {
+        Relation::Unknown
+    }
 }
 
 /// Whether the canonical `table` holds the constant at `index`.

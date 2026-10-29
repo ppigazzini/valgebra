@@ -626,6 +626,15 @@ impl Schema {
             && spills_a_kind_into(self, other, cx)
     }
 
+    /// Whether this schema holds every value of a kind with infinitely many
+    /// values, which is every kind but `None` and `bool`: no finite set of
+    /// constants holds such a kind whole ([`spills_past_a_table`]).
+    ///
+    /// [`spills_past_a_table`]: super::literals::spills_past_a_table
+    pub(super) fn holds_a_boundless_kind_whole(&self, cx: &Cx<'_>) -> bool {
+        self.kinds_held_whole(cx.oracle, cx.defs) & !FINITE_KINDS != 0
+    }
+
     /// Whether this schema holds no value of some kind, which makes its
     /// complement inhabited: the complement holds every value of that kind
     /// [FCB08, Def. 4.1], and every kind has one. Read by the witness guard
@@ -655,6 +664,10 @@ pub(super) type Kinds = u16;
 
 /// Every kind.
 const EVERY_KIND: Kinds = (1 << Kind::ALL.len()) - 1;
+
+/// The kinds with finitely many values: `None`'s one and `bool`'s two. The two
+/// bits are distinct, so their sum is their union.
+const FINITE_KINDS: Kinds = bit(Kind::NoneType) + bit(Kind::Bool);
 
 /// The nodes one kind reading may read before it answers conservatively.
 ///
