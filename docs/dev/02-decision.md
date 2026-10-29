@@ -656,7 +656,7 @@ directions.
 
 `leaf_subtype` answers one question the class hierarchy alone cannot: whether an
 enumeration is the union of its members. It is, when **every instance of the
-class is one of the values `list(cls)` yields** — and that takes four
+class is one of the values `list(cls)` yields** — and that takes five
 conditions:
 
 | condition | the value that stands against dropping it |
@@ -665,6 +665,7 @@ conditions:
 | it is **not** a `Flag` | `P.A \| P.B`, an instance of `P` that `list(P)` never yields |
 | it has **at least one member** | a subclass's member: a memberless enum is still subclassable |
 | its members compare by identity | an `IntEnum` member *is* the integer, so two of them are not two values |
+| it makes no instance but by looking a member up: its `_missing_` is `Enum`'s, its metaclass's `__iter__` and `__call__` are `EnumMeta`'s | `E(5)`, which a `_missing_` of its own makes, and a member a metaclass's `__iter__` leaves out of `list(cls)` |
 
 The shorter reading -- "the members are fixed at class creation, a class with
 any cannot be subclassed, and every instance is one of them" -- has a true

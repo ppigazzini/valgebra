@@ -45,6 +45,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a constant proves its literal only where the values equal to it read alike
 - fix: two bounds are compared only where each operand orders as the walk reads it
 - fix: two bounds over lists or tuples are not compared
+- fix: an enumeration making an instance past its members is not their union
 
 -->
 
@@ -195,6 +196,14 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **An enumeration making an instance past its members is not their union.**
+  An `Enum` whose `_missing_` returns a new instance for any value was decided
+  equivalent to the `Literal` of its members, though `E(5)` is an instance of
+  it and of no member's literal; an enumeration whose metaclass leaves a member
+  out of its iteration was decided below the members it lists. An enumeration
+  is read as the union of its members only where its `_missing_` is `Enum`'s
+  and its metaclass's `__iter__` and `__call__` are `EnumMeta`'s.
 
 - **Two bounds over lists or tuples are not compared.**
   `Annotated[list[object], Ge([2])]` holds `[2 + 0j]`, whose one item equals
