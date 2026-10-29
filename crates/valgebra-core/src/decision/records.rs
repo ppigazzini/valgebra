@@ -1018,7 +1018,8 @@ impl Slot {
         if self.absent && theirs.absent {
             return false;
         }
-        self.ty.shares_no_value_with(&theirs.ty, cx)
+        self.ty
+            .shares_no_value_with_a_part_of_the_supertype(&theirs.ty, cx)
     }
 }
 

@@ -102,7 +102,7 @@ pub(super) fn product_subtype(
         let disjoint = components
             .iter()
             .zip(branch.iter())
-            .any(|(mine, theirs)| mine.shares_no_value_with(theirs, cx));
+            .any(|(mine, theirs)| mine.shares_no_value_with_a_part_of_the_supertype(theirs, cx));
         if !disjoint {
             break (branch, rest);
         }
