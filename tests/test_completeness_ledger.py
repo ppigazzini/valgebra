@@ -1716,6 +1716,38 @@ _TRANSLATED: list[object] = [
         nothing,
         id="json:int-Le(True)-without-bool-is-inhabited",
     ),
+    # A bound is asked of one value at a time, so over a union base it is the
+    # union of the refined branches, and `None` orders against no number.
+    pytest.param(
+        "empty",
+        intersection(None, Annotated[int | float, at.Le(1)]),
+        None,
+        id="refine:None&(int|float)<=1-is-empty",
+    ),
+    pytest.param(
+        "refutes",
+        Annotated[int | float, at.Ge(0)],
+        nothing,
+        id="refine:(int|float)>=0-is-inhabited",
+    ),
+    pytest.param(
+        "subtype",
+        bool,
+        Annotated[int | float, at.Ge(-2)],
+        id="refine:bool<=(int|float)>=-2",
+    ),
+    pytest.param(
+        "refutes",
+        None,
+        Annotated[int | None, at.Ge(0)],
+        id="refine:None!<=(int|None)>=0",
+    ),
+    pytest.param(
+        "equivalent",
+        Annotated[int | float, at.Le(1)],
+        union(Annotated[int, at.Le(1)], Annotated[float, at.Le(1)]),
+        id="refine:(int|float)<=1==int<=1|float<=1",
+    ),
     # Under a full match the two ends of the text are word boundaries before and
     # after a word character.
     pytest.param(

@@ -200,9 +200,17 @@ answers `"undecided"`.
   No float lies between a float and the next one, so `Gt(1.0)` is decided equal
   to `Ge(math.nextafter(1.0, math.inf))`, and a pair of bounds with no float
   between them is empty.
-  A base that is neither the whole numbers nor the floats alone stays undecided,
-  because narrowing it to one component would give a smaller set than the schema
-  denotes.
+  A constraint is asked of one value at a time, so a refinement of a union is
+  the union of its refined branches: `Annotated[int | float, Ge(0)]` is the
+  non-negative ints and the non-negative floats, decided as each is, and a
+  value of another kind beside them is refuted below it. A constraint is
+  Python's own operation and a value it raises against is refused, so `None`
+  under any constraint but a predicate is empty: `Annotated[int | None, Ge(0)]`
+  is `Annotated[int, Ge(0)]`. A branch of strings or of another kind a class
+  may derive from stays undecided under a numeric bound, since a subclass may
+  answer the comparison, and so does a base that is neither the whole numbers
+  nor the floats alone, because narrowing it to one component would give a
+  smaller set than the schema denotes.
 - **Sequences.** Homogeneous, fixed-length, and prefix-plus-tail lists and tuples,
   with the container as part of the type (a list is never a tuple). Every sequence
   schema valgebra builds takes this linear shape, so inclusion *between two

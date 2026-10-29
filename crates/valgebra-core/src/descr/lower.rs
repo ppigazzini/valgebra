@@ -947,6 +947,16 @@ fn sequence(
 /// Each constraint is a *set* here rather than a test, so narrowing is
 /// intersection and the order the constraints are written in carries no meaning
 /// -- which is what makes `Ge(0) ∧ Lt(0)` decide rather than run.
+///
+/// A constraint is asked of one value at a time, so a refinement of a union is
+/// the union of its refined branches, as a meet distributes over a union
+/// [FCB08, Def. 4.1]. `Annotated[int | float, Ge(0)]` is the non-negative ints
+/// and the non-negative floats, each in the component that holds it, where the
+/// union as one base lands in neither. And a constraint is Python's own
+/// operation, whose error the walk reads as a non-match: `None` orders against
+/// no builtin value, has no length, takes no remainder and matches no pattern,
+/// and no class derives from `NoneType` to answer otherwise, so `None` under
+/// any constraint but a predicate is the empty set.
 fn refine(
     base: &Schema,
     constraints: &[Constraint],
@@ -954,6 +964,18 @@ fn refine(
     budget: &Room,
     depth: u32,
 ) -> Option<Descr> {
+    if let Schema::Union(branches) = base {
+        return branches.iter().try_fold(Descr::nothing(), |whole, branch| {
+            whole.union(&refine(branch, constraints, pool, budget, depth)?)
+        });
+    }
+    if matches!(base, Schema::NoneType)
+        && constraints
+            .iter()
+            .any(|constraint| holds_of_no_none(constraint, pool))
+    {
+        return Some(Descr::nothing());
+    }
     let mut narrowed = descend(base, pool, budget, depth)?;
     for constraint in constraints {
         let Some(set) = constrained(constraint, &narrowed, pool) else {
@@ -965,6 +987,31 @@ fn refine(
         narrowed = narrowed.intersect(&set)?;
     }
     Some(narrowed)
+}
+
+/// Whether `constraint` holds of no `None`: it raises against `None`, and the
+/// walk reads its error as a non-match. Every constraint but a predicate does,
+/// whose operand is a builtin value -- a comparison is asked of the operand's
+/// own type too, reflected, and a class may answer `None` there.
+fn holds_of_no_none(constraint: &Constraint, pool: &dyn Constants) -> bool {
+    match constraint {
+        Constraint::Ge(index)
+        | Constraint::Gt(index)
+        | Constraint::Le(index)
+        | Constraint::Lt(index)
+        | Constraint::MultipleOf(index) => matches!(
+            pool.operand(*index),
+            Some(
+                Operand::Boolean(_)
+                    | Operand::Integer(_)
+                    | Operand::Float(_)
+                    | Operand::Word(..)
+                    | Operand::NoneType
+            )
+        ),
+        Constraint::MinLen(_) | Constraint::MaxLen(_) | Constraint::Regex(_) => true,
+        Constraint::Predicate(_) => false,
+    }
 }
 
 /// The set one constraint denotes, read under the kinds the base admits.
