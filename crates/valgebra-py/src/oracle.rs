@@ -1359,6 +1359,16 @@ impl LeafRelations for PoolRelations<'_, '_> {
         {
             return None;
         }
+        // A list or a tuple orders item by item, stopping at the first pair
+        // that differs, so a value orders against one bound and raises against
+        // another: `[2 + 0j] >= [2]` holds, and `[2 + 0j] >= [1]` orders a
+        // complex number against an integer. No order between the bounds is an
+        // order of the values.
+        if [left, right].iter().any(|operand| {
+            operand.is_instance_of::<PyList>() || operand.is_instance_of::<PyTuple>()
+        }) {
+            return None;
+        }
         self.heard(left.compare(right))
     }
 

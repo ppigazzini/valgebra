@@ -550,7 +550,10 @@ corpus of its own driving every question below
   == 8` -- is one bound to `==` and another to membership. A class of no
   builtin declines unless it is exactly one of the standard library's value
   types the trust base names: Python implies no relationship among its
-  comparison operators, and the walk reads `>=` alone;
+  comparison operators, and the walk reads `>=` alone. A list or a tuple
+  operand declines too: it orders item by item, and a value's item equal to
+  one bound's and ordered against nothing -- `2 + 0j` -- passes one bound and
+  raises against the other;
 - `no_int_between` — does the interval between two bounds admit no integer,
   declining on the same operands, which `floor` and `ceil` round as the
   builtin. Read both ways: `bounds_unsatisfiable` takes `Some(true)` as an
