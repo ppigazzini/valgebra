@@ -826,7 +826,7 @@ kind being its own question [FCB08, (4)] and inhabited. **[LOAD-BEARING: kinds-d
 
 SOURCE: §13.1 "positives of mixed kind make a clause empty outright"
 
-IMPLEMENTED-BY: decision.rs::has_disjoint_pair, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::Schema::meet_disjoint_with, decision/readings.rs::Schema::spills_a_kind, decision/readings.rs::Schema::misses_a_kind, decision/readings.rs::Schema::kinds_held_whole, decision/readings.rs::Schema::kinds_possibly_held, decision/readings.rs::Schema::atom_region, decision/emptiness.rs::intersection_verdict, decision/products.rs::seq_splits_across_union, descr/mod.rs::Descr::within, descr/mod.rs::Descr::emptiness
+IMPLEMENTED-BY: decision.rs::has_disjoint_pair, decision.rs::two_members_of_kinds_apart, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::Schema::meet_disjoint_with, decision/readings.rs::Schema::spills_a_kind, decision/readings.rs::Schema::misses_a_kind, decision/readings.rs::Schema::kinds_held_whole, decision/readings.rs::Schema::kinds_possibly_held, decision/readings.rs::Schema::atom_region, decision/emptiness.rs::intersection_verdict, decision/products.rs::seq_splits_across_union, descr/mod.rs::Descr::within, descr/mod.rs::Descr::emptiness
 
 HELD-BY: the_same_shape_under_two_kinds_does_not_meet, a_kind_read_whole_or_absent_agrees_with_membership, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart, a_kind_is_an_independent_question, a_meet_is_disjoint_from_what_one_of_its_members_is, a_pair_read_disjoint_shares_no_value, test_a_meet_with_a_union_of_guarded_patterns_is_empty
 
