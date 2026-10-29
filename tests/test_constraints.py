@@ -506,6 +506,28 @@ def test_a_bound_that_is_empty_because_the_order_says_so_is_kept() -> None:
     assert not beyond.is_valid(float("inf"))
 
 
+def test_a_whole_float_step_is_not_the_integer_step_it_equals() -> None:
+    """`MultipleOf(2.0)` equals `MultipleOf(2)` and is another set over `int`.
+
+    `%` reads an `int` against a `float` as the float nearest it, so
+    `2**53 + 1` -- whose nearest float is `2**53` -- is a multiple of `2.0` and
+    not of `2`. Each step is read as the number it is, and `typing`'s cache,
+    which keys `Annotated` by equality, makes the two one marker in a process
+    that wrote either first: `docs/05-refinements.md` says so, and this holds
+    what it says.
+    """
+    past = 2**53 + 1
+    try:
+        assert not _fresh(lambda: Annotated[int, at.MultipleOf(2)]).is_valid(past)
+        assert _fresh(lambda: Annotated[int, at.MultipleOf(2.0)]).is_valid(past)
+        written = Annotated[int, at.MultipleOf(2.0)]
+        assert Annotated[int, at.MultipleOf(2)] is written
+        assert Validator(Annotated[int, at.MultipleOf(2)]).is_valid(past)
+    finally:
+        for cleanup in getattr(typing, "_cleanups", ()):
+            cleanup()
+
+
 def test_a_truth_value_is_read_as_the_length_it_equals() -> None:
     """`MinLen(True)` is `MinLen(1)`, and refusing it is not available.
 
