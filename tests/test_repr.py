@@ -1,6 +1,7 @@
 import dataclasses
 import enum
 import sys
+import typing
 from typing import Annotated, Any, Literal, TypedDict
 
 import annotated_types as at
@@ -303,6 +304,27 @@ class _B(bytes):
     __slots__ = ()
 
 
+class _Reversed(int):
+    """An `int` ordered the other way round, which the walk reads reflected."""
+
+    __slots__ = ()
+
+    def __le__(self, other: object) -> bool:
+        return int.__ge__(self, other)  # ty: ignore[invalid-argument-type]
+
+    def __ge__(self, other: object) -> bool:
+        return int.__le__(self, other)  # ty: ignore[invalid-argument-type]
+
+
+class _Divides(int):
+    """An `int` every number is a multiple of, read through `__rmod__`."""
+
+    __slots__ = ()
+
+    def __rmod__(self, other: object) -> int:
+        return 0
+
+
 def test_a_literal_of_a_builtins_subclass_is_marked_rather_than_misread() -> None:
     """A literal whose constant's `repr` reads back as another value refuses.
 
@@ -313,9 +335,10 @@ def test_a_literal_of_a_builtins_subclass_is_marked_rather_than_misread() -> Non
     value in angle brackets, a syntax error where it is read. A constant whose
     `repr` is not the builtin's spelling of it prints by that `repr` -- `True`,
     an enum member, a subclass that spells itself, and one whose builtin
-    spelling would raise -- and a bound is read as Python's comparison, so a
-    bound of the subclass rebuilds as one schema with the bound of the builtin
-    and prints as the builtin's.
+    spelling would raise. A bound of a subclass keeping the builtin's order
+    rebuilds as one schema with the bound of the builtin and prints as the
+    builtin's; one whose order or remainder is its own is another set, which
+    the builtin's spelling would misread, and is marked.
     """
     assert not Validator(_Text("a")).is_valid("a")
     for constant in (_Text("a"), _Mimic("a"), _F(1.5), _C(2j), _B(b"a")):
@@ -329,6 +352,32 @@ def test_a_literal_of_a_builtins_subclass_is_marked_rather_than_misread() -> Non
     bounded = Validator(Annotated[str, at.Ge(_Text("a"))])
     assert repr(bounded) == "Annotated[str, Ge('a')]"
     assert Validator(eval(repr(bounded), dict(_ROUNDTRIP_NS))) == bounded  # noqa: S307
+
+    # `typing` caches `Annotated` by `==`, and `Ge(_Reversed(5)) == Ge(5)`: the
+    # cache is cleared before each form is built, so none reads another's, and
+    # after, so no form built here is what a later `Annotated[int, Ge(5)]`
+    # anywhere in the session reads back.
+    def fresh(marker: object) -> Validator:
+        for cleanup in getattr(typing, "_cleanups", ()):
+            cleanup()
+        built = Validator(Annotated[int, marker])
+        for cleanup in getattr(typing, "_cleanups", ()):
+            cleanup()
+        return built
+
+    reversed_bound = fresh(at.Ge(_Reversed(5)))
+    assert reversed_bound.is_valid(0)
+    assert not fresh(at.Ge(5)).is_valid(0)
+    for schema, wanted in (
+        (reversed_bound, "Annotated[int, Ge(<_Reversed: 5>)]"),
+        (
+            fresh(at.MultipleOf(_Divides(3))),
+            "Annotated[int, MultipleOf(<_Divides: 3>)]",
+        ),
+    ):
+        assert repr(schema) == wanted
+        with pytest.raises(SyntaxError):
+            eval(wanted, dict(_ROUNDTRIP_NS))  # noqa: S307
 
 
 @dataclasses.dataclass(frozen=True)

@@ -61,6 +61,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a string a type alias substitutes is refused as a forward reference
 - fix: annotated-types' documentation marker is ignored under its new name
 - fix: opening or closing a schema twice gives the schema once did
+- fix: a bound whose operand orders on its own renders marked
 
 -->
 
@@ -285,6 +286,15 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A bound whose operand orders on its own renders marked.** A bound of a
+  subclass of `int`, `float`, `str` or `bytes` printed as the builtin's bound,
+  but where the subclass writes a comparison or a remainder of its own the walk
+  reads that one first, so the two are two sets: `Ge(RevInt(5))`, with
+  `RevInt` ordered the other way round, holds `0`, and its meet with
+  `complement(Annotated[int, Ge(5)])` printed as one that reads back empty. The
+  operand prints as a literal of it does, `Ge(<RevInt: 5>)`, a syntax error
+  where it is read; a subclass keeping the builtin's methods prints as before.
 
 - **Opening or closing a schema twice gives the schema once did.**
   `Validator({"a": int, "b?": anything}).open()` kept `b`, which the closed
