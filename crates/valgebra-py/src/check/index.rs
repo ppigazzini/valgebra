@@ -331,6 +331,12 @@ thread_local! {
 /// a query, under its text -- a schema the query builds holds a copy of the
 /// text at an address of its own, which no address key would find again -- and
 /// [`forget_unindexed`] drops what the query compiled when its oracle goes.
+///
+/// Out of line and cold: a validator's own walk never reaches it, and inlined
+/// into the pattern check every refined value reads, the table and the
+/// thread-local around it lay out the walk's hot path anew.
+#[cold]
+#[inline(never)]
 pub(crate) fn matches_unindexed(pattern: &str, text: &str) -> bool {
     UNINDEXED.with_borrow_mut(|compiled| {
         if let Some(regex) = compiled.get(pattern) {
