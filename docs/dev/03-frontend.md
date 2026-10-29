@@ -112,10 +112,13 @@ The rest are read in this order:
    `.func` becomes the predicate, which is `Predicate`;
 6. otherwise, a marker that contributed nothing above and whose class is itself
    one of the vocabulary's — refused, since it was written to narrow this
-   schema and ignoring it would admit what it excludes. `DocInfo` and `Unit`
-   exclude no value, so `narrows_nothing` exempts them by name and each is
-   ignored: one documents an annotation, and the other names what a number is
-   measured in and leaves the reading to the consumer. A class *deriving* from
+   schema and ignoring it would admit what it excludes. The documentation
+   marker and `Unit` exclude no value, so `narrows_nothing` exempts them by
+   name and each is ignored: one documents an annotation, and the other names
+   what a number is measured in and leaves the reading to the consumer. The
+   first is named `DocInfo` before annotated-types 0.8.0 and `Doc` from it,
+   where `doc()` makes a class of its own for want of `typing_extensions`'.
+   A class *deriving* from
    the vocabulary is read for the vocabulary's names and otherwise ignored, as
    the README asks of metadata a consumer does not recognize: pydantic derives
    the object carrying `StringConstraints`' pattern from `BaseMetadata`.

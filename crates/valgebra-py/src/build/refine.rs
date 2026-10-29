@@ -491,16 +491,18 @@ fn is_constraint_vocabulary(ty: &Bound<'_, PyType>) -> PyResult<bool> {
 }
 
 /// Whether `ty` is named as one of the two markers of the vocabulary that
-/// exclude no value: `DocInfo`, which documents an annotation, and `Unit`, which
+/// exclude no value: the one that documents an annotation, and `Unit`, which
 /// names what a number is measured in and leaves the reading to the consumer.
+/// The first is `DocInfo` before annotated-types 0.8.0 and `Doc` from it, the
+/// class `doc()` makes where `typing_extensions` has none to lend.
 ///
 /// Each is ignored as metadata written for someone else is. Refusing one as a
 /// constraint this frontend does not check would refuse it for admitting the
 /// values it excludes, and it excludes none.
 fn narrows_nothing(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let py = ty.py();
-    Ok(names(ty, intern!(py, "__name__"), "DocInfo")?
-        || names(ty, intern!(py, "__name__"), "Unit")?)
+    let name = intern!(py, "__name__");
+    Ok(names(ty, name, "Doc")? || names(ty, name, "DocInfo")? || names(ty, name, "Unit")?)
 }
 
 /// Whether `ty` is a string-pattern marker: valgebra's `Regex`, or a compiled
