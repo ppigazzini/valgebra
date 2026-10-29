@@ -25,6 +25,11 @@ a query this file drives:
 * an undecidable bullet is refused when the validator is built, or is read as
   an opaque atom, which the row states.
 
+A decided bullet promising its answer however the question is spelled carries
+each spelling it names, and each is driven: an example is one spelling, and a
+page whose example passes while another spelling of the same set declines is a
+promise kept for the example alone.
+
 Both directions: a bullet with no row fails, and a row naming no bullet fails.
 A conservative row that begins deciding fails too, which is what makes closing
 a gap a change to the page rather than a quiet improvement.
@@ -86,11 +91,18 @@ class Decides:
 
     `answer` is what `relation_to` reports, or `"empty"` for a bullet the page
     states as an emptiness rather than an inclusion.
+
+    `spellings` are the pairs a bullet names as its question written another
+    way -- a bound conjunction "however the meet is spelled", a difference as
+    one complemented union or as a meet of complements. A bullet promising an
+    answer whatever the spelling is a promise about each of them, and the
+    example it gives is one; each is driven, and answers as the row does.
     """
 
     left: Any
     right: Any
     answer: str
+    spellings: tuple[tuple[Any, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -187,7 +199,15 @@ ROWS: dict[str, Row] = {
         "subset",
     ),
     "Refinements.": Decides(
-        Annotated[int, at.Ge(1)], Annotated[int, at.Ge(0)], "subset"
+        Annotated[int, at.Ge(1)],
+        Annotated[int, at.Ge(0)],
+        "subset",
+        # "That holds however the meet is spelled": an interval skipping every
+        # integer, on one refinement and across an intersection.
+        spellings=(
+            (Annotated[int, at.Gt(0), at.Lt(1)], nothing),
+            (intersection(Annotated[int, at.Gt(0)], Annotated[int, at.Lt(1)]), nothing),
+        ),
     ),
     "Sequences.": Decides(
         tuple[int | str, int], union(tuple[int, int], tuple[str, int]), "subset"
@@ -208,6 +228,19 @@ ROWS: dict[str, Row] = {
         ),
         nothing,
         "subset",
+        # The difference written as a meet of complements: "both are decided".
+        spellings=(
+            (
+                intersection(
+                    {"a": union(int, str), "b": union(int, str)},
+                    complement({"a": int, "b": int}),
+                    complement({"a": int, "b": str}),
+                    complement({"a": str, "b": int}),
+                    complement({"a": str, "b": str}),
+                ),
+                nothing,
+            ),
+        ),
     ),
     "A complemented union or meet, as the subject.": Decides(
         complement(union(str, complement(list[list[int]]))),
@@ -468,6 +501,12 @@ def test_every_entry_of_the_boundary_answers_as_the_page_says(title: str) -> Non
         assert left.relation_to(row.right) == row.answer, (
             f"{title}: the page puts this on the decided list"
         )
+        for spelled, against in row.spellings:
+            answer = Validator(spelled).relation_to(against)
+            assert answer == row.answer, (
+                f"{title}: the page decides this question however it is spelled, "
+                f"and {spelled!r} answers {answer!r}"
+            )
         return
     if isinstance(row, Declines):
         answer = Validator(row.left).relation_to(row.right)

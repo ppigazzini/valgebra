@@ -1851,6 +1851,19 @@ PLANTS = (
         trips=("test_every_entry_of_the_boundary_answers_as_the_page_says",),
     ),
     Plant(
+        # A spelling of a decided entry that names a different set: the example
+        # still answers, and the spelling beside it does not.
+        "tests/test_boundary_ledger.py",
+        ("tests/test_boundary_ledger.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_boundary_ledger.py",
+            "(Annotated[int, at.Gt(0), at.Lt(1)], nothing),",
+            "(Annotated[int, at.Gt(0), at.Lt(2)], nothing),",
+        ),
+        trips=("test_every_entry_of_the_boundary_answers_as_the_page_says",),
+    ),
+    Plant(
         # A cache-key pattern narrowed to the top of each crate's sources: every
         # nested module becomes an input uv reinstalls the previous build over.
         "tests/test_build_surfaces.py",
