@@ -4001,9 +4001,9 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            '          python-version: "3.12"\n'
+            '          python-version: "3.15"\n'
             "      - run: uv sync --locked --group docs\n",
-            '          python-version: "3.13"\n'
+            '          python-version: "3.14"\n'
             "      - run: uv sync --locked --group docs\n",
         ),
         trips=("test_jobs_sharing_a_rust_cache_install_the_interpreter_it_names",),
@@ -4078,7 +4078,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/docs.yml",
-            "          key: python-3.12\n",
+            "          key: python-3.15\n",
             "          key: managed-python\n",
         ),
         trips=("test_every_rust_cache_names_the_interpreter_its_job_installs",),
