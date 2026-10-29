@@ -57,6 +57,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a record is refuted a shared field at a time past the node bound
 - feat: an order bound over str or bytes is decided as the words it admits
 - feat: a schema meeting a complement's inner set is refuted below the complement
+- fix: a meet two of whose members share no value is below anything at once
 
 -->
 
@@ -281,6 +282,12 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A meet two of whose members share no value is below anything at once.** A
+  meet subject asked each member against the supertype before reading its own
+  emptiness, so `intersection(complement(bool), float, dict[str, X])` against a
+  large recursive schema walked that schema for seconds before the meet's
+  empty `float & dict` pair answered it. The pair is read first.
 
 - **A class's layout is the one Python laid down.** A class given `__slots__`
   after it was made -- by a decorator, say -- lays down no slot, yet was read

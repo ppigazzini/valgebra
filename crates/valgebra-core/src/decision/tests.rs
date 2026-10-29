@@ -6553,6 +6553,40 @@ fn a_value_of_no_kind_refutes_past_a_cut() {
     );
 }
 
+/// A meet two of whose members share no value is below anything, read before
+/// a member is asked against the supertype: a float and a mapping meet in
+/// nothing, so the meet is below a fixpoint of lists and mappings in one step
+/// rather than after each member has walked it.
+#[test]
+fn an_empty_meet_is_below_anything_before_its_members_are_asked() {
+    let fixpoint = Schema::Ref(DefIx::new(0));
+    let defs = [Schema::union([
+        Schema::list(SeqShape::homogeneous(fixpoint.clone())),
+        Schema::mapping(MapClause {
+            key: Schema::Str,
+            value: fixpoint.clone(),
+        }),
+    ])];
+    let empty = Schema::Intersection(
+        vec![
+            Schema::Float,
+            Schema::mapping(MapClause {
+                key: Schema::Str,
+                value: fixpoint.clone(),
+            }),
+        ]
+        .into(),
+    );
+    let budget = Budget::new(DECISION_BUDGET);
+    let answer = empty.is_subtype_rec(&fixpoint, &mut Cx::new(&NoLeafRelations, &defs, &budget));
+    assert_eq!(answer, Relation::Holds);
+    assert_eq!(
+        DECISION_BUDGET - budget.left(),
+        1,
+        "one step, the pair's own"
+    );
+}
+
 /// A set of one literal is counted by the oracle, not by the node.
 ///
 /// A set holds each member once, so `MinLen(n)` over an element asks it for `n`

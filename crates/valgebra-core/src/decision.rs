@@ -1438,6 +1438,12 @@ impl Schema {
         if placed_by_membership(self, other) {
             return Relation::Holds;
         }
+        // A meet two of whose members share no value is empty, and below
+        // everything [BBC+26, (uninhabited)], which is read before a member is
+        // asked against a reference, whose definition is dear to walk.
+        if matches!(other, Schema::Ref(_)) && two_members_of_kinds_apart(members) {
+            return Relation::Holds;
+        }
         // Every placement here proves and none refutes: a member that is *not*
         // below the supertype says nothing about the meet, which is a smaller
         // set than that member. So a pair none of them places is handed to the
@@ -2126,6 +2132,23 @@ impl<'a> Cx<'a> {
         self.trail.pop();
         answer
     }
+}
+
+/// Whether two members of a meet have kinds that share no value, read off
+/// each member's own kind tag: positives of two kinds meet in nothing
+/// [FCB08, (5)].
+///
+/// The cheap half of [`has_disjoint_pair`], a discriminant a member, asked of
+/// a meet subject before a member is asked against a reference. Each
+/// tag is read against the first, which is every pair it could find: only
+/// `int` and `bool` share values, so a tag sharing values with the first
+/// shares them with every tag that does.
+fn two_members_of_kinds_apart(members: &[Schema]) -> bool {
+    let mut tags = members.iter().filter_map(Schema::type_tag);
+    let Some(first) = tags.next() else {
+        return false;
+    };
+    tags.any(|tag| !first.shares_values_with(tag))
 }
 
 /// Whether some two members are provably disjoint (distinct concrete kinds,
