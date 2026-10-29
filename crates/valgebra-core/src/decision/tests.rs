@@ -1036,6 +1036,30 @@ fn meet_is_empty(members: &[Schema]) -> bool {
     .is_empty()
 }
 
+/// The complement of a meet holds what a complemented member's inner set
+/// holds: pushed in, it is the union of the members' complements.
+///
+/// `¬(¬{"a": None} ∩ ¬{})` is `{"a": None} ∪ {}`, which holds `{}`, and a record
+/// has no region for the partition to read it by. The inner set is read by its
+/// shape, and one whose shape names no value says nothing this way.
+#[test]
+fn the_complement_of_a_meet_holds_a_complemented_member_s_values() {
+    let complement = |inner| Schema::Complement(Arc::new(inner));
+    let none_at_a = closed(vec![field("a", Schema::NoneType, true)]);
+    let pushed = complement(Schema::Intersection(
+        vec![complement(none_at_a), complement(closed(Vec::new()))].into(),
+    ));
+    assert_eq!(pushed.verdict(), Verdict::Inhabited);
+
+    let empty_inner = Schema::Intersection(vec![Schema::Int, Schema::Str].into());
+    let met = Schema::Intersection(vec![complement(empty_inner), closed(Vec::new())].into());
+    assert_eq!(
+        super::emptiness::a_complemented_member_holds_a_value(&met),
+        Verdict::Unknown
+    );
+    assert_ne!(complement(met).verdict(), Verdict::Empty);
+}
+
 /// The two rules [Cas23, (11)] and [Cas23, (12)] give for a meet of record
 /// atoms, and the guard of [Cas23, fn. 11] that stops each from firing where it
 /// must not.

@@ -1846,6 +1846,14 @@ _TRANSLATED: list[object] = [
         None,
         id="scalar:int&~(int&~{0.5,1.0,b''})-is-empty",
     ),
+    # The complement of a meet holds what a complemented member's inner holds:
+    # `~(~{"a": None} & ~{})` is `{"a": None} | {}`, which holds `{}`.
+    pytest.param(
+        "refutes",
+        complement(intersection(complement({"a": None}), complement({}))),
+        nothing,
+        id="map:~(~{a:None}&~{})-is-inhabited",
+    ),
     # Two records sharing no value empty a meet beside a member whose scalars
     # nest past that depth under a literal key's complement: the reading that
     # holds the member proves nothing, and the one that leaves it out proves

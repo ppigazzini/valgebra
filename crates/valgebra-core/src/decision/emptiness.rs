@@ -376,6 +376,14 @@ impl Schema {
             // the empty set read it alike; the fold alone, which spends no
             // step, since a step spent here is one a relation asking this
             // emptiness inside its own query no longer has.
+            //
+            // And it holds a value where its inner is a meet one of whose
+            // members is a complement of a set that holds one: pushed in, the
+            // complement of a meet is the union of its members' complements
+            // [FCB08, Lem. 6.2], which holds that member's inner. A record has
+            // no region, so `¬(¬{"a": None} ∩ ¬{})` is read this way or not at
+            // all. The member's inner is read by its own shape, which spends
+            // no step, as the fold above spends none.
             Schema::Complement(inner) => {
                 let (_, inner_region) = inner.empty_and_region(cx);
                 let region = match inner_region {
@@ -394,6 +402,7 @@ impl Schema {
                     {
                         Verdict::Empty
                     }
+                    Verdict::Unknown => a_complemented_member_holds_a_value(inner),
                     settled => settled,
                 };
                 (verdict, region)
@@ -448,6 +457,27 @@ impl Schema {
             // it cannot relate, so neither direction is proven of it.
             _ => (Verdict::Unknown, Regions::Unknown),
         }
+    }
+}
+
+/// `Inhabited` where `inner` is a meet a member of which is the complement of
+/// a set that has a value by its own shape ([`Schema::holds_a_value_shallowly`]),
+/// which the complement of the meet then holds; `Unknown` otherwise.
+///
+/// Read without descent: the fold that reached this complement has read the
+/// set already and kept no verdict of it, and reading it again would spend the
+/// steps a relation asking this emptiness inside its own query has left.
+pub(super) fn a_complemented_member_holds_a_value(inner: &Schema) -> Verdict {
+    let Schema::Intersection(members) = inner else {
+        return Verdict::Unknown;
+    };
+    if members
+        .iter()
+        .any(|member| matches!(member, Schema::Complement(set) if set.holds_a_value_shallowly()))
+    {
+        Verdict::Inhabited
+    } else {
+        Verdict::Unknown
     }
 }
 
