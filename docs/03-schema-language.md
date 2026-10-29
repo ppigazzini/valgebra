@@ -601,6 +601,22 @@ assert repr(mapping.open()) == "dict[anything, anything]"  # two clauses, folded
 assert not mapping.open().close().is_valid({"a": 1})
 ```
 
+The name the closed record drops is the one it says of every key it does not
+name: an optional field admitting nothing is the closed record's default, so
+`{"a?": nothing}` is `{}` and opens as `{}` does, to every dict. A key that
+stays refused once opened is written beside a clause that frees the rest:
+
+```python
+from valgebra import Validator, anything, nothing
+
+assert Validator({"a?": nothing}).open() == Validator({}).open()
+assert Validator({"a?": nothing}).open().is_valid({"a": 1})
+
+refused = Validator({"a?": nothing, str: anything}).open()
+assert not refused.is_valid({"a": 1})
+assert refused.is_valid({"b": 1, 2: None})
+```
+
 `dict[str, int]` above is the ordinary case: its clause carries a value that is
 not the top, nothing folds, and the round trip is exact.
 
