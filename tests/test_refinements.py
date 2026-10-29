@@ -237,6 +237,20 @@ def test_a_unit_is_metadata_that_narrows_nothing() -> None:
         Validator(Annotated[str, at.Timezone(None)])
 
 
+def test_the_documentation_marker_narrows_nothing_under_either_name() -> None:
+    """`at.doc()` documents an annotation, and excludes no value.
+
+    It returns `typing_extensions.Doc` where that exists, and from
+    annotated-types 0.8.0 a class of its own named `Doc` where it does not,
+    which earlier releases named `DocInfo`. Each is ignored, whichever class the
+    environment lends.
+    """
+    assert Validator(Annotated[int, at.doc("a count")]) == Validator(int)
+    for name in ("Doc", "DocInfo"):
+        marker = type(name, (), {"__module__": "annotated_types"})
+        assert Validator(Annotated[int, marker()]) == Validator(int)
+
+
 def test_a_function_is_a_predicate_whatever_module_defines_it() -> None:
     """A function in metadata is called, and nothing about it says what for.
 

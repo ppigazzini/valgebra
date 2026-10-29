@@ -59,6 +59,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a schema meeting a complement's inner set is refuted below the complement
 - fix: a meet two of whose members share no value is below anything at once
 - fix: a string a type alias substitutes is refused as a forward reference
+- fix: annotated-types' documentation marker is ignored under its new name
 
 -->
 
@@ -283,6 +284,13 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **`annotated_types.doc()` is ignored under annotated-types 0.8.0.** Where
+  `typing_extensions` has no `Doc` to lend, the release makes a class of its
+  own named `Doc`, which earlier releases named `DocInfo`, and
+  `Annotated[int, doc("a count")]` was refused as a constraint valgebra does not
+  check. It documents an annotation and excludes no value, and is ignored as
+  `DocInfo` is.
 
 - **A string a `type` alias substitutes is refused as a forward reference.**
   `type Keyed[T] = dict[str, T]` applied to `""` raised `SyntaxError` from

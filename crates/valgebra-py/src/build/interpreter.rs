@@ -80,7 +80,9 @@ const STAND_INS: &str = "import types\n\
              \x20   pass\n\
              class Unit:\n\
              \x20   def __init__(self, unit): self.unit = unit\n\
-             for vocabulary in (namespace, slotted.Ge, slotted.MinLen, guarded, hooked, Timezone, Unit):\n\
+             class Doc:\n\
+             \x20   def __init__(self, documentation): self.documentation = documentation\n\
+             for vocabulary in (namespace, slotted.Ge, slotted.MinLen, guarded, hooked, Timezone, Unit, Doc):\n\
              \x20   vocabulary.__module__ = 'annotated_types'\n\
              class traced(namespace):\n\
              \x20   def __getattribute__(self, name):\n\
@@ -669,7 +671,8 @@ fn a_typing_form_in_metadata_is_not_a_predicate() {
 /// Metadata that excludes no value is ignored wherever it is written: the
 /// standard library's `deprecated`, whose class `warnings` defines from 3.13 and
 /// `_py_warnings` from 3.14 and whose call raises for a value, and the
-/// vocabulary's `Unit`, which names what a number is measured in. Read as
+/// vocabulary's `Unit`, which names what a number is measured in, and its
+/// documentation marker under the name annotated-types 0.8.0 gives it. Read as
 /// narrowing, the first would be a predicate refusing every value and the second
 /// a constraint refused for what it would admit; and a group yielding `Unit`
 /// beside a bound is the bound. A vocabulary marker that does narrow is still
@@ -702,6 +705,7 @@ fn metadata_that_excludes_no_value_is_ignored() {
                 bound.as_str(),
             ),
             ("typing.Annotated[int, Unit('m'), at.Ge(0)]", bound.as_str()),
+            ("typing.Annotated[int, Doc('a count')]", "int"),
         ] {
             reads(expression, wanted);
         }
