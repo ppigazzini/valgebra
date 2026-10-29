@@ -1120,7 +1120,10 @@ the shape. What is left below is what the descriptor cannot hold.
   one member is, so each member is asked on its own; a union supertype is first
   narrowed to the branches the subject shares a value with. A meet supertype is
   asked a member at a time too: `int` is outside `Ge(0)` met with a predicate,
-  `-1` being outside the first member whatever the predicate says. Records told apart
+  `-1` being outside the first member whatever the predicate says. A record
+  against a record is asked a shared field at a time, so one field outside its
+  counterpart refutes the pair however many fields stand beside it -- thirteen
+  guarded fields are past the node bound as a pair. Records told apart
   by a tag meet one branch each, so a union of them is decided at any width:
 
   ```python

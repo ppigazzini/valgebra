@@ -40,7 +40,8 @@ use literals::{
 use products::{linear_subtype, seq_splits_across_union};
 use readings::{outside_every_kind, refuted_by_a_multiple, tables_disjoint};
 use records::{
-    attr_record_subtype, keyed_map_splits_across_union, keyed_map_subtype, keyed_meet_below,
+    a_shared_field_refuted_by_the_sets, attr_record_subtype, keyed_map_splits_across_union,
+    keyed_map_subtype, keyed_meet_below,
 };
 
 pub use crate::oracle::{LeafRelations, NoLeafRelations};
@@ -751,10 +752,15 @@ impl Schema {
     /// and is not read again a member at a time, which would lower each member
     /// for an answer the whole reading did not find.
     ///
+    /// A record against a record is asked a shared field at a time by the set
+    /// representation, which the pair is past the node bound of where it is
+    /// wide: a field refuted refutes the record on a subject that holds a
+    /// value ([`a_shared_field_refuted_by_the_sets`]).
+    ///
     /// The parts are asked in the query, so the rules' work stays bounded by
     /// its budget in total, and the lowerings are one per member, per
-    /// narrowing and per branch of the one subject, each under its own bounds:
-    /// linear in the two terms.
+    /// narrowing, per shared field and per branch of the one subject, each
+    /// under its own bounds: linear in the two terms.
     fn decided_by_parts(&self, other: &Schema, cx: &mut Cx<'_>, by_branch: bool) -> Relation {
         if let Schema::Union(members) = self {
             // The supertype is every member's, so it is lowered once: where it
@@ -776,6 +782,15 @@ impl Schema {
                     })
                     .or_else(|| member.decided_by_parts(other, cx, false))
             }));
+        }
+        if let (Schema::KeyedMap { fields: fa, .. }, Schema::KeyedMap { fields: fb, .. }) =
+            (self, other)
+        {
+            return if a_shared_field_refuted_by_the_sets(fa, fb, cx) {
+                Relation::of_mismatch(self.verdict_rec(cx))
+            } else {
+                Relation::Unknown
+            };
         }
         if let Schema::Intersection(members) = other {
             if members

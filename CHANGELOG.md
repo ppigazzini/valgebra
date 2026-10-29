@@ -54,10 +54,19 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet supertype is decided a member at a time
 - feat: a meet subject is asked narrowed by the complements beside its unions
 - feat: a record the key partition cannot hold is left out of a meet of records
+- feat: a record is refuted a shared field at a time past the node bound
 
 -->
 
 ### Added
+
+- **A record is refuted a shared field at a time past the node bound.** Where
+  both deciders decline a record against a record, each field the two declare
+  is asked of the set representation alone, and one outside its counterpart
+  refutes the pair on a subject that holds a value. A record of thirteen
+  guarded integer fields, `~int | Ge(0)` each and `~int | Ge(-1)` first, is
+  `not_subset` of the same record with `Ge(0)` first, where past twelve fields
+  it was `undecided`.
 
 - **A record the key partition cannot hold is left out of a meet of records.**
   A meet is below the members it keeps, so a meet holding a record whose

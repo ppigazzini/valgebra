@@ -1506,6 +1506,49 @@ fn a_record_the_partition_cannot_read_is_left_out_of_the_meet() {
     );
 }
 
+// THEORY: a-record-splits-across-a-union
+/// A record against a record past the set representation's node bound as a
+/// pair is asked a shared field at a time: a field the set representation
+/// refutes refutes the record on a subject that holds a value, and a field
+/// below its counterpart refutes nothing.
+#[test]
+fn a_record_is_refuted_a_shared_field_at_a_time_past_the_node_bound() {
+    let pattern = |words: &str| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex(words.into())].into(),
+    };
+    let record = |first: Schema| {
+        closed(
+            (0..40)
+                .map(|at| {
+                    let schema = if at == 0 {
+                        first.clone()
+                    } else {
+                        pattern("a+")
+                    };
+                    field(&format!("f{at:02}"), schema, false)
+                })
+                .collect(),
+        )
+    };
+    let wide = record(pattern("a*"));
+    let narrow = record(pattern("a+"));
+    assert_eq!(
+        wide.descriptor_contained_in(&narrow, &NoLeafRelations, &[]),
+        Relation::Unknown,
+        "past the node bound as a pair"
+    );
+    assert_eq!(
+        wide.subtype_relation_under(&narrow, &NoLeafRelations, &[]),
+        Relation::Fails
+    );
+    assert_ne!(
+        narrow.subtype_relation_under(&wide, &NoLeafRelations, &[]),
+        Relation::Fails,
+        "a field below its counterpart refutes nothing"
+    );
+}
+
 /// A chain spelled as a recursive record, its reference inside the key's
 /// union, decides as the chain spelled around the union does.
 ///
