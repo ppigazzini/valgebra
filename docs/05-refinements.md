@@ -73,6 +73,27 @@ apart, so such a literal below a predicate is not proven.
 | `Regex(p)` | the string fully matches the regex `p` | `string_pattern_mismatch` |
 | `Predicate(f)` | `f(value)` is truthy | `predicate_failed` |
 
+**A constraint is Python's own operation, and a value it raises against is
+refused.** The walk asks each constraint of the value and reads an ordinary
+error as a failed check, so a bound over a base holding values it cannot
+compare refuses them: `Annotated[int | None, Ge(0)]` admits the non-negative
+integers and refuses `None`, which orders against no number, with
+`greater_than_equal`. A length bound refuses a value with no length, and a
+pattern a value that is not a string, the same way:
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import Validator
+
+maybe_count = Validator(Annotated[int | None, at.Ge(0)])
+assert maybe_count.is_valid(3)
+assert not maybe_count.is_valid(None)
+assert maybe_count.relation_to(Annotated[int, at.Ge(0)]) == "subset"
+```
+
 **A length bound is read before the elements it bounds.** On a list, tuple,
 set, frozenset or dict, `MinLen` and `MaxLen` are asked once the value is of the
 base's kind and before any element is read, which is where a fixed shape such as

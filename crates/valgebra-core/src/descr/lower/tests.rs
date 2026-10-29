@@ -11,7 +11,8 @@ use crate::descr::budget;
 use crate::descr::classes::Class;
 use crate::descr::{Descr, Value};
 use crate::ir::{
-    ClassIx, ConstIx, Constraint, Field, MapClause, Openness, OperandIx, Schema, SeqKind, SeqShape,
+    ClassIx, ConstIx, Constraint, Field, MapClause, Openness, OperandIx, PredIx, Schema, SeqKind,
+    SeqShape,
 };
 use crate::kind::Kind;
 use crate::verdict::{Relation, Verdict};
@@ -1294,6 +1295,147 @@ proptest! {
         prop_assert!(read.is_some(), "a boolean bound lowers");
         prop_assert_eq!(read, lower(&refined, &Pool(vec![Operand::Integer(i64::from(boolean))])));
     }
+}
+
+/// A number a comparison is asked of, as Python reads it: `None` for a value
+/// no builtin number orders, whose comparison raises.
+fn as_number(value: &Value) -> Option<f64> {
+    if *value == Value::of_kind(Kind::NoneType) || *value == Value::word(b"a", Kind::Str) {
+        return None;
+    }
+    [
+        (Value::boolean(false), 0.0),
+        (Value::boolean(true), 1.0),
+        (Value::integer(-1), -1.0),
+        (Value::integer(0), 0.0),
+        (Value::integer(2), 2.0),
+        (Value::float(0.5), 0.5),
+        (Value::float(-2.5), -2.5),
+    ]
+    .into_iter()
+    .find(|(held, _)| held == value)
+    .map(|(_, number)| number)
+}
+
+proptest! {
+    // THEORY: a-refinement-narrows-its-base
+    /// A refinement of a union is the union of its refined branches, and a
+    /// value a bound cannot be compared with is refused: the lowered set admits
+    /// a value exactly where the value is of a branch and Python's comparison
+    /// of it with the operand holds, an error read as a non-match, as the walk
+    /// reads one. Over branches the components hold whole numbers, floats,
+    /// truth values and `None`, two at a time; a branch of strings declines.
+    #[test]
+    fn a_bound_over_a_union_is_asked_of_each_branch(
+        first in 0usize..5,
+        second in 0usize..5,
+        which in 0usize..4,
+        operand in prop_oneof![
+            (-2i64..3).prop_map(Operand::Integer),
+            prop_oneof![Just(-0.5), Just(0.5), Just(2.0)].prop_map(Operand::Float),
+            any::<bool>().prop_map(Operand::Boolean),
+        ],
+    ) {
+        let bases = [Schema::Int, Schema::Float, Schema::Bool, Schema::NoneType, Schema::Str];
+        let kinds = [
+            vec![Kind::Int, Kind::Bool],
+            vec![Kind::Float],
+            vec![Kind::Bool],
+            vec![Kind::NoneType],
+            vec![Kind::Str],
+        ];
+        let at = OperandIx::new(0);
+        let constraint = [
+            Constraint::Gt(at),
+            Constraint::Ge(at),
+            Constraint::Lt(at),
+            Constraint::Le(at),
+        ]
+        .into_iter()
+        .nth(which)
+        .expect("one of four");
+        let bound = match operand {
+            Operand::Integer(n) => {
+                #[expect(clippy::cast_precision_loss, reason = "small integers convert exactly")]
+                let n = n as f64;
+                n
+            }
+            Operand::Float(x) => x,
+            Operand::Boolean(b) => f64::from(u8::from(b)),
+            _ => unreachable!("the operands drawn are numbers"),
+        };
+        let refined = Schema::Refine {
+            base: Arc::new(Schema::Union(vec![bases[first].clone(), bases[second].clone()].into())),
+            constraints: vec![constraint.clone()].into(),
+        };
+        // A string may be of a class that answers the comparison, so a branch of
+        // strings is not read as refused; the union declines with it.
+        let strings = first == 4 || second == 4;
+        let set = lower(&refined, &Pool(vec![operand]));
+        prop_assert_eq!(set.is_some(), !strings, "{:?} lowers where no branch is strings", refined);
+        let Some(set) = set else {
+            return Ok(());
+        };
+        for value in [
+            Value::boolean(false),
+            Value::boolean(true),
+            Value::integer(-1),
+            Value::integer(0),
+            Value::integer(2),
+            Value::float(0.5),
+            Value::float(-2.5),
+            Value::of_kind(Kind::NoneType),
+            Value::word(b"a", Kind::Str),
+        ] {
+            let of_a_branch = [first, second].iter().any(|&at| {
+                kinds[at].iter().any(|kind| Descr::of_kind(*kind).admits(value))
+            });
+            let holds = as_number(&value).is_some_and(|x| match constraint {
+                Constraint::Gt(_) => x > bound,
+                Constraint::Ge(_) => x >= bound,
+                Constraint::Lt(_) => x < bound,
+                _ => x <= bound,
+            });
+            prop_assert_eq!(set.admits(value), of_a_branch && holds, "{:?} in {:?}", value, refined);
+        }
+    }
+}
+
+// THEORY: a-refinement-narrows-its-base
+/// `None` under any constraint but a predicate is empty: it orders against no
+/// builtin value, has no length, takes no remainder and matches no pattern, and
+/// the walk reads each error as a non-match. A predicate may accept it, and an
+/// operand the pool does not read may answer a reflected comparison, so both
+/// leave the set unread.
+#[test]
+fn none_under_a_constraint_is_empty() {
+    let at = OperandIx::new(0);
+    let refined = |constraint: Constraint| Schema::Refine {
+        base: Arc::new(Schema::NoneType),
+        constraints: vec![constraint].into(),
+    };
+    for constraint in [
+        Constraint::Ge(at),
+        Constraint::Lt(at),
+        Constraint::MultipleOf(at),
+        Constraint::MinLen(0),
+        Constraint::MaxLen(3),
+        Constraint::Regex(".*".into()),
+    ] {
+        let set = lower(
+            &refined(constraint.clone()),
+            &Pool(vec![Operand::Integer(2)]),
+        );
+        assert_eq!(set, Some(Descr::nothing()), "{constraint:?}");
+    }
+    assert_eq!(lower(&refined(Constraint::Ge(at)), &empty_pool()), None);
+    assert_eq!(
+        lower(
+            &refined(Constraint::Predicate(PredIx::new(0))),
+            &empty_pool()
+        ),
+        None
+    );
 }
 
 /// A length bound lands in the kinds the base has and in no other: the bound

@@ -527,7 +527,12 @@ time, and a predicate only by itself. The other direction needs a value: where a
 refinement of `int` is narrowed by one integer step and integer bounds alone,
 its values are the multiples of the step between the bounds, so its emptiness
 is read exactly and one of those multiples that the other's step does not
-divide refutes the pair. A refinement whose predicate is not well
+divide refutes the pair. A constraint is asked of one value at a time, so
+over a union base a refinement is the union of its refined branches, the meet
+distributing over the union [FCB08, Def. 4.1]; and a constraint is Python's own
+operation, whose error the walk reads as a non-match, so `None`, which no
+class derives from and which orders against no builtin value, is empty under
+any constraint but a predicate. A refinement whose predicate is not well
 sorted over its base is not a type at all [JV20, Fig. 3.3], and the frontend
 refuses a constraint no value of the base can answer.
 **[LOAD-BEARING: a-refinement-narrows-its-base]**
@@ -536,7 +541,7 @@ SOURCE: §10 "the runtime check; the static/SMT side is"
 
 IMPLEMENTED-BY: decision.rs::refinement_subtype, decision/constraints.rs::constraint_entailed, decision/readings.rs::refuted_by_a_multiple, decision/constraints.rs::Multiples, ir.rs::Schema::refine, valgebra-py/src/check/walk/scalar.rs::check_refine, valgebra-py/src/build/refine.rs::check_constraint_fits, descr/lower.rs::refine
 
-HELD-BY: test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker, test_every_cell_narrows_its_base_or_is_refused, a_step_is_refuted_where_one_of_its_multiples_is_outside
+HELD-BY: test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker, test_every_cell_narrows_its_base_or_is_refused, a_step_is_refuted_where_one_of_its_multiples_is_outside, a_bound_over_a_union_is_asked_of_each_branch, none_under_a_constraint_is_empty
 
 ## Decision procedures, for widening the decided fragment
 

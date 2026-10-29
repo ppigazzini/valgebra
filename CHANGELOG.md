@@ -35,10 +35,21 @@ answer of its own, or a repair to a change not yet released.
 - fix: a length or a bound equal to a whole number is read as that number
 - fix: one depth bound raises one type, and a class reached again is refused there
 - fix: a counted Unicode class written as an ordinary bound builds
+- feat: a refinement of a union is the union of its refined branches
 
 -->
 
 ### Added
+
+- **A refinement of a union is the union of its refined branches.** A
+  constraint is asked of one value at a time, so `Annotated[int | float,
+  Ge(0)]` is the non-negative ints and the non-negative floats, and is decided
+  as each is: `intersection(None, Annotated[int | float, Le(1)])` is empty,
+  `bool` is `subset` of `Annotated[int | float, Ge(-2)]`, and the base written
+  as a union is `subset` of the union of the refinements both ways, where each
+  of these was `undecided`. A constraint is Python's own operation, whose error
+  the walk reads as a failed check, so `None` under any constraint but a
+  predicate is empty: `Annotated[int | None, Ge(0)]` is `Annotated[int, Ge(0)]`.
 
 - **A float bound over the integers is read at its floor or its ceiling.**
   Python compares an `int` with a `float` exactly, so the set representation
