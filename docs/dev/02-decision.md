@@ -117,7 +117,10 @@ union subject is asked a member at a time, since it is below where each member
 is and outside where one is; a union supertype is narrowed to the branches the
 subject shares a value with, by the reading `below_a_union` narrows with, and
 the narrowed pair asked whole, or, where nothing narrows, proved by a branch
-the descriptor places the subject in. What it reaches is the descriptor's
+the descriptor places the subject in; a meet supertype is asked a member at a
+time, since the subject is below it where it is below each member and outside
+it where it is outside one, by either decider, beside a member neither reads.
+What it reaches is the descriptor's
 bounds: a union of tagged records is past the node bound as a pair and a record
 and the one branch it meets are not, and a branch holding a reference beside a
 pattern is dropped where the subject meets it nowhere, which leaves the
@@ -131,7 +134,8 @@ while the query has a step left: a pair the rules spent the budget on has as
 many parts as members and branches, and a union of four thousand records
 against another, or a tuple against its two thousand corners, read a part at a
 time cost seventy times the decline and answered nothing more.
-`a_union_is_decided_a_part_at_a_time` holds each exit, and
+`a_union_is_decided_a_part_at_a_time` holds each exit,
+`a_meet_supertype_is_decided_a_member_at_a_time` the meet's, and
 `a_spent_query_asks_no_part` the step the parts need.
 
 **The respellings** are reached last, for the query's own pair, where every
