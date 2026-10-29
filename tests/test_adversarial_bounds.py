@@ -101,8 +101,11 @@ def test_build_depth_guard_rejects_an_overdeep_schema() -> None:
     # A reasonably nested annotation compiles; one past the build-depth guard is
     # rejected at compile time with a clean exception, not a stack overflow.
     assert Validator(_nested_annotation(50)).is_valid(_nested_value(50))
-    with pytest.raises((NotImplementedError, ValidationError, ValueError)):
-        Validator(_nested_annotation(1000))
+    # One bound and one type: an annotation nested past it raises the
+    # `ValueError` a schema built past it raises, at the bound and past it.
+    for levels in (MAX_SCHEMA_DEPTH, MAX_SCHEMA_DEPTH + 1, 1000):
+        with pytest.raises(ValueError, match="schema nesting is too deep"):
+            Validator(_nested_annotation(levels))
 
 
 def _compose_in_a_loop(compose: Callable[[object], object]) -> None:

@@ -183,21 +183,21 @@ checking](18-static-checking.md)).
 | --- | --- | --- |
 | `NotImplementedError` | The spec names a form with no decidable runtime membership. | `Sequence[int]`, `Mapping[str, int]`, a `TypeVar`, `Final`, `ClassVar` |
 | `NotImplementedError` | A callable that is not a class, or the annotation `Validator[T]`, stands where a schema goes. The message names the spelling that was meant: `Annotated[T, fn]` or `Literal[fn]` for a callable, the schema or a compiled validator for `Validator[T]`. | `Validator(fn)`, `intersection(Record, fn)`, `list[fn]`, `Validator(Validator[int])` |
-| `NotImplementedError` | Compiling descends one level past the construction depth bound without reaching a leaf. | a self-referential class, whose field type names the class |
-| `ValueError` | A constructed schema crosses a size bound: depth, definitions, or nodes. | growing a schema in a loop with `\|`, `union` or `intersection`; opening one near the node bound |
+| `NotImplementedError` | A class is reached again, under the type arguments it is applied to, while its own fields are being built. | a self-referential dataclass, `TypedDict` or protocol, whose field type names the class |
+| `ValueError` | A schema crosses a size bound: depth, definitions, or nodes, whether a sequence of calls built it or an annotation spells it. | growing a schema in a loop with `\|`, `union` or `intersection`; opening one near the node bound; `list[list[...]]` nested past `MAX_SCHEMA_DEPTH` |
 | `ValueError` | A marker's value cannot denote a set. | `MultipleOf(0)` |
 | `ValueError` | A `recursive` body is not contractive — its back edge is not under a structural constructor. | `recursive(lambda s: s)` |
 | `TypeError` | An argument is the wrong Python type for the call. | `validate_json(123)`, `load(123)` |
 
-The form row and the depth row are **different bounds** that happen to share
-a class. The first is about the *form* and no depth would help it; the second is
-about *depth while compiling*, and is what a self-referential class reaches
-because its field type names the class again — the frontend descends one level
-past what a constructed schema may carry, so the message names the bound and the
-schema past it is refused rather than half-built. The `ValueError` depth row is
-that construction bound itself, on the schema a sequence of calls has built, and
-`MAX_SCHEMA_DEPTH` is importable so code that sizes a schema reads it rather
-than repeating it. The [resource limits](10-limits.md) guide covers all three
+The form row and the class row are **different refusals** that share a
+class. The first is about the *form* and no depth would help it; the second is
+a class whose field type names the class again, which never bottoms out and is
+refused where it is reached rather than at a depth. The `ValueError` depth row
+is one bound, `MAX_SCHEMA_DEPTH`, on a schema a sequence of calls built and on
+one an annotation spells -- the frontend descends one level past it, so the
+message names the bound and the schema past it is refused rather than
+half-built -- and `MAX_SCHEMA_DEPTH` is importable so code that sizes a schema
+reads it rather than repeating it. The [resource limits](10-limits.md) guide covers all three
 sizes.
 
 ```python

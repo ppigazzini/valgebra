@@ -33,6 +33,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a reading that cannot decide a meet hands it to the next
 - fix: a definition being resolved drops no part of a supertype
 - fix: a length or a bound equal to a whole number is read as that number
+- fix: one depth bound raises one type, and a class reached again is refused there
 
 -->
 
@@ -133,6 +134,15 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **One depth bound raises one type.** An annotation nested past
+  `MAX_SCHEMA_DEPTH` raises the `ValueError` a schema built past it raises, at
+  the bound and past it, where 129 levels and more raised
+  `NotImplementedError`. A class whose own type appears in its fields is
+  refused with `NotImplementedError` where it is reached again while its fields
+  are being built, under the type arguments it is applied to, rather than after
+  descending to the bound: `Chain[int]` naming `Chain[int]` is refused, and
+  `Box[Box[int]]` builds.
 
 - **A length bound equal to a whole number is that length, and a truth value
   bounding a number is the integer it is.** `len` is an `int`, so

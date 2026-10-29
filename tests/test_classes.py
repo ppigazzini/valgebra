@@ -392,9 +392,44 @@ class Node:
 
 def test_recursive_dataclass_is_rejected_not_crashed() -> None:
     # A class whose own type appears in a field is recursive; it must be written
-    # with recursive. Compiling it directly is rejected cleanly, never crashing.
-    with pytest.raises(NotImplementedError):
+    # with recursive. Compiling it directly is rejected cleanly, never crashing,
+    # and where the class is reached again rather than at the depth bound.
+    with pytest.raises(
+        NotImplementedError, match="reached again while its own fields are being built"
+    ):
         Validator(Node)
+
+
+T = typing.TypeVar("T")
+
+
+@dataclasses.dataclass
+class Box(typing.Generic[T]):
+    item: T
+
+
+@dataclasses.dataclass
+class Chain(typing.Generic[T]):
+    item: T
+    nxt: "Chain[T] | None" = None
+
+
+def test_a_generic_class_is_refused_where_it_is_reached_with_its_own_arguments() -> (
+    None
+):
+    """A class reached again under the arguments it is being built with repeats.
+
+    `Chain[int]` names `Chain[int]` in a field, so its fields are built from the
+    same hints again and the build never ends. `Box[Box[int]]` names `Box[int]`,
+    another build that ends: a class reached again is refused only where its
+    arguments are the ones it is open under.
+    """
+    with pytest.raises(
+        NotImplementedError, match="reached again while its own fields are being built"
+    ):
+        Validator(Chain[int])
+    assert Validator(Box[Box[int]]).is_valid(Box(Box(1)))
+    assert not Validator(Box[Box[int]]).is_valid(Box(Box("x")))
 
 
 def test_finite_deep_schema_still_compiles() -> None:

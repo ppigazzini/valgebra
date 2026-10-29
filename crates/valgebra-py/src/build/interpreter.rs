@@ -223,6 +223,26 @@ fn a_generic_class_binds_each_parameter_once() {
     });
 }
 
+/// A class reached again while its fields are being built is refused there only
+/// under the arguments it is open under: `Box[Box]` reaches the bare `Box`, which
+/// is another build, refused for the parameter its field names rather than as a
+/// class reached again, and `Box[Box[int]]` reaches `Box[int]`, which builds.
+#[test]
+fn a_class_reached_under_other_arguments_is_another_build() {
+    Python::attach(|py| {
+        let program = r"import dataclasses, typing\nT = typing.TypeVar('T')\n@dataclasses.dataclass\nclass Box(typing.Generic[T]):\n    sub: T\n";
+        let spelled =
+            |form: &str| format!(r#"(lambda ns: (exec("{program}", ns), {form})[1])({{}})"#);
+        let refused =
+            built(py, &spelled("ns['Box'][ns['Box']]")).expect_err("the bare class is refused");
+        assert!(refused.to_string().contains("is generic in T"), "{refused}");
+        assert_eq!(
+            built(py, &spelled("ns['Box'][ns['Box'][int]]")).expect("each level builds"),
+            "Box"
+        );
+    });
+}
+
 /// Every spelling the frontend dispatches on, and the schema it must reach.
 ///
 /// One row per arm rather than per feature: a mutant that folds two arms

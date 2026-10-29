@@ -61,7 +61,7 @@ def test_a_field_wrapping_itself_is_refused_by_depth() -> None:
     """
     looped = Annotated[int, "meta"]
     looped.__origin__ = looped  # ty: ignore[invalid-assignment]
-    with pytest.raises(NotImplementedError, match="nesting is too deep"):
+    with pytest.raises(ValueError, match="nesting is too deep"):
         Validator({"a": looped})
 
 
