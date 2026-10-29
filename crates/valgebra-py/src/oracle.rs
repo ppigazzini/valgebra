@@ -31,7 +31,9 @@ use valgebra_core::descr::classes::{Attributes, Class, Hook, Member, Namespace, 
 use valgebra_core::descr::lower::{Constants, Operand};
 use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, OperandIx, Schema};
 
-use crate::check::{Ctx, Unwritten, ValidatorIndex, WalkMode, WalkState, build_index, member};
+use crate::check::{
+    Ctx, Unwritten, ValidatorIndex, WalkMode, WalkState, build_index, forget_unindexed, member,
+};
 use crate::errors::is_fatal;
 use crate::input::Value;
 
@@ -92,7 +94,7 @@ impl<'py, 'pool> PoolRelations<'py, 'pool> {
     /// The query's answer, or the fatal signal a probe raised while it was
     /// decided. The one way a relation leaves the bindings.
     pub(crate) fn answer<T>(self, decided: T) -> PyResult<T> {
-        self.fatal.into_inner().map_or(Ok(decided), Err)
+        self.fatal.take().map_or(Ok(decided), Err)
     }
 
     /// A probe's result, or `None` where it raised: a check that raised has
@@ -107,6 +109,14 @@ impl<'py, 'pool> PoolRelations<'py, 'pool> {
         if is_fatal(&err, self.py) {
             self.fatal.borrow_mut().get_or_insert(err);
         }
+    }
+}
+
+impl Drop for PoolRelations<'_, '_> {
+    /// The patterns this query's walks compiled outside an index are its own,
+    /// and go with it.
+    fn drop(&mut self) {
+        forget_unindexed();
     }
 }
 

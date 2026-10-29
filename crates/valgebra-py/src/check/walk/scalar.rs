@@ -27,7 +27,7 @@ use super::{
     reads_its_length, record_fatal, record_if_fatal, record_stop, stop, stopped,
 };
 use crate::check::ctx::Ctx;
-use crate::check::index::compile_pattern;
+use crate::check::index::matches_unindexed;
 use crate::check::violation::{mismatch, summarize_in, summarize_value};
 use crate::codes::{
     Code, GREATER_THAN, GREATER_THAN_EQUAL, LESS_THAN, LESS_THAN_EQUAL, LITERAL_ERROR, MULTIPLE_OF,
@@ -755,7 +755,7 @@ fn check_constraint(
             // a string base check, but stays defensive), and nor does a string
             // holding a lone surrogate, which has no UTF-8 to match.
             //
-            // A pattern absent from the index is compiled here, per value. A
+            // A pattern absent from the index is compiled here, once a query. A
             // validator's own walk never misses -- its index compiles every
             // pattern the schema holds -- but the relation oracle walks schemas
             // no validator owns, with an empty index, to ask whether a literal
@@ -769,7 +769,7 @@ fn check_constraint(
                 .and_then(|s| s.to_str().map_err(set_aside).ok())
                 .is_some_and(|text| match regexes.get(&(pattern.as_ptr() as usize)) {
                     Some(compiled) => compiled.is_match(text),
-                    None => compile_pattern(pattern).is_ok_and(|re| re.is_match(text)),
+                    None => matches_unindexed(pattern, text),
                 });
             explained(
                 matched,
