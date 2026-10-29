@@ -74,19 +74,13 @@ class _Near:
         return f"_Near({self.n})"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "`Literal[c] <= Literal[d]` is proved from `c == d`, a proof only where "
-        "`==` is transitive"
-    ),
-)
-# TRUST: A constant's `==` is an equivalence.
+# THEORY: a-constant-is-the-values-equal-to-it
 def test_a_proof_between_constants_needs_a_transitive_equality() -> None:
-    """The known-unsound case of trusting a constant's `==` in a proof.
+    """A class whose `__eq__` is its own proves nothing by its constant.
 
-    `_Near(1) == _Near(2)`, so the first literal is proved below the second;
-    `_Near(0)` equals the first and not the second, a value against the proof.
+    `_Near(1) == _Near(2)`, but `_Near(0)` equals the first and not the second,
+    a value against a proof read from `==`; the class's equality is read by no
+    atom, so the constant speaks for its literal nowhere it is not alone.
     """
     first, second, witness = Validator(_Near(1)), Validator(_Near(2)), _Near(0)
 

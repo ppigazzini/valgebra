@@ -177,9 +177,10 @@ the value outside the base is outside a subset of it, while being inside the
 base says nothing about the constraints. The oracle is asked before the
 refinement because it proves where the refinement reading only refutes: a
 literal below a predicate refinement is settled by running the predicate on the
-constant, where the constant is the literal's one value or the supertype asks
-nothing that tells two equal values apart
-(`the_constant_speaks_for_the_literal` in `decision/literals.rs`).
+constant, where the constant is the literal's one value, or where its equality
+is one the atoms read through and the supertype asks nothing else that tells
+two equal values apart (`the_constant_speaks_for_the_literal` in
+`decision/literals.rs`).
 
 **A string subject is read by its texts last**, once the sets have declined
 as well (`decided_by_its_texts` in `decision/readings.rs`). A pattern whose
@@ -530,6 +531,14 @@ corpus of its own driving every question below
   literal before a predicate or an attribute record
   (`the_constant_speaks_for_the_literal`). The default answers no, which keeps
   such a proof only where the supertype tells no two equal values apart;
+- `equal_values_read_alike` — do the values `==` joins to this constant answer
+  a pattern, a length, a bound and a step alike, which decides whether that
+  proof speaks for the literal before any other atom. Those atoms read a
+  builtin's storage, so a builtin subclass whose `__eq__` is its own -- a
+  case-insensitive `str` -- joins values they read apart, while an exact
+  builtin, a subclass keeping the builtin's `__eq__`, a standard-library value
+  type and a type comparing by identity read alike. The default answers no, which
+  keeps the proof only where the constant is alone;
 - `strings_admitted` — which of these texts, each a `str`, does this schema
   admit, by the walk a validator of it runs: the question `leaf_subtype` asks
   of a literal's constant, asked of the texts a string subject is read by

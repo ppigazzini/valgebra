@@ -1232,13 +1232,20 @@ constant: `Literal[0.0]` holds `-0.0`, `Literal[Decimal("1.00")]` holds
 `Decimal("1.0")`, and a type whose `__eq__` is its own may hold values that
 differ. So the constant speaks for the literal only where nothing tells the two
 apart.
-Two equal values answer every atom alike under the trust base -- a type test,
-`==`, a bound's comparison, a step's `%` -- but two: a callback, which may answer
-any function of the value, and an attribute record, which reads what two equal
-instances may hold apart. A proof that walks the constant through a supertype is
-the literal's where the constant is the only value or the supertype reaches
-neither, and a refutation by a constant equal to itself stands always, since the
-constant is a value of its literal. A meet holding a literal is the union of
+Two values equal under an equality the atoms read through -- an exact builtin's,
+a builtin subclass's that keeps it, a standard-library value type's, or identity
+-- answer every atom alike but two: a callback, which may answer any function of
+the value, and an attribute record, which reads what two equal instances may
+hold apart. Under an equality a builtin subclass defines for itself they need
+not: a pattern, a length, a bound and a step read the builtin's storage. A kind
+and a class read the type alone, which every value of the literal has as its
+constant's exact type, so they answer those values as they answer the constant
+under any equality. A proof that walks the constant through a supertype is the
+literal's where the constant is the only value, or where each node the supertype
+reaches reads the type alone or, under an equality read through, is neither of
+the two, and a refutation by a constant equal to itself stands always, since the
+constant is a value of its
+literal. A meet holding a literal is the union of
 each constant's literal met with the rest [FCB08, Lem. 6.2], and takes the same
 two answers the other way round: a constant every other member admits inhabits
 it, and one a member refuses takes its literal out only where it speaks for the
@@ -1246,9 +1253,9 @@ literal, the refusal read through the member's complement, since the walk
 refuses a value it stopped at from a set and its complement alike.
 **[DEVIATION: a-constant-is-the-values-equal-to-it]**
 
-IMPLEMENTED-BY: decision/literals.rs::finite_set_below, decision/literals.rs::the_constant_speaks_for_the_literal, valgebra-py/src/check/walk/scalar.rs::literal_matches, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::literals_disjoint, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::literal_sets_disjoint, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::constant_is_alone, decision/emptiness.rs::value_count_bounds, decision/literals.rs::FiniteMeet, decision/literals.rs::a_meet_read_by_its_constants, descr/lower.rs::singleton, descr/floats.rs::FloatSet::just, descr/mod.rs::Descr::float
+IMPLEMENTED-BY: decision/literals.rs::finite_set_below, decision/literals.rs::the_constant_speaks_for_the_literal, valgebra-py/src/check/walk/scalar.rs::literal_matches, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::literals_disjoint, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::literal_sets_disjoint, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::constant_is_alone, valgebra-py/src/oracle.rs::<PoolRelations as LeafRelations>::equal_values_read_alike, decision/emptiness.rs::value_count_bounds, decision/literals.rs::FiniteMeet, decision/literals.rs::a_meet_read_by_its_constants, descr/lower.rs::singleton, descr/floats.rs::FloatSet::just, descr/mod.rs::Descr::float
 
-HELD-BY: a_constant_that_does_not_equal_itself_denotes_no_value, a_constant_unequal_to_itself_is_shared_by_no_two_sets, a_literal_nan_is_the_empty_set, test_nan_never_matches_a_nan_literal, a_constant_speaks_for_its_literal_where_nothing_tells_equal_values_apart, a_constant_is_alone_where_equality_joins_nothing_to_it, test_a_float_zero_literal_is_not_proved_below_a_sign_predicate, test_a_decimal_literal_is_not_proved_below_a_predicate_on_its_exponent, test_an_attribute_record_tells_two_equal_constants_apart, test_a_literal_that_is_its_whole_class_is_proved_below_a_predicate, test_a_literal_is_not_always_a_singleton, a_meet_holding_a_table_is_read_by_its_constants, a_meet_holding_a_table_is_decided_as_its_constants_are_walked, test_a_meet_holding_a_literal_is_decided_as_its_values_are_walked, test_a_literal_met_with_a_deep_complement_is_decided_by_its_constant
+HELD-BY: a_constant_that_does_not_equal_itself_denotes_no_value, a_constant_unequal_to_itself_is_shared_by_no_two_sets, a_literal_nan_is_the_empty_set, test_nan_never_matches_a_nan_literal, a_constant_speaks_for_its_literal_where_nothing_tells_equal_values_apart, a_constant_is_alone_where_equality_joins_nothing_to_it, test_a_float_zero_literal_is_not_proved_below_a_sign_predicate, test_a_decimal_literal_is_not_proved_below_a_predicate_on_its_exponent, test_an_attribute_record_tells_two_equal_constants_apart, test_a_literal_that_is_its_whole_class_is_proved_below_a_predicate, test_a_literal_is_not_always_a_singleton, a_meet_holding_a_table_is_read_by_its_constants, a_meet_holding_a_table_is_decided_as_its_constants_are_walked, test_a_meet_holding_a_literal_is_decided_as_its_values_are_walked, test_a_literal_met_with_a_deep_complement_is_decided_by_its_constant, equal_values_read_alike_where_the_atoms_read_their_equality, test_a_builtin_subclass_with_its_own_equality_is_not_proved_by_its_constant, test_a_subclass_keeping_its_builtins_equality_is_proved, test_a_proof_between_constants_needs_a_transitive_equality
 
 **Membership has a third answer.** The membership predicate is two-valued over
 the values it is defined on, and a negation is its `not` [Cas24, Def. 3]. The

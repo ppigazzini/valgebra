@@ -42,6 +42,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a pattern too large to build is read by its texts
 - fix: a table of constants below a complemented table is one question
 - feat: the complement of a meet holds a complemented member's values
+- fix: a constant proves its literal only where the values equal to it read alike
 
 -->
 
@@ -192,6 +193,19 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A constant proves its literal only where the values equal to it read
+  alike.** `Literal[CI("a")]`, with `CI` a `str` subclass whose `==` ignores
+  case, holds `CI("A")`, which `Regex("a")` refuses; the literal was `subset`
+  of that pattern, and its meet with the pattern's complement `is_empty()`.
+  The same held of `int`, `float` and `bytes` subclasses with an `==` of their
+  own against bounds, lengths and steps, and of a literal against another
+  literal of a class whose `==` is not transitive. A proof by the constant
+  stands where the values `==` joins to it read alike to the supertype's
+  atoms: an exact builtin, a builtin subclass keeping the builtin's `==` (an
+  `IntEnum`), a standard-library value type (`Decimal`), or identity. A class
+  is a standard-library type by identity with the class its module binds,
+  never by the `__module__` it states.
 
 - **A table of constants below a complemented table is one question.**
   `Literal[0, ..., 3999]` against `complement(Literal[-1, ..., -4000])` is the

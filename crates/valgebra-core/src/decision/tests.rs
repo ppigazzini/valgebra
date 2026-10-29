@@ -7773,9 +7773,11 @@ fn a_literal_keyed_mapping_is_refuted_under_the_constant_it_names() {
 /// A leaf oracle answering, of every literal's constant and every schema,
 /// whether the constant is a member, holding every constant a value, and
 /// saying nothing of whether a constant is the only value of its literal,
-/// which the core reads as no.
+/// which the core reads as no. `reads_alike` is whether the values equal to a
+/// constant answer a pattern, a length, a bound and a step alike.
 struct EveryConstant {
     member: bool,
+    reads_alike: bool,
 }
 
 impl Constants for EveryConstant {}
@@ -7787,6 +7789,10 @@ impl LeafRelations for EveryConstant {
 
     fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
         (left == right).then_some(false)
+    }
+
+    fn equal_values_read_alike(&self, _: ConstIx) -> bool {
+        self.reads_alike
     }
 }
 
@@ -7811,6 +7817,26 @@ impl LeafRelations for EveryConstantAlone {
     }
 }
 
+/// [`EveryConstant`] reading values apart, beside classes whose `isinstance`
+/// runs no hook.
+struct ReadApartPlainClasses;
+
+impl Constants for ReadApartPlainClasses {}
+
+impl LeafRelations for ReadApartPlainClasses {
+    fn leaf_subtype(&self, sub: &Schema, _: &Schema) -> Option<bool> {
+        matches!(sub, Schema::Literal(_)).then_some(true)
+    }
+
+    fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+        (left == right).then_some(false)
+    }
+
+    fn atom_denotes_a_set(&self, atom: &Schema) -> Option<bool> {
+        matches!(atom, Schema::Instance(_)).then_some(true)
+    }
+}
+
 // THEORY: a-constant-is-the-values-equal-to-it
 /// A constant speaks for its literal where it is the only value, or where the
 /// supertype asks nothing that tells two equal values apart.
@@ -7819,7 +7845,9 @@ impl LeafRelations for EveryConstantAlone {
 /// membership. Where the constant is the literal's one value that proof
 /// stands; where it is not, a predicate or an attribute record may refuse a
 /// value equal to the constant, so the proof through either is no answer,
-/// and a supertype with neither keeps it. A refutation stands whatever the
+/// and a supertype with neither keeps it. A kind reads the type, which every
+/// value of the literal shares, so it keeps the proof whatever the constant's
+/// equality, and a bound does not. A refutation stands whatever the
 /// constant's class: the constant is a value of its literal.
 #[test]
 fn a_constant_speaks_for_its_literal_where_nothing_tells_equal_values_apart() {
@@ -7827,6 +7855,10 @@ fn a_constant_speaks_for_its_literal_where_nothing_tells_equal_values_apart() {
     let predicate = Schema::Refine {
         base: Arc::new(Schema::Float),
         constraints: vec![Constraint::Predicate(PredIx::new(1))].into(),
+    };
+    let bounded = Schema::Refine {
+        base: Arc::new(Schema::Float),
+        constraints: vec![Constraint::Ge(OperandIx::new(1))].into(),
     };
     let attributes = Schema::attr_record(vec![Attribute {
         name: "y".into(),
@@ -7837,7 +7869,10 @@ fn a_constant_speaks_for_its_literal_where_nothing_tells_equal_values_apart() {
         literal.subtype_relation(sup, oracle, &[], &budget)
     };
     let alone = EveryConstantAlone { member: true };
-    let not_alone = EveryConstant { member: true };
+    let not_alone = EveryConstant {
+        member: true,
+        reads_alike: true,
+    };
     for sup in [&predicate, &attributes, &Schema::Float] {
         assert_eq!(relation(&alone, sup), Relation::Holds, "{sup:?}");
     }
@@ -7849,10 +7884,31 @@ fn a_constant_speaks_for_its_literal_where_nothing_tells_equal_values_apart() {
         Relation::Holds,
         "a supertype that tells no two equal values apart keeps the proof"
     );
+    assert_eq!(relation(&not_alone, &bounded), Relation::Holds);
+    // A builtin subclass with an equality of its own: the values equal to the
+    // constant may differ in the storage a pattern, a bound or a length reads,
+    // and share the type a kind reads.
+    let read_apart = EveryConstant {
+        member: true,
+        reads_alike: false,
+    };
+    assert_eq!(relation(&read_apart, &bounded), Relation::Unknown);
+    let kinds = Schema::union(vec![Schema::Float, Schema::complement(Schema::Int)]);
+    for sup in [&Schema::Float, &kinds] {
+        assert_eq!(relation(&read_apart, sup), Relation::Holds, "{sup:?}");
+    }
+    // A class reads the type too, where its `isinstance` runs no hook; a hook
+    // is handed the value.
+    let class = Schema::Instance(ClassIx::new(0));
+    assert_eq!(relation(&ReadApartPlainClasses, &class), Relation::Holds);
+    assert_eq!(relation(&read_apart, &class), Relation::Unknown);
     // A refutation stands on the leaf alone against an attribute record, which
     // has no base to refute it through, so the guard must leave it be.
     for refuting in [
-        &EveryConstant { member: false } as &dyn LeafRelations,
+        &EveryConstant {
+            member: false,
+            reads_alike: false,
+        } as &dyn LeafRelations,
         &EveryConstantAlone { member: false },
     ] {
         for sup in [&predicate, &attributes] {
@@ -7988,6 +8044,9 @@ impl LeafRelations for Walked {
     }
     fn constant_is_alone(&self, constant: ConstIx) -> bool {
         constant.get() != 2
+    }
+    fn equal_values_read_alike(&self, _: ConstIx) -> bool {
+        true
     }
 }
 

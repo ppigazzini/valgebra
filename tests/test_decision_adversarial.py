@@ -25,6 +25,7 @@ from valgebra import (
     ValidationError,
     Validator,
     complement,
+    instance_of,
     intersection,
     nothing,
     recursive,
@@ -287,6 +288,172 @@ def test_a_decimal_literal_is_not_proved_below_a_predicate_on_its_exponent() -> 
     assert literal.relation_to(two_places) == "undecided"
     assert literal.relation_to(Decimal) == "subset"
     assert literal.relation_to(Annotated[Decimal, at.Gt(Decimal(0))]) == "subset"
+
+
+class _CaseFree(str):
+    """A ``str`` whose ``==`` ignores case, hashed to match."""
+
+    __slots__ = ()
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, str) and self.lower() == other.lower()
+
+    def __hash__(self) -> int:
+        return hash(self.lower())
+
+
+class _Folded(str):
+    """A ``str`` whose ``==`` compares ``casefold``: ``"ss"`` and ``"ß"`` are one."""
+
+    __slots__ = ()
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, str) and self.casefold() == other.casefold()
+
+    def __hash__(self) -> int:
+        return hash(self.casefold())
+
+
+class _BytesCaseFree(bytes):
+    """A ``bytes`` whose ``==`` ignores ASCII case."""
+
+    __slots__ = ()
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, bytes) and self.lower() == other.lower()
+
+    def __hash__(self) -> int:
+        return hash(self.lower())
+
+
+class _Mod7(int):
+    """An ``int`` equal to every integer it is congruent to modulo 7."""
+
+    __slots__ = ()
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, int) and (int(self) - int(other)) % 7 == 0
+
+    def __hash__(self) -> int:
+        return int(self) % 7
+
+
+class _Sign(float):
+    """A ``float`` equal to every float of its sign."""
+
+    __slots__ = ()
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, float) and (self > 0) == (other > 0)
+
+    def __hash__(self) -> int:
+        return int(self > 0)
+
+
+class _Number(enum.IntEnum):
+    ONE = 1
+
+
+#: A builtin subclass's constant, a supertype reading the builtin's storage,
+#: and a value its literal holds that the supertype refuses.
+_READ_APART: list[tuple[object, object, object]] = [
+    (_CaseFree("a"), Annotated[str, Regex("a")], _CaseFree("A")),
+    (_CaseFree("a"), Annotated[str, at.Ge("a")], _CaseFree("A")),
+    (_Folded("ss"), Annotated[str, at.Len(2, 2)], _Folded("ß")),
+    (_BytesCaseFree(b"a"), Annotated[bytes, at.Ge(b"a")], _BytesCaseFree(b"A")),
+    (_Mod7(1), Annotated[int, at.Ge(1)], _Mod7(-6)),
+    (_Mod7(1), Annotated[int, at.Le(1)], _Mod7(8)),
+    (_Mod7(2), Annotated[int, at.MultipleOf(2)], _Mod7(9)),
+    (_Sign(1.5), Annotated[float, at.Ge(1)], _Sign(0.25)),
+]
+
+
+# THEORY: a-constant-is-the-values-equal-to-it
+@pytest.mark.parametrize(("constant", "supertype", "equal"), _READ_APART)
+def test_a_builtin_subclass_with_its_own_equality_is_not_proved_by_its_constant(
+    constant: object, supertype: object, equal: object
+) -> None:
+    """A builtin subclass's literal holds a value its own ``==`` joins and atoms refuse.
+
+    ``Literal[c]`` is every value of ``c``'s type equal to it, and a pattern, a
+    length, a bound and a step read the builtin's storage, which an ``==`` the
+    subclass defines need not respect: the constant passes, a value equal to it
+    does not. Neither the relation nor the meet with the complement stands on
+    the constant.
+    """
+    literal = Validator(Literal[constant])  # ty: ignore[invalid-type-form]
+    assert literal.is_valid(equal)
+    assert not Validator(supertype).is_valid(equal)
+    assert literal.relation_to(supertype) != "subset"
+    meet = intersection(literal, complement(supertype))
+    assert meet.is_valid(equal)
+    assert not meet.is_empty()
+
+
+# THEORY: a-constant-is-the-values-equal-to-it
+def test_a_subclass_keeping_its_builtins_equality_is_proved() -> None:
+    """An ``IntEnum``'s ``==`` is ``int``'s, so its equal values hold one integer.
+
+    The bound reads that integer for every value the literal holds, so the
+    constant speaks for the literal as an ``int`` constant does.
+    """
+    literal = Validator(Literal[_Number.ONE])
+    assert literal.relation_to(Annotated[int, at.Ge(1)]) == "subset"
+
+
+def test_a_proof_reading_the_constants_type_stands_for_its_literal() -> None:
+    """A literal's values all have the constant's exact type, which a kind reads.
+
+    `_CaseFree("a")`'s literal holds `_CaseFree("A")` as well, and both are a
+    `str` and no `int`, so the literal is below `str`, below its own class and
+    outside `int`, as far inside a list as at the top. A pattern reads the
+    characters, which the two do not share, and proves nothing by the constant.
+    """
+    literal = Validator(Literal[_CaseFree("a")])  # ty: ignore[invalid-type-form]
+    assert literal.relation_to(str) == "subset"
+    assert literal.relation_to(instance_of(_CaseFree)) == "subset"
+    assert intersection(literal, int).relation_to(nothing) == "subset"
+    assert literal.relation_to(complement(int)) == "subset"
+    items = Validator(list[Literal[_CaseFree("a")]])  # ty: ignore[invalid-type-form]
+    assert items.relation_to(list[str]) == "subset"
+    assert literal.relation_to(Annotated[str, Regex("a")]) != "subset"
+
+
+class _StatesFractions:
+    """A class stating `fractions` as its module, each instance equal to all."""
+
+    __module__ = "fractions"
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _StatesFractions)
+
+    def __hash__(self) -> int:
+        return 0
+
+    def __ge__(self, other: int) -> bool:
+        return self.value >= other
+
+    def __len__(self) -> int:
+        return self.value
+
+
+def test_a_class_stating_a_standard_library_module_is_not_its_type() -> None:
+    """A standard-library type is the class its module binds.
+
+    A class body can state any `__module__`, so `_StatesFractions(5)` is no
+    `Fraction`: its literal holds `_StatesFractions(0)`, which `Ge(3)` and
+    `MinLen(3)` refuse, and its constant proves neither. `Decimal`'s does.
+    """
+    literal = Validator(Literal[_StatesFractions(5)])  # ty: ignore[invalid-type-form]
+    assert literal.is_valid(_StatesFractions(0))
+    for atom in (at.Ge(3), at.MinLen(3)):
+        assert not Validator(Annotated[object, atom]).is_valid(_StatesFractions(0))
+        assert literal.relation_to(Annotated[object, atom]) != "subset"
+    decimal = Validator(Literal[Decimal(5)])  # ty: ignore[invalid-type-form]
+    assert decimal.relation_to(Annotated[object, at.Ge(3)]) == "subset"
 
 
 class _ByX:

@@ -256,6 +256,23 @@ pub trait LeafRelations: Constants {
     fn constant_is_alone(&self, _constant: ConstIx) -> bool {
         false
     }
+
+    /// Whether the values the literal of the pooled constant holds -- equal
+    /// to it under its type's `==` -- answer a pattern, a length, a bound and
+    /// a step alike; `false` where the bindings cannot say.
+    ///
+    /// They do where the atoms read the value through the equality the
+    /// literal is made of: an exact builtin's, a builtin subclass's that keeps
+    /// the builtin's `__eq__`, a standard-library type's, or identity, under
+    /// which the equal values are one. A builtin subclass whose `__eq__` is
+    /// its own joins values those atoms read apart, since they read the
+    /// builtin's storage: a case-insensitive `str` subclass holds `"A"` in the
+    /// literal of `"a"`, which `Regex("a")` refuses. The default answers
+    /// `false`, the reading that keeps a proof by the constant only where the
+    /// constant is alone.
+    fn equal_values_read_alike(&self, _constant: ConstIx) -> bool {
+        false
+    }
 }
 
 /// The trivial [`LeafRelations`] that decides nothing — the core default, under
