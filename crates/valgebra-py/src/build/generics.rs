@@ -18,8 +18,8 @@ use valgebra_core::{Field, MapClause, Schema, SeqShape};
 
 use super::classes::{build_object, build_typed_dict, declares_fields, field_name, is_truthy_attr};
 use super::{
-    Pool, build_applied_alias, build_constant, build_schema, checked_key, forms, is_extension,
-    is_forward_reference, is_type_alias, not_implemented,
+    Pool, build_applied_alias, build_constant, build_schema, checked_key, forms, forward_reference,
+    is_extension, is_forward_reference, is_type_alias, not_implemented,
 };
 use crate::errors::summarize;
 use crate::validator::Validator;
@@ -414,12 +414,7 @@ pub(super) fn build_type_argument(
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
     if arg.is_instance_of::<PyString>() || is_forward_reference(arg)? {
-        return Err(not_implemented(format!(
-            "{} is a forward reference, and a schema is built from the types \
-             themselves: resolve the annotation first with typing.get_type_hints(\
-             ..., include_extras=True), or write the type rather than its name",
-            summarize(arg)?
-        )));
+        return Err(forward_reference(arg)?);
     }
     build_schema(arg, lits, defs)
 }
