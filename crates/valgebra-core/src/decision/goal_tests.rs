@@ -679,19 +679,19 @@ fn the_goals_a_query_asks_are_pairs_of_the_subterms() {
 }
 
 // THEORY: the-trail-holds-terms
-/// The longest trail any recursive shape in hand builds is three pairs.
+/// The longest trail any recursive shape in hand builds is two pairs.
 ///
 /// The deviation's cost is a scan over the trail at every recursive goal, and
 /// the sentence that bounds the cost is a number the recorder reads: every
 /// recursive pair the counter's shapes carry, and the pairs the fixpoint laws
 /// are written over, are asked with the trail's depth recorded, and the
-/// deepest is the figure the page states. The relation matrix alone reaches
-/// two; a list over a reference against a union holding that reference
-/// unfolds the reference on both sides and once more under the list, which is
-/// three. A shape whose trail grows past it fails here by name, which is what
+/// deepest is the figure the page states. Two definitions naming each other
+/// through a list and its complement unfold both references, which is two,
+/// and a list over one of them against a union holding it reaches two as
+/// well. A shape whose trail grows past it fails here by name, which is what
 /// turns the sentence into a claim the tree holds.
 #[test]
-fn the_longest_trail_any_recursive_shape_builds_is_three_pairs() {
+fn the_longest_trail_any_recursive_shape_builds_is_two_pairs() {
     let tree = tree_defs();
     let list_tree = vec![Schema::union([
         Schema::Int,
@@ -749,13 +749,13 @@ fn the_longest_trail_any_recursive_shape_builds_is_three_pairs() {
             "the counter saw no goal for {sub:?} <= {sup:?}"
         );
         assert!(
-            counts.deepest <= 3,
+            counts.deepest <= 2,
             "{sub:?} <= {sup:?} grew the trail to {} pairs",
             counts.deepest
         );
         deepest = deepest.max(counts.deepest);
     }
-    assert_eq!(deepest, 3, "no shape reached the length the page states");
+    assert_eq!(deepest, 2, "no shape reached the length the page states");
 }
 
 // THEORY: the-assumption-set-is-popped
