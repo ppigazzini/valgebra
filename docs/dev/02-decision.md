@@ -83,7 +83,10 @@ refuted is never lowered, because a sound second reading cannot overturn a
 proof, and lowering one costs about three orders of magnitude more than the rule
 that already answered. Its inhabited answer refutes only where no reference was
 cut: where one was, the difference was widened on the left and shrunk on the
-right, so a value found in it need be no value of the real difference. A
+right, so a value found in it need be no value of the real difference -- at
+the kinds the cut reaches. A cut beneath a constructor reaches that
+constructor's kind alone (`parts_a_cut_reaches`), the difference being read a
+kind at a time, so a value it holds at another kind refutes. A
 conjunct at the top of the subject no lowering reads -- a refinement's
 predicate, a meet member holding one, a meet member nested past the depth
 bound -- is left out the same way (`read_widened` in `descr/lower.rs`): a meet

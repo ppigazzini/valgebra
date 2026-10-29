@@ -3,13 +3,15 @@ import json
 import sys
 import threading
 from collections.abc import Callable
-from typing import Literal
+from typing import Annotated, Literal
 
+import annotated_types as at
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import (
+    Regex,
     ValidationError,
     Validator,
     anything,
@@ -608,3 +610,41 @@ def test_a_body_that_never_names_the_fixpoint_is_that_body() -> None:
     assert repr(through).startswith("recursive(lambda X: recursive(")
     assert through.is_valid({"next": [{"next": None}]})
     assert not through.is_valid({"next": 1})
+
+
+# THEORY: a-cut-reference-proves
+def test_a_value_of_a_kind_no_cut_reaches_refutes_a_fixpoint() -> None:
+    """A refinement's outside is named beside a fixpoint of containers.
+
+    The set reading unfolds a reference once and cuts it beneath the list, the
+    mapping, the record or the tuple that holds it, which changes values of
+    that kind alone: a value of the refinement's kind outside it is outside the
+    fixpoint, and the relation says so. Where the subject's values are of the
+    container's own kind, the cut reaches them, and an inclusion that holds is
+    still proved.
+    """
+    shapes = {
+        "list": lambda leaf: recursive(lambda t: union(leaf, [t])),
+        "dict": lambda leaf: recursive(lambda t: union(leaf, {str: t})),
+        "record": lambda leaf: recursive(lambda t: union(leaf, {"k": t})),
+        "tuple": lambda leaf: recursive(
+            lambda t: union(leaf, tuple[t, ...])  # ty: ignore[invalid-type-form]
+        ),
+    }
+    rows = [
+        (int, Annotated[int, at.Ge(0)], -1),
+        (int, Annotated[int, at.MultipleOf(2)], 1),
+        (str, Annotated[str, at.MinLen(1)], ""),
+        (str, Annotated[str, Regex("a")], "b"),
+        (float, Annotated[float, at.Ge(0)], -0.5),
+        (bool, Literal[True], False),
+    ]
+    for name, fixpoint in shapes.items():
+        for kind, leaf, witness in rows:
+            supertype = fixpoint(leaf)
+            assert Validator(kind).is_valid(witness)
+            assert not supertype.is_valid(witness), (name, witness)
+            answer = Validator(kind).relation_to(supertype)
+            assert answer == "not_subset", (name, kind, leaf)
+        assert Validator(list[str]).relation_to(shapes["list"](str)) == "subset"
+        assert Validator(str).relation_to(fixpoint(str)) == "subset", name
