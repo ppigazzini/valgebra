@@ -95,7 +95,10 @@ expression of it**, which is a syntax error where it is parsed -- an enum
 member's own `<Color.RED: 1>`, an `int` past the interpreter's digit limit
 printed as `<unrepresentable>`, and a value of a subclass of `int`, `float`,
 `complex`, `str` or `bytes` whose `repr` is the builtin's spelling of it, which
-would read back as the builtin and prints as `<MyStr: 'a'>` instead; a **meet of two
+would read back as the builtin and prints as `<MyStr: 'a'>` instead -- as a
+literal's constant, and as a bound's or a step's operand whose class writes an
+order or a remainder of its own, which the walk reads ahead of the builtin's;
+a **meet of two
 classes that each declare attributes**, which flattens to the two classes
 alone, printed as `instance_of(...)`, and their two attribute records, and a
 record standing apart from its class prints

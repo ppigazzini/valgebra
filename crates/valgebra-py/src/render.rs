@@ -14,6 +14,7 @@ use valgebra_core::{
 
 use crate::build::declares_fields;
 use crate::errors::{UNREPRESENTABLE, class_label, stored, unless_fatal};
+use crate::oracle::keeps;
 
 /// The deepest render recursion before the walk stops and gives up. A cycle
 /// guard already bounds a single recursive definition, but a chain of *distinct*
@@ -503,13 +504,13 @@ fn render_constraint(
     pool: &[Py<PyAny>],
 ) -> PyResult<String> {
     Ok(match constraint {
-        Constraint::Ge(i) => format!("Ge({})", pool_repr(py, pool, i.get())?),
-        Constraint::Gt(i) => format!("Gt({})", pool_repr(py, pool, i.get())?),
-        Constraint::Le(i) => format!("Le({})", pool_repr(py, pool, i.get())?),
-        Constraint::Lt(i) => format!("Lt({})", pool_repr(py, pool, i.get())?),
+        Constraint::Ge(i) => format!("Ge({})", operand_repr(py, pool, i.get())?),
+        Constraint::Gt(i) => format!("Gt({})", operand_repr(py, pool, i.get())?),
+        Constraint::Le(i) => format!("Le({})", operand_repr(py, pool, i.get())?),
+        Constraint::Lt(i) => format!("Lt({})", operand_repr(py, pool, i.get())?),
         Constraint::MinLen(n) => format!("MinLen({n})"),
         Constraint::MaxLen(n) => format!("MaxLen({n})"),
-        Constraint::MultipleOf(i) => format!("MultipleOf({})", pool_repr(py, pool, i.get())?),
+        Constraint::MultipleOf(i) => format!("MultipleOf({})", operand_repr(py, pool, i.get())?),
         Constraint::Predicate(_) => "Predicate(...)".to_owned(),
         Constraint::Regex(pattern) => format!("Regex({})", python_repr(py, pattern)),
     })
@@ -569,8 +570,8 @@ fn pool_repr(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<Strin
 /// says what it holds and refuses to stand for anything else. A subclass whose
 /// `repr` spells it some other way is printed by that `repr`, as every other
 /// constant is: an enum member's `<Level.LOW: 1>`, and a `Shown(1)` that reads
-/// back as itself. A bound is not marked: it is read as Python's comparison,
-/// and the schema a bound of `S(3)` and one of `3` give is one schema.
+/// back as itself. A bound is marked only where its operand's order is its
+/// own ([`operand_repr`]).
 fn literal_repr(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<String> {
     let text = pool_repr(py, pool, index)?;
     let Some(constant) = pool.get(index).map(|constant| constant.bind(py)) else {
@@ -589,6 +590,38 @@ fn literal_repr(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<St
     }
     let kind = class_label(constant.get_type().as_any())?;
     Ok(format!("<{kind}: {text}>"))
+}
+
+/// A bound's or a step's operand, marked where it reads back as another one.
+///
+/// The walk asks `x >= b` and `x % b`, and Python reads a builtin subclass's
+/// operand through the subclass's reflected method where it writes one, ahead of
+/// the builtin's: `RevInt(5)`, whose order is reversed, puts `0` in
+/// `Ge(RevInt(5))` and out of `Ge(5)`. Where its `repr` is the builtin's
+/// spelling, the render would read back as the builtin's bound, another set, so
+/// it is marked as a literal of the same constant is, `<RevInt: 5>`. A subclass
+/// keeping the builtin's order and remainder reads back as the same set and
+/// prints as its `repr`; one whose methods cannot be read is marked.
+fn operand_repr(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<String> {
+    let Some(operand) = pool.get(index).map(|operand| operand.bind(py)) else {
+        return pool_repr(py, pool, index);
+    };
+    let Some(builtin) = derived_builtin(operand) else {
+        return pool_repr(py, pool, index);
+    };
+    let read = [
+        intern!(py, "__lt__"),
+        intern!(py, "__le__"),
+        intern!(py, "__gt__"),
+        intern!(py, "__ge__"),
+        intern!(py, "__mod__"),
+        intern!(py, "__rmod__"),
+    ];
+    if unless_fatal(keeps(&operand.get_type(), &builtin, &read), py, false)? {
+        pool_repr(py, pool, index)
+    } else {
+        literal_repr(py, pool, index)
+    }
 }
 
 /// The builtin with a literal spelling `constant`'s type strictly derives from.

@@ -416,7 +416,7 @@ fn builtin_base<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Bound<'py, PyTy
 /// Whether `ty` resolves each of `names` its builtin has to what the builtin
 /// resolves it to. A subclass inherits every name the builtin has, so one the
 /// builtin lacks is no method of its to keep.
-fn keeps(
+pub(crate) fn keeps(
     ty: &Bound<'_, PyType>,
     builtin: &Bound<'_, PyType>,
     names: &[&Bound<'_, PyString>],

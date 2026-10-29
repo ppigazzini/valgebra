@@ -134,7 +134,10 @@ in the meet's turn, so the report carries the elements' violations beside it.
   prints by its own `repr` whole, since one cut where an error message cuts
   does not read back, and a literal's constant whose `repr` is a builtin's
   spelling of a subclass's value prints in angle brackets, since it would read
-  back as the builtin (`literal_repr`). Every refusal is a syntax error or a
+  back as the builtin (`literal_repr`); so does a bound's or a step's operand
+  of such a subclass writing an order or a remainder of its own, which the walk
+  reads reflected ahead of the builtin's, so that the builtin's bound read back
+  is another set (`operand_repr`). Every refusal is a syntax error or a
   call the frontend refuses, and `docs/16-api.md` lists them.
   `tests/test_repr.py` holds each, and the pytest mutation sweep, which owns
   `render.rs`, reads them there.
