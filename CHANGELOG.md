@@ -56,10 +56,18 @@ answer of its own, or a repair to a change not yet released.
 - feat: a record the key partition cannot hold is left out of a meet of records
 - feat: a record is refuted a shared field at a time past the node bound
 - feat: an order bound over str or bytes is decided as the words it admits
+- feat: a schema meeting a complement's inner set is refuted below the complement
 
 -->
 
 ### Added
+
+- **A schema meeting a complement's inner set is refuted below the
+  complement.** `A <= ~B` asked the meet `A & B` for emptiness and read only
+  its empty answer; an inhabited meet is a value of `A` inside `B`, outside
+  `~B`, and now refutes the pair before `A <= B` is asked: the rules alone
+  refute `anything <= ~list[json]`, which the respelled pair answered after
+  every reading had declined.
 
 - **An order bound over `str` or `bytes` is decided as the words it admits.**
   Python orders two words symbol by symbol, a prefix first, and the words on

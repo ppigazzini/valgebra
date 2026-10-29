@@ -9352,9 +9352,10 @@ fn a_pair_declined_as_written_is_asked_in_its_other_spellings() {
     assert_eq!(rules(&only_none, &Schema::Str), Relation::Unknown);
     assert_eq!(both(&only_none, &Schema::Str), Relation::Fails);
 
+    // Against a complement, the meet of the universe with the arrays is
+    // inhabited, which the rules read as the refutation it is.
     let not_an_array = not(Schema::list(SeqShape::homogeneous(json.clone())));
-    assert_eq!(rules(&Schema::ANYTHING, &not_an_array), Relation::Unknown);
-    assert_eq!(both(&Schema::ANYTHING, &not_an_array), Relation::Fails);
+    assert_eq!(rules(&Schema::ANYTHING, &not_an_array), Relation::Fails);
 
     let number = Schema::Intersection(
         vec![

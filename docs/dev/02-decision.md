@@ -1441,7 +1441,11 @@ The same reading governs three more rules.
 
 **A complement on the right is one question, not a shape to recurse into.**
 `A ⊆ ¬B` holds exactly when `A ∩ B = ∅`, which emptiness answers through kind
-disjointness and the scalar regions. Deciding it by contraposition alone --
+disjointness and the scalar regions, and fails exactly when the meet holds a
+value: one verdict of the meet answers both ways (`verdict_beside`), and an
+inhabited one ends the pair before `A ⊆ B` is asked. `B` stands at a positive
+position of the meet, so where a reference is being resolved the meet reads it
+emptied, a subset, and a value it finds is real. Deciding it by contraposition alone --
 where `A` is itself a complement -- leaves the structural arms with nothing to
 say about a container inside the complement of a scalar, and the pair falls
 through to `false`.

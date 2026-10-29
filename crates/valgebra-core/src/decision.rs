@@ -1112,12 +1112,20 @@ impl Schema {
     /// regions. Without it a container is never seen below the complement of a
     /// scalar.
     fn shares_no_value_with(&self, other: &Schema, cx: &mut Cx<'_>) -> bool {
+        self.verdict_beside(other, cx) == Verdict::Empty
+    }
+
+    /// Whether `self` and `other` share a value, as a verdict: the meet's, the
+    /// question `self ⊆ ¬other` reduces to [FCB08, §4.1], which
+    /// [`shares_no_value_with`](Self::shares_no_value_with) reads for its
+    /// empty answer and the complement arm for both.
+    fn verdict_beside(&self, other: &Schema, cx: &mut Cx<'_>) -> Verdict {
         // Kind disjointness reads two discriminants and settles most pairs: a
         // list never shares a value with an int, positives of two kinds meeting
         // in nothing [FCB08, (5)]. The general question below owns the rest,
         // and has to build the meet to ask it.
         if self.disjoint_with(other, cx.oracle) {
-            return true;
+            return Verdict::Empty;
         }
         // Built through the meet constructor rather than as a raw node: the
         // emptiness rule that decides most pairs compares the *members* of one
@@ -1127,7 +1135,7 @@ impl Schema {
         // would never meet, so `A <= ~B` would decline for a pair whose meet
         // `is_empty` decides, and the two relations would disagree about one
         // question asked two ways.
-        Schema::meet_within([self.clone(), other.clone()], cx.defs).is_empty_rec(cx)
+        Schema::meet_within([self.clone(), other.clone()], cx.defs).verdict_rec(cx)
     }
 
     /// Whether `self` shares no value with `part`, a part of the supertype: a
@@ -1564,7 +1572,11 @@ impl Schema {
     fn a_meet_read_whole(&self, members: &[Schema], other: &Schema, cx: &mut Cx<'_>) -> Relation {
         match other {
             Schema::KeyedMap { .. } | Schema::Union(_) => keyed_meet_below(members, other, cx),
-            Schema::Complement(inner) => Relation::proven(self.shares_no_value_with(inner, cx)),
+            Schema::Complement(inner) => match self.verdict_beside(inner, cx) {
+                Verdict::Empty => Relation::Holds,
+                Verdict::Inhabited => Relation::Fails,
+                Verdict::Unknown => Relation::Unknown,
+            },
             _ => Relation::Unknown,
         }
         .or_else(|| self.unstructured(other, cx))
@@ -1705,11 +1717,15 @@ impl Schema {
             (Schema::Complement(a), Schema::Complement(b)) => b
                 .is_subtype_rec(a, cx)
                 .or_else(|| Relation::proven(cx.denotes_no_value(b))),
-            // `A ⊆ ¬B` is disjointness, which the rules prove or fail to
-            // prove -- they are sound and incomplete, so not proving it is not
-            // refuting it. There is one shape where the pair *is* refuted, and
-            // it is the opposite proof: `A ⊆ B` holding means every value of
-            // `A` is in `B`, so a value of `A` is a value outside `¬B`. That
+            // `A ⊆ ¬B` is disjointness [FCB08, §4.1], which the meet `A ∧ B`
+            // answers both ways: empty, the pair holds; inhabited, a value of
+            // the meet is a value of `A` inside `B`, so outside `¬B`, and the
+            // pair is refuted. `B` stands at a positive position of the meet,
+            // and where a reference is being resolved the meet reads it there
+            // as empty, a subset of the set it denotes, so a value it finds is
+            // a value of the real meet. The rules are sound and incomplete,
+            // so a meet they leave open is neither, and the opposite proof
+            // is asked: `A ⊆ B` holding puts every value of `A` in `B`, which
             // needs `A` to have one, which the reading around this settles.
             //
             // Where both decline, an empty `B` still settles it: `¬B` is the
@@ -1718,8 +1734,10 @@ impl Schema {
             // subject may have no descriptor at all, as a literal the oracle
             // cannot place has none.
             (_, Schema::Complement(inner)) => {
-                if self.shares_no_value_with(inner, cx) {
-                    return Relation::Holds;
+                match self.verdict_beside(inner, cx) {
+                    Verdict::Empty => return Relation::Holds,
+                    Verdict::Inhabited => return Relation::Fails,
+                    Verdict::Unknown => {}
                 }
                 if self.is_subtype_rec(inner, cx).holds() {
                     Relation::of_mismatch(self.verdict_rec(cx))

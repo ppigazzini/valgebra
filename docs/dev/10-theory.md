@@ -140,7 +140,7 @@ subterms.
 
 SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
 
-IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled
+IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::verdict_beside, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled
 
 HELD-BY: the_two_deciders_agree_under_an_oracle, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment, a_placement_by_identity_spends_no_step, a_union_is_decided_a_part_at_a_time, a_meet_supertype_is_decided_a_member_at_a_time, test_a_meet_is_refuted_by_one_member_beside_one_no_decider_reads, a_pair_declined_as_written_is_asked_in_its_other_spellings, a_meet_disjoint_from_a_meet_is_refuted
 
@@ -1167,13 +1167,13 @@ HELD-BY: every_key_falls_in_exactly_one_part, a_map_constrains_one_part_of_the_k
 **The trail holds terms, not addresses.** Assumption pairs are compared by
 structural equality in a linear scan, short-circuiting on pointer identity for
 interned subtrees; the longest trail any recursive shape in hand builds is
-three pairs, counted by a recorder at the one push site, `Cx::assuming`, which
+two pairs, counted by a recorder at the one push site, `Cx::assuming`, which
 both unfoldings of a reference go through, over the shapes the
-goal counter carries -- a list over a reference against a union holding that
-reference is the one that reaches three. A decision leaves the trail as it was
+goal counter carries -- two definitions naming each other through a list and
+its complement reach two. A decision leaves the trail as it was
 given. **[DEVIATION: the-trail-holds-terms]**
 
-HELD-BY: a_decision_leaves_the_trail_it_was_given, an_assumption_is_read_as_the_pair_it_is, the_longest_trail_any_recursive_shape_builds_is_three_pairs
+HELD-BY: a_decision_leaves_the_trail_it_was_given, an_assumption_is_read_as_the_pair_it_is, the_longest_trail_any_recursive_shape_builds_is_two_pairs
 
 **The assumption set is popped, not threaded.** Every relation proved on the
 way is discarded, so a goal reached twice by different paths is decided twice,
