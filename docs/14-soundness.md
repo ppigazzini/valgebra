@@ -239,6 +239,10 @@ The soundness is relative to a small, explicit trust base:
   the two. A refutation standing on such a value is sound as it is: an
   `IntEnum` is not below `Ge(1)` although both its members are, because
   `int.__new__(IE, -5)` is an instance the walk admits and the bound refuses.
+  A class that makes another instance through itself is no union of its
+  members at all, and is read as the class it is: a `_missing_` of its own
+  answers `E(5)` with a new instance, and a metaclass's own `__iter__` or
+  `__call__` can hide a member from `list(E)` or build one past the lookup.
 - **What a value answers is a function of the value.** Membership asks a value
   questions through Python — `isinstance`, `__eq__`, a rich comparison, `__len__`,
   `%`, a predicate — and reads the answers as facts about it. A method that

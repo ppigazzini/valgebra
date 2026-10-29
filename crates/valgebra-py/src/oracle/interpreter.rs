@@ -605,6 +605,51 @@ fn an_enumeration_lists_its_members_up_to_the_bound() {
 }
 
 #[test]
+fn an_enumeration_making_an_instance_past_its_members_lists_none() {
+    // The union reading stands on the class making no instance but its
+    // members: a `_missing_` of its own makes `E(5)`, and a metaclass's own
+    // `__iter__` hides a member from the list, so either is an instance check.
+    Python::attach(|py| {
+        let program = r"import enum
+class Missing(enum.Enum):
+    A = 1
+    @classmethod
+    def _missing_(cls, value):
+        pseudo = object.__new__(cls)
+        pseudo._name_, pseudo._value_ = f'V{value}', value
+        return pseudo
+class Hide(enum.EnumMeta):
+    def __iter__(cls):
+        return (m for m in super().__iter__() if m.name != 'HIDDEN')
+class Hidden(enum.Enum, metaclass=Hide):
+    A = 1
+    HIDDEN = 2
+class Valued(enum.Enum):
+    A = 1
+    def describe(self):
+        return self.name
+";
+        let module = PyModule::from_code(
+            py,
+            &CString::new(program).expect("no interior nul"),
+            c"enum_hooks.py",
+            c"enum_hooks",
+        )
+        .expect("the module compiles");
+        asking(py, Vec::new(), |oracle| {
+            let listed = |name: &str| {
+                oracle
+                    .enum_members(&module.getattr(name).expect("the class"))
+                    .map(|got| got.len())
+            };
+            assert_eq!(listed("Missing"), None, "a _missing_ of its own");
+            assert_eq!(listed("Hidden"), None, "a metaclass's own __iter__");
+            assert_eq!(listed("Valued"), Some(1), "a method beside its members");
+        });
+    });
+}
+
+#[test]
 fn a_fatal_signal_a_probe_raises_is_the_querys_answer() {
     // A probe runs user code, and one interrupted there has answered nothing:
     // the core reads it as a decline, like any probe that raised, and `answer`

@@ -142,9 +142,10 @@ answers `"undecided"`.
   `object.__new__` steps past
   ([the trust base](14-soundness.md#what-this-argument-assumes)): an `Enum`
   that is not a `Flag`, carrying at least one member, whose members compare by
-  identity. Then `Color` and
+  identity, with `Enum`'s `_missing_` and `EnumMeta`'s `__iter__` and
+  `__call__`. Then `Color` and
   `Literal[Color.RED, Color.GREEN]` are one set, decided in both directions;
-  the class is still what `repr` prints and what a failure names. The three
+  the class is still what `repr` prints and what a failure names. The four
   exclusions are each a value that would stand against the union:
 
   | kind | the value it admits that `list(cls)` never yields |
@@ -152,6 +153,7 @@ answers `"undecided"`.
   | `Flag`, `IntFlag` | `P.A \| P.B` -- `\|` builds instances the class never listed |
   | an `Enum` with no members | a member of a subclass, since a memberless enum can still be subclassed |
   | `IntEnum`, `StrEnum` | nothing new, but its members equal the values behind them, so two of them are not two values |
+  | an `_missing_`, or a metaclass `__iter__` or `__call__`, of its own | `E(5)` from the hook, or a member `list(cls)` leaves out |
 
   Each stays an `isinstance` atom, which is sound for every enumeration and
   merely less complete.

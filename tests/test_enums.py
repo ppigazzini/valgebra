@@ -129,6 +129,53 @@ def test_a_string_enumeration_stays_an_atom_for_the_same_reason() -> None:
     assert Validator(Name).is_valid(Name.RED)
 
 
+class _Missing(enum.Enum):
+    """An enumeration whose ``_missing_`` makes an instance for any value."""
+
+    A = 1
+    B = 2
+
+    @classmethod
+    def _missing_(cls, value: object) -> _Missing:
+        pseudo = object.__new__(cls)
+        pseudo._name_, pseudo._value_ = f"V{value}", value
+        return pseudo
+
+
+class _HideMeta(enum.EnumMeta):
+    """A metaclass leaving one member out of the members it lists."""
+
+    def __iter__(cls):  # noqa: ANN204 - the metaclass's own signature
+        members = super().__iter__()
+        return (member for member in members if member.name != "HIDDEN")  # ty: ignore[unresolved-attribute]
+
+
+class _Hidden(enum.Enum, metaclass=_HideMeta):
+    A = 1
+    B = 2
+    HIDDEN = 3
+
+
+def test_an_enumeration_making_an_instance_past_its_members_stays_an_atom() -> None:
+    """The union reading stands on the class making no instance but its members.
+
+    A ``_missing_`` of its own is the class making one -- ``_Missing(5)`` -- and
+    a metaclass's own ``__iter__`` leaves ``HIDDEN`` out of ``list(_Hidden)``:
+    each is an instance the class admits and no listed member's literal does.
+    """
+    pseudo = _Missing(5)
+    listed = Literal[_Missing.A, _Missing.B]
+    assert Validator(_Missing).is_valid(pseudo)
+    assert not Validator(listed).is_valid(pseudo)
+    assert Validator(_Missing).relation_to(listed) != "subset"
+    assert not Validator(_Missing).is_equivalent(listed)
+
+    shown = Literal[_Hidden.A, _Hidden.B]
+    assert Validator(_Hidden).is_valid(_Hidden.HIDDEN)
+    assert not Validator(shown).is_valid(_Hidden.HIDDEN)
+    assert Validator(_Hidden).relation_to(shown) != "subset"
+
+
 def test_every_refused_kind_still_answers_membership() -> None:
     """The refusals cost completeness, never an accept or a reject."""
     cases = [

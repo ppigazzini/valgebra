@@ -138,23 +138,54 @@ fn math_floor_ceil(py: Python<'_>) -> PyResult<&'static (Py<PyAny>, Py<PyAny>)> 
 /// The subtype rule asks whether a class is an enumeration for *every* class it
 /// cannot place in a union, so importing a module there would put an import on
 /// a decision path.
-static ENUM_TYPES: PyOnceLock<(Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
+static ENUM_TYPES: PyOnceLock<(Py<PyAny>, Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
 
-/// `(enum.EnumMeta, enum.Flag)`, imported once per interpreter.
+/// `(enum.EnumMeta, enum.Flag, enum.Enum)`, imported once per interpreter.
 ///
-/// Both are needed at the same place and neither on any other path, so they
+/// All three are needed at the same place and none on any other path, so they
 /// share one lock. `Flag` is here because it is the one enumeration whose
 /// instances are *not* the members it lists: `P.A | P.B` is an instance of `P`
-/// that `list(P)` never yields.
-fn enum_types(py: Python<'_>) -> Option<&(Py<PyAny>, Py<PyAny>)> {
+/// that `list(P)` never yields. `Enum` holds the `_missing_` that makes no
+/// instance.
+fn enum_types(py: Python<'_>) -> Option<&(Py<PyAny>, Py<PyAny>, Py<PyAny>)> {
     ENUM_TYPES
         .get_or_try_init(py, || {
             let module = py.import("enum")?;
             let meta = module.getattr(intern!(py, "EnumMeta"))?.unbind();
             let flag = module.getattr(intern!(py, "Flag"))?.unbind();
-            Ok::<_, PyErr>((meta, flag))
+            let base = module.getattr(intern!(py, "Enum"))?.unbind();
+            Ok::<_, PyErr>((meta, flag, base))
         })
         .ok()
+}
+
+/// Whether every instance an enumeration's class makes is a member it lists:
+/// the class lists its members through `EnumMeta`'s `__iter__`, makes an
+/// instance only through `EnumMeta`'s `__call__`, which looks a member up, and
+/// answers a value it holds no member for with `Enum`'s `_missing_`, which
+/// makes none.
+///
+/// A `_missing_` of its own is the hook a class makes a new instance through
+/// -- `E(5)`, a pseudo-member `list(E)` never yields -- and a metaclass's own
+/// `__iter__` can leave a member out of the list, or its `__call__` build an
+/// instance past the lookup.
+fn lists_every_instance(
+    class: &Bound<'_, PyType>,
+    meta: &Bound<'_, PyAny>,
+    base: &Bound<'_, PyAny>,
+) -> PyResult<bool> {
+    let py = class.py();
+    let metaclass = class.get_type();
+    for name in [intern!(py, "__iter__"), intern!(py, "__call__")] {
+        if !metaclass.getattr(name)?.is(&meta.getattr(name)?) {
+            return Ok(false);
+        }
+    }
+    let (missing, function) = (intern!(py, "_missing_"), intern!(py, "__func__"));
+    Ok(class
+        .getattr(missing)?
+        .getattr(function)?
+        .is(&base.getattr(missing)?.getattr(function)?))
 }
 
 /// The most members an enumeration may have before it is read as an atom.
@@ -382,13 +413,17 @@ impl PoolRelations<'_, '_> {
     ///   union would make it a subtype of `nothing`.
     /// * two members are two values, which is the identity check. An `IntEnum`
     ///   fails it because its members equal the integers behind them.
+    /// * the class makes no instance but by looking a member up
+    ///   ([`lists_every_instance`]). A `_missing_` of its own makes one --
+    ///   `E(5)` -- and a metaclass's own `__iter__` or `__call__` can hide a
+    ///   member from the list or build an instance past the lookup.
     ///
     /// A class failing any of them stays the `isinstance` atom it was, which is
     /// sound for every enumeration and merely less complete.
     fn enum_members<'py>(&self, class: &Bound<'py, PyAny>) -> Option<Vec<Bound<'py, PyAny>>> {
         let py = class.py();
         let class = class.cast::<PyType>().ok()?;
-        let (meta, flag) = enum_types(py)?;
+        let (meta, flag, base) = enum_types(py)?;
         if !self.heard(class.is_instance(meta.bind(py)))? {
             return None;
         }
@@ -396,6 +431,9 @@ impl PoolRelations<'_, '_> {
             return None;
         }
         if !self.heard(compares_by_identity(class))? {
+            return None;
+        }
+        if !self.heard(lists_every_instance(class, meta.bind(py), base.bind(py)))? {
             return None;
         }
         let members: Vec<Bound<'py, PyAny>> = self.heard(
