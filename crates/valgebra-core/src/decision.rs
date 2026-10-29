@@ -1647,7 +1647,7 @@ impl Schema {
 
     /// What a pair no structural rule decided is worth, asked in one place.
     ///
-    /// Three readings, in this order. Five **refutations**, each naming a
+    /// Four readings, in this order. Five **refutations**, each naming a
     /// value of the subject outside the supertype: the empty sequence below a
     /// length bound (`shorter_than`), a region the subject reaches past the
     /// supertype's (`spills_past`), a kind whose builtin the supertype's class
@@ -1661,7 +1661,13 @@ impl Schema {
     /// outside the refinement -- the value that refutes the one refutes the
     /// other, and it is the same value. Its proof does not carry, since being
     /// inside the base says nothing about the constraints, so only the
-    /// refutation is taken.
+    /// refutation is taken. Last, what a **length** settles
+    /// ([`read_by_length`](Self::read_by_length)): a refinement whose length is
+    /// at most zero is the empty sequence, and a sequence shape holds one
+    /// longer than a supertype's maximum. Last because the pairs it reads are
+    /// rare and every pair before them would pay for asking first: on the
+    /// matrix workload, asked beside `shorter_than`, it cost 0.95% of the
+    /// instructions, and asked here, 0.27%.
     ///
     /// The oracle is asked before the refinement because it *proves* where the
     /// refinement reading only refutes: a literal below a predicate refinement
@@ -1717,7 +1723,16 @@ impl Schema {
             None => match other {
                 Schema::Refine { base, .. } => self.is_subtype_rec(base, cx).refutation_only(),
                 _ => Relation::Unknown,
-            },
+            }
+            // Last, and out of line behind the subject's discriminant: what a
+            // length settles is read only of a pair everything above left open.
+            .or_else(|| {
+                if matches!(self, Schema::Refine { .. } | Schema::Seq { .. }) {
+                    self.read_by_length(other, cx)
+                } else {
+                    Relation::Unknown
+                }
+            }),
         }
     }
 

@@ -1748,6 +1748,20 @@ _TRANSLATED: list[object] = [
         union(Annotated[int, at.Le(1)], Annotated[float, at.Le(1)]),
         id="refine:(int|float)<=1==int<=1|float<=1",
     ),
+    # A list bounded to length zero is the empty list, which every list holds,
+    # and a list of an inhabited element is refuted past a maximum length.
+    pytest.param(
+        "subtype",
+        Annotated[list[None], at.Len(0, 0)],
+        list[Annotated[float, at.MultipleOf(1)]],
+        id="seq:[]<=list[float-step]",
+    ),
+    pytest.param(
+        "refutes",
+        list[union(int, Annotated[float, at.MultipleOf(1)])],  # ty: ignore[invalid-type-form]
+        Annotated[list[union(int, Annotated[float, at.MultipleOf(1)])], at.Len(0, 1)],  # ty: ignore[invalid-type-form]
+        id="seq:list[INTEGER]!<=maxItems-1",
+    ),
     # Under a full match the two ends of the text are word boundaries before and
     # after a word character.
     pytest.param(

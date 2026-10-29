@@ -2803,12 +2803,13 @@ fn a_subject_with_no_value_is_below_a_shape_it_cannot_match() {
     // A list of at most zero elements *is* the empty list, and its base is
     // nowhere near it. Reading the refinement through its base reaches the arity
     // rule, which refutes what the constraint has already settled -- so the base
-    // is read for its proof alone and the rule declines instead.
+    // is read for its proof alone, and the bound is read for what it says: the
+    // empty list alone, which the empty shape holds.
     let bounded = Schema::refine(
         Schema::list(SeqShape::homogeneous(Schema::Int)),
         vec![Constraint::MaxLen(0)],
     );
-    assert_eq!(relation(&bounded, &empty_list), Relation::Unknown);
+    assert_eq!(relation(&bounded, &empty_list), Relation::Holds);
     assert!(bounded.is_subtype_of(&empty_list));
     assert!(bounded.is_equivalent(&empty_list));
 
@@ -4390,6 +4391,85 @@ fn a_record_decides_the_same_whichever_field_sorts_first() {
 
     assert_eq!(refutes_first, Relation::Fails);
     assert_eq!(declines_first, Relation::Fails);
+}
+
+/// A sequence whose length is at most zero is the empty sequence alone, and a
+/// sequence shape is refuted past a supertype's maximum length.
+///
+/// `list[None]` bounded to length zero is `[]`, which every list of no prefix
+/// holds, whatever its element -- the step over floats below is one no rule
+/// reads. And `list[int]` holds `[0, 0]`, which `MaxLen(1)` refuses whatever
+/// the base it bounds; a list of an element no value has is `[]` alone, and is
+/// not refuted so.
+#[test]
+fn a_length_is_read_off_a_sequence_shape_at_both_ends() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Budget::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let list_of = |element: Schema| Schema::list(SeqShape::homogeneous(element));
+    let refine = |base: Schema, constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(base),
+        constraints: constraints.into(),
+    };
+    let float_step = refine(
+        Schema::Float,
+        vec![Constraint::MultipleOf(OperandIx::new(0))],
+    );
+    let empty = refine(
+        list_of(Schema::NoneType),
+        vec![Constraint::MinLen(0), Constraint::MaxLen(0)],
+    );
+    assert_eq!(
+        relation(&empty, &list_of(float_step.clone())),
+        Relation::Holds
+    );
+    assert_eq!(
+        relation(&empty, &Schema::union([list_of(Schema::Int), Schema::Str])),
+        Relation::Holds
+    );
+    assert_eq!(
+        relation(
+            &empty,
+            &refine(list_of(float_step.clone()), vec![Constraint::MaxLen(3)])
+        ),
+        Relation::Holds,
+        "a bound that admits zero keeps the empty list"
+    );
+    assert_ne!(
+        relation(
+            &empty,
+            &refine(list_of(float_step.clone()), vec![Constraint::MinLen(1)])
+        ),
+        Relation::Holds,
+        "a minimum of one leaves the empty list out"
+    );
+    assert_ne!(
+        relation(
+            &empty,
+            &Schema::tuple(SeqShape::homogeneous(Schema::ANYTHING))
+        ),
+        Relation::Holds,
+        "a list is no tuple"
+    );
+
+    let at_most_one = refine(list_of(Schema::Int), vec![Constraint::MaxLen(1)]);
+    assert_eq!(
+        relation(&list_of(Schema::Int), &at_most_one),
+        Relation::Fails
+    );
+    let integer = Schema::union([Schema::Int, float_step]);
+    assert_eq!(
+        relation(
+            &list_of(integer.clone()),
+            &refine(list_of(integer), vec![Constraint::MaxLen(1)])
+        ),
+        Relation::Fails
+    );
+    assert_ne!(
+        relation(&list_of(Schema::Nothing), &at_most_one),
+        Relation::Fails
+    );
 }
 
 /// A subject whose regions are exact is refuted by a bound on the other side.

@@ -3863,8 +3863,11 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
     // `list[Any]` of at most two is refuted by a three-element list of sets,
     // and neither the bound -- which builds its widths out of a fixed item --
     // nor the subject -- which reaches two past its own prefix -- spells one.
+    // A bound over the top narrows every sequence, so its widths are built in
+    // the container of the shape they are filled from: `list[float]` below
+    // `None | (Any of at most two)` is refuted by a list of three floats.
     'bounded: for (container, len) in bounded_widths(schemas) {
-        for (_, theirs) in &shapes {
+        for (shaped, theirs) in &shapes {
             if made.len() >= cap {
                 break 'bounded;
             }
@@ -3877,7 +3880,10 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
                     if made.len() >= cap {
                         break 'bounded;
                     }
-                    made.push(hold(container, vec![element.clone(); width]));
+                    made.push(hold(
+                        container.unwrap_or(*shaped),
+                        vec![element.clone(); width],
+                    ));
                 }
             }
         }
@@ -4056,7 +4062,7 @@ fn crossed_record(
 ///
 /// Read through the refinement, because a bound is a node above the shape it
 /// narrows and the shape is what a value of that width has to be built as.
-fn bounded_widths(schemas: &[&Schema]) -> Vec<(SeqKind, usize)> {
+fn bounded_widths(schemas: &[&Schema]) -> Vec<(Option<SeqKind>, usize)> {
     let mut found = Vec::new();
     for schema in schemas {
         widths_named_by(schema, &mut found);
@@ -4090,14 +4096,21 @@ fn shapes_named_by<'a>(schema: &'a Schema, out: &mut Vec<(SeqKind, &'a SeqShape)
     }
 }
 
-/// The length bounds a schema names, through the same wrappers.
-fn widths_named_by(schema: &Schema, out: &mut Vec<(SeqKind, usize)>) {
+/// The length bounds a schema names, through the same wrappers, each with the
+/// container it narrows: `None` for a bound over the top, which narrows every
+/// sequence and is built in the container of the shape it is filled from.
+fn widths_named_by(schema: &Schema, out: &mut Vec<(Option<SeqKind>, usize)>) {
     match schema {
         Schema::Refine { base, constraints } => {
-            if let Schema::Seq { container, .. } = base.as_ref() {
+            let narrowed = match base.as_ref() {
+                Schema::Seq { container, .. } => Some(Some(*container)),
+                Schema::Anything(_) => Some(None),
+                _ => None,
+            };
+            if let Some(container) = narrowed {
                 for constraint in constraints.iter() {
                     if let Constraint::MinLen(len) | Constraint::MaxLen(len) = constraint {
-                        out.push((*container, *len));
+                        out.push((container, *len));
                     }
                 }
             }
@@ -4481,6 +4494,46 @@ fn a_length_bound_is_separated_by_the_shape_it_narrows() {
         }),
         constraints: vec![Constraint::MaxLen(2)].into(),
     };
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
+}
+
+/// A length bound over the top is separated by a sequence of the subject's
+/// own elements one past it.
+///
+/// The pair: `list[float]` against `None` or any value of at most two. It is
+/// refuted by a list of three floats, and the bound sits on no sequence, so
+/// it names a width in no container of its own: its widths are built in the
+/// container of the subject's shape, from the subject's elements.
+#[test]
+fn a_length_bound_over_the_top_is_separated_by_a_sequence_past_it() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let a = Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape::homogeneous(Schema::Float),
+    };
+    let b = Schema::Union(
+        vec![
+            Schema::Refine {
+                base: Arc::new(Schema::ANYTHING),
+                constraints: vec![Constraint::MaxLen(2)].into(),
+            },
+            Schema::NoneType,
+        ]
+        .into(),
+    );
     assert_eq!(
         a.subtype_relation_under(&b, &NoLeafRelations, &defs),
         Relation::Fails,

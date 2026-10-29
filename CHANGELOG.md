@@ -36,10 +36,19 @@ answer of its own, or a repair to a change not yet released.
 - fix: one depth bound raises one type, and a class reached again is refused there
 - fix: a counted Unicode class written as an ordinary bound builds
 - feat: a refinement of a union is the union of its refined branches
+- feat: a sequence's length is read at both ends of a relation
 
 -->
 
 ### Added
+
+- **A sequence's length is read at both ends of a relation.** A list bounded
+  to length zero is the empty list, so `Annotated[list[None], Len(0, 0)]` is
+  `subset` of a list of any element, and a list shape whose element has a value
+  is refuted below a maximum length by one copy more than it admits, so a list
+  of integers is `not_subset` of the same list under `Len(0, 1)` -- what a
+  translation from JSON Schema writes for `maxItems` -- where both were
+  `undecided` whenever the element was one the set representation cannot hold.
 
 - **A refinement of a union is the union of its refined branches.** A
   constraint is asked of one value at a time, so `Annotated[int | float,
