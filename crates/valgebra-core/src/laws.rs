@@ -2622,6 +2622,26 @@ proptest! {
         );
     }
 
+    /// A schema read empty is below every schema [BBC+26, (uninhabited)], and
+    /// one whose meet with another is read empty is below that one's
+    /// complement [FCB08, §4.1]. The relation answers what the emptiness
+    /// reading says of the same terms, over drawn shaped schemas, wherever the
+    /// rules spent their steps on the way.
+    #[test]
+    fn what_is_read_empty_bounds_the_relation(a in shaped_schema(), b in shaped_schema()) {
+        let _allowance = crate::descr::budget::law();
+        let (a, b) = (built(&a), built(&b));
+        if a.is_empty_with(&NoLeafRelations, &[]) {
+            let below = a.subtype_relation_under(&b, &NoLeafRelations, &[]);
+            prop_assert_eq!(below, Relation::Holds, "{:?} is read empty, below {:?}", a, b);
+        }
+        let meet = Schema::meet_within([a.clone(), b.clone()], &[]);
+        if meet.is_empty_with(&NoLeafRelations, &[]) {
+            let below = a.subtype_relation_under(&b.clone().complement(), &NoLeafRelations, &[]);
+            prop_assert_eq!(below, Relation::Holds, "{:?} meets {:?} in nothing", a, b);
+        }
+    }
+
     /// The relation below `nothing` and the emptiness reading are one
     /// procedure, `is_empty` being the primitive the relations call into: a
     /// schema is proved below `nothing` exactly where it is read empty, over a

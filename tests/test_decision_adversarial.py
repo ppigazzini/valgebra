@@ -977,6 +977,45 @@ def test_a_fractional_number_met_with_a_recursive_universe_is_inhabited() -> Non
     assert meet.relation_to(Validator(complement(object))) != "subset"
 
 
+def test_a_subject_read_empty_is_below_every_set() -> None:
+    """A subject `is_empty` proves is below any supertype, however the steps went.
+
+    A literal `None` or `0.0` is no list, so the meet below is empty, and the
+    empty set is below every set; the rules spent the query's steps on the
+    supertype's fixpoints before the bound read it, and the bound is read again
+    with steps of its own.
+    """
+    values = recursive(
+        lambda j: union(
+            None,
+            bool,
+            int,
+            float,
+            str,
+            Validator(list[j]),  # ty: ignore[invalid-type-form]
+            Validator({str: j}),
+        )
+    )
+    objects = Validator(dict[str, values])  # ty: ignore[invalid-type-form]
+    number = intersection(union(int, float), complement(bool))
+    element = intersection(
+        objects,
+        Validator({"tag": intersection(number, values)}).open(),
+        union(complement(objects), values),
+    )
+    subject = intersection(union(None, Literal[0.0]), list[element])  # ty: ignore[invalid-type-form]
+    nested = recursive(
+        lambda u: union(Literal[0, 0.5], list[u], {str: u})  # ty: ignore[invalid-type-form]
+    )
+    supertype = union(
+        {"tag": Literal["b"], str: values},
+        recursive(lambda t: union(nested, list[t], {str: t})),  # ty: ignore[invalid-type-form]
+    )
+    assert subject.is_empty()
+    assert subject.relation_to(nothing) == "subset"
+    assert subject.relation_to(supertype) == "subset"
+
+
 def test_a_narrowed_meet_left_open_is_distributed_as_written() -> None:
     """A meet its guards narrow and leave undecided is read through its reference.
 

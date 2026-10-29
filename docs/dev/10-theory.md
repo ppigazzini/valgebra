@@ -98,7 +98,7 @@ each claimed equivalence against membership rather than asserting it.
 
 SOURCE: §13.2 "**The laws hold by construction**"; §2 "every combinator builds the normal"
 
-IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend, ir.rs::Schema::union_within, ir.rs::Schema::meet_within, ir.rs::Schema::complement, kind.rs::Region::union, kind.rs::Region::intersect, kind.rs::Region::complement, oracle.rs::has_complementary_pair_within, valgebra-py/src/check/walk.rs::check_intersection, decision.rs::pushed_complement_is_placed, decision.rs::merged_split, decision/emptiness.rs::narrowed_by_its_members
+IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend, ir.rs::Schema::union_within, ir.rs::Schema::meet_within, ir.rs::Schema::complement, kind.rs::Region::union, kind.rs::Region::intersect, kind.rs::Region::complement, oracle.rs::has_complementary_pair_within, valgebra-py/src/check/walk.rs::check_intersection, decision.rs::pushed_complement_is_placed, decision.rs::merged_split, decision/emptiness.rs::narrowed_by_its_members, decision/emptiness.rs::narrowed_meet
 
 HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference, a_complement_is_below_its_complements_pushed_in, a_set_is_below_its_own_split, a_complement_the_relation_empties_is_read_empty, a_meet_of_guards_reads_as_the_meet_of_their_branches, a_reference_and_its_complement_meet_in_nothing
 
@@ -133,14 +133,14 @@ member of a union subject, and the subject against the branches of a union it
 shares a value with -- and by the meet's: the subject against each member of a
 meet, the intersection of their sets [FCB08, Def. 4.1], one member refuted by
 either decider refuting it beside a member neither reads. Where every decider declines, the pair is asked in the
-spellings `a ⊆ b` has as `a ∧ ¬b = ∅`: a difference holding a whole kind refutes
+spellings `a ⊆ b` has as `a ∧ ¬b = ∅`, the identity of [FCB08, §4.1]. A difference holding a whole kind refutes
 it, and against a complement the meet of the two is asked below the empty set
 and the pair from its other side, all of them goals over the query's signed
 subterms.
 
 SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
 
-IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled
+IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::below_by_emptiness, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled
 
 HELD-BY: the_two_deciders_agree_under_an_oracle, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment, a_placement_by_identity_spends_no_step, a_union_is_decided_a_part_at_a_time, a_meet_supertype_is_decided_a_member_at_a_time, test_a_meet_is_refuted_by_one_member_beside_one_no_decider_reads, a_pair_declined_as_written_is_asked_in_its_other_spellings, a_meet_disjoint_from_a_meet_is_refuted
 

@@ -1433,7 +1433,8 @@ fn a_narrowed_meet_is_read_beside_itself_once_more() {
 
 /// A union in a meet is narrowed by the members beside it: `K ∩ (¬K ∪ X)` is
 /// `K ∩ X`, read with no clause distributed, so three guards over one kind --
-/// eight clauses distributed, past the bound -- decide as their branches do. A
+/// eight clauses distributed, past the bound -- decide as their branches do,
+/// and a guarded meet as a subject is the record its guard holds. A
 /// branch goes beside the member it complements and beside a meet whose
 /// conjuncts its complement's are; never on a predicate's complement, which may
 /// answer its two occurrences apart.
@@ -1495,6 +1496,81 @@ fn a_union_in_a_meet_is_narrowed_by_the_members_beside_it() {
         ),
     ]);
     assert_ne!(rules_verdict(&outside_a_union, &[]).0, Verdict::Empty);
+    // As a subject the meet is asked narrowed, the same set: a guarded record
+    // is below the record its guard holds by the rules alone, and outside
+    // another.
+    let guarded_once = Schema::meet([object.clone(), guard(&object, tagged(Schema::Int))]);
+    assert!(structural(&guarded_once, &tagged(Schema::Int)));
+    assert!(!structural(&guarded_once, &tagged(Schema::Str)));
+}
+
+/// A narrowed meet inside a fixpoint answers. The subject is the JSON-like
+/// fixpoint met with the complement of its own lists, `μt. (int | list[t] |
+/// dict[str, t]) & ~list[t]`, against `μt. int | dict[str, t]`, the same set:
+/// every goal the narrowed meet asks unfolds to the meet again, and a narrowed
+/// meet asked inside another's question under an allowance of its own, on a
+/// trail of its own, never ended. Asked with the question's steps and trail,
+/// the goal met again is an assumption and the pair is proved. The query runs
+/// on a thread of its own and is given a minute, so a return of that loop
+/// fails here rather than holding the suite.
+#[test]
+fn a_narrowed_meet_inside_a_fixpoint_answers() {
+    let (sender, answers) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let json = |own: usize| {
+            Schema::union([
+                Schema::Int,
+                Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(own)))),
+                Schema::mapping(MapClause {
+                    key: Schema::Str,
+                    value: Schema::Ref(DefIx::new(own)),
+                }),
+            ])
+        };
+        let defs = [
+            Schema::meet([
+                json(0),
+                Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))).complement(),
+            ]),
+            Schema::union([
+                Schema::Int,
+                Schema::mapping(MapClause {
+                    key: Schema::Str,
+                    value: Schema::Ref(DefIx::new(1)),
+                }),
+            ]),
+        ];
+        let answer = Schema::Ref(DefIx::new(0)).subtype_relation_under(
+            &Schema::Ref(DefIx::new(1)),
+            &NoLeafRelations,
+            &defs,
+        );
+        let _sent = sender.send(answer);
+    });
+    let answer = answers.recv_timeout(std::time::Duration::from_secs(60));
+    assert_eq!(answer.ok(), Some(Relation::Holds), "no proof in a minute");
+}
+
+/// Where the query's steps are spent, the two lattice bounds are read once more
+/// under emptiness queries of their own: an empty subject is below anything,
+/// and one meeting a set in nothing is below its complement. A query with
+/// steps left has read them, and reads neither again.
+#[test]
+fn a_spent_query_reads_its_bounds_under_steps_of_its_own() {
+    let empty = Schema::Intersection(vec![Schema::Int, Schema::Str].into());
+    let bounds = |subject: &Schema, other: &Schema, steps: u32| {
+        let budget = Budget::new(steps);
+        subject.below_by_emptiness(other, &Cx::new(&NoLeafRelations, &[], &budget))
+    };
+    assert_eq!(bounds(&empty, &Schema::Bytes, 0), Relation::Holds);
+    assert_eq!(bounds(&empty, &Schema::Bytes, 1), Relation::Unknown);
+    let not_str = Schema::Str.complement();
+    assert_eq!(bounds(&Schema::Int, &not_str, 0), Relation::Holds);
+    assert_eq!(
+        bounds(&Schema::Int, &Schema::Int.complement(), 0),
+        Relation::Unknown
+    );
+    assert_eq!(bounds(&Schema::Int, &Schema::Bytes, 0), Relation::Unknown);
 }
 
 /// A chain spelled as a recursive record, its reference inside the key's

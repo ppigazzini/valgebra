@@ -686,6 +686,17 @@ fn the_empty_sequence_in_every_member(members: &[Schema]) -> Verdict {
 /// clauses and past [`MAX_DISTRIBUTED_TERMS`]. A union is narrowed only by the
 /// members beside it, never by itself: a branch meets its own union in itself.
 ///
+/// Out of line: asked of every meet the rules decline, it answers `None` at the
+/// first look where no member is a union.
+#[inline(never)]
+fn narrowed_by_its_members(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdict> {
+    Some(narrowed_meet(members, cx)?.empty_and_region(cx).0)
+}
+
+/// The meet of `members` with every branch of a union member dropped that
+/// shares no value with another member ([`shares_nothing_beside`]), which is
+/// the same set [FCB08, Def. 4.1], or `None` where no branch is.
+///
 /// The narrowed meet's members are read beside each other once more, by the
 /// same complements, and the meet is empty where one shares no value with the
 /// rest. Narrowing can leave such a pair with no union between them for a
@@ -694,11 +705,7 @@ fn the_empty_sequence_in_every_member(members: &[Schema]) -> Verdict {
 /// conjuncts beside the rest. `(f ∪ c) ∩ ¬f` met with `¬k ∪ ¬(i ∪ c)`, `k` the
 /// meet of the first two, narrows to `c ∩ ¬f ∩ ¬(i ∪ c)`, and `c` is no value
 /// of `¬(i ∪ c)`.
-///
-/// Out of line: asked of every meet the rules decline, it answers `None` at the
-/// first look where no member is a union.
-#[inline(never)]
-fn narrowed_by_its_members(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdict> {
+pub(super) fn narrowed_meet(members: &[Schema], cx: &Cx<'_>) -> Option<Schema> {
     let drops = |at: usize, branch: &Schema| shares_nothing_beside(branch, members, at, cx);
     let narrows = members.iter().enumerate().any(|(at, member)| {
         matches!(member, Schema::Union(branches) if branches.iter().any(|b| drops(at, b)))
@@ -723,9 +730,9 @@ fn narrowed_by_its_members(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdic
             .enumerate()
             .any(|(at, part)| shares_nothing_beside(part, parts, at, cx))
     {
-        return Some(Verdict::Empty);
+        return Some(Schema::Nothing);
     }
-    Some(narrowed.empty_and_region(cx).0)
+    Some(narrowed)
 }
 
 /// Whether `branch` shares no value with the members of a meet other than the

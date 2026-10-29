@@ -736,7 +736,12 @@ asks the rules and then the descriptor, and `is_empty` asks its own pair. Below
 reads where the pair declines: a string subject's texts, and a union a member at
 a time, each member's emptiness the rules' or the descriptor's. The law
 `below_nothing_exactly_where_read_empty` holds the two to one answer in both
-directions, over drawn shaped schemas and the union of two.
+directions, over drawn shaped schemas and the union of two. And where every
+decider declined with the query's steps spent, the relation reads the two
+lattice bounds once more under emptiness queries of their own -- an empty
+subject is below anything, and one meeting a set in nothing is below its
+complement -- so a pair the rules spent their steps on is not left undecided
+where `is_empty` decides it; a query with steps left has read them already.
 
 **The route needs both sides, and a pair it cannot lower is not a pair it can
 answer.** A schema carrying a class the pool cannot order has no narrowing --
@@ -1150,7 +1155,16 @@ union distributes into a shape a reading decides (a fixpoint of words met with
 the integers from 2). That reads the branches the narrowing dropped, which meet
 nothing, so it runs on at most `RESPELLING` of the steps the query has left and
 is charged what it spends (`Budget::within`): on all of them, a distribution
-that declined left the readings after it none.
+that declined left the readings after it none. A meet *subject* the member rule does not
+place is narrowed the same way and asked in its own place
+(`narrowed_meet_below`), after the readings of the meet as written: the same set, so its relation to the supertype is the
+meet's, and the guard a translation writes, `K ∩ (¬K ∪ R)`, is the record `R`
+met with `K`. It is asked under steps apart from the query's, and a narrowed
+meet asked inside another's question with that question's steps and trail,
+which `NARROWING` marks. Given an allowance and a trail of its own, one asked
+inside another re-asked a fixpoint met with the complement of its own lists
+without end; on the question's trail the goal met again is an assumption, and
+the pair is proved (`a_narrowed_meet_inside_a_fixpoint_answers`).
 
 `decision/goal_tests.rs` holds the premise: every goal the recorder sees is in
 `C`, over the product rule's widest shapes, the record rule's split, the union

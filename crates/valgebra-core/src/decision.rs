@@ -30,7 +30,7 @@ use crate::verdict::{Relation, Verdict};
 
 use crate::oracle::{denotes_a_set_within, has_complementary_pair};
 use constraints::constraint_entailed;
-use emptiness::{class_with_attributes, the_rules_find_a_value};
+use emptiness::{class_with_attributes, narrowed_meet, the_rules_find_a_value};
 use literals::{
     a_union_spilled_past_as_a_table, finite_meet_below, finite_set, finite_set_below,
     spills_past_a_table, the_constant_speaks_for_the_literal,
@@ -376,6 +376,60 @@ impl SeqShape {
     }
 }
 
+/// A meet narrowed by the complements beside its unions ([`narrowed_meet`]),
+/// the same set, below `other`; `Unknown` where nothing narrows.
+///
+/// Asked under an allowance of its own, [`RESPELLING`] steps of what the query
+/// has left, as a respelled pair is: the meet arm asks it last, and a narrowed
+/// meet that declines spent the steps the readings after the arm -- the
+/// subject's own emptiness among them -- would have decided the pair with.
+///
+/// A narrowed meet asked inside another's question is asked with that
+/// question's steps and its trail, and is given no allowance of its own
+/// ([`NARROWING`]). Given one, its steps were counted by nothing above it, and
+/// a fixpoint met with the complement of its own lists, `μt. (int | list[t] |
+/// dict[str, t]) & ~list[t]`, asked below `μt. int | dict[str, t]`, narrowed
+/// again at every goal its narrowed meet asked, each time with fresh steps and
+/// a trail that had forgotten the goal: the query never ended. Asked on the
+/// question's trail, the goal met again is the assumption it is, and the pair
+/// is `subset`.
+///
+/// Out of line, since the meet arm it is asked from is inlined into the goal
+/// recursion, and a meet with no union answers at the first look.
+#[inline(never)]
+fn narrowed_meet_below(members: &[Schema], other: &Schema, cx: &mut Cx<'_>) -> Relation {
+    narrowed_meet(members, cx).map_or(Relation::Unknown, |narrowed| {
+        if NARROWING.with(Cell::get) {
+            return narrowed.is_subtype_rec(other, cx);
+        }
+        let allowance = Budget::new(cx.budget.left().min(RESPELLING));
+        let _open = Narrowing::open();
+        narrowed.is_subtype_rec(other, &mut Cx::new(cx.oracle, cx.defs, &allowance))
+    })
+}
+
+thread_local! {
+    /// Whether a narrowed meet's question is being asked on this thread
+    /// ([`narrowed_meet_below`]).
+    static NARROWING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// The narrowed meet's question open on this thread, closed when dropped: what
+/// was open before is open again.
+struct Narrowing(bool);
+
+impl Narrowing {
+    fn open() -> Self {
+        Self(NARROWING.with(|open| open.replace(true)))
+    }
+}
+
+impl Drop for Narrowing {
+    fn drop(&mut self) {
+        NARROWING.with(|open| open.set(self.0));
+    }
+}
+
 impl Schema {
     /// Whether the descriptor proves every value of this schema is one of
     /// `other`, by proving the difference empty.
@@ -661,6 +715,34 @@ impl Schema {
                     Relation::Unknown
                 }
             })
+            .or_else(|| self.below_by_emptiness(other, cx))
+    }
+
+    /// The two lattice bounds read once more, each under an emptiness query of its
+    /// own, where every decider declined with the query's steps spent: an empty
+    /// subject is below every set [BBC+26, (uninhabited)], and a subject below a
+    /// complement is one sharing no value with its inner set [FCB08, §4.1]. The
+    /// rules read both as they descend, under the query's steps, and a pair they
+    /// spent every step on reaches the bounds with none left; `is_empty` asked of
+    /// the same terms with steps of its own proves them, so the relation and the
+    /// emptiness reading do not answer one question two ways. A query with steps
+    /// left has asked the bounds already, and the readings asked again there cost a
+    /// fifth of the relation matrix for nothing.
+    #[inline(never)]
+    fn below_by_emptiness(&self, other: &Schema, cx: &Cx<'_>) -> Relation {
+        if cx.budget.left() > 0 {
+            return Relation::Unknown;
+        }
+        if self.is_empty_with(cx.oracle, cx.defs) {
+            return Relation::Holds;
+        }
+        match other {
+            Schema::Complement(inner) => Relation::proven(
+                Schema::meet_within([self.clone(), (**inner).clone()], cx.defs)
+                    .is_empty_with(cx.oracle, cx.defs),
+            ),
+            _ => Relation::Unknown,
+        }
     }
 
     /// The pair asked in the spellings the Boolean algebra gives it, where
@@ -1591,6 +1673,25 @@ impl Schema {
         }
     }
 
+    /// A meet the member rule and the table reading leave, read by the rest of
+    /// its readings: as one record below a map or a union of maps, as sharing
+    /// no value with a complement's inner set, then as a pair with no rule of
+    /// its own, then through a reference.
+    ///
+    /// The meet arm asks the narrowed meet after these, and never before:
+    /// asked before them, a narrowed meet that declines has spent the steps
+    /// they share, and asked in their place, its readings miss what the
+    /// meet's own spelling gives them.
+    fn a_meet_read_whole(&self, members: &[Schema], other: &Schema, cx: &mut Cx<'_>) -> Relation {
+        match other {
+            Schema::KeyedMap { .. } | Schema::Union(_) => keyed_meet_below(members, other, cx),
+            Schema::Complement(inner) => Relation::proven(self.shares_no_value_with(inner, cx)),
+            _ => Relation::Unknown,
+        }
+        .or_else(|| self.unstructured(other, cx))
+        .or_else(|| self.below_a_reference(other, cx))
+    }
+
     /// The arms that match a pair by the shapes on its two sides.
     ///
     /// They are rules of the kind a rule-based inclusion states: a union is
@@ -1619,24 +1720,17 @@ impl Schema {
             //
             // A meet of tables and complements of tables is a table, which is
             // what a record's tag narrows to, and is asked as one once the
-            // member rule has not placed it. A meet of keyed maps is one record,
+            // member rule has not placed it, and a meet a complement beside its
+            // union narrows is the narrowed meet, the same set, asked after
+            // every other reading (`narrowed_meet_below`). A meet of keyed maps is one record,
             // their pointwise meet, asked below a map or a union of maps; and a
             // meet below a complement is a meet sharing no value with its inner,
             // asked as the arm below asks it of any other subject.
             (Schema::Intersection(members), _) => self
                 .meet_below(other, members, cx)
                 .or_else(|| finite_meet_below(members, other, cx.oracle))
-                .or_else(|| match other {
-                    Schema::KeyedMap { .. } | Schema::Union(_) => {
-                        keyed_meet_below(members, other, cx)
-                    }
-                    Schema::Complement(inner) => {
-                        Relation::proven(self.shares_no_value_with(inner, cx))
-                    }
-                    _ => Relation::Unknown,
-                })
-                .or_else(|| self.unstructured(other, cx))
-                .or_else(|| self.below_a_reference(other, cx)),
+                .or_else(|| self.a_meet_read_whole(members, other, cx))
+                .or_else(|| narrowed_meet_below(members, other, cx)),
             // A table of constants is a union of literals, and holds no kind of
             // infinitely many values whole, which the branches read alone
             // cannot say; asked where the branches have declined.
