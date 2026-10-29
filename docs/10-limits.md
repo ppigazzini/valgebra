@@ -21,12 +21,14 @@ written by the developer and is trusted.
 
 - **Schema build depth.** The frontend descends at most one level past the
   construction bound while compiling (`MAX_BUILD_DEPTH` in
-  `crates/valgebra-py/src/build.rs`) and refuses anything deeper with
-  `NotImplementedError`, whether or not it reaches a leaf. A self-referential
-  class is the shape that gets there, because its field type names the class;
-  model it with [`recursive`](06-recursion.md) instead. An annotation exactly one
-  level too deep is refused by the construction bound below, with a
-  `ValueError` that names it; a deeper one meets the frontend's bound first.
+  `crates/valgebra-py/src/build.rs`) and refuses anything deeper with the
+  `ValueError` the construction bound below raises, whether or not it reaches a
+  leaf: an annotation exactly one level too deep is refused by that bound, and a
+  deeper one meets the frontend's first, with the same type. A self-referential
+  class does not get there: it is refused with `NotImplementedError` where it is
+  reached again while its own fields are being built, under the type arguments
+  it is applied to, because its field type names the class and the build never
+  bottoms out; model it with [`recursive`](06-recursion.md) instead.
 - **Schema construction size.** Every way of growing a schema — the `Validator`
   constructor, the `|` operator, `union`, `intersection`, `complement`,
   `recursive`, and the record transforms — is bounded at construction, so no sequence of

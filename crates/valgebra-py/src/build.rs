@@ -19,7 +19,7 @@ use valgebra_core::{
 };
 
 use crate::errors::summarize;
-use crate::validator::{MAX_SCHEMA_NODES, Validator};
+use crate::validator::{MAX_SCHEMA_DEPTH, MAX_SCHEMA_NODES, Validator};
 
 /// The `build_schema` recursion running on this thread, read and written once on
 /// each side of a descent.
@@ -52,6 +52,74 @@ thread_local! {
 
     /// The PEP 695 aliases whose bodies are being built on this thread.
     static OPEN_ALIASES: RefCell<Vec<OpenAlias>> = const { RefCell::new(Vec::new()) };
+
+    /// The classes whose fields are being built on this thread.
+    static OPEN_CLASSES: RefCell<Vec<OpenClass>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A class whose fields are being built, and the type arguments it is applied
+/// to, found the way an open alias is: by its address, and its arguments
+/// compared by Python equality.
+struct OpenClass {
+    address: usize,
+    arguments: Option<Py<PyTuple>>,
+}
+
+/// One class's fields being built, held open on [`OPEN_CLASSES`] until they
+/// are and given back as it was however the build ends.
+///
+/// A class reached again while its own fields are being built, applied to the
+/// same arguments, is built from the same hints again, so the build never
+/// bottoms out. It is refused where it is reached, as the form the frontend
+/// does not take that it is: an alias ties such a fixpoint, and a class is
+/// written with `recursive(...)` to tie one. Applied to other arguments it is
+/// another build, which may end, and the depth bound refuses it where it does
+/// not.
+pub(super) struct ClassScope;
+
+impl ClassScope {
+    pub(super) fn enter(
+        class: &Bound<'_, PyType>,
+        arguments: Option<&Bound<'_, PyTuple>>,
+    ) -> PyResult<ClassScope> {
+        let py = class.py();
+        let address = class.as_ptr() as usize;
+        // Compared outside the borrow, as an open alias is: an equality is
+        // Python code, and code that builds a validator would borrow the list.
+        let open: Vec<Option<Py<PyTuple>>> = OPEN_CLASSES.with_borrow(|open| {
+            open.iter()
+                .filter(|entry| entry.address == address)
+                .map(|entry| entry.arguments.as_ref().map(|held| held.clone_ref(py)))
+                .collect()
+        });
+        for held in open {
+            let same = match (held, arguments) {
+                (Some(held), Some(these)) => held.bind(py).eq(these)?,
+                (held, these) => held.is_none() && these.is_none(),
+            };
+            if same {
+                return Err(not_implemented(format!(
+                    "{} is reached again while its own fields are being built: a \
+                     class whose own type appears in its fields never bottoms out. \
+                     Write it with recursive(...), which ties the fixpoint explicitly.",
+                    summarize(class.as_any())?
+                )));
+            }
+        }
+        OPEN_CLASSES.with_borrow_mut(|open| {
+            open.push(OpenClass {
+                address,
+                arguments: arguments.map(|these| these.clone().unbind()),
+            });
+        });
+        Ok(ClassScope)
+    }
+}
+
+impl Drop for ClassScope {
+    fn drop(&mut self) {
+        OPEN_CLASSES.with_borrow_mut(Vec::pop);
+    }
 }
 
 /// One alias whose body is being built, and the token standing for it.
@@ -482,9 +550,11 @@ fn names_a_parameter(
 ///
 /// One level above the published construction depth, so the frontend never
 /// rejects a schema the construction bounds would accept: below this,
-/// `Validator::checked` owns the verdict and reports which bound tripped. A
-/// self-referential class is the shape that reaches this one, because its field
-/// type names the class and the descent does not terminate.
+/// `Validator::checked` owns the verdict and reports which bound tripped, and
+/// past it this refuses with the same `ValueError`: one bound, one type. A
+/// self-referential class does not reach it, being refused where it is reached
+/// again ([`ClassScope`]); a generic one applied to arguments that grow at each
+/// level does, and is refused as the nesting it is.
 ///
 /// The margin is what makes the ownership hold rather than happen to hold. Each
 /// level the frontend descends builds at least one schema node, so the deepest
@@ -543,11 +613,11 @@ impl BuildGuard {
         });
         if depth > MAX_BUILD_DEPTH {
             BUILD.with(|build| build.depth.set(depth - 1));
-            return Err(not_implemented(format!(
-                "schema nesting is too deep to compile: the frontend descended \
-                 past {MAX_BUILD_DEPTH} levels, one more than a schema may nest. \
-                 A class whose own type appears in its fields never bottoms out; \
-                 write it with recursive(...), which ties the fixpoint explicitly."
+            return Err(PyValueError::new_err(format!(
+                "schema nesting is too deep: reading this annotation descends past \
+                 {MAX_BUILD_DEPTH} levels, one more than the limit of \
+                 {MAX_SCHEMA_DEPTH} a schema may nest. Express structural \
+                 recursion with recursive(...) instead of nesting schemas."
             )));
         }
         if before > MAX_SCHEMA_NODES {
@@ -925,7 +995,8 @@ fn read_extension(
 /// The state a build in progress keeps on this thread, set aside while a build
 /// begun from the API runs and handed back when it ends.
 ///
-/// The guard's counts and the open aliases are the thread's, and a build can
+/// The guard's counts and the open aliases and classes are the thread's, and a
+/// build can
 /// begin inside another: an annotation the frontend evaluates may construct a
 /// `Validator` of its own. Without this the inner build would start at the
 /// outer one's depth and node count, and a schema within the bounds would be
@@ -935,6 +1006,7 @@ struct RootScope {
     descents: usize,
     held: usize,
     aliases: Vec<OpenAlias>,
+    classes: Vec<OpenClass>,
 }
 
 impl RootScope {
@@ -947,11 +1019,13 @@ impl RootScope {
             )
         });
         let aliases = OPEN_ALIASES.with_borrow_mut(std::mem::take);
+        let classes = OPEN_CLASSES.with_borrow_mut(std::mem::take);
         RootScope {
             depth,
             descents,
             held,
             aliases,
+            classes,
         }
     }
 }
@@ -964,6 +1038,7 @@ impl Drop for RootScope {
             build.held.set(self.held);
         });
         OPEN_ALIASES.with_borrow_mut(|open| *open = std::mem::take(&mut self.aliases));
+        OPEN_CLASSES.with_borrow_mut(|open| *open = std::mem::take(&mut self.classes));
     }
 }
 

@@ -21,7 +21,8 @@ use valgebra_core::{Attribute, Field, MapClause, Schema, SeqShape};
 
 use super::generics::is_field_qualifier;
 use super::{
-    MAX_BUILD_DEPTH, Pool, build_schema, forms, is_extension, loaded_modules, not_implemented,
+    ClassScope, MAX_BUILD_DEPTH, Pool, build_schema, forms, is_extension, loaded_modules,
+    not_implemented,
 };
 use crate::errors::{summarize, unless_fatal};
 
@@ -425,6 +426,7 @@ pub(super) fn build_protocol(
 ) -> PyResult<Schema> {
     let py = ty.py();
     let forms = forms(py)?;
+    let _open = ClassScope::enter(ty, None)?;
     if ty.is(forms.protocol.bind(py)) || is_extension(ty.as_any(), |held| &held.protocol)? {
         return Err(not_implemented(format!(
             "{} is the base a protocol is declared from, not a type: pass the \
@@ -1025,6 +1027,7 @@ pub(super) fn build_typed_dict<'py>(
     lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
+    let _open = ClassScope::enter(ty, applied)?;
     let hints = bound_hints(ty, applied)?;
     let required = ty.getattr(intern!(ty.py(), "__required_keys__"))?;
     let mut fields = Vec::with_capacity(hints.len());
@@ -1387,6 +1390,7 @@ pub(super) fn build_object<'py>(
     lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
+    let _open = ClassScope::enter(ty, applied)?;
     let hints = bound_hints(ty, applied)?;
     let hints = &hints;
     let instance = Schema::Instance(lits.intern_class(ty.as_any()));
