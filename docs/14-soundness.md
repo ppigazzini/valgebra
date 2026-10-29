@@ -330,13 +330,24 @@ The soundness is relative to a small, explicit trust base:
   which is equal to nothing including itself, the empty set. A proof that runs
   the constant through a predicate or reads its attributes speaks for that one
   value, so it stands for the literal only where the constant is the whole
-  class; `Literal[0.0]` below a predicate refusing `-0.0` is not proven.
-- **A constant's `==` is an equivalence.** `Literal[c]` is proved below
-  `Literal[d]` from `c == d`, which is a proof only where equality is
-  transitive: a value equal to `c` is then equal to `d`. A refutation between
-  two constants is guarded -- it stands only where their type's equality is
-  Python's own -- and a proof is not, so a class whose `__eq__` is not
-  transitive is outside the relations between its constants.
+  class; `Literal[0.0]` below a predicate refusing `-0.0` is not proven. A proof
+  through a kind or a class whose `isinstance` runs no hook reads the type
+  alone, which every value of the literal shares as its exact type, and stands
+  for all of them whatever their equality: `Literal[CI("a")]` is below `str` and
+  outside `int`. A proof through any other atom stands where the values `==`
+  joins to the constant are read alike by it: under an exact builtin's equality,
+  a builtin subclass's that keeps it, a value type's, or identity. The value
+  types are, exactly and by identity with the class their module binds,
+  `complex`, `bytearray`, `range`, the builtin containers, `Decimal`,
+  `Fraction`, the `datetime` types, `UUID`, the `ipaddress` addresses, networks
+  and interfaces, and the `pathlib` paths: each orders, divides and measures,
+  where it does, as its `==` says. A class stating one of their modules is none
+  of them, and a module of the program's own imported under one of those names
+  is what the program means by it. A class whose `__eq__` is its own is read by
+  none of those, so a proof by its constant is not made: a case-insensitive
+  `str` subclass holds `"A"` in the literal of `"a"`, which `Regex("a")`
+  refuses, and an `__eq__` that is not transitive would join a value to `c` that
+  it does not join to an equal `d`.
 - **The values are the finite ones.** A guarded fixpoint denotes the values built
   by finitely many unfoldings, which is what makes membership an induction on the
   value. A value that contains itself is not a large member: it is outside the

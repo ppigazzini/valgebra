@@ -699,6 +699,59 @@ fn a_constant_is_alone_where_equality_joins_nothing_to_it() {
     });
 }
 
+// THEORY: a-constant-is-the-values-equal-to-it
+#[test]
+fn equal_values_read_alike_where_the_atoms_read_their_equality() {
+    // `equal_values_read_alike`: do the values `==` joins to the constant
+    // answer a pattern, a length, a bound and a step alike. Those read a
+    // builtin's storage, so a builtin subclass with an `__eq__` of its own
+    // joins values they tell apart; the standard library's types and identity
+    // read alike.
+    Python::attach(|py| {
+        let source = "types.SimpleNamespace(\
+             values=[1, 'a', 1.5, enum.IntEnum('Number', 'A').A,\
+                     type('Plain', (str,), {})('a'), __import__('decimal').Decimal('1.00'),\
+                     __import__('fractions').Fraction(1, 2), complex(1, 2),\
+                     enum.Enum('Color', 'A').A, object(),\
+                     type('CI', (str,), {'__eq__': lambda self, other: str.lower(self) == str.lower(other),\
+                                        '__hash__': lambda self: hash(str.lower(self))})('a'),\
+                     type('ByX', (), {'__eq__': lambda self, other: True,\
+                                      '__hash__': lambda self: 0})(),\
+                     type('Stated', (), {'__module__': 'fractions',\
+                                         '__eq__': lambda self, other: True,\
+                                         '__hash__': lambda self: 0})()],\
+         )";
+        let values: Vec<Py<PyAny>> = built(py, source)
+            .getattr("values")
+            .unwrap()
+            .try_iter()
+            .unwrap()
+            .map(|value| value.unwrap().unbind())
+            .collect();
+        asking(py, values, |oracle| {
+            let alike = |slot| oracle.equal_values_read_alike(ConstIx::new(slot));
+            for (slot, what) in [
+                (0, "an int"),
+                (1, "a str"),
+                (2, "a float"),
+                (3, "an IntEnum's member, whose == is int's"),
+                (4, "a str subclass keeping str's =="),
+                (5, "a Decimal"),
+                (6, "a Fraction"),
+                (7, "a complex number"),
+                (8, "an Enum's member, which compares by identity"),
+                (9, "an object of a type comparing by identity"),
+            ] {
+                assert!(alike(slot), "{what}");
+            }
+            assert!(!alike(10), "a str subclass whose == is its own");
+            assert!(!alike(11), "a user class whose == is its own");
+            assert!(!alike(12), "a class stating a standard-library module");
+            assert!(!alike(13), "a slot the pool does not hold");
+        });
+    });
+}
+
 #[test]
 fn a_type_whose_equality_is_its_own_is_not_trusted_to_decide_disjointness() {
     // Two constants are disjoint when they are different values, and "different"

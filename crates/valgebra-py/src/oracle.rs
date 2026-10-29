@@ -23,8 +23,8 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
-    PyBool, PyBytes, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString,
-    PyTuple, PyType,
+    PyBool, PyByteArray, PyBytes, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyRange,
+    PySet, PyString, PyTuple, PyType,
 };
 use rustc_hash::FxHashMap;
 use valgebra_core::descr::classes::{Attributes, Class, Hook, Member, Namespace, Reach};
@@ -182,6 +182,117 @@ fn compares_by_identity(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let theirs = ty.getattr(intern!(py, "__eq__"))?;
     let inherited = PyAny::type_object(py).getattr(intern!(py, "__eq__"))?;
     Ok(theirs.is(&inherited))
+}
+
+/// The value types the standard library defines whose order, `%` and length
+/// are their equality's, by the module that defines each: two values equal by
+/// one's `==` answer a bound, a step and a length alike.
+const STDLIB_VALUE_TYPES: &[(&str, &[&str])] = &[
+    ("decimal", &["Decimal"]),
+    ("fractions", &["Fraction"]),
+    ("datetime", &["date", "datetime", "time", "timedelta"]),
+    ("uuid", &["UUID"]),
+    (
+        "ipaddress",
+        &[
+            "IPv4Address",
+            "IPv6Address",
+            "IPv4Network",
+            "IPv6Network",
+            "IPv4Interface",
+            "IPv6Interface",
+        ],
+    ),
+    (
+        "pathlib",
+        &[
+            "PurePath",
+            "PurePosixPath",
+            "PureWindowsPath",
+            "Path",
+            "PosixPath",
+            "WindowsPath",
+        ],
+    ),
+];
+
+/// `sys.modules`, the modules imported so far, read once.
+static SYS_MODULES: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
+/// Whether `ty` is exactly a value type whose order, `%` and length are its
+/// equality's: `complex`, `bytearray`, `range`, a builtin container, or one of
+/// [`STDLIB_VALUE_TYPES`].
+///
+/// Asked by identity with the class the module that defines it binds, never by
+/// the `__module__` or the name a class states: a class body can state any,
+/// and a module of the program's own can take a standard-library name. A
+/// module not imported defines no class a value has, so it is looked up among
+/// the imported ones and never imported here. A subclass is none of these.
+fn is_a_value_type(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+    let py = ty.py();
+    let builtins = [
+        PyComplex::type_object(py),
+        PyByteArray::type_object(py),
+        PyRange::type_object(py),
+        PyTuple::type_object(py),
+        PyList::type_object(py),
+        PyDict::type_object(py),
+        PySet::type_object(py),
+        PyFrozenSet::type_object(py),
+    ];
+    if builtins.iter().any(|builtin| ty.is(builtin)) {
+        return Ok(true);
+    }
+    let modules = SYS_MODULES.import(py, "sys", "modules")?;
+    for (module, names) in STDLIB_VALUE_TYPES {
+        let Some(module) = modules.get_item(*module).ok() else {
+            continue;
+        };
+        for name in *names {
+            if module.getattr_opt(*name)?.is_some_and(|class| class.is(ty)) {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+/// Whether the values `==` joins to `value` read alike to a pattern, a length,
+/// a bound and a step: [`LeafRelations::equal_values_read_alike`] of its class.
+///
+/// Those atoms read an `int`, a `float`, a `str` or `bytes` through the
+/// builtin's storage, so a subclass of one reads alike where it keeps the
+/// builtin's `__eq__` -- an `IntEnum` does -- and not where its `__eq__` is its
+/// own. Any other class reads alike where it compares by identity, the equal
+/// values being one, or where it is exactly one of the value types whose
+/// order, `%` and length are their equality's ([`is_a_value_type`]):
+/// `Decimal`, `Fraction`, the date types, `complex`. A user class with an
+/// `__eq__` of its own is read as unknown, whatever module it names.
+///
+/// Asked of the class Python reports, through `issubclass` and attribute
+/// lookups a metaclass can answer, so it can raise, and the caller hears what
+/// it raised.
+fn equal_values_read_alike(value: &Bound<'_, PyAny>) -> PyResult<bool> {
+    if kind_of(value).is_some() {
+        return Ok(true);
+    }
+    let py = value.py();
+    let ty = value.get_type();
+    let eq = intern!(py, "__eq__");
+    for builtin in [
+        PyInt::type_object(py),
+        PyFloat::type_object(py),
+        PyString::type_object(py),
+        PyBytes::type_object(py),
+    ] {
+        if ty.is_subclass(&builtin)? {
+            return Ok(ty.getattr(eq)?.is(&builtin.getattr(eq)?));
+        }
+    }
+    if compares_by_identity(&ty)? {
+        return Ok(true);
+    }
+    is_a_value_type(&ty)
 }
 
 impl PoolRelations<'_, '_> {
@@ -1157,6 +1268,18 @@ impl LeafRelations for PoolRelations<'_, '_> {
             return complex.real() != 0.0 && complex.imag() != 0.0;
         }
         self.heard(compares_by_identity(&ty)).unwrap_or(false)
+    }
+
+    /// Whether the values the constant's literal holds -- the model's
+    /// singleton [FCB08, §4.2] widened to the values `==` joins to the
+    /// constant -- read alike to a pattern, a length, a bound and a step, as
+    /// [`equal_values_read_alike`] reads the constant's class. A check that
+    /// raised has answered nothing.
+    fn equal_values_read_alike(&self, constant: ConstIx) -> bool {
+        self.literals.get(constant.get()).is_some_and(|value| {
+            self.heard(equal_values_read_alike(value.bind(self.py)))
+                .unwrap_or(false)
+        })
     }
 
     fn compare(&self, left: OperandIx, right: OperandIx) -> Option<core::cmp::Ordering> {

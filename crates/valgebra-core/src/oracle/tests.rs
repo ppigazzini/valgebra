@@ -278,6 +278,7 @@ fn the_default_oracle_declines_every_question() {
     );
     assert_eq!(oracle.kind_derives_from(Kind::Int, ClassIx::new(0)), None);
     assert!(!oracle.constant_is_alone(ConstIx::new(0)));
+    assert!(!oracle.equal_values_read_alike(ConstIx::new(0)));
     assert_eq!(oracle.strings_admitted(&Schema::Str, &["a"]), None);
 }
 

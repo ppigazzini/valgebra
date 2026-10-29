@@ -266,12 +266,19 @@ fn apart_from(index: ConstIx, table: &[Schema], oracle: &dyn LeafRelations) -> b
 /// it, a predicate included. The literal is the values of the constant's exact
 /// type that `==` it: the model's singleton [FCB08, §4.2] where `==` joins no
 /// other value to the constant, and a wider set where it does -- `-0.0` beside
-/// `0.0`, `Decimal("1.0")` beside `Decimal("1.00")`. Two equal values answer
-/// every atom alike under the trust base but two: a callback, which may answer
-/// any function of the value ([`asks_no_callback`]), and an attribute record,
-/// which reads what two equal instances of a type with its own `__eq__` may
-/// hold apart. So the constant speaks for the literal where it is the only
-/// value, or where `other` reaches neither of those.
+/// `0.0`, `Decimal("1.0")` beside `Decimal("1.00")`. Two values equal under an
+/// equality the atoms read through ([`LeafRelations::equal_values_read_alike`])
+/// answer every atom alike but two: a callback, which may answer any function
+/// of the value ([`asks_no_callback`]), and an attribute record, which reads
+/// what two equal instances of a type with its own `__eq__` may hold apart.
+/// Under an equality a builtin subclass defines for itself, a pattern, a
+/// length, a bound and a step read the builtin's storage, which that equality
+/// need not respect. Every value of the literal has the constant's exact type,
+/// so a node reading the type alone ([`reads_the_type_alone`]) answers them as
+/// it answers the constant, whatever their equality. So the constant speaks
+/// for the literal where it is the only value, or where each node `other`
+/// reaches reads the type alone or, under an equality read through, is neither
+/// a callback nor an attribute record.
 ///
 /// Out of line, behind the discriminant test its caller makes, so the leaf
 /// proofs of every other subject pay nothing for it.
@@ -282,10 +289,38 @@ pub(super) fn the_constant_speaks_for_the_literal(
     oracle: &dyn LeafRelations,
     definitions: &[Schema],
 ) -> bool {
-    oracle.constant_is_alone(constant)
-        || every_node_within(other, definitions, |node| {
-            !matches!(node, Schema::AttrRecord { .. }) && asks_no_callback(node, oracle)
-        })
+    if oracle.constant_is_alone(constant) {
+        return true;
+    }
+    let mut alike = None;
+    every_node_within(other, definitions, |node| {
+        reads_the_type_alone(node, oracle)
+            || (!matches!(node, Schema::AttrRecord { .. })
+                && asks_no_callback(node, oracle)
+                && *alike.get_or_insert_with(|| oracle.equal_values_read_alike(constant)))
+    })
+}
+
+/// Whether `node` answers every value of one exact type alike: top, bottom, a
+/// kind, a class whose `isinstance` runs no hook, or a connective, whose
+/// members are asked in turn. Every other node reads the value: a constant, a
+/// pattern, a length, a bound, a step, a callback, an attribute, an item.
+fn reads_the_type_alone(node: &Schema, oracle: &dyn LeafRelations) -> bool {
+    match node {
+        Schema::Anything(_)
+        | Schema::Nothing
+        | Schema::NoneType
+        | Schema::Bool
+        | Schema::Int
+        | Schema::Float
+        | Schema::Str
+        | Schema::Bytes
+        | Schema::Union(_)
+        | Schema::Intersection(_)
+        | Schema::Complement(_) => true,
+        Schema::Instance(_) => asks_no_callback(node, oracle),
+        _ => false,
+    }
 }
 
 /// A meet holding a table of constants, read one constant at a time.
