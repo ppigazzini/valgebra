@@ -37,7 +37,7 @@ use regex_automata::dfa::{Automaton, dense};
 use regex_automata::nfa::thompson;
 use regex_automata::util::syntax;
 use regex_automata::{Anchored, Input};
-use regex_syntax::hir::{Hir, HirKind, Look};
+use regex_syntax::hir::{self, Hir, HirKind, Look};
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
@@ -223,6 +223,76 @@ impl Dfa {
 
     fn accepts(&self, state: u32) -> bool {
         self.accepting.get(state as usize).copied().unwrap_or(false)
+    }
+
+    /// The state no word leads from to acceptance, where the table has one.
+    ///
+    /// A minimal table has one at most: every state that accepts nothing is
+    /// equivalent to every other such state, so they merge, and the one left
+    /// leads only to states that accept nothing -- to itself.
+    fn dead_state(&self) -> Option<u32> {
+        (0..self.state_count()).find_map(|state| {
+            let state = u32::try_from(state).ok()?;
+            (!self.accepts(state)
+                && (0..self.class_count)
+                    .all(|class| self.step(state, Class::try_from(class).unwrap_or(0)) == state))
+            .then_some(state)
+        })
+    }
+
+    /// Every word this minimal table accepts, where it accepts `limit` or
+    /// fewer, or `None` where it accepts more or infinitely many.
+    ///
+    /// Read a length at a time from the start, through every state but the
+    /// dead one, each of which leads on to acceptance. Two prefixes of one
+    /// length begin two words, so a length holding more than `limit` of them is
+    /// a language past `limit`; and a prefix longer than the table has states
+    /// has passed one state twice, a cycle that repeats into infinitely many
+    /// words.
+    fn words(&self, limit: usize) -> Option<Vec<Vec<u8>>> {
+        let dead = self.dead_state();
+        let mut bytes_of: Vec<Vec<u8>> = vec![Vec::new(); self.class_count];
+        for byte in 0..=u8::MAX {
+            if let Some(bytes) = bytes_of.get_mut(usize::from(self.class_of(byte))) {
+                bytes.push(byte);
+            }
+        }
+        let mut words = Vec::new();
+        let mut level = if dead == Some(0) {
+            Vec::new()
+        } else {
+            vec![(0, Vec::new())]
+        };
+        for _ in 0..=self.state_count() {
+            let mut next: Vec<(u32, Vec<u8>)> = Vec::new();
+            for (state, word) in level {
+                if self.accepts(state) {
+                    if words.len() == limit {
+                        return None;
+                    }
+                    words.push(word.clone());
+                }
+                for (class, bytes) in bytes_of.iter().enumerate() {
+                    let target = self.step(state, Class::try_from(class).unwrap_or(0));
+                    if Some(target) == dead {
+                        continue;
+                    }
+                    for byte in bytes {
+                        if next.len() == limit {
+                            return None;
+                        }
+                        let mut longer = word.clone();
+                        longer.push(*byte);
+                        next.push((target, longer));
+                    }
+                }
+            }
+            if next.is_empty() {
+                return Some(words);
+            }
+            level = next;
+        }
+        None
     }
 
     /// Whether this automaton accepts `word`.
@@ -995,6 +1065,50 @@ thread_local! {
     static COMPILED: RefCell<Compiled> = RefCell::new(Compiled::default());
 }
 
+/// The longest guess [`RegularSet::a_text_of`] writes: a repetition counted in
+/// the thousands names no text a caller is waiting on.
+const WITNESS_BYTES: usize = 4096;
+
+/// [`RegularSet::a_text_of`] one node down, appending to `word`.
+fn write_a_word(hir: &Hir, word: &mut Vec<u8>) -> Option<()> {
+    match hir.kind() {
+        HirKind::Empty | HirKind::Look(_) => {}
+        HirKind::Literal(literal) => word.extend_from_slice(&literal.0),
+        HirKind::Class(hir::Class::Unicode(class)) => {
+            let first = class.ranges().first()?.start();
+            word.extend_from_slice(first.encode_utf8(&mut [0; 4]).as_bytes());
+        }
+        HirKind::Class(hir::Class::Bytes(class)) => word.push(class.ranges().first()?.start()),
+        HirKind::Repetition(repetition) => {
+            let mut once = Vec::new();
+            write_a_word(&repetition.sub, &mut once)?;
+            for _ in 0..repetition.min {
+                word.extend_from_slice(&once);
+                if word.len() > WITNESS_BYTES {
+                    return None;
+                }
+            }
+        }
+        HirKind::Capture(capture) => write_a_word(&capture.sub, word)?,
+        HirKind::Concat(parts) => {
+            for part in parts {
+                write_a_word(part, word)?;
+            }
+        }
+        HirKind::Alternation(branches) => {
+            let shortest = branches
+                .iter()
+                .filter_map(|branch| {
+                    let mut written = Vec::new();
+                    write_a_word(branch, &mut written).map(|()| written)
+                })
+                .min_by_key(Vec::len)?;
+            word.extend_from_slice(&shortest);
+        }
+    }
+    (word.len() <= WITNESS_BYTES).then_some(())
+}
+
 /// A set of words: a regular language.
 ///
 /// The table sits behind a handle, so a copy is a reference count. A descriptor
@@ -1078,6 +1192,23 @@ impl RegularSet {
             }
             RegularSet::determinize(&parsed)
         })
+    }
+
+    /// A text `pattern` may match, read off its parsed tree where its table is
+    /// past the build's limit: the first character of each class, each
+    /// repetition its least number of times, the shortest branch of each
+    /// alternation, and nothing for an assertion.
+    ///
+    /// A guess, which the caller puts to the walk before it names a value, since
+    /// an assertion can refuse it -- `a\bb` guesses `ab` and matches nothing.
+    /// `None` where the pattern does not parse alone, or the guess passes
+    /// [`WITNESS_BYTES`].
+    #[must_use]
+    pub(crate) fn a_text_of(pattern: &str) -> Option<String> {
+        let parsed = syntax::parse_with(pattern, &syntax::Config::new()).ok()?;
+        let mut word = Vec::new();
+        write_a_word(&parsed, &mut word)?;
+        String::from_utf8(word).ok()
     }
 
     /// The language of a pattern this module writes, anchored as it is written.
@@ -1183,6 +1314,13 @@ impl RegularSet {
     #[must_use]
     pub(crate) fn holds(&self, word: &[u8]) -> bool {
         self.dfa.holds(word)
+    }
+
+    /// Every word this set holds, where it holds `limit` or fewer: `None`
+    /// where it holds more or infinitely many.
+    #[must_use]
+    pub(crate) fn words(&self, limit: usize) -> Option<Vec<Vec<u8>>> {
+        self.dfa.words(limit)
     }
 
     /// The words in either set, or `None` past [`MAX_STATES`].

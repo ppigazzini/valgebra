@@ -1,4 +1,6 @@
-use super::{Alphabet, COMPILED, COMPILED_BYTES, Compiled, Dfa, MAX_STATES, RegularSet};
+use super::{
+    Alphabet, COMPILED, COMPILED_BYTES, Compiled, Dfa, MAX_STATES, RegularSet, WITNESS_BYTES,
+};
 use crate::descr::lattice_tests::Algebra;
 use proptest::prelude::*;
 use std::sync::Arc;
@@ -1065,4 +1067,75 @@ fn the_memo_starts_over_at_its_bound() {
             .raw
             .contains_key("e".repeat(COMPILED_BYTES + 1).as_str())
     );
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    /// The words a finite language lists are its words, and the limit is
+    /// exact: every word listed is held, every word of the universe held is
+    /// listed, and the count listed is the least limit that lists them.
+    #[test]
+    fn a_finite_language_lists_exactly_its_words(set in regular_set()) {
+        let Some(words) = set.words(64) else {
+            return Ok(());
+        };
+        for word in &words {
+            prop_assert!(set.holds(word), "{word:?} is listed and not held");
+        }
+        for word in universe() {
+            prop_assert_eq!(set.holds(word), words.iter().any(|listed| listed == word));
+        }
+        prop_assert_eq!(set.words(words.len()), Some(words.clone()));
+        if let Some(fewer) = words.len().checked_sub(1) {
+            prop_assert_eq!(set.words(fewer), None);
+        }
+    }
+}
+
+/// A language is listed where it holds at most the limit, shortest first, and
+/// is not where it holds more or infinitely many.
+#[test]
+fn a_language_is_listed_up_to_its_limit() {
+    let listed = |pattern: &str, limit| language(pattern).words(limit);
+    let words = |words: &[&str]| Some(words.iter().map(|word| word.as_bytes().to_vec()).collect());
+    assert_eq!(listed("a|abc", 64), words(&["a", "abc"]));
+    assert_eq!(listed("x{0,2}", 64), words(&["", "x", "xx"]));
+    assert_eq!(listed("[ab]c", 2), words(&["ac", "bc"]));
+    assert_eq!(listed("[ab]c", 1), None);
+    assert_eq!(listed("a+", 64), None);
+    assert_eq!(listed("é", 64), words(&["é"]));
+    assert_eq!(
+        language("a")
+            .intersect(&language("b"))
+            .and_then(|set| set.words(64)),
+        words(&[])
+    );
+}
+
+/// A guess at a text of a pattern reads each part at its least: a class at its
+/// first character, a repetition its fewest times, an alternation its
+/// shortest branch, an assertion nothing -- which the walk may then refuse.
+#[test]
+fn a_guess_reads_each_part_at_its_least() {
+    assert_eq!(
+        RegularSet::a_text_of(r"(?:\w{3,4})+").as_deref(),
+        Some("000")
+    );
+    assert!(matcher(r"(?:\w{3,4})+").is_match("000"));
+    assert_eq!(RegularSet::a_text_of("x|yz").as_deref(), Some("x"));
+    assert_eq!(RegularSet::a_text_of("(a)(?:b)?c*").as_deref(), Some("a"));
+    assert_eq!(RegularSet::a_text_of(r"a\bb").as_deref(), Some("ab"));
+    assert!(!matcher(r"a\bb").is_match("ab"));
+    assert_eq!(RegularSet::a_text_of("[é-ü]").as_deref(), Some("é"));
+    let counted = |count: usize| RegularSet::a_text_of(&format!("a{{{count}}}"));
+    assert_eq!(
+        counted(WITNESS_BYTES).map(|text| text.len()),
+        Some(WITNESS_BYTES)
+    );
+    assert_eq!(counted(WITNESS_BYTES + 1), None);
+    assert_eq!(RegularSet::a_text_of("a)|(b"), None);
 }

@@ -508,8 +508,9 @@ def test_a_meet_of_patterns_is_empty_beside_a_predicate() -> None:
     As a meet of three and as one refinement holding all three constraints,
     the two spellings `Annotated` gives one set; and beside the recursive
     universe a planner meets every member with. A pattern beside a predicate
-    is below the pattern, and is no refutation of another pattern, since the
-    predicate may admit no string.
+    is below the pattern, and is refuted by another pattern only on a text the
+    walk admits to it, the predicate run on the text: one the predicate refuses
+    names nothing.
     """
     email = Annotated[str, Regex(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")]
     tagged = Annotated[str, Regex(r"^re_[a-z0-9]{8}$")]
@@ -527,7 +528,11 @@ def test_a_meet_of_patterns_is_empty_beside_a_predicate() -> None:
     both = Annotated[str, Regex("^a+$"), Regex("^b+$"), lambda s: len(s) % 2 == 1]
     assert Validator(both).is_empty()
     assert Validator(a_and_p).relation_to(Annotated[str, Regex("^a+$")]) == "subset"
-    assert Validator(a_and_p).relation_to(Annotated[str, Regex("^b+$")]) == "undecided"
+    assert Validator(a_and_p).relation_to(Annotated[str, Regex("^b+$")]) == "not_subset"
+    a_and_none = Annotated[str, Regex("^a+$"), _admits_none]
+    assert (
+        Validator(a_and_none).relation_to(Annotated[str, Regex("^b+$")]) == "undecided"
+    )
 
 
 # THEORY: kinds-decompose-emptiness

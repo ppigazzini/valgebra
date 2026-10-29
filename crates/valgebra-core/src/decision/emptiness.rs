@@ -95,12 +95,17 @@ impl Schema {
         match self.verdict_rec(cx) {
             Verdict::Empty => true,
             Verdict::Inhabited => false,
-            // A union a member at a time, as the relation below `Nothing` reads
-            // it, so the two answer alike: a union is empty where each member
-            // is, which a reading of the whole can miss where one member's
-            // emptiness is the rules' and another's the descriptor's.
+            // A string subject's texts last, and a union a member at a time, as
+            // the relation below `Nothing` reads them, so the two answer alike:
+            // a union is empty where each member is, which a reading of the
+            // whole can miss where one member's emptiness is the rules' and
+            // another's the descriptor's.
             Verdict::Unknown => {
                 self.denotes_no_value(cx.oracle, cx.defs)
+                    || (matches!(self, Schema::Refine { .. } | Schema::Intersection(_))
+                        && self
+                            .decided_by_its_texts(&Schema::Nothing, cx.oracle)
+                            .holds())
                     || matches!(self, Schema::Union(members)
                         if members.iter().all(|member| member.empty_under(cx)))
             }

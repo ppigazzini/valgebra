@@ -14,6 +14,7 @@
 //! question a rule left, in the direction a sound procedure may -- a reading
 //! that cannot name a value declines, and the pair stays undecided.
 
+use crate::descr::regular::{Alphabet, RegularSet};
 use crate::ir::{ClassIx, CollKind, Constraint, Schema, SeqKind};
 use crate::kind::{Kind, Region, Regions};
 use crate::verdict::{Relation, Verdict};
@@ -859,5 +860,133 @@ pub(super) fn refuted_by_a_multiple(
         Relation::Fails
     } else {
         Relation::Unknown
+    }
+}
+
+/// How many texts of a string subject [`Schema::decided_by_its_texts`] puts to
+/// the walk. A pattern holding more is read by a guess at one of its texts.
+pub(super) const TEXTS_READ: usize = 64;
+
+impl Schema {
+    /// The relation read off the texts of a string subject, each put to the
+    /// walk the oracle runs, where every other decider declined.
+    ///
+    /// A pattern's table can be past the build's limit -- a counted Unicode
+    /// class under a repetition, `(?:\w{3,4})+` -- and then no set reading
+    /// holds it, though the walk's own matcher answers for one text, as it
+    /// answers for a literal's constant. The texts are the words of one of the
+    /// subject's patterns whose table builds and holds at most [`TEXTS_READ`]
+    /// words, which is every text the subject has; or, past that, a guess at a
+    /// text of each pattern ([`RegularSet::a_text_of`]).
+    ///
+    /// A text the walk admits to the subject and refuses to `other` is a value
+    /// outside it, which refutes whatever either side holds. A proof needs
+    /// every text, and both sides judging two `str`s of one text alike
+    /// ([`reads_the_text_alone`](Self::reads_the_text_alone)): the walk answers
+    /// for a `str`, and a subclass of it with the same text is a value of the
+    /// subject as well. Against `Nothing` this is the subject's emptiness.
+    #[inline(never)]
+    pub(super) fn decided_by_its_texts(
+        &self,
+        other: &Schema,
+        oracle: &dyn LeafRelations,
+    ) -> Relation {
+        let Some((texts, every_text)) = self.texts_to_read() else {
+            return Relation::Unknown;
+        };
+        let texts: Vec<&str> = texts.iter().map(String::as_str).collect();
+        let Some(admitted) = oracle.strings_admitted(self, &texts) else {
+            return Relation::Unknown;
+        };
+        let held: Vec<&str> = texts
+            .iter()
+            .zip(admitted)
+            .filter_map(|(text, admitted)| admitted.then_some(*text))
+            .collect();
+        if held.is_empty() {
+            return Relation::proven(every_text && self.reads_the_text_alone());
+        }
+        match oracle.strings_admitted(other, &held) {
+            Some(inside) if inside.contains(&false) => Relation::Fails,
+            Some(_) => Relation::proven(
+                every_text && self.reads_the_text_alone() && other.reads_the_text_alone(),
+            ),
+            None => Relation::Unknown,
+        }
+    }
+
+    /// The texts a string subject is read by, and whether they are every text
+    /// it has: the words of the first of its patterns holding at most
+    /// [`TEXTS_READ`], or a guess at a text of each. A meet is read by its
+    /// members' patterns, since it is below each member. `None` where no
+    /// pattern refines a `str` at the top.
+    fn texts_to_read(&self) -> Option<(Vec<String>, bool)> {
+        let members = match self {
+            Schema::Intersection(members) => &members[..],
+            schema => core::slice::from_ref(schema),
+        };
+        let patterns: Vec<&str> = members
+            .iter()
+            .filter_map(|member| match member {
+                Schema::Refine { base, constraints } if matches!(**base, Schema::Str) => {
+                    Some(constraints)
+                }
+                _ => None,
+            })
+            .flat_map(|constraints| constraints.iter())
+            .filter_map(|constraint| match constraint {
+                Constraint::Regex(pattern) => Some(&**pattern),
+                _ => None,
+            })
+            .collect();
+        if patterns.is_empty() {
+            return None;
+        }
+        let every_text = patterns
+            .iter()
+            .find_map(|pattern| RegularSet::pattern(pattern, Alphabet::Text)?.words(TEXTS_READ));
+        if let Some(words) = every_text {
+            let texts = words
+                .into_iter()
+                .map(|word| String::from_utf8(word).ok())
+                .collect::<Option<Vec<_>>>()?;
+            return Some((texts, true));
+        }
+        let guesses: Vec<String> = patterns
+            .iter()
+            .filter_map(|pattern| RegularSet::a_text_of(pattern))
+            .collect();
+        (!guesses.is_empty()).then_some((guesses, false))
+    }
+
+    /// Whether two `str`s of one text are both values of this schema or
+    /// neither: a pattern and a length read the text, and a kind no `str` is
+    /// holds neither. A literal pins the exact type, a class and a predicate
+    /// read the value, and each of those declines.
+    fn reads_the_text_alone(&self) -> bool {
+        match self {
+            Schema::Anything(_)
+            | Schema::Nothing
+            | Schema::Str
+            | Schema::NoneType
+            | Schema::Bool
+            | Schema::Int
+            | Schema::Float
+            | Schema::Bytes => true,
+            Schema::Refine { base, constraints } => {
+                matches!(**base, Schema::Str)
+                    && constraints.iter().all(|constraint| {
+                        matches!(
+                            constraint,
+                            Constraint::Regex(_) | Constraint::MinLen(_) | Constraint::MaxLen(_)
+                        )
+                    })
+            }
+            Schema::Complement(inner) => inner.reads_the_text_alone(),
+            Schema::Union(members) | Schema::Intersection(members) => {
+                members.iter().all(Schema::reads_the_text_alone)
+            }
+            _ => false,
+        }
     }
 }

@@ -194,6 +194,20 @@ constant, where the constant is the literal's one value or the supertype asks
 nothing that tells two equal values apart
 (`the_constant_speaks_for_the_literal` in `decision/literals.rs`).
 
+**A string subject is read by its texts last**, once the sets have declined
+as well (`decided_by_its_texts` in `decision/readings.rs`). A pattern whose
+table is past the build's limit -- a counted Unicode class under a repetition --
+has no set, and the walk's own matcher answers for one text of it as it answers
+for a literal's constant: the oracle walks each text as a `str`, through the
+subject and then the supertype (`strings_admitted`). The texts are every word of
+one of the subject's patterns whose table builds and holds at most
+`TEXTS_READ`, and otherwise a guess at a text of each pattern read off its tree,
+which names nothing where the walk refuses it -- `a\bb` guesses `ab`. A text
+the subject admits and the supertype refuses is a value outside it. A proof
+needs every text, and both sides judging two `str`s of one text alike, since a
+`str` subclass with the same text is a value of the subject the walk was not
+shown.
+
 Both halves are gated. `scripts/perf_gate.py --decision` measures the relations
 that hold; `--decision-refute` measures the ones a rule refutes, which is the
 path the first workload never walks and where work therefore costs nothing any
@@ -528,6 +542,10 @@ corpus of its own driving every question below
   literal before a predicate or an attribute record
   (`the_constant_speaks_for_the_literal`). The default answers no, which keeps
   such a proof only where the supertype tells no two equal values apart;
+- `strings_admitted` — which of these texts, each a `str`, does this schema
+  admit, by the walk a validator of it runs: the question `leaf_subtype` asks
+  of a literal's constant, asked of the texts a string subject is read by
+  where its pattern's table is past the build's limit (`decided_by_its_texts`);
 - `compare` — order two pooled refinement bounds;
 - `no_int_between` — does the interval between two bounds admit no integer.
   Read both ways: `bounds_unsatisfiable` takes `Some(true)` as an empty integer
@@ -661,8 +679,8 @@ it: the structural rules, and the emptiness of the difference through the
 descriptor. Both are sound and neither subsumes the other, so `is_subtype_of`
 asks the rules and then the descriptor, and `is_empty` asks its own pair. Below
 `nothing` the two are one question, so `is_empty` reads what the relation there
-reads where the pair declines: a union a member at a time, each member's
-emptiness the rules' or the descriptor's. The law
+reads where the pair declines: a string subject's texts, and a union a member at
+a time, each member's emptiness the rules' or the descriptor's. The law
 `below_nothing_exactly_where_read_empty` holds the two to one answer in both
 directions, over drawn shaped schemas and the union of two.
 

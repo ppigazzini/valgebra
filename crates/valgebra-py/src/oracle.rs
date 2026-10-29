@@ -31,7 +31,7 @@ use valgebra_core::descr::classes::{Attributes, Class, Hook, Member, Namespace, 
 use valgebra_core::descr::lower::{Constants, Operand};
 use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, OperandIx, Schema};
 
-use crate::check::{Ctx, Unwritten, ValidatorIndex, WalkMode, WalkState, member};
+use crate::check::{Ctx, Unwritten, ValidatorIndex, WalkMode, WalkState, build_index, member};
 use crate::errors::is_fatal;
 use crate::input::Value;
 
@@ -236,15 +236,25 @@ impl PoolRelations<'_, '_> {
         // walk falls back to its general path for any record or union here. A
         // fatal signal the walk records is kept for the query, and a query
         // already interrupted runs no more of them.
+        self.is_member_under(schema, value, &ValidatorIndex::default())
+    }
+
+    /// [`Self::is_member`] under an `index` built for `schema`, for a probe
+    /// that walks several values through it.
+    fn is_member_under(
+        &self,
+        schema: &Schema,
+        value: &Bound<'_, PyAny>,
+        index: &ValidatorIndex,
+    ) -> bool {
         if self.fatal.borrow().is_some() {
             return false;
         }
         let state = WalkState::new();
-        let index = ValidatorIndex::default();
         let ctx = Ctx {
             pool: self.literals,
             defs: self.definitions,
-            index: &index,
+            index,
             state: &state,
             mode: WalkMode::Fast,
         };
@@ -1018,6 +1028,18 @@ impl LeafRelations for PoolRelations<'_, '_> {
             }
             _ => None,
         }
+    }
+
+    /// Each text as a fresh `str`, walked through one index built for
+    /// `schema`, so a pattern compiles once for the question rather than once
+    /// a text. A probe a fatal signal stopped has answered nothing.
+    fn strings_admitted(&self, schema: &Schema, texts: &[&str]) -> Option<Vec<bool>> {
+        let index = build_index(self.py, schema, self.definitions, self.literals);
+        let admitted = texts
+            .iter()
+            .map(|text| self.is_member_under(schema, PyString::new(self.py, text).as_any(), &index))
+            .collect();
+        self.fatal.borrow().is_none().then_some(admitted)
     }
 
     fn literal_kind(&self, constant: ConstIx) -> Option<Kind> {
