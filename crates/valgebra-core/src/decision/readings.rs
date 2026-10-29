@@ -16,7 +16,7 @@
 
 use crate::ir::{ClassIx, CollKind, Constraint, Schema, SeqKind};
 use crate::kind::{Kind, Region, Regions};
-use crate::verdict::Relation;
+use crate::verdict::{Relation, Verdict};
 
 use super::constraints::{Multiples, integer};
 use super::literals::literal_constants;
@@ -223,6 +223,89 @@ impl Schema {
         other.holds_an_element()
             && matches!(self, Schema::Seq { .. } | Schema::Coll { .. })
             && self.star_element().is_some()
+    }
+
+    /// What a sequence's length settles of the pair, where a sequence or a
+    /// refinement of one is the subject: `Holds` for a refinement whose length
+    /// is at most zero -- the empty sequence of its kind and nothing else --
+    /// below a supertype admitting that sequence, `Fails` for a sequence shape
+    /// that holds one longer than the supertype's maximum length
+    /// ([`longer_than`](Self::longer_than)), `Unknown` otherwise.
+    ///
+    /// Out of line behind the discriminant test its caller asks, so a pair of
+    /// any other shape pays the one test.
+    #[inline(never)]
+    pub(super) fn read_by_length(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
+        if let Schema::Refine { base, constraints } = self
+            && let Schema::Seq { container, shape } = &**base
+            && shape.prefix.is_empty()
+            && constraints
+                .iter()
+                .any(|constraint| matches!(constraint, Constraint::MaxLen(0)))
+            && other.admits_the_empty_sequence(*container)
+        {
+            return Relation::Holds;
+        }
+        if self.longer_than(other, cx) {
+            return Relation::Fails;
+        }
+        Relation::Unknown
+    }
+
+    /// Whether the subject holds a sequence longer than the supertype's length
+    /// bound lets through.
+    ///
+    /// The dual of [`shorter_than`](Self::shorter_than). A sequence shape with
+    /// a repeated element holds its prefix followed by the element as many
+    /// times as a value likes, so where the supertype bounds the length from
+    /// above, the prefix and then the element one time past the bound is a
+    /// value of the subject the bound refuses, whatever the supertype's base.
+    /// It stands on a value at every prefix position and of the element, which
+    /// the emptiness reading proves -- a list of a type no value has is the
+    /// empty list alone. Read off the bare shape, for the reason
+    /// `shorter_than` gives: a constraint this does not read may bound the
+    /// subject's own length.
+    pub(super) fn longer_than(&self, other: &Schema, cx: &mut Cx<'_>) -> bool {
+        let Schema::Refine { constraints, .. } = other else {
+            return false;
+        };
+        let Schema::Seq { shape, .. } = self else {
+            return false;
+        };
+        let (Some(element), true) = (
+            shape.tail.as_deref(),
+            constraints
+                .iter()
+                .any(|constraint| matches!(constraint, Constraint::MaxLen(_))),
+        ) else {
+            return false;
+        };
+        shape
+            .prefix
+            .iter()
+            .chain([element])
+            .all(|position| position.verdict_rec(cx) == Verdict::Inhabited)
+    }
+
+    /// Whether the empty sequence of `kind` is a value of this schema, read off
+    /// the constructors: `false` is "not seen", never "refused".
+    ///
+    /// A shape with no prefix admits it, and a refinement of one keeps it under
+    /// length bounds that admit zero; a predicate says nothing. The other
+    /// supertypes never reach this: the rules settle the universe before any
+    /// reading, and split a union and a meet into the members this reads.
+    #[inline(never)]
+    pub(super) fn admits_the_empty_sequence(&self, kind: SeqKind) -> bool {
+        match self {
+            Schema::Seq { container, shape } => *container == kind && shape.prefix.is_empty(),
+            Schema::Refine { base, constraints } => {
+                base.admits_the_empty_sequence(kind)
+                    && constraints.iter().all(|constraint| {
+                        matches!(constraint, Constraint::MinLen(0) | Constraint::MaxLen(_))
+                    })
+            }
+            _ => false,
+        }
     }
 
     /// Whether every value of `kind` belongs to this schema, read off the

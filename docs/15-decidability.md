@@ -383,6 +383,11 @@ answers `"undecided"`.
   tuple takes any length by repeating one element, so its element answers
   instead: a bound of zero is met by the empty container whatever the element
   admits, and a longer one by as many copies of an element as it asks for. A
+  relation reads the same two facts: a list bounded to length zero is the empty
+  list, below every list shape with no prefix whatever its element, and a list
+  shape whose element has a value is refuted below a maximum length by one copy
+  more than the bound lets through, so `list[int]` is `not_subset` of
+  `Annotated[list[int], MaxLen(1)]`, on `[0, 0]`. A
   set holds each member once, so a bound over one asks how many values its
   element has: `set[bool]` under `MinLen(3)` is empty, `set[int]` under it has
   a value, and an element the rules cannot count declines. A dict's bound is
