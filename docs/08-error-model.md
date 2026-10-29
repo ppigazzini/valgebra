@@ -24,7 +24,10 @@ A `ValidationError` exposes:
     `d["2"]` are different entries and the path says which. A key that is
     neither, and a string holding a lone surrogate, has no spelling here and
     appears as its `repr` — naming the key rather than being one a caller can
-    index back with.
+    index back with. That entry is text, so it can equal a string key's:
+    `{None: "x"}` and `{"None": "x"}` both fail at `("None",)`. A caller
+    walking a path back down over keys of other types tells the two apart by
+    the container, where `"None"` is no key of the first.
   - `message` — the rendered one-line human message, `at <location>: expected
     <expected>, got <value> [<code>]`. The location writes a key as itself and
     an index or an integer key in brackets, `items[2].id`, an integer longer
