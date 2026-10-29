@@ -757,6 +757,29 @@ pub(super) fn empty_without_the_maps_unread(members: &[Schema], cx: &Cx<'_>) -> 
     cx.denotes_no_value(&Schema::meet_within(kept, cx.defs))
 }
 
+/// Whether a field two records share is refuted by the set representation,
+/// asked of the field alone where the records were refused it as a pair.
+///
+/// One record is below another where it is empty or where each label's type
+/// is below the other's [Cas23, Lem. 2.3], one record on each side, and a key
+/// both records declare is read by each through its field alone. So a value
+/// outside the supertype's field, carried under that key by a value of the
+/// subject, is a value of the subject outside the supertype, which stands on
+/// the subject holding a value -- the caller's to read. Thirteen guarded fields
+/// are past the node bound as a pair, and each field is a pair of a few nodes.
+pub(super) fn a_shared_field_refuted_by_the_sets(fa: &[Field], fb: &[Field], cx: &Cx<'_>) -> bool {
+    let order = Cell::new(None);
+    let mut a_by_name = FieldCursor::over(fa, fb, &order);
+    fb.iter().any(|b_field| {
+        a_by_name.named(&b_field.name).is_some_and(|a_field| {
+            a_field
+                .schema
+                .descriptor_contained_in(&b_field.schema, cx.oracle, cx.defs)
+                == Relation::Fails
+        })
+    })
+}
+
 /// `meet ⊆ other` for a meet holding two keyed maps or more and `other` a
 /// keyed map or a union holding one: the maps met into one record R◦
 /// [Cas23, (12)], split across the maps of `other` as one record is
