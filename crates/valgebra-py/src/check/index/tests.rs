@@ -156,4 +156,73 @@ mod interpreter {
             );
         });
     }
+
+    /// A union of records one required key pins to constants no two share is
+    /// tagged by it: an exact tag names its record or none, and any other tag
+    /// is the scan's. Records sharing a constant, a key pinned to no constant,
+    /// and fewer records than reading the tag first pays for are no tagged
+    /// union.
+    #[test]
+    fn a_tagged_plan_names_the_record_its_tag_pins() {
+        use valgebra_core::Field;
+
+        Python::attach(|py| {
+            let pool: Vec<Py<PyAny>> = vec![
+                PyString::new(py, "a").into_any().unbind(),
+                1i64.into_pyobject(py).unwrap().into_any().unbind(),
+                PyString::new(py, "b").into_any().unbind(),
+                PyString::new(py, "c").into_any().unbind(),
+            ];
+            let record = |tag: Schema| Schema::KeyedMap {
+                fields: vec![
+                    Field {
+                        name: "v".into(),
+                        schema: Schema::Int,
+                        required: false,
+                    },
+                    Field {
+                        name: "kind".into(),
+                        schema: tag,
+                        required: true,
+                    },
+                ]
+                .into(),
+                defaults: Vec::new().into(),
+            };
+            let literal = |slot: usize| Schema::Literal(ConstIx::new(slot));
+            let both = Schema::Union(vec![literal(1), literal(2)].into());
+            let three = [record(literal(0)), record(both), record(literal(3))];
+            assert_eq!(three.len(), TAGGED_MIN_RECORDS);
+            let plan = tagged_union_plan(py, &three, &pool).expect("one key pins every record");
+            assert!(tagged_union_plan(py, &three[1..], &pool).is_none());
+            assert_eq!(plan.key.bind(py).to_str().unwrap(), "kind");
+            let tag = |value: Bound<'_, PyAny>| plan.branch(&value);
+            assert_eq!(
+                tag(PyString::new(py, "a").into_any()),
+                Some(Tagged::Branch(0))
+            );
+            assert_eq!(
+                tag(PyString::new(py, "b").into_any()),
+                Some(Tagged::Branch(1))
+            );
+            assert_eq!(
+                tag(1i64.into_pyobject(py).unwrap().into_any()),
+                Some(Tagged::Branch(1))
+            );
+            assert_eq!(
+                tag(PyString::new(py, "z").into_any()),
+                Some(Tagged::Nothing)
+            );
+            assert_eq!(tag(PyBool::new(py, true).to_owned().into_any()), None);
+            assert_eq!(
+                tag((1i128 << 70).into_pyobject(py).unwrap().into_any()),
+                None
+            );
+
+            let shared = [record(literal(0)), record(literal(0)), record(literal(3))];
+            assert!(tagged_union_plan(py, &shared, &pool).is_none());
+            let unpinned = [record(literal(0)), record(Schema::Str), record(literal(3))];
+            assert!(tagged_union_plan(py, &unpinned, &pool).is_none());
+        });
+    }
 }

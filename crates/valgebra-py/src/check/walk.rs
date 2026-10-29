@@ -44,6 +44,7 @@ use valgebra_core::{
 };
 
 use crate::check::ctx::{Ctx, Entered, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, WalkMode};
+use crate::check::index::{Tagged, TaggedPlan};
 use crate::check::memo::{Answer, Room};
 use crate::check::violation::{class_label_in, summarize_in, summarize_value, type_mismatch};
 use crate::codes::{
@@ -859,6 +860,17 @@ fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, 
     {
         return decided;
     }
+    // A union of records one key tags is read at that key, and the one record
+    // it names is walked ([`TaggedPlan`]): one lookup where the scan makes one
+    // a record. Two tests here, and the reading out of line, since this scan
+    // is inlined into every walk and what it carries costs the walks that
+    // never meet a tagged union.
+    if matches!(members.first(), Some(Schema::KeyedMap { .. }))
+        && !ctx.index.tagged.is_empty()
+        && let Some(admitted) = tagged_member(members, value, frame)
+    {
+        return admitted;
+    }
     // A value is a member iff it matches at least one branch. A scalar branch is
     // its type test, asked without the walk around it, and any other is walked
     // in this frame: the walk here is a fast one, which writes neither of the
@@ -883,6 +895,51 @@ fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, 
             None if ctx.state.memo.entered() == entered => member(m, value, frame),
             None => member_again(members.as_ptr() as usize, m, value, frame),
         })
+}
+
+/// [`check_union`] read by the union's [`TaggedPlan`], or `None` where it has
+/// none, or it cannot say for this value, or the walk is at its bound: the
+/// scan reads the union then, as it reports the bound.
+#[inline(never)]
+fn tagged_member(
+    members: &[Schema],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    if !ctx.room_to_descend() {
+        return None;
+    }
+    let plan = ctx.index.tagged.get(&(members.as_ptr() as usize))?;
+    Some(match tagged_branch(plan, value, ctx)? {
+        Tagged::Branch(position) => members
+            .get(position)
+            .is_some_and(|record| member(record, value, frame)),
+        Tagged::Nothing => false,
+    })
+}
+
+/// The member of a tagged union `value` may belong to, read off its tag, or
+/// `None` where the plan cannot say and the scan reads the union.
+///
+/// An exact dict alone: its lookup reads the storage, as the record walk does.
+/// A lookup that raises is the scan's, which reads it as the record walk does,
+/// unless what stopped it is a fatal signal, which is recorded and refuses,
+/// since the scan would not see it raised again.
+fn tagged_branch(plan: &TaggedPlan, value: &Value<'_, '_>, ctx: Ctx<'_>) -> Option<Tagged> {
+    let Value::Py(value) = value else {
+        return None;
+    };
+    let dict = value.cast_exact::<PyDict>().ok()?;
+    match dict.get_item(plan.key.bind(value.py())) {
+        Ok(Some(tag)) => plan.branch(&tag),
+        Ok(None) => Some(Tagged::Nothing),
+        Err(err) if is_fatal(&err, value.py()) => {
+            record_fatal(err, ctx);
+            Some(Tagged::Nothing)
+        }
+        Err(_) => None,
+    }
 }
 
 /// [`check_union`] in a walk that explains, or that settles a complement's

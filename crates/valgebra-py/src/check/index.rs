@@ -156,6 +156,56 @@ impl UnionPlan {
 /// address mapped to its [`UnionPlan`]. Keyed and rebuilt like [`RecordIndex`].
 pub(crate) type UnionIndex = FxHashMap<usize, UnionPlan>;
 
+/// A union of records that each require one key, pinned to `int` or `str`
+/// constants no two records share: the one record a dict can be a member of is
+/// the one its value at that key names, so the deciding walk reads the key once
+/// and walks that record, where the scan reads it once a record. The design
+/// reference is `pydantic-core`'s tagged union, a lookup and then one branch.
+///
+/// Every record's constants are in the tables, so a tag of an exact `int` or
+/// `str` that no table holds is no record's. Any other tag is the scan's.
+pub(crate) struct TaggedPlan {
+    /// The key every record requires, interned.
+    pub(crate) key: Py<PyString>,
+    ints: FxHashMap<i64, usize>,
+    strs: FxHashMap<Box<str>, usize>,
+}
+
+/// What a tag says of a tagged union's members.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Tagged {
+    /// The member at this position, the one record whose constants hold it.
+    Branch(usize),
+    /// No record's constants hold it, so no member admits the dict.
+    Nothing,
+}
+
+impl Tagged {
+    fn of(position: Option<&usize>) -> Tagged {
+        position.map_or(Tagged::Nothing, |position| Tagged::Branch(*position))
+    }
+}
+
+impl TaggedPlan {
+    /// What `tag` says of the union's members, or `None` where it is no exact
+    /// `int` or `str`, which the scan reads.
+    pub(crate) fn branch(&self, tag: &Bound<'_, PyAny>) -> Option<Tagged> {
+        if tag.is_exact_instance_of::<PyInt>() {
+            // A big integer equals no constant the table holds, and a record
+            // pinning one has no plan, so it is the scan's.
+            return Some(Tagged::of(self.ints.get(&tag.extract::<i64>().ok()?)));
+        }
+        if tag.is_exact_instance_of::<PyString>() {
+            let text = tag.cast::<PyString>().ok()?.to_str().ok()?;
+            return Some(Tagged::of(self.strs.get(text)));
+        }
+        None
+    }
+}
+
+/// Each tagged union's members-buffer address mapped to its [`TaggedPlan`].
+pub(crate) type TaggedIndex = FxHashMap<usize, TaggedPlan>;
+
 /// A compiled pattern: the engine `regex` builds a `Regex` on, built as it
 /// builds one ([`compile_pattern`]), so it matches the same language and can
 /// say what memory it keeps.
@@ -299,6 +349,10 @@ pub(crate) struct ValidatorIndex {
     /// other case (a non-literal union, a value of another type, a JSON value)
     /// falls back to the linear scan.
     pub(crate) unions: UnionIndex,
+    /// Per-union dispatch for unions of records pinned by one key to constants
+    /// no two share ([`TaggedPlan`]), keyed as `unions` is. The deciding walk
+    /// reads it and the explaining walk scans, so a report is the scan's.
+    pub(crate) tagged: TaggedIndex,
     /// Compiled string patterns, keyed by the address of the pattern's own
     /// text in the schema; the refinement walk reads it for a `Regex(...)`
     /// constraint instead of recompiling.
@@ -323,6 +377,7 @@ impl ValidatorIndex {
             .values()
             .flat_map(|plan| plan.names.iter())
             .chain(self.records.values().flat_map(|plan| plan.keys.iter()))
+            .chain(self.tagged.values().map(|plan| &plan.key))
     }
 }
 
@@ -396,6 +451,11 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
             if let Some(plan) = literal_union_plan(py, members, pool) {
                 index
                     .unions
+                    .entry(members.as_ptr() as usize)
+                    .or_insert(plan);
+            } else if let Some(plan) = tagged_union_plan(py, members, pool) {
+                index
+                    .tagged
                     .entry(members.as_ptr() as usize)
                     .or_insert(plan);
             }
@@ -487,6 +547,79 @@ fn literal_union_plan(py: Python<'_>, members: &[Schema], pool: &[Py<PyAny>]) ->
         }
     }
     Some(UnionPlan { ints, strs, pooled })
+}
+
+/// The fewest records a tagged union holds before its plan is built.
+///
+/// Below it, reading the tag and then the record it names costs more than
+/// reading the records in turn, each of which reads the tag first and refuses
+/// on it: the record the plan names reads the tag again. Measured on the
+/// release build, averaged over the tags a value can carry, two records read in
+/// turn take 0.115 us and dispatched 0.128 us, three 0.128 and 0.125, four
+/// 0.144 and 0.125, and a thousand 48 and 0.14.
+pub(crate) const TAGGED_MIN_RECORDS: usize = 3;
+
+/// Build a [`TaggedPlan`] where at least [`TAGGED_MIN_RECORDS`] members are
+/// records requiring a key the first record requires, each pinning it to exact
+/// `int` or `str` constants and no two sharing one: the first such key of the
+/// first record. `None` where no key is, and the union stays a scan.
+fn tagged_union_plan(py: Python<'_>, members: &[Schema], pool: &[Py<PyAny>]) -> Option<TaggedPlan> {
+    let Some(Schema::KeyedMap { fields: first, .. }) = members.first() else {
+        return None;
+    };
+    if members.len() < TAGGED_MIN_RECORDS {
+        return None;
+    }
+    first
+        .iter()
+        .filter(|candidate| candidate.required)
+        .find_map(|candidate| {
+            let mut ints = FxHashMap::default();
+            let mut strs = FxHashMap::default();
+            for (position, member) in members.iter().enumerate() {
+                let Schema::KeyedMap { fields, .. } = member else {
+                    return None;
+                };
+                let field = fields
+                    .iter()
+                    .find(|field| field.required && field.name == candidate.name)?;
+                for constant in pinned_constants(&field.schema)? {
+                    let constant = pool.get(constant)?.bind(py);
+                    let other = if constant.is_exact_instance_of::<PyInt>() {
+                        ints.insert(constant.extract::<i64>().ok()?, position)
+                    } else if constant.is_exact_instance_of::<PyString>() {
+                        let text = constant.cast::<PyString>().ok()?.to_str().ok()?;
+                        strs.insert(text.into(), position)
+                    } else {
+                        return None;
+                    };
+                    if other.is_some_and(|other| other != position) {
+                        return None;
+                    }
+                }
+            }
+            Some(TaggedPlan {
+                key: PyString::intern(py, &candidate.name).unbind(),
+                ints,
+                strs,
+            })
+        })
+}
+
+/// The pool positions of the constants a field is pinned to: one literal, or
+/// a union of nothing but literals.
+fn pinned_constants(schema: &Schema) -> Option<Vec<usize>> {
+    match schema {
+        Schema::Literal(index) => Some(vec![index.get()]),
+        Schema::Union(members) => members
+            .iter()
+            .map(|member| match member {
+                Schema::Literal(index) => Some(index.get()),
+                _ => None,
+            })
+            .collect(),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
