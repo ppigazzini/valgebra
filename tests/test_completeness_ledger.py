@@ -1697,6 +1697,20 @@ _TRANSLATED: list[object] = [
         Annotated[str, Regex("ab")],
         id="json:\\bab\\b==ab",
     ),
+    # A repetition of a repetition between the ends keeps the empty word, which
+    # `\B` admits where the text ends and the word character `a` refuses.
+    pytest.param(
+        "refutes",
+        Annotated[str, Regex(r"(?:a+)?\B")],
+        nothing,
+        id="json:(?:a+)?\\B-is-inhabited",
+    ),
+    pytest.param(
+        "equivalent",
+        Annotated[str, Regex(r"(?:a+)?\B")],
+        Annotated[str, Regex("")],
+        id="json:(?:a+)?\\B==empty-pattern",
+    ),
     # One question through a complement's meet, where its plain spelling decides.
     pytest.param(
         "refutes",

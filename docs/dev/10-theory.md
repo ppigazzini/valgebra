@@ -211,9 +211,12 @@ leftmost-first, which keeps only the match a search prefers: `a|ab` would lose
 Unicode word boundary, and a pattern matched whole needs none at its ends: a
 `\b` or `\B` leading or closing it asks about the first or last character
 alone, so its set is the set between the ends met with one regular language per
-end (`word_ends`). A law in `crates/valgebra-core/src/descr/regular/tests.rs`
-holds each pattern's table to the `regex` matcher the walk runs, boundaries at
-the ends included.
+end (`word_ends`). The set between is built from the parsed tree and never from
+text printed off it, which `regex-syntax` writes as another pattern where a
+repetition repeats a repetition: `(?:b+)?` prints as the lazy `b+?`. A law in
+`crates/valgebra-core/src/descr/regular/tests.rs` holds each pattern's table to
+the `regex` matcher the walk runs, boundaries at the ends and nested
+repetitions included.
 
 **The rule that splits a fixed-length sequence across a union** is the product
 decomposition — [FCB08, Lem. 6.5] for pairs, in the backtrack-free form Castagna

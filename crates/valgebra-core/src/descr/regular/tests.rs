@@ -142,6 +142,10 @@ fn bounded_words() -> Vec<String> {
 /// Patterns over `{a, -, é}` whose two ends may each assert a word boundary or
 /// its negation, Unicode or ASCII: the first read as the character it asks
 /// about, the second by the builder.
+///
+/// Every repetition the syntax has, greedy and lazy, nested in one another:
+/// the part between the ends is built from its tree, and a repetition of a
+/// repetition is the tree a printer writes back as another pattern.
 fn bounded_pattern() -> impl Strategy<Value = String> {
     let leaf = prop_oneof![
         Just(String::new()),
@@ -154,7 +158,11 @@ fn bounded_pattern() -> impl Strategy<Value = String> {
         prop_oneof![
             (inner.clone(), inner.clone()).prop_map(|(x, y)| format!("{x}{y}")),
             (inner.clone(), inner.clone()).prop_map(|(x, y)| format!("(?:{x}|{y})")),
-            inner.prop_map(|x| format!("(?:{x})*")),
+            (
+                inner,
+                prop::sample::select(vec!["*", "+", "?", "{1,2}", "*?", "+?", "??"])
+            )
+                .prop_map(|(x, repeat)| format!("(?:{x}){repeat}")),
         ]
     });
     let end = || prop::sample::select(vec!["", r"\b", r"\B", r"(?-u:\b)", r"(?-u:\B)"]);
@@ -176,6 +184,14 @@ fn a_word_boundary_at_an_end_is_the_character_it_asks_about() {
     assert_eq!(language(r"\B"), one_word(b""));
     assert_eq!(language(r"\b(?:a|-)"), language("a"));
     assert_eq!(language(r"(?:a|-)\B"), language("-"));
+    // A repetition of a repetition between the ends keeps the words it holds:
+    // the optional `(?:a+)?` holds the empty word, which `\B` admits at an end
+    // and the word character `a` does not.
+    assert_eq!(language(r"(?:a+)?\B"), one_word(b""));
+    assert_eq!(language(r"\B(?:a+)?"), one_word(b""));
+    assert_eq!(language(r"(?:a{1,2})?\B"), one_word(b""));
+    assert_eq!(language(r"(?:-+)?\B"), language("-*"));
+    assert!(language(r"(?:a+)+\B").is_empty());
     assert!(RegularSet::pattern(r"a\bb", Alphabet::Text).is_none());
     assert!(RegularSet::pattern(r"\bab\b", Alphabet::Bytes).is_none());
 }
