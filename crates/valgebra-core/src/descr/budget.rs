@@ -111,6 +111,16 @@ pub(crate) fn law() -> Allowance {
 /// found, so an inner one cannot spend an outer one's. That is deliberate --
 /// the two are separate questions, and an inner build that refuses is an answer
 /// the outer one goes on without.
+///
+/// **One allowance shared by every reading of a query is not the bound it
+/// looks like.** A query asks a set reading of each goal its rules decline,
+/// so a pool armed once per query, every reading spending from it, would bound
+/// what a query that declines spends. Measured over the record families, the
+/// queries they answer spend up to six hundred thousand units on their
+/// readings, so a pool small enough to cut the queries that decline cuts
+/// answers with them: sixteen readings' worth lost a `subset` on three of four
+/// seeds. What a unit costs is the bound worth holding, and `polar::product`
+/// holds it.
 pub fn under<T>(units: u64, build: impl FnOnce() -> T) -> T {
     let _allowance = armed(units);
     build()

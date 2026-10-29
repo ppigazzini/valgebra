@@ -103,12 +103,21 @@ impl<G: Guard> Values<G> {
 /// One type for a record's attributes and a map's labels both: the two ask the
 /// same question of a name -- what it holds, and whether it has to be there --
 /// and `T⊥` [Cas23, §4.1] is that question with a name.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialOrd, Ord)]
 pub(crate) struct Field<G> {
     /// The type the value must be in.
     pub(crate) ty: Values<G>,
     /// Whether the key or attribute may be missing altogether.
     pub(crate) absent: bool,
+}
+
+/// Equal where both halves are, the flag read first: a union of atoms keeps an
+/// atom once by scanning for an equal one, and two fields that differ in the
+/// flag are told apart without reading their types, which are descriptors.
+impl<G: PartialEq> PartialEq for Field<G> {
+    fn eq(&self, other: &Field<G>) -> bool {
+        self.absent == other.absent && self.ty == other.ty
+    }
 }
 
 impl<G: Guard> Field<G> {

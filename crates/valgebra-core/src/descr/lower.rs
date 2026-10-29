@@ -169,11 +169,11 @@ pub(crate) fn lower_unfolded(
     lower(&schema.unfolded(definitions, UNFOLDS, polarity), pool)
 }
 
-/// [`lower_unfolded`] on the widened side, where a schema the lowering refuses
-/// is read without the conjuncts at its top no lowering can read: a predicate
-/// among a refinement's constraints, at the top or as a member, and a meet's
-/// member holding a predicate below its top or nested deeper than the meet
-/// leaves room for.
+/// [`lower_unfolded`] on the widened side, decided by the caller one reading
+/// at a time: the schema built whole, and the schema without the conjuncts at
+/// its top a lowering cannot read -- a predicate among a refinement's
+/// constraints, at the top or as a member, and a meet's member holding a
+/// predicate below its top or nested deeper than the meet leaves room for.
 ///
 /// A meet is below each of its members, and a refinement below the one its
 /// constraints are a subset of, so the thinned schema denotes a superset,
@@ -183,21 +183,29 @@ pub(crate) fn lower_unfolded(
 /// unfolding has nested past [`DEPTH`]. Nothing below a union, a complement or
 /// a container is thinned, since a member there is no conjunct of the whole.
 ///
-/// A schema nesting past [`DEPTH`] is read thinned and never built whole --
-/// [`nests_past_the_depth`] reads that off the schema -- whatever else in it
-/// the build would have refused first. Any other schema is lowered whole
-/// first, so one the lowering takes pays a walk and nothing more, and one
-/// refused for a predicate is read thinned. A refusal of any other kind -- a
-/// class the pool cannot read, a key in part of a kind, a bound on what a
-/// build spends -- refuses the reading as it refuses the schema, unless it
-/// sits in a conjunct the reading leaves out.
+/// `decide` is asked of each reading in turn, with the conjuncts it kept --
+/// `None` for the schema read whole -- and the first answer it gives is the
+/// answer. A reading it answers nothing of is no answer, so the next reading
+/// is asked, and since each reading is sound on its own the order is a matter
+/// of cost alone. **Each is decided under an allowance of its own**, [`WORK`]
+/// as the build was: reading a descriptor is a build ([`budget`]), and a
+/// negated union's emptiness expands it by a product -- a complemented meet of
+/// three records, read unbudgeted, multiplies out for minutes where the
+/// allowance refuses at once.
 ///
-/// `kept` is left `None` where the schema lowered whole, and is otherwise the
-/// conjuncts the reading kept, a refinement thinned among them: the schemas a
-/// caller holds a literal key's label against, since a member left out
-/// narrowed nothing and keeps no key exact. An out-parameter, so the schemas
-/// that lower whole return the set as [`lower_unfolded`] does. **A thinned
-/// reading widens like a cut**, so an inhabited answer refutes nothing.
+/// A schema nesting a container past [`DEPTH`] is read thinned and never
+/// built whole -- [`reach`] reads that off the schema -- whatever else in it
+/// the build would have refused first. One holding a scalar past the depth is
+/// read thinned first: the readings that leave the scalar's member out build
+/// less, a meet beside a pattern's automata being the product they skip, and
+/// where they answer nothing -- a scalar tower whose deep member is what decides
+/// it -- the schema is built whole. Any other schema is built whole first, so
+/// one the lowering takes pays a walk and nothing more, and one refused for a
+/// predicate is read thinned. A refusal of any other kind -- a class the pool
+/// cannot read, a key in part of a kind, a bound on what a build spends --
+/// refuses the reading as it refuses the schema, unless it sits in a conjunct
+/// the reading leaves out. **A thinned reading widens like a cut**, so an
+/// inhabited answer refutes nothing.
 ///
 /// **A reading that can only be inhabited is not built for a caller that
 /// cannot read one.** A thinned reading of conjuncts whose meet the rules find a
@@ -205,15 +213,18 @@ pub(crate) fn lower_unfolded(
 /// question, a relation's subject below a supertype that lowers, so `answers`
 /// is the caller's word, given the conjuncts kept, on whether their reading
 /// can answer it -- the rules being the caller's to ask -- and the reading is
-/// refused where it says no.
+/// refused where it says no. The whole build a scalar past the depth defers is
+/// asked the same of the whole schema: an emptiness the rules already find
+/// inhabited is asked of every meet the rules reach, and would build the same
+/// schema each time to read a value the rules have.
 #[inline]
-pub(crate) fn lower_widened(
+pub(crate) fn read_widened<T>(
     schema: &Schema,
     definitions: &[Schema],
     pool: &dyn Constants,
-    kept: &mut Option<Vec<Schema>>,
-    answers: impl FnOnce(&[Schema]) -> bool,
-) -> Option<Descr> {
+    answers: impl FnMut(&[Schema]) -> bool,
+    mut decide: impl FnMut(&Descr, Option<&[Schema]>) -> Option<T>,
+) -> Option<T> {
     let unfolded;
     let schema = if definitions.is_empty() || !schema.has_reference() {
         schema
@@ -221,62 +232,120 @@ pub(crate) fn lower_widened(
         unfolded = schema.unfolded(definitions, UNFOLDS, Polarity::Widen);
         &unfolded
     };
-    if nests_past_the_depth(schema, Bounds::DEFAULT) {
-        return thinned_lowering(schema, pool, kept, answers);
+    let past = reach(schema, DEPTH, &Cell::new(BUDGET));
+    let mut answers = answers;
+    match past {
+        Reach::Container => return thinned_readings(schema, pool, answers, decide),
+        Reach::Scalar => {
+            if let Some(answer) = thinned_readings(schema, pool, &mut answers, &mut decide) {
+                return Some(answer);
+            }
+            if !answers(core::slice::from_ref(schema)) {
+                return None;
+            }
+        }
+        Reach::Within => {}
     }
-    // Returned as built: a set held in a local and then returned is copied,
-    // and the copy is most of what this would cost a schema that lowers.
+    // Decided where it is built: a set returned out of here to be decided
+    // would be copied, and the copy is most of what this costs a schema that
+    // lowers.
     let room = Room::new(BUDGET);
-    budget::under(WORK, || descend(schema, pool, &room, DEPTH)).or_else(|| {
-        room.unread
-            .get()
-            .then(|| thinned_lowering(schema, pool, kept, answers))
-            .flatten()
+    if let Some(set) = budget::under(WORK, || descend(schema, pool, &room, DEPTH)) {
+        return budget::under(WORK, || decide(&set, None));
+    }
+    if past == Reach::Scalar || !room.unread.get() {
+        return None;
+    }
+    thinned_readings(schema, pool, answers, decide)
+}
+
+/// The first reading [`read_widened`] builds, and the conjuncts it kept: what
+/// a test reads of one reading.
+#[cfg(test)]
+pub(crate) fn lower_widened(
+    schema: &Schema,
+    definitions: &[Schema],
+    pool: &dyn Constants,
+    kept: &mut Option<Vec<Schema>>,
+    answers: impl FnMut(&[Schema]) -> bool,
+) -> Option<Descr> {
+    read_widened(schema, definitions, pool, answers, |set, read| {
+        *kept = read.map(<[Schema]>::to_vec);
+        Some(set.clone())
     })
 }
 
-/// The refused half of [`lower_widened`], out of line so the schemas that lower
+/// The thinned half of [`read_widened`], out of line so the schemas that lower
 /// whole carry none of it.
 ///
-/// One look at each member first, allocating nothing: most refusals hold no
-/// predicate and nest within the room, and those leave here as they came.
+/// Twice at most, keeping less the second time: the members a lowering reads
+/// whole -- no predicate, no container past the depth -- and then the members
+/// nested within the depth counting every node, a scalar included, which is
+/// the reading a schema holding a scalar past the depth is decided by where
+/// the build that holds it is not. The second is skipped where it keeps what
+/// the first kept. One look at each member first, allocating nothing: most
+/// refusals leave here as they came.
 #[inline(never)]
-fn thinned_lowering(
+fn thinned_readings<T>(
     schema: &Schema,
     pool: &dyn Constants,
-    kept: &mut Option<Vec<Schema>>,
-    answers: impl FnOnce(&[Schema]) -> bool,
-) -> Option<Descr> {
-    let read: Vec<Schema> = match schema {
+    mut answers: impl FnMut(&[Schema]) -> bool,
+    mut decide: impl FnMut(&Descr, Option<&[Schema]>) -> Option<T>,
+) -> Option<T> {
+    let mut kept_before = None;
+    for every_node in [false, true] {
+        // The second thinning keeps a part of what the first kept, so as many
+        // members are the same members.
+        let Some(read) =
+            thinned_members(schema, every_node).filter(|read| Some(read.len()) != kept_before)
+        else {
+            continue;
+        };
+        kept_before = Some(read.len());
+        // Fewer members hold more values, so a reading the caller refuses for
+        // the first thinning is refused for the second.
+        if !answers(&read) {
+            return None;
+        }
+        let Some(set) = lower(&Schema::Intersection(read.clone().into()), pool) else {
+            continue;
+        };
+        if let Some(answer) = budget::under(WORK, || decide(&set, Some(&read))) {
+            return Some(answer);
+        }
+    }
+    None
+}
+
+/// The members of `schema` a thinned reading keeps, or `None` where it would
+/// keep them all: each one [`readable`] as it is or with its predicates left
+/// out. A meet keeping none reads as the universe, which a relation against a
+/// supertype the reading proves universal still decides.
+fn thinned_members(schema: &Schema, every_node: bool) -> Option<Vec<Schema>> {
+    let read = |member: &Schema, room: u32| readable(member, room, every_node);
+    match schema {
         Schema::Intersection(members) => {
             let room = DEPTH.checked_sub(1)?;
-            if members.iter().all(|member| readable(member, room)) {
+            if members.iter().all(|member| read(member, room)) {
                 return None;
             }
-            members
-                .iter()
-                .filter_map(|member| {
-                    if readable(member, room) {
-                        return Some(member.clone());
-                    }
-                    without_predicates(member).filter(|thinned| readable(thinned, room))
-                })
-                .collect()
+            Some(
+                members
+                    .iter()
+                    .filter_map(|member| {
+                        if read(member, room) {
+                            return Some(member.clone());
+                        }
+                        without_predicates(member).filter(|thinned| read(thinned, room))
+                    })
+                    .collect(),
+            )
         }
         schema => {
             let thinned = without_predicates(schema)?;
-            if !readable(&thinned, DEPTH) {
-                return None;
-            }
-            vec![thinned]
+            read(&thinned, DEPTH).then(|| vec![thinned])
         }
-    };
-    if !answers(&read) {
-        return None;
     }
-    let set = lower(&Schema::Intersection(read.clone().into()), pool)?;
-    *kept = Some(read);
-    Some(set)
 }
 
 /// A refinement with its predicates left out, or `None` where `schema` is no
@@ -302,12 +371,15 @@ fn without_predicates(schema: &Schema) -> Option<Schema> {
     })
 }
 
-/// Whether `schema` is one a lowering can read at all: nested within the
-/// `room` it descends -- a level for the node and the rest for what it holds --
-/// and holding no predicate.
-fn readable(schema: &Schema, room: u32) -> bool {
-    let Some(room) = room.checked_sub(1) else {
-        return false;
+/// Whether `schema` is one a lowering can read at all: its containers nested
+/// within the `room` it descends -- a level for each node and the rest for what
+/// it holds -- or, where `every_node`, every node of it, and holding no
+/// predicate.
+fn readable(schema: &Schema, room: u32, every_node: bool) -> bool {
+    let room = match room.checked_sub(1) {
+        Some(room) => room,
+        None if every_node || starts_a_build(schema) => return false,
+        None => 0,
     };
     if let Schema::Refine { constraints, .. } = schema
         && constraints
@@ -316,11 +388,11 @@ fn readable(schema: &Schema, room: u32) -> bool {
     {
         return false;
     }
-    every_child_read(schema, |child| readable(child, room))
+    every_child_read(schema, |child| readable(child, room, every_node))
 }
 
-/// Whether a build of `schema` under `bounds` reaches a node past their depth
-/// before it has read their nodes: a refusal read off the schema before
+/// Whether a build of `schema` under `bounds` reaches a container past their
+/// depth before it has read their nodes: a refusal read off the schema before
 /// anything is built.
 ///
 /// The walk is the build's without the building. It spends a node and a level
@@ -332,23 +404,43 @@ fn readable(schema: &Schema, room: u32) -> bool {
 /// sequence, a powerset at a set, a product at a meet -- and a walk of the
 /// same nodes allocates nothing.
 fn nests_past_the_depth(schema: &Schema, bounds: Bounds) -> bool {
-    reaches_past(schema, bounds.depth, &Cell::new(bounds.nodes)) == Some(true)
+    reach(schema, bounds.depth, &Cell::new(bounds.nodes)) == Reach::Container
 }
 
-/// [`nests_past_the_depth`] one node down: `Some(true)` where a node past
-/// `depth` is reached, `Some(false)` where none is, and `None` where the node
-/// bound runs out first, which refuses the build for its nodes instead.
-fn reaches_past(schema: &Schema, depth: u32, nodes: &Cell<u32>) -> Option<bool> {
-    nodes.set(nodes.get().checked_sub(1)?);
-    let Some(depth) = depth.checked_sub(1) else {
-        return Some(true);
+/// The farthest a build reads past the depth: nowhere, a scalar, or a
+/// container, which refuses it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Reach {
+    Within,
+    Scalar,
+    Container,
+}
+
+/// [`nests_past_the_depth`] one node down, and what it found on the way: the
+/// farthest past `depth` the nodes it read reach.
+///
+/// One walk answers both questions [`read_widened`] asks: whether the schema
+/// is refused for depth, and whether a reading that leaves a scalar past the
+/// depth out could decide what the whole one does not. It stops at a
+/// container past the depth, and where the node bound runs out it reports
+/// what it read before: a node past the bound is read as within the depth
+/// and nothing below it is walked, so a member past the node bound is refused
+/// for its nodes, as the build refuses it.
+fn reach(schema: &Schema, depth: u32, nodes: &Cell<u32>) -> Reach {
+    let Some(left) = nodes.get().checked_sub(1) else {
+        return Reach::Within;
     };
-    let mut past = Some(false);
+    nodes.set(left);
+    let (depth, mut far) = match depth.checked_sub(1) {
+        Some(depth) => (depth, Reach::Within),
+        None if starts_a_build(schema) => return Reach::Container,
+        None => (0, Reach::Scalar),
+    };
     every_child_read(schema, |child| {
-        past = reaches_past(child, depth, nodes);
-        past == Some(false)
+        far = far.max(reach(child, depth, nodes));
+        far != Reach::Container
     });
-    past
+    far
 }
 
 /// Whether `read` holds of every schema [`descend`] reads below `schema`,
@@ -385,6 +477,21 @@ fn every_child_read(schema: &Schema, mut read: impl FnMut(&Schema) -> bool) -> b
         | Schema::Ref(_)
         | Schema::SelfRef(_) => true,
     }
+}
+
+/// Whether lowering `schema` starts a build of its own, the cost [`DEPTH`]
+/// bounds: a container, whose set is an automaton, a powerset or a record
+/// lattice built over its parts. A meet, a union, a complement and a
+/// refinement are operations on the sets below them, whose products
+/// [`WORK`] charges, and a scalar is an interval or a word set.
+fn starts_a_build(schema: &Schema) -> bool {
+    matches!(
+        schema,
+        Schema::Seq { .. }
+            | Schema::Coll { .. }
+            | Schema::KeyedMap { .. }
+            | Schema::AttrRecord { .. }
+    )
 }
 
 /// What a lowering may spend, in the three quantities it can run out of.
@@ -469,7 +576,7 @@ impl Bounds {
 /// finite and exponential, which a memo over equal subtrees would not shrink.
 pub const WORK: u64 = 4096;
 
-/// The schema nesting this will descend before refusing.
+/// The schema nesting this will descend before refusing a container.
 ///
 /// [`WORK`] bounds what a build spends once it has started, and it cannot bound
 /// what starting costs: a lowering builds an automaton at every sequence node
@@ -481,12 +588,21 @@ pub const WORK: u64 = 4096;
 /// schema, so a refusal for depth costs a walk of the nodes ahead of the deep
 /// one rather than the sets built from them.
 ///
+/// **A container is what it refuses.** Every node above one counts, a meet, a
+/// union, a complement or a refinement as much as another container, so a
+/// container more than this deep is refused as it always was; a node past the
+/// depth that starts no build ([`starts_a_build`]) is read, since an interval,
+/// a word set or an operation on them is what [`WORK`] charges. A scalar
+/// tower -- `int & ~(int & ~(Literal[0, 1]))`, six deep at its constants --
+/// lowers, and where the reading holding the deep scalar decides nothing, the
+/// one leaving it out is asked ([`read_widened`]).
+///
 /// Nesting is the exponential, and `benches/core.rs` measures it:
 /// `lower_nested_records_depth{0,2,4,6}`, run under [`Bounds::UNHELD`]. Breadth
 /// is not the exponential and is bounded by [`BUDGET`] instead.
 ///
 /// Set from both sides. Every relation the descriptor decides and the rules do
-/// not nests five deep or less -- `lower_container_meet`,
+/// not nests its containers five deep or less -- `lower_container_meet`,
 /// `lower_tuple_meet`, `lower_regular_language` and `lower_step_divides` are
 /// those four. The shapes that blow up nest ten and deeper.
 /// `lower_sibling_union_difference_{unheld,held}` is the pair that shows what
@@ -518,10 +634,10 @@ pub fn lower_within(bounds: Bounds, schema: &Schema, pool: &dyn Constants) -> Op
 /// What one lowering has left of the nodes it may read, and whether it refused
 /// at a predicate, the constraint no lowering reads.
 ///
-/// The second is what [`lower_widened`] asks before it thins a refused schema,
+/// The second is what [`read_widened`] asks before it thins a refused schema,
 /// so a refusal of any other kind costs it nothing. The depth bound, the other
 /// refusal a thinned reading answers, is read off the schema before the build
-/// ([`nests_past_the_depth`]), so a build that starts never reaches it. The
+/// ([`reach`]), so a build that starts never reaches it. The
 /// flag is set on that one refusal alone, which leaves the paths that lower
 /// untouched but for the store that clears it: the matrix decision workload,
 /// whose subjects are refused for a class and an operand its pool cannot read,
@@ -541,6 +657,20 @@ impl Room {
     }
 }
 
+/// Whether a union's members hold the top, a member that is a union read as
+/// its members at any depth.
+fn holds_the_top(members: &[Schema]) -> bool {
+    let mut unread: Vec<&Schema> = members.iter().collect();
+    while let Some(member) = unread.pop() {
+        match member {
+            Schema::Anything(_) => return true,
+            Schema::Union(inner) => unread.extend(inner.iter()),
+            _ => {}
+        }
+    }
+    false
+}
+
 /// [`lower`] with the nodes left to spend, which every node spends one of.
 ///
 /// Each node lowers to the set it denotes: the bounds to the universe and the
@@ -548,7 +678,11 @@ impl Room {
 /// and complement of their members' sets [FCB08, Def. 4.1].
 fn descend(schema: &Schema, pool: &dyn Constants, budget: &Room, depth: u32) -> Option<Descr> {
     budget.nodes.set(budget.nodes.get().checked_sub(1)?);
-    let depth = depth.checked_sub(1)?;
+    let depth = match depth.checked_sub(1) {
+        Some(depth) => depth,
+        None if starts_a_build(schema) => return None,
+        None => 0,
+    };
     match schema {
         Schema::Anything(_) => Some(Descr::anything()),
         Schema::Nothing => Some(Descr::nothing()),
@@ -570,9 +704,16 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Room, depth: u32) -> 
             };
             Descr::set(&descend(element, pool, budget, depth)?, kind)
         }
-        Schema::Union(members) => members.iter().try_fold(Descr::nothing(), |whole, member| {
-            whole.union(&descend(member, pool, budget, depth)?)
-        }),
+        // A union holding the top is the top whatever its other members are,
+        // so a member the lowering refuses refuses no such union. The
+        // constructors fold one; a term built raw carries it, and is read on a
+        // refusal alone, so a union that lowers pays nothing for the look.
+        Schema::Union(members) => members
+            .iter()
+            .try_fold(Descr::nothing(), |whole, member| {
+                whole.union(&descend(member, pool, budget, depth)?)
+            })
+            .or_else(|| holds_the_top(members).then(Descr::anything)),
         Schema::Intersection(members) => {
             members.iter().try_fold(Descr::anything(), |whole, member| {
                 whole.intersect(&descend(member, pool, budget, depth)?)

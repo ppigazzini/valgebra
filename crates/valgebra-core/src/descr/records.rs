@@ -295,24 +295,14 @@ impl<G: Guard> Summand for Atom<G> {
         Atom::complement(self)
     }
 
-    /// Each atom in its tidied shape, without the ones holding no object, each
-    /// once, and in order.
-    ///
-    /// Once by equality rather than by position after a sort. A guard's
-    /// equality can be coarser than its order -- an integer set compares two
-    /// spellings of one set equal and sorts them apart -- so two equal atoms
-    /// need not be neighbors once sorted, and a sort cannot be what finds the
-    /// repeat.
-    fn compacted(atoms: Vec<Atom<G>>) -> Option<Vec<Atom<G>>> {
-        let mut kept: Vec<Atom<G>> = Vec::with_capacity(atoms.len());
-        for atom in atoms {
-            let atom = atom.tidy();
-            if !atom.is_empty() && !kept.contains(&atom) {
-                kept.push(atom);
-            }
+    /// The atom in its tidied shape, unless it holds no object or the list
+    /// holds it already.
+    fn admit(kept: &mut Vec<Atom<G>>, atom: Atom<G>) -> Option<()> {
+        let atom = atom.tidy();
+        if !atom.is_empty() && !kept.contains(&atom) {
+            kept.push(atom);
         }
-        kept.sort();
-        Some(kept)
+        Some(())
     }
 }
 

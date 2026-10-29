@@ -19,7 +19,7 @@
 use std::cell::RefCell;
 
 use crate::descr::classes::Reach;
-use crate::descr::lower::{Constants, an_empty_reading_stands, lower_widened};
+use crate::descr::lower::{Constants, an_empty_reading_stands, read_widened};
 use crate::ir::{Attribute, ClassIx, Constraint, Constraints, Schema};
 use crate::kind::{Kind, Region, Regions};
 use crate::oracle::denotes_a_set_within;
@@ -112,23 +112,30 @@ impl Schema {
     /// [`an_empty_reading_stands`] says it does.
     ///
     /// A conjunct at the top the lowering refuses -- a predicate, a member
-    /// nested past the depth bound -- is left out ([`lower_widened`]), which
+    /// nested past the depth bound -- is left out ([`read_widened`]), which
     /// reads a superset, so emptiness is monotone in a meet's members. A
     /// superset the reading can only find inhabited proves nothing here, and
-    /// is not built.
+    /// is not built. A proof the label check refuses is no answer, and the
+    /// reading that leaves a scalar past the depth out is asked after it.
     pub(super) fn denotes_no_value(&self, pool: &dyn Constants, defs: &[Schema]) -> bool {
-        let mut kept = None;
-        lower_widened(self, defs, pool, &mut kept, |read| {
-            !the_rules_find_a_value(read)
-        })
-        .is_some_and(|set| set.emptiness() == Verdict::Empty)
-            && match &kept {
-                None => an_empty_reading_stands(&[self], &[], defs, pool),
-                Some(kept) => {
-                    let kept: Vec<&Schema> = kept.iter().collect();
-                    an_empty_reading_stands(&kept, &[], defs, pool)
-                }
-            }
+        read_widened(
+            self,
+            defs,
+            pool,
+            |read| !the_rules_find_a_value(read),
+            |set, kept| {
+                (set.emptiness() == Verdict::Empty
+                    && match kept {
+                        None => an_empty_reading_stands(&[self], &[], defs, pool),
+                        Some(kept) => {
+                            let kept: Vec<&Schema> = kept.iter().collect();
+                            an_empty_reading_stands(&kept, &[], defs, pool)
+                        }
+                    })
+                .then_some(())
+            },
+        )
+        .is_some()
     }
 
     /// The decision steps [`is_empty`](Self::is_empty) spends on this schema.

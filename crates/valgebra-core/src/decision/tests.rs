@@ -480,12 +480,11 @@ fn members_of_the_universe(opaque: &Schema) -> crate::Members {
 /// A union nested in the union is read as its members: `~c | (c)`, with `(c)`
 /// a union of one member, covers the universe as `~c | c` does.
 ///
-/// The fuzzer's pair has an `int` constant and a subject whose unions nest one
-/// level past the depth the set reading descends. The set reading proves the
-/// supertype's complement empty, reading the supertype alone, and refuses the
-/// pair at the subject, so the rules are the whole of the answer. One De Morgan step in, the union taken whole is `c & ~(c)`,
-/// which the meet's fold reads as two spellings; read through the nested
-/// union it is `c & ~c`.
+/// The fuzzer's pair has an `int` constant and a subject whose unions nest
+/// inside one another. The rules are asked alone, so their answer is held
+/// whatever the set reading builds. One De Morgan step in, the union taken
+/// whole is `c & ~(c)`, which the meet's fold reads as two spellings; read
+/// through the nested union it is `c & ~c`.
 #[test]
 fn a_union_nested_in_the_union_is_read_as_its_members() {
     /// A pool holding the one constant, so the set reading can lower it. The
@@ -521,10 +520,6 @@ fn a_union_nested_in_the_union_is_read_as_its_members() {
             ]),
         ]
         .into(),
-    );
-    assert!(
-        crate::descr::lower::lower(&subject, &MinusTwo).is_none(),
-        "the premise: the set reading builds no set for {subject:?}"
     );
     // The drawn supertype, the nesting moved to the complement's side, and a
     // nested union of two members one level further in.
@@ -3199,17 +3194,15 @@ fn a_refutation_about_a_part_with_no_value_is_not_one() {
         assert!(sub.is_subtype_of(&sup), "{label}");
     }
 
-    // One level further down, where neither decider reaches the answer: the
-    // rules decline, as above, and the sets decline too -- lowering a record
-    // inside a list inside a list is past what the set representation builds.
+    // Further down, where neither decider reaches the answer: the rules
+    // decline, as above, and the sets decline too -- a record inside lists
+    // three deep is past the containers the set representation builds.
     // The pair is unproven, which the relation is allowed to be; what it may
     // not be is refuted.
     let deeper = |record: &Schema| {
-        Schema::list(SeqShape::homogeneous(closed(vec![field(
-            "k",
-            record.clone(),
-            true,
-        )])))
+        Schema::list(SeqShape::homogeneous(Schema::list(SeqShape::homogeneous(
+            closed(vec![field("k", record.clone(), true)]),
+        ))))
     };
     let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
@@ -3388,6 +3381,57 @@ fn a_pattern_over_two_bases_that_hold_every_string_is_one_set() {
         subject.subtype_relation(&universe, &NoLeafRelations, &[], &budget),
         Relation::Holds,
         "{subject:?} below {universe:?} by the rules"
+    );
+}
+
+/// A union holding the top is the top to the set representation, whatever
+/// else it holds, so a member the lowering refuses -- a literal the pool
+/// cannot read -- refuses no such union. The fuzzer drew the pair below, held
+/// as drawn: `None | <literal> | Any` through a reference, against a union the
+/// set reading proves universal because no string fully matches both `x` and
+/// `[0-9]*`. `Any` is below that union, and the subject was declined.
+#[test]
+fn a_union_holding_the_top_is_below_a_universe_the_sets_prove() {
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let refined = |base: Schema, constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(base),
+        constraints: constraints.into(),
+    };
+    let pattern = |text: &str| refined(Schema::Str, vec![Constraint::Regex(text.to_owned())]);
+    let literal = |index: usize| Schema::Literal(ConstIx::new(index));
+    let defs = vec![
+        Schema::Coll {
+            container: CollKind::Set,
+            element: Arc::new(Schema::Intersection(
+                vec![Schema::ANYTHING, literal(1), literal(0)].into(),
+            )),
+        },
+        Schema::Union(
+            vec![
+                Schema::Union(vec![Schema::NoneType, literal(2), Schema::ANYTHING].into()),
+                literal(2),
+            ]
+            .into(),
+        ),
+    ];
+    let universe = Schema::Union(
+        vec![
+            Schema::KeyedMap {
+                fields: Vec::new().into(),
+                defaults: Vec::new().into(),
+            },
+            not(pattern("x")),
+            refined(not(pattern("[0-9]*")), Vec::new()),
+        ]
+        .into(),
+    );
+    assert!(
+        not(universe.clone()).is_empty_under(&defs),
+        "the premise: {universe:?} is the universe"
+    );
+    assert_eq!(
+        Schema::Ref(DefIx::new(1)).subtype_relation_under(&universe, &NoLeafRelations, &defs),
+        Relation::Holds
     );
 }
 

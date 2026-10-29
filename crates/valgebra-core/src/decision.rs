@@ -17,12 +17,10 @@ mod products;
 mod readings;
 mod records;
 
-use std::cell::Cell;
+use std::cell::{Cell, OnceCell};
 
 use crate::descr::budget;
-use crate::descr::lower::{
-    Constants, WORK, an_empty_reading_stands, lower_unfolded, lower_widened,
-};
+use crate::descr::lower::{Constants, WORK, an_empty_reading_stands, lower_unfolded, read_widened};
 use crate::ir::{Constraint, DefIx, Polarity, Schema, SeqShape};
 use crate::kind::{Region, Regions};
 use crate::unordered_pairs;
@@ -412,7 +410,7 @@ impl Schema {
         // which is the one it can overturn.
         //
         // **A conjunct the subject's lowering refuses is left out**, as
-        // [`lower_widened`] reads it, which is a widening of the same kind:
+        // [`read_widened`] reads it, which is a widening of the same kind:
         // the subject reads as a superset, and the label check reads the
         // members kept. A thinned subject that can only be inhabited answers
         // nothing against a supertype the lowering refuses, so where the
@@ -428,59 +426,79 @@ impl Schema {
         // meet with the inner set fits in: `{"t": int} ⊆ ¬({"t": str} ∪
         // {"t": bytes})` declines that way, while three field kinds, whose
         // complement stays negated, decide.
+        //
+        // **Each reading is decided where it is built**, and one that answers
+        // nothing hands the question to the next ([`read_widened`]): an empty
+        // difference the label check refuses over a whole subject is asked
+        // again of the reading that leaves a scalar past the depth out. The
+        // supertype is lowered once for all of them.
         let (read, side) = other.read_as_a_supertype();
-        let mut theirs = None;
-        let mut kept = None;
-        let Some(mine) = lower_widened(self, defs, pool, &mut kept, |kept| {
-            !the_rules_find_a_value(kept)
-                || theirs
-                    .insert(lower_unfolded(read, defs, side, pool))
-                    .is_some()
-        }) else {
-            return Relation::Unknown;
+        let theirs = OnceCell::new();
+        let theirs = || {
+            theirs
+                .get_or_init(|| lower_unfolded(read, defs, side, pool))
+                .as_ref()
         };
-        let cut =
-            kept.is_some() || (!defs.is_empty() && (self.has_reference() || other.has_reference()));
-        // The schemas the subject's side reads as widened are itself, or the
-        // conjuncts a thinned reading kept, collected only where read.
-        if mine.emptiness() == Verdict::Empty {
-            let stands = match &kept {
-                None => an_empty_reading_stands(&[self], &[], defs, pool),
-                Some(kept) => {
-                    an_empty_reading_stands(&kept.iter().collect::<Vec<_>>(), &[], defs, pool)
-                }
-            };
-            return Relation::proven(stands);
-        }
         let negate = side == Polarity::Narrow;
-        let Some(theirs) = theirs.unwrap_or_else(|| lower_unfolded(read, defs, side, pool)) else {
-            return Relation::Unknown;
-        };
-        budget::under(WORK, || {
-            let outside = if negate { theirs.complement() } else { theirs };
-            mine.intersect(&outside)
-                .map(|difference| difference.emptiness())
-        })
-        .map_or(Relation::Unknown, |emptiness| {
-            let stands = || match (&kept, negate) {
-                (None, true) => an_empty_reading_stands(&[self], &[read], defs, pool),
-                (None, false) => an_empty_reading_stands(&[self, read], &[], defs, pool),
-                (Some(kept), true) => {
-                    an_empty_reading_stands(&kept.iter().collect::<Vec<_>>(), &[read], defs, pool)
+        let unfolded = !defs.is_empty() && (self.has_reference() || other.has_reference());
+        read_widened(
+            self,
+            defs,
+            pool,
+            |kept| !the_rules_find_a_value(kept) || theirs().is_some(),
+            |mine, kept| {
+                // The schemas the subject's side reads as widened are itself,
+                // or the conjuncts a thinned reading kept, collected only where
+                // read.
+                if mine.emptiness() == Verdict::Empty {
+                    let stands = match kept {
+                        None => an_empty_reading_stands(&[self], &[], defs, pool),
+                        Some(kept) => an_empty_reading_stands(
+                            &kept.iter().collect::<Vec<_>>(),
+                            &[],
+                            defs,
+                            pool,
+                        ),
+                    };
+                    return stands.then_some(Relation::Holds);
                 }
-                (Some(kept), false) => {
-                    let widened: Vec<&Schema> = kept.iter().chain([read]).collect();
-                    an_empty_reading_stands(&widened, &[], defs, pool)
-                }
-            };
-            if emptiness == Verdict::Empty && !stands() {
-                Relation::Unknown
-            } else if cut {
-                Relation::proven(emptiness == Verdict::Empty)
-            } else {
-                Relation::of_difference(emptiness)
-            }
-        })
+                let theirs = theirs()?;
+                let emptiness = budget::under(WORK, || {
+                    let complemented;
+                    let outside = if negate {
+                        complemented = theirs.complement();
+                        &complemented
+                    } else {
+                        theirs
+                    };
+                    mine.intersect(outside)
+                        .map(|difference| difference.emptiness())
+                })?;
+                let stands = || match (kept, negate) {
+                    (None, true) => an_empty_reading_stands(&[self], &[read], defs, pool),
+                    (None, false) => an_empty_reading_stands(&[self, read], &[], defs, pool),
+                    (Some(kept), true) => an_empty_reading_stands(
+                        &kept.iter().collect::<Vec<_>>(),
+                        &[read],
+                        defs,
+                        pool,
+                    ),
+                    (Some(kept), false) => {
+                        let widened: Vec<&Schema> = kept.iter().chain([read]).collect();
+                        an_empty_reading_stands(&widened, &[], defs, pool)
+                    }
+                };
+                let relation = if emptiness == Verdict::Empty && !stands() {
+                    Relation::Unknown
+                } else if kept.is_some() || unfolded {
+                    Relation::proven(emptiness == Verdict::Empty)
+                } else {
+                    Relation::of_difference(emptiness)
+                };
+                (relation != Relation::Unknown).then_some(relation)
+            },
+        )
+        .unwrap_or(Relation::Unknown)
     }
 
     /// What the set representation lowers of this schema as a supertype, and on

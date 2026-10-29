@@ -4,8 +4,8 @@ use std::sync::{Arc, LazyLock};
 use proptest::prelude::*;
 
 use super::{
-    BUDGET, Bounds, Constants, DEPTH, Operand, Room, WORK, descend, lower, lower_widened,
-    lower_within, nests_past_the_depth,
+    BUDGET, Bounds, Constants, DEPTH, Operand, Room, WORK, an_empty_reading_stands, descend, lower,
+    lower_widened, lower_within, nests_past_the_depth, read_widened,
 };
 use crate::descr::budget;
 use crate::descr::classes::Class;
@@ -750,10 +750,26 @@ fn a_schema_past_a_bound_refuses() {
     );
     assert!(lower(&wide(BUDGET as usize / 2), &pool).is_some());
 
-    let nested =
-        |levels: u32| (0..levels).fold(Schema::Str, |inner, _| Schema::Complement(Arc::new(inner)));
+    // The depth bounds the containers a build starts below other nodes, and
+    // a scalar tower starts none: complements of a string lower past it.
+    let nested = |levels: u32| {
+        (0..levels).fold(Schema::Str, |inner, _| {
+            Schema::list(SeqShape::homogeneous(inner))
+        })
+    };
     assert!(lower(&nested(DEPTH + 1), &pool).is_none(), "too deep");
-    assert!(lower(&nested(DEPTH - 1), &pool).is_some());
+    // The build refuses it on its own as well, where no walk read it first.
+    assert!(
+        descend(&nested(DEPTH + 1), &pool, &Room::new(BUDGET), DEPTH).is_none(),
+        "built past the depth"
+    );
+    assert!(lower(&nested(DEPTH), &pool).is_some());
+    let scalars =
+        |levels: u32| (0..levels).fold(Schema::Str, |inner, _| Schema::Complement(Arc::new(inner)));
+    assert!(
+        lower(&scalars(DEPTH + 3), &pool).is_some(),
+        "a scalar tower starts no build"
+    );
 }
 
 /// A build that would cost too much refuses, and the same schema lowers
@@ -2799,6 +2815,66 @@ fn a_member_past_the_depth_is_left_out_whatever_it_holds() {
     assert_eq!(kept, Some(vec![words("^a+$"), words("^b+$")]));
 }
 
+/// Each reading is decided under an allowance of its own, [`WORK`] as the
+/// build was, whether it was built whole or thinned.
+///
+/// Reading a descriptor is a build: a negated union's emptiness expands it by
+/// a product, and a caller deciding outside an allowance spends without bound.
+/// The decision below spends until it is refused, so it answers only where it
+/// was given exactly the figure.
+#[test]
+fn each_reading_is_decided_under_an_allowance_of_its_own() {
+    let pool = empty_pool();
+    let spent = |_: &Descr, _: Option<&[Schema]>| {
+        let mut units = 0;
+        while units <= WORK && budget::spend() {
+            units += 1;
+        }
+        (units == WORK).then_some(units)
+    };
+    assert_eq!(
+        read_widened(&words("^a+$"), &[], &pool, |_| true, spent),
+        Some(WORK),
+        "read whole"
+    );
+    let beside = Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    assert_eq!(
+        read_widened(
+            &meet(vec![words("^a+$"), beside]),
+            &[],
+            &pool,
+            |_| true,
+            spent
+        ),
+        Some(WORK),
+        "read thinned of the predicate"
+    );
+}
+
+/// A member whose scalar lies past the depth, its containers within it, is
+/// kept by the first thinned reading, which counts the containers alone.
+///
+/// The member beside the lists past the depth is `b+` under six complements,
+/// the same set, its pattern a level past the depth. The build spends a level
+/// a node and reads a scalar it reaches with none left, so the reading that
+/// leaves the lists out reads the member, and its meet with `a+` is empty.
+#[test]
+fn a_member_whose_scalar_is_past_the_depth_is_kept_by_the_first_reading() {
+    let pool = empty_pool();
+    let tower = (0..6).fold(words("^b+$"), |inner, _| {
+        Schema::Complement(Arc::new(inner))
+    });
+    let three = meet(vec![words("^a+$"), tower.clone(), nested_lists(DEPTH)]);
+    assert!(nests_past_the_depth(&three, Bounds::DEFAULT));
+    let mut kept = None;
+    let set = lower_widened(&three, &[], &pool, &mut kept, for_emptiness).expect("read thinned");
+    assert_eq!(set.emptiness(), Verdict::Empty);
+    assert_eq!(kept, Some(vec![words("^a+$"), tower]));
+}
+
 // THEORY: a-cut-reference-proves
 /// A conjunct whose deepest node is a clause's key is kept by a thinned
 /// reading where the build reads it.
@@ -2897,6 +2973,118 @@ fn a_member_deep_only_past_the_node_bound_is_refused_for_its_nodes() {
     ]);
     assert!(!nests_past_the_depth(&three, Bounds::DEFAULT));
     assert!(lower_widened(&three, &[], &pool, &mut None, for_emptiness).is_none());
+}
+
+// THEORY: a-cut-reference-proves
+/// A meet holding a scalar past the depth is read first without the member
+/// that holds it, a reading that builds less.
+///
+/// `dict[str, Literal["a"]]` and `{"a": Literal[0]}` share no value, so their
+/// meet with anything is empty. The member beside them nests `int` and `str`
+/// a level past the depth, scalars the build reads, under a complement that
+/// puts the label `"a"` on the side a difference narrows: the whole reading is
+/// empty and its proof stands on nothing. The reading that leaves the member
+/// out is asked first, and proves the meet empty.
+#[test]
+fn a_meet_holding_a_deep_scalar_is_read_first_without_it() {
+    let pool = Pool(vec![
+        Operand::Word(b"a".to_vec(), Kind::Str),
+        Operand::Integer(0),
+    ]);
+    let label = || Schema::Literal(ConstIx::new(0));
+    let keyed = |key, value| Schema::keyed_map(Vec::new(), vec![MapClause { key, value }]);
+    let complement = |inner| Schema::Complement(Arc::new(inner));
+    let strings = keyed(Schema::Str, label());
+    let labeled = complement(meet(vec![
+        keyed(label(), complement(Schema::Str)),
+        complement(keyed(label(), Schema::Int)),
+    ]));
+    let zero = Schema::keyed_map(
+        vec![Field {
+            name: "a".into(),
+            schema: Schema::Literal(ConstIx::new(1)),
+            required: true,
+        }],
+        Vec::new(),
+    );
+    let three = meet(vec![strings.clone(), labeled, zero.clone()]);
+
+    assert!(!nests_past_the_depth(&three, Bounds::DEFAULT));
+    let mut kept = None;
+    let first = lower_widened(&three, &[], &pool, &mut kept, |_| true).expect("read thinned");
+    assert_eq!(
+        (first.emptiness(), kept),
+        (Verdict::Empty, Some(vec![strings, zero]))
+    );
+    assert!(!an_empty_reading_stands(&[&three], &[], &[], &pool));
+    assert_eq!(
+        three.descriptor_contained_in(&Schema::Nothing, &pool, &[]),
+        Relation::Holds
+    );
+}
+
+// THEORY: a-cut-reference-proves
+/// The whole build a scalar past the depth defers to the thinned readings is
+/// put to the caller as a thinned reading's members are: made where the caller
+/// can read what it may answer, and spared where it says it cannot -- an
+/// emptiness the rules find inhabited, which the build would only confirm.
+#[test]
+fn a_deep_scalar_is_built_whole_where_the_caller_can_read_it() {
+    let pool = empty_pool();
+    let tower = (0..DEPTH + 2).fold(Schema::Str, |inner, _| Schema::Complement(Arc::new(inner)));
+    let asked = |answer: bool| {
+        let mut kept = None;
+        let mut put = Vec::new();
+        let read = lower_widened(&tower, &[], &pool, &mut kept, |read| {
+            put.push(read.to_vec());
+            answer
+        });
+        (read.is_some(), kept, put)
+    };
+    assert_eq!(asked(false), (false, None, vec![vec![tower.clone()]]));
+    assert_eq!(asked(true), (true, None, vec![vec![tower.clone()]]));
+}
+
+/// A member of a union the law below draws: one the lowering reads, one past
+/// its depth or its nodes, or one it refuses outright -- a literal an empty
+/// pool cannot read, a predicate.
+fn beside_the_top() -> impl Strategy<Value = Schema> {
+    prop_oneof![
+        nested_schema(),
+        Just(Schema::Literal(ConstIx::new(0))),
+        Just(Schema::Refine {
+            base: Arc::new(Schema::Int),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        }),
+    ]
+}
+
+proptest! {
+    /// A union holding the top lowers to the universe, whatever its other
+    /// members are and however deep in unions of its own the top sits: `x ∪ ⊤`
+    /// is `⊤` [FCB08, Def. 4.1], a member the lowering refuses included.
+    #[test]
+    fn a_union_holding_the_top_lowers_to_the_universe(
+        others in prop::collection::vec(beside_the_top(), 0..4),
+        at in any::<prop::sample::Index>(),
+        wrapped in 0usize..4,
+    ) {
+        let mut top = Schema::ANYTHING;
+        for _ in 0..wrapped {
+            top = Schema::Union(vec![top].into());
+        }
+        let mut members = others;
+        members.insert(at.index(members.len() + 1), top);
+        let union = Schema::Union(members.into());
+        let built = budget::under(WORK, || {
+            descend(&union, &empty_pool(), &Room::new(BUDGET), DEPTH)
+        });
+        prop_assert!(
+            built.is_some_and(|set| set.complement().emptiness() == Verdict::Empty),
+            "{:?} is not read as the universe",
+            union
+        );
+    }
 }
 
 /// Schemas nested to either side of the depth bound, a clause's key among

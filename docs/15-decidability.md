@@ -899,11 +899,13 @@ the shape. What is left below is what the descriptor cannot hold.
 
     **An unfolding spends depth.** The fixpoint's body sits one level below
     every member that names it, so a member met with a recursive universe under
-    a complement nests past the depth a build descends. Beside the members a
-    proof needs, such a member is left out of the reading and the proof stands,
-    as a [predicate](#undecidable-at-runtime) is; where it is the member the
-    proof needs, the relation declines, so `str & ~(str & json)` is undecided
-    though `str & ~json` is proved:
+    a complement nests deeper than the rest. What the depth a build descends
+    bounds is the containers it starts: a scalar past it is read, and a cut
+    reference is one, so `str & ~(str & json)` is proved as `str & ~json` is. A
+    container past the depth is not built: beside the members a proof needs,
+    its member is left out of the reading and the proof stands, as a
+    [predicate](#undecidable-at-runtime) is, and where it is the member the
+    proof needs, the relation declines.
 
     ```python
     from valgebra import complement, intersection, nothing, recursive, union
@@ -911,7 +913,7 @@ the shape. What is left below is what the descriptor cannot hold.
     json = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
     assert intersection(str, complement(json)).relation_to(nothing) == "subset"
     nested = intersection(str, complement(intersection(str, json)))
-    assert nested.relation_to(nothing) == "undecided"
+    assert nested.relation_to(nothing) == "subset"
     ```
 - **An inhabited meet with a recursive reference, beside a class.** The
   meet's emptiness is decided ([above](#decided-exactly)), and a value is named
@@ -1034,8 +1036,8 @@ the shape. What is left below is what the descriptor cannot hold.
     ```
 
 - **A schema too large to build.** The descriptor is bounded three ways: the
-  nodes it will read, the nesting it will descend, and the work a build may
-  spend. Past any of them it refuses, and the caller keeps the rules' answer.
+  nodes it will read, the depth at which it will still start a container, and
+  the work a build may spend. Past any of them it refuses, and the caller keeps the rules' answer.
   None of these is a statement about the schema -- the same schema decides under
   a larger bound -- and each exists because building a descriptor beside a
   verdict the rules already reached is work whose result is discarded. Every
