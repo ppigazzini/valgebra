@@ -320,7 +320,7 @@ jobs:
       # not there to run from.
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
-          python-version: "3.14"
+          python-version: "3.15"
           # This job installs from a downloaded artifact, not a checked-out
           # dependency file, so there is nothing for the uv cache to key on.
           enable-cache: false
@@ -418,7 +418,7 @@ jobs:
       # reason the glibc smoke gives.
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
-          python-version: "3.14"
+          python-version: "3.15"
           enable-cache: false
       # The same install and check as the glibc rows, in a script each
       # container runs: the image's own pip, the matching wheel from the
@@ -523,7 +523,7 @@ jobs:
       # not there to run from.
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
-          python-version: "3.14"
+          python-version: "3.15"
           # This job installs from a downloaded artifact, not a checked-out
           # dependency file, so there is nothing for the uv cache to key on.
           enable-cache: false
