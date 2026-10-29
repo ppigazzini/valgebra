@@ -612,6 +612,19 @@ non-member, a predicate interrupted while `Literal[5]` is probed would answer
 `not_subset` about a refinement the query never finished asking. `is_empty`,
 `is_subtype_of`, `relation_to` and `is_equivalent` each return through it.
 
+**An answer reads Python at the type the trust base grants it for.** Each
+question above stands on a reading the trust base
+([14-soundness.md](../14-soundness.md)) grants for one case -- an exact
+builtin's `==` and order, an enumeration as `EnumMeta` builds it, a class as
+Python lays it out when it makes it -- and an object of a neighboring case is
+declined rather than read as that one: a builtin subclass with an `__eq__` or
+an order of its own (`equal_values_read_alike`, `compare`), a sequence bound
+whose items a value's items may not order against, an enumeration whose
+`_missing_` or metaclass hooks are its own, a class whose `__slots__` or `mro()`
+code writes after the class is made. A rule that reads an answer's negative
+side as a refutation states at its site what that negative means for `nan`,
+for a class this oracle does not trust, and for a question it declined.
+
 **A layout is the class that laid it down.** The snapshot a class enters the
 core with carries, beside its ancestors, the class whose instance layout it
 has: the first on its `__base__` chain that lays one down, which is one of the
