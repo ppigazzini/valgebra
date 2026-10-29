@@ -1779,6 +1779,41 @@ impl Schema {
         total
     }
 
+    /// Whether this node is a refinement holding a pattern.
+    fn holds_a_pattern(&self) -> bool {
+        matches!(self, Schema::Refine { constraints, .. }
+            if constraints.iter().any(|constraint| matches!(constraint, Constraint::Regex(_))))
+    }
+
+    /// The patterns this tree's refinements hold, in the order a walk of it
+    /// meets them: each `Constraint::Regex` of every node it reaches, a
+    /// reference read as the leaf it is here, since what it names is a tree of
+    /// the definitions table's own.
+    ///
+    /// The bindings compile a validator's patterns from this, and key each
+    /// compiled one by where the tree holds its text, so the text is handed
+    /// back where it lives rather than copied.
+    #[must_use]
+    pub fn patterns(&self) -> Vec<&str> {
+        let mut found = Vec::new();
+        let mut pending: Vec<&Schema> = Vec::new();
+        let mut root = Some(self);
+        while let Some(node) = root.take().or_else(|| pending.pop()) {
+            if let Schema::Refine { constraints, .. } = node {
+                found.extend(
+                    constraints
+                        .iter()
+                        .filter_map(|constraint| match constraint {
+                            Constraint::Regex(pattern) => Some(pattern.as_str()),
+                            _ => None,
+                        }),
+                );
+            }
+            node.push_children(&mut pending);
+        }
+        found
+    }
+
     /// Whether this constructor guards its children.
     ///
     /// A structural constructor does: a fixpoint unfolds one of them per step,
@@ -1935,6 +1970,7 @@ impl Schema {
             depth: 1,
             nodes: self.own_nodes(),
             escaped_self_ref: escapes(self),
+            holds_a_pattern: self.holds_a_pattern(),
         };
         let mut level: Vec<&Schema> = Vec::new();
         let mut next: Vec<&Schema> = Vec::new();
@@ -1947,6 +1983,7 @@ impl Schema {
             for node in level.drain(..) {
                 measure.nodes += node.own_nodes();
                 measure.escaped_self_ref |= escapes(node);
+                measure.holds_a_pattern |= node.holds_a_pattern();
                 node.push_children(&mut next);
             }
             std::mem::swap(&mut level, &mut next);
@@ -1976,6 +2013,9 @@ pub struct Measure {
     /// Whether a self-reference marker the caller does not recognize is
     /// anywhere in the tree.
     pub escaped_self_ref: bool,
+    /// Whether a refinement anywhere in the tree holds a pattern, which the
+    /// bindings compile while the validator is built ([`Schema::patterns`]).
+    pub holds_a_pattern: bool,
 }
 
 /// The sizes every walk and decision copies, pinned so a layout change is a

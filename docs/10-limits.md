@@ -69,6 +69,17 @@ from valgebra import MAX_DEFINITIONS, MAX_SCHEMA_DEPTH, MAX_SCHEMA_NODES
 
 assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_000)
 ```
+- **Pattern size.** A `Regex` the walk runs compiles to a program of at most
+  32 MiB (`PATTERN_SIZE_LIMIT` in `crates/valgebra-py/src/check/index.rs`),
+  three times the `regex` crate's default, and a pattern past it is refused
+  where the schema is built. A counted Unicode class is what reaches it: the
+  class is copied once a repetition, so `\w{1,255}` keeps 14 MiB and builds in
+  about 150 ms, and `\w{1,1000}` is refused. A validator keeps what its
+  patterns compiled to for as long as it lives, so the patterns of one
+  validator are held to the same 32 MiB together, each text counted once: two
+  `\w{1,255}` fit, and a third is refused where the schema is built, in one
+  call or combined from validators holding one each. An ASCII class,
+  `(?-u)\w`, is a three-hundredth of the Unicode one.
 - **Value-walk depth.** Two bounds hold the walk inside the stack, and reaching
   either fails with `recursion_limit`: at most 128 levels of **recursive
   unfolding**, and at most 384 levels of **descent** in total. The second is what

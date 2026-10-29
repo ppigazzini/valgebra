@@ -15,6 +15,69 @@ fn compile_pattern_anchors_the_whole_string() {
     assert!(!digits.is_match(""));
 }
 
+/// A counted Unicode class written as an ordinary bound compiles: the program
+/// is past the crate's default and inside [`PATTERN_SIZE_LIMIT`], and one four
+/// times larger is refused.
+#[test]
+fn a_counted_unicode_class_compiles_within_the_pattern_size_limit() {
+    let word = compile_pattern(r"\w{1,255}").expect("a counted class compiles");
+    assert!(word.is_match(&"é".repeat(255)));
+    assert!(!word.is_match(&"a".repeat(256)));
+    assert!(!word.is_match(""));
+    assert!(compile_pattern(r"\w{1,255}@\w{1,255}").is_ok());
+    assert!(compile_pattern(r"\w{1,1000}").is_err());
+}
+
+/// A validator's patterns are bounded together by what each keeps: two
+/// counted Unicode classes fit, and a third is refused with the pattern that
+/// takes them past the bound named. A text met twice is one program, and each
+/// place the tree holds a pattern finds its compiled one.
+#[test]
+fn a_schemas_patterns_compile_within_one_allowance_together() {
+    let refined =
+        |pattern: &str| Schema::refine(Schema::Str, vec![Constraint::Regex(pattern.to_owned())]);
+    let words = |count: usize| {
+        Schema::Union(
+            (0..count)
+                .map(|at| refined(&format!(r"\w{{1,255}}x{at}")))
+                .collect::<Vec<_>>()
+                .into(),
+        )
+    };
+    let two = words(2);
+    let compiled = compile_patterns(&two, &[]).expect("two counted classes fit");
+    assert_eq!(compiled.len(), 2);
+    for pattern in two.patterns() {
+        assert!(
+            compiled[&(pattern.as_ptr() as usize)]
+                .is_match(&format!("é{}", &pattern[pattern.len() - 2..]))
+        );
+    }
+    let refused = compile_patterns(&words(3), &[]).expect_err("a third one passes the bound");
+    assert!(
+        refused.contains("at most 32 MiB together") && refused.contains("{1,255}x"),
+        "{refused}"
+    );
+    // One text held three times, once in a definition, beside a second text:
+    // four places, two programs, each charged once.
+    let thrice = Schema::Union(
+        vec![
+            refined(r"\w{1,255}x0"),
+            refined(r"\w{1,255}x0"),
+            refined(r"\w{1,255}x1"),
+        ]
+        .into(),
+    );
+    let compiled = compile_patterns(&thrice, &[refined(r"\w{1,255}x0")])
+        .expect("two programs, each charged once");
+    assert_eq!(compiled.len(), 4);
+    let invalid = compile_patterns(&refined("(unclosed"), &[]).expect_err("no pattern");
+    assert!(
+        invalid.starts_with("invalid regular expression"),
+        "{invalid}"
+    );
+}
+
 #[test]
 fn compile_pattern_rejects_an_invalid_pattern() {
     assert!(compile_pattern("(unclosed").is_err());

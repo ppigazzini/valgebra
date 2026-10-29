@@ -26,5 +26,7 @@ mod violation;
 mod walk;
 
 pub(crate) use ctx::{Ctx, WalkMode, WalkState};
-pub(crate) use index::{ValidatorIndex, build_index, compile_pattern};
+#[cfg(all(test, feature = "interpreter-tests"))]
+pub(crate) use index::build_index;
+pub(crate) use index::{RegexIndex, ValidatorIndex, build_index_from, compile_patterns};
 pub(crate) use walk::{Frame, Unwritten, member};

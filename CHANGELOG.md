@@ -34,6 +34,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a definition being resolved drops no part of a supertype
 - fix: a length or a bound equal to a whole number is read as that number
 - fix: one depth bound raises one type, and a class reached again is refused there
+- fix: a counted Unicode class written as an ordinary bound builds
 
 -->
 
@@ -134,6 +135,15 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A counted Unicode class written as an ordinary bound builds.** The walk's
+  pattern compiles under a size limit of 32 MiB, three times the `regex`
+  crate's default, which refused `Annotated[str, Regex(r"\w{1,255}")]` and
+  every count past `\w{0,209}` while `re` takes them. `\w{1,1000}` is refused
+  as before, naming the limit. A validator keeps every pattern's program, so
+  its patterns compile within the same 32 MiB together, each text once, when
+  it is built: two `\w{1,255}` fit and a third is refused there, where a
+  hundred held a gigabyte and aborted the interpreter at the first value.
 
 - **One depth bound raises one type.** An annotation nested past
   `MAX_SCHEMA_DEPTH` raises the `ValueError` a schema built past it raises, at

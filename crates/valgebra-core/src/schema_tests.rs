@@ -59,6 +59,57 @@ fn every_variant() -> Vec<Schema> {
     ]
 }
 
+/// `patterns` reads every pattern a tree holds, under every constructor that
+/// holds a schema, and hands each back where the tree holds it.
+#[test]
+fn patterns_are_read_from_every_node_that_holds_one() {
+    let refined = |pattern: &str| {
+        Schema::refine(
+            Schema::Str,
+            vec![Constraint::Regex(pattern.to_owned()), Constraint::MinLen(1)],
+        )
+    };
+    let tree = Schema::Union(
+        vec![
+            refined("a"),
+            Schema::Complement(Arc::new(refined("b"))),
+            Schema::set(refined("c")),
+            Schema::Intersection(vec![refined("d"), Schema::Ref(DefIx::new(0))].into()),
+        ]
+        .into(),
+    );
+    let mut found = tree.patterns();
+    found.sort_unstable();
+    assert_eq!(found, ["a", "b", "c", "d"]);
+    assert_eq!(Schema::Str.patterns(), Vec::<&str>::new());
+    // The walk that measures a tree says whether it holds one, at its root, in
+    // a node below it, or nowhere.
+    let holds = |schema: &Schema| schema.measure(&|_| true).holds_a_pattern;
+    assert!(holds(&tree));
+    assert!(holds(&refined("a")));
+    assert!(!holds(&Schema::refine(
+        Schema::Str,
+        vec![Constraint::MinLen(1)]
+    )));
+    assert!(!holds(&Schema::set(Schema::Str)));
+    let held = refined("e");
+    let Schema::Refine { constraints, .. } = &held else {
+        panic!("a refinement");
+    };
+    let text = constraints
+        .iter()
+        .find_map(|constraint| match constraint {
+            Constraint::Regex(text) => Some(text),
+            _ => None,
+        })
+        .expect("the pattern");
+    assert_eq!(
+        held.patterns()[0].as_ptr(),
+        text.as_ptr(),
+        "the tree's own text"
+    );
+}
+
 /// `node_count` sizes the whole tree, and the binding's schema-size limit is
 /// the only consumer: an undercount admits a schema past the cap. Each arm
 /// carries a distinct total so a wrong operator cannot coincide with a right

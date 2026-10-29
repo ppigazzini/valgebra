@@ -1065,6 +1065,7 @@ dependencies = [
  "pyo3",
  "pyo3-build-config",
  "regex",
+ "regex-automata",
  "regex-syntax",
  "rustc-hash",
  "rusty-fork",

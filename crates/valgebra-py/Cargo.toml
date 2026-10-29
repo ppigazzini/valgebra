@@ -55,6 +55,11 @@ regex = "1.13"
 # language than the one written. `regex` depends on it, so the version is the
 # one it already resolves.
 regex-syntax = "0.8"
+# The engine `regex` is built on, asked for a compiled pattern directly: built
+# as `regex` builds one, it matches the same language, and it says how much
+# memory it keeps, which bounds a validator's patterns together. `regex`
+# enables the `meta` engine already, so it adds no crate and no build.
+regex-automata = { workspace = true, features = ["meta"] }
 
 [dev-dependencies]
 # A test that needs a process of its own runs in one: an interpreter keeps a

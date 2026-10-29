@@ -970,6 +970,42 @@ def test_a_pattern_whose_determinization_explodes_answers_in_bounded_time() -> N
     assert elapsed < 30, f"four relations took {elapsed:.1f}s; the bound is not biting"
 
 
+# BOUND: PATTERN_SIZE_LIMIT
+def test_a_counted_unicode_class_builds_and_a_larger_one_is_refused() -> None:
+    r"""The program a pattern compiles to is bounded at 32 MiB.
+
+    `\w{1,255}`, an ordinary bound on a word, compiles to 16 MiB because the
+    Unicode class is copied once a repetition, past the engine's default of 10
+    and inside the bound; `re` takes it, and so does the walk. Four times the
+    count is past the bound and refused where the schema is built.
+    """
+    word = Validator(Annotated[str, Regex(r"\w{1,255}")])
+    assert word.is_valid("é" * 255)
+    assert not word.is_valid("a" * 256)
+    assert not word.is_valid("")
+    with pytest.raises(ValueError, match="invalid regular expression"):
+        Validator(Annotated[str, Regex(r"\w{1,1000}")])
+
+
+# BOUND: PATTERN_SIZE_LIMIT
+def test_a_validators_patterns_are_bounded_together() -> None:
+    r"""A validator keeps every pattern's program, so the bound holds them together.
+
+    `\w{1,255}` keeps 14 MiB, so two fit in one validator and a third is refused
+    where the schema is built: in one call, and combined from validators that
+    each hold one. Unbounded, a hundred of them held a gigabyte, and the
+    allocation past the memory there was aborted the interpreter.
+    """
+    words = [Annotated[str, Regex(rf"\w{{1,255}}x{at}")] for at in range(3)]
+    assert Validator(union(*words[:2])).is_valid("éx1")
+    together = "compile to at most 32 MiB together"
+    with pytest.raises(ValueError, match=together):
+        union(*words)
+    held = [Validator(word) for word in words]
+    with pytest.raises(ValueError, match=together):
+        union(*held)
+
+
 def test_a_pattern_that_stays_small_is_still_decided() -> None:
     """The bound is on the table, not on the shape or the length of the source."""
     small = Annotated[str, Regex("(a|b)*a(a|b){4}")]
