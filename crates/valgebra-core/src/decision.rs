@@ -824,7 +824,13 @@ impl Schema {
     /// [BBC+26, (anyOf-r)] -- for a subject that is not a member of a union
     /// being asked, since a union against a union would lower every member
     /// against every branch: two hundred patterns against two hundred spend
-    /// three seconds that way, and decide nothing.
+    /// three seconds that way, and decide nothing. A branch of one constant is
+    /// not asked: it holds the subject only where the subject is that one
+    /// value, and a subject of one value is inside every branch it shares the
+    /// value with, so narrowing leaves that constant alone or beside branches
+    /// that hold the subject too. Asked a constant at a time, a table lowers
+    /// the subject once a constant: a millisecond each for a pattern of a
+    /// thousand words, and a table of a thousand names decides nothing for it.
     ///
     /// A meet supertype is above a subject where each member is, and refuted
     /// where one member is, a meet being the intersection of its members'
@@ -845,11 +851,11 @@ impl Schema {
     ///
     /// The parts are asked in the query, so the rules' work stays bounded by
     /// its budget in total, and the lowerings are one per member, per
-    /// narrowing, per shared field and per branch of the one subject, each
-    /// under its own bounds: linear in the two terms. They are asked only while
-    /// the query has a step left: the lowerings are counted by no step, and a
-    /// pair the rules spent the budget on is a pair wide enough that reading it
-    /// a part at a time costs its width in lowerings.
+    /// narrowing, per shared field and per branch of the one subject that is
+    /// not a constant, each under its own bounds. They are asked only while the
+    /// query has a step left: the lowerings are counted by no step, and a pair
+    /// the rules spent the budget on is a pair wide enough that reading it a
+    /// part at a time costs its width in lowerings.
     fn decided_by_parts(&self, other: &Schema, cx: &mut Cx<'_>, by_branch: bool) -> Relation {
         // A query whose steps the pair spent asks no part. A part is a reading
         // of the set representation, which no step counts, and a pair the
@@ -913,10 +919,13 @@ impl Schema {
         if met.len() == branches.len() {
             return Relation::proven(
                 by_branch
-                    && branches.iter().any(|branch| {
-                        self.descriptor_contained_in(branch, cx.oracle, cx.defs)
-                            .holds()
-                    }),
+                    && branches
+                        .iter()
+                        .filter(|branch| !matches!(branch, Schema::Literal(_)))
+                        .any(|branch| {
+                            self.descriptor_contained_in(branch, cx.oracle, cx.defs)
+                                .holds()
+                        }),
             );
         }
         let narrowed = Schema::union(met);
