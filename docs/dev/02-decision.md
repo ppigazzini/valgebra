@@ -970,6 +970,22 @@ rules can neither prove nor refute `A <= ~B`, the `Complement` arm of
 question is bounded by the lowering's own `Bounds` -- nodes read, nesting
 descended, multiplying work -- once for each goal that reaches it.
 
+**An emptiness reading is built once a query.** The goals a query asks repeat
+one reading many times -- the meet of a record's kept members, the inner set of
+a complement -- and a relation between two records nested past the depth the
+sets descend asks one meet's emptiness a hundred and thirty-six times. The
+answer is a function of the schema, the pool and the definitions, all fixed for
+the query, and each build arms an allowance of its own, so `Cx::denotes_no_value`
+holds it under the query's number (`Readings` in `decision.rs`): the memo
+changes no answer and no allowance, and it rests on no open hypothesis, since a
+reading reads neither the trail nor the definitions being resolved. It is held
+beside the query rather than on its context, because a query the rules answer is
+a few hundred instructions and a pointer on the context read 5.4% more on the
+decision workload; a query is numbered at its first reading, a part of it read
+under the same sets shares the number, and the memo is emptied at
+`READINGS_HELD` answers. `a_query_keeps_its_readings_to_itself` and
+`the_readings_held_are_bounded` in `decision/tests.rs` hold the two claims.
+
 **One context carries a query through both recursions.** The oracle, the
 definitions, the budget and two stacks of hypotheses travel together in
 `decision::Cx`, built where a query starts and handed down by `&mut`: the trail

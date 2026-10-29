@@ -29,7 +29,9 @@ use super::constraints::{
     Density, Multiples, bounds_unsatisfiable, longest, shortest, tightest_bounds,
 };
 use super::literals::{FiniteMeet, a_meet_read_by_its_constants, misses_a_fresh_object};
-use super::records::{keyed_map_meet_verdict, keyed_map_minus_keyed_maps};
+use super::records::{
+    empty_without_the_maps_unread, keyed_map_meet_verdict, keyed_map_minus_keyed_maps,
+};
 use super::{
     Budget, Cx, DECISION_BUDGET, LeafRelations, NoLeafRelations, descending,
     has_complementary_pair, has_disjoint_pair, pushed_complement_is_placed, spend,
@@ -756,7 +758,10 @@ fn a_difference_of_sets(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
             .iter()
             .any(|member| matches!(member, Schema::KeyedMap { .. }))
     {
-        return keyed_map_minus_keyed_maps(members, cx);
+        return match keyed_map_minus_keyed_maps(members, cx) {
+            Verdict::Unknown if empty_without_the_maps_unread(members, cx) => Verdict::Empty,
+            verdict => verdict,
+        };
     }
     Verdict::Unknown
 }

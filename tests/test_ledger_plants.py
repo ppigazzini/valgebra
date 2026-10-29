@@ -3842,8 +3842,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "crates/valgebra-core/src/decision.rs",
-            "    visiting: Vec<DefIx>,\n}\n",
-            "    visiting: Vec<DefIx>,\n"
+            "    query: Cell<u64>,\n}\n",
+            "    query: Cell<u64>,\n"
             "    /// The goals already decided, so a repeat is answered from here.\n"
             "    decided: FxHashMap<(Schema, Schema), Relation>,\n}\n",
         ),

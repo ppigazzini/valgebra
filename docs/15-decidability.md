@@ -289,7 +289,10 @@ answers `"undecided"`.
     clause covering it, and may be missing only where every record lets it
     be. So the meet of open records is related as one record, below a record
     and minus records alike, and a member of another shape beside them, a
-    predicate say, leaves a proof standing. The meet holds a value where every
+    predicate say, leaves a proof standing; so does a record whose clause
+    names part of a kind, an opened record keyed by `1`, which the key
+    partition does not hold, beside an emptiness the set representation
+    reads of the rest. The meet holds a value where every
     field it requires does -- the dict of those fields is in each record -- so
     a refutation of it stands on that value.
 

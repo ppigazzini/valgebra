@@ -726,6 +726,37 @@ pub(super) fn keyed_map_minus_keyed_maps(members: &[Schema], cx: &mut Cx<'_>) ->
     }
 }
 
+/// Whether a meet holding a record the key partition cannot read
+/// ([`read_map`]) beside a complement is empty without that record, by the
+/// set representation; `false` where it holds no such record.
+///
+/// A meet is below the members it keeps [FCB08, Def. 4.1], so the meet of the
+/// rest is a superset, and its emptiness is the meet's. A record whose clause
+/// names part of a kind -- `{Literal[1]: str, ~Literal[1]: anything}`, an
+/// opened record keyed by an integer -- leaves the records' readings the whole
+/// meet unread, and the rest is asked of the set representation, which reads
+/// no decision step of the query's: a reading asked beside the ones that
+/// declined spends nothing they share.
+pub(super) fn empty_without_the_maps_unread(members: &[Schema], cx: &Cx<'_>) -> bool {
+    let unread = |member: &Schema| {
+        matches!(member, Schema::KeyedMap { fields, defaults }
+            if read_map(fields, defaults, cx).is_none())
+    };
+    if !members
+        .iter()
+        .any(|member| matches!(member, Schema::Complement(_)))
+        || !members.iter().any(unread)
+    {
+        return false;
+    }
+    let kept: Vec<Schema> = members
+        .iter()
+        .filter(|member| !unread(member))
+        .cloned()
+        .collect();
+    cx.denotes_no_value(&Schema::meet_within(kept, cx.defs))
+}
+
 /// `meet ⊆ other` for a meet holding two keyed maps or more and `other` a
 /// keyed map or a union holding one: the maps met into one record R◦
 /// [Cas23, (12)], split across the maps of `other` as one record is

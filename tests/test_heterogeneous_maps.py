@@ -19,6 +19,8 @@ from valgebra import (
     Validator,
     anything,
     complement,
+    intersection,
+    nothing,
     recursive,
     union,
 )
@@ -427,3 +429,19 @@ def test_a_literal_key_named_by_a_field_is_never_refuted() -> None:
     assert subject.relation_to({"x?": int}) != "not_subset"
     assert subject.is_valid({"x": 1})
     assert Validator({"x?": int}).is_valid({"x": 1})
+
+
+# THEORY: a-record-splits-across-a-union
+def test_a_map_the_partition_cannot_read_is_left_out_of_the_meet() -> None:
+    """A meet is below the members it keeps, whatever the one it leaves out holds.
+
+    `{str: nothing}` is `{}` alone, so beside the complement of `{}` it is
+    empty, and stays so beside an opened record keyed by an integer, whose
+    clause names a part of a kind the key partition cannot hold: the set
+    representation reads the rest empty.
+    """
+    pair = intersection(Validator({str: nothing}), complement(Validator({})))
+    keyed_by_one = Validator({1: str}).open()
+    assert intersection(pair, keyed_by_one).relation_to(nothing) == "subset"
+    either = union(keyed_by_one, Validator({1: complement(str)}).open())
+    assert intersection(pair, either).relation_to(nothing) == "subset"
