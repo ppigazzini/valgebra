@@ -7395,6 +7395,62 @@ fn by_words(subject: &Schema, other: &Schema) -> Relation {
     subject.subtype_relation(other, &Words, &[], &budget)
 }
 
+/// A reading that cannot decide a meet hands it to the next.
+///
+/// Each of a meet's readings is sound on its own, so `Unknown` from one says
+/// only that it cannot read the meet. Two meets of mappings keyed by `"a"` are
+/// empty, each read by the reading after one that ends undecided: the
+/// distribution of `~DN | DB` cannot read `(~DN | DB) & {"a": int} & ~dict`
+/// and the difference of the records can -- every member but `~dict` is a set
+/// of dicts -- and the narrowing that drops `DAA` beside `~(OF | DAA)` cannot
+/// read what it leaves, which the difference of the records reads.
+#[test]
+fn a_reading_that_cannot_decide_a_meet_hands_it_to_the_next() {
+    let empty = |meet: &Schema| {
+        let budget = Budget::new(DECISION_BUDGET);
+        meet.empty_and_region(&mut Cx::new(&Words, &[], &budget)).0
+    };
+    let dict = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause::top()].into(),
+    };
+
+    let records_beside_a_complement = Schema::meet([
+        Schema::union([
+            keyed_by(0, Schema::NoneType).complement(),
+            keyed_by(0, Schema::Bytes),
+        ]),
+        closed(vec![field("a", Schema::Int, true)]),
+        dict.complement(),
+    ]);
+    assert!(matches!(
+        records_beside_a_complement,
+        Schema::Intersection(_)
+    ));
+    assert_eq!(empty(&records_beside_a_complement), Verdict::Empty);
+
+    let tagged = keyed_by(0, Schema::Literal(ConstIx::new(0)));
+    let opened = open(vec![field("a", Schema::Float, false)]);
+    let by_str = |value: Schema| Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause::of(Schema::Str, value)].into(),
+    };
+    let narrowed_then_distributed = Schema::meet([
+        Schema::union([tagged.clone(), keyed_by(0, Schema::NoneType)]),
+        Schema::union([opened, tagged]).complement(),
+        Schema::union([
+            Schema::meet([
+                by_str(Schema::Literal(ConstIx::new(3))),
+                Schema::Str.complement(),
+            ]),
+            by_str(Schema::Literal(ConstIx::new(0))),
+        ]),
+        closed(vec![field("a", Schema::Float, true)]),
+    ]);
+    assert!(matches!(narrowed_then_distributed, Schema::Intersection(_)));
+    assert_eq!(empty(&narrowed_then_distributed), Verdict::Empty);
+}
+
 /// Two mappings keyed by one literal, apart under it, are refuted on that key
 /// at any depth.
 ///

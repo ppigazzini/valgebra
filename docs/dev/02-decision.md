@@ -1007,7 +1007,16 @@ value. Without the copies, a distribution leaves strictly smaller members and an
 unfolding is guarded by contractivity, so an open goal is met again only under a
 constructor. `a_meet_holding_a_union_twice_is_proved_empty_only_where_it_is`
 draws the shape and `a_union_met_twice_is_distributed_once` is the meet a
-downstream planner found proved empty while it held `0.5`.
+downstream planner found proved empty while it held `0.5`. A meet the rules leave
+open is read in turn by its constants, by its unions narrowed by the
+complements beside them or else by this distribution, and by the difference of
+its records, and each is sound alone: one that ends undecided hands the meet on
+rather than answering for it
+(`a_reading_that_cannot_decide_a_meet_hands_it_to_the_next`). A narrowed meet is
+the same set, read with its own unions distributed, so it goes to the
+difference and is not distributed again: distributing the meet reads the
+branches the narrowing dropped, which meet nothing, and spends steps the
+respelled questions after it share.
 
 `decision/goal_tests.rs` holds the premise: every goal the recorder sees is in
 `C`, over the product rule's widest shapes, the record rule's split, the union

@@ -30,6 +30,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a float bound over the integers is read at its floor or its ceiling
 - fix: emptiness reads a reference in the complement law as construction does
 - fix: the part of a pattern between its word boundaries is built from its tree -- internal
+- fix: a reading that cannot decide a meet hands it to the next
 
 -->
 
@@ -130,6 +131,15 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A reading that cannot decide a meet hands it to the next.** A meet's
+  readings are each sound alone, so one that ends undecided passes the meet on
+  rather than answering for it. `intersection(union(complement(DN), DB),
+  Validator({"a": int}), complement(dict))`, with `DN` and `DB` mappings keyed
+  by `Literal["a"]`, is `subset` of `nothing`, as on 0.0.21, where 0.0.22
+  distributed the union, ended undecided and asked nothing after it: of the
+  answers 0.0.21 gives on 60,000 drawn record schemas, 0.0.22 left 136
+  `undecided` three combinators deep and 153 four deep.
 
 - **The emptiness decision reads a reference in the complement law as
   construction does.** A recursive schema is a set where its definition is

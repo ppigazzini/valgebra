@@ -290,6 +290,21 @@ impl Verdict {
         matches!(self, Verdict::Empty)
     }
 
+    /// The second reading, asked only where the first declines.
+    ///
+    /// Each reading of a set answers soundly on its own, so its `Unknown` says
+    /// only that it cannot read the set, and asking the next loses nothing; an
+    /// `Empty` or an `Inhabited` from either is the answer. The verdict's own
+    /// [`Relation::or_else`].
+    #[must_use]
+    #[inline]
+    pub(crate) fn or_else(self, second: impl FnOnce() -> Verdict) -> Verdict {
+        match self {
+            Verdict::Unknown => second(),
+            settled => settled,
+        }
+    }
+
     /// The verdict for a value that must satisfy **every** part: a product, a
     /// meet of positions, a record's required fields.
     ///

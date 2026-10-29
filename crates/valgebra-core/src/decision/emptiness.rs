@@ -559,12 +559,19 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
         {
             Verdict::Empty
         }
-        Verdict::Unknown => match a_meet_read_by_its_constants(members, cx.oracle, cx.defs) {
-            Verdict::Unknown => narrowed_by_its_members(members, cx)
-                .or_else(|| meet_through_a_reference(members, cx))
-                .unwrap_or_else(|| a_difference_of_sets(members, cx)),
-            settled => settled,
-        },
+        // Each reading is sound on its own, so one that cannot read the meet
+        // hands it on: a narrowing or a distribution that ends undecided leaves
+        // the difference of the records to be asked, as one that does not
+        // apply does. A narrowed meet is not distributed again: it is the same
+        // set, read with its own unions distributed already, and distributing
+        // the meet reads the branches it dropped, which meet nothing, at the
+        // distribution's cost.
+        Verdict::Unknown => a_meet_read_by_its_constants(members, cx.oracle, cx.defs)
+            .or_else(|| match narrowed_by_its_members(members, cx) {
+                Some(narrowed) => narrowed,
+                None => meet_through_a_reference(members, cx),
+            })
+            .or_else(|| a_difference_of_sets(members, cx)),
         settled => settled,
     };
     (verdict, region)
@@ -702,8 +709,8 @@ fn has_a_pattern_and_its_complement(members: &[Schema], cx: &mut Cx<'_>) -> bool
 }
 
 /// A meet the rules leave undecided, decided by unfolding a reference among
-/// its members into it, or `None` where no member is a reference a definition
-/// resolves.
+/// its members into it, or `Unknown` where no member is a reference a
+/// definition resolves.
 ///
 /// A meet is a set of values, and a reference denotes its definition, so `t ∧
 /// X` is the definition met with `X` and a definition that is a union is the
@@ -757,7 +764,7 @@ fn has_a_pattern_and_its_complement(members: &[Schema], cx: &mut Cx<'_>) -> bool
 /// the key, and the meet holding `{"a": None}`, empty.
 ///
 /// Asked only where the rules decline, so a meet they decide keeps its answer.
-fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdict> {
+fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
     let defs = cx.defs;
     let unfolding = members
         .iter()
@@ -772,19 +779,23 @@ fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdi
     let (at, branches, unfolds) = if let Some((at, branches)) = unfolding {
         (at, branches, true)
     } else {
-        let (at, branches) = members
-            .iter()
-            .enumerate()
-            .find_map(|(at, member)| match member {
-                Schema::Union(branches) => Some((at, &branches[..])),
-                _ => None,
-            })?;
+        let Some((at, branches)) =
+            members
+                .iter()
+                .enumerate()
+                .find_map(|(at, member)| match member {
+                    Schema::Union(branches) => Some((at, &branches[..])),
+                    _ => None,
+                })
+        else {
+            return Verdict::Unknown;
+        };
         let holds_a_reference = branches
             .iter()
             .any(|branch| matches!(branch, Schema::Ref(_)));
         let unfolds = holds_a_reference || OpenMeet::any_open(cx.budget);
         if !(unfolds || normal_form_within(members, MAX_DISTRIBUTED_TERMS)) {
-            return None;
+            return Verdict::Unknown;
         }
         (at, branches, unfolds)
     };
@@ -793,7 +804,7 @@ fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdi
         goal.sort();
         goal.dedup();
         let Some(open) = OpenMeet::open(cx.budget, goal) else {
-            return Some(Verdict::Empty);
+            return Verdict::Empty;
         };
         Some(open)
     } else {
@@ -818,7 +829,7 @@ fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdi
             break;
         }
     }
-    Some(verdict)
+    verdict
 }
 
 /// The clauses a meet with no reference may be read as before it is distributed.

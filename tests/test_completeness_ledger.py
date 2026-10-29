@@ -1689,6 +1689,19 @@ _TRANSLATED: list[object] = [
         Annotated[int, at.MultipleOf(2500)],
         id="json:step-6!<=step-2500",
     ),
+    # A reading that cannot decide a meet hands it to the next: distributing
+    # `~DN | DB` ends undecided, and the difference of the records decides the
+    # meet, every member but `~dict` a set of dicts.
+    pytest.param(
+        "empty",
+        intersection(
+            union(complement(dict[Literal["a"], None]), dict[Literal["a"], bytes]),
+            {"a": int},
+            complement(dict),
+        ),
+        None,
+        id="json:records-met-with-~dict-are-empty",
+    ),
     # Under a full match the two ends of the text are word boundaries before and
     # after a word character.
     pytest.param(
