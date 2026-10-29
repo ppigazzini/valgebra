@@ -1294,6 +1294,20 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
         float_bound(constraint, &pool.operand(*index)?)
     };
     let base_is_floats = base.within(&[Kind::Float]);
+    // A word orders the words of its own kind, which the word component holds
+    // as an automaton: read where the bound is a word and the base holds no
+    // value but of that word's kind.
+    if let Constraint::Ge(index)
+    | Constraint::Gt(index)
+    | Constraint::Le(index)
+    | Constraint::Lt(index) = constraint
+        && let Some(Operand::Word(bound, kind)) = pool.operand(*index)
+        && base.within(&[kind])
+    {
+        let above = matches!(constraint, Constraint::Ge(_) | Constraint::Gt(_));
+        let inclusive = matches!(constraint, Constraint::Ge(_) | Constraint::Le(_));
+        return Descr::words_ordered(&bound, kind, above, inclusive);
+    }
     match constraint {
         Constraint::Ge(index) | Constraint::Gt(index) if base_is_floats => {
             floats(float_bound(constraint, index)?)

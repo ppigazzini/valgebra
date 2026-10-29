@@ -513,6 +513,56 @@ impl Dfa {
         .minimal()
     }
 
+    /// The words at or past `bound` in byte order, `bound` itself where
+    /// `inclusive`: a word sharing a prefix with `bound` and then holding a
+    /// greater byte, or holding the whole of `bound` and then anything.
+    ///
+    /// A chain over the bound's bytes, as [`Dfa::word`] is, beside two sinks:
+    /// a greater byte than the bound's at its place leads to the one accepting
+    /// every rest, and a smaller one to the one accepting none. Every byte is
+    /// a class of its own, which the minimization merges. The table is
+    /// complete [DV14, §2].
+    fn ordered_from(bound: &[u8], inclusive: bool) -> Dfa {
+        const CLASSES: usize = 256;
+        let whole = bound.len();
+        let above = u32::try_from(whole + 1).unwrap_or(0);
+        let below = above + 1;
+        let states = whole + 3;
+        let mut transitions = vec![below; states * CLASSES];
+        for (place, byte) in bound.iter().enumerate() {
+            for symbol in 0..=u8::MAX {
+                let target = match symbol.cmp(byte) {
+                    core::cmp::Ordering::Less => below,
+                    core::cmp::Ordering::Equal => u32::try_from(place + 1).unwrap_or(0),
+                    core::cmp::Ordering::Greater => above,
+                };
+                if let Some(slot) = transitions.get_mut(place * CLASSES + usize::from(symbol)) {
+                    *slot = target;
+                }
+            }
+        }
+        for state in [whole, whole + 1] {
+            for symbol in 0..CLASSES {
+                if let Some(slot) = transitions.get_mut(state * CLASSES + symbol) {
+                    *slot = above;
+                }
+            }
+        }
+        let mut accepting = vec![false; states];
+        for (state, accepts) in [(whole, inclusive), (whole + 1, true)] {
+            if let Some(flag) = accepting.get_mut(state) {
+                *flag = accepts;
+            }
+        }
+        Dfa {
+            classes: (0..=u8::MAX).map(Class::from).collect(),
+            class_count: CLASSES,
+            transitions,
+            accepting,
+        }
+        .minimal()
+    }
+
     /// Every word this automaton does not accept.
     ///
     /// A flip of the accepting flags [HVP05, §4.1], which is only sound because
@@ -1288,6 +1338,36 @@ impl RegularSet {
         Some(RegularSet {
             dfa: Arc::new(Dfa::word(word)),
         })
+    }
+
+    /// The words of an alphabet ordered against `bound` as Python orders two
+    /// of them: past it where `above`, short of it otherwise, and `bound`
+    /// itself where `inclusive`; `None` past [`MAX_STATES`].
+    ///
+    /// Python orders two `bytes` byte by byte and two `str` code point by code
+    /// point, a prefix before what extends it, and the byte order of two
+    /// encodings is that order: UTF-8 orders as its code points do, and so
+    /// does the surrogate range the kind's universe spells between `U+D7FF`
+    /// and `U+E000`. So the bound is a chain over its bytes
+    /// ([`Dfa::ordered_from`]), the words short of it are the complement of
+    /// the words at or past it, and either is met with the alphabet's
+    /// universe ([`RegularSet::all`]), which keeps a word of the kind.
+    #[must_use]
+    pub(crate) fn ordered(
+        bound: &[u8],
+        above: bool,
+        inclusive: bool,
+        alphabet: Alphabet,
+    ) -> Option<RegularSet> {
+        if !chain_fits(bound.len()) {
+            return None;
+        }
+        let from = Dfa::ordered_from(bound, if above { inclusive } else { !inclusive });
+        let side = if above { from } else { from.complement() };
+        RegularSet {
+            dfa: Arc::new(side),
+        }
+        .intersect(&RegularSet::all(alphabet))
     }
 
     /// The words of at least `length` symbols -- code points for

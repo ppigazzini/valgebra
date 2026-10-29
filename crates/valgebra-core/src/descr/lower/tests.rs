@@ -2854,6 +2854,44 @@ fn each_reading_is_decided_under_an_allowance_of_its_own() {
     );
 }
 
+// THEORY: a-refinement-narrows-its-base
+/// An order bound over `str` or `bytes` lowers to the words on its side of
+/// the bound, read against a word of the base's own kind and no other.
+#[test]
+fn an_order_bound_over_words_lowers_to_the_words_it_admits() {
+    let pool = Pool(vec![
+        Operand::Word(b"a".to_vec(), Kind::Str),
+        Operand::Word(b"b".to_vec(), Kind::Str),
+        Operand::Word(b"a".to_vec(), Kind::Bytes),
+    ]);
+    let bounded = |base: Schema, constraint| Schema::Refine {
+        base: Arc::new(base),
+        constraints: vec![constraint].into(),
+    };
+    let from_a = bounded(Schema::Str, Constraint::Ge(OperandIx::new(0)));
+    let from_b = bounded(Schema::Str, Constraint::Ge(OperandIx::new(1)));
+    let set = lower(&from_a, &pool).expect("a word bound over str lowers");
+    assert_eq!(set.emptiness(), Verdict::Inhabited);
+    assert_eq!(
+        from_b.descriptor_contained_in(&from_a, &pool, &[]),
+        Relation::Holds
+    );
+    assert_eq!(
+        from_a.descriptor_contained_in(&from_b, &pool, &[]),
+        Relation::Fails
+    );
+    let below_nothing = bounded(Schema::Str, Constraint::Lt(OperandIx::new(0)));
+    assert!(lower(&below_nothing, &pool).is_some());
+    assert!(
+        lower(
+            &bounded(Schema::Str, Constraint::Ge(OperandIx::new(2))),
+            &pool
+        )
+        .is_none(),
+        "a bytes bound orders no str"
+    );
+}
+
 /// A member whose scalar lies past the depth, its containers within it, is
 /// kept by the first thinned reading, which counts the containers alone.
 ///

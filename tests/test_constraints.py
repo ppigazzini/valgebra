@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Annotated
 import annotated_types as at
 import pytest
 
-from valgebra import Regex, ValidationError, Validator, nothing
+from valgebra import Regex, ValidationError, Validator, nothing, union
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -823,3 +823,38 @@ def test_two_list_or_tuple_bounds_are_not_compared() -> None:
     assert pairs.relation_to(Annotated[tuple[object, ...], at.Ge((1,))]) != "subset"
     supersets = Validator(Annotated[set[int], at.Ge({1, 2})])
     assert supersets.relation_to(Annotated[set[int], at.Ge({1})]) == "subset"
+
+
+# THEORY: a-refinement-narrows-its-base
+def test_an_order_bound_over_words_is_decided_as_the_words_it_admits() -> None:
+    """A `str` or `bytes` ordered against a word is a regular set of words.
+
+    Python orders two strings code point by code point and two `bytes` byte by
+    byte, a prefix before what extends it, and the words on one side of a word
+    are what an automaton holds: so two such bounds relate as their sets do,
+    and the set a bound leaves is read empty or not. A lone surrogate is a
+    code point, ordered where its number puts it.
+    """
+
+    def text(bound: object) -> object:
+        return Annotated[str, bound]
+
+    assert Validator(text(at.Ge("a"))).relation_to(text(at.Ge("b"))) == "not_subset"
+    assert Validator(text(at.Ge("b"))).relation_to(text(at.Ge("a"))) == "subset"
+    assert Validator(text(at.Lt(""))).relation_to(nothing) == "subset"
+    assert Validator(text(at.Ge(""))).relation_to(nothing) == "not_subset"
+    assert (
+        Validator(str).relation_to(union(text(at.Ge("a")), text(at.Lt("a"))))
+        == "subset"
+    )
+    assert Validator(text(at.Gt("a"))).is_equivalent(text(at.Ge("a\x00")))
+
+    def words(bound: object) -> object:
+        return Annotated[bytes, bound]
+
+    assert Validator(words(at.Gt(b"a"))).is_equivalent(words(at.Ge(b"a\x00")))
+    assert Validator(words(at.Ge(b"a"))).relation_to(words(at.Ge(b"b"))) == "not_subset"
+    surrogate = "\ud800"
+    assert Validator(text(at.Gt("퟿"))).is_valid(surrogate)
+    assert not Validator(text(at.Ge(""))).is_valid(surrogate)
+    assert Validator(text(at.Gt("퟿"))).relation_to(text(at.Ge(""))) == "not_subset"
