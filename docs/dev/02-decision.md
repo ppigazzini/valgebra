@@ -614,9 +614,15 @@ non-member, a predicate interrupted while `Literal[5]` is probed would answer
 
 **A layout is the class that laid it down.** The snapshot a class enters the
 core with carries, beside its ancestors, the class whose instance layout it
-has: the first on its `__mro__` that lays one down, which is one of the nine
-builtins or a class whose own `__slots__` add a slot -- `__dict__` and
-`__weakref__` add none, and neither does an empty `__slots__`. Python builds a
+has: the first on its `__base__` chain that lays one down, which is one of the
+nine builtins or a class whose own `__slots__` added a slot -- `__dict__` and
+`__weakref__` add none, and neither does an empty `__slots__`. Both are read
+off what Python built rather than off attributes code assigns: `__base__`
+through `type`'s own descriptor, the chain Python lays an instance out along
+and the one a metaclass's `mro()` does not rewrite, and a slot off the member
+descriptor Python made for it when it made the class, since a `__slots__`
+named afterwards lays nothing down. A slot whose descriptor an assignment
+replaced is read as the value that replaced it. Python builds a
 class deriving from two others only where the layout one carries extends the
 other's, and a layout extends another when the class that laid it down derives
 from the class that laid down the other. So two classes are disjoint exactly

@@ -46,6 +46,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: two bounds are compared only where each operand orders as the walk reads it
 - fix: two bounds over lists or tuples are not compared
 - fix: an enumeration making an instance past its members is not their union
+- fix: a class's layout is the one Python laid down
 
 -->
 
@@ -196,6 +197,16 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A class's layout is the one Python laid down.** A class given `__slots__`
+  after it was made -- by a decorator, say -- lays down no slot, yet was read
+  as laid out: its meet with any slotted class, and its relation to the
+  complement of `int`, were decided empty, beside instances Python builds of
+  both. A class whose metaclass's `mro()` leaves out the builtin it derives
+  from was read as laid out on nothing, though every instance is laid out on
+  that builtin, and a slot whose descriptor an assignment replaced was read as
+  unset rather than as the value every instance reads. The layout is read off
+  `__base__` and off the member descriptors Python makes with a class.
 
 - **An enumeration making an instance past its members is not their union.**
   An `Enum` whose `_missing_` returns a new instance for any value was decided
