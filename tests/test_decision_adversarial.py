@@ -849,3 +849,43 @@ def test_a_narrowed_meet_left_open_is_distributed_as_written() -> None:
     )
     assert tagged.relation_to(nothing) == "subset"
     assert tagged.is_empty()
+
+
+def test_a_narrowed_meet_left_open_leaves_steps_to_the_readings_after_it() -> None:
+    """The distribution after an undecided narrowing spends a bounded share.
+
+    A record whose one field is the complement of a guarded record is a dict,
+    so it is below any union holding the dicts. The guarded meets inside it
+    narrow and decline, and distributed through the JSON value's reference on
+    every step the query had left, they left the reading that places a record
+    below the dicts none to decide with.
+    """
+    json = recursive(
+        lambda j: union(
+            None,
+            bool,
+            int,
+            float,
+            str,
+            Validator(list[j]),  # ty: ignore[invalid-type-form]
+            Validator({str: j}),
+        )
+    )
+    obj = Validator(dict[str, json])  # ty: ignore[invalid-type-form]
+
+    def guard(record: Validator[Any]) -> Validator[Any]:
+        return intersection(
+            obj,
+            union(complement(obj), record),
+            union(complement(obj), Validator({"tag": json}).open()),
+        )
+
+    integer = intersection(
+        union(int, Annotated[float, at.MultipleOf(1)]), complement(bool)
+    )
+    up_to_one = union(Annotated[int, at.Le(1)], Annotated[float, at.Le(1)])
+    tag_int = Validator({"tag": intersection(integer, up_to_one)}).open()
+    guarded = Validator(
+        {"a": complement(guard(Validator({"tag": guard(tag_int)}).open()))}
+    )
+    assert guarded.relation_to(union(obj, complement(Validator(str)))) == "subset"

@@ -146,6 +146,20 @@ impl Budget {
     pub(crate) fn left(&self) -> u32 {
         self.steps.get()
     }
+
+    /// `reading` run on at most `cap` of the steps left, and what it spent
+    /// charged to the query: an allowance the query's total still bounds, on
+    /// this budget, so the meets the query holds open stay open inside it
+    /// (`OpenMeet`, in [`emptiness`], keys them by the budget).
+    pub(super) fn within<T>(&self, cap: u32, reading: impl FnOnce() -> T) -> T {
+        let left = self.steps.get();
+        let allowance = left.min(cap);
+        self.steps.set(allowance);
+        let answer = reading();
+        let spent = allowance.saturating_sub(self.steps.get());
+        self.steps.set(left - spent);
+        answer
+    }
 }
 
 /// Run `descent` one level below the budget's current depth, or answer
