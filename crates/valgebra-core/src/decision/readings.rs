@@ -57,21 +57,14 @@ impl Schema {
         // four hundred million calls into the bindings. The oracle can answer
         // the whole question at once where it holds the constants, and declines
         // -- leaving the walk to run -- where it cannot.
-        // Each table is read only where the one before it answered: a tuple of
-        // the two builds both, and the second is wasted whenever the first says
-        // this pair is not two tables of constants.
         //
-        // And neither is read until both sides are a shape that could *be* one.
-        // A table is a literal or a union of them, so every other node answers
-        // the question with a discriminant test -- while building the left
-        // table walks the left union's members, and a union of nothing but
-        // literals against a node that is not a table pays that walk to reach a
-        // reading the right side was never going to answer.
+        // Neither table is read until both sides are a shape that could *be*
+        // one. A table is a literal or a union of them, so every other node
+        // answers the question with a discriminant test here, where the call
+        // would cost every pair the walk reaches.
         if matches!(self, Schema::Literal(_) | Schema::Union(_))
             && matches!(other, Schema::Literal(_) | Schema::Union(_))
-            && let Some(left) = literal_constants(self)
-            && let Some(right) = literal_constants(other)
-            && let Some(answer) = oracle.literal_sets_disjoint(&left, &right)
+            && let Some(answer) = tables_disjoint(self, other, oracle)
         {
             return answer;
         }
@@ -861,6 +854,25 @@ pub(super) fn refuted_by_a_multiple(
     } else {
         Relation::Unknown
     }
+}
+
+/// Whether two tables of constants share no value, asked of the oracle for
+/// both tables at once: `None` where either side is no table, or the oracle
+/// cannot compare them. Its callers test both shapes first, a literal or a
+/// union, so a pair that holds no table pays no call.
+///
+/// Each table is read only where the one before it answered: a tuple of the
+/// two builds both, and the second is wasted whenever the first says the pair
+/// is not two tables of constants. Building the left one walks the left
+/// union's members, which a union of nothing but literals against a node that
+/// is not a table would pay to reach a reading the right side was never going
+/// to answer.
+pub(super) fn tables_disjoint(
+    left: &Schema,
+    right: &Schema,
+    oracle: &dyn LeafRelations,
+) -> Option<bool> {
+    oracle.literal_sets_disjoint(&literal_constants(left)?, &literal_constants(right)?)
 }
 
 /// How many texts of a string subject [`Schema::decided_by_its_texts`] puts to

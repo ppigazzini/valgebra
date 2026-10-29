@@ -227,6 +227,35 @@ fn two_sets_of_constants_are_disjoint_when_no_member_is_shared() {
     });
 }
 
+// THEORY: a-constant-is-the-values-equal-to-it
+#[test]
+fn a_constant_unequal_to_itself_is_shared_by_no_two_sets() {
+    // `Literal[nan]` denotes no value, since `nan == nan` is false, so the
+    // one `nan` object in two tables is no value they share -- although a set
+    // finds it there, by identity, before it asks `==`. The pair form answers
+    // the same of the constant against itself.
+    Python::attach(|py| {
+        let values = vec![
+            f64::NAN.into_pyobject(py).unwrap().into_any().unbind(),
+            1.0f64.into_pyobject(py).unwrap().into_any().unbind(),
+        ];
+        asking(py, values, |oracle| {
+            let ix = |slots: &[usize]| -> Vec<ConstIx> {
+                slots.iter().map(|slot| ConstIx::new(*slot)).collect()
+            };
+            let sets = |a: &[usize], b: &[usize]| oracle.literal_sets_disjoint(&ix(a), &ix(b));
+            assert_eq!(sets(&[0], &[0]), Some(true), "nan is no value");
+            assert_eq!(sets(&[0, 1], &[0]), Some(true), "nor beside 1.0");
+            assert_eq!(sets(&[0, 1], &[0, 1]), Some(false), "1.0 is shared");
+            assert_eq!(
+                oracle.literals_disjoint(ConstIx::new(0), ConstIx::new(0)),
+                Some(true),
+                "the pair form reads it so"
+            );
+        });
+    });
+}
+
 #[test]
 fn each_text_is_walked_as_a_str_of_the_schema() {
     // `strings_admitted` puts texts the core holds to the walk a validator of

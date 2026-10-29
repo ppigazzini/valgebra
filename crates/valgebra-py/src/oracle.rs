@@ -1079,7 +1079,8 @@ impl LeafRelations for PoolRelations<'_, '_> {
     /// [`literals_disjoint`](LeafRelations::literals_disjoint) over two sets of
     /// constants in one pass: two literals share a value where their constants
     /// are one exact type and equal [FCB08, §4.2], under the equality the pair
-    /// form trusts.
+    /// form trusts. A constant unequal to itself denotes no value, as the pair
+    /// form reads it, so it shares none even with itself.
     fn literal_sets_disjoint(&self, left: &[ConstIx], right: &[ConstIx]) -> Option<bool> {
         // Hash the smaller side and probe with the larger, which turns the
         // core's member-by-member walk into one pass. Keyed by `(type, value)`
@@ -1112,7 +1113,12 @@ impl LeafRelations for PoolRelations<'_, '_> {
             {
                 return None;
             }
-            if self.heard(seen.contains((value.get_type(), value)))? {
+            // A set finds a member by identity before it asks `==`, so the
+            // one `nan` held on both sides is found; it is a value of neither
+            // literal, and only a constant equal to itself is one shared.
+            if self.heard(seen.contains((value.get_type(), value)))?
+                && self.heard(value.eq(value))?
+            {
                 return Some(false);
             }
         }
