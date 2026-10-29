@@ -15,6 +15,84 @@ fn compile_pattern_anchors_the_whole_string() {
     assert!(!digits.is_match(""));
 }
 
+/// A counted Unicode class written as an ordinary bound compiles: the program
+/// is past the crate's default and inside [`PATTERN_SIZE_LIMIT`], and one four
+/// times larger is refused.
+#[test]
+fn a_counted_unicode_class_compiles_within_the_pattern_size_limit() {
+    let word = compile_pattern(r"\w{1,255}").expect("a counted class compiles");
+    assert!(word.is_match(&"é".repeat(255)));
+    assert!(!word.is_match(&"a".repeat(256)));
+    assert!(!word.is_match(""));
+    assert!(compile_pattern(r"\w{1,255}@\w{1,255}").is_ok());
+    assert!(compile_pattern(r"\w{1,1000}").is_err());
+}
+
+/// A validator's patterns are bounded together by what each keeps: within an
+/// allowance of one program's bound two counted Unicode classes fit, and a
+/// third is refused with the pattern that takes them past it named. A text met
+/// twice is one program, and each place the tree holds a pattern finds its
+/// compiled one. The sixteen identifier patterns of one record, refused within
+/// that allowance, fit within [`PATTERNS_HELD`].
+#[test]
+fn a_schemas_patterns_compile_within_one_allowance_together() {
+    let refined =
+        |pattern: &str| Schema::refine(Schema::Str, vec![Constraint::Regex(pattern.to_owned())]);
+    let words = |count: usize| {
+        Schema::Union(
+            (0..count)
+                .map(|at| refined(&format!(r"\w{{1,255}}x{at}")))
+                .collect::<Vec<_>>()
+                .into(),
+        )
+    };
+    let within_one = |schema: &Schema| compile_patterns_within(PATTERN_SIZE_LIMIT, schema, &[]);
+    let two = words(2);
+    let compiled = within_one(&two).expect("two counted classes fit");
+    assert_eq!(compiled.len(), 2);
+    for pattern in two.patterns() {
+        assert!(
+            compiled[&(pattern.as_ptr() as usize)]
+                .is_match(&format!("é{}", &pattern[pattern.len() - 2..]))
+        );
+    }
+    let refused = within_one(&words(3)).expect_err("a third one passes the bound");
+    assert!(
+        refused.contains("at most 32 MiB together") && refused.contains("{1,255}x"),
+        "{refused}"
+    );
+    // One text held three times, once in a definition, beside a second text:
+    // four places, two programs, each charged once.
+    let thrice = Schema::Union(
+        vec![
+            refined(r"\w{1,255}x0"),
+            refined(r"\w{1,255}x0"),
+            refined(r"\w{1,255}x1"),
+        ]
+        .into(),
+    );
+    let compiled = compile_patterns(&thrice, &[refined(r"\w{1,255}x0")])
+        .expect("two programs, each charged once");
+    assert_eq!(compiled.len(), 4);
+    let identifiers = Schema::Union(
+        (0..16)
+            .map(|at| refined(&format!(r"^[\w.-]{{1,{}}}$", 40 + at)))
+            .collect::<Vec<_>>()
+            .into(),
+    );
+    assert!(
+        within_one(&identifiers).is_err(),
+        "past one program's bound"
+    );
+    let held = compile_patterns_within(PATTERNS_HELD, &identifiers, &[]);
+    assert_eq!(held.map(|compiled| compiled.len()).ok(), Some(16));
+    let invalid = compile_patterns(&refined("(unclosed"), &[]).expect_err("no pattern");
+    assert!(
+        invalid.starts_with("invalid regular expression"),
+        "{invalid}"
+    );
+}
+
 #[test]
 fn compile_pattern_rejects_an_invalid_pattern() {
     assert!(compile_pattern("(unclosed").is_err());
@@ -93,4 +171,59 @@ mod interpreter {
             );
         });
     }
+}
+
+/// Two validators holding one text hold one program while either lives
+/// ([`program`]), and the table keeps none alive: once both are gone, the text
+/// compiles again.
+#[test]
+fn validators_holding_one_text_hold_one_program() {
+    let refined =
+        |pattern: &str| Schema::refine(Schema::Str, vec![Constraint::Regex(pattern.to_owned())]);
+    let text = r"^\w{1,40}held$";
+    let program_of = |compiled: &RegexIndex| {
+        compiled
+            .values()
+            .next()
+            .map(Arc::clone)
+            .expect("one pattern, one program")
+    };
+    let first = compile_patterns(&refined(text), &[]).expect("a pattern that builds");
+    let second = compile_patterns(&refined(text), &[]).expect("a pattern that builds");
+    let held = program_of(&first);
+    assert!(Arc::ptr_eq(&held, &program_of(&second)));
+    let gone = Arc::downgrade(&held);
+    drop((held, first, second));
+    assert!(gone.upgrade().is_none(), "the table keeps no program alive");
+    let again = compile_patterns(&refined(text), &[]).expect("a pattern that builds");
+    assert!(program_of(&again).is_match("éheld"));
+}
+
+/// The table drops the entries of programs gone each time it reaches the
+/// length it last doubled to, and keeps every program a validator holds: the
+/// next length is twice the entries left, and the first is two.
+#[test]
+fn the_program_table_drops_the_programs_gone_as_it_doubles() {
+    let mut programs = Programs::default();
+    let compiled = |text: &str| Arc::new(compile_pattern(text).expect("a pattern that builds"));
+    let texts = |programs: &Programs| {
+        let mut held: Vec<String> = programs.by_text.keys().map(ToString::to_string).collect();
+        held.sort();
+        held
+    };
+    let (a, b, d) = (compiled("a"), compiled("b"), compiled("d"));
+    programs.hold("a", &a);
+    assert_eq!(programs.prune_at, 2, "the first length is two");
+    programs.hold("b", &b);
+    programs.hold("c", &compiled("c"));
+    assert_eq!(programs.prune_at, 4, "twice the two entries left");
+    assert_eq!(texts(&programs), ["a", "b", "c"]);
+    programs.hold("d", &d);
+    programs.hold("e", &compiled("e"));
+    assert_eq!(programs.prune_at, 6, "twice the three entries left");
+    assert_eq!(
+        texts(&programs),
+        ["a", "b", "d", "e"],
+        "the program gone is dropped, the ones held kept"
+    );
 }

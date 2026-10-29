@@ -1199,11 +1199,10 @@ fn parse_constraint_within<'py>(
         let pattern = with_inline_flags(marker, &probes, pattern)?;
         // Refused before the compile, because this engine compiles these and
         // reads them as a different set than `re` does. The parse error the
-        // compile gives is for the loud direction; this is the quiet one.
+        // compile gives is for the loud direction; this is the quiet one. The
+        // compile is the validator's, which holds every pattern of the schema
+        // within one allowance and keeps what it compiled.
         super::dialect::reject_reserved_class_syntax(&pattern)?;
-        crate::check::compile_pattern(&pattern).map_err(|err| {
-            PyValueError::new_err(format!("invalid regular expression {pattern:?}: {err}"))
-        })?;
         out.push(Constraint::Regex(pattern));
         return Ok(());
     }

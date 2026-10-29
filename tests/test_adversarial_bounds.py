@@ -970,6 +970,78 @@ def test_a_pattern_whose_determinization_explodes_answers_in_bounded_time() -> N
     assert elapsed < 30, f"four relations took {elapsed:.1f}s; the bound is not biting"
 
 
+# BOUND: PATTERN_SIZE_LIMIT
+def test_a_counted_unicode_class_builds_and_a_larger_one_is_refused() -> None:
+    r"""The program a pattern compiles to is bounded at 32 MiB.
+
+    `\w{1,255}`, an ordinary bound on a word, compiles to 16 MiB because the
+    Unicode class is copied once a repetition, past the engine's default of 10
+    and inside the bound; `re` takes it, and so does the walk. Four times the
+    count is past the bound and refused where the schema is built.
+    """
+    word = Validator(Annotated[str, Regex(r"\w{1,255}")])
+    assert word.is_valid("é" * 255)
+    assert not word.is_valid("a" * 256)
+    assert not word.is_valid("")
+    with pytest.raises(ValueError, match="invalid regular expression"):
+        Validator(Annotated[str, Regex(r"\w{1,1000}")])
+
+
+def test_a_validators_patterns_are_bounded_together() -> None:
+    r"""A validator keeps every pattern's program, so they are bounded together.
+
+    The bound is eight programs at the one pattern's bound, 256 MiB. A record of
+    sixteen identifier fields, `^[\w.-]{1,n}$` each, keeps 43 MB and builds, in
+    one call and composed of two records holding seven and nine of the fields,
+    where the one program's bound held together refused it at its twelfth
+    field. The edge itself is the crate's own test: reaching it takes nineteen
+    counted Unicode classes, seconds of compiling in a test build.
+    """
+
+    def fields(at: range) -> dict[str, object]:
+        return {f"f{j}": Annotated[str, Regex(rf"^[\w.-]{{1,{40 + j}}}$")] for j in at}
+
+    value = {f"f{j}": "a.b" for j in range(16)}
+    assert Validator(fields(range(16))).is_valid(value)
+    left, right = Validator(fields(range(7))), Validator(fields(range(7, 16)))
+    assert union(left, right).is_valid({f"f{j}": "a.b" for j in range(7)})
+    assert not intersection(left, right).is_valid(value)
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="Linux applies an address-space cap to the child"
+)
+def test_validators_holding_one_pattern_hold_one_program() -> None:
+    r"""Four hundred validators built over one pattern-holding field fit in 3 GiB.
+
+    Each holds `^\w{1,200}$`, a program of 12 MB. A validator that compiled
+    a copy of its own passed the cap at about the two hundred and fortieth, where
+    the failed allocation aborted the interpreter; shared, the four hundred hold
+    one program. Asked in a child whose address space is capped, so a
+    regression ends the child rather than the suite.
+    """
+    code = textwrap.dedent(
+        """
+        import resource
+        resource.setrlimit(resource.RLIMIT_AS, (3 << 30, 3 << 30))
+        from typing import Annotated
+        from valgebra import Regex, Validator, intersection
+        field = Validator({"a": Annotated[str, Regex(r"^\\w{1,200}$")]})
+        rest = Validator({"b?": int}).open()
+        kept = [intersection(field, rest) for _ in range(400)]
+        print(len(kept), kept[-1].is_valid({"a": "word"}))
+        """
+    )
+    done = subprocess.run(  # noqa: S603 - this interpreter, a fixed program
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+    assert done.stdout.split() == ["400", "True"], done.stderr[-300:]
+
+
 def test_a_pattern_that_stays_small_is_still_decided() -> None:
     """The bound is on the table, not on the shape or the length of the source."""
     small = Annotated[str, Regex("(a|b)*a(a|b){4}")]

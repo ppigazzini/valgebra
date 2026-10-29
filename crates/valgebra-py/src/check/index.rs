@@ -3,9 +3,11 @@
 
 use pyo3::prelude::*;
 use pyo3::types::{PyInt, PyString};
-use regex::Regex;
+use regex_automata::util::syntax;
+use regex_automata::{MatchKind, meta};
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::sync::Arc;
+use std::collections::hash_map::Entry;
+use std::sync::{Arc, LazyLock, Mutex, Weak};
 use valgebra_core::{Constraint, Schema};
 
 use super::memo::{self, MemoPlan};
@@ -154,6 +156,11 @@ impl UnionPlan {
 /// address mapped to its [`UnionPlan`]. Keyed and rebuilt like [`RecordIndex`].
 pub(crate) type UnionIndex = FxHashMap<usize, UnionPlan>;
 
+/// A compiled pattern: the engine `regex` builds a `Regex` on, built as it
+/// builds one ([`compile_pattern`]), so it matches the same language and can
+/// say what memory it keeps.
+pub(crate) type Regex = meta::Regex;
+
 /// Each `Regex(...)` constraint's pattern-buffer address mapped to its compiled,
 /// anchored regex, built once per validator so a string-pattern refinement
 /// matches natively without recompiling on every call.
@@ -163,9 +170,9 @@ pub(crate) type UnionIndex = FxHashMap<usize, UnionPlan>;
 /// and the index is rebuilt per validator from its own schema, so an entry
 /// always refers to the same live constraint. The text is a key that must be
 /// hashed in full for every value a pattern refinement checks; the address is
-/// one integer. Two occurrences of the same pattern compile twice, once, at
-/// build time.
-pub(crate) type RegexIndex = FxHashMap<usize, Regex>;
+/// one integer. Two occurrences of the same text share one compiled program,
+/// and so do two validators holding it ([`program`]).
+pub(crate) type RegexIndex = FxHashMap<usize, Arc<Regex>>;
 
 /// Anchor a user pattern so the whole string must match (`re.fullmatch`
 /// semantics): `\A` and `\z` are absolute string boundaries, and the
@@ -184,13 +191,173 @@ pub(crate) type RegexIndex = FxHashMap<usize, Regex>;
 /// parse once wrapped -- `a)|(b` closes the wrapper's group and opens one the
 /// wrapper closes -- and its alternation then escapes both anchors, so the
 /// wrappers would compile a language the caller never wrote.
+///
+/// Built with the configuration `regex::RegexBuilder` hands the engine -- the
+/// leftmost-first match, the UTF-8 syntax, and the lazy DFA's cache at the 2 MiB
+/// the engine defaults to -- and its errors read as `regex`'s, so the language
+/// and the refusal are the ones `regex` gives.
 pub(crate) fn compile_pattern(pattern: &str) -> Result<Regex, regex::Error> {
     regex_syntax::Parser::new()
         .parse(pattern)
         .map_err(|err| regex::Error::Syntax(err.to_string()))?;
-    Regex::new(&format!(r"\A(?:{pattern})\z"))
-        .or_else(|anchored| Regex::new(&format!("\\A(?:{pattern}\n)\\z")).map_err(|_| anchored))
+    let build = |anchored: &str| {
+        meta::Builder::new()
+            .configure(
+                meta::Config::new()
+                    .nfa_size_limit(Some(PATTERN_SIZE_LIMIT))
+                    .match_kind(MatchKind::LeftmostFirst)
+                    .utf8_empty(true),
+            )
+            .syntax(syntax::Config::new().utf8(true))
+            .build(anchored)
+            .map_err(|err| match (err.size_limit(), err.syntax_error()) {
+                (Some(limit), _) => regex::Error::CompiledTooBig(limit),
+                (None, Some(syntax)) => regex::Error::Syntax(syntax.to_string()),
+                (None, None) => regex::Error::Syntax(err.to_string()),
+            })
+    };
+    build(&format!(r"\A(?:{pattern})\z"))
+        .or_else(|anchored| build(&format!("\\A(?:{pattern}\n)\\z")).map_err(|_| anchored))
 }
+
+/// The programs a live validator holds, by their text, held weakly
+/// ([`program`]).
+static PROGRAMS: LazyLock<Mutex<Programs>> = LazyLock::new(Mutex::default);
+
+/// The table [`PROGRAMS`] guards: a program for each text some validator holds,
+/// and the length at which the entries of programs gone are dropped.
+#[derive(Default)]
+struct Programs {
+    by_text: FxHashMap<Box<str>, Weak<Regex>>,
+    prune_at: usize,
+}
+
+impl Programs {
+    /// Hold `compiled` as the program of `pattern`, first dropping the entries
+    /// of programs gone where the table has reached the length it last doubled
+    /// to: the entries left then set the next length, twice theirs.
+    fn hold(&mut self, pattern: &str, compiled: &Arc<Regex>) {
+        if self.by_text.len() >= self.prune_at {
+            self.by_text.retain(|_, held| held.strong_count() > 0);
+            self.prune_at = 2 * self.by_text.len().max(1);
+        }
+        self.by_text
+            .insert(pattern.into(), Arc::downgrade(compiled));
+    }
+}
+
+/// The program of `pattern`, shared with every validator that holds it while
+/// one does, or compiled ([`compile_pattern`]) where none does.
+///
+/// A validator built from another -- a meet, a union, a complement, the same
+/// annotation built again -- holds the other's patterns, and compiled for it
+/// each would keep a program of its own: twenty over `^\w{1,200}$` kept 240
+/// MB, and a few hundred passed the memory there was, where a failed
+/// allocation aborts the interpreter. Held weakly, a program lives as long as
+/// a validator holds it and no longer, so validators holding one text hold one
+/// program, and a text no validator holds any more is compiled again. The
+/// table keeps no program alive, and drops the entries of programs gone each
+/// time it has doubled, so its upkeep is constant a program.
+///
+/// Compiled outside the lock: a counted Unicode class takes hundreds of
+/// milliseconds, and two threads compiling one text at once each hold a
+/// correct program. A poisoned lock shares nothing and compiles.
+pub(crate) fn program(pattern: &str) -> Result<Arc<Regex>, regex::Error> {
+    let held = PROGRAMS
+        .lock()
+        .ok()
+        .and_then(|programs| programs.by_text.get(pattern).and_then(Weak::upgrade));
+    if let Some(held) = held {
+        return Ok(held);
+    }
+    let compiled = Arc::new(compile_pattern(pattern)?);
+    if let Ok(mut programs) = PROGRAMS.lock() {
+        programs.hold(pattern, &compiled);
+    }
+    Ok(compiled)
+}
+
+/// A validator's patterns, each text compiled once, within [`PATTERNS_HELD`]
+/// together.
+///
+/// A validator keeps the program of every pattern it holds for as long as it
+/// lives, so the bound on what one pattern may keep is a bound on one of them
+/// only: a hundred patterns of 16 MiB each held a gigabyte, and the allocation
+/// past the memory there is aborts the interpreter rather than raising. Read
+/// together, the memory each compiled pattern keeps is charged to one
+/// allowance, and the pattern that would pass it is refused where the schema is
+/// built, with the patterns compiled before it. A text met twice is one
+/// program, charged once. A program another validator holds is shared
+/// ([`program`]) and charged all the same, so what a schema is refused for does
+/// not depend on what else is alive.
+///
+/// What it returns is the table the walk's index takes, so a validator's
+/// patterns compile once, when it is built.
+pub(crate) fn compile_patterns(
+    schema: &Schema,
+    definitions: &[Schema],
+) -> Result<RegexIndex, String> {
+    compile_patterns_within(PATTERNS_HELD, schema, definitions)
+}
+
+/// [`compile_patterns`] within `allowance` bytes, the figure a test can make
+/// small enough to reach with patterns that compile in a millisecond.
+pub(crate) fn compile_patterns_within(
+    allowance: usize,
+    schema: &Schema,
+    definitions: &[Schema],
+) -> Result<RegexIndex, String> {
+    let mut compiled = RegexIndex::default();
+    let mut by_text: FxHashMap<&str, Arc<Regex>> = FxHashMap::default();
+    let mut left = allowance;
+    for tree in std::iter::once(schema).chain(definitions) {
+        for pattern in tree.patterns() {
+            let regex = if let Some(regex) = by_text.get(pattern) {
+                regex.clone()
+            } else {
+                let regex = program(pattern)
+                    .map_err(|err| format!("invalid regular expression {pattern:?}: {err}"))?;
+                left = left.checked_sub(regex.memory_usage()).ok_or_else(|| {
+                    format!(
+                        "the patterns of one schema compile to at most {} MiB together, \
+                         and {pattern:?} takes them past it: a validator keeps every \
+                         pattern's program while it lives",
+                        allowance >> 20
+                    )
+                })?;
+                by_text.insert(pattern, Arc::clone(&regex));
+                regex
+            };
+            compiled.insert(pattern.as_ptr() as usize, regex);
+        }
+    }
+    Ok(compiled)
+}
+
+/// The program one pattern may compile to: 32 MiB, three times the `regex`
+/// crate's default program size.
+///
+/// The default refuses a counted Unicode class written as an ordinary bound.
+/// The class holds some 700 ranges and a count copies it once a repetition, so
+/// `\w{1,255}` keeps 14 MiB and `\w{1,255}@\w{1,255}` 28, each built in 150 to
+/// 400 ms; `re` takes both. Past this, `\w{1,1000}` is refused as before. The
+/// ASCII class of the same counts, `(?-u)\w{1,255}`, keeps 40 KiB.
+pub(crate) const PATTERN_SIZE_LIMIT: usize = 32 << 20;
+
+/// The memory a validator's patterns may keep together: 256 MiB, eight programs
+/// at [`PATTERN_SIZE_LIMIT`] ([`compile_patterns`]).
+///
+/// A validator keeps every pattern's program while it lives, and the `regex`
+/// crate bounds one program, leaving a collection to its caller; pydantic-core
+/// keeps each pattern under the crate's bound and none together. Unbounded,
+/// a hundred and twenty `\w{1,255}`, 14.3 MB a program, held 1.7 GB, and the
+/// allocation past the memory aborted the interpreter. Held to the one
+/// program's bound, a record of sixteen string fields each `^[\w.-]{1,n}$`,
+/// 2.2 to 3 MB a program, was refused at its twelfth field, a schema every
+/// release built. At this figure that record keeps 43 MB and builds, and the
+/// `\w{1,255}` union is refused at its nineteenth pattern, built and walked
+/// within an address space of 1 GiB.
+pub(crate) const PATTERNS_HELD: usize = 256 << 20;
 
 /// The per-validator precompute: record-field lookups, literal-union decision
 /// tables, and compiled string patterns, all built once from the finished schema
@@ -248,13 +415,28 @@ impl ValidatorIndex {
 /// exception: a record with no plan is read by its entries rather than its
 /// keys, and which branch of a union of records is explained follows that
 /// reading, so the traversal descends into every node a record can sit under.
+#[cfg(all(test, feature = "interpreter-tests"))]
 pub(crate) fn build_index(
     py: Python<'_>,
     schema: &Schema,
     defs: &[Schema],
     pool: &[Py<PyAny>],
 ) -> ValidatorIndex {
+    build_index_from(py, schema, defs, pool, &RegexIndex::default())
+}
+
+/// [`build_index`] taking the patterns a validator compiled when it was built
+/// ([`compile_patterns`]), so none compiles twice; a pattern the table does
+/// not hold is compiled here.
+pub(crate) fn build_index_from(
+    py: Python<'_>,
+    schema: &Schema,
+    defs: &[Schema],
+    pool: &[Py<PyAny>],
+    compiled: &RegexIndex,
+) -> ValidatorIndex {
     let mut index = ValidatorIndex::default();
+    index.regexes.clone_from(compiled);
     collect(py, schema, pool, &mut index);
     for def in defs {
         collect(py, def, pool, &mut index);
@@ -315,9 +497,10 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
             collect(py, base, pool, index);
             for constraint in constraints.iter() {
                 if let Constraint::Regex(pattern) = constraint
-                    && let Ok(compiled) = compile_pattern(pattern)
+                    && let Entry::Vacant(slot) = index.regexes.entry(pattern.as_ptr() as usize)
+                    && let Ok(compiled) = program(pattern)
                 {
-                    index.regexes.insert(pattern.as_ptr() as usize, compiled);
+                    slot.insert(compiled);
                 }
             }
         }

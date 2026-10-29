@@ -19,7 +19,8 @@ use valgebra_core::{Measure, Openness, Relation, Schema};
 
 use crate::build::{Pool, PoolKeys, build_root};
 use crate::check::{
-    Ctx, Frame, Unwritten, ValidatorIndex, WalkMode, WalkState, build_index, member,
+    Ctx, Frame, RegexIndex, Unwritten, ValidatorIndex, WalkMode, WalkState, build_index_from,
+    compile_patterns, member,
 };
 use crate::errors::into_pyerr;
 use crate::input::{JsonInput, Value, decode_json_input, parse_json};
@@ -151,6 +152,12 @@ pub struct Validator {
     /// rebuilt per validator (a copy starts empty) so its buffer-address keys
     /// always refer to this schema's nodes.
     index: OnceLock<ValidatorIndex>,
+    /// The patterns the schema holds, compiled when the validator was built,
+    /// within one allowance together ([`compile_patterns`]), each shared with
+    /// every other validator holding its text; the index takes them rather
+    /// than compiling them again. Empty for a validator assembled without
+    /// [`checked`](Self::checked), whose index finds its own.
+    patterns: RegexIndex,
     /// The keys of `literals`, read on the first relation this validator is a
     /// side of and shared by every relation after it. Lazy for the reason
     /// `index` is, and never copied: a copy reads its own.
@@ -170,6 +177,7 @@ impl Validator {
             literals,
             definitions,
             index: OnceLock::new(),
+            patterns: RegexIndex::default(),
             keys: PyOnceLock::new(),
             hash: OnceLock::new(),
         }
@@ -242,11 +250,13 @@ impl Validator {
                     depth: 0,
                     nodes: 0,
                     escaped_self_ref: false,
+                    holds_a_pattern: false,
                 },
                 |whole, tree| Measure {
                     depth: whole.depth.max(tree.depth),
                     nodes: whole.nodes.saturating_add(tree.nodes),
                     escaped_self_ref: whole.escaped_self_ref || tree.escaped_self_ref,
+                    holds_a_pattern: whole.holds_a_pattern || tree.holds_a_pattern,
                 },
             );
         let depth = whole.depth;
@@ -286,7 +296,15 @@ impl Validator {
                  outside.",
             ));
         }
-        Ok(Validator::new(schema, literals, definitions))
+        // Most schemas hold no pattern, and the walk above has said so.
+        if !whole.holds_a_pattern {
+            return Ok(Validator::new(schema, literals, definitions));
+        }
+        let patterns = compile_patterns(&schema, &definitions).map_err(PyValueError::new_err)?;
+        Ok(Validator {
+            patterns,
+            ..Validator::new(schema, literals, definitions)
+        })
     }
 
     /// Rebuild this validator with `f` applied to the root schema and to every
@@ -317,7 +335,13 @@ impl Validator {
     /// finish. The built path is the same `get()` either way.
     fn index(&self, py: Python<'_>) -> &ValidatorIndex {
         self.index.get_or_init_py_attached(py, || {
-            build_index(py, &self.schema, &self.definitions, &self.literals)
+            build_index_from(
+                py,
+                &self.schema,
+                &self.definitions,
+                &self.literals,
+                &self.patterns,
+            )
         })
     }
 
