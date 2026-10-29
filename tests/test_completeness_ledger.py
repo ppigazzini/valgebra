@@ -845,6 +845,51 @@ _DECIDED = [
         ),
         id="map:wider-record<=its-corners",
     ),
+    # A dict below the complement of three dict shapes, the widest the work
+    # allowance is sized from: refuted at `{"a": 0, "zz": None}`, which every
+    # shape leaves out and the meet of a mapping to non-strings and the
+    # complement of a record holding `None` keeps. The difference spends half
+    # again what the three-field record does, so the row fails on a commit
+    # that lowers the allowance under it.
+    pytest.param(
+        "refutes",
+        complement(
+            union(
+                Validator({"a?": complement(Literal[0])}).open(),
+                dict[str, Literal[0]],
+                dict[Literal["a"], object],
+            )
+        ),
+        complement(
+            intersection(
+                Validator(dict[str, complement(str)]),  # ty: ignore[invalid-type-form]
+                complement({"a": None}),
+            )
+        ),
+        id="map:dict!<=complement-of-three-shapes",
+    ),
+    # A meet of a union of complements and a record minus three shapes, refuted
+    # at `{"a": b"", "b": "x"}` by the same difference.
+    pytest.param(
+        "refutes",
+        intersection(
+            union(
+                complement(Validator({"a": None}).open()),
+                complement(dict[str, bytes]),
+            ),
+            {"a": bytes, "b?": complement(Literal[0])},
+            dict,
+            complement(
+                union(
+                    Validator({"a": complement(nothing), str: bytes}),
+                    Validator({"a": complement(Literal["a"]), str: float}),
+                    dict[Literal["a"], int],
+                )
+            ),
+        ),
+        nothing,
+        id="map:record-minus-three-shapes!<=nothing",
+    ),
     # The record rule's width, where the product rule's is: six fields against
     # their sixty-four corners decide, as six tuple components do, which is the
     # number the decidability page gives.
@@ -1777,6 +1822,74 @@ _TRANSLATED: list[object] = [
         list[union(int, Annotated[float, at.MultipleOf(1)])],  # ty: ignore[invalid-type-form]
         Annotated[list[union(int, Annotated[float, at.MultipleOf(1)])], at.Len(0, 1)],  # ty: ignore[invalid-type-form]
         id="seq:list[INTEGER]!<=maxItems-1",
+    ),
+    # A scalar tower deep in meets and complements starts no build of its own,
+    # so the set representation reads it past the depth that bounds containers.
+    pytest.param(
+        "refutes",
+        intersection(
+            int,
+            complement(intersection(int, complement(Annotated[int, at.MultipleOf(2)]))),
+        ),
+        nothing,
+        id="scalar:int&~(int&~even)-is-inhabited",
+    ),
+    pytest.param(
+        "refutes",
+        intersection(int, complement(intersection(int, complement(Literal[1, 2, 3])))),
+        nothing,
+        id="scalar:int&~(int&~{1,2,3})-is-inhabited",
+    ),
+    pytest.param(
+        "empty",
+        intersection(
+            int,
+            complement(
+                union(intersection(Annotated[int, at.MultipleOf(4)], bool), int)
+            ),
+        ),
+        None,
+        id="scalar:int&~((mult4&bool)|int)-is-empty",
+    ),
+    pytest.param(
+        "empty",
+        intersection(
+            int,
+            complement(intersection(int, complement(Literal[0.5, 1.0, b""]))),  # ty: ignore[invalid-type-form]
+        ),
+        None,
+        id="scalar:int&~(int&~{0.5,1.0,b''})-is-empty",
+    ),
+    # Two records sharing no value empty a meet beside a member whose scalars
+    # nest past that depth under a literal key's complement: the reading that
+    # holds the member proves nothing, and the one that leaves it out proves
+    # the meet empty.
+    pytest.param(
+        "empty",
+        intersection(
+            dict[str, Literal["a"]],
+            complement(
+                intersection(
+                    dict[Literal["a"], complement(str)],  # ty: ignore[invalid-type-form]
+                    complement(dict[Literal["a"], int]),
+                )
+            ),
+            {"a": Literal[0]},
+        ),
+        None,
+        id="map:dict[str,'a']&~(dict['a',~str]&~dict['a',int])&{'a':0}-is-empty",
+    ),
+    # A meet whose every member holds such a scalar reads, left without them,
+    # as the universe, which is below a union of complements whose inner sets
+    # share no value: `{"a": None}` and `dict[Literal["a"], Literal["a"]]`.
+    pytest.param(
+        "subtype",
+        intersection(
+            complement(intersection({"a": str}, {"b": complement(float)})),
+            complement(intersection(dict[Literal["a"], float], {"b": complement(int)})),
+        ),
+        union(complement({"a": None}), complement(dict[Literal["a"], Literal["a"]])),
+        id="map:~({a:str}&{b:~float})&~(dict['a',float]&{b:~int})<=~{a:None}|~dict['a','a']",
     ),
     # Under a full match the two ends of the text are word boundaries before and
     # after a word character.

@@ -86,10 +86,14 @@ cut: where one was, the difference was widened on the left and shrunk on the
 right, so a value found in it need be no value of the real difference. A
 conjunct at the top of the subject no lowering reads -- a refinement's
 predicate, a meet member holding one, a meet member nested past the depth
-bound -- is left out the same way (`lower_widened` in `descr/lower.rs`): a meet
+bound -- is left out the same way (`read_widened` in `descr/lower.rs`): a meet
 is below each member, so the reading is a superset, which makes the
 descriptor's emptiness monotone in a meet's members, and an inhabited reading
-of it refutes nothing. A constraint no component holds that is no predicate --
+of it refutes nothing. Each reading is decided where it is built, and one that
+answers nothing hands the pair to the next. A scalar nested past the depth is
+read first by the readings that leave its member out, which build less, and in
+the whole build after them, where the caller can read what that build may
+answer: an emptiness the rules find inhabited is not built whole. A constraint no component holds that is no predicate --
 a step over the floats -- refuses the reading as it refuses the schema. The
 depth is read off the schema before anything is built (`nests_past_the_depth`),
 so a schema past it costs a walk of the nodes ahead of the deep one rather than
@@ -318,6 +322,22 @@ are read as a set first, since a predicate may answer two occurrences apart.
 `a_universe_through_a_pattern_over_two_bases_bounds_a_subject_the_sets_refuse`
 in `laws.rs` draws the family.
 
+**A union holding the top lowers to the universe, whatever else it holds.**
+`X ∪ ⊤` is `⊤`, so a member the lowering refuses -- a literal the pool cannot
+read, a predicate -- refuses no union beside the top. The constructors fold
+such a union, and a term built raw carries it; the lowering looks for the top
+only where a member refused, so a union that lowers pays nothing for the look.
+The fuzzer drew `None | <literal> | Any`, through a reference, below a union the
+set reading proves universal because no string fully matches two of its
+patterns, which the rules compare by spelling: the relation declined a subject
+whose own reading is the universe. `fuzz/seeds/decision/` keeps the input,
+`a_union_holding_the_top_is_below_a_universe_the_sets_prove` in
+`decision/tests.rs` holds the pair, and
+`a_union_holding_the_top_lowers_to_the_universe` in `descr/lower/tests.rs`
+draws the family. A lone literal the pool cannot read below the same union
+stays a decline: the set reading lowers no supertype for a subject it refuses,
+the dearer route below.
+
 **What no component holds is a cycle**, which is why a recursive schema is
 lowered by unfolding its body once, with a lattice bound where the reference was
 (`UNFOLDS` in `descr/lower.rs`), and belongs to the rules past that. The other
@@ -333,10 +353,17 @@ a complement against a meet -- and it is the one nothing else holds: a width
 bound refuses an answer too wide to represent, and says nothing about how long
 reaching a narrow one may take. So the allowance is what sets the width of the
 fragment the sets decide, and `decision/tests.rs` carries the two record splits
-either side of it, asked of the set reading alone: a record over nine corners
-decides, one over sixteen declines, and a decline is "not proven within what a
+either side of it, asked of the set reading alone: a record over sixteen
+corners decides, one over twenty-five declines, and a decline is "not proven within what a
 build may spend". The record rule decides both, so the figure is the set
 reading's and not the relation's.
+
+**So is the reading of a side.** A subject is read for emptiness before the
+difference is built, and a negated union's emptiness expands it by a product,
+which costs what a build costs. `read_widened` decides each reading under an
+allowance of its own, the same figure: read outside one, the complement of a
+meet of three complemented records multiplied out for minutes where it now
+declines at once (`each_reading_is_decided_under_an_allowance_of_its_own`).
 
 **Against a complement, the difference meets the inner set.** `a ∧ ¬¬x` is
 `a ∧ x`, and `x` is lowered on the widened side in place of complementing the
@@ -1312,6 +1339,20 @@ is. `fuzz/seeds/decision/` keeps the input, and
 `a_complement_only_the_descriptor_empties_bounds_a_subject_with_no_descriptor`
 in `decision/tests.rs` holds the pair and its non-universal neighbor, which
 stays a decline.
+
+**The universe bound reads a union's complements by the set representation
+where the rules leave their meet open.** `¬(X₁ ∪ … ∪ Xₙ)` is the meet of the
+complements, the supertype's alone, and two patterns no word matches both are
+a meet only the sets empty. The descriptor route lowers the subject first, so
+on that route a subject the set reading cannot lower -- a literal the null
+oracle cannot place -- is refused at the subject, beside a union `is_empty`
+proves the universe. So `union_complement_is_empty` asks the set
+representation for the meet once the rules decline it (`denotes_no_value`), which is only where every rule and the region walk have
+declined and the walk passed a member over: a query that decides never lowers
+the meet. `fuzz/seeds/decision/` keeps the input, and
+`a_union_only_the_sets_read_as_the_universe_bounds_a_subject_with_no_descriptor`
+in `decision/tests.rs` holds the pair and its neighbor whose two patterns are
+one, which is no universe and stays a decline.
 
 **The contravariant rule asks the same where it declines.** `¬A ⊆ ¬B` is read
 as `B ⊆ A`, which puts `B` in the subject, where its emptiness is the

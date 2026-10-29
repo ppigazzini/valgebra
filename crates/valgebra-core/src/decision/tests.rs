@@ -480,12 +480,11 @@ fn members_of_the_universe(opaque: &Schema) -> crate::Members {
 /// A union nested in the union is read as its members: `~c | (c)`, with `(c)`
 /// a union of one member, covers the universe as `~c | c` does.
 ///
-/// The fuzzer's pair has an `int` constant and a subject whose unions nest one
-/// level past the depth the set reading descends. The set reading proves the
-/// supertype's complement empty, reading the supertype alone, and refuses the
-/// pair at the subject, so the rules are the whole of the answer. One De Morgan step in, the union taken whole is `c & ~(c)`,
-/// which the meet's fold reads as two spellings; read through the nested
-/// union it is `c & ~c`.
+/// The fuzzer's pair has an `int` constant and a subject whose unions nest
+/// inside one another. The rules are asked alone, so their answer is held
+/// whatever the set reading builds. One De Morgan step in, the union taken
+/// whole is `c & ~(c)`, which the meet's fold reads as two spellings; read
+/// through the nested union it is `c & ~c`.
 #[test]
 fn a_union_nested_in_the_union_is_read_as_its_members() {
     /// A pool holding the one constant, so the set reading can lower it. The
@@ -521,10 +520,6 @@ fn a_union_nested_in_the_union_is_read_as_its_members() {
             ]),
         ]
         .into(),
-    );
-    assert!(
-        crate::descr::lower::lower(&subject, &MinusTwo).is_none(),
-        "the premise: the set reading builds no set for {subject:?}"
     );
     // The drawn supertype, the nesting moved to the complement's side, and a
     // nested union of two members one level further in.
@@ -3239,17 +3234,15 @@ fn a_refutation_about_a_part_with_no_value_is_not_one() {
         assert!(sub.is_subtype_of(&sup), "{label}");
     }
 
-    // One level further down, where neither decider reaches the answer: the
-    // rules decline, as above, and the sets decline too -- lowering a record
-    // inside a list inside a list is past what the set representation builds.
+    // Further down, where neither decider reaches the answer: the rules
+    // decline, as above, and the sets decline too -- a record inside lists
+    // three deep is past the containers the set representation builds.
     // The pair is unproven, which the relation is allowed to be; what it may
     // not be is refuted.
     let deeper = |record: &Schema| {
-        Schema::list(SeqShape::homogeneous(closed(vec![field(
-            "k",
-            record.clone(),
-            true,
-        )])))
+        Schema::list(SeqShape::homogeneous(Schema::list(SeqShape::homogeneous(
+            closed(vec![field("k", record.clone(), true)]),
+        ))))
     };
     let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
@@ -3283,6 +3276,48 @@ fn a_complement_only_the_descriptor_empties_bounds_a_subject_with_no_descriptor(
     let all_but_the_empty_string = complement(vec![Constraint::MaxLen(0)]);
     assert_eq!(
         unplaced.subtype_relation_under(&all_but_the_empty_string, &NoLeafRelations, &[]),
+        Relation::Unknown
+    );
+}
+
+/// A union only the set representation reads as the universe bounds a subject
+/// it cannot lower. The fuzzer's union holds the empty dict, the complement of
+/// the words matching `x`, and the complement of those matching `[0-9]*` under
+/// a refinement carrying no constraint: no word matches both patterns, so the
+/// complements meet in nothing, which the rules cannot see and the sets can. A
+/// literal the null oracle cannot place has no descriptor, so the descriptor
+/// route refuses the pair at the subject; the universe bound reads the meet of
+/// the complements, the supertype's alone. The neighbor whose two patterns are
+/// one is no universe, and the pair stays a decline.
+#[test]
+fn a_union_only_the_sets_read_as_the_universe_bounds_a_subject_with_no_descriptor() {
+    let unplaced = Schema::Literal(ConstIx::new(2));
+    let words =
+        |pattern: &str| Schema::refine(Schema::Str, vec![Constraint::Regex(pattern.into())]);
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let union = |second: &str| {
+        Schema::Union(
+            vec![
+                closed(Vec::new()),
+                not(words("x")),
+                Schema::Refine {
+                    base: Arc::new(not(words(second))),
+                    constraints: Vec::new().into(),
+                },
+            ]
+            .into(),
+        )
+    };
+    let universe = union("[0-9]*");
+    assert!(not(universe.clone()).is_empty_under(&[]), "the premise");
+    assert_eq!(
+        unplaced.subtype_relation_under(&universe, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    let short_of_it = union("x");
+    assert!(!not(short_of_it.clone()).is_empty_under(&[]));
+    assert_eq!(
+        unplaced.subtype_relation_under(&short_of_it, &NoLeafRelations, &[]),
         Relation::Unknown
     );
 }
@@ -3428,6 +3463,57 @@ fn a_pattern_over_two_bases_that_hold_every_string_is_one_set() {
         subject.subtype_relation(&universe, &NoLeafRelations, &[], &budget),
         Relation::Holds,
         "{subject:?} below {universe:?} by the rules"
+    );
+}
+
+/// A union holding the top is the top to the set representation, whatever
+/// else it holds, so a member the lowering refuses -- a literal the pool
+/// cannot read -- refuses no such union. The fuzzer drew the pair below, held
+/// as drawn: `None | <literal> | Any` through a reference, against a union the
+/// set reading proves universal because no string fully matches both `x` and
+/// `[0-9]*`. `Any` is below that union, and the subject was declined.
+#[test]
+fn a_union_holding_the_top_is_below_a_universe_the_sets_prove() {
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let refined = |base: Schema, constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(base),
+        constraints: constraints.into(),
+    };
+    let pattern = |text: &str| refined(Schema::Str, vec![Constraint::Regex(text.to_owned())]);
+    let literal = |index: usize| Schema::Literal(ConstIx::new(index));
+    let defs = vec![
+        Schema::Coll {
+            container: CollKind::Set,
+            element: Arc::new(Schema::Intersection(
+                vec![Schema::ANYTHING, literal(1), literal(0)].into(),
+            )),
+        },
+        Schema::Union(
+            vec![
+                Schema::Union(vec![Schema::NoneType, literal(2), Schema::ANYTHING].into()),
+                literal(2),
+            ]
+            .into(),
+        ),
+    ];
+    let universe = Schema::Union(
+        vec![
+            Schema::KeyedMap {
+                fields: Vec::new().into(),
+                defaults: Vec::new().into(),
+            },
+            not(pattern("x")),
+            refined(not(pattern("[0-9]*")), Vec::new()),
+        ]
+        .into(),
+    );
+    assert!(
+        not(universe.clone()).is_empty_under(&defs),
+        "the premise: {universe:?} is the universe"
+    );
+    assert_eq!(
+        Schema::Ref(DefIx::new(1)).subtype_relation_under(&universe, &NoLeafRelations, &defs),
+        Relation::Holds
     );
 }
 
@@ -6929,7 +7015,7 @@ fn a_union_narrowed_to_one_branch_refutes_where_that_branch_does() {
 /// against a complemented union removes one part at a time and each removal
 /// multiplies.
 ///
-/// Nine corners decide, two fields over three types. Sixteen, over four,
+/// Sixteen corners decide, two fields over four types. Twenty-five, over five,
 /// spend the whole allowance and decline -- `Unknown` rather than `Fails`: the
 /// relation holds, and a decline is "not proven within what a build may
 /// spend". The set reading is asked alone, because the record rule decides
@@ -6970,14 +7056,20 @@ fn a_difference_past_the_allowance_declines() {
     };
 
     assert_eq!(
-        sets(&[Schema::Int, Schema::Str, Schema::Bool]),
+        sets(&[Schema::Int, Schema::Str, Schema::Bool, Schema::Bytes]),
         Relation::Holds,
-        "nine corners are inside what a build may spend"
+        "sixteen corners are inside what a build may spend"
     );
     assert_eq!(
-        sets(&[Schema::Int, Schema::Str, Schema::Bool, Schema::Bytes]),
+        sets(&[
+            Schema::Int,
+            Schema::Str,
+            Schema::Bool,
+            Schema::Bytes,
+            Schema::NoneType
+        ]),
         Relation::Unknown,
-        "sixteen are past it, and what is past it declines rather than refutes"
+        "twenty-five are past it, and what is past it declines rather than refutes"
     );
 }
 
@@ -7027,7 +7119,7 @@ fn without_the_first(corners: &Schema) -> Schema {
 /// subject, so the rule that tries each member alone declines, and the split
 /// narrows one label at a time. The rules are asked alone, with a budget of
 /// their own, so the answer is theirs and not the set reading's -- which
-/// declines from sixteen corners (`a_difference_past_the_allowance_declines`).
+/// declines from twenty-five corners (`a_difference_past_the_allowance_declines`).
 #[test]
 fn a_record_below_a_union_of_records_is_the_rules_answer() {
     for width in 2..=4 {
@@ -8684,6 +8776,36 @@ fn a_union_is_decided_a_part_at_a_time() {
     assert_eq!(
         beside.subtype_relation(&Schema::Nothing, &NoLeafRelations, &defs, &budget),
         Relation::Fails
+    );
+}
+
+/// `is_empty` reads a union a member at a time, as the relation below
+/// `nothing` does, so the two answer alike: `bool & ~((bool | list) & ~str)` is
+/// empty, every `bool` being in the inner meet, and so is `str & int`, and the
+/// union of the two is empty to both.
+#[test]
+fn a_union_of_empty_members_is_read_empty_as_it_is_below_nothing() {
+    let list = Schema::list(SeqShape::homogeneous(Schema::ANYTHING));
+    let inner = Schema::meet_within(
+        [
+            Schema::union_within([Schema::Bool, list], &[]),
+            Schema::Str.complement(),
+        ],
+        &[],
+    );
+    let empty = Schema::meet_within([Schema::Bool, inner.complement()], &[]);
+    assert!(empty.is_empty());
+    let union = Schema::union_within(
+        [empty, Schema::meet_within([Schema::Str, Schema::Int], &[])],
+        &[],
+    );
+    assert_eq!(
+        union.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    assert!(
+        union.is_empty(),
+        "{union:?} is below nothing and not read empty"
     );
 }
 

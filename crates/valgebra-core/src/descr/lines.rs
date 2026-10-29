@@ -170,6 +170,23 @@ impl Summand for Line {
         Line::complement(self, whole)
     }
 
+    /// The line, unless it is proved empty, merged into the first line of the
+    /// list that agrees with it on objects where their structures join, as
+    /// [`compacted`](Summand::compacted) below merges a list.
+    fn admit(kept: &mut Vec<Line>, line: Line) -> Option<()> {
+        if line.is_empty() {
+            return Some(());
+        }
+        if let Some(held) = kept.iter_mut().find(|held| held.objects == line.objects)
+            && let Some(joined) = held.structure.combine(&line.structure, Op::Union)
+        {
+            held.structure = joined;
+            return Some(());
+        }
+        kept.push(line);
+        Some(())
+    }
+
     /// Drop the lines proved empty, merge the ones that differ only in
     /// structure, and put the rest in order, each once.
     ///

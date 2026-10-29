@@ -37,10 +37,20 @@ answer of its own, or a repair to a change not yet released.
 - fix: a counted Unicode class written as an ordinary bound builds
 - feat: a refinement of a union is the union of its refined branches
 - feat: a sequence's length is read at both ends of a relation
+- feat: the set representation reads scalars nested past its depth
 
 -->
 
 ### Added
+
+- **The set representation reads scalars nested past its depth.** Its depth
+  bound exists for the containers a build starts -- an automaton, a powerset, a
+  record lattice -- and every node above one still counts, so a container is
+  refused where it was; a scalar node past the depth starts no build and is
+  read. `intersection(int, complement(intersection(int, complement(E))))` with
+  `E` the even integers is `not_subset` of `nothing`, and the same over the
+  literals `{1, 2, 3}` or a bound, where each was `undecided` once the meets
+  and complements nested the constants six deep.
 
 - **A sequence's length is read at both ends of a relation.** A list bounded
   to length zero is the empty list, so `Annotated[list[None], Len(0, 0)]` is

@@ -45,18 +45,40 @@ pub(super) trait Summand: Clone + Ord + Sized {
     /// The values of the universe this summand does not hold, as a union.
     fn complement(&self, within: Self::Within) -> Self::Complement;
 
-    /// A list a meet or a union has just built, in the lattice's canonical
-    /// form: the summands proved to hold nothing dropped, the rest each in
-    /// the shape this lattice compares them in, each once, and in order. `None`
-    /// where bringing one into that shape refuses.
+    /// Bring one summand into a list kept in the lattice's canonical form:
+    /// dropped where it is proved to hold nothing or the list holds it
+    /// already, merged into a summand of the list where the lattice merges
+    /// two into one, and kept, in the shape this lattice compares them in,
+    /// otherwise. `None` where bringing it into that shape refuses. The list
+    /// is left unsorted; [`compacted`](Summand::compacted) puts it in order.
     ///
     /// The lattice's own reading of what makes two spellings of a union one,
     /// which is why it is not written once: each lattice has its own canonical
-    /// summand, one merges two summands into one, and "each once" is by
-    /// position after a sort for a summand whose equality agrees with its
-    /// order and by equality for one whose guard's equality is coarser.
-    /// [`tidy`] holds what this returns to [`MAX`](Summand::MAX).
-    fn compacted(summands: Vec<Self>) -> Option<Vec<Self>>;
+    /// summand, and one merges two summands into one. "Each once" is by
+    /// equality rather than by position after a sort, because a guard's
+    /// equality can be coarser than its order -- an integer set compares two
+    /// spellings of one set equal and sorts them apart -- so two equal
+    /// summands need not be neighbors once sorted.
+    ///
+    /// One summand at a time, as a union is built, which is what keeps a
+    /// product at its bound from reading its whole list again for every pair:
+    /// [`product`] admits each pair as it is met, the way a type checker's
+    /// union builder checks a member against the ones it holds as it adds it
+    /// rather than simplifying the whole union again.
+    fn admit(kept: &mut Vec<Self>, summand: Self) -> Option<()>;
+
+    /// A list a meet or a union has just built, in the lattice's canonical
+    /// form: every summand admitted ([`admit`](Summand::admit)), and the list
+    /// put in order. `None` where bringing one into shape refuses. [`tidy`]
+    /// holds what this returns to [`MAX`](Summand::MAX).
+    fn compacted(summands: Vec<Self>) -> Option<Vec<Self>> {
+        let mut kept = Vec::with_capacity(summands.len());
+        for summand in summands {
+            Self::admit(&mut kept, summand)?;
+        }
+        kept.sort();
+        Some(kept)
+    }
 }
 
 /// A set held as a union of summands, or as the complement of one.
@@ -248,34 +270,34 @@ pub(super) fn complement_all<S: Summand>(summands: &[S], within: S::Within) -> O
 /// nesting for each pair. The width bound stops the result from being too
 /// wide, and the allowance stops the *work* from being too much before the
 /// width is known. See [`budget`].
+///
+/// **Each pair is admitted as it is met** ([`Summand::admit`]), so the list is
+/// in canonical form at every pair and the bound is read off it there: a list
+/// past [`MAX`](Summand::MAX) once its repeats and the summands holding nothing
+/// are gone refuses at the pair that takes it past, and the result is what
+/// [`tidy`] would make of every pair at the end -- the same summands, kept
+/// once, in order. A unit of the allowance then buys one pair and one reading
+/// of the list. Compacting the whole list again whenever it reaches the bound
+/// would read every kept summand against every other each time a few slots
+/// come free: a product of map atoms standing at the bound would spend the
+/// width squared in comparisons of trees every few pairs, sixty-five thousand
+/// for two hundred and fifty-six atoms.
 pub(super) fn product<S: Summand>(left: &[S], right: &[S]) -> Option<Vec<S>> {
-    let mut summands = Vec::new();
+    let mut kept = Vec::new();
     for mine in left {
         for theirs in right {
             if !budget::spend() {
                 return None;
             }
-            if summands.len() >= S::MAX {
-                // The bound is on the *union*, and a union is only as wide as
-                // it is once the summands holding nothing and the repeats are
-                // gone. Compacting here is what keeps the raw count from
-                // standing in for that width, and the bound itself is
-                // [`tidy`]'s: asked once, so a union as wide as the bound
-                // builds whichever order its factors were multiplied in, and
-                // one wider than it refuses whichever order they took.
-                //
-                // A union standing at the bound compacts again at every pair.
-                // Compacting only when the raw list doubles reads flat on every
-                // decision shape the instruction gate holds, since none stands
-                // there, and lets the list grow to twice the bound, where
-                // `a_product_holds_no_more_pairs_than_its_bound` holds it at
-                // the bound.
-                summands = tidy(summands)?;
+            S::admit(&mut kept, mine.meet(theirs)?)?;
+            if kept.len() > S::MAX {
+                return None;
             }
-            summands.push(mine.meet(theirs)?);
         }
     }
-    tidy(summands)
+    kept.sort();
+    kept.dedup();
+    Some(kept)
 }
 
 /// Bring a list into the lattice's canonical form, and refuse a union past

@@ -170,11 +170,19 @@ pub(crate) struct Entry<V> {
 /// maps than `A` and `B` share. Naming the exclusion set at the point the
 /// constraint is made keeps its meaning fixed under every later operation,
 /// which is the same fixing the paper does globally.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialOrd, Ord)]
 struct Wanted<G> {
     slot: usize,
     ty: Values<G>,
     besides: BTreeSet<Label>,
+}
+
+/// Equal where every part is, the slot and the labels read before the type,
+/// which is a descriptor.
+impl<G: PartialEq> PartialEq for Wanted<G> {
+    fn eq(&self, other: &Wanted<G>) -> bool {
+        self.slot == other.slot && self.besides == other.besides && self.ty == other.ty
+    }
 }
 
 /// Whether two labels name one key of a dict.
@@ -314,7 +322,7 @@ impl<G: Guard> Search<'_, G> {
 /// One map atom, `⟨(τ_ℓ)_{ℓ∈L} ; t₀ ; S⟩`.
 ///
 /// Both collections are ordered, so two ways of writing one atom compare equal.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialOrd, Ord)]
 struct MapAtom<G> {
     /// `(τ_ℓ)_{ℓ∈L}`, keyed by the constant each names.
     labels: BTreeMap<Label, Field<G>>,
@@ -322,6 +330,43 @@ struct MapAtom<G> {
     defaults: [Field<G>; PARTS],
     /// `S`.
     wanted: Vec<Wanted<G>>,
+}
+
+/// Equal where every part is, the parts compared exactly read before the
+/// types, which are descriptors.
+///
+/// A union keeps an atom once by scanning the atoms it holds for an equal one
+/// ([`Summand::admit`]), so equality is asked of every pair a product builds
+/// against every atom kept, and almost always answers `false`. Atoms of one
+/// union share most of their shape, so the derived order -- the labels with
+/// their types, then the defaults, then `S` -- read a descriptor before the
+/// slot or the key that tells two atoms apart. The keys, the flags and the
+/// slots are compared first, and the types only between atoms they leave
+/// equal; the answer is the derived one.
+impl<G: PartialEq> PartialEq for MapAtom<G> {
+    fn eq(&self, other: &MapAtom<G>) -> bool {
+        self.labels.len() == other.labels.len()
+            && self.wanted.len() == other.wanted.len()
+            && self.labels.keys().eq(other.labels.keys())
+            && self
+                .labels
+                .values()
+                .zip(other.labels.values())
+                .all(|(mine, theirs)| mine.absent == theirs.absent)
+            && self
+                .defaults
+                .iter()
+                .zip(&other.defaults)
+                .all(|(mine, theirs)| mine.absent == theirs.absent)
+            && self
+                .wanted
+                .iter()
+                .zip(&other.wanted)
+                .all(|(mine, theirs)| (mine.slot, &mine.besides) == (theirs.slot, &theirs.besides))
+            && self.labels == other.labels
+            && self.defaults == other.defaults
+            && self.wanted == other.wanted
+    }
 }
 
 impl<G: Guard> MapAtom<G> {
@@ -660,25 +705,16 @@ impl<G: Guard> Summand for MapAtom<G> {
         MapAtom::complement(self)
     }
 
-    /// Each atom with the labels its defaults already say absorbed, without
-    /// the ones holding no dict, each once, and in order.
-    ///
-    /// Once by equality, for the reason the record atoms give: a guard's
-    /// equality can be coarser than its order -- an integer set compares two
-    /// spellings of one set equal and sorts them apart -- so two equal atoms
-    /// need not be neighbors once sorted. A repeat kept is a summand of
-    /// width toward [`MAX_ATOMS`] and a factor in every complement of the
-    /// union.
-    fn compacted(atoms: Vec<MapAtom<G>>) -> Option<Vec<MapAtom<G>>> {
-        let mut kept: Vec<MapAtom<G>> = Vec::with_capacity(atoms.len());
-        for atom in atoms {
-            let atom = atom.absorbed();
-            if atom.emptiness() != Verdict::Empty && !kept.contains(&atom) {
-                kept.push(atom);
-            }
+    /// The atom with the labels its defaults already say absorbed, unless it
+    /// holds no dict or the list holds it already. A repeat kept would be a
+    /// summand of width toward [`MAX_ATOMS`] and a factor in every complement
+    /// of the union.
+    fn admit(kept: &mut Vec<MapAtom<G>>, atom: MapAtom<G>) -> Option<()> {
+        let atom = atom.absorbed();
+        if atom.emptiness() != Verdict::Empty && !kept.contains(&atom) {
+            kept.push(atom);
         }
-        kept.sort();
-        Some(kept)
+        Some(())
     }
 }
 
