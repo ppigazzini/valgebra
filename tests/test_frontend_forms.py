@@ -29,7 +29,7 @@ from typing import Annotated, Literal
 import annotated_types as at
 import pytest
 
-from valgebra import Regex, Validator, nothing
+from valgebra import Regex, Validator, instance_of, nothing
 
 #: PEP 814's frozen dict, which arrives in 3.15; `None` below it.
 FROZENDICT = getattr(builtins, "frozendict", None)
@@ -344,15 +344,21 @@ def test_a_frozen_dict_is_a_mapping_and_not_a_dict() -> None:
     `dict` subclass, so `dict[K, V]` and a record refuse one exactly as they
     refuse any other mapping; the `Mapping` atom is the `isinstance` check that
     admits it. `frozendict[K, V]` names a set of frozen dicts, a carrier the
-    node set does not have, and is refused rather than read as `dict[K, V]`.
+    node set does not have, and is refused rather than read as `dict[K, V]`;
+    the literal's refusal names the two schemas that admit a frozen dict.
     """
     assert FROZENDICT is not None
-    with pytest.raises(NotImplementedError, match="a frozen dict literal is not a"):
+    with pytest.raises(
+        NotImplementedError,
+        match=r"no schema reads a frozen dict's keys: collections\.abc\.Mapping or "
+        r"instance_of\(frozendict\) admits one whole",
+    ):
         Validator(FROZENDICT(a=int))
     value = FROZENDICT(a=1)
     assert not Validator(dict[str, int]).is_valid(value)
     assert not Validator({"a": int}).is_valid(value)
     assert Validator(collections.abc.Mapping).is_valid(value)
+    assert Validator(instance_of(FROZENDICT)).is_valid(value)
     with pytest.raises(NotImplementedError, match="unsupported typing form"):
         Validator(FROZENDICT[str, int])
 

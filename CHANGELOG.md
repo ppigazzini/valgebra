@@ -71,6 +71,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a member deep by a clause's key alone is left out of the last reading
 - feat: a length the supertype's bounds leave out refutes at any size
 - fix: a type variable is its own class's parameter
+- fix: a frozen dict literal's refusal names the schemas that admit one
 
 -->
 
@@ -328,6 +329,13 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A frozen dict literal's refusal names the schemas that admit one.** On
+  3.15, `frozendict(a=int)` was refused with a pointer to the dict literal
+  `{"a": int}` and to `dict[K, V]`, both of which refuse every frozen dict, since
+  no node reads a frozen dict's keys. The refusal names
+  `collections.abc.Mapping` and `instance_of(frozendict)`, which admit one
+  whole.
 
 - **A type variable is its own class's parameter.** `class IntBoxOf(Box[int],
   Generic[T])` reuses the `T` its base declares a field with, and `typing`

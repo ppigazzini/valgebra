@@ -188,6 +188,26 @@ constructor. Beyond the admission test, two costs specific to this one:
   fragment with a published decision, which is the part the completeness claim
   rests on.
 
+**A frozen mapping, so `frozendict[K, V]` builds.** Refused on its cost. The
+set passes the admission test: frozen dicts read by key and value are reached
+by no combination -- `instance_of(frozendict)` reads no key, and
+`collections.abc.Mapping` admits every mapping. Its form would be the frozen
+set's: a parameter on `KeyedMap` naming the carrier, as `CollKind` names
+`FrozenSet`, and a kind of its own in the descriptor's partition, so frozen
+maps are decided against dicts and every other kind as frozen sets are against
+sets. The kind is what the instruction gate (`scripts/perf_gate.py --against`)
+refuses: every descriptor operation runs over one more part, and a complement
+fills an absent map part with a fresh top, so relations that hold no frozen
+dict pay for it -- +7.36% on length bounds asked of the sets, +3.92% on
+relations asked of the sets, +2.13% on the matrix. The parameter without the
+kind leaves the descriptor no part to lower a frozen map into, so every
+relation holding one declines there, a frozen map against any other kind
+included. It reopens with a descriptor that holds a kind's top without building
+it, measured on its own first; `collections.abc.Mapping` and
+`instance_of(frozendict)` are the spellings meanwhile, and
+`test_a_frozen_dict_is_a_mapping_and_not_a_dict` in
+`tests/test_frontend_forms.py` holds the refusal.
+
 **A spelling for the carrier-free attribute record.** A `Protocol` is that
 spelling: the node is in the closure — `AttrRecord` denotes exactly "any object
 whose `.a` is an `int`" — and the frontend builds a protocol as the record of

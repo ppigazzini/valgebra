@@ -378,7 +378,7 @@ with a message instead:
 | a `Protocol` member declared `ClassVar` or `Final` | the qualifier says where the value lives rather than what it is |
 | a set or frozen set literal | `{int}` and `frozenset({int})` name containers, which are `set[T]` and `frozenset[T]` |
 | a tuple literal | `(A, B)` is `tuple[A, B]`; the list literal `[A, B]` is the fixed-length list |
-| a frozen dict literal | `frozendict(a=int)` names a record, which the dict literal `{"a": int}` spells (Python 3.15+) |
+| a frozen dict literal | `frozendict(a=int)` names a record of frozen dicts, which no node reads: `collections.abc.Mapping` or `instance_of(frozendict)` admits a frozen dict whole, and `{"a": int}` admits dicts alone (Python 3.15+) |
 | `Validator[T]` | annotates a validator for a static checker; the schema, or a compiled `Validator`, is what builds |
 | bare `TypedDict` | the base a `TypedDict` class is declared from; the class is what has a set |
 | bare `NamedTuple` | names every named tuple class, and at runtime it is a function `isinstance` cannot ask |
