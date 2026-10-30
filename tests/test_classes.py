@@ -29,6 +29,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import (
+    Regex,
     ValidationError,
     Validator,
     anything,
@@ -1868,3 +1869,190 @@ def test_a_layout_is_read_from_what_python_laid_down() -> None:
     assert _ReplacedSlot().x == "s"
     assert Validator(_HoldsS).is_valid(_ReplacedSlot())
     assert instance_of(_ReplacedSlot).relation_to(_HoldsS) != "not_subset"
+
+
+_TYPE_SUBCLASSCHECK = type.__dict__["__subclasscheck__"]
+_TYPE_INSTANCECHECK = type.__dict__["__instancecheck__"]
+
+
+class _HidesHooks(type):
+    """A meta-metaclass answering `getattr` with `type`'s own two hooks."""
+
+    def __getattribute__(cls, name: str) -> object:
+        if name == "__subclasscheck__":
+            return _TYPE_SUBCLASSCHECK
+        if name == "__instancecheck__":
+            return _TYPE_INSTANCECHECK
+        return super().__getattribute__(name)
+
+
+class _SubclassOfAll(type, metaclass=_HidesHooks):
+    def __subclasscheck__(cls, sub: type) -> bool:
+        return True
+
+
+class _InstanceOfAll(type, metaclass=_HidesHooks):
+    def __instancecheck__(cls, obj: object) -> bool:
+        return True
+
+
+class _Plain:
+    pass
+
+
+class _ClaimsEverySubclass(metaclass=_SubclassOfAll):
+    pass
+
+
+class _ClaimsEveryInstance(metaclass=_InstanceOfAll):
+    __slots__ = ("x",)
+
+
+def _hiding(*names: str) -> type:
+    """Make a metaclass answering `names` on its classes with their builtin base's."""
+
+    class Hiding(type):
+        def __getattribute__(cls, attr: str) -> object:
+            if attr in names:
+                for base in type.__getattribute__(cls, "__mro__")[1:]:
+                    if attr in base.__dict__ and base.__module__ == "builtins":
+                        return base.__dict__[attr]
+            return super().__getattribute__(attr)
+
+    return Hiding
+
+
+class _HidesEq(type):
+    def __getattribute__(cls, name: str) -> object:
+        if name == "__eq__":
+            return object.__eq__
+        return super().__getattribute__(name)
+
+
+class _EqualToItsKind(metaclass=_HidesEq):
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _EqualToItsKind)
+
+    __hash__ = object.__hash__
+
+
+class _CaseBlind(str, metaclass=_hiding("__eq__")):
+    """A `str` equal to its other cases, whose metaclass answers `str`'s `__eq__`."""
+
+    __slots__ = ()
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, str) and self.lower() == other.lower()
+
+    def __hash__(self) -> int:
+        return hash(self.lower())
+
+
+_ORDER = ("__eq__", "__lt__", "__le__", "__gt__", "__ge__")
+
+
+class _Backwards(int, metaclass=_hiding(*_ORDER)):
+    """An `int` ordered backwards, whose metaclass answers `int`'s order."""
+
+    __slots__ = ()
+
+    def __lt__(self, other: int) -> bool:
+        return int.__gt__(self, other)
+
+    def __le__(self, other: int) -> bool:
+        return int.__ge__(self, other)
+
+    def __gt__(self, other: int) -> bool:
+        return int.__lt__(self, other)
+
+    def __ge__(self, other: int) -> bool:
+        return int.__le__(self, other)
+
+
+def _bound_unmemoized(operand: int) -> Validator:
+    """`Annotated[int, at.Ge(operand)]`, out of `typing`'s memo on both sides.
+
+    `typing` memoizes `Annotated` by equality and `Ge(_Backwards(5)) == Ge(5)`,
+    so the memo would hand either form back for the other.
+    """
+    for cleanup in getattr(typing, "_cleanups", ()):
+        cleanup()
+    built = Validator(Annotated[int, at.Ge(operand)])
+    for cleanup in getattr(typing, "_cleanups", ()):
+        cleanup()
+    return built
+
+
+class _ShortStr(str, metaclass=_hiding("__len__")):
+    __slots__ = ()
+
+    def __len__(self) -> int:
+        return 0
+
+
+class _EmptySet(set, metaclass=_hiding("__iter__")):
+    def __iter__(self) -> typing.Iterator[object]:
+        return iter(())
+
+
+class _Base:
+    pass
+
+
+class _FakesMro(type):
+    def __getattribute__(cls, name: str) -> object:
+        if name == "__mro__":
+            return (cls, _Base, object)
+        return super().__getattribute__(name)
+
+
+class _ClaimsBase(metaclass=_FakesMro):
+    pass
+
+
+# TRUST: A class whose metaclass leaves `isinstance` alone holds an object.
+def test_a_class_is_read_where_python_dispatches_its_hooks() -> None:
+    """A metaclass answering `getattr` hides nothing Python calls.
+
+    Each class below has a metaclass, or a metaclass's metaclass, answering
+    `getattr` for a name with the plain one -- `type`'s own hooks, `object`'s
+    `__eq__`, the builtin base's `__eq__`, order, `__len__` or `__iter__`, an
+    order leaving the class's real base out -- while the class's own namespace
+    holds what Python runs. Read through `getattr`, each decided a relation its
+    own membership contradicts; read where the interpreter dispatches, each is
+    read as it is.
+    """
+    empty = intersection(int, complement(int))
+    plain, claims = instance_of(_Plain), instance_of(_ClaimsEverySubclass)
+    assert not claims.is_valid(_Plain())
+    assert plain.relation_to(claims) != "subset"
+
+    meet = intersection(int, instance_of(_ClaimsEveryInstance))
+    assert meet.is_valid(5)
+    assert meet.relation_to(empty) != "subset"
+    assert Validator(int).relation_to(instance_of(_ClaimsEveryInstance)) != "not_subset"
+
+    one, two = _EqualToItsKind(), _EqualToItsKind()
+    assert Validator(Literal[two]).is_valid(one)  # ty: ignore[invalid-type-form]
+    pair = intersection(Literal[one], Literal[two])  # ty: ignore[invalid-type-form]
+    assert pair.relation_to(empty) != "subset"
+
+    short_abc = intersection(Annotated[str, at.MaxLen(1)], Annotated[str, Regex("abc")])
+    assert not short_abc.is_valid(_ShortStr("abc"))
+    assert not Validator(set[int]).is_valid(_EmptySet({"x"}))
+
+    not_base = intersection(instance_of(_ClaimsBase), complement(instance_of(_Base)))
+    assert not_base.is_valid(_ClaimsBase())
+    assert not_base.relation_to(empty) != "subset"
+
+    blind = Validator(Literal[_CaseBlind("a")])  # ty: ignore[invalid-type-form]
+    pattern = Validator(Annotated[str, Regex("a")])
+    assert blind.is_valid(_CaseBlind("A"))
+    assert not pattern.is_valid(_CaseBlind("A"))
+    assert blind.relation_to(pattern) != "subset"
+    assert intersection(blind, complement(pattern)).relation_to(empty) != "subset"
+
+    backwards = _bound_unmemoized(_Backwards(5))
+    assert backwards.is_valid(0)
+    assert backwards.relation_to(Annotated[int, at.Ge(4)]) != "subset"
+    assert "<_Backwards: 5>" in repr(backwards)

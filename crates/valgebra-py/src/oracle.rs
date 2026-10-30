@@ -179,7 +179,9 @@ fn enum_types(py: Python<'_>) -> Option<&(Py<PyAny>, Py<PyAny>, Py<PyAny>)> {
 /// A `_missing_` of its own is the hook a class makes a new instance through
 /// -- `E(5)`, a pseudo-member `list(E)` never yields -- and a metaclass's own
 /// `__iter__` can leave a member out of the list, or its `__call__` build an
-/// instance past the lookup.
+/// instance past the lookup. The two are read where `list(E)` and `E(5)` call
+/// them ([`special_lookup`]); `_missing_` as `Enum.__new__` asks for it, an
+/// attribute of the class, which a metaclass does answer.
 fn lists_every_instance(
     class: &Bound<'_, PyType>,
     meta: &Bound<'_, PyAny>,
@@ -187,8 +189,13 @@ fn lists_every_instance(
 ) -> PyResult<bool> {
     let py = class.py();
     let metaclass = class.get_type();
+    let meta = meta.cast::<PyType>()?;
     for name in [intern!(py, "__iter__"), intern!(py, "__call__")] {
-        if !metaclass.getattr(name)?.is(&meta.getattr(name)?) {
+        let (mine, theirs) = (
+            special_lookup(&metaclass, name)?,
+            special_lookup(meta, name)?,
+        );
+        if !matches!((mine, theirs), (Some(mine), Some(theirs)) if mine.is(&theirs)) {
             return Ok(false);
         }
     }
@@ -226,9 +233,13 @@ const MAX_ENUM_MEMBERS: usize = 512;
 /// a signal among it is the query's to raise.
 fn compares_by_identity(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let py = ty.py();
-    let theirs = ty.getattr(intern!(py, "__eq__"))?;
-    let inherited = PyAny::type_object(py).getattr(intern!(py, "__eq__"))?;
-    Ok(theirs.is(&inherited) || is_the_sentinel_type(ty)?)
+    let eq = intern!(py, "__eq__");
+    let theirs = special_lookup(ty, eq)?;
+    let inherited = special_lookup(&PyAny::type_object(py), eq)?;
+    Ok(
+        matches!((theirs, inherited), (Some(theirs), Some(inherited)) if theirs.is(&inherited))
+            || is_the_sentinel_type(ty)?,
+    )
 }
 
 /// Whether `ty` is the interpreter's `sentinel`: a static type, which no class
@@ -244,15 +255,13 @@ fn is_the_sentinel_type(ty: &Bound<'_, PyType>) -> PyResult<bool> {
 /// Whether `ty` was made at run time, as a class statement and a C type built
 /// from a spec make one, rather than defined static in C, as the builtins are.
 ///
-/// The flags are the ones Python set, read through `type`'s own descriptor: a
-/// metaclass answering `__flags__` makes no class static.
+/// The flags are the ones Python set, read through `type`'s own descriptor
+/// ([`read_by_type`]): a metaclass answering `__flags__` makes no class
+/// static.
 fn is_heap_type(ty: &Bound<'_, PyType>) -> PyResult<bool> {
-    let py = ty.py();
-    let flags: std::os::raw::c_ulong = PyType::type_object(py)
-        .getattr(intern!(py, "__dict__"))?
-        .get_item(intern!(py, "__flags__"))?
-        .call_method1(intern!(py, "__get__"), (ty,))?
-        .extract()?;
+    static TYPE_FLAGS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    let name = intern!(ty.py(), "__flags__");
+    let flags: std::os::raw::c_ulong = read_by_type(&TYPE_FLAGS, name, ty)?.extract()?;
     Ok(flags & pyo3::ffi::Py_TPFLAGS_HEAPTYPE != 0)
 }
 
@@ -415,16 +424,18 @@ fn builtin_base<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Bound<'py, PyTy
 }
 
 /// Whether `ty` resolves each of `names` its builtin has to what the builtin
-/// resolves it to. A subclass inherits every name the builtin has, so one the
-/// builtin lacks is no method of its to keep.
-pub(crate) fn keeps(
-    ty: &Bound<'_, PyType>,
-    builtin: &Bound<'_, PyType>,
-    names: &[&Bound<'_, PyString>],
+/// resolves it to, each read where Python dispatches it ([`special_lookup`]):
+/// a metaclass answering the name with the builtin's keeps no method the
+/// class's own namespace replaces. A subclass inherits every name the builtin
+/// has, so one the builtin lacks is no method of its to keep.
+pub(crate) fn keeps<'py>(
+    ty: &Bound<'py, PyType>,
+    builtin: &Bound<'py, PyType>,
+    names: &[&Bound<'py, PyString>],
 ) -> PyResult<bool> {
     for name in names {
-        if let Some(theirs) = builtin.getattr_opt(*name)?
-            && !ty.getattr(*name)?.is(&theirs)
+        if let Some(theirs) = special_lookup(builtin, name)?
+            && !special_lookup(ty, name)?.is_some_and(|mine| mine.is(&theirs))
         {
             return Ok(false);
         }
@@ -667,26 +678,130 @@ fn layout_of<'py>(ty: &Bound<'py, PyType>) -> PyResult<(Option<Bound<'py, PyType
     Ok((solid, kind))
 }
 
-/// `type.__base__`, the descriptor read once.
+/// `type`'s own readers of a class's `__base__`, `__mro__` and `__dict__`:
+/// each descriptor's `__get__`, read once.
 static TYPE_BASE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static TYPE_MRO: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static TYPE_DICT: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
-/// The class Python lays `ty`'s instances out on, or `None` for `object`: its
-/// `__base__`, read through `type`'s own descriptor, so a metaclass defining
-/// an attribute of that name does not answer for it.
-fn base_of<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Bound<'py, PyType>>> {
-    let py = ty.py();
-    let descriptor = TYPE_BASE.get_or_try_init(py, || {
+/// What `type`'s own descriptor `name` reads of `of`, the descriptor kept in
+/// `held`: the value Python laid down, which a metaclass defining an attribute
+/// of that name does not answer for, as `inspect.getattr_static` reads it. A
+/// class whose metaclass is `type` itself is asked by name, which finds those
+/// descriptors first, `type`'s being data descriptors: it is nearly every
+/// class, and the descriptor's call costs a relation between two dataclasses
+/// three percent.
+#[inline]
+fn read_by_type<'py>(
+    held: &'static PyOnceLock<Py<PyAny>>,
+    name: &Bound<'py, PyString>,
+    of: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    if made_by_type(of) {
+        return of.getattr(name);
+    }
+    read_through_type(held, name, of)
+}
+
+/// [`read_by_type`] for a class with a metaclass of its own, out of line.
+#[cold]
+#[inline(never)]
+fn read_through_type<'py>(
+    held: &'static PyOnceLock<Py<PyAny>>,
+    name: &Bound<'py, PyString>,
+    of: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = of.py();
+    let get = held.get_or_try_init(py, || {
         Ok::<_, PyErr>(
             PyType::type_object(py)
                 .getattr(intern!(py, "__dict__"))?
-                .get_item(intern!(py, "__base__"))?
+                .get_item(name)?
+                .getattr(intern!(py, "__get__"))?
                 .unbind(),
         )
     })?;
-    let base = descriptor
-        .bind(py)
-        .call_method1(intern!(py, "__get__"), (ty,))?;
-    Ok(base.cast_into::<PyType>().ok())
+    get.bind(py).call1((of,))
+}
+
+/// Whether `class`'s metaclass is `type` itself, compared by address: the
+/// reference two owned types would take and give back costs more than the
+/// lookup this decides to make.
+#[inline]
+fn made_by_type(class: &Bound<'_, PyAny>) -> bool {
+    class.get_type_ptr() == PyType::type_object_raw(class.py())
+}
+
+/// The class Python lays `ty`'s instances out on, or `None` for `object`.
+fn base_of<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Bound<'py, PyType>>> {
+    let name = intern!(ty.py(), "__base__");
+    Ok(read_by_type(&TYPE_BASE, name, ty)?
+        .cast_into::<PyType>()
+        .ok())
+}
+
+/// The method resolution order Python laid down for `ty`, which `isinstance`
+/// and attribute lookup read.
+fn mro_of<'py>(ty: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    read_by_type(&TYPE_MRO, intern!(ty.py(), "__mro__"), ty)
+}
+
+/// The namespace `ty`'s class statement filled, as Python holds it.
+fn namespace_by_type<'py>(ty: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    read_by_type(&TYPE_DICT, intern!(ty.py(), "__dict__"), ty)
+}
+
+/// What Python's special-method lookup finds for `name` on `ty`, or `None`
+/// where it finds nothing: the first namespace along `ty`'s method resolution
+/// order holding the name.
+///
+/// The interpreter dispatches `len`, `iter`, `==`, a call, `isinstance` and a
+/// descriptor's `__set__` through the type's slots, filled from those
+/// namespaces, and asks no `__getattribute__` -- not even the metaclass's
+/// (the language reference, "Special method lookup"). `getattr` on a class
+/// asks its metaclass first, so a metaclass answering the name, by a hook or
+/// by a data descriptor of that name, reports a method other than the one
+/// Python calls. A class whose metaclass is `type` itself answers `getattr`
+/// by exactly this lookup, and is asked that way: it is nearly every class,
+/// and one attribute read where the walk below is one a class.
+#[inline]
+pub(crate) fn special_lookup<'py>(
+    ty: &Bound<'py, PyType>,
+    name: &Bound<'py, PyString>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    if made_by_type(ty) {
+        return ty.getattr_opt(name);
+    }
+    along_the_mro(ty, name)
+}
+
+/// Whether Python's special-method lookup finds `name` on `ty`: the presence
+/// [`special_lookup`] reads, asked through [`type_has`] where the metaclass is
+/// `type`, since a miss is what most of these questions meet.
+#[inline]
+fn special_has(ty: &Bound<'_, PyType>, name: &Bound<'_, PyString>) -> PyResult<bool> {
+    if made_by_type(ty) {
+        return type_has(ty, name);
+    }
+    Ok(along_the_mro(ty, name)?.is_some())
+}
+
+/// The first value of `name` along `ty`'s method resolution order, each
+/// namespace read as Python holds it: the lookup for a class with a metaclass
+/// of its own, out of line.
+#[cold]
+#[inline(never)]
+fn along_the_mro<'py>(
+    ty: &Bound<'py, PyType>,
+    name: &Bound<'py, PyString>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    for class in mro_of(ty)?.try_iter()? {
+        let namespace = namespace_by_type(&class?)?;
+        if namespace.contains(name)? {
+            return namespace.get_item(name).map(Some);
+        }
+    }
+    Ok(None)
 }
 
 /// `types.MemberDescriptorType`, read once.
@@ -724,27 +839,23 @@ fn is_own_slot(value: &Bound<'_, PyAny>, ty: &Bound<'_, PyAny>) -> PyResult<bool
 /// nothing.
 ///
 /// The flags, the base and the two sizes are the ones Python laid down, read
-/// through `type`'s own descriptors as `solid_base` reads the type object: a
-/// metaclass answering any of them lays no layout down.
+/// through `type`'s own descriptors ([`read_by_type`]) as `solid_base` reads
+/// the type object: a metaclass answering any of them lays no layout down.
 #[cfg(not(PyPy))]
-fn lays_down_its_own<'py>(ty: &Bound<'py, PyType>) -> PyResult<bool> {
+fn lays_down_its_own(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+    static TYPE_BASICSIZE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    static TYPE_ITEMSIZE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     let py = ty.py();
-    let readers = PyType::type_object(py).getattr(intern!(py, "__dict__"))?;
-    let read = |name: &Bound<'py, PyString>, of: &Bound<'py, PyType>| {
-        readers
-            .get_item(name)?
-            .call_method1(intern!(py, "__get__"), (of,))
-    };
     if is_heap_type(ty)? {
         return adds_slots(ty);
     }
-    let Ok(base) = read(intern!(py, "__base__"), ty)?.cast_into::<PyType>() else {
+    let Some(base) = base_of(ty)? else {
         return Ok(false);
     };
-    let shape = |of: &Bound<'py, PyType>| -> PyResult<(isize, isize)> {
+    let shape = |of: &Bound<'_, PyType>| -> PyResult<(isize, isize)> {
         Ok((
-            read(intern!(py, "__basicsize__"), of)?.extract()?,
-            read(intern!(py, "__itemsize__"), of)?.extract()?,
+            read_by_type(&TYPE_BASICSIZE, intern!(py, "__basicsize__"), of)?.extract()?,
+            read_by_type(&TYPE_ITEMSIZE, intern!(py, "__itemsize__"), of)?.extract()?,
         ))
     };
     Ok(shape(ty)? != shape(&base)?)
@@ -775,7 +886,7 @@ fn lays_down_its_own(ty: &Bound<'_, PyType>) -> PyResult<bool> {
 /// iterable of the class's -- is the caller's.
 fn adds_slots(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let py = ty.py();
-    let namespace = ty.getattr(intern!(py, "__dict__"))?;
+    let namespace = namespace_by_type(ty)?;
     // Asked before it is read: most classes declare no slots, and a `KeyError`
     // built for each of them and read for its type costs a relation between
     // two dataclasses more than the rest of its class reading.
@@ -940,8 +1051,7 @@ fn read_namespace<'py>(
     let py = base.py();
     let mut entries = Vec::new();
     let mut slots = None;
-    for item in base
-        .getattr(intern!(py, "__dict__"))?
+    for item in namespace_by_type(base)?
         .call_method0(intern!(py, "items"))?
         .try_iter()?
     {
@@ -1001,7 +1111,7 @@ fn is_data_descriptor<'py>(
     }
     let py = value.py();
     let answer =
-        type_has(&ty, intern!(py, "__set__"))? || type_has(&ty, intern!(py, "__delete__"))?;
+        special_has(&ty, intern!(py, "__set__"))? || special_has(&ty, intern!(py, "__delete__"))?;
     descriptors.push((ty, answer));
     Ok(answer)
 }
@@ -1030,10 +1140,7 @@ impl<'py> PoolRelations<'py, '_> {
             return None;
         }
         let mut bases = Vec::new();
-        for base in self.heard(
-            ty.getattr(intern!(ty.py(), "__mro__"))
-                .and_then(|mro| mro.try_iter()),
-        )? {
+        for base in self.heard(mro_of(ty).and_then(|mro| mro.try_iter()))? {
             let base = self.heard(base)?;
             let base = base.cast_into::<PyType>().ok()?;
             // A base need not denote a set for the order to hold: what `is_a`
@@ -1085,10 +1192,7 @@ impl<'py> PoolRelations<'py, '_> {
     fn read_attributes(&self, ty: &Bound<'py, PyType>) -> Option<Attributes> {
         let mut namespaces = Vec::new();
         let mut descriptors = Vec::new();
-        for base in self.heard(
-            ty.getattr(intern!(self.py, "__mro__"))
-                .and_then(|mro| mro.try_iter()),
-        )? {
+        for base in self.heard(mro_of(ty).and_then(|mro| mro.try_iter()))? {
             let base = self.heard(base)?;
             namespaces.push(self.heard(self.namespace_of(&base, &mut descriptors))?);
         }
@@ -1178,10 +1282,9 @@ impl<'py> PoolRelations<'py, '_> {
             return Some(true);
         }
         let untouched = |hook: &Bound<'_, PyString>| -> Option<bool> {
-            Some(
-                self.heard(metaclass.getattr(hook))?
-                    .is(&plain.getattr(hook).ok()?),
-            )
+            let mine = self.heard(special_lookup(&metaclass, hook))?;
+            let theirs = special_lookup(&plain, hook).ok()?;
+            Some(matches!((mine, theirs), (Some(mine), Some(theirs)) if mine.is(&theirs)))
         };
         Some(
             untouched(intern!(self.py, "__instancecheck__"))?

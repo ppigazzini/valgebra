@@ -52,6 +52,7 @@ use crate::codes::{
     RECURSION_LOOP, UNEXPECTED_MATCH, UNION_ERROR, UNRESOLVED_RECURSION,
 };
 use crate::input::Value;
+use crate::oracle::special_lookup;
 
 mod record;
 mod scalar;
@@ -353,15 +354,16 @@ fn held_dict<'py>(value: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyDict>> {
     Ok(copy.bind(py).call1((value,))?.cast_into::<PyDict>()?)
 }
 
-/// Whether the value's type carries `name` as the base's own slot. The lookup
-/// runs a metaclass's own attribute hook, so it can raise.
+/// Whether the value's type carries `name` as the base's own slot, found
+/// where `len` and `iter` find it ([`special_lookup`]): a metaclass answering
+/// the name is not what the interpreter calls. Reading the class can raise.
 fn carries(
     value: &Bound<'_, PyAny>,
     name: &Bound<'_, PyString>,
     of_base: &'static Py<PyAny>,
     ctx: Ctx<'_>,
 ) -> bool {
-    match value.get_type().getattr_opt(name) {
+    match special_lookup(&value.get_type(), name) {
         Ok(found) => found.is_some_and(|found| found.is(of_base.bind(value.py()))),
         Err(err) => unread(err, value.py(), ctx),
     }

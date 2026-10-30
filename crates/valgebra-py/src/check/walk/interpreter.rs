@@ -2858,28 +2858,26 @@ fn a_fatal_signal_propagates_from_a_key() {
 /// A length bound reads a tuple subclass's length as `PyObject_Size` reads it,
 /// which runs the type's own `__len__`, so it asks the type whether that
 /// `__len__` is the tuple's own on every interpreter -- where the tuple walk
-/// beside it asks nothing on `CPython`. Asking runs the metaclass: a fatal
-/// signal it raises is kept for the entry point, and an ordinary error reads
-/// the type as a liar, whose length is read through the base.
+/// beside it asks nothing on `CPython`. It asks where `len` looks, the type's
+/// own namespaces, and a descriptor found there runs as `len` would run it: a
+/// fatal signal its `__get__` raises is kept for the entry point, and an
+/// ordinary error reads the type as a liar, whose length is read through the
+/// base.
 #[test]
 fn a_length_bound_asks_a_tuple_subclass_its_type() {
     Python::attach(|py| {
         let module = PyModule::from_code(
             py,
-            c"class StoppingMeta(type):\n\
-              \x20   def __getattribute__(cls, name):\n\
-              \x20       if name == '__len__':\n\
-              \x20           raise KeyboardInterrupt\n\
-              \x20       return super().__getattribute__(name)\n\
-              class RudeMeta(type):\n\
-              \x20   def __getattribute__(cls, name):\n\
-              \x20       if name == '__len__':\n\
-              \x20           raise ValueError('no')\n\
-              \x20       return super().__getattribute__(name)\n\
-              class StoppingPair(tuple, metaclass=StoppingMeta):\n\
-              \x20   pass\n\
-              class RudePair(tuple, metaclass=RudeMeta):\n\
-              \x20   pass\n",
+            c"class Stopping:\n\
+              \x20   def __get__(self, obj, cls):\n\
+              \x20       raise KeyboardInterrupt\n\
+              class Rude:\n\
+              \x20   def __get__(self, obj, cls):\n\
+              \x20       raise ValueError('no')\n\
+              class StoppingPair(tuple):\n\
+              \x20   __len__ = Stopping()\n\
+              class RudePair(tuple):\n\
+              \x20   __len__ = Rude()\n",
             c"bounded_types.py",
             c"bounded_types",
         )
@@ -2899,49 +2897,94 @@ fn a_length_bound_asks_a_tuple_subclass_its_type() {
     });
 }
 
-/// A fatal signal raised by a type's metaclass when the walk asks for its
-/// `__len__` or `__iter__` is kept for the entry point to re-raise; an ordinary
-/// error there reads the type as a liar, and the value is read through its base.
-///
-/// Where the walk asks is the other half of the claim. A set subclass is
-/// iterated where it lies only if its type's `__iter__` is the set's own, on
-/// every interpreter. A tuple subclass is asked for its `__len__` on `PyPy`
-/// alone: `CPython` reads the storage whatever the type overrides, so there the
-/// metaclass never runs and the pair is read for what it holds.
+/// A metaclass answering `__len__` or `__iter__` is not what `len` and `iter`
+/// call: the interpreter reads a type's slots, filled from its own namespaces,
+/// and asks no `__getattribute__`, not even the metaclass's. So the walk never
+/// runs it -- a signal or an error it would raise is never met -- and a
+/// subclass whose metaclass hides a `__len__` of its own behind the base's is
+/// read through the base, as a visible override is.
 #[test]
-fn a_fatal_signal_propagates_from_a_type() {
+fn a_metaclass_answering_a_slot_is_not_what_the_walk_reads() {
     Python::attach(|py| {
         let module = PyModule::from_code(
             py,
             std::ffi::CString::new(
                 "class StoppingMeta(type):\n\
                  \x20   def __getattribute__(cls, name):\n\
-                 \x20       if name == '__len__':\n\
+                 \x20       if name in ('__len__', '__iter__'):\n\
                  \x20           raise KeyboardInterrupt\n\
-                 \x20       return super().__getattribute__(name)\n\
-                 class RudeMeta(type):\n\
-                 \x20   def __getattribute__(cls, name):\n\
-                 \x20       if name == '__len__':\n\
-                 \x20           raise ValueError('no')\n\
                  \x20       return super().__getattribute__(name)\n\
                  class StoppingPair(tuple, metaclass=StoppingMeta):\n\
                  \x20   pass\n\
-                 class RudePair(tuple, metaclass=RudeMeta):\n\
+                 class StoppingBag(set, metaclass=StoppingMeta):\n\
                  \x20   pass\n\
-                 class StoppingIterMeta(type):\n\
+                 class Hiding(type):\n\
                  \x20   def __getattribute__(cls, name):\n\
-                 \x20       if name == '__iter__':\n\
-                 \x20           raise KeyboardInterrupt\n\
+                 \x20       if name in ('__len__', '__iter__'):\n\
+                 \x20           return getattr(set, name)\n\
                  \x20       return super().__getattribute__(name)\n\
-                 class RudeIterMeta(type):\n\
-                 \x20   def __getattribute__(cls, name):\n\
-                 \x20       if name == '__iter__':\n\
-                 \x20           raise ValueError('no')\n\
-                 \x20       return super().__getattribute__(name)\n\
-                 class StoppingBag(set, metaclass=StoppingIterMeta):\n\
-                 \x20   pass\n\
-                 class RudeBag(set, metaclass=RudeIterMeta):\n\
-                 \x20   pass\n",
+                 class LieBag(set, metaclass=Hiding):\n\
+                 \x20   def __iter__(self):\n\
+                 \x20       return iter(['x'])\n",
+            )
+            .expect("no interior nul")
+            .as_c_str(),
+            std::ffi::CString::new("slot_metaclasses.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("slot_metaclasses")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+        let ints = Schema::tuple(SeqShape::homogeneous(Schema::Int));
+        let pair = module
+            .getattr("StoppingPair")
+            .expect("class")
+            .call1(((1i64, 2i64),))
+            .expect("pair");
+        assert_eq!(decide_with_fatal(py, &ints, &pair, &[]), (true, false));
+        let int_set = Schema::set(Schema::Int);
+        for (class, want) in [("StoppingBag", (true, false)), ("LieBag", (true, false))] {
+            let bag = module
+                .getattr(class)
+                .expect("class")
+                .call1(((1i64, 2i64),))
+                .expect("bag");
+            assert_eq!(decide_with_fatal(py, &int_set, &bag, &[]), want, "{class}");
+        }
+    });
+}
+
+/// A fatal signal raised where the walk asks a type for its `__len__` or
+/// `__iter__` is kept for the entry point to re-raise; an ordinary error there
+/// reads the type as a liar, and the value is read through its base.
+///
+/// Where the walk asks is the other half of the claim. A set subclass is
+/// iterated where it lies only if its type's `__iter__` is the set's own, on
+/// every interpreter. A tuple subclass is asked for its `__len__` on `PyPy`
+/// alone: `CPython` reads the storage whatever the type overrides, so there the
+/// descriptor never runs and the pair is read for what it holds.
+#[test]
+fn a_fatal_signal_propagates_from_a_type() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new(
+                "class Stopping:\n\
+                 \x20   def __get__(self, obj, cls):\n\
+                 \x20       raise KeyboardInterrupt\n\
+                 class Rude:\n\
+                 \x20   def __get__(self, obj, cls):\n\
+                 \x20       raise ValueError('no')\n\
+                 class StoppingPair(tuple):\n\
+                 \x20   __len__ = Stopping()\n\
+                 class RudePair(tuple):\n\
+                 \x20   __len__ = Rude()\n\
+                 class StoppingBag(set):\n\
+                 \x20   __iter__ = Stopping()\n\
+                 class RudeBag(set):\n\
+                 \x20   __iter__ = Rude()\n",
             )
             .expect("no interior nul")
             .as_c_str(),

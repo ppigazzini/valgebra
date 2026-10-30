@@ -64,6 +64,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a bound whose operand orders on its own renders marked
 - feat: a set's and a record's lengths are read off their shapes
 - fix: a constant the walk stopped on proves and refutes nothing
+- fix: a class is read where Python dispatches its hooks
 
 -->
 
@@ -299,6 +300,21 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A class is read where Python dispatches its hooks, not through its
+  metaclass.** Whether a class overrides `isinstance`, `issubclass` or `==`,
+  whether a builtin subclass's `__len__` and `__iter__` are the base's own,
+  which slots and descriptors its namespace holds and in what order its bases
+  stand were read through `getattr` on the class, which asks the metaclass
+  first. Python dispatches each through what the type's own namespaces hold
+  along the order it laid down, and asks no `__getattribute__`, so a metaclass
+  answering with the plain one hid the class's own: a class whose
+  `__subclasscheck__` answers `True` was decided above a class `isinstance`
+  says it is not above, two instances of a class with an equality of its own
+  were two disjoint literals, a `str` subclass whose `__len__` answers `0` met
+  `MaxLen(1)` with `"abc"`, and an order the metaclass reported decided a meet
+  empty that held an instance. Each is read as `inspect.getattr_static` reads
+  it now, at no cost to a class whose metaclass is `type`.
 
 - **A constant the walk stopped on proves and refutes nothing.** A literal is
   decided by walking its constant through the supertype, and a predicate that

@@ -1535,10 +1535,18 @@ fn a_record_a_class_cannot_carry_is_not_refuted_against_a_kind() {
     });
 }
 
-/// A class is read through code of its own -- its namespace and the `__eq__`
-/// on it through its metaclass, its `__slots__` by iterating them -- and a
-/// signal any of them raises is the relation's to raise: the oracle declines
-/// the question, and the query's answer is the signal.
+/// A class is read through code of its own -- the `__slots__` it names, by
+/// iterating them, and a descriptor's type, whose `__set__` a data-descriptor
+/// test looks up -- and a signal either raises is the relation's to raise: the
+/// oracle declines the question, and the query's answer is the signal.
+///
+/// A metaclass answering `__dict__` or `__eq__` is no such code: Python reads a
+/// class's namespace and dispatches `==` through what the class laid down, and
+/// asks no `__getattribute__` for either (the language reference, "Special
+/// method lookup"). Neither hook runs, so neither class is read through it --
+/// the namespace is the one the class statement filled, and two instances of a
+/// class whose metaclass hides its `__eq__` behind `object`'s compare by
+/// identity, as `==` on them does.
 #[test]
 fn a_signal_reading_a_class_is_the_answer() {
     Python::attach(|py| {
@@ -1546,9 +1554,7 @@ fn a_signal_reading_a_class_is_the_answer() {
             py,
             c"class Loud(dict):\n\
               \x20   def __contains__(self, key):\n\
-              \x20       if key == '__slots__':\n\
-              \x20           raise KeyboardInterrupt\n\
-              \x20       return dict.__contains__(self, key)\n\
+              \x20       raise KeyboardInterrupt\n\
               class Namespace(type):\n\
               \x20   def __getattribute__(cls, name):\n\
               \x20       if name == '__dict__':\n\
@@ -1565,14 +1571,26 @@ fn a_signal_reading_a_class_is_the_answer() {
               \x20       return iter(['x'])\n\
               class Slotted:\n\
               \x20   __slots__ = Names()\n\
+              class Stopping:\n\
+              \x20   def __get__(self, obj, cls):\n\
+              \x20       raise KeyboardInterrupt\n\
+              class Descriptor:\n\
+              \x20   __set__ = Stopping()\n\
+              class Holder:\n\
+              \x20   x = Descriptor()\n\
               class Equality(type):\n\
               \x20   def __getattribute__(cls, name):\n\
               \x20       if name == '__eq__':\n\
               \x20           raise KeyboardInterrupt\n\
               \x20       return type.__getattribute__(cls, name)\n\
               class Opaque(metaclass=Equality):\n\
+              \x20   def __eq__(self, other):\n\
+              \x20       return True\n\
+              \x20   __hash__ = object.__hash__\n\
+              class Hidden(metaclass=Equality):\n\
               \x20   pass\n\
-              first, second = Opaque(), Opaque()\n",
+              first, second = Opaque(), Opaque()\n\
+              one, two = Hidden(), Hidden()\n",
             c"class_reads.py",
             c"class_reads",
         )
@@ -1582,22 +1600,47 @@ fn a_signal_reading_a_class_is_the_answer() {
             let raised = oracle.answer(()).expect_err("the signal is the answer");
             assert!(raised.is_instance_of::<pyo3::exceptions::PyKeyboardInterrupt>(py));
         };
-        for class in ["Unread", "Slotted"] {
-            let held = pooled(vec![slot(class)]);
-            let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
-            assert_eq!(
-                oracle.direct_instance_of_kind(ClassIx::new(0), Kind::Int),
-                None,
-                "{class}"
-            );
-            interrupted(oracle);
-        }
-        let held = pooled(vec![slot("first"), slot("second")]);
+        let quiet = |oracle: PoolRelations<'_, '_>| {
+            oracle.answer(()).expect("no hook ran");
+        };
+        let held = pooled(vec![slot("Slotted")]);
         let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
         assert_eq!(
-            oracle.literals_disjoint(ConstIx::new(0), ConstIx::new(1)),
+            oracle.direct_instance_of_kind(ClassIx::new(0), Kind::Int),
             None
         );
         interrupted(oracle);
+        let held = pooled(vec![slot("Holder")]);
+        let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
+        assert_eq!(oracle.attribute_reach(ClassIx::new(0), "x"), None);
+        interrupted(oracle);
+        let held = pooled(vec![slot("Unread")]);
+        let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
+        assert_eq!(
+            oracle.direct_instance_of_kind(ClassIx::new(0), Kind::Int),
+            Some(false),
+            "Unread is read through the namespace its class statement filled"
+        );
+        quiet(oracle);
+        // Opaque's own `__eq__` answers `True`, which the metaclass hides;
+        // Hidden's is `object`'s, which it hides too.
+        let held = pooled(vec![
+            slot("first"),
+            slot("second"),
+            slot("one"),
+            slot("two"),
+        ]);
+        let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
+        assert_eq!(
+            oracle.literals_disjoint(ConstIx::new(0), ConstIx::new(1)),
+            None,
+            "an equality of its own"
+        );
+        assert_eq!(
+            oracle.literals_disjoint(ConstIx::new(2), ConstIx::new(3)),
+            Some(true),
+            "identity, as `==` on them is"
+        );
+        quiet(oracle);
     });
 }
