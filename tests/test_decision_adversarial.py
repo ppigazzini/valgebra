@@ -24,6 +24,7 @@ from valgebra import (
     Regex,
     ValidationError,
     Validator,
+    anything,
     complement,
     instance_of,
     intersection,
@@ -1020,6 +1021,26 @@ def test_a_fractional_number_met_with_a_recursive_universe_is_inhabited() -> Non
     assert meet.is_valid(0.5)
     assert not meet.is_empty()
     assert meet.relation_to(Validator(complement(object))) != "subset"
+
+
+def test_a_union_beside_every_dict_is_asked_as_its_difference() -> None:
+    """`a <= b | dict` is `a & ~dict <= b`, the dict kind's top read as `~~dict`.
+
+    `{"a?": object}.open()` is `dict[anything, anything]`, and `rest` holds
+    every value that is not a dict, so `rest` beside it is everything: the union
+    with `~dict` folds to `anything`, which is below it.
+    """
+    holds_a = Validator({"a": complement(str)}).open()
+    tagged = intersection(holds_a, complement(Validator(dict[Literal["a"], bytes])))
+    record = Validator({"a": float, str: bytes})
+    keyed = Validator(dict[Literal["a"], complement(None)])  # ty: ignore[invalid-type-form]
+    rest = intersection(
+        union(complement(record), complement(keyed)), complement(tagged)
+    )
+    every_dict = Validator({"a?": object}).open()
+    covering = union(rest, every_dict)
+    assert union(complement(dict), rest, every_dict).relation_to(covering) == "subset"
+    assert anything.relation_to(covering) == "subset"
 
 
 def test_a_subject_read_empty_is_below_every_set() -> None:

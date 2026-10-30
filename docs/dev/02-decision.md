@@ -155,9 +155,13 @@ by the set representation. So `anything ⊆ ¬s` is proved where `s` is read
 empty within the respelling's steps, which `below_nothing_exactly_where_read_empty`
 in `laws.rs` holds over drawn schemas, and
 `the_universe_is_below_the_complement_of_a_set_read_empty` on a union neither
-reading empties whole. The difference against any other supertype is not asked: a
-meet built on every declined pair costs the relation matrix more than it
-decides. A meet subject against a meet supertype is the one pair asked as the
+reading empties whole. Against a union holding a complement, `b ∪ ¬c`, the meet
+`a ∧ c` is asked below `b`, and where that declines, `a ∧ ¬(b ∪ ¬c)` is read
+empty the same way, which folds no predicate's complement:
+`what_is_read_empty_bounds_the_relation` holds the relation to what that reading
+says. The difference against any other supertype is not asked: a meet built on
+every declined pair costs the relation matrix more than it decides. A meet
+subject against a meet supertype is the one pair asked as the
 two together: their meet proved empty and the subject proved to hold a value
 refute it, since `a ⊆ b` with `a ∧ b = ∅` holds only of an empty `a`, and
 neither the member rule on the left nor the member-at-a-time rule on the right

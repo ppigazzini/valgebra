@@ -9684,6 +9684,121 @@ fn a_pair_declined_as_written_is_asked_in_its_other_spellings() {
     assert_eq!(both(&number, &neither), Relation::Fails);
 }
 
+/// A union holding a complement is asked as the meet the difference is.
+///
+/// `a ⊆ b ∨ ¬c` is `(a ∧ c) ∧ ¬b = ∅`, which is `a ∧ c ⊆ b`, both ways. The
+/// universe below the complement of the dicts beside a meet of records is the
+/// dicts below that meet, which the rules refute where the pair as written
+/// declines: the union `dict | ~dict | x` construction folds to the universe
+/// is that pair.
+#[test]
+fn a_union_holding_a_complement_is_asked_as_its_difference() {
+    let both = |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &NoLeafRelations, &[]);
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let dicts = Schema::mapping(MapClause {
+        key: Schema::ANYTHING,
+        value: Schema::ANYTHING,
+    });
+    let with_b = open(vec![field("b", Schema::Int, true)]);
+    let a_not_int = Schema::KeyedMap {
+        fields: vec![field("a", not(Schema::Int), false)].into(),
+        defaults: vec![MapClause {
+            key: Schema::ANYTHING,
+            value: Schema::ANYTHING,
+        }]
+        .into(),
+    };
+    let a_int = closed(vec![field("a", Schema::Int, true)]);
+    let neither = Schema::Union(vec![not(a_not_int), not(a_int)].into());
+    let meet = Schema::Intersection(vec![with_b.clone(), neither.clone()].into());
+    let beside = Schema::Union(vec![not(dicts.clone()), meet].into());
+    assert_eq!(both(&Schema::ANYTHING, &beside), Relation::Fails);
+    // And proved where the dicts are below the rest: the two records the
+    // complements name share no value, so their meet's complement is the
+    // universe, and every value is outside the dicts or a dict.
+    let every_dict = Schema::Intersection(vec![dicts.clone(), neither].into());
+    let whole = Schema::Union(vec![not(dicts.clone()), every_dict].into());
+    assert_eq!(both(&Schema::ANYTHING, &whole), Relation::Holds);
+
+    let with_c = open(vec![field("c", Schema::Str, true)]);
+    let with_both = open(vec![
+        field("b", Schema::Int, true),
+        field("c", Schema::Str, true),
+    ]);
+    let split = Schema::Union(vec![not(with_c), with_both].into());
+    assert_eq!(both(&with_b, &split), Relation::Holds);
+
+    // And read as the difference where the rules decline the meet below the
+    // rest: a meet holding a constant or an empty meet is below the constant
+    // beside a complement, the union's complement dropping that branch.
+    let constant = |at: usize| Schema::Literal(ConstIx::new(at));
+    let one = |of: Schema| {
+        Schema::tuple(SeqShape {
+            prefix: vec![of].into(),
+            tail: None,
+        })
+    };
+    let read_empty = Schema::Intersection(vec![one(Schema::Int), one(Schema::Str)].into());
+    let a_constant_or_none = Schema::Intersection(
+        vec![
+            Schema::list(SeqShape::homogeneous(Schema::NoneType)),
+            Schema::Union(vec![constant(2), read_empty].into()),
+        ]
+        .into(),
+    );
+    let beside_a_complement = Schema::Union(vec![constant(2), not(constant(1))].into());
+    assert_eq!(
+        both(&a_constant_or_none, &beside_a_complement),
+        Relation::Holds
+    );
+    assert_eq!(both(&constant(3), &beside_a_complement), Relation::Unknown);
+
+    // A member holding a whole kind and nothing else is the complement of the
+    // kind's complement, and is asked as one: `anything <= ¬R ∪ dict` is
+    // `¬dict <= ¬R`, which holds where `R` is a record, and so for a list.
+    // The meet of two complements of a kind's shapes holds every value but that
+    // kind's, which the kind walk does not read whole beside the kind's top.
+    let everything_but = |a: Schema, b: Schema, top: Schema| {
+        let rest = Schema::Intersection(vec![not(a), not(b)].into());
+        both(&Schema::ANYTHING, &Schema::Union(vec![rest, top].into()))
+    };
+    let a_int = closed(vec![field("a", Schema::Int, true)]);
+    let b_str = closed(vec![field("b", Schema::Str, true)]);
+    assert_eq!(everything_but(a_int, b_str, dicts.clone()), Relation::Holds);
+    let list = |of: Schema| Schema::list(SeqShape::homogeneous(of));
+    let lists = everything_but(list(Schema::Int), list(Schema::Str), list(Schema::ANYTHING));
+    assert_eq!(lists, Relation::Holds);
+    let set = Schema::set;
+    let sets = everything_but(set(Schema::Int), set(Schema::Str), set(Schema::ANYTHING));
+    assert_eq!(sets, Relation::Holds);
+
+    // Excluded middle on a predicate is no law: the union of one with its
+    // complement is not the top, so the pair is not read as the predicate
+    // below itself.
+    let called = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    let either = Schema::Union(vec![called.clone(), not(called)].into());
+    assert_ne!(both(&Schema::ANYTHING, &either), Relation::Holds);
+    // Nor is the difference read empty by a predicate's complement beside it.
+    let nones = Schema::list(SeqShape::homogeneous(Schema::NoneType));
+    let called = Schema::Refine {
+        base: Arc::new(nones.clone()),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    let read_empty = Schema::Intersection(vec![one(Schema::Int), one(Schema::Str)].into());
+    let a_call_or_none = Schema::Intersection(
+        vec![
+            nones,
+            Schema::Union(vec![called.clone(), read_empty].into()),
+        ]
+        .into(),
+    );
+    let the_call_beside = Schema::Union(vec![called, not(constant(1))].into());
+    assert_eq!(both(&a_call_or_none, &the_call_beside), Relation::Unknown);
+}
+
 /// A respelled pair spends no more than [`RESPELLING`] steps.
 ///
 /// Towers of `(T, list[T])` reach each level twice, so their inclusion costs
