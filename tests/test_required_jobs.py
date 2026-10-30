@@ -373,9 +373,16 @@ def _listing() -> str:
 
 
 def _sweep_step(job: dict) -> dict:
-    """Give the one step of a job that runs the binding sweep."""
+    """Give the one step of a job that runs the binding sweep.
+
+    The one that writes outcomes: the push lane's diff step lists the package's
+    mutants too, which runs none.
+    """
     steps = [
-        step for step in job["steps"] if "cargo mutants" in str(step.get("run", ""))
+        step
+        for step in job["steps"]
+        if "cargo mutants" in str(step.get("run", ""))
+        and "--output" in str(step.get("run", ""))
     ]
     assert len(steps) == 1, f"expected one sweep step, found {len(steps)}"
     return steps[0]

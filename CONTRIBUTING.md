@@ -155,7 +155,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | a mutation verdict | any baseline | `python3 scripts/mutation_gate.py --baseline core` |
 | no file under the per-file coverage floor | `scripts/coverage_gate.py`'s floor and the files named under it, per lane scope | `uv run --no-sync python scripts/coverage_gate.py --json coverage-core.json --scope core` |
 | where a change starts, for the bench gate and the diff sweeps, a force-push included | `scripts/change_base.py` | `uv run --no-sync pytest tests/test_change_base.py` |
-| a diff sweep mutates the files whose code a change touches, and none whose diff is comments alone | `scripts/code_changes.py` | `uv run --no-sync pytest tests/test_code_changes.py` |
+| a diff sweep mutates the functions whose code a change touches, and none whose diff is comments alone | `scripts/code_changes.py` | `uv run --no-sync pytest tests/test_code_changes.py` |
 | supply chain (Rust) | `deny.toml` | `cargo deny check` |
 | supply chain (Python) | `uv.lock` | `uv export --locked --format requirements-txt --no-emit-project --all-groups > requirements-audit.txt && uvx pip-audit -r requirements-audit.txt` |
 | workflow security | `.github/` | `uvx zizmor .github/` |
@@ -267,10 +267,10 @@ against their own committed baselines: a survivor the baseline does not accept f
 baseline entry whose mutant the tests kill. The target is never zero —
 equivalent mutants exist and are undecidable — so an accepted survivor carries
 the argument for why no test can kill it.
-Every push also runs the first two **restricted to the whole files whose code
-the diff changes** of the ones each examines -- a file whose diff is comments
-and blank lines alone compiles as it did and is left out
-(`scripts/code_changes.py`) -- which is bounded by the change rather than
+Every push also runs the first two **restricted to the functions whose code
+the diff changes** in the files each examines -- a change of comments and blank
+lines alone compiles as it did and touches none (`scripts/code_changes.py`) --
+which is bounded by the change rather than
 by the tree and so blocks merges, under one fixed proptest seed, so a push's
 verdict is the tree's and not the draw's; the third costs a suite run per
 mutant and stays on the schedule. Each
