@@ -1104,25 +1104,25 @@ fn refinement_verdict(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>)
     if !lengths_only {
         return Verdict::Unknown;
     }
-    match base {
-        // A string and a bytes take any length, so a bound the lengths
-        // themselves satisfy -- which the check above has already read -- is met
-        // by a value of the shortest length it admits.
-        Schema::Str | Schema::Bytes => Verdict::Inhabited,
-        // A container takes any length too: a bound of zero is met by the empty
-        // container whatever the element admits. Past zero the two container
-        // families part. A sequence repeats one element, so a bound of any size
-        // is met by that many copies of a single witness. A **set holds each
-        // member once**, so a bound of `n` asks the element for `n` values that
-        // differ -- `set[None]` with `MinLen(2)` denotes no set at all, and
-        // reading it as inhabited let a kind mismatch refute an inclusion that
-        // holds vacuously.
-        _ => match repeated_element(base) {
-            Some(_) if shortest(constraints.iter()) == 0 => Verdict::Inhabited,
-            Some(element) if repeats_a_member(base) => element.verdict_rec(cx),
-            Some(element) => distinct_members(element, shortest(constraints.iter()), cx.oracle),
-            None => Verdict::Unknown,
-        },
+    // A container takes any length: a bound of zero is met by the empty
+    // container whatever the element admits. Past zero the two container
+    // families part. A sequence repeats one element, so a bound of any size is
+    // met by that many copies of a single witness. A **set holds each member
+    // once**, so a bound of `n` asks the element for `n` values that differ --
+    // `set[None]` with `MinLen(2)` denotes no set at all, and reading it as
+    // inhabited let a kind mismatch refute an inclusion that holds vacuously.
+    // A shape that holds a value of every length from some least one
+    // ([`Schema::every_length_from`]) -- a string, a bytes, a sequence past its
+    // prefix, a mapping with one clause keyed by every value of a kind with no
+    // end of them -- holds one of a length a bound the lengths satisfy admits:
+    // the least is the prefix's length, which the check above has read against
+    // the bound's most.
+    match repeated_element(base) {
+        Some(_) if shortest(constraints.iter()) == 0 => Verdict::Inhabited,
+        Some(element) if repeats_a_member(base) => element.verdict_rec(cx),
+        Some(element) => distinct_members(element, shortest(constraints.iter()), cx.oracle),
+        None if base.every_length_from(cx).is_some() => Verdict::Inhabited,
+        None => Verdict::Unknown,
     }
 }
 

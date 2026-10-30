@@ -225,10 +225,11 @@ impl Schema {
     /// is at most zero -- the empty container of its kind and nothing else --
     /// below a supertype admitting that container, `Fails` for a shape that
     /// holds one longer than the supertype's maximum length
-    /// ([`longer_than`](Self::longer_than)) or a record whose required fields
+    /// ([`longer_than`](Self::longer_than)), a record whose required fields
     /// alone are a length the supertype refuses
-    /// ([`required_fields_refused`](Self::required_fields_refused)), `Unknown`
-    /// otherwise.
+    /// ([`required_fields_refused`](Self::required_fields_refused)), or a
+    /// refinement holding a length the supertype's bounds leave out
+    /// ([`length_refused`](Self::length_refused)), `Unknown` otherwise.
     ///
     /// Out of line behind the discriminant test its caller asks, so a pair of
     /// any other shape pays the one test.
@@ -244,7 +245,10 @@ impl Schema {
         {
             return Relation::Holds;
         }
-        if self.longer_than(other, cx) || self.required_fields_refused(other, cx) {
+        if self.longer_than(other, cx)
+            || self.required_fields_refused(other, cx)
+            || self.length_refused(other, cx)
+        {
             return Relation::Fails;
         }
         Relation::Unknown
@@ -315,6 +319,81 @@ impl Schema {
         let refused = required < shortest(constraints.iter())
             || longest(constraints.iter()).is_some_and(|most| required > most);
         refused && self.verdict_rec(cx) == Verdict::Inhabited
+    }
+
+    /// Whether a refinement holding a value of every length its bounds admit
+    /// holds one the supertype's length bounds refuse.
+    ///
+    /// The subject's base holds a value of each length from some least one
+    /// ([`every_length_from`](Self::every_length_from)), and where its
+    /// constraints are length bounds alone, none excludes such a value: the
+    /// subject holds one of each length from the larger of that least and its
+    /// `MinLen` to its `MaxLen`. A length the supertype's bounds leave out --
+    /// below its `MinLen`, or above its `MaxLen` -- is then a value outside the
+    /// supertype whatever its base: `Annotated[str, MaxLen(256)]` holds a text
+    /// of 65 code points, which `MaxLen(64)` refuses. The entailment the other
+    /// way is the bound rules' [JV20, Fig. 3.4]; this is what they leave
+    /// undecided, and what a pattern counting past a few hundred code points
+    /// no longer holds.
+    fn length_refused(&self, other: &Schema, cx: &mut Cx<'_>) -> bool {
+        let (
+            Schema::Refine { base, constraints },
+            Schema::Refine {
+                constraints: theirs,
+                ..
+            },
+        ) = (self, other)
+        else {
+            return false;
+        };
+        if !constraints
+            .iter()
+            .all(|constraint| matches!(constraint, Constraint::MinLen(_) | Constraint::MaxLen(_)))
+        {
+            return false;
+        }
+        let Some(from) = base.every_length_from(cx) else {
+            return false;
+        };
+        let least = from.max(shortest(constraints.iter()));
+        let most = longest(constraints.iter());
+        if most.is_some_and(|most| most < least) {
+            return false;
+        }
+        least < shortest(theirs.iter())
+            || longest(theirs.iter()).is_some_and(|allowed| most.is_none_or(|most| most > allowed))
+    }
+
+    /// The least length from which this shape holds a value of every length,
+    /// or `None` where it is not read: a word of any length for `str` and
+    /// `bytes`; a sequence with a repeated element, each position holding a
+    /// value, from its prefix on; and a mapping with one clause and no field,
+    /// whose key holds every value of a kind with no end of them -- a name,
+    /// a byte string, an integer -- and whose value holds one, from empty.
+    pub(super) fn every_length_from(&self, cx: &mut Cx<'_>) -> Option<usize> {
+        match self {
+            Schema::Str | Schema::Bytes => Some(0),
+            Schema::Seq { shape, .. } => {
+                let tail = shape.tail.as_deref()?;
+                shape
+                    .prefix
+                    .iter()
+                    .chain([tail])
+                    .all(|position| position.verdict_rec(cx) == Verdict::Inhabited)
+                    .then_some(shape.prefix.len())
+            }
+            Schema::KeyedMap { fields, defaults } if fields.is_empty() => {
+                let [clause] = &defaults[..] else {
+                    return None;
+                };
+                ([Kind::Str, Kind::Bytes, Kind::Int]
+                    .iter()
+                    .any(|kind| clause.key.holds_every_value_of(*kind, cx.oracle))
+                    && clause.value.verdict_rec(cx) == Verdict::Inhabited)
+                    .then_some(0)
+            }
+            _ => None,
+        }
     }
 
     /// The lengths of this schema's values, as the least and, where there is

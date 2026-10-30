@@ -422,7 +422,14 @@ answers `"undecided"`.
   out; past that they decline. A bound over a `str` or `bytes` is a pattern
   counting code points or bytes, a few states a code point, and the sets read
   one up to about 250 code points or 2,000 bytes before its table passes the
-  state bound; past 4,094 the bound is refused before it is built. That decides a
+  state bound; past 4,094 the bound is refused before it is built. A
+  refinement whose base holds a value of every length its bounds admit -- a
+  word, a sequence with a repeated element, a mapping keyed by every name --
+  is refuted below a bound leaving one of those lengths out, at any size:
+  `Annotated[str, MaxLen(256)]` is `not_subset` of `Annotated[str,
+  MaxLen(64)]`, on a text of 65 code points. A union of bounds covering a
+  word's lengths past the state bound is not read: `Annotated[str,
+  MaxLen(1000)]` below `MaxLen(64) | MinLen(65)` over `str` declines. That decides a
   fixpoint every unfolding of which needs one more element -- each element is a
   value of the fixpoint, and no finite value satisfies it. A bound over a
   *fixed* position, or over a base whose values have no length at all, is not

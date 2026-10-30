@@ -620,6 +620,33 @@ _DECIDED = [
         Annotated[dict[str, int], at.MaxLen(1)],
         id="refute:map:{a:int,b:int}<=MaxLen(1)dict[str,int]",
     ),
+    # A refinement whose base holds a value of every length its bounds admit
+    # holds one a bound leaving that length out refuses, at any size: past the
+    # few hundred code points a pattern counting a word's length is built for.
+    pytest.param(
+        "refutes",
+        Annotated[str, at.MaxLen(256)],
+        Annotated[str, at.MaxLen(64)],
+        id="refute:str:MaxLen(256)<=MaxLen(64)",
+    ),
+    pytest.param(
+        "refutes",
+        Annotated[bytes, at.MaxLen(32_768)],
+        Annotated[bytes, at.MaxLen(64)],
+        id="refute:bytes:MaxLen(32768)<=MaxLen(64)",
+    ),
+    pytest.param(
+        "refutes",
+        Annotated[str, at.MinLen(64)],
+        Annotated[str, at.MinLen(1_000)],
+        id="refute:str:MinLen(64)<=MinLen(1000)",
+    ),
+    pytest.param(
+        "refutes",
+        Annotated[dict[str, int], at.MinLen(1)],
+        Annotated[dict[str, int], at.MinLen(2)],
+        id="refute:dict[str,int]:MinLen(1)<=MinLen(2)",
+    ),
     pytest.param(
         "refutes",
         {"a?": int},

@@ -69,10 +69,24 @@ answer of its own, or a repair to a change not yet released.
 - fix: a length bound no automaton could count to is refused before it is built
 - feat: a union holding a complement is asked as its difference
 - fix: a member deep by a clause's key alone is left out of the last reading
+- feat: a length the supertype's bounds leave out refutes at any size
 
 -->
 
 ### Added
+
+- **A length the supertype's bounds leave out refutes at any size.** A
+  refinement whose constraints are length bounds alone, over a base holding a
+  value of every length -- `str`, `bytes`, a sequence with a repeated element
+  whose positions hold a value, a mapping with one clause keyed by every
+  `str`, `bytes` or `int` -- holds a value of each length its bounds admit,
+  and one a bound of the supertype leaves out is a value outside it.
+  `Annotated[str, MaxLen(256)]` is `not_subset` of `Annotated[str,
+  MaxLen(64)]` and `Annotated[str, MinLen(64)]` of `Annotated[str,
+  MinLen(1000)]`, where the pattern a word's length is read as passed the
+  state bound and declined; `Annotated[dict[str, int], MinLen(1)]` is
+  `not_subset` of `Annotated[dict[str, int], MinLen(2)]` and holds a value at
+  all, which a bound over a mapping's clauses did not say.
 
 - **A union holding a complement is asked as its difference.** `a <= b | ~c`
   is `(a & c) & ~b` empty, which is `a & c <= b`, both ways, and a pair every
@@ -334,8 +348,7 @@ answer of its own, or a repair to a change not yet released.
   counting to a bound holds a state for each count, so a bound past the 4,094
   a table of 4,096 states counts to is refused before its pattern is written,
   as a sequence's bound already was, and the compiler is held to the size the
-  table build is held to, for every pattern. Both relations answer at once,
-  undecided.
+  table build is held to, for every pattern. Both relations answer at once.
 
 - **An enumeration with a subclass is read as its class.** An enumeration
   with members is read as the union of them because the class makes no other

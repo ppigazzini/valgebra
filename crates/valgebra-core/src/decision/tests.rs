@@ -9458,6 +9458,112 @@ fn a_union_holding_a_complement_is_asked_as_its_difference() {
     assert_ne!(both(&Schema::ANYTHING, &either), Relation::Holds);
 }
 
+// THEORY: a-refinement-narrows-its-base
+/// A refinement holding a value of every length its bounds admit is refuted
+/// below a bound leaving one of those lengths out, at any size: a word, a
+/// sequence with a repeated element and a mapping keyed by every name hold a
+/// value of each length from their least. A constraint other than a length --
+/// a pattern -- may leave such a value out, and an empty interval holds none,
+/// so neither is read.
+#[test]
+fn a_length_the_supertype_leaves_out_refutes_at_any_size() {
+    let relation =
+        |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &NoLeafRelations, &[]);
+    let bounded = |base: Schema, constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(base),
+        constraints: constraints.into(),
+    };
+    let names = Schema::mapping(MapClause {
+        key: Schema::Str,
+        value: Schema::Int,
+    });
+    let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+    for (base, short, long) in [
+        (Schema::Str, 64, 256),
+        (Schema::Bytes, 64, 32_768),
+        (ints, 64, 5_000),
+        (names, 1, 2),
+    ] {
+        let at_most = |most| bounded(base.clone(), vec![Constraint::MaxLen(most)]);
+        let at_least = |least| bounded(base.clone(), vec![Constraint::MinLen(least)]);
+        assert_eq!(
+            relation(&at_most(long), &at_most(short)),
+            Relation::Fails,
+            "{base:?}"
+        );
+        assert_eq!(
+            relation(&at_least(short), &at_least(long)),
+            Relation::Fails,
+            "{base:?}"
+        );
+        assert_eq!(
+            relation(&at_least(long), &at_least(short)),
+            Relation::Holds,
+            "{base:?}"
+        );
+        // A subject of one length the supertype's bound leaves out.
+        let exactly = bounded(
+            base.clone(),
+            vec![Constraint::MinLen(long), Constraint::MaxLen(long)],
+        );
+        assert_eq!(
+            relation(&exactly, &at_most(short)),
+            Relation::Fails,
+            "{base:?}"
+        );
+    }
+    // A mapping holds a value of every length only where its one clause is
+    // keyed by every value of a kind with no end of them, its value holds one,
+    // and no field stands beside it: `dict[bool, int]` holds two keys at most
+    // and a mapping of `str` to nothing only `{}`, so neither is refuted by a
+    // length it cannot reach, and a record requiring `a` holds one key at
+    // least, so it holds no value of none.
+    let at_most = |base: &Schema, most| bounded(base.clone(), vec![Constraint::MaxLen(most)]);
+    let few_keys = Schema::mapping(MapClause {
+        key: Schema::Bool,
+        value: Schema::Int,
+    });
+    let to_nothing = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: Schema::Nothing,
+        }]
+        .into(),
+    };
+    let requiring_a = Schema::KeyedMap {
+        fields: vec![field("a", Schema::Int, true)].into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: Schema::Int,
+        }]
+        .into(),
+    };
+    assert_ne!(
+        relation(&at_most(&few_keys, 5), &at_most(&few_keys, 2)),
+        Relation::Fails
+    );
+    assert_ne!(
+        relation(&at_most(&to_nothing, 5), &at_most(&to_nothing, 0)),
+        Relation::Fails
+    );
+    assert_ne!(
+        relation(&at_most(&requiring_a, 0), &Schema::Nothing),
+        Relation::Fails
+    );
+    let short_words = bounded(
+        Schema::Str,
+        vec![Constraint::Regex("a{0,3}".into()), Constraint::MaxLen(300)],
+    );
+    let at_most_64 = bounded(Schema::Str, vec![Constraint::MaxLen(64)]);
+    assert_ne!(relation(&short_words, &at_most_64), Relation::Fails);
+    let none = bounded(
+        Schema::Str,
+        vec![Constraint::MinLen(300), Constraint::MaxLen(200)],
+    );
+    assert_ne!(relation(&none, &at_most_64), Relation::Fails);
+}
+
 /// A respelled pair spends no more than [`RESPELLING`] steps.
 ///
 /// Towers of `(T, list[T])` reach each level twice, so their inclusion costs

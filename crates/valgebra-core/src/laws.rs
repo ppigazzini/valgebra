@@ -4373,6 +4373,48 @@ fn the_universe_separates_a_pair_at_a_key_of_a_position() {
 }
 
 // THEORY: each-kind-is-closed
+/// A length bound over a record is separated by a mapping of that many keys
+/// holding what the record reads them with.
+///
+/// The pair: `dict[str, None]` of at least two keys, against `set[Any]`. It is
+/// refuted by `{"a": None, "b": None}`, a dict and no set. The bound names the
+/// width, and a mapping of two integers is no value of the record: the
+/// subject's member is the mapping of two keys whose values the clause takes.
+#[test]
+fn a_length_bound_over_a_record_is_separated_by_a_mapping_it_admits() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let a = Schema::Refine {
+        base: Arc::new(Schema::KeyedMap {
+            fields: Vec::new().into(),
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::NoneType,
+            }]
+            .into(),
+        }),
+        constraints: vec![Constraint::MinLen(2)].into(),
+    };
+    let b = Schema::Coll {
+        container: CollKind::Set,
+        element: Arc::new(Schema::ANYTHING),
+    };
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
+}
+
+// THEORY: each-kind-is-closed
 /// The universe separates a pair whose sequences sit under a wrapper.
 ///
 /// `tuple[*Any]` of at least three is refuted below `¬tuple[*None]`: a tuple
@@ -4734,11 +4776,43 @@ fn sized_like(schema: &Schema, len: usize, fuel: usize) -> Vec<Obj> {
                 .collect(),
         ),
     ];
+    // A record's mapping of `len` keys holds what the record reads each key
+    // with, as its member does: a mapping of `len` integers is no value of a
+    // record whose clause takes `None`, so the width a bound names would have
+    // no member and a refutation standing on one no witness.
+    if let Schema::KeyedMap { fields, defaults } = schema {
+        built.extend(record_of_width(fields, defaults, len, fuel));
+    }
     if distinct.len() == len {
         built.push(Obj::Set(distinct.clone()));
         built.push(Obj::FrozenSet(distinct));
     }
     built
+}
+
+/// A mapping of `len` keys a record reads, each holding a member of the schema
+/// the record reads it with ([`schema_at`]): its required fields first, then
+/// the names in order. `None` where fewer than `len` names have one.
+fn record_of_width(fields: &Fields, defaults: &Clauses, len: usize, fuel: usize) -> Option<Obj> {
+    let required = fields
+        .iter()
+        .filter(|field| field.required)
+        .filter_map(|field| static_name(&field.name));
+    let mut entries: Vec<(Key, Obj)> = Vec::with_capacity(len);
+    for name in required.chain(NAMES) {
+        if entries.len() == len {
+            break;
+        }
+        if entries.iter().any(|(key, _)| key.name() == name) {
+            continue;
+        }
+        if let Some(value) = schema_at(fields, defaults, name)
+            .and_then(|read| a_member(&read, fuel.saturating_sub(1)))
+        {
+            entries.push((Key::Exact(name), value));
+        }
+    }
+    (entries.len() == len).then_some(Obj::Map(entries))
 }
 
 /// How deep a constructed member is built before the attempt is given up.
