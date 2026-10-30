@@ -1,16 +1,19 @@
-"""A push sweep reads the files whose code a change touches.
+"""A push sweep reads the functions whose code a change touches.
 
-`scripts/code_changes.py` names them for both diff-scoped mutation sweeps. A
-file whose diff is comments and blank lines alone compiles to what it compiled
-to before, so every mutant in it answers as it did, and sweeping it again
-costs the whole file's mutants and finds nothing. The script is driven over a
-synthetic history rather than this tree, so the answer does not depend on the
-clone the suite runs in.
+`scripts/code_changes.py` names them for both diff-scoped mutation sweeps: the
+files, and a pattern each that picks the mutants of the touched functions out
+of the package's listing. A change of comments and blank lines alone compiles
+to what it compiled to before, so every mutant answers as it did, and sweeping
+it again finds nothing. The script is driven over a synthetic history and a
+listing written for it rather than this tree, so the answer does not depend on
+the clone the suite runs in or on cargo-mutants being installed.
 """
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import subprocess
 import sys
 from typing import TYPE_CHECKING
@@ -50,6 +53,69 @@ def _git(tree: Path, *args: str) -> str:
     ).stdout.strip()
 
 
+def _listing(tree: Path) -> list[dict]:
+    """List a mutant on each line of each function of the tree's Rust files.
+
+    In the shape `cargo mutants --list --json` prints: a function starts at a
+    line opening with `fn` and ends at the first line that is `}`, or on its
+    own line where it closes there. A line outside every function holds none.
+    """
+    listed = []
+    for source in sorted(tree.rglob("*.rs")):
+        path = str(source.relative_to(tree)).replace("\\", "/")
+        lines = source.read_text(encoding="utf-8").splitlines()
+        for start, text in enumerate(lines, 1):
+            if not text.startswith("fn "):
+                continue
+            end = start
+            while not lines[end - 1].endswith("}"):
+                end += 1
+            span = {"start": {"line": start}, "end": {"line": end}}
+            name = text.split("(")[0].removeprefix("fn ")
+            listed.extend(
+                {
+                    "file": path,
+                    "function": {"function_name": name, "span": span},
+                    "span": {"start": {"line": line}, "end": {"line": line}},
+                }
+                for line in range(start, end + 1)
+            )
+    return listed
+
+
+def _named(tree: Path, base: str) -> subprocess.CompletedProcess[str]:
+    """Run the script over the tree's own listing, as the lanes run it."""
+    (tree / "listed.json").write_text(json.dumps(_listing(tree)), encoding="utf-8")
+    return subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        [
+            sys.executable,
+            str(SCRIPT),
+            base,
+            "--listing",
+            str(tree / "listed.json"),
+            "--examined",
+            str(tree / "examined.txt"),
+        ],
+        cwd=tree,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _examined(tree: Path) -> list[str]:
+    """Name each mutant of the tree's listing a pattern the script wrote picks."""
+    patterns = (tree / "examined.txt").read_text(encoding="utf-8").split()
+    return [
+        f"{mutant['file']}:{mutant['span']['start']['line']}"
+        for mutant in _listing(tree)
+        if any(
+            re.match(pattern, f"{mutant['file']}:{mutant['span']['start']['line']}:1:")
+            for pattern in patterns
+        )
+    ]
+
+
 def test_a_comment_or_a_blank_line_is_not_code() -> None:
     assert not script.is_code("")
     assert not script.is_code("    ")
@@ -81,13 +147,7 @@ def test_a_file_whose_diff_is_comments_alone_is_left_out(tmp_path: Path) -> None
     for name, text in edits.items():
         (tmp_path / name).write_text(text, encoding="utf-8")
     _git(tmp_path, "commit", "--quiet", "-am", "change")
-    named = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
-        [sys.executable, str(SCRIPT), base],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    named = _named(tmp_path, base)
     assert named.returncode == script.EXIT_OK, named.stderr
     assert sorted(named.stdout.split()) == ["both.rs", "code.rs"]
 
@@ -100,16 +160,6 @@ def _history(tree: Path) -> str:
     _git(tree, "add", ".")
     _git(tree, "commit", "--quiet", "-m", "base")
     return _git(tree, "rev-parse", "HEAD")
-
-
-def _named(tree: Path, base: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
-        [sys.executable, str(SCRIPT), base],
-        cwd=tree,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
 
 
 def test_a_renamed_file_is_named_under_its_new_path(tmp_path: Path) -> None:
@@ -158,7 +208,7 @@ def test_a_path_in_another_shape_is_unreadable_rather_than_unchanged() -> None:
         "diff --git a/n.rs b/n.rs\n--- /dev/null\n+++ b/n.rs\n"
         "@@ -0,0 +1 @@\n+fn f() {}\n"
     )
-    assert script.code_changes(added) == ["n.rs"]
+    assert list(script.code_changes(added)) == ["n.rs"]
 
 
 #: A crate laid out as this tree lays its own: a suite the root declares, a
@@ -181,6 +231,57 @@ CRATE = {
 }
 
 
+def _laid_down(tree: Path, files: dict[str, str]) -> str:
+    """Commit `files` as a history's first commit, and name it."""
+    _git(tree, "init", "--quiet", "--initial-branch=main")
+    for name, text in files.items():
+        (tree / name).parent.mkdir(parents=True, exist_ok=True)
+        (tree / name).write_text(text, encoding="utf-8")
+    _git(tree, "add", ".")
+    _git(tree, "commit", "--quiet", "-m", "base")
+    return _git(tree, "rev-parse", "HEAD")
+
+
+#: Three functions and a constant outside them, one mutant a line in each.
+FUNCTIONS = (
+    "const N: u8 = 1;\n"
+    "fn f() -> u8 {\n    1\n}\n"
+    "fn g() -> u8 {\n    2\n}\n"
+    "fn h() -> u8 {\n    3\n    4\n}\n"
+)
+
+
+def test_a_change_sweeps_the_functions_it_touches(tmp_path: Path) -> None:
+    """A change examines the mutants of the functions it touches, and no others.
+
+    A line changed in `g` examines `g`; a line removed from `h` examines `h`,
+    whose remaining lines hold the place it was; a constant outside every
+    function, and a comment inside one, touch none, so neither file is named.
+    """
+    names = ("changed.rs", "removed.rs", "constant.rs", "comment.rs")
+    base = _laid_down(tmp_path, dict.fromkeys(names, FUNCTIONS))
+    edits = {
+        "changed.rs": FUNCTIONS.replace("    2", "    20"),
+        "removed.rs": FUNCTIONS.replace("    4\n", ""),
+        "constant.rs": FUNCTIONS.replace("N: u8 = 1", "N: u8 = 2"),
+        "comment.rs": FUNCTIONS.replace("    1\n", "    // one\n    1\n"),
+    }
+    for name, text in edits.items():
+        (tmp_path / name).write_text(text, encoding="utf-8")
+    _git(tmp_path, "commit", "--quiet", "-am", "change")
+    run = _named(tmp_path, base)
+    assert run.returncode == script.EXIT_OK, run.stderr
+    assert run.stdout.split() == ["changed.rs", "removed.rs"]
+    assert _examined(tmp_path) == [
+        "changed.rs:5",
+        "changed.rs:6",
+        "changed.rs:7",
+        "removed.rs:8",
+        "removed.rs:9",
+        "removed.rs:10",
+    ]
+
+
 @pytest.mark.parametrize(
     ("changed", "named"),
     [
@@ -197,28 +298,49 @@ CRATE = {
 def test_a_test_module_gives_way_to_the_code_it_holds(
     tmp_path: Path, changed: str, named: list[str]
 ) -> None:
-    """A changed test module is swept as the code it holds, which it can move.
+    """A test module that loses a line is swept as the code it holds, whole.
 
     cargo-mutants mutates no `#[cfg(test)]` file, so a change confined to one
     swept nothing, and an edit that stops it killing a mutant in the code it
     holds pushed green. A suite the crate root declares holds the whole crate,
     which no push sweeps, so it names nothing.
     """
-    _git(tmp_path, "init", "--quiet", "--initial-branch=main")
-    for name, text in CRATE.items():
-        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / name).write_text(text, encoding="utf-8")
-    _git(tmp_path, "add", ".")
-    _git(tmp_path, "commit", "--quiet", "-m", "base")
-    base = _git(tmp_path, "rev-parse", "HEAD")
+    base = _laid_down(tmp_path, CRATE)
     path = tmp_path / changed
     path.write_text(
-        path.read_text(encoding="utf-8") + "fn more() {}\n", encoding="utf-8"
+        path.read_text(encoding="utf-8")
+        .replace("() {}", "() { 1; }")
+        .replace("    2", "    3"),
+        encoding="utf-8",
     )
     _git(tmp_path, "commit", "--quiet", "-am", "change")
     run = _named(tmp_path, base)
     assert run.returncode == script.EXIT_OK, run.stderr
     assert run.stdout.split() == named
+    assert _examined(tmp_path) == [
+        f"{mutant['file']}:{mutant['span']['start']['line']}"
+        for mutant in _listing(tmp_path)
+        if mutant["file"] in named
+    ]
+
+
+def test_a_test_module_that_only_gains_tests_names_nothing(tmp_path: Path) -> None:
+    """A test added kills every mutant the module killed, so it sweeps nothing.
+
+    A change that only adds lines to a test module adds tests: the ones it held
+    still run, and a mutant they killed is still killed.
+    """
+    base = _laid_down(tmp_path, CRATE)
+    for name in ("crates/c/src/m/tests.rs", "crates/c/src/m/interpreter.rs"):
+        path = tmp_path / name
+        path.write_text(
+            path.read_text(encoding="utf-8") + "fn more() {}\n", encoding="utf-8"
+        )
+    _git(tmp_path, "commit", "--quiet", "-am", "change")
+    run = _named(tmp_path, base)
+    assert run.returncode == script.EXIT_OK, run.stderr
+    assert run.stdout.split() == []
+    assert _examined(tmp_path) == []
 
 
 def test_the_tree_s_test_modules_are_read_as_test_modules() -> None:
@@ -242,32 +364,72 @@ def test_a_base_git_cannot_read_is_not_an_empty_sweep(tmp_path: Path) -> None:
     """A diff that fails exits 2: a sweep of nothing would read as a clean one."""
     _git(tmp_path, "init", "--quiet", "--initial-branch=main")
     _git(tmp_path, "commit", "--quiet", "--allow-empty", "-m", "base")
+    assert _named(tmp_path, "no-such-commit").returncode == script.EXIT_CANNOT_RUN
+
+
+def test_a_listing_it_cannot_read_is_not_an_empty_sweep(tmp_path: Path) -> None:
+    """A listing that is not one exits 2, rather than examining no mutant."""
+    base = _laid_down(tmp_path, {"code.rs": FUNCTIONS})
+    (tmp_path / "code.rs").write_text(FUNCTIONS.replace("    2", "    20"))
+    _git(tmp_path, "commit", "--quiet", "-am", "change")
     named = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
-        [sys.executable, str(SCRIPT), "no-such-commit"],
+        [
+            sys.executable,
+            str(SCRIPT),
+            base,
+            "--listing",
+            str(tmp_path / "missing.json"),
+            "--examined",
+            str(tmp_path / "examined.txt"),
+        ],
         cwd=tmp_path,
         capture_output=True,
         text=True,
         check=False,
     )
-    assert named.returncode == script.EXIT_CANNOT_RUN
+    assert named.returncode == script.EXIT_CANNOT_RUN, named.stdout
 
 
-def test_both_push_sweeps_list_their_files_through_it() -> None:
+#: How a sweep step hands `cargo mutants` the patterns the script wrote.
+EXAMINED = '"${examined[@]}"'
+
+
+def test_both_push_sweeps_examine_what_it_names() -> None:
     """Both diff-scoped sweeps read the script, so neither sweeps a comment.
 
-    And neither sweeps a dispatch: it changes nothing, and measured from the
+    Each lists the package it sweeps for the script, and hands every
+    `cargo mutants` it runs -- the sweep, and the listing its shards are named
+    against -- the patterns the script wrote, so a sweep examines the touched
+    functions and its ratchet places their mutants among the same ones. And
+    neither sweeps a dispatch: it changes nothing, and measured from the
     default branch's tip it would sweep the whole release window again.
     """
-    listings = [
+    swept = {"mutants-diff-core": "valgebra-core", "mutants-diff-walk": "valgebra-py"}
+    jobs = read_workflow()["jobs"]
+    for name, package in swept.items():
+        steps = [str(step.get("run", "")) for step in jobs[name]["steps"]]
+        (listing,) = [run for run in steps if "> changed.txt" in run]
+        assert (
+            f"  cargo mutants --package {package} --list --json > listed.json\n"
+            '  python3 scripts/code_changes.py "$base" --listing listed.json \\\n'
+            "    --examined examined.txt > changed.txt"
+        ) in listing, listing
+        assert "git diff --name-only" not in listing, listing
+        assert (
+            'if [ "$EVENT" = workflow_dispatch ]; then\n'
+            "  : > changed.txt\n  : > examined.txt"
+        ) in listing, listing
+        (sweep,) = [run for run in steps if "--output" in run]
+        assert '--re "$pattern"' in sweep, sweep
+        assert "done < examined.txt" in sweep, sweep
+        calls = re.findall(r"cargo mutants --package (\S+) (.*)", sweep)
+        assert calls, sweep
+        for called, arguments in calls:
+            assert called == package, sweep
+            assert EXAMINED in arguments, f"{name} runs `{arguments}` unexamined"
+    (step,) = [
         step
-        for job in read_workflow()["jobs"].values()
-        for step in job.get("steps", [])
+        for step in jobs["mutants-diff-core"]["steps"]
         if "> changed.txt" in str(step.get("run", ""))
     ]
-    assert len(listings) == 2, listings
-    for step in listings:
-        run = step["run"]
-        assert 'python3 scripts/code_changes.py "$base" > changed.txt' in run, run
-        assert "git diff --name-only" not in run, run
-        assert step["env"]["EVENT"] == "${{ github.event_name }}", step["env"]
-        assert 'if [ "$EVENT" = workflow_dispatch ]; then\n  : > changed.txt' in run
+    assert step["env"]["EVENT"] == "${{ github.event_name }}", step["env"]

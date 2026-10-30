@@ -1293,10 +1293,11 @@ jobs:
     # carry, and cut as widely as the readings say. A shard spends about two
     # and a half minutes on its baseline, then about three for each pair of
     # mutants, since a caught mutant runs the whole suite: nine mutants a shard
-    # is about 18 minutes. What a push sweeps is the core files it touches, so
-    # the slowest reading is the run touching the most of the largest: the
-    # push that moves `main` over a release window, which can hold nearly
-    # every core file, reads 108 minutes a shard. So the ceiling is 220, twice the slowest -- the rule
+    # is about 18 minutes. What a push sweeps is the core functions it touches,
+    # and at most the files that hold them, so the slowest reading is the run
+    # touching the most of the largest: a push that moves `main` over a release
+    # window, sweeping nearly every core file whole, reads 108 minutes a shard.
+    # So the ceiling is 220, twice the slowest -- the rule
     # `docs/dev/07-tooling-ci.md` states for a sharded sweep, because a job
     # that reaches its ceiling is canceled and a canceled job is red -- read
     # on the run that sweeps the most rather than on the one that comes most
@@ -1304,8 +1305,9 @@ jobs:
     # sweep that has to be re-sharded after every large commit is not a gate.
     # A shard with no core file to sweep ends in seconds, so the cuts cost a
     # push that touches none of the core nothing but their start.
-    # Sharding splits the mutants and keeps the file granularity, which is the
-    # part that matters -- see the note above on why the lines are not enough.
+    # Sharding splits the mutants and keeps the function granularity, which is
+    # the part that matters -- see the diff step's note on why the lines are
+    # not enough.
     # Each shard runs its own baseline, and the ratchet is already written for
     # a partial sweep.
     runs-on: ubuntu-26.04
@@ -1381,26 +1383,34 @@ jobs:
         run: |
           # The bench gate's base, read the same way: past a force-push, which
           # otherwise measures an amended commit from itself and sweeps nothing.
-          # WHOLE FILES, not the diff's lines. `--in-diff` would sweep only the
-          # lines the change touches, and the miss that matters is the other
-          # direction: an edit that stops an EXISTING test from killing a mutant
-          # somewhere else in the same file. That mutant is not in the diff, and
-          # sweeping the file finds it. A change to a test module sweeps the
-          # code it holds -- the file declaring it and the files beneath that
-          # module -- since cargo-mutants mutates no test file; a crate-wide
-          # suite (`laws.rs`, `index_laws.rs`, `schema_tests.rs`) holds the
-          # whole crate, and the nightly sweep alone judges it.
-          # A file whose diff is comments and blank lines alone compiles as it
-          # did, so its mutants answer as they did, and it is left out.
+          # WHOLE FUNCTIONS, not the diff's lines: `--in-diff` would sweep only
+          # the lines the change touches, and the miss that matters is the
+          # other direction: an edit that stops an EXISTING test from killing a
+          # mutant elsewhere in the same function -- a branch added that makes
+          # an older one unreachable. An effect that crosses into another
+          # function is the nightly's, which sweeps every file whole.
+          # `scripts/code_changes.py` names the files and, in `examined.txt`, a
+          # pattern each for `--re`, read off the package's mutant listing. A
+          # test module that loses a line of code sweeps the code it holds --
+          # the file declaring it and the files beneath that module -- whole,
+          # since cargo-mutants mutates no test file; one that only gains
+          # lines sweeps nothing; a crate-wide suite (`laws.rs`,
+          # `index_laws.rs`, `schema_tests.rs`) holds the whole crate, and the
+          # nightly sweep alone judges it. A change of comments and blank lines
+          # alone compiles as it did, so its mutants answer as they did, and
+          # it touches nothing.
           # A dispatch changes nothing: it carries no `before`, and measured from
           # the default branch's tip it would sweep the whole release window at
           # the push seed, which the push that moves `main` sweeps once and the
           # night's full sweeps read whole. So it sweeps no file.
           if [ "$EVENT" = workflow_dispatch ]; then
             : > changed.txt
+            : > examined.txt
           else
             base="$(python3 scripts/change_base.py)"
-            python3 scripts/code_changes.py "$base" > changed.txt
+            cargo mutants --package valgebra-core --list --json > listed.json
+            python3 scripts/code_changes.py "$base" --listing listed.json \
+              --examined examined.txt > changed.txt
           fi
           core=$(grep '^crates/valgebra-core/' changed.txt || true)
           {
@@ -1417,11 +1427,12 @@ jobs:
         env:
           FILES: ${{ steps.diff.outputs.core }}
         run: |
-          args=""
-          for f in $FILES; do args="$args --file $f"; done
+          files=()
+          for f in $FILES; do files+=(--file "$f"); done
+          examined=()
+          while read -r pattern; do examined+=(--re "$pattern"); done < examined.txt
           set +e
-          # shellcheck disable=SC2086  # $args is a built flag list, not input
-          cargo mutants --package valgebra-core $args -j 2 \
+          cargo mutants --package valgebra-core "${files[@]}" "${examined[@]}" -j 2 \
             --timeout-multiplier 20 --shard "${{ matrix.shard }}/24" \
             --sharding round-robin \
             --output core-diff-mutants \
@@ -1441,8 +1452,8 @@ jobs:
             # A shard holds part of each function's mutants, and a survivor is
             # named by its place among the ones of its description: the places
             # are read from the listing the shards were cut from.
-            # shellcheck disable=SC2086  # $args is a built flag list, not input
-            cargo mutants --package valgebra-core $args --list --colors=never \
+            cargo mutants --package valgebra-core "${files[@]}" "${examined[@]}" \
+              --list --colors=never \
               > core-diff-listed.txt
             python3 scripts/mutation_gate.py --baseline core --new-only \
               --out core-diff-mutants/mutants.out --all core-diff-listed.txt
@@ -1461,8 +1472,8 @@ jobs:
     # walk's files, whose mutants build and run, would fall to one shard and
     # the rest, two thirds of their mutants unviable, to the others, so one
     # shard would carry nearly all the work. Round-robin gives every shard the
-    # same mix. The ceiling is set by a change that touches every listed file,
-    # as a push to `main` carrying a release window does: about twenty-six
+    # same mix. The ceiling is set by a change that sweeps every listed file
+    # whole, as a push to `main` carrying a release window can: about twenty-six
     # hundred mutants, whose slowest shard reads 65 minutes, so the ceiling is
     # 135, twice that, by the rule the core's sweep states.
     runs-on: ubuntu-26.04
@@ -1534,26 +1545,34 @@ jobs:
         run: |
           # The bench gate's base, read the same way: past a force-push, which
           # otherwise measures an amended commit from itself and sweeps nothing.
-          # WHOLE FILES, not the diff's lines. `--in-diff` would sweep only the
-          # lines the change touches, and the miss that matters is the other
-          # direction: an edit that stops an EXISTING test from killing a mutant
-          # somewhere else in the same file. That mutant is not in the diff, and
-          # sweeping the file finds it. A change to a test module sweeps the
-          # code it holds -- the file declaring it and the files beneath that
-          # module -- since cargo-mutants mutates no test file; a crate-wide
-          # suite (`laws.rs`, `index_laws.rs`, `schema_tests.rs`) holds the
-          # whole crate, and the nightly sweep alone judges it.
-          # A file whose diff is comments and blank lines alone compiles as it
-          # did, so its mutants answer as they did, and it is left out.
+          # WHOLE FUNCTIONS, not the diff's lines: `--in-diff` would sweep only
+          # the lines the change touches, and the miss that matters is the
+          # other direction: an edit that stops an EXISTING test from killing a
+          # mutant elsewhere in the same function -- a branch added that makes
+          # an older one unreachable. An effect that crosses into another
+          # function is the nightly's, which sweeps every file whole.
+          # `scripts/code_changes.py` names the files and, in `examined.txt`, a
+          # pattern each for `--re`, read off the package's mutant listing. A
+          # test module that loses a line of code sweeps the code it holds --
+          # the file declaring it and the files beneath that module -- whole,
+          # since cargo-mutants mutates no test file; one that only gains
+          # lines sweeps nothing; a crate-wide suite (`laws.rs`,
+          # `index_laws.rs`, `schema_tests.rs`) holds the whole crate, and the
+          # nightly sweep alone judges it. A change of comments and blank lines
+          # alone compiles as it did, so its mutants answer as they did, and
+          # it touches nothing.
           # A dispatch changes nothing: it carries no `before`, and measured from
           # the default branch's tip it would sweep the whole release window at
           # the push seed, which the push that moves `main` sweeps once and the
           # night's full sweeps read whole. So it sweeps no file.
           if [ "$EVENT" = workflow_dispatch ]; then
             : > changed.txt
+            : > examined.txt
           else
             base="$(python3 scripts/change_base.py)"
-            python3 scripts/code_changes.py "$base" > changed.txt
+            cargo mutants --package valgebra-py --list --json > listed.json
+            python3 scripts/code_changes.py "$base" --listing listed.json \
+              --examined examined.txt > changed.txt
           fi
           # The listed files among the changed ones, matched against the list
           # itself: every file the sweep can take starts it, and no other does.
@@ -1577,8 +1596,10 @@ jobs:
           export PATH="$(dirname "$PYO3_PYTHON"):$PATH"
           files=()
           for f in $FILES; do files+=(--file "$f"); done
+          examined=()
+          while read -r pattern; do examined+=(--re "$pattern"); done < examined.txt
           set +e
-          cargo mutants --package valgebra-py "${files[@]}" \
+          cargo mutants --package valgebra-py "${files[@]}" "${examined[@]}" \
             --features interpreter-tests -j 2 --timeout-multiplier 20 \
             --shard "${{ matrix.shard }}/3" --sharding round-robin \
             --output walk-diff-mutants \
@@ -1593,7 +1614,8 @@ jobs:
           if [ -f walk-diff-mutants/mutants.out/caught.txt ] \
             || [ -f walk-diff-mutants/mutants.out/missed.txt ]; then
             # Named by the whole listing, for the reason the core shard gives.
-            cargo mutants --package valgebra-py "${files[@]}" --list --colors=never \
+            cargo mutants --package valgebra-py "${files[@]}" "${examined[@]}" \
+              --list --colors=never \
               > walk-diff-listed.txt
             python3 scripts/mutation_gate.py --baseline walk --new-only \
               --out walk-diff-mutants/mutants.out --all walk-diff-listed.txt

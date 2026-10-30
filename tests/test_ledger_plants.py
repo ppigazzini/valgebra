@@ -3543,8 +3543,12 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "for f in $FILES; do files+=",
-            "for f in $BINDING_SWEPT; do files+=",
+            'export PATH="$(dirname "$PYO3_PYTHON"):$PATH"\n'
+            "          files=()\n"
+            "          for f in $FILES; do files+=",
+            'export PATH="$(dirname "$PYO3_PYTHON"):$PATH"\n'
+            "          files=()\n"
+            "          for f in $BINDING_SWEPT; do files+=",
         ),
         trips=("test_the_push_sweep_takes_the_listed_files_the_change_touches",),
     ),

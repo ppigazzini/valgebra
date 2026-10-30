@@ -851,7 +851,12 @@ export LD_LIBRARY_PATH="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.g
 # without the second, the sweep draws what the lane does not.
 export PROPTEST_MAX_SHRINK_TIME=1000
 export PROPTEST_RNG_SEED=0
-cargo mutants --package valgebra-py --file <each file of BINDING_SWEPT the change touches> \
+# The files and functions the change touches, from where it starts.
+cargo mutants --package valgebra-py --list --json > listed.json
+python scripts/code_changes.py "$(git merge-base origin/github_ci HEAD)" \
+  --listing listed.json --examined examined.txt
+cargo mutants --package valgebra-py --file <each file of BINDING_SWEPT it names> \
+  --re <each pattern of examined.txt> \
   --features interpreter-tests -j 2 --timeout-multiplier 20 \
   --output sweep -- -- --skip recursion_deeper_than_the_bound_is_refused \
   --skip the_two_readings_agree_at_the_walks_depth_bound
@@ -864,7 +869,11 @@ skips are the two termination proofs and the long chain's minimization:
 ```bash
 export PROPTEST_MAX_SHRINK_TIME=1000
 export PROPTEST_RNG_SEED=0
-cargo mutants --package valgebra-core --file <each core file the change touches> \
+cargo mutants --package valgebra-core --list --json > listed.json
+python scripts/code_changes.py "$(git merge-base origin/github_ci HEAD)" \
+  --listing listed.json --examined examined.txt
+cargo mutants --package valgebra-core --file <each core file it names> \
+  --re <each pattern of examined.txt> \
   -j 4 --timeout-multiplier 20 --output sweep \
   -- -- --skip deep_subtype_into_bottom_terminates \
   --skip subtyping_terminates_on_a_distributed_tower \
@@ -1181,7 +1190,7 @@ shard has reported. A shard's ceiling (`timeout-minutes` in `ci.yml`) is twice
 the slowest shard's reading, because a job that reaches its ceiling is
 canceled and a canceled job is red. The slowest reading is taken over every
 event that runs the sweep, and the events differ: a push to `main` sweeps every
-file a release window touched where a push to `github_ci` sweeps one change's,
+function a release window touched where a push to `github_ci` sweeps one change's,
 so a push sweep's shard reads slowest on the push that moves `main`. And the runners differ: one class builds and tests a mutant at half
 the speed of another, so a shard read on the faster class costs twice that on
 the slower, and the factor of two is that margin. Every sweep shards
@@ -1189,7 +1198,7 @@ round-robin: cut in consecutive slices, a file's mutants fall to one shard,
 and one whose mutants build and run costs several times one whose mutants
 mostly do not compile -- the binding's push sweep read 15, 19 and past 30
 minutes that way. Every push runs the core and walk sweeps
-restricted to the **whole files the change touches** of the ones each sweep
+restricted to the **functions the change touches** in the files each sweep
 examines, the core crate's and the binding files `BINDING_SWEPT` lists —
 bounded by the change rather than by the tree — and blocks the merge; the
 pytest sweep costs a rebuild and a suite run per mutant and stays on the
@@ -1197,20 +1206,28 @@ schedule. A push sweep
 checks the new-survivor direction alone, because a partial sweep never
 generates most of the baseline.
 
-Whole files, not the diff's lines: the miss that matters is an edit that stops an
-**existing** test from killing a mutant elsewhere in the same file, and that
-mutant is not in the diff. **A file whose diff is comments and blank lines
-alone is not swept:** it compiles to what it compiled to before, so each of its
-mutants answers as it did, and a doc edit to a large file would otherwise put
-the whole file's mutants on the push. `scripts/code_changes.py` names the files
-whose code changed, for both sweeps. **A test module gives way to the code it
-holds:** cargo-mutants mutates no `#[cfg(test)]` file, so a change to a long
-`tests.rs` or an `interpreter.rs` corpus -- one that stops it killing a mutant
--- sweeps the file declaring it and the files beneath that module instead. The
-crate-wide suites, `laws.rs`, `index_laws.rs` and `schema_tests.rs`, hold the
-whole crate, which no push sweeps: the nightly sweep alone judges a change to
-one of them. The diff is read in one shape whatever git is configured to print,
-a rename as an added file among them.
+Whole functions, not the diff's lines: the miss that matters is an edit that
+stops an **existing** test from killing a mutant elsewhere in the same
+function -- a branch added that makes an older one unreachable -- and that
+mutant is not in the diff. An effect that crosses into another function, a
+caller whose branch the edit made dead, is the nightly sweep's to find, which
+reads every file whole; the push sweep is bounded by the change, so a one-line
+edit to a large file costs the function's mutants rather than the file's.
+`scripts/code_changes.py` names the files and a `--re` pattern each, read off
+the package's `cargo mutants --list --json`, for both sweeps: a mutant is
+examined where its function holds a changed line of code. **A line of comment
+or blank is no change:** it compiles to what it compiled to before, so each
+mutant answers as it did. An edit outside every function -- a type, a
+constant -- touches none, and is the nightly's. **A test module gives way to the
+code it holds:** cargo-mutants mutates no `#[cfg(test)]` file, so a change to a
+long `tests.rs` or an `interpreter.rs` corpus that removes a line of code -- the
+edit that can stop it killing a mutant -- sweeps the file declaring it and the
+files beneath that module whole instead, and one that only adds lines, new
+tests, sweeps nothing; an added attribute that stops a test running is the
+nightly's. The crate-wide suites, `laws.rs`, `index_laws.rs` and
+`schema_tests.rs`, hold the whole crate, which no push sweeps: the nightly
+sweep alone judges a change to one of them. The diff is read in one shape
+whatever git is configured to print, a rename as an added file among them.
 
 **A change starts where its commits leave the history they replace.** The
 bench gate's `rev` and the sweeps' file list come from one base, which
