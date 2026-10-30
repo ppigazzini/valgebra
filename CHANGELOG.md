@@ -70,6 +70,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a union holding a complement is asked as its difference
 - fix: a member deep by a clause's key alone is left out of the last reading
 - feat: a length the supertype's bounds leave out refutes at any size
+- fix: a type variable is its own class's parameter
 
 -->
 
@@ -327,6 +328,21 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A type variable is its own class's parameter.** `class IntBoxOf(Box[int],
+  Generic[T])` reuses the `T` its base declares a field with, and `typing`
+  reads the two as two parameters: `Box[int]` closes `Box`'s, and
+  `IntBoxOf`'s is another, the same object in another scope. Every field was
+  substituted through one table keyed by the variable, so `IntBoxOf[str]` was
+  refused as binding `T` to `int` and `str` at once, and so was a base applied
+  to its class's parameters crossed. Each class keeps a scope of its own, a
+  base's arguments read through the class deriving from it, and a field is
+  substituted in the scope of the class that declares it: `IntBoxOf[str]`
+  holds an `int` at the base's field and a `str` at its own. A class two
+  bases reach under two arguments is still refused. A PEP 696 default naming
+  an earlier parameter takes that parameter's binding in the same
+  application: with `U` defaulting to `list[T]`, `Pairs[int]` reads `U` as
+  `list[int]`, applied directly or as a base applied short.
 
 - **A member deep by a clause's key alone is left out of the last thinned
   reading.** A meet the set representation cannot read whole is read without

@@ -225,6 +225,31 @@ fn a_generic_class_binds_each_parameter_once() {
     });
 }
 
+/// A type variable is its own class's parameter: a class binding a base's
+/// parameter and reusing the same `TypeVar` for its own reads each field in the
+/// scope of the class that declares it, and a base applied to the parameters
+/// crossed binds them crossed. A `TypedDict`'s annotations merge its bases', so
+/// the base holding a field under the same hint is the one that declares it.
+#[test]
+fn a_type_variable_is_its_own_classs_parameter() {
+    Python::attach(|py| {
+        if !Since(11).met(py) {
+            return;
+        }
+        let program = r"import typing\nT = typing.TypeVar('T')\nU = typing.TypeVar('U')\nclass Box(typing.TypedDict, typing.Generic[T]):\n    a: T\nclass IntBoxOf(Box[int], typing.Generic[T]):\n    b: T\nclass Pair(typing.TypedDict, typing.Generic[T, U]):\n    first: T\n    second: U\nclass Crossed(Pair[U, T], typing.Generic[T, U]):\n    pass\n";
+        let spelled =
+            |form: &str| format!(r#"(lambda ns: (exec("{program}", ns), {form})[1])({{}})"#);
+        assert_eq!(
+            built(py, &spelled("ns['IntBoxOf'][str]")).expect("the class builds"),
+            "{'a': int, 'b': str, str: anything}"
+        );
+        assert_eq!(
+            built(py, &spelled("ns['Crossed'][int, str]")).expect("the class builds"),
+            "{'first': str, 'second': int, str: anything}"
+        );
+    });
+}
+
 /// A class reached again while its fields are being built is refused there only
 /// under the arguments it is open under: `Box[Box]` reaches the bare `Box`, which
 /// is another build, refused for the parameter its field names rather than as a

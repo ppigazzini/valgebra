@@ -312,10 +312,17 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    type variables its generic bases bind put in place (`bound_hints`: the
    arguments it is applied to, each base's arguments read off the original
    bases depth first since a `TypedDict`'s bases are not on its `__mro__`, a
-   default where nothing binds one, and a variable two bases bind two ways
-   refused; a class with no `Generic` on its `__mro__` binds nothing), not the
-   raw `__annotations__` (see the reading below): under `from __future__ import annotations` those are
-   strings, so a `NotRequired[...]` is invisible to the class's own key sets,
+   default where nothing binds one; a class with no `Generic` on its `__mro__`
+   binds nothing). Each class keeps a scope of its own, its parameters bound
+   to what the class deriving from it gives them, and a field is substituted in
+   the scope of the class that declares it -- here, whose annotations merge
+   its bases', the base that holds it under the same hint; for a dataclass or
+   a named tuple, the first class on the `__mro__` whose own body annotates
+   it, the one `get_type_hints` takes the hint from -- so a `TypeVar` a
+   subclass reuses for its own parameter is two parameters, as `typing` and
+   mypy read it. A class two bases reach under two arguments is refused. The
+   fields are not the raw `__annotations__` (see the reading below): under
+   `from __future__ import annotations` those are strings, so a `NotRequired[...]` is invisible to the class's own key sets,
    which read every such key as required. A qualifier on the resolved hint wins
    over the key sets, and a qualifier may wrap another. `qualified_required`
    reads on below the first presence qualifier it meets, through `Annotated`,
@@ -853,6 +860,19 @@ passes the admission test of [01-schema-ir.md](01-schema-ir.md): the first is
 reaches. `test_every_variant_is_a_generator_a_representative_or_a_marker` in
 `tests/test_closure_ledger.py` is the row a new variant fails until it has a
 column.
+
+**Reading a `TypedDict` field declared again with its base's type variable in
+the subclass's scope.** `class Again(Base[int], Generic[P])` declaring `a: P`
+reads `int` at `a`, the base's, where a dataclass of the same shape reads its
+own `P`. A `TypedDict` holds its bases' annotations merged with its own body's,
+on every release this crate builds for, so a field the subclass declares again
+under the same `TypeVar` object and one it inherits leave the same record:
+`IntBoxOf(Box[int], Generic[T])` inherits `a: T` and holds an `int` there,
+which `test_a_type_variable_is_its_own_classs_parameter` in
+`tests/test_generic_classes.py` holds. Reading the subclass's scope fails that
+row, and refusing the shape refuses `IntBoxOf`. The typing spec does not let a
+`TypedDict` subclass change a field's type, so the base's reading is the one a
+class the spec allows gets.
 
 ## The limit
 
