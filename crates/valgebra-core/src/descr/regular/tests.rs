@@ -973,6 +973,25 @@ fn a_word_past_the_state_bound_refuses() {
     assert!(RegularSet::word(&[edge.as_slice(), b"a"].concat()).is_none());
 }
 
+/// A length bound is held to the state bound before its pattern is written, as
+/// a word is: a table counting to the bound holds a state for each count. Past
+/// it a bound of a million is refused rather than compiled into a million
+/// copies of a code point, and a counted repetition a caller's pattern writes
+/// is refused by the compiler's own size limit rather than by the allocation
+/// that aborts the interpreter.
+#[test]
+fn a_length_past_the_state_bound_refuses_before_it_is_built() {
+    for alphabet in [Alphabet::Text, Alphabet::Bytes] {
+        assert!(RegularSet::at_most(2, alphabet).is_some(), "{alphabet:?}");
+        assert!(RegularSet::at_least(2, alphabet).is_some(), "{alphabet:?}");
+        for past in [MAX_STATES - 1, 1_000_000, usize::MAX] {
+            assert!(RegularSet::at_least(past, alphabet).is_none(), "{past}");
+            assert!(RegularSet::at_most(past, alphabet).is_none(), "{past}");
+        }
+    }
+    assert!(RegularSet::pattern("(?s:.){1000000}", Alphabet::Text).is_none());
+}
+
 /// A product that keeps a word's chain is a chain again, minimized again: a
 /// word of four thousand bytes met with a language that holds it is the word.
 #[test]

@@ -941,6 +941,49 @@ def test_a_class_named_from_many_places_is_refused_before_it_is_built() -> None:
     assert int(result.stdout) < 100 * 1024 * 1024 // unit, result.stdout
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="the high-water mark is read from `resource`"
+)
+def test_a_length_bound_of_a_million_is_refused_before_it_is_built() -> None:
+    """A relation between two length bounds must not exhaust the process.
+
+    A word length bound is read as a pattern counting to it, and a compiler
+    unrolls a counted repetition into that many copies of a code point before
+    any table is built: `MinLen(1_000_000)` held three gigabytes, and an
+    allocation past the address space aborted the interpreter with no Python
+    exception. A table counting to a bound holds a state for each count, so a
+    bound past the state bound is refused before its pattern is written. A child
+    process, because the failure this guards is memory.
+    """
+    program = textwrap.dedent(
+        """
+        import resource
+        from typing import Annotated
+        from annotated_types import MaxLen, MinLen
+        from valgebra import Validator
+        before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        print(Validator(Annotated[str, MinLen(999_999)]).relation_to(
+            Annotated[str, MinLen(1_000_000)]))
+        print(Validator(Annotated[bytes, MaxLen(1_000_000)]).relation_to(
+            Annotated[bytes, MaxLen(64)]))
+        print(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - before)
+        """
+    )
+    result = subprocess.run(  # noqa: S603 -- fixed interpreter, in-repo program
+        [sys.executable, "-c", program],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    first, second, grown = result.stdout.split()
+    assert first != "subset"
+    assert second != "subset"
+    unit = 1 if sys.platform == "darwin" else 1024
+    assert int(grown) < 100 * 1024 * 1024 // unit, result.stdout
+
+
 def test_a_pattern_whose_determinization_explodes_answers_in_bounded_time() -> None:
     """A subtype question must not be a way to exhaust the process's memory.
 
