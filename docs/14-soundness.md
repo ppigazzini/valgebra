@@ -251,6 +251,9 @@ The soundness is relative to a small, explicit trust base:
   members at all, and is read as the class it is: a `_missing_` of its own
   answers `E(5)` with a new instance, and a metaclass's own `__iter__` or
   `__call__` can hide a member from `list(E)` or build one past the lookup.
+  So is one with a subclass: no class statement makes one, but `__bases__`
+  assigned to a plain class does on CPython 3.15, whose own constructor then
+  makes an instance of `Color` that is no member.
 - **What a value answers is a function of the value.** Membership asks a value
   questions through Python — `isinstance`, `__eq__`, a rich comparison, `__len__`,
   `%`, a predicate — and reads the answers as facts about it. A method that

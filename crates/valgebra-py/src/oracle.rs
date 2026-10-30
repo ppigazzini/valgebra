@@ -206,6 +206,25 @@ fn lists_every_instance(
         .is(&base.getattr(missing)?.getattr(function)?))
 }
 
+/// `type.__subclasses__`, read once.
+static TYPE_SUBCLASSES: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
+/// Whether no class derives from `class` as it stands: `type`'s own
+/// `__subclasses__`, which a metaclass does not answer for, lists the live
+/// ones, each assigned base included.
+fn has_no_subclass(class: &Bound<'_, PyType>) -> PyResult<bool> {
+    let py = class.py();
+    let subclasses = TYPE_SUBCLASSES.get_or_try_init(py, || {
+        Ok::<_, PyErr>(
+            PyType::type_object(py)
+                .getattr(intern!(py, "__dict__"))?
+                .get_item(intern!(py, "__subclasses__"))?
+                .unbind(),
+        )
+    })?;
+    Ok(subclasses.bind(py).call1((class,))?.len()? == 0)
+}
+
 /// The most members an enumeration may have before it is read as an atom.
 ///
 /// Reading one asks a membership question per member, so a class with thousands
@@ -469,6 +488,10 @@ impl PoolRelations<'_, '_> {
     ///   ([`lists_every_instance`]). A `_missing_` of its own makes one --
     ///   `E(5)` -- and a metaclass's own `__iter__` or `__call__` can hide a
     ///   member from the list or build an instance past the lookup.
+    /// * it **has no subclass** ([`has_no_subclass`]). A class statement
+    ///   cannot derive from an enumeration with members, but `__bases__`
+    ///   assigned to a plain class can, from `CPython` 3.15, and that class's
+    ///   own constructor makes an instance that is no member.
     ///
     /// A class failing any of them stays the `isinstance` atom it was, which is
     /// sound for every enumeration and merely less complete.
@@ -486,6 +509,9 @@ impl PoolRelations<'_, '_> {
             return None;
         }
         if !self.heard(lists_every_instance(class, meta.bind(py), base.bind(py)))? {
+            return None;
+        }
+        if !self.heard(has_no_subclass(class))? {
             return None;
         }
         let members: Vec<Bound<'py, PyAny>> = self.heard(

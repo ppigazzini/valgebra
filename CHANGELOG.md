@@ -65,6 +65,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a set's and a record's lengths are read off their shapes
 - fix: a constant the walk stopped on proves and refutes nothing
 - fix: a class is read where Python dispatches its hooks
+- fix: an enumeration with a subclass is read as its class
 
 -->
 
@@ -300,6 +301,15 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **An enumeration with a subclass is read as its class.** An enumeration
+  with members is read as the union of them because the class makes no other
+  instance. No class statement derives from one, but on CPython 3.15
+  `__bases__` assigned to a plain class does, and that class's own
+  constructor makes an instance of the enumeration that is no member:
+  `Hue` was decided `subset` of `Literal[Hue.RED, Hue.GREEN]` with such an
+  instance in the first and not the second. An enumeration `type.__subclasses__`
+  lists a subclass of, as it stands when asked, is read as the class it is.
 
 - **A class is read where Python dispatches its hooks, not through its
   metaclass.** Whether a class overrides `isinstance`, `issubclass` or `==`,
