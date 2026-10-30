@@ -89,7 +89,9 @@ constructor's kind alone (`parts_a_cut_reaches`), the difference being read a
 kind at a time, so a value it holds at another kind refutes. A
 conjunct at the top of the subject no lowering reads -- a refinement's
 predicate, a meet member holding one, a meet member nested past the depth
-bound -- is left out the same way (`read_widened` in `descr/lower.rs`): a meet
+bound, and last a member nested past it by a clause's key alone, which the
+build reads without descending -- is left out the same way (`read_widened` in
+`descr/lower.rs`): a meet
 is below each member, so the reading is a superset, which makes the
 descriptor's emptiness monotone in a meet's members, and an inhabited reading
 of it refutes nothing. Each reading is decided where it is built, and one that

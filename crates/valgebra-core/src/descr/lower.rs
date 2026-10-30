@@ -355,13 +355,17 @@ pub(crate) fn lower_widened(
 /// The thinned half of [`read_widened`], out of line so the schemas that lower
 /// whole carry none of it.
 ///
-/// Twice at most, keeping less the second time: the members a lowering reads
-/// whole -- no predicate, no container past the depth -- and then the members
+/// Three times at most, keeping less each time: the members a lowering reads
+/// whole -- no predicate, no container past the depth -- then the members
 /// nested within the depth counting every node, a scalar included, which is
 /// the reading a schema holding a scalar past the depth is decided by where
-/// the build that holds it is not. The second is skipped where it keeps what
-/// the first kept. One look at each member first, allocating nothing: most
-/// refusals leave here as they came.
+/// the build that holds it is not, and last the same counting a clause's key
+/// as a level, which the build does not spend. A member at the edge of the
+/// depth by its key alone is kept by the first two and is the one the meet's
+/// emptiness is not proved beside, where the meet without it is proved empty;
+/// a reading of fewer members holds more values, so the proof stands. A
+/// thinning that keeps what the one before kept is skipped. One look at each
+/// member first, allocating nothing: most refusals leave here as they came.
 #[inline(never)]
 fn thinned_readings<T>(
     schema: &Schema,
@@ -370,11 +374,11 @@ fn thinned_readings<T>(
     mut decide: impl FnMut(&Descr, Option<&[Schema]>) -> Option<T>,
 ) -> Option<T> {
     let mut kept_before = None;
-    for every_node in [false, true] {
-        // The second thinning keeps a part of what the first kept, so as many
+    for (every_node, keys) in [(false, false), (true, false), (true, true)] {
+        // Each thinning keeps a part of what the one before kept, so as many
         // members are the same members.
-        let Some(read) =
-            thinned_members(schema, every_node).filter(|read| Some(read.len()) != kept_before)
+        let Some(read) = thinned_members(schema, every_node, keys)
+            .filter(|read| Some(read.len()) != kept_before)
         else {
             continue;
         };
@@ -398,8 +402,8 @@ fn thinned_readings<T>(
 /// keep them all: each one [`readable`] as it is or with its predicates left
 /// out. A meet keeping none reads as the universe, which a relation against a
 /// supertype the reading proves universal still decides.
-fn thinned_members(schema: &Schema, every_node: bool) -> Option<Vec<Schema>> {
-    let read = |member: &Schema, room: u32| readable(member, room, every_node);
+fn thinned_members(schema: &Schema, every_node: bool, keys: bool) -> Option<Vec<Schema>> {
+    let read = |member: &Schema, room: u32| readable(member, room, every_node, keys);
     match schema {
         Schema::Intersection(members) => {
             let room = DEPTH.checked_sub(1)?;
@@ -450,9 +454,9 @@ fn without_predicates(schema: &Schema) -> Option<Schema> {
 
 /// Whether `schema` is one a lowering can read at all: its containers nested
 /// within the `room` it descends -- a level for each node and the rest for what
-/// it holds -- or, where `every_node`, every node of it, and holding no
-/// predicate.
-fn readable(schema: &Schema, room: u32, every_node: bool) -> bool {
+/// it holds -- or, where `every_node`, every node of it, a clause's key
+/// counted too where `keys`, and holding no predicate.
+fn readable(schema: &Schema, room: u32, every_node: bool, keys: bool) -> bool {
     let room = match room.checked_sub(1) {
         Some(room) => room,
         None if every_node || starts_a_build(schema) => return false,
@@ -465,7 +469,9 @@ fn readable(schema: &Schema, room: u32, every_node: bool) -> bool {
     {
         return false;
     }
-    every_child_read(schema, |child| readable(child, room, every_node))
+    every_child_read(schema, keys, |child| {
+        readable(child, room, every_node, keys)
+    })
 }
 
 /// Whether a build of `schema` under `bounds` reaches a container past their
@@ -513,7 +519,7 @@ fn reach(schema: &Schema, depth: u32, nodes: &Cell<u32>) -> Reach {
         None if starts_a_build(schema) => return Reach::Container,
         None => (0, Reach::Scalar),
     };
-    every_child_read(schema, |child| {
+    every_child_read(schema, false, |child| {
         far = far.max(reach(child, depth, nodes));
         far != Reach::Container
     });
@@ -526,8 +532,10 @@ fn reach(schema: &Schema, depth: u32, nodes: &Cell<u32>) -> Reach {
 /// Every child but a clause's key: [`map`] reads a key through [`key_cover`],
 /// which names the labels and parts the key covers without descending into
 /// it. A walk over [`Schema::children`] counts the key's nesting, and would
-/// refuse a map whose key is its deepest node, which the build reads.
-fn every_child_read(schema: &Schema, mut read: impl FnMut(&Schema) -> bool) -> bool {
+/// refuse a map whose key is its deepest node, which the build reads. Where
+/// `keys`, the key is read as well, for the last thinned reading
+/// ([`thinned_readings`]).
+fn every_child_read(schema: &Schema, keys: bool, mut read: impl FnMut(&Schema) -> bool) -> bool {
     match schema {
         Schema::Union(members) | Schema::Intersection(members) => members.iter().all(&mut read),
         Schema::Complement(inner)
@@ -536,7 +544,9 @@ fn every_child_read(schema: &Schema, mut read: impl FnMut(&Schema) -> bool) -> b
         Schema::Seq { shape, .. } => shape.elements().all(&mut read),
         Schema::KeyedMap { fields, defaults } => {
             fields.iter().all(|field| read(&field.schema))
-                && defaults.iter().all(|clause| read(&clause.value))
+                && defaults
+                    .iter()
+                    .all(|clause| (!keys || read(&clause.key)) && read(&clause.value))
         }
         Schema::AttrRecord { fields } => fields.iter().all(|field| read(&field.schema)),
         // The leaves, listed as `Schema::push_children` lists them, so a

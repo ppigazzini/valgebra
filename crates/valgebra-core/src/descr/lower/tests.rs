@@ -2815,6 +2815,128 @@ fn a_member_past_the_depth_is_left_out_whatever_it_holds() {
     assert_eq!(kept, Some(vec![words("^a+$"), words("^b+$")]));
 }
 
+/// A member at the edge of the depth by its key alone is left out by the last
+/// thinned reading, which counts a key as a level.
+///
+/// The first two keep it, since the build reads a key without descending, and
+/// beside its literal-keyed records the meet is not proved empty with it: the
+/// readings answer nothing. Without it the meet holds `{}` alone, which the
+/// complement of `dict[Literal[True], None]` leaves out, so it is empty, and a
+/// reading of fewer members holds more values: the proof stands.
+#[test]
+fn a_member_deep_by_its_key_is_left_out_by_the_last_reading() {
+    let pool = Pool(vec![
+        Operand::Word(b"a".to_vec(), Kind::Str),
+        Operand::Boolean(true),
+    ]);
+    let a = || Schema::Literal(ConstIx::new(0));
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let mapping = |key: Schema, value: Schema| Schema::mapping(MapClause { key, value });
+    let keyed = |field: Schema, key: Schema, value: Schema| Schema::KeyedMap {
+        fields: vec![Field {
+            name: "a".into(),
+            schema: field,
+            required: false,
+        }]
+        .into(),
+        defaults: vec![MapClause { key, value }].into(),
+    };
+    let nothing_at_a = Schema::KeyedMap {
+        fields: vec![Field {
+            name: "a".into(),
+            schema: Schema::Nothing,
+            required: true,
+        }]
+        .into(),
+        defaults: Vec::new().into(),
+    };
+    let edge = not(mapping(
+        meet(vec![Schema::Int, not(Schema::Bool)]),
+        Schema::ANYTHING,
+    ));
+    let subject = meet(vec![
+        mapping(Schema::Float, a()),
+        keyed(a(), Schema::Str, a()),
+        Schema::Union(
+            vec![
+                nothing_at_a,
+                meet(vec![
+                    keyed(a(), Schema::Str, Schema::Int),
+                    keyed(Schema::NoneType, Schema::Str, not(Schema::Int)),
+                ]),
+            ]
+            .into(),
+        ),
+        not(mapping(Schema::Literal(ConstIx::new(1)), Schema::NoneType)),
+        edge.clone(),
+    ]);
+    let mut left_out = false;
+    let proved = read_widened(
+        &subject,
+        &[],
+        &pool,
+        |_| true,
+        |set, kept| {
+            let stands = match kept {
+                None => an_empty_reading_stands(&[&subject], &[], &[], &pool),
+                Some(kept) => {
+                    left_out = !kept.contains(&edge);
+                    an_empty_reading_stands(&kept.iter().collect::<Vec<_>>(), &[], &[], &pool)
+                }
+            };
+            (set.emptiness() == Verdict::Empty && stands).then_some(())
+        },
+    );
+    assert!(proved.is_some(), "the meet is empty");
+    assert!(
+        left_out,
+        "proved by the reading without the member deep by its key"
+    );
+}
+
+/// The first two thinned readings count no clause's key, as the build spends
+/// no level on one: a member whose key holds a container past the room the
+/// meet leaves it -- `str | tuple[Any, ...]`, whole kinds the build reads for
+/// their parts -- is kept by the first, and the last reading, which counts the
+/// key, is not reached.
+#[test]
+fn a_key_holding_a_container_is_no_level_of_the_first_readings() {
+    let pool = empty_pool();
+    let keyed = Schema::Complement(Arc::new(Schema::Union(
+        vec![
+            Schema::KeyedMap {
+                fields: Vec::new().into(),
+                defaults: vec![MapClause {
+                    key: Schema::Union(
+                        vec![
+                            Schema::Str,
+                            Schema::tuple(SeqShape::homogeneous(Schema::ANYTHING)),
+                        ]
+                        .into(),
+                    ),
+                    value: Schema::Int,
+                }]
+                .into(),
+            },
+            Schema::NoneType,
+        ]
+        .into(),
+    )));
+    assert!(lower(&meet(vec![keyed.clone()]), &pool).is_some());
+    let mut kept = None;
+    assert!(
+        lower_widened(
+            &meet(vec![keyed.clone(), nested_lists(DEPTH)]),
+            &[],
+            &pool,
+            &mut kept,
+            |_| true
+        )
+        .is_some()
+    );
+    assert_eq!(kept, Some(vec![keyed]));
+}
+
 /// Each reading is decided under an allowance of its own, [`WORK`] as the
 /// build was, whether it was built whole or thinned.
 ///
