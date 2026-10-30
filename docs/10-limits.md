@@ -192,7 +192,12 @@ decision steps. None caps time, and four costs grow inside them:
   is one step whatever the leaf holds. So a relation over a large leaf costs
   time in proportion to it inside the budget: `int` against a union of
   thousands of literals grows with the square of their number before it
-  answers undecided.
+  answers undecided. What the set representation builds is held by size as
+  well -- an automaton to 4,096 states, a pattern's table to the bytes that
+  takes -- and a length bound is refused before it is built where no table
+  of that many states could count to it, so `Annotated[str,
+  MinLen(1_000_000)]` against another bound answers at once instead of
+  unrolling a million copies of a code point.
 - **A walk does not stop for a signal.** No walk or relation asks the
   interpreter for pending signals, so a `KeyboardInterrupt` raised while one
   runs arrives when it returns. Asking would cost every element of every walk

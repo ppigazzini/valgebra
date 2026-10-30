@@ -65,12 +65,15 @@ use super::automaton::{MAX_STATES, Reached, canonical_order, chain_fits, reaches
 /// determinization is exponential passes right through `MAX_STATES` because
 /// it never reaches the check.
 ///
-/// Both limits are set: `determinize_size_limit` bounds the scratch space the
-/// subset construction uses, and `dfa_size_limit` the table it produces. A
-/// pattern past either is `None` here, which is a refusal every caller of a
-/// descriptor operation already handles -- the relation stays undecided and the
-/// walk still matches the pattern, since the walk runs the regex rather than
-/// the automaton.
+/// Three limits are set: `nfa_size_limit` bounds the automaton the compiler
+/// unrolls a pattern into before any table is built -- a counted repetition is
+/// that many copies, and `.{1000000,}` is three gigabytes of them, an
+/// allocation that fails by aborting the interpreter --
+/// `determinize_size_limit` the scratch space the subset construction uses,
+/// and `dfa_size_limit` the table it produces. A pattern past any is `None`
+/// here, which is a refusal every caller of a descriptor operation already
+/// handles -- the relation stays undecided and the walk still matches the
+/// pattern, since the walk runs the regex rather than the automaton.
 pub(crate) const BUILD_SIZE_LIMIT: usize = MAX_STATES * 514 * 4;
 
 /// Which end of a text an assertion sits at.
@@ -1304,7 +1307,11 @@ impl RegularSet {
     /// holds the tree already or rewrites it first.
     fn determinize(pattern: &Hir) -> Option<RegularSet> {
         let nfa = thompson::Compiler::new()
-            .configure(thompson::Config::new().which_captures(thompson::WhichCaptures::None))
+            .configure(
+                thompson::Config::new()
+                    .which_captures(thompson::WhichCaptures::None)
+                    .nfa_size_limit(Some(BUILD_SIZE_LIMIT)),
+            )
             .build_from_hir(pattern)
             .ok()?;
         // Every match, which is the classical construction. The builder's
@@ -1376,14 +1383,26 @@ impl RegularSet {
 
     /// The words of at least `length` symbols -- code points for
     /// [`Alphabet::Text`], bytes for [`Alphabet::Bytes`].
+    ///
+    /// A table counting to `length` holds a state for each count it tells
+    /// apart, so a bound past [`MAX_STATES`] is refused before it is written,
+    /// as a literal word and a sequence's bound are ([`chain_fits`]): the
+    /// pattern would be compiled first, one copy of a code point for each.
     #[must_use]
     pub(crate) fn at_least(length: usize, alphabet: Alphabet) -> Option<RegularSet> {
+        if !chain_fits(length) {
+            return None;
+        }
         RegularSet::compile(&format!("{}{{{length},}}", code_point(alphabet)), false)
     }
 
-    /// The words of at most `length` symbols.
+    /// The words of at most `length` symbols, refused past [`MAX_STATES`] as
+    /// [`at_least`](Self::at_least) is.
     #[must_use]
     pub(crate) fn at_most(length: usize, alphabet: Alphabet) -> Option<RegularSet> {
+        if !chain_fits(length) {
+            return None;
+        }
         RegularSet::compile(&format!("{}{{0,{length}}}", code_point(alphabet)), false)
     }
 

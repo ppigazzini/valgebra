@@ -66,6 +66,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a constant the walk stopped on proves and refutes nothing
 - fix: a class is read where Python dispatches its hooks
 - fix: an enumeration with a subclass is read as its class
+- fix: a length bound no automaton could count to is refused before it is built
 
 -->
 
@@ -301,6 +302,18 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A length bound no automaton could count to is refused before it is
+  built.** A `str` or `bytes` length bound is read as a pattern counting code
+  points or bytes, and the pattern's compiler unrolls the count into that many
+  copies before any limit is read: `Annotated[str, MinLen(999_999)]` against
+  `MinLen(1_000_000)` held three gigabytes, and a bound past the address space
+  aborted the interpreter with no Python exception, on every release. A table
+  counting to a bound holds a state for each count, so a bound past the 4,094
+  a table of 4,096 states counts to is refused before its pattern is written,
+  as a sequence's bound already was, and the compiler is held to the size the
+  table build is held to, for every pattern. Both relations answer at once,
+  undecided.
 
 - **An enumeration with a subclass is read as its class.** An enumeration
   with members is read as the union of them because the class makes no other

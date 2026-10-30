@@ -419,7 +419,10 @@ answers `"undecided"`.
   clauses is not counted, and declines. A bound over a list is an automaton with a
   state per element, and the sets compare two such bounds up to about 1,340
   elements over a list of integers before the work a relation may spend runs
-  out; past that they decline. That decides a
+  out; past that they decline. A bound over a `str` or `bytes` is a pattern
+  counting code points or bytes, a few states a code point, and the sets read
+  one up to about 250 code points or 2,000 bytes before its table passes the
+  state bound; past 4,094 the bound is refused before it is built. That decides a
   fixpoint every unfolding of which needs one more element -- each element is a
   value of the fixpoint, and no finite value satisfies it. A bound over a
   *fixed* position, or over a base whose values have no length at all, is not
