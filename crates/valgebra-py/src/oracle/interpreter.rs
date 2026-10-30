@@ -886,16 +886,68 @@ fn a_fatal_signal_a_probe_raises_is_the_querys_answer() {
             )]
             .into(),
         };
-        // The walk folds the interrupted predicate to a non-member, which is a
-        // refutation to the core; the kept signal is what stops it standing.
+        // The interrupted predicate ends the walk, which answers nothing, and
+        // the kept signal is the query's to raise.
         assert_eq!(
             oracle.leaf_subtype(&Schema::Literal(ConstIx::new(0)), &refined),
-            Some(false)
+            None
         );
         let raised = oracle
-            .answer("not_subset")
-            .expect_err("the signal, not the refutation");
+            .answer("undecided")
+            .expect_err("the signal, not the decline");
         assert!(raised.is_instance_of::<pyo3::exceptions::PyKeyboardInterrupt>(py));
+    });
+}
+
+// THEORY: the-decision-has-three-answers
+/// A constant the walk stopped on -- a predicate that raised -- is neither in
+/// the set nor out of it: the walk refuses it from the set and from its
+/// complement alike, so a bare refusal read as a value outside would refute
+/// a literal below `T | ~T`, which holds every value. A part that decides
+/// still decides beside a stop: a meet another member refuses is refused, and
+/// a union another branch admits is admitted.
+#[test]
+fn a_constant_the_walk_stopped_on_proves_and_refutes_nothing() {
+    Python::attach(|py| {
+        let five = 5i64.into_pyobject(py).unwrap().into_any().unbind();
+        let raising = built(py, "lambda value: 1 // 0").unbind();
+        asking(py, vec![five, raising], |oracle| {
+            let literal = Schema::Literal(ConstIx::new(0));
+            let stops = Schema::Refine {
+                base: std::sync::Arc::new(Schema::Int),
+                constraints: vec![valgebra_core::Constraint::Predicate(
+                    valgebra_core::PredIx::new(1),
+                )]
+                .into(),
+            };
+            let either = Schema::Union(vec![stops.clone(), stops.clone().complement()].into());
+            assert_eq!(oracle.leaf_subtype(&literal, &stops), None);
+            assert_eq!(
+                oracle.leaf_subtype(&literal, &stops.clone().complement()),
+                None
+            );
+            assert_eq!(oracle.leaf_subtype(&literal, &either), None, "T | ~T");
+            let beside_str = Schema::Intersection(vec![stops.clone(), Schema::Str].into());
+            assert_eq!(oracle.leaf_subtype(&literal, &beside_str), Some(false));
+            let or_int = Schema::Union(vec![stops.clone(), Schema::Int].into());
+            assert_eq!(oracle.leaf_subtype(&literal, &or_int), Some(true));
+            let texts = Schema::Refine {
+                base: std::sync::Arc::new(Schema::Str),
+                constraints: vec![valgebra_core::Constraint::Predicate(
+                    valgebra_core::PredIx::new(1),
+                )]
+                .into(),
+            };
+            assert_eq!(oracle.strings_admitted(&texts, &["a"]), None);
+            assert_eq!(
+                oracle.strings_admitted(&Schema::Str, &["a"]),
+                Some(vec![true])
+            );
+            assert!(
+                oracle.fatal.borrow().is_none(),
+                "a raised predicate is no signal"
+            );
+        });
     });
 }
 

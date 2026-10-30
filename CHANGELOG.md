@@ -63,6 +63,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: opening or closing a schema twice gives the schema once did
 - fix: a bound whose operand orders on its own renders marked
 - feat: a set's and a record's lengths are read off their shapes
+- fix: a constant the walk stopped on proves and refutes nothing
 
 -->
 
@@ -298,6 +299,19 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A constant the walk stopped on proves and refutes nothing.** A literal is
+  decided by walking its constant through the supertype, and a predicate that
+  raises on the constant stops that walk, which refuses the value from the set
+  and from its complement alike. The relation read the refusal as a value
+  outside the set: `Literal[5]` was `not_subset` of `T | ~T` for `T` an `int`
+  refined by a predicate raising on every value, a union holding every value,
+  and through the respelling of `~(T | ~T) <= ~Literal[5]` as its
+  contrapositive, the empty `~(T | ~T)` was refuted below it too. The constant
+  is read as a complement reads its inner walk: refused only where the walk
+  decided it, admitted only where a branch admitted it, and neither otherwise.
+  The same for an enumeration's members, `None`, and the texts a pattern too
+  large to build is read by.
 
 - **A bound whose operand orders on its own renders marked.** A bound of a
   subclass of `int`, `float`, `str` or `bytes` printed as the builtin's bound,

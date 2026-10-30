@@ -34,6 +34,7 @@ use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, OperandIx, Schema};
 use crate::check::{
     Ctx, Unwritten, ValidatorIndex, WalkMode, WalkState, build_index, forget_unindexed, member,
 };
+use crate::codes::Code;
 use crate::errors::is_fatal;
 use crate::input::Value;
 
@@ -484,7 +485,7 @@ impl PoolRelations<'_, '_> {
         (!members.is_empty() && members.len() <= MAX_ENUM_MEMBERS).then_some(members)
     }
 
-    fn is_member(&self, schema: &Schema, value: &Bound<'_, PyAny>) -> bool {
+    fn is_member(&self, schema: &Schema, value: &Bound<'_, PyAny>) -> Option<bool> {
         // These leaf-subtype probes run on transient schemas during compilation,
         // not on a finished validator, so they carry no precomputed index; the
         // walk falls back to its general path for any record or union here. A
@@ -495,14 +496,44 @@ impl PoolRelations<'_, '_> {
 
     /// [`Self::is_member`] under an `index` built for `schema`, for a probe
     /// that walks several values through it.
+    ///
+    /// **A walk that stopped decides nothing**, so the probe answers in three
+    /// values. The walk refuses a value it stopped on -- a predicate that raised,
+    /// the depth bound -- and refuses it from the set's complement as well
+    /// (`docs/14-soundness.md`), so a bare refusal is no value outside the set:
+    /// read as one, a literal is refuted below `T | ~T`. A refusal is read as a
+    /// complement reads its inner walk ([`WalkMode::Settle`]), where a stop is
+    /// the third value; an admission needs no such reading, no stop admitting
+    /// anything, and where a settling walk met a stop the plain walk is asked
+    /// whether a later branch admits.
     fn is_member_under(
         &self,
         schema: &Schema,
         value: &Bound<'_, PyAny>,
         index: &ValidatorIndex,
-    ) -> bool {
+    ) -> Option<bool> {
+        match self.walk(schema, value, index, WalkMode::Settle)? {
+            (false, _) => Some(false),
+            (true, None) => Some(true),
+            (true, Some(_)) => self
+                .walk(schema, value, index, WalkMode::Fast)?
+                .0
+                .then_some(true),
+        }
+    }
+
+    /// One walk of `value` through `schema` in `mode`: whether it admitted, and
+    /// the stop it met, or `None` where a fatal signal ended it or the value
+    /// moved while it was read, which is no answer whatever the walk decided.
+    fn walk(
+        &self,
+        schema: &Schema,
+        value: &Bound<'_, PyAny>,
+        index: &ValidatorIndex,
+        mode: WalkMode,
+    ) -> Option<(bool, Option<Code>)> {
         if self.fatal.borrow().is_some() {
-            return false;
+            return None;
         }
         let state = WalkState::new();
         let ctx = Ctx {
@@ -510,7 +541,7 @@ impl PoolRelations<'_, '_> {
             defs: self.definitions,
             index,
             state: &state,
-            mode: WalkMode::Fast,
+            mode,
         };
         let admitted = member(
             schema,
@@ -519,8 +550,9 @@ impl PoolRelations<'_, '_> {
         );
         if let Some(err) = state.take_fatal() {
             self.keep_if_fatal(err);
+            return None;
         }
-        admitted
+        (state.moves() == 0).then(|| (admitted, state.signals.stopped.get()))
     }
 }
 
@@ -1292,10 +1324,11 @@ impl LeafRelations for PoolRelations<'_, '_> {
         match sub {
             // The constant's membership, which is the literal's where the
             // constant is its one value or nothing in `sup` tells equal values
-            // apart; the core asks which, and keeps this proof only there.
+            // apart; the core asks which, and keeps this proof only there. A
+            // walk that stopped on the constant answers neither way.
             Schema::Literal(index) => {
                 let value = self.literals.get(index.get())?.bind(self.py);
-                Some(self.is_member(sup, value))
+                self.is_member(sup, value)
             }
             // The `isinstance(., C)` values are a subset of the `isinstance(., D)`
             // values exactly when `C` is a subclass of `D`.
@@ -1329,27 +1362,35 @@ impl LeafRelations for PoolRelations<'_, '_> {
                 // what makes `Color` and `Literal[Color.RED, Color.GREEN]` one
                 // set rather than two the procedure cannot relate.
                 let members = self.enum_members(class)?;
-                Some(members.iter().all(|member| self.is_member(sup, member)))
+                let mut every = Some(true);
+                for member in &members {
+                    match self.is_member(sup, member) {
+                        Some(false) => return Some(false),
+                        Some(true) => {}
+                        None => every = None,
+                    }
+                }
+                every
             }
             // `None`'s kind is the literal of its one value: `NoneType` admits
             // no subclass, so the walk of `None` is the kind's. `bool`'s two
             // values are each a pooled literal, which the parts reading asks
             // one at a time, and no kind with more is a set of values to walk.
-            Schema::NoneType => Some(self.is_member(sup, &self.py.None().into_bound(self.py))),
+            Schema::NoneType => self.is_member(sup, &self.py.None().into_bound(self.py)),
             _ => None,
         }
     }
 
     /// Each text as a fresh `str`, walked through one index built for
     /// `schema`, so a pattern compiles once for the question rather than once
-    /// a text. A probe a fatal signal stopped has answered nothing.
+    /// a text. A probe a fatal signal stopped has answered nothing, and so has
+    /// one whose walk of a text stopped ([`Self::is_member_under`]).
     fn strings_admitted(&self, schema: &Schema, texts: &[&str]) -> Option<Vec<bool>> {
         let index = build_index(self.py, schema, self.definitions, self.literals);
-        let admitted = texts
+        texts
             .iter()
             .map(|text| self.is_member_under(schema, PyString::new(self.py, text).as_any(), &index))
-            .collect();
-        self.fatal.borrow().is_none().then_some(admitted)
+            .collect()
     }
 
     fn literal_kind(&self, constant: ConstIx) -> Option<Kind> {
