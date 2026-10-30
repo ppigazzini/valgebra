@@ -1279,13 +1279,16 @@ fn read_annotation(
     // And the dict literal's frozen sibling. A `frozendict` is not a `dict`, so
     // the arm below does not see it, and past it the constant fallthrough would
     // intern `frozendict(a=int)` as a schema admitting that one mapping of a
-    // type object. It names a record, which the dict literal spells.
+    // type object. It names a record of frozen dicts, a set no node reaches,
+    // and the dict literal's record admits no frozen dict.
     if let Some(frozendict) = &forms.frozendict
         && obj.is_instance(frozendict.bind(py))?
     {
         return Err(not_implemented(
-            "a frozen dict literal is not a schema; write a record as a dict \
-             literal {\"key\": T}, or a mapping as dict[K, V]",
+            "a frozen dict literal is not a schema, and no schema reads a frozen \
+             dict's keys: collections.abc.Mapping or instance_of(frozendict) \
+             admits one whole, and a dict literal {\"key\": T} or dict[K, V] \
+             admits dicts alone",
         ));
     }
     if let Ok(dict) = obj.cast::<PyDict>() {

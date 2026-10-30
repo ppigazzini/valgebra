@@ -591,18 +591,20 @@ read through `Annotated` and `ReadOnly`, is refused naming the key's spelling
 `get_origin` call a qualifier needs. A tuple literal
 and a set literal are refused rather than accepted, since `tuple[A, B]` and
 `set[T]` already spell them and two spellings for one set is a fork. The frozen
-siblings are refused for the same reason and need arms of their own: a
-`frozenset` is not a `set` and, on 3.15, a `frozendict` is not a `dict`, so
-without one each falls through to the constant reading and becomes a schema
-admitting that one object.
+siblings need arms of their own: a `frozenset` is not a `set` and, on 3.15, a
+`frozendict` is not a `dict`, so without one each falls through to the
+constant reading and becomes a schema admitting that one object. A frozen set
+literal is refused for the reason above; a frozen dict literal names a record
+of frozen dicts, a set no node reaches (below), and its refusal names the two
+schemas that admit a frozen dict whole.
 
 **A `frozendict` is a `Mapping` and not a `dict`.** The record and mapping node
 denotes dicts (`ir.rs`), so `dict[K, V]`, a record and a `TypedDict` refuse a
 `frozendict` value, and the bare `collections.abc.Mapping` atom admits it.
 `frozendict[K, V]` names a set of frozen dicts, a carrier the node set does not
-have, and is refused as an unknown origin rather than read as `dict[K, V]`:
-admitting it is a question for the admission test of
-[01-schema-ir.md](01-schema-ir.md), not for this page.
+have, and is refused as an unknown origin rather than read as `dict[K, V]`; the
+algebra change it would take is refused in [01-schema-ir.md](01-schema-ir.md),
+"Refused, and the test each one fails".
 `test_a_frozen_dict_is_a_mapping_and_not_a_dict` in
 `tests/test_frontend_forms.py` holds all three, on the interpreters that have
 the type. A key
