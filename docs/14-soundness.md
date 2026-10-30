@@ -109,6 +109,11 @@ finished and refused*, and a stopped walk did not. So the walk computes
 only stopping, is refused by a schema and its complement alike: a part that
 refuses, or a branch that admits, decides the walk whatever a part beside it
 stopped on ([the error model](08-error-model.md#unions-report-the-closest-branch)).
+A relation reads a walk the same way where it puts a value to one -- a
+literal's constant, an enumeration's members, `None`, the texts of a pattern
+too large to build: a value the walk stopped on is neither in the set nor out
+of it, so it proves and refutes nothing. `Literal[5]` is not refuted below
+`T | ~T` for a `T` whose predicate raises on `5`.
 
 ## Why construction preserves meaning
 

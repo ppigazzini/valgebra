@@ -634,6 +634,51 @@ def _admits_none(_value: object) -> bool:
 
 _ADMITS_NONE = Annotated[Any, _admits_none]
 
+#: An integer refinement whose predicate raises on every value: the walk stops
+#: on each, and refuses it from the set and from its complement alike.
+_STOPS = Validator(Annotated[int, _raises])
+
+
+# THEORY: the-decision-has-three-answers
+@pytest.mark.parametrize(
+    ("subject", "supertype"),
+    [
+        (Literal[5], union(_STOPS, complement(_STOPS))),
+        (Literal[5], _STOPS),
+        (Literal[5], complement(_STOPS)),
+        (union(Literal[5], Literal["x"]), union(_STOPS, complement(_STOPS))),
+        (
+            complement(union(_STOPS, complement(_STOPS))),
+            complement(union(Annotated[str, Regex("abc|abcd|x")], Literal[5])),
+        ),
+        (complement(union(_STOPS, complement(_STOPS))), complement(Literal[5])),
+    ],
+)
+def test_a_constant_the_walk_stopped_on_refutes_nothing(
+    subject: object, supertype: object
+) -> None:
+    """A stopped walk is no value outside a set, read directly or respelled.
+
+    `T | ~T` holds every value and `~(T | ~T)` none, whatever a stop denotes,
+    so neither relation is refuted. The constant `5` stops `T`'s walk, which
+    refuses it from both branches: read as a non-member it refuted the literal
+    below the union, and the respelling of `~(T | ~T) <= ~L` as `L <= T | ~T`
+    carried that refutation to a subject with no value.
+    """
+    assert Validator(subject).relation_to(supertype) != "not_subset"
+
+
+# THEORY: the-decision-has-three-answers
+def test_a_part_that_decides_still_decides_beside_a_stop() -> None:
+    """A meet another member refuses is refused, a union another branch admits.
+
+    The walk reads a stop as the third value of Kleene's strong logic, so a
+    refusal beside it is a refusal and an admission an admission.
+    """
+    assert Validator(Literal[5]).relation_to(intersection(_STOPS, str)) == "not_subset"
+    assert Validator(Literal[5]).relation_to(union(_STOPS, int)) == "subset"
+
+
 #: Members no lowering reads: predicates answering every value one way, one
 #: that raises, and a member nested past the depth the set representation
 #: reads.
