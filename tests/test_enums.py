@@ -198,6 +198,33 @@ class _Color(enum.Enum):
     GREEN = 2
 
 
+def test_an_enumeration_with_a_subclass_is_read_as_its_class() -> None:
+    """A subclass makes instances of its own, so the members are not all.
+
+    A class statement cannot derive from an enumeration with members; assigning
+    `__bases__` to a plain class can, from CPython 3.15, and that class's own
+    constructor makes an instance of the enumeration that is no member.
+    """
+
+    class Hue(enum.Enum):
+        RED = 1
+        GREEN = 2
+
+    class Below:
+        def __new__(cls) -> object:
+            return object.__new__(cls)
+
+    try:
+        Below.__bases__ = (Hue,)
+    except TypeError as refused:
+        pytest.skip(f"this release refuses the base: {refused}")
+    stray = Below()
+    members = Validator(Literal[Hue.RED, Hue.GREEN])
+    assert Validator(Hue).is_valid(stray)
+    assert not members.is_valid(stray)
+    assert Validator(Hue).relation_to(members) != "subset"
+
+
 @pytest.mark.xfail(
     strict=True,
     reason=(

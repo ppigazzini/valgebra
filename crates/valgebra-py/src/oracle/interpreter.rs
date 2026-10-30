@@ -692,8 +692,10 @@ fn an_enumeration_lists_its_members_up_to_the_bound() {
 #[test]
 fn an_enumeration_making_an_instance_past_its_members_lists_none() {
     // The union reading stands on the class making no instance but its
-    // members: a `_missing_` of its own makes `E(5)`, and a metaclass's own
-    // `__iter__` hides a member from the list, so either is an instance check.
+    // members: a `_missing_` of its own makes `E(5)`, a metaclass's own
+    // `__iter__` hides a member from the list, and a subclass -- made past the
+    // class statement, which refuses one -- makes instances of its own, so each
+    // is an instance check.
     Python::attach(|py| {
         let program = r"import enum
 class Missing(enum.Enum):
@@ -713,6 +715,9 @@ class Valued(enum.Enum):
     A = 1
     def describe(self):
         return self.name
+class Derived(enum.Enum):
+    A = 1
+Below = type.__new__(type(Derived), 'Below', (Derived,), {})
 ";
         let module = PyModule::from_code(
             py,
@@ -730,6 +735,7 @@ class Valued(enum.Enum):
             assert_eq!(listed("Missing"), None, "a _missing_ of its own");
             assert_eq!(listed("Hidden"), None, "a metaclass's own __iter__");
             assert_eq!(listed("Valued"), Some(1), "a method beside its members");
+            assert_eq!(listed("Derived"), None, "a subclass of its own");
         });
     });
 }
