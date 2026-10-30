@@ -68,6 +68,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an enumeration with a subclass is read as its class
 - fix: a length bound no automaton could count to is refused before it is built
 - feat: a union holding a complement is asked as its difference
+- fix: a member deep by a clause's key alone is left out of the last reading
 
 -->
 
@@ -312,6 +313,17 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A member deep by a clause's key alone is left out of the last thinned
+  reading.** A meet the set representation cannot read whole is read without
+  the members it cannot hold, a superset whose emptiness proves the meet's. A
+  map's key is read for the labels it covers, never descended, so a member at
+  the edge of the depth by its key alone was kept, and beside literal-keyed
+  records the meet with it was not proved empty where the meet without it is:
+  0.0.22 declined a share of the emptiness proofs 0.0.21 made over maps --
+  `{}` alone, outside `dict[Literal[True], None]`'s complement. A last reading
+  counts a key as a level and leaves such a member out, after the two that
+  keep it.
 
 - **A length bound no automaton could count to is refused before it is
   built.** A `str` or `bytes` length bound is read as a pattern counting code
