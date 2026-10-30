@@ -984,10 +984,17 @@ assert not Validator(Box[int]).is_valid(Box("one"))
 assert not Validator(IntBox).is_valid(IntBox(**wrong))
 ```
 
-A parameter with no default is refused where the class is written bare and a
-field names it, and so is a type variable two bases bind to two types. A
-generic class whose fields are not read -- one `isinstance` alone answers --
-gains nothing from an argument, and is refused applied
+A type variable is its class's own: a class that binds a base's parameter and
+declares its own with the same `TypeVar` object reads each field in the scope of
+the class that declares it, as the type checkers do. A default may name a
+parameter before it, which the same application binds, as PEP 696 reads it: with
+`U = TypeVar("U", default=list[T])`, `Pairs[int]` reads `U` as `list[int]`, and
+so does a base applied short, which Python hands back with the default as
+written. A parameter with no default is refused where the class is written bare
+and a field names it, and so is a class two bases reach under two arguments,
+since a field it declares would name two types. A generic class whose fields are
+not read -- one `isinstance` alone answers -- gains nothing from an argument,
+and is refused applied
 ([above](#the-forms-that-are-refused-rather-than-read-as-a-literal)).
 
 ### A `TypedDict` is open, a dict literal is closed
