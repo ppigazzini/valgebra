@@ -9403,6 +9403,61 @@ fn a_pair_declined_as_written_is_asked_in_its_other_spellings() {
     assert_eq!(both(&number, &neither), Relation::Fails);
 }
 
+/// A union holding a complement is asked as the meet the difference is.
+///
+/// `a ⊆ b ∨ ¬c` is `(a ∧ c) ∧ ¬b = ∅`, which is `a ∧ c ⊆ b`, both ways. The
+/// universe below the complement of the dicts beside a meet of records is the
+/// dicts below that meet, which the rules refute where the pair as written
+/// declines: the union `dict | ~dict | x` construction folds to the universe
+/// is that pair.
+#[test]
+fn a_union_holding_a_complement_is_asked_as_its_difference() {
+    let both = |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &NoLeafRelations, &[]);
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let dicts = Schema::mapping(MapClause {
+        key: Schema::ANYTHING,
+        value: Schema::ANYTHING,
+    });
+    let with_b = open(vec![field("b", Schema::Int, true)]);
+    let a_not_int = Schema::KeyedMap {
+        fields: vec![field("a", not(Schema::Int), false)].into(),
+        defaults: vec![MapClause {
+            key: Schema::ANYTHING,
+            value: Schema::ANYTHING,
+        }]
+        .into(),
+    };
+    let a_int = closed(vec![field("a", Schema::Int, true)]);
+    let neither = Schema::Union(vec![not(a_not_int), not(a_int)].into());
+    let meet = Schema::Intersection(vec![with_b.clone(), neither.clone()].into());
+    let beside = Schema::Union(vec![not(dicts.clone()), meet].into());
+    assert_eq!(both(&Schema::ANYTHING, &beside), Relation::Fails);
+    // And proved where the dicts are below the rest: the two records the
+    // complements name share no value, so their meet's complement is the
+    // universe, and every value is outside the dicts or a dict.
+    let every_dict = Schema::Intersection(vec![dicts.clone(), neither].into());
+    let whole = Schema::Union(vec![not(dicts.clone()), every_dict].into());
+    assert_eq!(both(&Schema::ANYTHING, &whole), Relation::Holds);
+
+    let with_c = open(vec![field("c", Schema::Str, true)]);
+    let with_both = open(vec![
+        field("b", Schema::Int, true),
+        field("c", Schema::Str, true),
+    ]);
+    let split = Schema::Union(vec![not(with_c), with_both].into());
+    assert_eq!(both(&with_b, &split), Relation::Holds);
+
+    // Excluded middle on a predicate is no law: the union of one with its
+    // complement is not the top, so the pair is not read as the predicate
+    // below itself.
+    let called = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    let either = Schema::Union(vec![called.clone(), not(called)].into());
+    assert_ne!(both(&Schema::ANYTHING, &either), Relation::Holds);
+}
+
 /// A respelled pair spends no more than [`RESPELLING`] steps.
 ///
 /// Towers of `(T, list[T])` reach each level twice, so their inclusion costs

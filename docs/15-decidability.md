@@ -467,14 +467,24 @@ answers `"undecided"`.
   holds every value of some kind is a value of the subject outside the
   supertype, whatever shape the subject has, and against a complement `~c` the
   pair is also asked as the meet with `c` below the empty set and as `c` below
-  the complement of the subject:
+  the complement of the subject. Against a union holding complements, `b | ~c`,
+  it is asked as the meet with `c` below `b`, which is the same question both
+  ways:
 
     ```python
-    from valgebra import Validator, anything, complement, recursive, union
+    from valgebra import Validator, anything, complement, intersection, recursive, union
 
     json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
     # the empty list is a JSON array
     assert Validator(anything).relation_to(complement([json_value])) == "not_subset"
+
+    # the dicts below the meet beside them: {} is a dict without "b"
+    with_b = {"b": int, str: anything}
+    meet = intersection(
+        with_b,
+        complement({"a": int}) | complement({"a?": complement(int), anything: anything}),
+    )
+    assert Validator(anything).relation_to(complement(dict) | meet) == "not_subset"
     ```
 
 - **A subject outside a base.** A refinement is a subset of its base, so a

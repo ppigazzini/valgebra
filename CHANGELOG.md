@@ -67,10 +67,20 @@ answer of its own, or a repair to a change not yet released.
 - fix: a class is read where Python dispatches its hooks
 - fix: an enumeration with a subclass is read as its class
 - fix: a length bound no automaton could count to is refused before it is built
+- feat: a union holding a complement is asked as its difference
 
 -->
 
 ### Added
+
+- **A union holding a complement is asked as its difference.** `a <= b | ~c`
+  is `(a & c) & ~b` empty, which is `a & c <= b`, both ways, and a pair every
+  decider declines is asked so where `c` denotes a set. `anything` below
+  `~dict | x` is the dicts below `x`: `dict | ~dict | x`, which construction
+  folds to `anything`, is refuted below `~dict | x` where `dict` is below
+  `x` alone, as it was before `{"a?": object}.open()` came to spell
+  `dict[anything, anything]`. A union of a predicate and its complement is
+  not the top and is not read so.
 
 - **A set's and a record's lengths are read off their shapes.** A set holds
   each member once, so it is no longer than the values its element holds

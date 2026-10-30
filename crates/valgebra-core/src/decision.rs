@@ -674,11 +674,18 @@ impl Schema {
     /// pairs that never need it; here it is read for any subject, once the
     /// rules have declined. Against a complement the difference of `a ⊆ ¬c` is
     /// the meet `a ∧ c`, asked by the rules as a subject of its own, and the
-    /// pair is `c ⊆ ¬a`, asked from its other side. Both are goals over the
-    /// query's signed subterms, so the goals stay in the closure the budget is
-    /// argued over. The difference against any other supertype is a meet the
-    /// constructors build on every pair that declines, which the relation
-    /// matrix pays a seventh of its instructions for, and is not asked.
+    /// pair is `c ⊆ ¬a`, asked from its other side. Against a union holding
+    /// complements the difference is the same meet with the union's other
+    /// members subtracted: `a ⊆ b ∨ ¬c` is `(a ∧ c) ∧ ¬b = ∅`, which is `a ∧ c
+    /// ⊆ b`, exactly -- `anything ⊆ ¬dict ∨ x` asks whether `dict ⊆ x` -- where
+    /// `c` denotes a set: the identity is excluded middle on `c`, which a
+    /// predicate answering two calls apart does not obey, so `anything ⊆ p ∨ ¬p`
+    /// is not `p ⊆ p` (`denotes_a_set_within`). Both are
+    /// goals over the query's signed subterms, so the goals stay in the
+    /// closure the budget is argued over. The difference against any other
+    /// supertype is a meet the constructors build on every pair that declines,
+    /// which the relation matrix pays a seventh of its instructions for, and is
+    /// not asked.
     ///
     /// A meet against a meet is asked as the two together: `a ⊆ b` with
     /// `a ∧ b = ∅` holds only where `a` is empty, so a subject the rules find a
@@ -697,11 +704,36 @@ impl Schema {
             (self, other),
             (Schema::Intersection(_), Schema::Intersection(_))
         );
-        if !meets && !matches!(other, Schema::Complement(_)) {
+        let negates = match other {
+            Schema::Complement(_) => true,
+            Schema::Union(members) => members
+                .iter()
+                .any(|member| matches!(member, Schema::Complement(_))),
+            _ => false,
+        };
+        if !meets && !negates {
             return Relation::Unknown;
         }
         let allowance = Budget::new(cx.budget.left().min(RESPELLING));
         let cx = &mut cx.within_this_query(&allowance);
+        if let Schema::Union(members) = other {
+            let (complements, rest): (Vec<&Schema>, Vec<&Schema>) =
+                members.iter().partition(|member| {
+                    matches!(member, Schema::Complement(inner)
+                        if denotes_a_set_within(inner, cx.oracle, cx.defs))
+                });
+            if complements.is_empty() {
+                return Relation::Unknown;
+            }
+            let inners = complements.into_iter().filter_map(|member| match member {
+                Schema::Complement(inner) => Some((**inner).clone()),
+                _ => None,
+            });
+            let narrowed =
+                Schema::meet_within(core::iter::once(self.clone()).chain(inners), cx.defs);
+            let rest = Schema::union_within(rest.into_iter().cloned(), cx.defs);
+            return narrowed.is_subtype_rec(&rest, cx);
+        }
         let Schema::Complement(inner) = other else {
             let disjoint = Schema::meet_within([self.clone(), other.clone()], cx.defs)
                 .is_empty_rec(cx)
