@@ -378,20 +378,20 @@ def test_a_signal_while_a_relation_reads_a_class_propagates(
     """A relation reads a class's `__eq__` and its `__slots__`, which run code.
 
     Whether two constants of a class are two values is read off the class's
-    `__eq__`, through its metaclass, and where a class's instances lie is read
-    off the `__slots__` it declares, by iterating them. Folding what either
-    raises into an answer gives `undecided` for the pair of constants, and a
-    verdict for the class, with the signal gone.
+    `__eq__` where `==` finds it, in the class's own namespace, and a
+    descriptor there runs as it would for `==`; where a class's instances lie
+    is read off the `__slots__` it declares, by iterating them. Folding what
+    either raises into an answer gives `undecided` for the pair of constants,
+    and a verdict for the class, with the signal gone.
     """
 
-    class Meta(type):
-        def __getattribute__(cls, name: str) -> object:
-            if name == "__eq__":
-                raise signal
-            return super().__getattribute__(name)
+    class Raising:
+        def __get__(self, obj: object, cls: type) -> object:
+            raise signal
 
-    class Opaque(metaclass=Meta):
-        pass
+    class Opaque:
+        __eq__ = Raising()  # ty: ignore[invalid-attribute-override]
+        __hash__ = object.__hash__
 
     with pytest.raises(signal):
         Validator(Literal[Opaque()]).relation_to(  # ty: ignore[invalid-type-form]

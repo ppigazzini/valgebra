@@ -281,6 +281,19 @@ The soundness is relative to a small, explicit trust base:
   the pair for no class, because it holds no class object to ask whether a hook
   answers `isinstance`, so the meet keeps its spelling.
 
+  **A hook is read where Python dispatches it.** `isinstance`, `issubclass`,
+  `==`, `<`, `math.floor`, `len`, `iter`, a call and a descriptor's `__set__`
+  run what the type's own namespaces hold along the order Python laid down,
+  and ask no `__getattribute__`, not even the metaclass's (the language
+  reference, "Special method lookup"). `getattr` on a class asks the metaclass
+  first, so every reading of a class here -- whether a hook, an `__eq__`, an
+  order or rounding method, a `__len__` or an `__iter__` is the base's own, the
+  namespace a class's slots and descriptors are read from, its method
+  resolution order, its flags and instance sizes -- looks where the
+  interpreter looks, as `inspect.getattr_static` does. A metaclass whose
+  `__getattribute__` answers `type`'s own `__subclasscheck__` hides none of its
+  own: the class is read as one that overrides it, and declined.
+
   **A bound conjunction rests on the order besides.** A contradiction between
   two bounds is decided by comparing the *bounds*, which holds only because a
   value ordered against one is ordered the same way against the other -- the
