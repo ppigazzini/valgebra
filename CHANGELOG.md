@@ -43,6 +43,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a table of constants below a complemented table is one question
 - feat: the complement of a meet holds a complemented member's values
 - fix: a constant proves its literal only where the values equal to it read alike
+- fix: two bounds are compared only where each operand orders as the walk reads it
 
 -->
 
@@ -193,6 +194,19 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **Two bounds are compared only where each operand orders as the walk reads
+  it.** `Annotated[int, Ge(Mod7(1))]`, with `Mod7` an `int` subclass equal to
+  every integer congruent to it modulo 7, admits `1`, since `1 >= Mod7(1)`
+  reads the stored `1`; it was equivalent to `Annotated[int, Ge(8)]`, because
+  `Mod7(1) == 8`. A `str` or `int` subclass ordering by its own methods was
+  read the same way, so a tighter bound was proved below a looser one that a
+  value refutes, and an empty interval was reported inhabited. A bound whose
+  operand is a builtin subclass with an `==`, an order or a rounding of its
+  own is compared with no other bound, and so is one whose operand is of a
+  class of no builtin, unless that class is exactly one of the standard
+  library's value types (`Decimal`, `Fraction`, the dates): Python implies no
+  relationship among a class's comparison operators.
 
 - **A constant proves its literal only where the values equal to it read
   alike.** `Literal[CI("a")]`, with `CI` a `str` subclass whose `==` ignores

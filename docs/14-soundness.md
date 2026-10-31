@@ -280,7 +280,13 @@ The soundness is relative to a small, explicit trust base:
   "exactly `int`" from "an `int` or a subclass". The set representation has that
   class for a literal, which is the constant at its exact type, and a bound is
   not read through it: a bound holds of the subclasses too. The case is pinned
-  as a known-unsound test rather than left unwritten.
+  as a known-unsound test rather than left unwritten. The bound's own operand
+  is another matter, and is not trusted: a builtin subclass whose `__eq__` or
+  order is its own is read by the walk through the builtin's storage or its
+  reflected method, so two bounds are compared only where each operand keeps
+  its builtin's comparisons. A class of no builtin orders as unknown, since
+  Python implies no relationship among a class's comparison operators and the
+  walk reads `>=` alone, unless it is exactly one of the value types below.
 - **A class whose metaclass leaves `isinstance` alone holds an object.** A
   refutation about a class stands on a value of it, and nothing here can build
   one: reporting `A` not below `B` for two unrelated classes reads the

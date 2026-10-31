@@ -282,6 +282,63 @@ fn each_text_is_walked_as_a_str_of_the_schema() {
 }
 
 #[test]
+fn a_bound_is_ordered_only_as_the_walk_reads_it() {
+    // `compare` and `no_int_between` read two operands by `==`, the order and
+    // rounding; the walk reads a builtin subclass's operand through the
+    // builtin's storage, or through the reflected method a subclass overrides.
+    // A subclass keeping the builtin's methods is read alike and answered; one
+    // with its own equality or order is declined, and so is a class of no
+    // builtin that is not one of the standard library's value types.
+    Python::attach(|py| {
+        let source = "types.SimpleNamespace(\
+             values=[type('Kept', (int,), {})(1), 8,\
+                     type('Mod7', (int,), {'__eq__': lambda s, o: (int(s) - int(o)) % 7 == 0,\
+                                           '__hash__': lambda s: int(s) % 7})(1),\
+                     type('RevInt', (int,), {'__lt__': lambda s, o: int.__gt__(s, o),\
+                                             '__gt__': lambda s, o: int.__lt__(s, o)})(5),\
+                     3,\
+                     type('Own', (), {'__eq__': lambda s, o: True, '__hash__': lambda s: 0,\
+                                      '__lt__': lambda s, o: True,\
+                                      '__gt__': lambda s, o: True})(),\
+                     __import__('fractions').Fraction(5, 2)],\
+         )";
+        let values: Vec<Py<PyAny>> = built(py, source)
+            .getattr("values")
+            .unwrap()
+            .try_iter()
+            .unwrap()
+            .map(|value| value.unwrap().unbind())
+            .collect();
+        asking(py, values, |oracle| {
+            let cmp = |a, b| oracle.compare(OperandIx::new(a), OperandIx::new(b));
+            assert_eq!(
+                cmp(0, 1),
+                Some(core::cmp::Ordering::Less),
+                "kept, against 8"
+            );
+            assert_eq!(cmp(2, 1), None, "Mod7(1) == 8 to its own ==, 1 to the walk");
+            assert_eq!(cmp(1, 2), None);
+            assert_eq!(cmp(3, 4), None, "RevInt's order is its own");
+            assert_eq!(cmp(5, 1), None, "a class of its own orders as unknown");
+            assert_eq!(
+                cmp(6, 1),
+                Some(core::cmp::Ordering::Less),
+                "a Fraction, the standard library's"
+            );
+            let between =
+                |lo, hi| oracle.no_int_between(OperandIx::new(lo), true, OperandIx::new(hi), true);
+            assert_eq!(between(0, 4), Some(false), "2 lies between Kept(1) and 3");
+            assert_eq!(
+                between(4, 3),
+                None,
+                "RevInt rounds as an int and orders backwards"
+            );
+            assert_eq!(between(2, 4), None);
+        });
+    });
+}
+
+#[test]
 fn two_bounds_are_ordered_where_python_orders_them() {
     // `compare` orders two refinement operands. Python orders numbers with
     // numbers and text with text and raises across the two, and a bound whose
@@ -529,7 +586,10 @@ fn a_fatal_signal_a_probe_raises_is_the_querys_answer() {
     // the core reads it as a decline, like any probe that raised, and `answer`
     // hands the signal back in place of whatever was decided without it. An
     // ordinary exception is a decline and nothing more, so the verdict stands.
-    // The literal probe runs the walk, whose own slot is the one kept there.
+    // Two steps are divided by the operand's own `%`, which runs here; two
+    // bounds are compared only where each operand is one the walk reads alike,
+    // so a class of the test's own is not asked there. The literal probe runs
+    // the walk, whose own slot is the one kept there.
     Python::attach(|py| {
         let module = PyModule::from_code(
             py,
@@ -538,7 +598,7 @@ fn a_fatal_signal_a_probe_raises_is_the_querys_answer() {
               \x20       self.raised = raised\n\
               \x20   def compared(self, other):\n\
               \x20       raise self.raised\n\
-              \x20   __eq__ = __lt__ = __gt__ = compared\n\
+              \x20   __eq__ = __lt__ = __gt__ = __mod__ = __rmod__ = compared\n\
               \x20   __hash__ = object.__hash__\n\
               def interrupted(value):\n\
               \x20   raise KeyboardInterrupt\n",
@@ -560,7 +620,7 @@ fn a_fatal_signal_a_probe_raises_is_the_querys_answer() {
 
         let held = pooled(vec![order("KeyboardInterrupt()"), one.clone_ref(py)]);
         let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
-        assert_eq!(oracle.compare(first, second), None, "a decline to the core");
+        assert_eq!(oracle.divides(second, first), None, "a decline to the core");
         let raised = oracle
             .answer("decided")
             .expect_err("the signal is the answer");
@@ -568,7 +628,7 @@ fn a_fatal_signal_a_probe_raises_is_the_querys_answer() {
 
         let held = pooled(vec![order("ValueError()"), one.clone_ref(py)]);
         let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
-        assert_eq!(oracle.compare(first, second), None);
+        assert_eq!(oracle.divides(second, first), None);
         assert_eq!(
             oracle.answer("decided").expect("a decline alone"),
             "decided"

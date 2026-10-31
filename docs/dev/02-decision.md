@@ -543,11 +543,19 @@ corpus of its own driving every question below
   admit, by the walk a validator of it runs: the question `leaf_subtype` asks
   of a literal's constant, asked of the texts a string subject is read by
   where its pattern's table is past the build's limit (`decided_by_its_texts`);
-- `compare` — order two pooled refinement bounds;
-- `no_int_between` — does the interval between two bounds admit no integer.
-  Read both ways: `bounds_unsatisfiable` takes `Some(true)` as an empty integer
-  refinement, and `bounded_integer_verdict` takes `Some(false)` as an integer
-  that is a value of one;
+- `compare` — order two pooled refinement bounds. An operand the walk reads
+  through another order declines: `x >= b` reads a builtin subclass's operand
+  through the builtin's storage, or through the reflected method the subclass
+  overrides, so a subclass with an `__eq__` or an order of its own -- `Mod7(1)
+  == 8` -- is one bound to `==` and another to membership. A class of no
+  builtin declines unless it is exactly one of the standard library's value
+  types the trust base names: Python implies no relationship among its
+  comparison operators, and the walk reads `>=` alone;
+- `no_int_between` — does the interval between two bounds admit no integer,
+  declining on the same operands, which `floor` and `ceil` round as the
+  builtin. Read both ways: `bounds_unsatisfiable` takes `Some(true)` as an
+  empty integer refinement, and `bounded_integer_verdict` takes `Some(false)`
+  as an integer that is a value of one;
 - `divides` — does one pooled step divide another, which settles an inclusion
   between two `MultipleOf` refinements: every multiple of `m` is a multiple of
   `s` when `s` divides `m`, whatever the size of either. The operator is `%`,

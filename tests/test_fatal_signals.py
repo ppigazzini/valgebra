@@ -17,6 +17,7 @@ import subprocess
 import sys
 import textwrap
 import typing
+from fractions import Fraction
 from typing import TYPE_CHECKING, Annotated, Literal
 
 import annotated_types as at
@@ -26,6 +27,7 @@ from valgebra import ValidationError, Validator
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
+    from types import FrameType
 
 # The signals that must propagate. KeyboardInterrupt/SystemExit are base
 # exceptions that are not ordinary exceptions; MemoryError/RecursionError *are*
@@ -318,16 +320,21 @@ def forgetting_annotated() -> Iterator[None]:
     _forget_annotated()
 
 
-class _LoudBound(int):
-    """An integer bound whose order comparisons raise the signal it was given."""
+def _raising_in_fractions(signal: type[BaseException]) -> Callable[..., None]:
+    """Make a profile hook raising `signal` where a function of `fractions` starts.
 
-    signal: type[BaseException] = KeyboardInterrupt
+    A bound is ordered only where its operand orders as the walk reads it, so no
+    class of the test's own is asked; a `Fraction` is, and its methods are
+    Python's. A profile hook raising at their start raises inside the ordering,
+    as a signal arriving there does, and the interpreter unsets it as it raises.
+    """
 
-    def _compared(self, _other: object) -> bool:
-        raise self.signal
+    def hook(frame: FrameType, event: str, arg: object) -> None:
+        del arg
+        if event == "call" and frame.f_code.co_filename.endswith("fractions.py"):
+            raise signal
 
-    __lt__ = __gt__ = __le__ = __ge__ = _compared
-    __hash__ = int.__hash__
+    return hook
 
 
 @pytest.mark.usefixtures("forgetting_annotated")
@@ -355,9 +362,13 @@ def test_a_fatal_signal_in_a_relation_query_propagates(
     with pytest.raises(signal):
         probe.is_equivalent(refined)
 
-    loud = type("Loud", (_LoudBound,), {"signal": signal})
-    with pytest.raises(signal):
-        Validator(Annotated[int, at.Gt(loud(5)), at.Lt(1)]).is_empty()
+    bounds = Validator(Annotated[int, at.Gt(Fraction(5)), at.Lt(1)])
+    sys.setprofile(_raising_in_fractions(signal))
+    try:
+        with pytest.raises(signal):
+            bounds.is_empty()
+    finally:
+        sys.setprofile(None)
 
 
 @pytest.mark.parametrize("signal", FATAL)
