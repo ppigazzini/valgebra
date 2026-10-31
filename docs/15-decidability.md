@@ -134,7 +134,8 @@ answers `"undecided"`.
   two pin different types. The rule reads the constant's type and applies only to
   the builtin scalars, whose equality is Python's own, and to any type that
   compares by *identity* -- which an enumeration does unless it says otherwise,
-  so two of its members are two values and a meet of them is empty. An `IntEnum`
+  so two of its members are two values and a meet of them is empty, and which
+  3.15's `sentinel` does by an `__eq__` of its own. An `IntEnum`
   says otherwise: its members equal the integers they carry, and a meet of two of
   them stays conservative. Whatever its constants are, a finite set of them is
   not a kind with infinitely many values, and its complement holds a value --

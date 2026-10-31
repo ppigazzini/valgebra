@@ -1,3 +1,4 @@
+import builtins
 import enum
 from fractions import Fraction
 from typing import Literal
@@ -141,3 +142,53 @@ def test_none_is_below_a_schema_where_its_value_is() -> None:
     assert Validator(None).relation_to(member) == "not_subset"
     assert intersection(None, complement(member)).relation_to(nothing) == "not_subset"
     assert Validator(None).relation_to(union(member, None)) == "subset"
+
+
+_SENTINEL = getattr(builtins, "sentinel", None)
+
+
+# THEORY: a-constant-is-the-values-equal-to-it
+@pytest.mark.skipif(_SENTINEL is None, reason="a builtin from 3.15 (PEP 661)")
+def test_a_sentinel_compares_by_identity() -> None:
+    """Two sentinels are two values, and one is a value of its literal.
+
+    `sentinel.__eq__` is the type's own, and answers `True` for the sentinel
+    itself alone, so two sentinels of one name are unequal as two `object()`s
+    are.
+    """
+    assert _SENTINEL is not None
+    first, second = _SENTINEL("Missing"), _SENTINEL("Missing")
+    assert first != second
+    assert Validator(first).is_valid(first)
+    assert not Validator(first).is_valid(second)
+    both = intersection(Validator(first), Validator(second))
+    assert both.relation_to(nothing) == "subset"
+    assert Validator(first).relation_to(nothing) == "not_subset"
+    assert Validator(first).relation_to(Validator(second)) == "not_subset"
+
+
+class _FakesStaticFlags(type):
+    """Answers `__flags__` without `Py_TPFLAGS_HEAPTYPE`, as a static type's."""
+
+    def __getattribute__(cls, name: str) -> object:
+        value = super().__getattribute__(name)
+        return value & ~(1 << 9) if name == "__flags__" else value
+
+
+def test_a_class_named_sentinel_is_not_the_builtin() -> None:
+    """A class is the interpreter's `sentinel` by the flags Python set.
+
+    One named `builtins.sentinel`, whose metaclass answers `__flags__` as a
+    static type's and whose `==` holds every value, is a class statement's: two
+    of its instances are equal, so the meet of their literals holds both.
+    """
+    namespace = {
+        "__module__": "builtins",
+        "__eq__": lambda _self, _other: True,
+        "__hash__": object.__hash__,
+    }
+    posing = _FakesStaticFlags("sentinel", (), namespace)
+    first, second = posing(), posing()
+    both = intersection(Validator(first), Validator(second))
+    assert both.is_valid(first)
+    assert both.relation_to(nothing) != "subset"

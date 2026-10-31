@@ -49,10 +49,16 @@ answer of its own, or a repair to a change not yet released.
 - fix: a class's layout is the one Python laid down
 - feat: a finite set of constants misses a value of every kind with infinitely many
 - feat: None's kind is the literal of its one value
+- feat: a sentinel compares by identity
 
 -->
 
 ### Added
+
+- **A sentinel compares by identity.** Python 3.15's `sentinel` defines an
+  `__eq__` that answers as identity does, so two sentinels are two values:
+  the meet of their literals is `subset` of `nothing`, and one's literal is
+  `not_subset` of it, where both were `undecided`.
 
 - **`None`'s kind is the literal of its one value.** `NoneType` admits no
   subclass, so `None` is its one value, and the kind is below a set exactly
