@@ -77,6 +77,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an enumeration is its members to a refutation as to a proof
 - fix: a class prints as its name only where its name builds the meet
 - fix: a signaling Decimal NaN is refused as a bound or a step, as nan is
+- fix: no value is longer than sys.maxsize
 
 -->
 
@@ -349,6 +350,15 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **No value is longer than `sys.maxsize`.** CPython counts a length in a
+  `Py_ssize_t` and `len()` raises past `sys.maxsize`, while a length bound was
+  read up to 2**64. `Annotated[str, MinLen(2**63)]`, which admits no value, was
+  refuted below `nothing`, and `list[int]`, `tuple[int, ...]`, `set[int]` and
+  `frozenset[int]` were refuted below `MaxLen(sys.maxsize)` on a value one
+  longer, which no container is. A length bound past `sys.maxsize` is now
+  refused at build as one no value has, and a bound at it refutes nothing for
+  being exceeded.
 
 - **A signaling `Decimal` NaN is refused as a bound or a step, as `nan` is.**
   `Annotated[int, Ge(Decimal("sNaN"))]` and `MultipleOf(Decimal("sNaN"))`

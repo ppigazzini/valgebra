@@ -1350,6 +1350,14 @@ impl SeqShape {
     }
 }
 
+/// The longest length a value has, `sys.maxsize`.
+///
+/// The data model has `CPython` count a length in a `Py_ssize_t` and `len()`
+/// raise past `sys.maxsize`, which is that type's maximum, `isize::MAX` on the
+/// platform. A length bound reads lengths up to this one, and a value one
+/// longer is no value: no list is longer than `MaxLen(LONGEST)` lets through.
+pub const LONGEST: usize = isize::MAX.unsigned_abs();
+
 /// A constraint narrowing a [`Schema::Refine`] base set.
 ///
 /// Comparison and predicate operands live in the validator's object pool; the
@@ -1378,7 +1386,8 @@ pub enum Constraint {
     /// `value < pool[i]`.
     Lt(OperandIx),
     /// The value holds at least `n` items: the count a builtin container
-    /// stores, and `len(value)` for any other value.
+    /// stores, and `len(value)` for any other value. `n` is at most
+    /// [`LONGEST`], the longest length a value has.
     MinLen(usize),
     /// The value holds at most `n` items, counted as [`Constraint::MinLen`]
     /// counts them.

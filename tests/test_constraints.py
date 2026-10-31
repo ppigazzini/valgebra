@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 import numbers
+import sys
 import typing
 from decimal import Decimal
 from fractions import Fraction
@@ -629,6 +630,37 @@ def test_a_number_equal_to_a_length_is_read_as_that_length() -> None:
     finally:
         for cleanup in getattr(typing, "_cleanups", ()):
             cleanup()
+
+
+def test_a_length_past_the_longest_a_value_has_is_refused() -> None:
+    """No value is longer than `sys.maxsize`, the core's `LONGEST`.
+
+    CPython counts a length in a `Py_ssize_t`, and `len()` raises past it, so a
+    bound past it names no length a value can have and is refused, as a whole
+    float equal to one is; the bound at it builds. Nothing is refuted below it
+    for holding a longer value, and one below it is refuted at the longest.
+    """
+    longest = sys.maxsize
+    for past in (
+        at.MinLen(longest + 1),
+        at.MaxLen(longest + 1),
+        at.MinLen(float(longest + 1)),  # ty: ignore[invalid-argument-type]
+    ):
+        with pytest.raises(ValueError, match="must be a length a value can have"):
+            Validator(Annotated[str, past])
+    for subject, base in (
+        (list[int], list[int]),
+        (set[int], set[int]),
+        (Annotated[str, at.MinLen(3)], str),
+    ):
+        assert (
+            Validator(subject).relation_to(Annotated[base, at.MaxLen(longest)])
+            != "not_subset"
+        )
+        assert (
+            Validator(subject).relation_to(Annotated[base, at.MaxLen(longest - 1)])
+            == "not_subset"
+        )
 
 
 def test_the_lengths_a_value_can_have_still_build() -> None:

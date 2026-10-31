@@ -15,7 +15,7 @@
 //! that cannot name a value declines, and the pair stays undecided.
 
 use crate::descr::regular::{Alphabet, RegularSet};
-use crate::ir::{ClassIx, CollKind, Constraint, Schema, SeqKind};
+use crate::ir::{ClassIx, CollKind, Constraint, LONGEST, Schema, SeqKind};
 use crate::kind::{Kind, Region, Regions};
 use crate::verdict::{Relation, Verdict};
 
@@ -266,7 +266,9 @@ impl Schema {
     /// the emptiness reading proves -- a list of a type no value has is the
     /// empty list alone. Read off the bare shape, for the reason
     /// `shorter_than` gives: a constraint this does not read may bound the
-    /// subject's own length.
+    /// subject's own length. The value one past the bound is a value only where
+    /// that length is one a value has, so a bound at [`LONGEST`] refuses nothing
+    /// here: no list is longer than `sys.maxsize`.
     ///
     /// A set holds each member once, so its value one past the bound is that
     /// many members its element holds apart under `==`
@@ -279,6 +281,7 @@ impl Schema {
         if let Schema::Coll { element, .. } = self {
             return longest(constraints.iter())
                 .and_then(|most| most.checked_add(1))
+                .filter(|wanted| *wanted <= LONGEST)
                 .is_some_and(|wanted| holds_apart(element, wanted, cx.oracle));
         }
         let Schema::Seq { shape, .. } = self else {
@@ -286,9 +289,7 @@ impl Schema {
         };
         let (Some(element), true) = (
             shape.tail.as_deref(),
-            constraints
-                .iter()
-                .any(|constraint| matches!(constraint, Constraint::MaxLen(_))),
+            longest(constraints.iter()).is_some_and(|most| most < LONGEST),
         ) else {
             return false;
         };
@@ -328,7 +329,8 @@ impl Schema {
     /// ([`every_length_from`](Self::every_length_from)), and where its
     /// constraints are length bounds alone, none excludes such a value: the
     /// subject holds one of each length from the larger of that least and its
-    /// `MinLen` to its `MaxLen`. A length the supertype's bounds leave out --
+    /// `MinLen` to its `MaxLen`, or to [`LONGEST`] where it writes none, since
+    /// no value is longer. A length the supertype's bounds leave out --
     /// below its `MinLen`, or above its `MaxLen` -- is then a value outside the
     /// supertype whatever its base: `Annotated[str, MaxLen(256)]` holds a text
     /// of 65 code points, which `MaxLen(64)` refuses. The entailment the other
@@ -356,12 +358,12 @@ impl Schema {
             return false;
         };
         let least = from.max(shortest(constraints.iter()));
-        let most = longest(constraints.iter());
-        if most.is_some_and(|most| most < least) {
+        let most = longest(constraints.iter()).unwrap_or(LONGEST).min(LONGEST);
+        if most < least {
             return false;
         }
         least < shortest(theirs.iter())
-            || longest(theirs.iter()).is_some_and(|allowed| most.is_none_or(|most| most > allowed))
+            || longest(theirs.iter()).is_some_and(|allowed| most > allowed)
     }
 
     /// The least length from which this shape holds a value of every length,

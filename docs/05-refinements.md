@@ -575,7 +575,10 @@ number is that length: `MaxLen(2.0)`, `MaxLen(Fraction(2))` and `MaxLen(True)`
 are `MaxLen(2)` and `MaxLen(1)`, which `typing`'s cache would hand them anyway,
 and a bound equal to no whole length, `MaxLen(2.5)`, is refused. So is a number
 of any other type, a subclass of those three included, whose `int()` and `==`
-are its own code rather than the arithmetic `len` is compared by. They are read through the grouping
+are its own code rather than the arithmetic `len` is compared by. So is a length
+past `sys.maxsize`: CPython counts a length in a `Py_ssize_t` and `len()` raises
+past it, so no value is longer, and `MinLen(2**63)` would be the empty set
+written as a bound. They are read through the grouping
 protocol `annotated_types` documents — a marker that stands for several
 constraints answers for them — so **a marker of your own written that way is
 read the same way**:

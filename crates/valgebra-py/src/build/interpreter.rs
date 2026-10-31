@@ -8,7 +8,7 @@ use pyo3::exceptions::PyKeyboardInterrupt;
 use rusty_fork::rusty_fork_test;
 use std::ffi::CString;
 use valgebra_core::{
-    Carries, Constraint, MapClause, SeqShape, StepGroup, carries_division, carries_length,
+    Carries, Constraint, LONGEST, MapClause, SeqShape, StepGroup, carries_division, carries_length,
     carries_pattern, carries_through,
 };
 
@@ -1038,7 +1038,9 @@ fn a_group_naming_no_length_is_refused_as_its_bound_is() {
 /// A length bound equal to a whole number is that length: `len` is an `int`, and
 /// Python compares one with a `float`, a `Fraction` or a `Decimal` exactly. A
 /// number with a fraction, a complex one, and an object of any other type --
-/// however its `__int__` and `__eq__` answer -- name no length, and are refused.
+/// however its `__int__` and `__eq__` answer -- name no length, and are refused,
+/// and so is a length past `sys.maxsize`, [`LONGEST`], which no value has, as an
+/// `int` and as the whole float equal to it; `sys.maxsize` itself builds.
 #[test]
 fn a_number_equal_to_a_whole_length_is_that_length() {
     Python::attach(|py| {
@@ -1061,6 +1063,8 @@ fn a_number_equal_to_a_whole_length_is_that_length() {
              lambda self, other: True, '__hash__': float.__hash__})(2.5))]",
             "typing.Annotated[str, at.MinLen(type('Whole', (float,), {})(2.0))]",
             "typing.Annotated[str, at.MinLen(__import__('fractions').Fraction(5, 2))]",
+            "typing.Annotated[str, at.MinLen(__import__('sys').maxsize + 1)]",
+            "typing.Annotated[str, at.MinLen(float(__import__('sys').maxsize + 1))]",
         ] {
             match built(py, expression) {
                 Err(error) => assert!(
@@ -1070,6 +1074,14 @@ fn a_number_equal_to_a_whole_length_is_that_length() {
                 Ok(schema) => panic!("{expression} built {schema} instead of refusing"),
             }
         }
+        assert_eq!(
+            built(
+                py,
+                "typing.Annotated[str, at.MinLen(__import__('sys').maxsize)]"
+            )
+            .expect("the longest length builds"),
+            format!("Annotated[str, MinLen({LONGEST})]")
+        );
     });
 }
 

@@ -269,7 +269,8 @@ The soundness is relative to a small, explicit trust base:
   own rules make a fact about the value: an attribute, which is a reading of
   the value; a constant's `==`, which a record's key lookup asks too; a bound's
   comparison; a length; and a step's `%`. The language reference sets rules
-  for comparisons, and the data model has `__len__` return the object's length;
+  for comparisons, and the data model has `__len__` return the object's length,
+  at most `sys.maxsize`, past which `len()` raises, so no value is longer;
   not-a-number is the exception those rules name, and it is read as one:
   `Literal[nan]` is empty and `Ge(nan)` is refused. A value whose method
   answers two calls differently is outside the sets the law is about: `P`

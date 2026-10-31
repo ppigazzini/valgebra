@@ -6,7 +6,7 @@ use crate::descr::classes::{Class, Reach};
 use crate::descr::lower::{Operand, lower_widened};
 use crate::descr::regular::{Alphabet, RegularSet};
 use crate::ir::{Attribute, CollKind, Field, MapClause, OperandIx, SeqKind, Spelling};
-use crate::ir::{DefIx, Openness};
+use crate::ir::{DefIx, LONGEST, Openness};
 use crate::kind::Kind;
 use crate::oracle::tests::Pure;
 
@@ -9797,6 +9797,50 @@ fn a_union_holding_a_complement_is_asked_as_its_difference() {
     );
     let the_call_beside = Schema::Union(vec![called, not(constant(1))].into());
     assert_eq!(both(&a_call_or_none, &the_call_beside), Relation::Unknown);
+}
+
+/// No value is longer than [`LONGEST`], `sys.maxsize`: the data model has
+/// `len()` raise past it. So a bound at it leaves no length out, and nothing is
+/// refuted below it for holding a longer value: a list, a set of integers and
+/// a word longer than three are each declined there, and each is refuted one
+/// below it, where a value of the longest length is the one left out. A subject
+/// bounded past it is read as reaching it and no further.
+#[test]
+fn no_value_is_longer_than_the_longest_length() {
+    let relation =
+        |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &NoLeafRelations, &[]);
+    let bounded = |base: Schema, constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(base),
+        constraints: constraints.into(),
+    };
+    let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let set_of_ints = Schema::set(Schema::Int);
+    let long_words = bounded(Schema::Str, vec![Constraint::MinLen(3)]);
+    for (subject, base) in [
+        (ints.clone(), ints.clone()),
+        (set_of_ints.clone(), set_of_ints.clone()),
+        (long_words.clone(), Schema::Str),
+    ] {
+        let at_most = |most| bounded(base.clone(), vec![Constraint::MaxLen(most)]);
+        assert_ne!(
+            relation(&subject, &at_most(LONGEST)),
+            Relation::Fails,
+            "{subject:?} holds no value longer than the longest"
+        );
+        assert_eq!(
+            relation(&subject, &at_most(LONGEST - 1)),
+            Relation::Fails,
+            "{subject:?} holds a value of the longest length"
+        );
+    }
+    let unbounded_past = bounded(Schema::Str, vec![Constraint::MaxLen(usize::MAX)]);
+    assert_ne!(
+        relation(
+            &unbounded_past,
+            &bounded(Schema::Str, vec![Constraint::MaxLen(LONGEST)])
+        ),
+        Relation::Fails
+    );
 }
 
 // THEORY: a-refinement-narrows-its-base

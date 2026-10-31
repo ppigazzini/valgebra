@@ -16,7 +16,7 @@ use pyo3::types::{
     PyTuple, PyType,
 };
 use valgebra_core::{
-    Carries, Constraint, Kind, OperandIx, OrderGroup, Schema, StepGroup, carries_division,
+    Carries, Constraint, Kind, LONGEST, OperandIx, OrderGroup, Schema, StepGroup, carries_division,
     carries_length, carries_pattern,
 };
 
@@ -1109,13 +1109,18 @@ fn parse_grouped<'py>(
 /// `Annotated` by equality, `MaxLen(2.0)` equal to `MaxLen(2)`, so refusing the
 /// float would refuse a correct `MaxLen(2)` wherever the float was written
 /// first -- the reason a truth value is read as the length it equals.
+///
+/// A length past `sys.maxsize`, [`LONGEST`], is refused as one no value has:
+/// `CPython` counts a length in a `Py_ssize_t`, and `len()` raises past it. Read,
+/// `MinLen(2**63)` is the empty set written as a bound, and the refutations at
+/// any length named a value longer than any there is.
 fn length_bound(probe: Probe, bound: &Bound<'_, PyAny>) -> PyResult<usize> {
     let py = bound.py();
     match bound.extract::<usize>() {
-        Ok(n) => Ok(n),
+        Ok(n) if n <= LONGEST => Ok(n),
         Err(err) if is_fatal(&err, py) => Err(err),
-        Err(_) => {
-            if let Some(n) = whole_length(bound)? {
+        _ => {
+            if let Some(n) = whole_length(bound)?.filter(|n| *n <= LONGEST) {
                 return Ok(n);
             }
             // A complex number equal to a whole length is no length -- `len`
