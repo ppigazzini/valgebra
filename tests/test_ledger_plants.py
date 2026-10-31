@@ -3694,9 +3694,15 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "docs/dev/02-decision.md",
-            "- `compare` — order two pooled refinement bounds;\n",
-            "- `compare` — order two pooled refinement bounds;\n"
-            "- `compare` — order two pooled refinement bounds;\n",
+            (
+                "- `compare` — order two pooled refinement bounds."
+                " An operand the walk reads\n"
+            ),
+            (
+                "- `compare` — order two pooled refinement bounds."
+                " An operand the walk reads\n"
+            )
+            * 2,
         ),
         trips=("test_the_page_lists_each_question_once",),
     ),

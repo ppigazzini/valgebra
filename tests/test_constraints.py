@@ -7,6 +7,8 @@ admits invalid values, so every constraint is checked in both directions.
 
 from __future__ import annotations
 
+import datetime as dt
+import numbers
 import typing
 from decimal import Decimal
 from fractions import Fraction
@@ -15,7 +17,7 @@ from typing import TYPE_CHECKING, Annotated
 import annotated_types as at
 import pytest
 
-from valgebra import Regex, ValidationError, Validator
+from valgebra import Regex, ValidationError, Validator, nothing
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -641,3 +643,161 @@ def test_a_set_of_a_narrow_element_cannot_be_longer_than_the_element() -> None:
     assert not Validator(Annotated[set[int], at.MinLen(9)]).is_empty()
     assert not Validator(Annotated[list[None], at.MinLen(9)]).is_empty()
     assert Validator(Annotated[list[None], at.MinLen(2)]).is_valid([None, None])
+
+
+class _Mod7(int):
+    """An ``int`` equal to every integer it is congruent to modulo 7."""
+
+    __slots__ = ()
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, int) and (int(self) - int(other)) % 7 == 0
+
+    def __hash__(self) -> int:
+        return int(self) % 7
+
+
+class _CaseOrder(str):
+    """A ``str`` equal and ordered by its lower case."""
+
+    __slots__ = ()
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, str) and self.lower() == other.lower()
+
+    def __hash__(self) -> int:
+        return hash(self.lower())
+
+    def __lt__(self, other: str) -> bool:
+        return self.lower() < other.lower()
+
+    def __le__(self, other: str) -> bool:
+        return self.lower() <= other.lower()
+
+    def __gt__(self, other: str) -> bool:
+        return self.lower() > other.lower()
+
+    def __ge__(self, other: str) -> bool:
+        return self.lower() >= other.lower()
+
+
+class _Reversed(int):
+    """An ``int`` ordered backwards, with ``int``'s own equality."""
+
+    __slots__ = ()
+
+    def __lt__(self, other: int) -> bool:
+        return int.__gt__(self, other)
+
+    def __le__(self, other: int) -> bool:
+        return int.__ge__(self, other)
+
+    def __gt__(self, other: int) -> bool:
+        return int.__lt__(self, other)
+
+    def __ge__(self, other: int) -> bool:
+        return int.__le__(self, other)
+
+
+class _Kept(int):
+    """An ``int`` subclass keeping every method of ``int``."""
+
+    __slots__ = ()
+
+
+def test_a_bound_of_a_builtin_subclass_with_its_own_order_is_not_compared() -> None:
+    """The walk reads such an operand otherwise than ``==`` and the order do.
+
+    ``x >= b`` reads a builtin subclass's operand through the builtin's storage,
+    or through the reflected method the subclass overrides: ``1 >= _Mod7(1)``
+    reads ``1``, though ``_Mod7(1) == 8``, and ``0 >= _Reversed(5)`` holds. Two
+    such bounds compared as their ``==`` and order say would be one bound to
+    the relations and two to membership.
+    """
+    mod7 = _fresh(lambda: Annotated[int, at.Ge(_Mod7(1))])
+    eight = _fresh(lambda: Annotated[int, at.Ge(8)])
+    assert mod7.is_valid(1)
+    assert not eight.is_valid(1)
+    assert not mod7.is_equivalent(eight)
+    box = _fresh(lambda: Annotated[int, at.Gt(_Mod7(1)), at.Lt(8)])
+    assert box.is_valid(2)
+    assert box.relation_to(nothing) != "subset"
+
+    cased = _fresh(lambda: Annotated[str, at.Ge(_CaseOrder("a"))])
+    plain = _fresh(lambda: Annotated[str, at.Ge("a")])
+    assert cased.is_valid("B")
+    assert not plain.is_valid("B")
+    assert cased.relation_to(plain) != "subset"
+    cased_box = _fresh(lambda: Annotated[str, at.Ge(_CaseOrder("b")), at.Lt("b")])
+    assert cased_box.is_valid("C")
+    assert cased_box.relation_to(nothing) != "subset"
+
+    backwards = _fresh(lambda: Annotated[int, at.Ge(_Reversed(5))])
+    assert backwards.is_valid(0)
+    assert backwards.relation_to(_fresh(lambda: Annotated[int, at.Ge(5)])) != "subset"
+    empty = _fresh(lambda: Annotated[int, at.Gt(5), at.Gt(_Reversed(5))])
+    assert not any(empty.is_valid(n) for n in range(-20, 20))
+    assert empty.relation_to(nothing) != "not_subset"
+    holds = _fresh(lambda: Annotated[int, at.Gt(_Reversed(5)), at.Lt(_Reversed(3))])
+    assert holds.is_valid(4)
+    assert holds.relation_to(nothing) != "subset"
+
+
+def test_a_bound_of_a_builtin_subclass_keeping_its_order_is_compared() -> None:
+    """A subclass keeping every method of its builtin orders as the builtin."""
+    kept = _fresh(lambda: Annotated[int, at.Ge(_Kept(1))])
+    assert kept.relation_to(_fresh(lambda: Annotated[int, at.Ge(0)])) == "subset"
+    assert _fresh(lambda: Annotated[int, at.Gt(_Kept(3)), at.Lt(4)]).is_empty()
+
+
+class _OwnNumber:
+    """A number of its own, registered as `numbers.Real`, equal to each other.
+
+    Its `==` holds every instance and its order compares the number it holds,
+    so two of its bounds are one to `==` and two to `>=`.
+    """
+
+    __slots__ = ("value",)
+
+    def __init__(self, value: float) -> None:
+        self.value = value
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _OwnNumber)
+
+    def __hash__(self) -> int:
+        return 0
+
+    def __lt__(self, other: float) -> bool:
+        return self.value < other
+
+    def __le__(self, other: float) -> bool:
+        return self.value <= other
+
+    def __gt__(self, other: float) -> bool:
+        return self.value > other
+
+    def __ge__(self, other: float) -> bool:
+        return self.value >= other
+
+
+numbers.Real.register(_OwnNumber)
+
+
+def test_a_bound_of_a_class_of_its_own_is_not_compared() -> None:
+    """Python implies no relationship among a class's comparison operators.
+
+    The walk reads `x >= b` alone, so `Ge(_OwnNumber(2.5))` over the integers
+    holds 3 and `Ge(_OwnNumber(4))` does not, while `==` calls the two operands
+    equal. Neither bound is compared with another. A date, the standard
+    library's, orders as its `==` says, and its bounds are.
+    """
+    low = _fresh(lambda: Annotated[int, at.Ge(_OwnNumber(2.5))])  # ty: ignore[invalid-argument-type]
+    high = _fresh(lambda: Annotated[int, at.Ge(_OwnNumber(4))])  # ty: ignore[invalid-argument-type]
+    assert low.is_valid(3)
+    assert not high.is_valid(3)
+    assert not low.is_equivalent(high)
+    assert low.relation_to(high) != "subset"
+    later = Validator(Annotated[dt.date, at.Ge(dt.date(2020, 1, 2))])
+    earlier = Annotated[dt.date, at.Ge(dt.date(2020, 1, 1))]
+    assert later.relation_to(earlier) == "subset"

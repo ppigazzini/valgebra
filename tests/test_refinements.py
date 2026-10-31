@@ -5,8 +5,10 @@ import math
 import operator
 import re
 import sys
+import types
 import typing
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Annotated, Literal
 
 import annotated_types as at
@@ -660,29 +662,37 @@ def test_a_subtyping_query_does_not_reason_about_a_predicate() -> None:
 
 
 def test_an_emptiness_query_runs_a_bound_comparison() -> None:
+    """The bounds are ordered through their own comparisons.
+
+    A `Fraction` is one of the standard library's value types, so the relations
+    order two of them through its methods, as the walk does, and those methods
+    are Python's, which a profile hook sees start. A class of the test's own
+    orders as unknown and is declined instead (`test_constraints.py`), so it is
+    not the instrument here.
+    """
     compared: list[str] = []
 
-    class Counted(int):
-        """An int that records the order comparisons a decision performs on it."""
+    def hook(frame: types.FrameType, event: str, arg: object) -> None:
+        del arg
+        if event == "call" and frame.f_code.co_filename.endswith("fractions.py"):
+            compared.append(frame.f_code.co_name)
 
-        def __gt__(self, other: int, /) -> bool:
-            compared.append("gt")
-            return super().__gt__(other)
-
-        def __lt__(self, other: int, /) -> bool:
-            compared.append("lt")
-            return super().__lt__(other)
-
-    # `typing.Annotated` caches by the value of its metadata, and a `Counted` is
-    # equal to the plain int it wraps, so a spec any other test already built
+    # `typing.Annotated` caches by the value of its metadata, and a `Fraction` is
+    # equal to the plain int it holds, so a spec any other test already built
     # comes back holding *that* test's operands and this one instruments nothing.
     # The bounds are values nothing else uses, and the premise is asserted rather
     # than assumed: the failure to catch is the silent one.
-    low, high = Counted(60_013), Counted(-60_013)
+    low, high = Fraction(60_013), Fraction(-60_013)
     spec = Annotated[int, at.Ge(low), at.Le(high)]
     assert spec.__metadata__[0].ge is low, "typing returned a cached spec"
 
-    assert Validator(spec).is_empty()
+    validator = Validator(spec)
+    sys.setprofile(hook)
+    try:
+        empty = validator.is_empty()
+    finally:
+        sys.setprofile(None)
+    assert empty
     assert compared, "deciding the bound conjunction ordered the two operands"
 
 

@@ -278,7 +278,57 @@ fn equal_values_read_alike(value: &Bound<'_, PyAny>) -> PyResult<bool> {
     }
     let py = value.py();
     let ty = value.get_type();
-    let eq = intern!(py, "__eq__");
+    if let Some(builtin) = builtin_base(&ty)? {
+        return keeps(&ty, &builtin, &[intern!(py, "__eq__")]);
+    }
+    if compares_by_identity(&ty)? {
+        return Ok(true);
+    }
+    is_a_value_type(&ty)
+}
+
+/// Whether a bound's operand orders as the walk reads it: an exact builtin, a
+/// builtin subclass keeping every comparison and rounding method of its
+/// builtin, or exactly one of the value types whose order is their equality's
+/// ([`is_a_value_type`]).
+///
+/// The walk asks `x >= b` of a value `x`, which reads a builtin subclass's
+/// operand through the builtin's storage unless the subclass overrides the
+/// reflected method, while the rules order two operands through `==` first
+/// and round one through `__floor__` and `__ceil__`. A subclass with its own
+/// `__eq__` is one bound to the rules and another to the walk -- `Mod7(1) == 8`,
+/// and `1 >= Mod7(1)` reads `1` -- and one with its own order reads the other
+/// way round. Any other class orders as unknown: Python implies no
+/// relationship among a class's comparison operators (the data model, "Basic
+/// customization"), and the walk reads `>=` alone.
+fn orders_as_the_walk_reads(value: &Bound<'_, PyAny>) -> PyResult<bool> {
+    if kind_of(value).is_some() {
+        return Ok(true);
+    }
+    let py = value.py();
+    let ty = value.get_type();
+    let Some(builtin) = builtin_base(&ty)? else {
+        return is_a_value_type(&ty);
+    };
+    keeps(
+        &ty,
+        &builtin,
+        &[
+            intern!(py, "__eq__"),
+            intern!(py, "__lt__"),
+            intern!(py, "__le__"),
+            intern!(py, "__gt__"),
+            intern!(py, "__ge__"),
+            intern!(py, "__floor__"),
+            intern!(py, "__ceil__"),
+        ],
+    )
+}
+
+/// The builtin whose storage the atoms read a value of `ty` through -- `int`,
+/// `float`, `str` or `bytes` -- where `ty` derives from one.
+fn builtin_base<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Bound<'py, PyType>>> {
+    let py = ty.py();
     for builtin in [
         PyInt::type_object(py),
         PyFloat::type_object(py),
@@ -286,13 +336,28 @@ fn equal_values_read_alike(value: &Bound<'_, PyAny>) -> PyResult<bool> {
         PyBytes::type_object(py),
     ] {
         if ty.is_subclass(&builtin)? {
-            return Ok(ty.getattr(eq)?.is(&builtin.getattr(eq)?));
+            return Ok(Some(builtin));
         }
     }
-    if compares_by_identity(&ty)? {
-        return Ok(true);
+    Ok(None)
+}
+
+/// Whether `ty` resolves each of `names` its builtin has to what the builtin
+/// resolves it to. A subclass inherits every name the builtin has, so one the
+/// builtin lacks is no method of its to keep.
+fn keeps(
+    ty: &Bound<'_, PyType>,
+    builtin: &Bound<'_, PyType>,
+    names: &[&Bound<'_, PyString>],
+) -> PyResult<bool> {
+    for name in names {
+        if let Some(theirs) = builtin.getattr_opt(*name)?
+            && !ty.getattr(*name)?.is(&theirs)
+        {
+            return Ok(false);
+        }
     }
-    is_a_value_type(&ty)
+    Ok(true)
 }
 
 impl PoolRelations<'_, '_> {
@@ -1285,9 +1350,15 @@ impl LeafRelations for PoolRelations<'_, '_> {
     fn compare(&self, left: OperandIx, right: OperandIx) -> Option<core::cmp::Ordering> {
         // Order two refinement-bound values by Python's own comparison, so the
         // core can decide an unsatisfiable bound conjunction. An incomparable
-        // pair (a TypeError) leaves the bound undecided.
+        // pair (a TypeError) leaves the bound undecided, and so does an operand
+        // the walk reads through another order than this one.
         let left = self.literals.get(left.get())?.bind(self.py);
         let right = self.literals.get(right.get())?.bind(self.py);
+        if !(self.heard(orders_as_the_walk_reads(left))?
+            && self.heard(orders_as_the_walk_reads(right))?)
+        {
+            return None;
+        }
         self.heard(left.compare(right))
     }
 
@@ -1332,6 +1403,13 @@ impl LeafRelations for PoolRelations<'_, '_> {
         let ceil = ceil.bind(self.py);
         let lo = self.literals.get(lo.get())?.bind(self.py);
         let hi = self.literals.get(hi.get())?.bind(self.py);
+        // An operand the walk orders otherwise than `floor` and `ceil` round it
+        // names no interval here.
+        if !(self.heard(orders_as_the_walk_reads(lo))?
+            && self.heard(orders_as_the_walk_reads(hi))?)
+        {
+            return None;
+        }
         // A non-real bound (`math.floor` raises a `TypeError`) or a non-finite one
         // (an `OverflowError`) leaves the rule undecided rather than guessing.
         let one = 1i64;
