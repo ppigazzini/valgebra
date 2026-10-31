@@ -293,6 +293,19 @@ built from, a refusal among them, and hands it back for that text again,
 found before the text is parsed. The memo is bounded by the bytes it holds,
 `COMPILED_BYTES`, and starts over past it.
 
+**A thread builds a product of two tables once** (`Products` in
+`descr/regular.rs`). A meet or a join of two languages is a function of the two
+tables and the operation, since each table is minimal and canonically numbered,
+and a relation over records keyed by strings meets the same few key sets over
+and over: one between two records nested past the depth the sets descend builds
+nine thousand products of thirteen hundred pairs. The memo is keyed by the two
+tables' addresses and holds both tables, so an address it holds is not reused
+while it is held; meet and join commute, so a pair is keyed in address order,
+and a product refused past `MAX_STATES` is held as the refusal it is. It is
+bounded by `COMPILED_BYTES` as the language memo is. The relations asked of the
+sets read 29% fewer instructions with it, and the length bounds 5%.
+`a_product_of_two_tables_is_built_once` in `descr/regular/tests.rs` holds it.
+
 **A map's key lands in the parts of the key partition it holds whole**
 (`key_cover` in `descr/lower.rs`): a kind, a `tuple` or `frozenset` of
 anything, a union of those, and a complement of one, which opens the parts its
