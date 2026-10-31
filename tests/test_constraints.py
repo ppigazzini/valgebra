@@ -414,6 +414,22 @@ def test_a_multiple_of_nan_is_refused() -> None:
         Validator(Annotated[float, at.MultipleOf(float("nan"))])
 
 
+@pytest.mark.parametrize("text", ["sNaN", "-sNaN", "NaN"])
+def test_a_decimal_nan_is_refused_as_a_float_nan_is(text: str) -> None:
+    """A `Decimal` not-a-number is the absence of an order too, signaling or not.
+
+    `Decimal("sNaN")` refuses the conversion to a float, and every comparison
+    or remainder with it raises `InvalidOperation`, which the walk reads as a
+    refusal: as a bound or a step it admits no value, as `nan` does.
+    """
+    nan = Decimal(text)
+    for marker in (at.Ge, at.Gt, at.Le, at.Lt):
+        with pytest.raises(ValueError, match="cannot be nan"):
+            Validator(Annotated[int, marker(nan)])
+    with pytest.raises(ValueError, match="MultipleOf\\(nan\\)"):
+        Validator(Annotated[Decimal, at.MultipleOf(nan)])
+
+
 @pytest.mark.parametrize("bound", NAN_BOUNDS)
 def test_an_order_bound_against_a_complex_number_is_refused(bound: str) -> None:
     """A complex number orders nothing either: `1 >= 1j` raises, as `1 >= 0j` does.

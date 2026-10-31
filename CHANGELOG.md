@@ -76,6 +76,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a TypedDict qualifier given as a type argument is refused
 - fix: an enumeration is its members to a refutation as to a proof
 - fix: a class prints as its name only where its name builds the meet
+- fix: a signaling Decimal NaN is refused as a bound or a step, as nan is
 
 -->
 
@@ -348,6 +349,15 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A signaling `Decimal` NaN is refused as a bound or a step, as `nan` is.**
+  `Annotated[int, Ge(Decimal("sNaN"))]` and `MultipleOf(Decimal("sNaN"))`
+  were built and admitted no value. The conversion to a float that reads `nan`
+  and the quiet `Decimal("NaN")` raises for a signaling one, and every
+  comparison or remainder with it raises `InvalidOperation`, which the walk
+  reads as a refusal. Both are refused at construction with the `ValueError`
+  `nan` gets, read by `Decimal.is_nan`, a subclass overriding that method
+  included.
 
 - **A class prints as its name only where its name builds the meet.** A class
   met with a shape or a record it does not declare printed as the class, which

@@ -111,7 +111,8 @@ fn equal_to_a_real(
     })
 }
 
-/// Refuse an order bound that orders nothing: `nan`, and a complex number.
+/// Refuse an order bound that orders nothing: a not-a-number, a float's or a
+/// `Decimal`'s, and a complex number.
 ///
 /// Every comparison with `nan` is false, so `Annotated[float, Ge(nan)]` admits
 /// **no value at all** -- and it is the empty set written as a bound, which no
@@ -125,18 +126,55 @@ fn equal_to_a_real(
 /// complex number are the absence of an order.
 pub(super) fn refuse_unordered_bound(attr: &str, bound: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = bound.py();
-    let unordered = unless_fatal(bound.extract::<f64>().map(f64::is_nan), py, false)?;
-    if unordered {
-        return Err(PyValueError::new_err(format!(
-            "{attr} cannot be nan: every comparison with nan is false, so the \
-             bound admits no value at all. Write the bound you mean, or `nothing` \
-             for the empty set"
-        )));
+    if unless_fatal(bound.extract::<f64>().map(f64::is_nan), py, false)? {
+        return Err(nan_bound(attr));
     }
-    if !is_a_builtin_number(bound) && unless_fatal(is_complex(bound), py, false)? {
-        return Err(complex_bound(attr, bound)?);
+    // A builtin number is ordered once it is not `nan`; the two questions
+    // below are a `Decimal`'s and a complex number's.
+    if !is_a_builtin_number(bound) {
+        if unless_fatal(is_a_decimal_nan(bound), py, false)? {
+            return Err(nan_bound(attr));
+        }
+        if unless_fatal(is_complex(bound), py, false)? {
+            return Err(complex_bound(attr, bound)?);
+        }
     }
     Ok(())
+}
+
+/// The refusal of a not-a-number bound, out of line as [`complex_bound`] is.
+#[cold]
+#[inline(never)]
+fn nan_bound(attr: &str) -> PyErr {
+    PyValueError::new_err(format!(
+        "{attr} cannot be nan: every comparison with nan is false, so the \
+         bound admits no value at all. Write the bound you mean, or `nothing` \
+         for the empty set"
+    ))
+}
+
+/// Whether `operand` is a `Decimal` not-a-number, quiet or signaling, as
+/// `Decimal.is_nan` reads it.
+///
+/// The `f64` reading the two refusals take first converts a quiet one to
+/// `nan`, and a signaling one, `Decimal("sNaN")`, refuses the conversion, so
+/// that reading passes it. Every comparison and remainder with it raises
+/// `InvalidOperation`, which the walk reads as a refusal: a bound or a step of
+/// it admits no value, as one of `nan` does. The class's own `is_nan` is
+/// called, rather than one looked up on the operand, so a subclass's override
+/// is not what answers, and the class is read off the operand's type rather
+/// than through `isinstance`, which asks a value outside it for its
+/// `__class__`.
+fn is_a_decimal_nan(operand: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = operand.py();
+    let decimal = DECIMAL.import(py, "decimal", "Decimal")?;
+    if !operand.get_type().is_subclass(decimal)? {
+        return Ok(false);
+    }
+    decimal
+        .getattr(intern!(py, "is_nan"))?
+        .call1((operand,))?
+        .is_truthy()
 }
 
 /// The refusal of a complex bound, out of line so that the path every real
@@ -1312,7 +1350,10 @@ fn read_vocabulary<'py>(
         && !multiple.is_none()
     {
         let py = multiple.py();
-        if unless_fatal(multiple.extract::<f64>().map(f64::is_nan), py, false)? {
+        if unless_fatal(multiple.extract::<f64>().map(f64::is_nan), py, false)?
+            || (!is_a_builtin_number(&multiple)
+                && unless_fatal(is_a_decimal_nan(&multiple), py, false)?)
+        {
             return Err(PyValueError::new_err(
                 "MultipleOf(nan) is not a valid constraint: no value is a multiple \
                  of nan, because every comparison with nan is false. Write the \

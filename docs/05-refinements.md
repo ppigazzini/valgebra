@@ -500,7 +500,9 @@ and every engine involved agrees the pattern is fine.
 
 A bound against `nan` is rejected with a `ValueError`, and so is
 `MultipleOf(nan)`: every comparison with `nan` is false, so such a bound admits
-no value at all. That is the empty set written as a bound, which no caller
+no value at all. A `Decimal` not-a-number is rejected the same way, quiet or
+signaling: every comparison and remainder with `Decimal("sNaN")` raises
+`InvalidOperation`, which the walk reads as a refusal. That is the empty set written as a bound, which no caller
 means, and dropping the marker instead would admit every value of the base. A
 complex bound is rejected for the same reason, whatever its imaginary part:
 Python orders no value against a complex number, and `1 >= 0j` raises. A

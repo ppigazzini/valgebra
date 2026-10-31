@@ -945,6 +945,68 @@ fn a_bound_or_a_step_python_cannot_apply_is_refused() {
     });
 }
 
+/// A not-a-number bound or step is refused: a float's and a `Decimal`'s, quiet
+/// or signaling, each admitting no value. The signaling one refuses the
+/// conversion to a float, so `Decimal`'s own `is_nan` reads it, and a subclass
+/// overriding that method is read the same way. A `Decimal` that is a number
+/// builds.
+#[test]
+fn a_not_a_number_bound_or_step_is_refused() {
+    Python::attach(|py| {
+        let decimal = |text: &str| format!("__import__('decimal').Decimal('{text}')");
+        let overriding = "type('Quiet', (__import__('decimal').Decimal,), \
+                          {'is_nan': lambda self: False})('sNaN')";
+        for (expression, wanted) in [
+            (
+                "typing.Annotated[int, at.Ge(float('nan'))]".to_owned(),
+                "ge cannot be nan",
+            ),
+            (
+                format!("typing.Annotated[int, at.Ge({})]", decimal("NaN")),
+                "ge cannot be nan",
+            ),
+            (
+                format!("typing.Annotated[int, at.Ge({})]", decimal("sNaN")),
+                "ge cannot be nan",
+            ),
+            (
+                format!("typing.Annotated[object, at.Le({})]", decimal("-sNaN")),
+                "le cannot be nan",
+            ),
+            (
+                format!("typing.Annotated[int, at.Le({overriding})]"),
+                "le cannot be nan",
+            ),
+            (
+                "typing.Annotated[int, at.MultipleOf(float('nan'))]".to_owned(),
+                "MultipleOf(nan)",
+            ),
+            (
+                format!("typing.Annotated[int, at.MultipleOf({})]", decimal("sNaN")),
+                "MultipleOf(nan)",
+            ),
+            (
+                format!("typing.Annotated[int, at.MultipleOf({overriding})]"),
+                "MultipleOf(nan)",
+            ),
+        ] {
+            match built(py, &expression) {
+                Err(error) => {
+                    let error = error.to_string();
+                    assert!(error.contains(wanted), "{expression} refused with {error}");
+                }
+                Ok(schema) => panic!("{expression} built {schema} instead of refusing"),
+            }
+        }
+        for expression in [
+            format!("typing.Annotated[int, at.Ge({})]", decimal("2.5")),
+            format!("typing.Annotated[int, at.MultipleOf({})]", decimal("0.5")),
+        ] {
+            built(py, &expression).unwrap_or_else(|error| panic!("{expression}: {error}"));
+        }
+    });
+}
+
 /// A length no value can have is refused inside a grouped marker as it is on its
 /// own: `annotated_types` unpacks a `Len` whose minimum is below one to no lower
 /// bound at all, so the minimum is read before the group unpacks.
