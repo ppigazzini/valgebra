@@ -17,7 +17,7 @@ use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyNone, PySet, PyString, PyTuple,
     PyType,
 };
-use valgebra_core::{Attribute, Field, MapClause, Schema, SeqShape};
+use valgebra_core::{Attribute, Field, MapClause, Schema, SeqKind, SeqShape};
 
 use super::generics::{MAX_QUALIFIER_DEPTH, is_field_qualifier};
 use super::{
@@ -71,6 +71,27 @@ pub(super) fn is_dataclass(ty: &Bound<'_, PyType>) -> PyResult<bool> {
 pub(crate) fn declares_fields(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     Ok(is_dataclass(ty)?
         || (ty.is_subclass_of::<PyTuple>()? && ty.hasattr(intern!(ty.py(), "_fields"))?))
+}
+
+/// Whether `declaration` is of the kind the frontend builds beside the class's
+/// atom: a tuple shape for a named tuple, whose positions are its fields, and
+/// an attribute record for a dataclass. A class of neither kind declares
+/// nothing beside its atom, so no member is its declaration.
+///
+/// The kind, not the member: a record the class does not declare has the kind
+/// too, and only building the class tells the two apart. The tests are the
+/// ones [`build_object`] takes, in its order.
+pub(crate) fn declares_of_kind(ty: &Bound<'_, PyType>, declaration: &Schema) -> PyResult<bool> {
+    if ty.is_subclass_of::<PyTuple>()? && ty.hasattr(intern!(ty.py(), "_fields"))? {
+        return Ok(matches!(
+            declaration,
+            Schema::Seq {
+                container: SeqKind::Tuple,
+                ..
+            }
+        ));
+    }
+    Ok(is_dataclass(ty)? && matches!(declaration, Schema::AttrRecord { .. }))
 }
 
 /// Build the class alone: its instances, whatever it declares.

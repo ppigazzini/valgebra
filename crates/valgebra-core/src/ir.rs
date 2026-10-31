@@ -1548,41 +1548,45 @@ impl Schema {
     /// what `repr` gives back.
     pub const ANY: Schema = Schema::Anything(Spelling::Any);
 
-    /// The class of an object schema, when this node is one: a meet carrying
-    /// exactly one `isinstance` atom beside exactly one deep check of what the
+    /// The class of an object schema and the member that declares it, when
+    /// this node has the shape the frontend builds for one: a meet carrying
+    /// exactly one `isinstance` atom beside exactly one deep check of what a
     /// class declares.
-    ///
-    /// That pair is what the frontend builds for a class whose fields it reads,
-    /// so it is what a user who wrote a class name is holding. `repr` and a
-    /// union's branch label both read the class back out of it, and a later meet
-    /// may flatten other members in beside the pair without changing which class
-    /// it is. The shape is recognized here, once, so the two readers cannot
-    /// recognize different shapes.
     ///
     /// The deep check is an attribute record where the fields are named and a
     /// sequence where they are positions: a `NamedTuple` is its class met with
-    /// `tuple[...]`. Reading the named shape alone made those two class forms
-    /// print differently -- a dataclass as `DC`, a `NamedTuple` as
-    /// `intersection(tuple[int], NT)` -- while the page states one rule for
-    /// both, and a union naming one branch said the same thing twice over.
+    /// `tuple[...]`. A later meet may flatten other members in beside the pair
+    /// without changing which class it is. `repr` and a union's branch label
+    /// both read the class back out of it, and the shape is recognized here,
+    /// once, so the two readers cannot recognize different shapes.
+    ///
+    /// The shape is not the class's own declaration on its evidence alone: a
+    /// class met with `list[int]` or with a protocol's record has it, and so
+    /// has `instance_of(C)` met with a record `C` does not declare. The schema
+    /// does not record which class declared a member, so this answers the
+    /// shape, and the bindings, which hold the class, ask the class whether the
+    /// member is its own.
     #[must_use]
-    pub fn object_class(&self) -> Option<ClassIx> {
+    pub fn object_class(&self) -> Option<(ClassIx, &Schema)> {
         let Schema::Intersection(members) = self else {
             return None;
         };
         let mut class = None;
-        let mut declarations = 0usize;
+        let mut declaration = None;
         for member in members.iter() {
             match member {
                 // A second atom of either kind is a meet of two objects, not one
                 // object: there is no single class to name.
                 Schema::Instance(_) if class.is_some() => return None,
                 Schema::Instance(index) => class = Some(*index),
-                Schema::AttrRecord { .. } | Schema::Seq { .. } => declarations += 1,
+                Schema::AttrRecord { .. } | Schema::Seq { .. } if declaration.is_some() => {
+                    return None;
+                }
+                Schema::AttrRecord { .. } | Schema::Seq { .. } => declaration = Some(member),
                 _ => {}
             }
         }
-        class.filter(|_| declarations == 1)
+        class.zip(declaration)
     }
 
     /// A short, stable label naming the expected set, shown in violations.

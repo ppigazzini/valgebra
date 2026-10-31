@@ -13,6 +13,7 @@ from valgebra import (
     Validator,
     anything,
     complement,
+    instance_of,
     intersection,
     nothing,
     recursive,
@@ -507,6 +508,60 @@ def test_repr_of_class_and_recursive_forms() -> None:
     assert (
         repr(recursive(lambda s: {"v": int, "n?": s}))
         == "recursive(lambda X: {'n?': X, 'v': int})"
+    )
+
+
+class _Plain:
+    pass
+
+
+class _Pair(typing.NamedTuple):
+    a: int
+
+
+@dataclasses.dataclass
+class _Point:
+    x: int
+
+
+class _NamedStr(typing.Protocol):
+    x: str
+
+
+def test_a_class_prints_as_its_name_only_where_its_name_builds_the_meet() -> None:
+    # A dataclass and a named tuple are their class met with what they declare,
+    # and a class met with a shape or a record from elsewhere has that shape
+    # too. Printed as the class's name, such a meet read back as every instance
+    # of the class; it prints as the meet it is, and reads back as itself.
+    names = {
+        "_Pair": _Pair,
+        "_Plain": _Plain,
+        "instance_of": instance_of,
+        "intersection": intersection,
+    }
+    for meet, wanted in [
+        (intersection(list[int], _Plain), "intersection(list[int], _Plain)"),
+        (
+            intersection(tuple[int, str], _Plain),
+            "intersection(tuple[int, str], _Plain)",
+        ),
+        (
+            intersection(instance_of(_Pair), tuple[bool]),
+            "intersection(tuple[bool], instance_of(_Pair))",
+        ),
+        # The very shape the class declares is the class.
+        (intersection(instance_of(_Pair), tuple[int]), "_Pair"),
+    ]:
+        assert repr(meet) == wanted
+        assert Validator(eval(wanted, names)) == meet  # noqa: S307
+    # A record the class does not declare prints apart from it, in the form no
+    # constructor spells, and the record it does declare is the class.
+    assert (
+        repr(intersection(instance_of(_Point), _NamedStr))
+        == "intersection(instance_of(_Point), object(x=str))"
+    )
+    assert (
+        repr(intersection(_Plain, _NamedStr)) == "intersection(_Plain, object(x=str))"
     )
 
 

@@ -110,6 +110,35 @@ pub(crate) fn schemas_equal(
     equal(&search, left_schema, right_schema)
 }
 
+/// Whether two subtrees are one schema, modulo their pools, pairing each
+/// definition a reference reaches with the one it meets there.
+///
+/// [`schemas_equal`] compares two whole validators, whose tables hold only the
+/// definitions their schemas reach, so it pairs every definition or none. A
+/// subtree indexes its validator's table, which may hold definitions the
+/// subtree does not reach, so here a pair is made only where the comparison
+/// meets a reference, and is taken back where the reading that made it fails.
+/// An answer is up to the same renaming `==` reads, over fewer definitions,
+/// and errs in the direction `==` does: no.
+pub(crate) fn subtrees_equal(
+    py: Python<'_>,
+    left_schema: &Schema,
+    left: &Side<'_>,
+    right_schema: &Schema,
+    right: &Side<'_>,
+) -> PyResult<bool> {
+    let comparison = Comparison {
+        constants: Constants::ByValue(py),
+        left,
+        right,
+        searching: true,
+        renaming: RefCell::new(Renaming::between(left, right)),
+        depth: Cell::new(0),
+        steps: Cell::new(0),
+    };
+    equal(&comparison, left_schema, right_schema)
+}
+
 /// Whether the two tables' bodies agree as multisets, each digested with its
 /// references read as references and nothing more.
 ///

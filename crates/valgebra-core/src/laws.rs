@@ -3340,12 +3340,22 @@ fn an_object_meet_knows_which_class_it_is() {
     };
     let class = |index| Schema::Instance(ClassIx::new(index));
     let object = Schema::meet([class(3), record.clone()]);
-    assert_eq!(object.object_class(), Some(ClassIx::new(3)));
+    assert_eq!(object.object_class(), Some((ClassIx::new(3), &record)));
     // A later meet may flatten other members in beside the pair; it is still
     // the same class.
     assert_eq!(
         Schema::meet([class(3), record.clone(), Schema::Int]).object_class(),
-        Some(ClassIx::new(3))
+        Some((ClassIx::new(3), &record))
+    );
+    // A sequence is the declaration where the fields are positions.
+    let positions = Schema::tuple(SeqShape::fixed(vec![Schema::Int]));
+    assert_eq!(
+        Schema::meet([class(3), positions.clone()]).object_class(),
+        Some((ClassIx::new(3), &positions))
+    );
+    assert_eq!(
+        Schema::meet([class(3), positions, record.clone()]).object_class(),
+        None
     );
     // Each half alone, and a meet of two objects, name no single class.
     assert_eq!(class(3).object_class(), None);
@@ -3361,8 +3371,8 @@ fn an_object_meet_knows_which_class_it_is() {
         None
     );
     assert_eq!(
-        Schema::meet([class(3), record.clone(), record]).object_class(),
-        Some(ClassIx::new(3))
+        Schema::meet([class(3), record.clone(), record.clone()]).object_class(),
+        Some((ClassIx::new(3), &record))
     );
 }
 

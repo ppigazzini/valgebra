@@ -209,9 +209,11 @@ fn a_generic_class_binds_each_parameter_once() {
         let program = r"import dataclasses, typing\nT = typing.TypeVar('T')\n@dataclasses.dataclass\nclass A(typing.Generic[T]):\n    x: T\n@dataclasses.dataclass\nclass B(A[int]):\n    pass\n@dataclasses.dataclass\nclass C(A[int]):\n    pass\n@dataclasses.dataclass\nclass D(B, C):\n    pass\n@dataclasses.dataclass\nclass E(A[str]):\n    pass\n@dataclasses.dataclass\nclass F(B, E):\n    pass\n";
         let spelled =
             |form: &str| format!(r#"(lambda ns: (exec("{program}", ns), {form})[1])({{}})"#);
+        // The class's name alone is refused for its parameter, so the applied
+        // class prints as the meet it is, its field bound to the argument.
         assert_eq!(
             built(py, &spelled("ns['A'][int]")).expect("the applied class builds"),
-            "A"
+            "intersection(instance_of(A), object(x=int))"
         );
         assert_eq!(
             built(py, &spelled("ns['D']")).expect("two bases agreeing build"),
@@ -265,7 +267,8 @@ fn a_class_reached_under_other_arguments_is_another_build() {
         assert!(refused.to_string().contains("is generic in T"), "{refused}");
         assert_eq!(
             built(py, &spelled("ns['Box'][ns['Box'][int]]")).expect("each level builds"),
-            "Box"
+            "intersection(instance_of(Box), object(sub=intersection(instance_of(Box), \
+             object(sub=int))))"
         );
     });
 }
@@ -3315,5 +3318,87 @@ fn a_key_schema_written_twice_is_refused() {
             "{refused}"
         );
         assert!(built(py, "{int: str, str: bytes}").is_ok());
+    });
+}
+
+/// A class's name stands for its atom beside a declaration only where the name
+/// builds that pair. A dataclass and a named tuple print as their names, and so
+/// does `instance_of(C)` met with the very record `C` declares; a class met with
+/// a shape or a record it does not declare prints whole, since its name alone
+/// reads back as more than the meet admits. A generic class applied prints
+/// whole too: its name is refused where a field needs the argument.
+#[test]
+fn a_class_names_only_the_pair_its_name_builds() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"import dataclasses, typing\n\
+              T = typing.TypeVar('T')\n\
+              @dataclasses.dataclass\n\
+              class Point:\n\
+              \x20   x: int\n\
+              @dataclasses.dataclass\n\
+              class Box(typing.Generic[T]):\n\
+              \x20   x: T\n\
+              IntBox = Box[int]\n\
+              class Pair(typing.NamedTuple):\n\
+              \x20   a: int\n\
+              class Plain:\n\
+              \x20   pass\n",
+            c"render_pairs.py",
+            c"render_pairs",
+        )
+        .expect("the classes define");
+        let mut pool = Pool::default();
+        let mut defs = Vec::new();
+        let mut build = |name: &str| {
+            let annotation = module.getattr(name).expect("the class is defined");
+            build_schema(&annotation, &mut pool, &mut defs).expect("the class builds")
+        };
+        let (point, pair, plain, int_box) = (
+            build("Point"),
+            build("Pair"),
+            build("Plain"),
+            build("IntBox"),
+        );
+        let (point_class, point_record) = point.object_class().expect("a dataclass is a pair");
+        let (pair_class, _) = pair.object_class().expect("a named tuple is a pair");
+        let named_str = Schema::attr_record(vec![valgebra_core::Attribute {
+            name: "x".into(),
+            schema: Schema::Str,
+        }]);
+        for (schema, wanted) in [
+            (point.clone(), "Point"),
+            (pair.clone(), "Pair"),
+            (
+                Schema::meet([Schema::Instance(point_class), point_record.clone()]),
+                "Point",
+            ),
+            (
+                Schema::meet([plain.clone(), point_record.clone()]),
+                "intersection(Plain, object(x=int))",
+            ),
+            (
+                Schema::meet([plain, Schema::list(SeqShape::homogeneous(Schema::Int))]),
+                "intersection(list[int], Plain)",
+            ),
+            (
+                Schema::meet([Schema::Instance(point_class), named_str]),
+                "intersection(instance_of(Point), object(x=str))",
+            ),
+            (
+                Schema::meet([
+                    Schema::Instance(pair_class),
+                    Schema::tuple(SeqShape::fixed([Schema::Bool])),
+                ]),
+                "intersection(tuple[bool], instance_of(Pair))",
+            ),
+            (int_box, "intersection(instance_of(Box), object(x=int))"),
+        ] {
+            assert_eq!(
+                render(py, &schema, pool.items(), &defs).expect("it renders"),
+                wanted
+            );
+        }
     });
 }

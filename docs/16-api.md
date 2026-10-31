@@ -84,11 +84,15 @@ between two dicts is Python's merge, and a key and a constant by Python's own
 prints and read back. A refinement marker prints by its bare name, `Ge(0)` rather than
 `at.Ge(0)`, so that session imports each marker by name, as
 `from annotated_types import Ge` does, rather than through the
-`import annotated_types as at` these pages write. Seven things it cannot render
-as an expression, and one of them reads back quietly: a
-**class**, which is an object rather than syntax and appears as its name -- or
-as `instance_of(Name)` where it stands alone and its name would read back as
-the class met with the fields it declares; a
+`import annotated_types as at` these pages write. Six things it cannot render
+as an expression: a
+**class**, which is an object rather than syntax and appears as its name where
+its name builds what the schema holds there -- the class alone where it declares
+no fields, a dataclass or a named tuple met with the fields it declares -- and
+as `instance_of(Name)` where a dataclass's or a named tuple's class stands
+without them: `intersection(list[int], Plain)` prints as itself, and
+`instance_of(Pair)` met with `tuple[bool]` for a named tuple declaring an `int`
+prints as `intersection(tuple[bool], instance_of(Pair))`; a
 **predicate**, which is a function and appears as `Predicate(...)`, and which
 the frontend refuses where it is built; a **constant whose `repr` is not an
 expression of it**, which is a syntax error where it is parsed -- an enum
@@ -104,20 +108,15 @@ alone, printed as `instance_of(...)`, and their two attribute records, and a
 record standing apart from its class prints
 as `object(x=int)`, a form no constructor spells -- the schema does not record
 which class each record came from, so the render cannot fold them back, and a
-`Protocol` prints the same way, as the record of its members; a
+`Protocol` prints the same way, as the record of its members, and so does a
+generic dataclass applied, `Box[int]` as
+`intersection(instance_of(Box), object(item=int))`, whose name alone reads back
+as its parameters' defaults or is refused where one has none; a
 **required key whose name ends in `?`**, which no dict display spells -- the
 dict literal reads every trailing `?` as optional -- and which prints marked,
 `<required: 'a?'>`, a syntax error where it is parsed:
 `TypedDict("TD", {"a?": int})` renders `{<required: 'a?'>: int, str: anything}`
-rather than the display of a record whose `a` is optional; a **class met with a
-declaration it did not make**, the quiet one:
-`intersection(MyTuple, tuple[int, str])` prints as `MyTuple`,
-`intersection(list[int], Plain)` as `Plain`, and `intersection(Plain, P)` for a
-protocol `P` as `Plain`, because a `NamedTuple` and a dataclass are built as
-exactly that meet and the schema does not record whether the shape or the
-record was the class's own declaration -- and so a generic dataclass or named
-tuple applied to its arguments prints as its name, `Box[int]` as `Box`, which
-reads back as the class's defaults or is refused where a parameter has none;
+rather than the display of a record whose `a` is optional;
 and a **schema past the renderer's own depth bound**, which gives up and prints
 `<...>`. The bound is
 within reach: no *single* annotation can be written deep enough, since the

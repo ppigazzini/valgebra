@@ -9,10 +9,11 @@ use pyo3::types::{PyBool, PyBytes, PyComplex, PyFloat, PyInt, PyString, PyType};
 use pyo3::{PyTypeCheck, PyTypeInfo};
 use rustc_hash::{FxHashMap, FxHashSet};
 use valgebra_core::{
-    Attribute, CollKind, Constraint, DefIx, Field, MapClause, Schema, SeqKind, Spelling,
+    Attribute, ClassIx, CollKind, Constraint, DefIx, Field, MapClause, Schema, SeqKind, Spelling,
 };
 
-use crate::build::declares_fields;
+use crate::build::{Pool, build_root, declares_fields, declares_of_kind};
+use crate::equality::{Side, subtrees_equal};
 use crate::errors::{UNREPRESENTABLE, class_label, stored, unless_fatal};
 use crate::oracle::keeps;
 
@@ -355,14 +356,6 @@ fn render_union(
     })
 }
 
-/// Render a meet, reading a class's `isinstance` atom beside its attribute
-/// record back as the class name the user wrote.
-///
-/// The pair is [`Schema::object_class`]; the members that are not the pair
-/// render as themselves, so a meet that flattened others in beside a class still
-/// names the class. Without this the annotation `Pt` would print as
-/// `intersection(Pt, object(x=int))` -- the algebra's spelling of a thing the
-/// user spelled with one name.
 /// Each member beside its variant, the key [`in_reading_order`] groups by.
 fn rendered_members<'a>(
     members: impl IntoIterator<Item = &'a Schema>,
@@ -374,6 +367,15 @@ fn rendered_members<'a>(
         .collect()
 }
 
+/// Render a meet, reading a class's `isinstance` atom beside its declaration
+/// back as the class name the user wrote.
+///
+/// The pair is [`Schema::object_class`], and the name stands for it only where
+/// the name builds it ([`names_the_pair`]); the members that are not the pair
+/// render as themselves, so a meet that flattened others in beside a class still
+/// names the class. Without this the annotation `Pt` would print as
+/// `intersection(Pt, object(x=int))` -- the algebra's spelling of a thing the
+/// user spelled with one name.
 fn render_meet(
     py: Python<'_>,
     schema: &Schema,
@@ -384,7 +386,13 @@ fn render_meet(
     depth: usize,
 ) -> PyResult<String> {
     let r = |s: &Schema| render_at(py, s, pool, defs, active, depth + 1);
-    let Some(class) = schema.object_class() else {
+    let named = match schema.object_class() {
+        Some((class, declaration)) if names_the_pair(py, class, declaration, pool, defs)? => {
+            Some(class)
+        }
+        _ => None,
+    };
+    let Some(class) = named else {
         let mut kids = rendered_members(members, &r)?;
         in_reading_order(&mut kids);
         let kids: Vec<String> = kids.into_iter().map(|(_, text)| text).collect();
@@ -415,6 +423,54 @@ fn render_meet(
         parts.extend(rest.into_iter().map(|(_, text)| text));
         format!("intersection({})", parts.join(", "))
     })
+}
+
+/// Whether the class's name builds the class met with `declaration`, which is
+/// what printing the name alone in the pair's place says.
+///
+/// The schema does not record which class declared a member, and a class met
+/// with `list[int]` or with a protocol's record has the shape the frontend
+/// builds for a class, as has `instance_of(C)` met with a record `C` does not
+/// declare. Printed as the name, each read back as a larger set. So the class
+/// is asked: first for the kind of member it declares, which answers those
+/// meets without building anything, and then for the build of its name,
+/// compared with the pair as `==` compares two validators. A build that raises
+/// names no pair, and the meet prints whole.
+///
+/// The build is what checking the name costs: a repr that names a class takes
+/// as long as `Validator` of that class does. A repr is a rendering for a
+/// person, and a name that reads back as a larger set is wrong at any speed.
+fn names_the_pair(
+    py: Python<'_>,
+    class: ClassIx,
+    declaration: &Schema,
+    pool: &[Py<PyAny>],
+    defs: &[Schema],
+) -> PyResult<bool> {
+    let Some(Ok(ty)) = pool.get(class.get()).map(|c| c.bind(py).cast::<PyType>()) else {
+        return Ok(false);
+    };
+    if !declares_of_kind(ty, declaration)? {
+        return Ok(false);
+    }
+    let (mut lits, mut built_defs) = (Pool::default(), Vec::new());
+    let built = build_root(ty.as_any(), &mut lits, &mut built_defs).map(Some);
+    let Some(built) = unless_fatal(built, py, None)? else {
+        return Ok(false);
+    };
+    subtrees_equal(
+        py,
+        &Schema::meet([Schema::Instance(class), declaration.clone()]),
+        &Side {
+            definitions: defs,
+            pool,
+        },
+        &built,
+        &Side {
+            definitions: &built_defs,
+            pool: lits.items(),
+        },
+    )
 }
 
 /// Render an attribute record on its own: `object(x=int)`.

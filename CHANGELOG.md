@@ -75,6 +75,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a class over a list of types or a signature is refused applied
 - fix: a TypedDict qualifier given as a type argument is refused
 - fix: an enumeration is its members to a refutation as to a proof
+- fix: a class prints as its name only where its name builds the meet
 
 -->
 
@@ -347,6 +348,20 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A class prints as its name only where its name builds the meet.** A class
+  met with a shape or a record it does not declare printed as the class, which
+  reads back as every instance of it: `intersection(list[int], Plain)` as
+  `Plain`, `intersection(Plain, P)` for a protocol `P` as `Plain`, and
+  `intersection(instance_of(Pair), tuple[bool])`, for a named tuple declaring
+  an `int`, as `Pair`. A generic dataclass applied printed as its name,
+  `Box[int]` as `Box`, which reads back as its parameters' defaults or is
+  refused. A class now prints as its name where the name builds the class met
+  with that member, and the meet prints whole elsewhere:
+  `intersection(list[int], Plain)`, `intersection(Plain, object(x=int))`,
+  `intersection(tuple[bool], instance_of(Pair))` and
+  `intersection(instance_of(Box), object(item=int))`. A union's branch label
+  names such a meet by its members, `list and Plain`.
 
 - **An enumeration is its members to a refutation as to a proof.** `Pair`, an
   `Enum` whose members carry no `x`, was proved below `Literal[Pair.A,

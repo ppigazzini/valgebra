@@ -651,7 +651,17 @@ So the surface is preserved by construction. `Schema::object_class` recognizes
 the pair — exactly one instance atom beside exactly one declaration, an
 attribute record or a sequence, other members tolerated — and `render` and a
 union's branch label both read the class out of it, which is why the shape is
-recognized once rather than matched at each of them. The walk stops collecting
+recognized once rather than matched at each of them. The shape is not the
+class's declaration on its own evidence: a class with no fields met with
+`list[int]` or with a protocol's record has it, as has `instance_of(C)` met with
+a record `C` does not declare, and the schema does not record which class
+declared a member. So each reader asks the class. The label asks whether the
+class declares a member of that kind, a dataclass a record and a named tuple a
+tuple, and otherwise names the meet's members; `render` asks that and then
+whether the class's name builds the pair, compared as `==` compares two
+validators, and otherwise prints the meet whole, so a repr never names a class
+where its name reads back as a larger set. The label stops at the kind because
+it is computed on every refused union and names a record by its kind alone. The walk stops collecting
 once a member of a meet has failed *at the meet's own path*: a member that
 rejects the value itself has settled it, and a member that fails inside the
 value leaves the others meaningful. That second rule is not specific to classes

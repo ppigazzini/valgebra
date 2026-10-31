@@ -425,26 +425,49 @@ fn a_meet_stops_at_the_member_that_rejects_the_value() {
 }
 
 /// A class branch names its class, and a class with declared attributes --
-/// the meet of an atom and a record -- names that same class rather than the
-/// algebra's spelling of it. A meet that is not an object has no class to
-/// name, and names each member instead: its kind would name no set.
+/// the meet of an atom and the record or tuple shape the class declares --
+/// names that same class rather than the algebra's spelling of it. A class
+/// beside a member of a kind it does not declare names both, as any other meet
+/// names its members: the class's name alone would read as more than the
+/// branch admits, and a kind alone would name no set.
 #[test]
 fn a_union_names_a_class_branch_by_its_class() {
     Python::attach(|py| {
-        let module = classes(py, c"classes_union");
-        let point = module.getattr("Point").expect("Point");
-        let other = module.getattr("Other").expect("Other");
-        let pool: Vec<Py<PyAny>> = vec![point.unbind(), other.unbind()];
-        let object = Schema::meet([
-            Schema::Instance(ClassIx::new(0)),
-            Schema::AttrRecord {
-                fields: vec![attribute("x", Schema::Int)].into(),
-            },
-        ]);
+        let module = PyModule::from_code(
+            py,
+            c"import dataclasses, typing\n\
+              @dataclasses.dataclass\n\
+              class Point:\n\
+              \x20   x: int\n\
+              class Pair(typing.NamedTuple):\n\
+              \x20   a: int\n\
+              class Other:\n\
+              \x20   pass\n\
+              class Row(tuple):\n\
+              \x20   pass\n",
+            c"label_classes.py",
+            c"label_classes",
+        )
+        .expect("the classes define");
+        let pool: Vec<Py<PyAny>> = ["Point", "Other", "Pair", "Row"]
+            .into_iter()
+            .map(|name| module.getattr(name).expect("the class is defined").unbind())
+            .collect();
+        let class = |index| Schema::Instance(ClassIx::new(index));
+        let record = || Schema::AttrRecord {
+            fields: vec![attribute("x", Schema::Int)].into(),
+        };
+        let positions = || Schema::tuple(SeqShape::fixed([Schema::Int]));
         let schema = Schema::Union(
             vec![
-                object,
-                Schema::Instance(ClassIx::new(1)),
+                Schema::meet([class(0), record()]),
+                class(1),
+                Schema::meet([class(2), positions()]),
+                Schema::meet([class(1), record()]),
+                Schema::meet([class(1), Schema::list(SeqShape::homogeneous(Schema::Int))]),
+                Schema::meet([class(3), positions()]),
+                Schema::meet([class(2), record()]),
+                Schema::meet([class(0), positions()]),
                 Schema::meet([Schema::Int, Schema::Str]),
                 Schema::meet([
                     Schema::union([Schema::Int, Schema::Str]),
@@ -466,7 +489,8 @@ fn a_union_names_a_class_branch_by_its_class() {
         push_branch_label(&schema, ctx, py, &mut labels);
         assert_eq!(
             labels.render(),
-            "one of: Point, Other, int and str, (int or str) and not bool",
+            "one of: Point, Other, Pair, Other and object, list and Other, tuple and Row, \
+             Pair and object, tuple and Point, int and str, (int or str) and not bool",
             "an object meet names its class; any other meet names its members"
         );
     });

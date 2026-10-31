@@ -43,6 +43,7 @@ use valgebra_core::{
     Violation,
 };
 
+use crate::build::declares_of_kind;
 use crate::check::ctx::{Ctx, Entered, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, WalkMode};
 use crate::check::index::{Tagged, TaggedPlan};
 use crate::check::memo::{Answer, Room};
@@ -753,14 +754,15 @@ fn push_branch_label_within(
         // A class with declared attributes is a meet of an atom and a record, and
         // the branch names the class the user wrote rather than the algebra's
         // spelling of it. Any other meet names what each member admits.
-        Schema::Intersection(members) => {
-            if let Some(class) = schema.object_class() {
+        Schema::Intersection(members) => match schema.object_class() {
+            Some((class, declaration)) if declares_its_kind(class, declaration, ctx, py) => {
                 out.push(class_name(class, schema, ctx, py));
-            } else {
+            }
+            _ => {
                 out.push(meet_label(members, ctx, py, unfolded));
                 out.joined = true;
             }
-        }
+        },
         // A refinement's type is its base, matching `Schema::expected`; the
         // constraints report themselves when one of them is what failed.
         Schema::Refine { base, .. } => push_branch_label_within(base, ctx, py, out, unfolded),
@@ -803,6 +805,25 @@ fn operand_label(schema: &Schema, ctx: Ctx<'_>, py: Python<'_>, unfolded: u32) -
     } else {
         joined
     }
+}
+
+/// Whether the class at `index` declares a member of `declaration`'s kind, which
+/// is what lets a branch label name the meet by the class alone.
+///
+/// The kind and not the member, which `repr` asks of a build of the class: a
+/// label is computed on every refused union, where a build per branch would
+/// cost more than the walk, and a label names a record by its kind, `object`,
+/// so a record of the kind the class declares adds no word the class's name
+/// leaves out. A member of another kind does -- `list` beside a class with no
+/// declaration, a record beside a named tuple -- and the meet names it.
+fn declares_its_kind(index: ClassIx, declaration: &Schema, ctx: Ctx<'_>, py: Python<'_>) -> bool {
+    let Some(Ok(ty)) = class_at(ctx, index, py).map(|class| class.cast::<PyType>()) else {
+        return false;
+    };
+    declares_of_kind(ty, declaration).unwrap_or_else(|err| {
+        record_if_fatal(err, py, ctx);
+        false
+    })
 }
 
 /// The pooled class's own name, falling back to the node's kind when the pool

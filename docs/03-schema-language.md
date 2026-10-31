@@ -1210,8 +1210,8 @@ each with the reason. A schema deeper than the renderer's own bound prints
 cannot be read back as a schema that kept it. A required key whose name ends in
 `?`, which `TypedDict("TD", {"a?": int})` declares and no dict display spells
 ([above](#a-key-name-that-ends-in-a-question-mark)), prints marked for the same
-reason: `{<required: 'a?'>: int, str: anything}`. One form reads back quietly as
-a different schema: a class met with a declaration it did not make -- a sequence
-shape, or a protocol's record -- which prints as the class's name. Do not parse a repr to
+reason: `{<required: 'a?'>: int, str: anything}`. A class prints as its name
+only where the name builds what the schema holds, so a class met with a shape or
+a record it does not declare prints as the meet it is. Do not parse a repr to
 recover structure — see [inspection](09-inspection.md) for asking a schema
 questions instead.

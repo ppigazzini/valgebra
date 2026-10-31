@@ -1868,7 +1868,7 @@ mod refine;
 #[cfg(all(test, feature = "interpreter-tests"))]
 use classes::annotations_as_written;
 use classes::build_type_object;
-pub(crate) use classes::{build_instances, declares_fields};
+pub(crate) use classes::{build_instances, declares_fields, declares_of_kind};
 use generics::{build_dict, build_parametrized, build_sequence};
 use refine::build_refine;
 
