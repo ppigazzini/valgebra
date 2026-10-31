@@ -147,6 +147,15 @@ class Parametrized(Generic[T]):
     """A user generic, whose parameter is erased before a value exists."""
 
 
+def _holding_one() -> typing.Any:
+    """Build a `TypedDict` generic in its one field, where the runtime has one."""
+
+    class Holds(TypedDict, Generic[T]):
+        a: T
+
+    return Holds
+
+
 Signature = typing.ParamSpec("Signature")
 
 
@@ -338,6 +347,11 @@ FORMS: dict[str, Reads | Refuses] = {
     ),
     "a class generic in a `TypeVarTuple` or a `ParamSpec`, applied": Refuses(
         lambda: Hooked[[int]], "stands for a list of types"
+    ),
+    "`Required`, `NotRequired` or `ReadOnly` as a class's type argument": Refuses(
+        lambda: _holding_one()[typing.NotRequired[int]],
+        "is a TypedDict qualifier",
+        needs=(3, 11),
     ),
     GENERIC_RECORDS: Reads(Box[int], Box(1), Box("one")),
     PROTOCOL_BASES: Refuses(lambda: Protocol, "the base a protocol is declared from"),

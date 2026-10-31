@@ -73,6 +73,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a type variable is its own class's parameter
 - fix: a frozen dict literal's refusal names the schemas that admit one
 - fix: a class over a list of types or a signature is refused applied
+- fix: a TypedDict qualifier given as a type argument is refused
 
 -->
 
@@ -330,6 +331,16 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A `TypedDict` qualifier given as a type argument is refused.** `Required`,
+  `NotRequired` and `ReadOnly` qualify an item where it is declared, and the
+  typing spec admits them nowhere else. `Holds[NotRequired[int]]`, for a
+  generic `TypedDict` declaring `a: X`, read the qualifier as the item's own:
+  `a` turned optional and the class equaled one declaring `a:
+  NotRequired[int]`, where the runtime keeps `a` required; a dataclass applied
+  to one dropped it. A class applied to a qualifier, bare or under
+  `Annotated`, or a base written applied to one, is refused, naming the class
+  the field is declared in.
 
 - **A class over a list of types or a signature is refused applied.** A
   `TypeVarTuple` stands for a list of types, and `Row[int, str]` binds it to

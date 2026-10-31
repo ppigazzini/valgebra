@@ -375,6 +375,7 @@ with a message instead:
 | `Unpack[X]` | binds element types into a `tuple[...]`, so it has no meaning alone, and nor has `*tuple[...]` outside one |
 | a user `Generic[T]` class read by `isinstance` alone, applied | the parameter is erased at runtime and the class declares no field it reaches, so the type argument narrows nothing |
 | a class generic in a `TypeVarTuple` or a `ParamSpec`, applied | the parameter stands for a list of types or a signature, which no form here binds a field to |
+| `Required`, `NotRequired` or `ReadOnly` as a class's type argument | a qualifier qualifies a `TypedDict` item where it is declared and nowhere else (PEP 655, PEP 705), and the runtime keeps the key it reaches as declared |
 | bare `Protocol`, and a generic `Protocol[T]` | the base a protocol is declared from declares no member, and a protocol over a type parameter names one set per argument |
 | a `Protocol` member declared `ClassVar` or `Final` | the qualifier says where the value lives rather than what it is |
 | a set or frozen set literal | `{int}` and `frozenset({int})` name containers, which are `set[T]` and `frozenset[T]` |

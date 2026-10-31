@@ -19,7 +19,7 @@ use pyo3::types::{
 };
 use valgebra_core::{Attribute, Field, MapClause, Schema, SeqShape};
 
-use super::generics::is_field_qualifier;
+use super::generics::{MAX_QUALIFIER_DEPTH, is_field_qualifier};
 use super::{
     ClassScope, MAX_BUILD_DEPTH, Pool, build_schema, forms, is_extension, loaded_modules,
     not_implemented,
@@ -640,6 +640,42 @@ fn one_type_each(class: &Bound<'_, PyType>, parameters: &Bound<'_, PyTuple>) -> 
     Ok(())
 }
 
+/// Refuse a `TypedDict` qualifier given as one of `class`'s type arguments.
+///
+/// `Required`, `NotRequired` and `ReadOnly` qualify a `TypedDict` item where it
+/// is declared, and the typing spec admits them nowhere else (PEP 655, PEP
+/// 705): `Holds[NotRequired[int]]` names no type, and the runtime keeps the key
+/// it reaches required. Substituted into the field, the qualifier read as the
+/// item's own, turning a required key optional, or vanished from a dataclass's
+/// field. Read through `Annotated`, which a qualifier may sit under.
+fn no_qualifier_among(class: &Bound<'_, PyType>, arguments: &Bound<'_, PyTuple>) -> PyResult<()> {
+    let py = class.py();
+    let forms = forms(py)?;
+    for argument in arguments.iter() {
+        let mut held = argument.clone();
+        // Bounded as a literal's field is read, so the loop ends whatever a
+        // form's `__origin__` claims.
+        for _ in 0..MAX_QUALIFIER_DEPTH {
+            if !held.get_type().is(forms.annotated_alias.bind(py)) {
+                break;
+            }
+            held = held.getattr(intern!(py, "__origin__"))?;
+        }
+        let origin = forms.get_origin.bind(py).call1((&held,))?;
+        if is_field_qualifier(&origin)? {
+            return Err(not_implemented(format!(
+                "{} as a type argument of {} is a TypedDict qualifier, which \
+                 qualifies an item where it is declared and nowhere else: declare \
+                 the field Required, NotRequired or ReadOnly in the class, and pass \
+                 the type alone",
+                summarize(&argument)?,
+                super::declared_name(class.as_any())?
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// The PEP 696 default `parameter` takes in one application of its class: where
 /// nothing is `written` for it, and where what is written is the default itself
 /// -- `CPython` hands an application left short back with the default filled in,
@@ -698,6 +734,9 @@ impl<'py> Scopes<'py> {
     fn of(ty: &Bound<'py, PyType>, applied: Option<&Bound<'py, PyTuple>>) -> PyResult<Self> {
         let parameters = parameters_of(ty)?;
         let mut arguments = Vec::with_capacity(parameters.len());
+        if let Some(applied) = applied {
+            no_qualifier_among(ty, applied)?;
+        }
         for (at, parameter) in parameters.iter().enumerate() {
             let written = applied.and_then(|args| args.get_item(at).ok());
             let argument = match defaulted(&parameter, written.as_ref())? {
@@ -727,6 +766,7 @@ impl<'py> Scopes<'py> {
                 let arguments = match written {
                     Some(written) => {
                         one_type_each(&base, &own)?;
+                        no_qualifier_among(&base, &written)?;
                         let mut arguments = Vec::with_capacity(written.len());
                         for (at, argument) in written.iter().enumerate() {
                             let parameter = own.get_item(at).ok();
