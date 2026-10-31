@@ -53,10 +53,19 @@ answer of its own, or a repair to a change not yet released.
 - feat: a set reading's difference refutes at a kind no cut reaches
 - feat: a meet supertype is decided a member at a time
 - feat: a meet subject is asked narrowed by the complements beside its unions
+- feat: a record the key partition cannot hold is left out of a meet of records
 
 -->
 
 ### Added
+
+- **A record the key partition cannot hold is left out of a meet of records.**
+  A meet is below the members it keeps, so a meet holding a record whose
+  clause names part of a kind -- an opened record keyed by an integer -- beside
+  a complement is empty where the set representation reads the rest empty.
+  `intersection(dict[str, nothing], complement({}),
+  Validator({1: str}).open())` is `subset` of `nothing`, where it was
+  `undecided`.
 
 - **A meet subject is asked narrowed by the complements beside its unions.**
   `K & (~K | R)` is `K & R`, and a meet on the left is now asked in that form:

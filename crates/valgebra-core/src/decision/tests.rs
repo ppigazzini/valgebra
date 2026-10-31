@@ -1551,6 +1551,36 @@ fn a_narrowed_meet_inside_a_fixpoint_answers() {
     assert_eq!(answer.ok(), Some(Relation::Holds), "no proof in a minute");
 }
 
+/// A narrowed meet's question is marked open while it is asked and closed when
+/// it returns. `(C0 | int) & ~int` narrows to `C0`, whose question below `C1`
+/// asks the oracle about the two classes; the oracle here records the mark each
+/// time it is asked, so the question is seen open from inside it, and the mark
+/// is gone once the query has answered.
+#[test]
+fn a_narrowed_meet_marks_its_question_while_it_is_asked() {
+    struct Marks(core::cell::RefCell<Vec<u64>>);
+    impl crate::descr::lower::Constants for Marks {}
+    impl LeafRelations for Marks {
+        fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
+            self.0.borrow_mut().push(NARROWING.with(Cell::get));
+            None
+        }
+    }
+    let marks = Marks(core::cell::RefCell::default());
+    let class = |index| Schema::Instance(ClassIx::new(index));
+    let subject = Schema::meet([
+        Schema::union([class(0), Schema::Int]),
+        Schema::Int.complement(),
+    ]);
+    let _answer = subject.subtype_relation_under(&class(1), &marks, &[]);
+    assert!(
+        marks.0.borrow().iter().any(|mark| *mark != 0),
+        "the oracle was asked from inside the narrowed question: {:?}",
+        marks.0.borrow()
+    );
+    assert_eq!(NARROWING.with(Cell::get), 0, "the question is closed");
+}
+
 /// Where the query's steps are spent, the two lattice bounds are read once more
 /// under emptiness queries of their own: an empty subject is below anything,
 /// and one meeting a set in nothing is below its complement. A query with
@@ -1571,6 +1601,48 @@ fn a_spent_query_reads_its_bounds_under_steps_of_its_own() {
         Relation::Unknown
     );
     assert_eq!(bounds(&Schema::Int, &Schema::Bytes, 0), Relation::Unknown);
+}
+
+// THEORY: a-record-splits-across-a-union
+/// A meet holding a record the key partition cannot hold is empty where the
+/// set representation finds the rest empty: the meet of the rest is a
+/// superset, so it proves emptiness and refutes nothing.
+///
+/// The record keyed by a literal is one no oracle here places in the
+/// partition; beside it, the empty mapping met with the complement of the
+/// empty record is empty. A meet the rest leaves inhabited is not refuted.
+#[test]
+fn a_record_the_partition_cannot_read_is_left_out_of_the_meet() {
+    let mapping = |key: Schema, value: Schema| Schema::mapping(MapClause { key, value });
+    let unread = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause {
+            key: Schema::Literal(ConstIx::new(0)),
+            value: Schema::Str,
+        }]
+        .into(),
+    };
+    let empty = closed(Vec::new());
+    let no_entry = mapping(Schema::Str, Schema::Nothing);
+    let meet = |members: Vec<Schema>| Schema::Intersection(members.into());
+    let verdict = |schema: &Schema| rules_verdict(schema, &[]).0;
+    assert_eq!(
+        verdict(&meet(vec![
+            no_entry.clone(),
+            unread.clone(),
+            empty.clone().complement()
+        ])),
+        Verdict::Empty
+    );
+    assert_eq!(
+        verdict(&meet(vec![
+            mapping(Schema::Str, Schema::Int),
+            unread,
+            empty.complement(),
+        ])),
+        Verdict::Unknown,
+        "the rest holds a value, which refutes nothing"
+    );
 }
 
 /// A chain spelled as a recursive record, its reference inside the key's
@@ -9916,6 +9988,75 @@ fn a_string_subject_is_read_by_its_texts() {
         pattern("a").decided_by_its_texts(&wide, &NoLeafRelations),
         Relation::Unknown
     );
+}
+
+/// A string between three and one long: a refinement the set representation
+/// proves empty and the rules do not.
+fn three_to_one_long() -> Schema {
+    Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::MinLen(3), Constraint::MaxLen(1)].into(),
+    }
+}
+
+/// A query reads an emptiness once, keeps the answer under its own number, and
+/// shares it with the parts of itself and with no other query.
+///
+/// The memo's claim is that an answer read back is the one a reading again
+/// would give, so it is held to the query that read it: a part of the query
+/// reads the same sets under the same number, and another query, which may read
+/// another pool at the same addresses, has a number of its own.
+#[test]
+fn a_query_keeps_its_readings_to_itself() {
+    let budget = Budget::new(DECISION_BUDGET);
+    let first = Cx::new(&NoLeafRelations, &[], &budget);
+    let schema = three_to_one_long();
+    assert!(first.denotes_no_value(&schema));
+    let held = |cx: &Cx<'_>| {
+        READINGS.with(|readings| {
+            readings
+                .borrow()
+                .get(&(cx.query(), schema.clone()))
+                .copied()
+        })
+    };
+    assert_eq!(
+        held(&first),
+        Some(true),
+        "the answer is held under the query"
+    );
+    let part = first.within_this_query(&budget);
+    assert_eq!(
+        part.query(),
+        first.query(),
+        "a part of the query shares its number"
+    );
+    assert_eq!(held(&part), Some(true));
+    let second = Cx::new(&NoLeafRelations, &[], &budget);
+    assert_ne!(
+        second.query(),
+        first.query(),
+        "another query has a number of its own"
+    );
+    assert_eq!(held(&second), None, "and reads no answer of the first");
+    assert!(second.denotes_no_value(&schema));
+}
+
+/// The memo is emptied when it holds its bound, and what it holds after is the
+/// answer that found it full.
+#[test]
+fn the_readings_held_are_bounded() {
+    READINGS.with(|readings| {
+        let mut readings = readings.borrow_mut();
+        readings.clear();
+        for query in 0..READINGS_HELD {
+            readings.insert((u64::MAX - query as u64, Schema::Int), false);
+        }
+    });
+    let budget = Budget::new(DECISION_BUDGET);
+    let cx = Cx::new(&NoLeafRelations, &[], &budget);
+    assert!(cx.denotes_no_value(&three_to_one_long()));
+    assert_eq!(READINGS.with(|readings| readings.borrow().len()), 1);
 }
 
 /// A reading run within a cap spends no more than the cap, and the query is

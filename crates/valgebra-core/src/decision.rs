@@ -17,7 +17,9 @@ mod products;
 mod readings;
 mod records;
 
-use std::cell::{Cell, OnceCell};
+use std::cell::{Cell, OnceCell, RefCell};
+
+use rustc_hash::FxHashMap;
 
 use crate::descr::budget;
 use crate::descr::lower::{
@@ -399,28 +401,23 @@ impl SeqShape {
 #[inline(never)]
 fn narrowed_meet_below(members: &[Schema], other: &Schema, cx: &mut Cx<'_>) -> Relation {
     narrowed_meet(members, cx).map_or(Relation::Unknown, |narrowed| {
-        if NARROWING.with(Cell::get) {
+        let query = cx.query();
+        if NARROWING.with(Cell::get) == query {
             return narrowed.is_subtype_rec(other, cx);
         }
         let allowance = Budget::new(cx.budget.left().min(RESPELLING));
-        let _open = Narrowing::open();
-        narrowed.is_subtype_rec(other, &mut Cx::new(cx.oracle, cx.defs, &allowance))
+        let _open = Narrowing::open(query);
+        narrowed.is_subtype_rec(other, &mut cx.within_this_query(&allowance))
     })
 }
 
-thread_local! {
-    /// Whether a narrowed meet's question is being asked on this thread
-    /// ([`narrowed_meet_below`]).
-    static NARROWING: Cell<bool> = const { Cell::new(false) };
-}
-
-/// The narrowed meet's question open on this thread, closed when dropped: what
-/// was open before is open again.
-struct Narrowing(bool);
+/// The narrowed meet's question open on this thread, closed when dropped: the
+/// query that was open before is open again.
+struct Narrowing(u64);
 
 impl Narrowing {
-    fn open() -> Self {
-        Self(NARROWING.with(|open| open.replace(true)))
+    fn open(query: u64) -> Self {
+        Self(NARROWING.with(|open| open.replace(query)))
     }
 }
 
@@ -788,7 +785,7 @@ impl Schema {
             return Relation::Unknown;
         }
         let allowance = Budget::new(cx.budget.left().min(RESPELLING));
-        let cx = &mut Cx::new(cx.oracle, cx.defs, &allowance);
+        let cx = &mut cx.within_this_query(&allowance);
         let Schema::Complement(inner) = other else {
             let disjoint = Schema::meet_within([self.clone(), other.clone()], cx.defs)
                 .is_empty_rec(cx)
@@ -872,7 +869,7 @@ impl Schema {
                         if lowers {
                             member.descriptor_contained_in(other, cx.oracle, cx.defs)
                         } else {
-                            Relation::proven(member.denotes_no_value(cx.oracle, cx.defs))
+                            Relation::proven(cx.denotes_no_value(member))
                         }
                     })
                     .or_else(|| member.decided_by_parts(other, cx, false))
@@ -1158,8 +1155,8 @@ impl Schema {
     /// above reads such a member as one region or as none.
     ///
     /// **The meet is the supertype's alone, so the set representation reads
-    /// it where the rules leave it open** ([`denotes_no_value`](Self::denotes_no_value)),
-    /// as the complement rule reads its inner set alone. Two patterns no word
+    /// it where the rules leave it open** ([`Cx::denotes_no_value`]), as the
+    /// complement rule reads its inner set alone. Two patterns no word
     /// matches both are a meet only the sets empty, and the descriptor route
     /// lowers the subject first, so a subject the set reading cannot lower --
     /// a literal the null oracle cannot place -- refuses the pair there: a
@@ -1195,7 +1192,7 @@ impl Schema {
             }
         });
         let meet = Schema::meet_within(complements, cx.defs);
-        meet.is_empty_rec(cx) || meet.denotes_no_value(cx.oracle, cx.defs)
+        meet.is_empty_rec(cx) || cx.denotes_no_value(&meet)
     }
 
     /// Whether `self` and `other` share no value, which is what decides `self ⊆
@@ -1825,7 +1822,7 @@ impl Schema {
             // `A` leaves it nothing to lower.
             (Schema::Complement(a), Schema::Complement(b)) => b
                 .is_subtype_rec(a, cx)
-                .or_else(|| Relation::proven(b.denotes_no_value(cx.oracle, cx.defs))),
+                .or_else(|| Relation::proven(cx.denotes_no_value(b))),
             // `A ⊆ ¬B` is disjointness, which the rules prove or fail to
             // prove -- they are sound and incomplete, so not proving it is not
             // refuting it. There is one shape where the pair *is* refuted, and
@@ -1847,7 +1844,7 @@ impl Schema {
                 } else if self.spills_a_kind(other, cx) {
                     Relation::Fails
                 } else {
-                    Relation::proven(inner.denotes_no_value(cx.oracle, cx.defs))
+                    Relation::proven(cx.denotes_no_value(inner))
                 }
             }
             (
@@ -2092,6 +2089,69 @@ pub(super) struct Cx<'a> {
     /// reference reached again is read as empty, the least fixpoint read
     /// inductively.
     visiting: Vec<DefIx>,
+    /// The number this query's set readings are memoized under, given at the
+    /// first one; zero until then ([`Readings`]).
+    query: Cell<u64>,
+}
+
+/// The answers the set representation gave the query running on this thread,
+/// by the schemas asked and by the oracle and definitions they were read under.
+///
+/// A reading is a function of its schemas, the pool and the definitions, and
+/// each build within it arms an allowance of its own and gives the enclosing
+/// one back untouched ([`budget::under`]), so an answer read back here is the
+/// answer a reading again would give: the memo changes no answer and no
+/// allowance, only how often a build runs. A query asks one reading of every
+/// goal its rules decline, and the goals repeat one meet many times over -- a
+/// relation between two records nested past the depth the sets descend asks a
+/// hundred and thirty-six readings of one meet -- so a reading is built once a
+/// query rather than once a goal.
+///
+/// Each answer rests on no open hypothesis, which is what a memo inside the
+/// coinductive procedure owes (`docs/dev/10-theory.md`, "A cache under
+/// coinduction is revertible or absent"): a reading takes the pool and the definitions and
+/// never the trail or the definitions being resolved, so no assumption a
+/// failed disjunct abandons is in what it answers.
+///
+/// **Held beside the query, not on its context.** A query whose rules answer
+/// is a few hundred instructions on the decision workload, and one pointer on
+/// the context, never allocated, read 5.4% more there: building and dropping
+/// it is that query's cost. A thread's queries run one at a time, so the memo
+/// is the thread's, and an answer is held under the number of the query that
+/// read it: a query is numbered at its first reading, a number is never given
+/// twice on a thread, and a part of a query read under the same sets shares
+/// its number, so an answer is read back by the query that read it and by no
+/// other. A query a callback or a reading starts inside another has a number
+/// of its own and leaves the outer one's answers where they are. Nothing is
+/// asked as a query starts, so a query that reads nothing pays one word; the
+/// memo is emptied when it holds [`READINGS_HELD`] answers, which bounds what
+/// the finished queries' answers occupy and changes no answer. What is held is the answer and never a descriptor: a
+/// descriptor of a few hundred atoms is what a reading builds to throw away.
+///
+/// Only emptiness is held. It is the reading the goals repeat -- the meet of a
+/// record's kept members, the inner set of a complement -- while a pair placed
+/// by the sets is asked once a query, where a memo is a hash and a copy of two
+/// schemas for nothing.
+type Readings = FxHashMap<(u64, Schema), bool>;
+
+/// The most answers the memo holds before it is emptied.
+///
+/// A query that repeats a reading repeats it within a few hundred goals, and
+/// the slowest relations of the record families hold a few dozen answers at
+/// once; the bound is what keeps the finished queries' answers from piling up
+/// on a thread that asks millions.
+const READINGS_HELD: usize = 4096;
+
+thread_local! {
+    /// The readings of the queries on this thread, by query number.
+    static READINGS: RefCell<Readings> = RefCell::new(Readings::default());
+    /// The query whose narrowed meet is being asked on this thread, or zero
+    /// where none is ([`narrowed_meet_below`]). Held beside the query for the
+    /// reason [`Readings`] is, and by number, so a query a callback starts
+    /// inside the question asks its own narrowed meets as a query of its own.
+    static NARROWING: Cell<u64> = const { Cell::new(0) };
+    /// The number the next query to read on this thread is given.
+    static QUERIES: Cell<u64> = const { Cell::new(0) };
 }
 
 impl<'a> Cx<'a> {
@@ -2107,7 +2167,47 @@ impl<'a> Cx<'a> {
             budget,
             trail: Vec::new(),
             visiting: Vec::new(),
+            query: Cell::new(0),
         }
+    }
+
+    /// A context for a part of this query, which reads the same sets and so
+    /// shares its memo.
+    fn within_this_query(&self, budget: &'a Budget) -> Self {
+        let cx = Self::new(self.oracle, self.defs, budget);
+        cx.query.set(self.query());
+        cx
+    }
+
+    /// This query's number, given at its first reading.
+    fn query(&self) -> u64 {
+        if self.query.get() == 0 {
+            self.query.set(QUERIES.with(|queries| {
+                let next = queries.get() + 1;
+                queries.set(next);
+                next
+            }));
+        }
+        self.query.get()
+    }
+
+    /// Whether the set representation proves `schema` holds no value, read once
+    /// a query ([`Readings`]).
+    fn denotes_no_value(&self, schema: &Schema) -> bool {
+        let key = (self.query(), schema.clone());
+        if let Some(known) = READINGS.with(|readings| readings.borrow().get(&key).copied()) {
+            return known;
+        }
+        let answer = schema.denotes_no_value(self.oracle, self.defs);
+        READINGS.with(|readings| {
+            let mut readings = readings.borrow_mut();
+            if readings.len() >= READINGS_HELD {
+                // Emptied in place: the table grown is the one refilled.
+                readings.clear();
+            }
+            readings.insert(key, answer);
+        });
+        answer
     }
 
     /// Decide `goal` with the goal itself on the trail, and take it off after.
