@@ -146,7 +146,7 @@ reproduces; the count is the table's rather than this sentence's:
 | the pinned tool versions | no, for the tools `taiki-e/install-action` installs | `ci.yml` installs `cargo-deny`, `cargo-llvm-cov` and `cargo-mutants` at versions it names, and the gate runs whichever is on the caller's `PATH`; a `uvx` step carries its pin in its own command, so the gate runs the lane's version of it |
 | the build of the interpreter, not only its version | no: a rule answers it instead | `sys.stdlib_module_names` is the build's, not the release's -- one 3.12 build lists the Windows-only `_wmi` and a runner's does not, so a table of every name would report a difference between two builds as a moved row. The floor table records the modules this tree imports, which are portable by construction |
 | the machine's own speed | not modeled, and not a gate: every merge-blocking number is an instruction count | an absolute count reads 5--8% apart between two machines on one `rustc` line, which is why a recorded count is read only where there is no base count, inside a band that wide |
-| secrets, tokens and the event payload | no, and the steps that need one are excused by name | the merge base comes from the event, so `--against` runs only in the lane |
+| secrets, tokens and the event payload | no, and the steps that need one are excused by name | the base comes from the event, so `--against` runs only in the lane |
 | what a gate **counts**, against what it claims to | no: a scope is a claim in prose, and no check reads it | a coverage floor that counts the instruction gate's own workloads, which no suite runs, reddens over a change that adds no uncovered line of its own; a shape that counts its harness reports the harness |
 
 The first four are closed. Named rather than numbered from here, since the
@@ -851,9 +851,9 @@ export LD_LIBRARY_PATH="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.g
 # without the second, the sweep draws what the lane does not.
 export PROPTEST_MAX_SHRINK_TIME=1000
 export PROPTEST_RNG_SEED=0
-# The files and functions the change touches, from where it starts.
+# The files and functions the change touches, from the tip it will replace.
 cargo mutants --package valgebra-py --list --json > listed.json
-python scripts/code_changes.py "$(git merge-base origin/github_ci HEAD)" \
+python scripts/code_changes.py origin/github_ci \
   --listing listed.json --examined examined.txt
 cargo mutants --package valgebra-py --file <each file of BINDING_SWEPT it names> \
   --re <each pattern of examined.txt> \
@@ -870,7 +870,7 @@ skips are the two termination proofs and the long chain's minimization:
 export PROPTEST_MAX_SHRINK_TIME=1000
 export PROPTEST_RNG_SEED=0
 cargo mutants --package valgebra-core --list --json > listed.json
-python scripts/code_changes.py "$(git merge-base origin/github_ci HEAD)" \
+python scripts/code_changes.py origin/github_ci \
   --listing listed.json --examined examined.txt
 cargo mutants --package valgebra-core --file <each core file it names> \
   --re <each pattern of examined.txt> \
@@ -1229,17 +1229,22 @@ nightly's. The crate-wide suites, `laws.rs`, `index_laws.rs` and
 sweep alone judges a change to one of them. The diff is read in one shape
 whatever git is configured to print, a rename as an added file among them.
 
-**A change starts where its commits leave the history they replace.** The
-bench gate's `rev` and the sweeps' file list come from one base, which
-`scripts/change_base.py` names: the event's base (a pull request's, or the
-`before` of a push) taken to its merge base with `HEAD`. A force-push names a
-`before` no branch reaches; the script fetches it by id where the host still
-serves it, so a rewritten history is measured from its fork point, and falls
-back to the default branch's tip -- which, pushed to, is `HEAD` itself -- and
-from there to `HEAD`'s parent. Measured from itself, an amended commit sweeps
-`core files: none` and passes. `tests/test_change_base.py` drives each case
-over a synthetic history, and holds every step reading the event's base to the
-script.
+**A push is measured from the tip it replaced.** The bench gate's `rev` and
+the sweeps' file list come from one base, which `scripts/change_base.py` names,
+and the sweeps diff the two trees rather than the commits between them. A push
+names its `before`, taken as it stands: what the two trees differ in is what
+the push changes, so a line amended fifty commits deep sweeps the one function
+holding it, where the fork point would sweep every function the fifty commits
+touch. A force-push names a `before` no branch reaches; the script fetches it by
+id where the host still serves it, and otherwise falls back to the default
+branch's tip -- which, pushed to, is `HEAD` itself -- and from there to `HEAD`'s
+parent, since a commit measured from itself sweeps `core files: none` and
+passes. A pull request is measured from where its branch left the base, the
+default branch's tip having moved on with commits of its own; the steps pass the
+event so the script tells the two apart. `tests/test_change_base.py` drives each
+case over a synthetic history, and holds every step reading the event's base to
+the script and to the event, and `tests/test_code_changes.py` holds a rewrite to
+the function its amend changed.
 
 **A slow network is not a red lane.** `astral-sh/setup-uv` reads its version
 manifest from `raw.githubusercontent.com` under a hard five-second timeout and

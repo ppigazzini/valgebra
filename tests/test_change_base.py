@@ -1,11 +1,12 @@
-"""A change is measured from where its commits start, a force-push included.
+"""A push is measured from the tip it replaced, a pull request from its fork point.
 
 `scripts/change_base.py` names the base the bench gate builds and the
 diff-scoped mutation sweeps diff against. The case it exists for is the
 maintainer's own way of working: amend, force-push. The event's `before` is
-then a tip no branch reaches, the fallback to the default branch is the commit
-under test, and a sweep measuring an amended commit from itself reads `core
-files: none` and passes.
+then a tip no branch reaches, and the difference from it is what the amend
+changed, however deep: a line amended under fifty commits sweeps the function
+holding it, not the fifty commits. A host that no longer serves that tip leaves
+the default branch, which is the commit under test, and its parent stands in.
 
 Driven against synthetic histories rather than this tree, so the answer does
 not depend on the clone the suite runs in: an upstream that is rewritten, and a
@@ -57,14 +58,21 @@ def _commit(tree: Path, message: str) -> str:
     return _git(tree, "rev-parse", "HEAD")
 
 
-def _base(checkout: Path, base_sha: str) -> subprocess.CompletedProcess[str]:
+def _base(
+    checkout: Path, base_sha: str, event: str = "push"
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
         [sys.executable, str(SCRIPT)],
         cwd=checkout,
         capture_output=True,
         text=True,
         check=False,
-        env={**os.environ, "BASE_SHA": base_sha, "DEFAULT_BRANCH": "main"},
+        env={
+            **os.environ,
+            "BASE_SHA": base_sha,
+            "DEFAULT_BRANCH": "main",
+            "EVENT": event,
+        },
     )
 
 
@@ -94,16 +102,16 @@ def rewritten(tmp_path: Path) -> tuple[Path, str, str, str]:
     return upstream, root, before, after
 
 
-def test_a_rewrite_is_measured_from_its_fork_point(
+def test_a_rewrite_is_measured_from_the_tip_it_replaced(
     rewritten: tuple[Path, str, str, str], tmp_path: Path
 ) -> None:
-    # A host that still serves the tip a push replaced: both rewritten commits
-    # are measured, not the difference the amend made to them.
-    upstream, root, before, _ = rewritten
+    # A host that still serves the tip a push replaced: the difference the
+    # amend made is measured, not every commit it rewrote.
+    upstream, _, before, _ = rewritten
     checkout = _checkout(tmp_path, upstream, "served")
     done = _base(checkout, before)
     assert done.returncode == 0, done.stderr
-    assert done.stdout.strip() == root
+    assert done.stdout.strip() == before
 
 
 def test_a_rewrite_the_host_forgot_is_measured_from_the_last_commit(
@@ -146,7 +154,7 @@ def test_a_branch_is_measured_from_where_it_left_the_default(tmp_path: Path) -> 
     moved = _commit(upstream, "main moves on")
     checkout = _checkout(tmp_path, upstream, "branch")
     _git(checkout, "checkout", "--quiet", "--detach", "origin/work")
-    assert _base(checkout, moved).stdout.strip() == fork
+    assert _base(checkout, moved, "pull_request").stdout.strip() == fork
     # A first push of a branch names no base at all: the default branch stands in.
     assert _base(checkout, "").stdout.strip() == fork
 
@@ -184,3 +192,13 @@ def test_every_step_that_reads_the_event_base_names_it_through_the_script() -> N
         if "scripts/change_base.py" not in run or "$BASE_SHA" in run
     ]
     assert not inline, f"steps working the base out for themselves: {inline}"
+    # A push and a pull request are measured apart, so each step names its event.
+    unnamed = [
+        f"{job}: {name}"
+        for job, body in spec["jobs"].items()
+        for step in body.get("steps", [])
+        if "BASE_SHA" in (env := step.get("env") or {})
+        and env.get("EVENT") != "${{ github.event_name }}"
+        for name in [step.get("name", "")]
+    ]
+    assert not unnamed, f"steps reading the base without the event: {unnamed}"
