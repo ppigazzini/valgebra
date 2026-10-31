@@ -847,7 +847,12 @@ names a class: `test_an_alias_recurring_on_a_growing_argument_is_refused` and
 list of types or a signature rather than for one type, and the schema language
 has no form an argument list for one becomes: `Callable` checks callability
 alone. An alias declaring one is refused by name:
-`test_a_parameter_that_is_no_type_variable_is_refused`.
+`test_a_parameter_that_is_no_type_variable_is_refused`, and so is a generic
+class applied, given a default for one, or written as a base applied:
+`test_a_class_binding_a_list_of_types_or_a_signature_is_refused`. Read as a
+parameter bound to one argument, `Row[int, str]`'s `tuple[*Ts]` was
+`tuple[int]`. The form that would read it has to admit `{"a": (1, "a")}` in
+`Row[int, str]` and refuse `{"a": (1,)}`.
 
 **Reading `NotRequired` on a dict-literal field as the key's optionality.**
 It is what a reader coming from `TypedDict` means, and it makes two markers for

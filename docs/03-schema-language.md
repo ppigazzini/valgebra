@@ -374,6 +374,7 @@ with a message instead:
 | `Final`, `ClassVar` | a declaration about a name, not about a value; a dataclass field's `Final[T]` is read as `T` ([classes](#classes)) |
 | `Unpack[X]` | binds element types into a `tuple[...]`, so it has no meaning alone, and nor has `*tuple[...]` outside one |
 | a user `Generic[T]` class read by `isinstance` alone, applied | the parameter is erased at runtime and the class declares no field it reaches, so the type argument narrows nothing |
+| a class generic in a `TypeVarTuple` or a `ParamSpec`, applied | the parameter stands for a list of types or a signature, which no form here binds a field to |
 | bare `Protocol`, and a generic `Protocol[T]` | the base a protocol is declared from declares no member, and a protocol over a type parameter names one set per argument |
 | a `Protocol` member declared `ClassVar` or `Final` | the qualifier says where the value lives rather than what it is |
 | a set or frozen set literal | `{int}` and `frozenset({int})` name containers, which are `set[T]` and `frozenset[T]` |

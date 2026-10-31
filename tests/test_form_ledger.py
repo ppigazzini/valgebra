@@ -147,6 +147,16 @@ class Parametrized(Generic[T]):
     """A user generic, whose parameter is erased before a value exists."""
 
 
+Signature = typing.ParamSpec("Signature")
+
+
+@dataclass
+class Hooked(Generic[Signature]):
+    """A dataclass generic in a signature, which no field form binds."""
+
+    call: typing.Callable[Signature, int]
+
+
 class HasX(Protocol):
     """A protocol with one data member."""
 
@@ -325,6 +335,9 @@ FORMS: dict[str, Reads | Refuses] = {
     ),
     "a user `Generic[T]` class read by `isinstance` alone, applied": Refuses(
         lambda: Parametrized[int], "unsupported typing form with origin"
+    ),
+    "a class generic in a `TypeVarTuple` or a `ParamSpec`, applied": Refuses(
+        lambda: Hooked[[int]], "stands for a list of types"
     ),
     GENERIC_RECORDS: Reads(Box[int], Box(1), Box("one")),
     PROTOCOL_BASES: Refuses(lambda: Protocol, "the base a protocol is declared from"),

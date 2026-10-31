@@ -186,6 +186,38 @@ def test_a_parameter_left_out_takes_its_default() -> None:
         assert Validator(Holder[str]).is_valid(Holder("one"))
 
 
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="a TypeVarTuple is 3.11")
+def test_a_class_binding_a_list_of_types_or_a_signature_is_refused() -> None:
+    """A `TypeVarTuple` stands for a list of types, which no form here takes.
+
+    `Row[int, str]` binds `shapes` to `(int, str)`, so its field is `tuple[int,
+    str]`; read as one argument a parameter, it held `(1,)` and refused `(1,
+    "a")`. The class applied, a class deriving from it applied, a dataclass
+    alike, and a class over a `ParamSpec` applied are refused, as an alias
+    declaring one is.
+    """
+    shapes = typing.TypeVarTuple("shapes")
+    signature = typing.ParamSpec("signature")
+
+    class Row(typing.TypedDict, typing.Generic[typing.Unpack[shapes]]):
+        a: tuple[typing.Unpack[shapes]]
+
+    class Derived(Row[int, str]):
+        pass
+
+    @dataclasses.dataclass
+    class DRow(typing.Generic[typing.Unpack[shapes]]):
+        a: tuple[typing.Unpack[shapes]]
+
+    @dataclasses.dataclass
+    class Hook(typing.Generic[signature]):
+        call: typing.Callable[signature, int]
+
+    for form in (Row[int, str], Row[int], Derived, DRow[int, str], Hook[[int]]):
+        with pytest.raises(NotImplementedError, match="stands for a list of types"):
+            Validator(form)
+
+
 @pytest.mark.skipif(
     sys.version_info < (3, 13), reason="a type parameter's default is 3.13"
 )
