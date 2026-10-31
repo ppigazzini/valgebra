@@ -186,6 +186,44 @@ def test_a_parameter_left_out_takes_its_default() -> None:
         assert Validator(Holder[str]).is_valid(Holder("one"))
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11), reason="NotRequired and a generic TypedDict are 3.11"
+)
+def test_a_qualifier_as_a_type_argument_is_refused() -> None:
+    """A `TypedDict` qualifier qualifies an item where it is declared, and nowhere else.
+
+    `Holds[NotRequired[int]]` names no type a checker accepts, and the runtime
+    keeps `a` required; substituted into the field, the qualifier turned the key
+    optional, and a dataclass applied to one dropped it. Read through
+    `Annotated`, and refused alike where a base is written applied to one.
+    """
+
+    class Holds(typing.TypedDict, typing.Generic[T]):
+        a: T
+
+    @dataclasses.dataclass
+    class DHolds(typing.Generic[T]):
+        a: T
+
+    class Derived(Holds[typing.NotRequired[int]]):  # ty: ignore[invalid-type-form]
+        pass
+
+    qualified = [
+        typing.NotRequired[int],
+        typing.Required[int],
+        typing.Annotated[typing.NotRequired[int], "note"],  # ty: ignore[invalid-type-form]
+    ]
+    if sys.version_info >= (3, 13):
+        qualified.append(typing.ReadOnly[int])
+    applied = DHolds[typing.NotRequired[int]]  # ty: ignore[invalid-type-form]
+    forms = [Holds[q] for q in qualified] + [applied, Derived]
+    for form in forms:
+        with pytest.raises(NotImplementedError, match="is a TypedDict qualifier"):
+            Validator(form)
+    assert Validator(Holds[int]).is_valid({"a": 1})
+    assert not Validator(Holds[int]).is_valid({})
+
+
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="a TypeVarTuple is 3.11")
 def test_a_class_binding_a_list_of_types_or_a_signature_is_refused() -> None:
     """A `TypeVarTuple` stands for a list of types, which no form here takes.

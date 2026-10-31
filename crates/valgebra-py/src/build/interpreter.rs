@@ -1435,6 +1435,37 @@ fn a_recursive_generic_alias_is_tied_by_its_arguments() {
     });
 }
 
+/// A `TypedDict` qualifier given as a class's type argument, bare or under
+/// `Annotated`, is refused: it qualifies an item where it is declared, and the
+/// runtime keeps the key it reaches required. The type alone reads.
+#[test]
+fn a_qualifier_as_a_type_argument_is_refused() {
+    Python::attach(|py| {
+        if !Since(11).met(py) {
+            return;
+        }
+        let holds = |argument: &str| {
+            format!(
+                r#"(lambda ns: (exec("import typing\nT = typing.TypeVar('T')\nclass Holds(typing.TypedDict, typing.Generic[T]):\n    a: T\n", ns), ns['Holds'][{argument}])[1])({{}})"#
+            )
+        };
+        assert_eq!(
+            built(py, &holds("int")).expect("the type alone reads"),
+            "{'a': int, str: anything}"
+        );
+        for qualified in [
+            "typing.NotRequired[int]",
+            "typing.Annotated[typing.NotRequired[int], 'note']",
+        ] {
+            let refused = built(py, &holds(qualified)).expect_err(qualified);
+            assert!(
+                refused.to_string().contains("is a TypedDict qualifier"),
+                "{qualified}: {refused}"
+            );
+        }
+    });
+}
+
 /// A class over a `TypeVarTuple` applied binds the parameter to a list of
 /// types, which no field form here takes, and is refused; the class bare binds
 /// nothing, and reads where no field names the parameter.

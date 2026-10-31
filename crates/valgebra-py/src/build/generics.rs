@@ -394,7 +394,7 @@ fn refuse_a_presence_qualifier(key: &str, value: &Bound<'_, PyAny>) -> PyResult<
 /// How many `Annotated` and `ReadOnly` wrappers [`refuse_a_presence_qualifier`]
 /// reads through: more than any spelling nests, since `Annotated` flattens
 /// itself and a qualifier qualifies once.
-const MAX_QUALIFIER_DEPTH: usize = 8;
+pub(super) const MAX_QUALIFIER_DEPTH: usize = 8;
 
 /// Compile a *type argument* of a typing form.
 ///
