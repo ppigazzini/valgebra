@@ -521,7 +521,10 @@ impl PoolRelations<'_, '_> {
         let py = class.py();
         let class = class.cast::<PyType>().ok()?;
         let (meta, flag, base) = enum_types(py)?;
-        if !self.heard(class.is_instance(meta.bind(py)))? {
+        // The metaclass Python laid down, which is what lists the members and
+        // makes an instance: `isinstance` reads a `__class__` past it on a
+        // miss, and this is asked of every class a query reads.
+        if !self.heard(class.get_type().is_subclass(meta.bind(py)))? {
             return None;
         }
         if self.heard(class.is_subclass(flag.bind(py)))? {
@@ -1220,7 +1223,16 @@ impl<'py> PoolRelations<'py, '_> {
         if let Some(read) = self.attributes.borrow().get(&key) {
             return Some(Arc::clone(read));
         }
-        let read = Arc::new(self.read_attributes(ty)?);
+        // An enumeration read as the union of its members has no instance but
+        // them, and a member holds what it holds as it stands, which the
+        // members' own reading asks (`leaf_subtype`). A direct instance made
+        // past them is no value of the set, so no name of one is read: the
+        // reading a `__getattribute__` hook gets, as a builtin's instance does.
+        let read = Arc::new(if self.enum_members(ty).is_some() {
+            Attributes::new(false, Hook::Getattribute)
+        } else {
+            self.read_attributes(ty)?
+        });
         self.attributes.borrow_mut().insert(key, Arc::clone(&read));
         Some(read)
     }

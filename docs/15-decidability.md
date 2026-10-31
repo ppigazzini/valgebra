@@ -151,7 +151,8 @@ answers `"undecided"`.
   that is not a `Flag`, carrying at least one member, whose members compare by
   identity, with `Enum`'s `_missing_` and `EnumMeta`'s `__iter__` and
   `__call__`. Then `Color` and
-  `Literal[Color.RED, Color.GREEN]` are one set, decided in both directions;
+  `Literal[Color.RED, Color.GREEN]` are one set, decided in both directions,
+  and a refutation reads the members as a proof does;
   the class is still what `repr` prints and what a failure names. The four
   exclusions are each a value that would stand against the union:
 

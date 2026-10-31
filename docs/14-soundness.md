@@ -244,9 +244,13 @@ The soundness is relative to a small, explicit trust base:
   the union of its members because the class makes no other instance.
   `object.__new__(Color)` makes one past it: the walk admits it to `Color`,
   and no member's literal holds it, so it is outside the relation that equates
-  the two. A refutation standing on such a value is sound as it is: an
-  `IntEnum` is not below `Ge(1)` although both its members are, because
-  `int.__new__(IE, -5)` is an instance the walk admits and the bound refuses.
+  the two. The union is read on both sides, a refutation reading the members
+  as a proof does, so no answer stands on such a value; a member is read as it
+  stands, so one given an attribute later refutes as its literal does. A
+  refutation standing on an instance made past the members is sound where the
+  class is read as the class it is: an `IntEnum` is not below `Ge(1)` although
+  both its members are, because `int.__new__(IE, -5)` is an instance the walk
+  admits and the bound refuses.
   A class that makes another instance through itself is no union of its
   members at all, and is read as the class it is: a `_missing_` of its own
   answers `E(5)` with a new instance, and a metaclass's own `__iter__` or

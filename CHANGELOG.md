@@ -74,6 +74,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a frozen dict literal's refusal names the schemas that admit one
 - fix: a class over a list of types or a signature is refused applied
 - fix: a TypedDict qualifier given as a type argument is refused
+- fix: an enumeration is its members to a refutation as to a proof
 
 -->
 
@@ -346,6 +347,16 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **An enumeration is its members to a refutation as to a proof.** `Pair`, an
+  `Enum` whose members carry no `x`, was proved below `Literal[Pair.A,
+  Pair.B]` and that union below `~X` for a protocol `X` declaring `x`, and
+  refuted below `~X` itself, on an instance `object.__new__` makes past the
+  members; `Pair & X` was refuted below `nothing` and proved below `~X | int`.
+  An enumeration read as the union of its members is that union on both sides:
+  `Pair` is below `~X`, and no relation of the class stands on an instance its
+  members are not. A member is read as it stands, so one given an `x` refutes
+  the class below `~X` as it refutes its own literal.
 
 - **A `TypedDict` qualifier given as a type argument is refused.** `Required`,
   `NotRequired` and `ReadOnly` qualify an item where it is declared, and the

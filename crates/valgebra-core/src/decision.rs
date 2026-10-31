@@ -1969,6 +1969,15 @@ impl Schema {
                     Relation::of_mismatch(self.verdict_rec(cx))
                 } else if self.spills_a_kind(other, cx) {
                     Relation::Fails
+                } else if let Schema::Instance(_) = self
+                    && let Some(below) = cx.oracle.leaf_subtype(self, other)
+                {
+                    // A class the bindings read as its values -- an enumeration
+                    // that is the union of its members -- is below the
+                    // complement exactly where each value is, and the meet the
+                    // rule above asks reads the class as an atom. The union arm
+                    // asks the same of a union supertype.
+                    Relation::decided(below)
                 } else {
                     Relation::proven(cx.denotes_no_value(inner))
                 }

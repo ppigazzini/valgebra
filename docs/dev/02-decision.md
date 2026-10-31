@@ -752,6 +752,16 @@ no-subclassing rule does not cover. Decided as unions on that reading,
 `Validator(Flag) <= Literal[*Flag]` and `Validator(EmptyEnum) <= nothing` would
 each be `True` with a value refuting it.
 
+**A class read as its members is that union to a refutation as to a proof.**
+The rules ask the members where a union or a complement is the supertype, and
+the bindings answer `attribute_reach` and the class snapshot for such a class
+as they answer a builtin's: no name of a direct instance is read, since an
+instance made past the members is no value of the set. A refutation standing
+on one would refute `Pair <= ~X` beside `Pair <= Literal[Pair.A, Pair.B]` and
+`Literal[Pair.A, Pair.B] <= ~X`, both proved, so no one set gives the three
+answers. A meet holding the class is not read a member at a time, and stays
+undecided where the class's atom leaves it.
+
 A class failing any condition is the `isinstance` atom any other class is. That
 costs completeness and nothing else: membership is unaffected, and the relations
 stay undecided. `tests/test_enums.py` holds each refused kind to the value
