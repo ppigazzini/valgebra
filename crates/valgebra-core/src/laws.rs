@@ -3712,9 +3712,9 @@ const EDGE_SPAN: usize = 1;
 /// holding none of them reports the relation sound because nothing in it can
 /// say otherwise. So each schema contributes its own edges -- the operand of
 /// every bound with its two neighbors, a container of each kind at each side
-/// of every length, the constant of every literal, and a mapping at each side
-/// of every record's width -- and the property is judged over the union of
-/// those with the fixed kind edges.
+/// of every length, the constant of every literal with the values beside it,
+/// and a mapping at each side of every record's width -- and the property is
+/// judged over the union of those with the fixed kind edges.
 fn boundary_values(schemas: &[&Schema]) -> Vec<Obj> {
     let mut pool = kind_edges();
     // Twice over the same pool. The first pass is what each schema contributes
@@ -4591,6 +4591,46 @@ fn a_length_bound_over_the_top_is_separated_by_a_sequence_past_it() {
     );
 }
 
+/// A literal is separated from its kind at a position of a record.
+///
+/// The pair: `{a?: list[int]}` against `{a?: list[Literal[1]]}`, both closed.
+/// It is refuted by `{"a": [0]}`. Each record probes its field with its
+/// list's values, and each list is built from its element's: an `int` builds
+/// `1`, and so does the literal, so neither record holds a list of any other
+/// integer unless the literal names the numbers beside it.
+#[test]
+fn a_literal_is_separated_from_its_kind_at_a_position_of_a_record() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let record = |element: Schema| Schema::KeyedMap {
+        fields: vec![Field {
+            name: "a".into(),
+            schema: Schema::Seq {
+                container: SeqKind::List,
+                shape: SeqShape::homogeneous(element),
+            },
+            required: false,
+        }]
+        .into(),
+        defaults: Vec::new().into(),
+    };
+    let a = record(Schema::Int);
+    let b = record(Schema::Literal(ConstIx::new(1)));
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
+}
+
 /// A length bound on `bytes` is separated by a byte string one past it.
 ///
 /// The pair: `bytes` against `bytes` of at most one. It is refuted by a
@@ -4684,9 +4724,30 @@ fn containers_of(len: usize, out: &mut Vec<Obj>) {
     out.push(Obj::Map(entries));
 }
 
-/// The numbers on both sides of a bound's operand, and the floats beside them.
-fn numbers_around(index: OperandIx, out: &mut Vec<Obj>) {
-    let Some(operand) = as_num(&const_pool()[index.get()]) else {
+/// The values beside a literal's constant: what separates the literal from
+/// the rest of its kind.
+///
+/// A literal is a point of its kind, as a bound's operand is a point of an
+/// order, and is separated from the kind by the values next to it. A position
+/// is probed with each schema's own member, and a kind's member is one value:
+/// `{a?: list[int]}` is refuted below `{a?: list[Literal[1]]}` by a list
+/// holding any integer but `1`, and `1` is the integer both build. So a
+/// literal contributes the numbers around its constant and another value of
+/// its own kind, and the shapes around it are built from those as from any
+/// value of it: the literal's record holds `{"a": [0]}`, which the subject
+/// admits.
+fn beside(constant: &Obj, out: &mut Vec<Obj>) {
+    numbers_around(constant, out);
+    match constant {
+        Obj::Bool(value) => out.push(Obj::Bool(!value)),
+        Obj::Str(text) => out.push(Obj::Str(if text.is_empty() { "a" } else { "" })),
+        _ => {}
+    }
+}
+
+/// The numbers on both sides of a constant, and the floats beside them.
+fn numbers_around(constant: &Obj, out: &mut Vec<Obj>) {
+    let Some(operand) = as_num(constant) else {
         return;
     };
     #[expect(
@@ -4992,7 +5053,11 @@ fn gather(container: CollKind, items: Vec<Obj>) -> Obj {
 fn edges_of(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
     let mut mine: Vec<Obj> = a_member(schema, MEMBER_FUEL).into_iter().collect();
     match schema {
-        Schema::Literal(index) => mine.push(const_pool()[index.get()].clone()),
+        Schema::Literal(index) => {
+            let constant = &const_pool()[index.get()];
+            mine.push(constant.clone());
+            beside(constant, &mut mine);
+        }
         Schema::Refine { base, constraints } => {
             mine.extend(edges_of(base, out));
             for constraint in constraints.iter() {
@@ -5001,7 +5066,9 @@ fn edges_of(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
                     | Constraint::Gt(index)
                     | Constraint::Le(index)
                     | Constraint::Lt(index)
-                    | Constraint::MultipleOf(index) => numbers_around(*index, &mut mine),
+                    | Constraint::MultipleOf(index) => {
+                        numbers_around(&const_pool()[index.get()], &mut mine);
+                    }
                     Constraint::MinLen(len) | Constraint::MaxLen(len) => {
                         for width in len.saturating_sub(EDGE_SPAN)..=(len + EDGE_SPAN) {
                             containers_of(width, &mut mine);
