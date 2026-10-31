@@ -1223,7 +1223,7 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
 The wall-clock numbers above are for humans reading results; they are too noisy
 on shared CI runners to gate a merge. The merge gate is instead a deterministic
 instruction count: `scripts/perf_gate.py --against` runs each fixed workload
-under cachegrind at the change and at its merge base, in one job with one
+under cachegrind at the change and at its base, in one job with one
 toolchain, and fails on a rise past the band it allows a change. The count is
 identical across runs of a given build, so the gate does not flake, and
 measuring both sides in one job cancels what another machine or another

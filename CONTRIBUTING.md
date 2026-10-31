@@ -278,7 +278,7 @@ checks the new-survivor direction alone, because a partial sweep never generates
 most of the baseline and the expiry direction is not its to judge.
 Performance is gated three ways: a **deterministic cachegrind instruction
 count** of the core, decision and binding workloads, compared with the same
-workloads built at the change's merge base (`scripts/perf_gate.py --against`);
+workloads built at the change's base (`scripts/perf_gate.py --against`);
 the same count of the comparison shapes on the profile-guided wheel built at
 both (`--profiled`), which sees a change to the training the plain builds
 cannot; and a **competitive ratio** of per-call time against pydantic-core

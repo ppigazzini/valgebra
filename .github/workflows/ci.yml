@@ -945,7 +945,8 @@ jobs:
         run: |
           uv run --no-sync --group bench maturin build --release --pgo --out dist
           uv pip install --no-deps --reinstall dist/*.whl
-      # The merge base this change is measured against. Both counts are taken in
+      # The base this change is measured against: the tip a push replaced, or
+      # where a pull request's branch left its base. Both counts are taken in
       # this job, with this toolchain, so what the gates below hold is the
       # difference the change made rather than the difference between two
       # machines -- which is 5% on the same rustc line, half the band an
@@ -955,6 +956,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EVENT: ${{ github.event_name }}
         # A force-push leaves `before` on no branch, and measuring a commit
         # against itself passes whatever it did; the script says how it reads
         # the base past both, and the mutation sweeps read it the same way.
@@ -1359,8 +1361,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # The merge base is what the diff is taken against, so the shallow
-          # default clone is not enough.
+          # The diff is taken against a base the shallow default clone does
+          # not carry.
           fetch-depth: 0
       - uses: $/.github/actions/setup-rust
         with:
@@ -1510,8 +1512,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # The merge base is what the diff is taken against, so the shallow
-          # default clone is not enough.
+          # The diff is taken against a base the shallow default clone does
+          # not carry.
           fetch-depth: 0
       - uses: $/.github/actions/setup-rust
         with:

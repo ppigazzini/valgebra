@@ -282,6 +282,39 @@ def test_a_change_sweeps_the_functions_it_touches(tmp_path: Path) -> None:
     ]
 
 
+def test_a_rewrite_sweeps_only_what_it_changed(tmp_path: Path) -> None:
+    """A rewritten history measured from the tip it replaced names the amend alone.
+
+    `root - c1 - c2` is pushed, then rewritten to `root - c1' - c2'`, with `c1'`
+    changing one more line, in `h`, deep under `c2`. The trees of the two tips
+    differ in that line, so `h` is examined and nothing the two commits changed
+    before the amend is: not `f`, which `c1` changed, nor `g` in another file,
+    which `c2` changed.
+    """
+    root = _laid_down(tmp_path, dict.fromkeys(("a.rs", "b.rs"), FUNCTIONS))
+    first = FUNCTIONS.replace("    1\n", "    10\n")
+    (tmp_path / "a.rs").write_text(first, encoding="utf-8")
+    _git(tmp_path, "commit", "--quiet", "-am", "c1")
+    (tmp_path / "b.rs").write_text(
+        FUNCTIONS.replace("    2", "    20"), encoding="utf-8"
+    )
+    _git(tmp_path, "commit", "--quiet", "-am", "c2")
+    before = _git(tmp_path, "rev-parse", "HEAD")
+    _git(tmp_path, "reset", "--quiet", "--hard", root)
+    (tmp_path / "a.rs").write_text(
+        first.replace("    4\n", "    40\n"), encoding="utf-8"
+    )
+    _git(tmp_path, "commit", "--quiet", "-am", "c1, amended")
+    (tmp_path / "b.rs").write_text(
+        FUNCTIONS.replace("    2", "    20"), encoding="utf-8"
+    )
+    _git(tmp_path, "commit", "--quiet", "-am", "c2, replayed")
+    run = _named(tmp_path, before)
+    assert run.returncode == script.EXIT_OK, run.stderr
+    assert run.stdout.split() == ["a.rs"]
+    assert _examined(tmp_path) == ["a.rs:8", "a.rs:9", "a.rs:10", "a.rs:11"]
+
+
 @pytest.mark.parametrize(
     ("changed", "named"),
     [
