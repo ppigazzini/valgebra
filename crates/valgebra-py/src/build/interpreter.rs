@@ -1435,6 +1435,29 @@ fn a_recursive_generic_alias_is_tied_by_its_arguments() {
     });
 }
 
+/// A class over a `TypeVarTuple` applied binds the parameter to a list of
+/// types, which no field form here takes, and is refused; the class bare binds
+/// nothing, and reads where no field names the parameter.
+#[test]
+fn a_class_binding_a_list_of_types_is_refused_applied() {
+    Python::attach(|py| {
+        if !Since(11).met(py) {
+            return;
+        }
+        let row = |applied: &str| {
+            format!(
+                r#"(lambda ns: (exec("import dataclasses, typing\nTs = typing.TypeVarTuple('Ts')\n@dataclasses.dataclass\nclass Row(typing.Generic[typing.Unpack[Ts]]):\n    a: int\n", ns), ns['Row']{applied})[1])({{}})"#
+            )
+        };
+        assert_eq!(built(py, &row("")).expect("the bare class builds"), "Row");
+        let refused = built(py, &row("[int, str]")).expect_err("the applied class is refused");
+        assert!(
+            refused.to_string().contains("stands for a list of types"),
+            "{refused}"
+        );
+    });
+}
+
 /// A parameter missing an argument takes its default, which may name an
 /// earlier parameter, and an alias whose every parameter has one reads bare.
 #[test]

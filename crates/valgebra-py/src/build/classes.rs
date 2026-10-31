@@ -615,6 +615,31 @@ pub(super) fn bound_hints<'py>(
     Ok(bound)
 }
 
+/// Refuse binding `class`'s parameters where one of them is no `TypeVar`.
+///
+/// A `TypeVarTuple` stands for a list of types and a `ParamSpec` for a
+/// signature, and an application binds one to a slice of its arguments, which
+/// the schema language has no form for: a field `tuple[*Ts]` of `Row[int, str]`
+/// is `tuple[int, str]`, and read one argument a parameter it held `(1,)` and
+/// refused `(1, "a")`. Refused as an alias declaring one is, where the class is
+/// applied, takes a default, or is a base written applied.
+fn one_type_each(class: &Bound<'_, PyType>, parameters: &Bound<'_, PyTuple>) -> PyResult<()> {
+    let py = class.py();
+    let type_var = forms(py)?.type_var.bind(py);
+    for parameter in parameters.iter() {
+        if !parameter.get_type().is(type_var) {
+            return Err(not_implemented(format!(
+                "{} declares {}, which stands for a list of types or a signature \
+                 rather than for one type, so no argument here substitutes it: write \
+                 the class over TypeVars alone",
+                super::declared_name(class.as_any())?,
+                super::declared_name(&parameter)?
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// The PEP 696 default `parameter` takes in one application of its class: where
 /// nothing is `written` for it, and where what is written is the default itself
 /// -- `CPython` hands an application left short back with the default filled in,
@@ -677,8 +702,11 @@ impl<'py> Scopes<'py> {
             let written = applied.and_then(|args| args.get_item(at).ok());
             let argument = match defaulted(&parameter, written.as_ref())? {
                 Some(default) => super::substitute(&default, &parameters, &arguments)?,
-                None => written.unwrap_or(parameter),
+                None => written.unwrap_or_else(|| parameter.clone()),
             };
+            if !argument.is(&parameter) {
+                one_type_each(ty, &parameters)?;
+            }
             arguments.push(argument);
         }
         let mut scopes = Self {
@@ -698,6 +726,7 @@ impl<'py> Scopes<'py> {
                 let own = parameters_of(&base)?;
                 let arguments = match written {
                     Some(written) => {
+                        one_type_each(&base, &own)?;
                         let mut arguments = Vec::with_capacity(written.len());
                         for (at, argument) in written.iter().enumerate() {
                             let parameter = own.get_item(at).ok();

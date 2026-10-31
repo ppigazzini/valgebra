@@ -72,6 +72,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a length the supertype's bounds leave out refutes at any size
 - fix: a type variable is its own class's parameter
 - fix: a frozen dict literal's refusal names the schemas that admit one
+- fix: a class over a list of types or a signature is refused applied
 
 -->
 
@@ -329,6 +330,16 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A class over a list of types or a signature is refused applied.** A
+  `TypeVarTuple` stands for a list of types, and `Row[int, str]` binds it to
+  `(int, str)`, so a field `tuple[*Ts]` is `tuple[int, str]`; the parameter
+  was bound to the argument at its position, so `Row[int, str]` held
+  `{"a": (1,)}`, refused `{"a": (1, "a")}`, and equaled `Row[int]`. A
+  generic class whose parameters are not all `TypeVar`s is refused where it is
+  applied, takes a default for one, or is a base written applied, as an alias
+  declaring one already is; written bare, it is read where no field names the
+  parameter. A `ParamSpec` alike.
 
 - **A frozen dict literal's refusal names the schemas that admit one.** On
   3.15, `frozendict(a=int)` was refused with a pointer to the dict literal
