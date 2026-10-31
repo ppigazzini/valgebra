@@ -742,6 +742,54 @@ fn none_is_below_a_schema_where_its_value_is() {
     });
 }
 
+// THEORY: a-constant-is-the-values-equal-to-it
+#[test]
+fn the_interpreters_sentinel_compares_by_identity() {
+    // `sentinel` (3.15) defines an `__eq__` that answers as identity does, so
+    // two of them are two values and one is the value of its literal. A class
+    // statement naming itself after it is not the interpreter's type, and
+    // neither is a static type of another name.
+    Python::attach(|py| {
+        let impostor = built(
+            py,
+            "type('sentinel', (), {'__module__': 'builtins', '__eq__': lambda a, b: True, \
+             '__hash__': lambda a: 0})",
+        );
+        let impostor = impostor.cast::<PyType>().expect("a class");
+        assert!(
+            !is_the_sentinel_type(impostor).unwrap(),
+            "a class statement"
+        );
+        assert!(!compares_by_identity(impostor).unwrap());
+        assert!(
+            is_heap_type(impostor).unwrap(),
+            "a class statement makes a heap type"
+        );
+        // A class made where no `__name__` is bound has no `__module__`, and
+        // is read as one of its own equality rather than raising.
+        let nameless = built(py, "type('Always', (), {'__eq__': lambda a, b: True})");
+        let nameless = nameless.cast::<PyType>().expect("a class");
+        assert!(nameless.getattr("__module__").is_err(), "no module");
+        assert!(!compares_by_identity(nameless).unwrap());
+        let integer = py.get_type::<PyInt>();
+        assert!(!is_heap_type(&integer).unwrap(), "a builtin is static");
+        assert!(
+            !is_the_sentinel_type(&integer).unwrap(),
+            "another static type"
+        );
+        let Ok(sentinel) = py.import("builtins").unwrap().getattr("sentinel") else {
+            return;
+        };
+        assert!(compares_by_identity(sentinel.cast::<PyType>().unwrap()).unwrap());
+        let made = |name: &str| sentinel.call1((name,)).unwrap().unbind();
+        asking(py, vec![made("S"), made("S")], |oracle| {
+            let pair = |a, b| oracle.literals_disjoint(ConstIx::new(a), ConstIx::new(b));
+            assert_eq!(pair(0, 1), Some(true), "two sentinels of one name");
+            assert_eq!(pair(0, 0), Some(false), "one is its literal's value");
+        });
+    });
+}
+
 #[test]
 fn a_fatal_signal_a_probe_raises_is_the_querys_answer() {
     // A probe runs user code, and one interrupted there has answered nothing:

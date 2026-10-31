@@ -205,6 +205,11 @@ const MAX_ENUM_MEMBERS: usize = 512;
 /// refused here, which is right: its members are equal to the integers they
 /// carry.
 ///
+/// One type defines an `__eq__` and compares by identity all the same: the
+/// interpreter's `sentinel` (PEP 661, a builtin from 3.15), whose `__eq__`
+/// answers `True` for the sentinel itself and declines every other value, so
+/// two sentinels of one name are two values, as two `object()`s are.
+///
 /// The lookup runs a metaclass's own attribute hook, so it can raise, and the
 /// caller hears what it raised: a check that raised has answered nothing, and
 /// a signal among it is the query's to raise.
@@ -212,7 +217,32 @@ fn compares_by_identity(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let py = ty.py();
     let theirs = ty.getattr(intern!(py, "__eq__"))?;
     let inherited = PyAny::type_object(py).getattr(intern!(py, "__eq__"))?;
-    Ok(theirs.is(&inherited))
+    Ok(theirs.is(&inherited) || is_the_sentinel_type(ty)?)
+}
+
+/// Whether `ty` is the interpreter's `sentinel`: a static type, which no class
+/// statement makes, named `sentinel` in `builtins`, which its qualified name
+/// spells bare. A literal of one is the model's singleton [FCB08, §4.2], as
+/// one of an `object()` is. The flag is read first, since every type has one
+/// and a class made where no `__name__` is bound has no `__module__`, so its
+/// qualified name raises.
+fn is_the_sentinel_type(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+    Ok(!is_heap_type(ty)? && ty.fully_qualified_name()? == "sentinel")
+}
+
+/// Whether `ty` was made at run time, as a class statement and a C type built
+/// from a spec make one, rather than defined static in C, as the builtins are.
+///
+/// The flags are the ones Python set, read through `type`'s own descriptor: a
+/// metaclass answering `__flags__` makes no class static.
+fn is_heap_type(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+    let py = ty.py();
+    let flags: std::os::raw::c_ulong = PyType::type_object(py)
+        .getattr(intern!(py, "__dict__"))?
+        .get_item(intern!(py, "__flags__"))?
+        .call_method1(intern!(py, "__get__"), (ty,))?
+        .extract()?;
+    Ok(flags & pyo3::ffi::Py_TPFLAGS_HEAPTYPE != 0)
 }
 
 /// The value types the standard library defines whose order, `%` and length
@@ -663,8 +693,7 @@ fn lays_down_its_own<'py>(ty: &Bound<'py, PyType>) -> PyResult<bool> {
             .get_item(name)?
             .call_method1(intern!(py, "__get__"), (of,))
     };
-    let flags: std::os::raw::c_ulong = read(intern!(py, "__flags__"), ty)?.extract()?;
-    if flags & pyo3::ffi::Py_TPFLAGS_HEAPTYPE != 0 {
+    if is_heap_type(ty)? {
         return adds_slots(ty);
     }
     let Ok(base) = read(intern!(py, "__base__"), ty)?.cast_into::<PyType>() else {

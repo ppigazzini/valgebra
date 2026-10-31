@@ -336,30 +336,30 @@ The soundness is relative to a small, explicit trust base:
   much text that pattern matches, and `"\ud800"` is the value that says so.
 - **A literal is its constant's class under `==`.** `Literal[c]` denotes
   `{x | type(x) is type(c) and x == c}`. For an `int`, a `bool`, a `str`,
-  `bytes`, `None` and a nonzero float that is one value; for a float zero it is
-  both zeros, for a `Decimal` every spelling equal to it, for a constant whose
-  class defines `__eq__` whatever that method admits, and for `float("nan")`,
-  which is equal to nothing including itself, the empty set. A proof that runs
-  the constant through a predicate or reads its attributes speaks for that one
-  value, so it stands for the literal only where the constant is the whole
-  class; `Literal[0.0]` below a predicate refusing `-0.0` is not proven. A proof
-  through a kind or a class whose `isinstance` runs no hook reads the type
-  alone, which every value of the literal shares as its exact type, and stands
-  for all of them whatever their equality: `Literal[CI("a")]` is below `str` and
-  outside `int`. A proof through any other atom stands where the values `==`
-  joins to the constant are read alike by it: under an exact builtin's equality,
-  a builtin subclass's that keeps it, a value type's, or identity. The value
-  types are, exactly and by identity with the class their module binds,
-  `complex`, `bytearray`, `range`, the builtin containers, `Decimal`,
-  `Fraction`, the `datetime` types, `UUID`, the `ipaddress` addresses, networks
-  and interfaces, and the `pathlib` paths: each orders, divides and measures,
-  where it does, as its `==` says. A class stating one of their modules is none
-  of them, and a module of the program's own imported under one of those names
-  is what the program means by it. A class whose `__eq__` is its own is read by
-  none of those, so a proof by its constant is not made: a case-insensitive
-  `str` subclass holds `"A"` in the literal of `"a"`, which `Regex("a")`
-  refuses, and an `__eq__` that is not transitive would join a value to `c` that
-  it does not join to an equal `d`.
+  `bytes`, `None`, a `sentinel` and a nonzero float that is one value; for a
+  float zero it is both zeros, for a `Decimal` every spelling equal to it, for a
+  constant whose class defines `__eq__` whatever that method admits, and for
+  `float("nan")`, which is equal to nothing including itself, the empty set. A
+  proof that runs the constant through a predicate or reads its attributes
+  speaks for that one value, so it stands for the literal only where the
+  constant is the whole class; `Literal[0.0]` below a predicate refusing `-0.0`
+  is not proven. A proof through a kind or a class whose `isinstance` runs no
+  hook reads the type alone, which every value of the literal shares as its
+  exact type, and stands for all of them whatever their equality:
+  `Literal[CI("a")]` is below `str` and outside `int`. A proof through any other
+  atom stands where the values `==` joins to the constant are read alike by it:
+  under an exact builtin's equality, a builtin subclass's that keeps it, a value
+  type's, or identity. The value types are, exactly and by identity with the
+  class their module binds, `complex`, `bytearray`, `range`, the builtin
+  containers, `Decimal`, `Fraction`, the `datetime` types, `UUID`, the
+  `ipaddress` addresses, networks and interfaces, and the `pathlib` paths: each
+  orders, divides and measures, where it does, as its `==` says. A class stating
+  one of their modules is none of them, and a module of the program's own
+  imported under one of those names is what the program means by it. A class
+  whose `__eq__` is its own is read by none of those, so a proof by its constant
+  is not made: a case-insensitive `str` subclass holds `"A"` in the literal of
+  `"a"`, which `Regex("a")` refuses, and an `__eq__` that is not transitive
+  would join a value to `c` that it does not join to an equal `d`.
 - **The values are the finite ones.** A guarded fixpoint denotes the values built
   by finitely many unfoldings, which is what makes membership an induction on the
   value. A value that contains itself is not a large member: it is outside the
