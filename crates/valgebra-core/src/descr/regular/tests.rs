@@ -1,5 +1,6 @@
 use super::{
-    Alphabet, COMPILED, COMPILED_BYTES, Compiled, Dfa, MAX_STATES, RegularSet, WITNESS_BYTES,
+    Alphabet, COMPILED, COMPILED_BYTES, Compiled, Dfa, Handles, MAX_STATES, Products, RegularSet,
+    WITNESS_BYTES,
 };
 use crate::descr::lattice_tests::Algebra;
 use proptest::prelude::*;
@@ -1228,4 +1229,115 @@ fn an_ordered_text_language_holds_no_word_a_str_cannot_spell() {
         !below.holds(&[0x61, 0x80]),
         "a continuation with nothing before it"
     );
+}
+
+/// A product of two tables is built once while the memo holds it, whichever
+/// order the two are asked in.
+///
+/// The memo's whole claim: asked again, a meet or a join hands back the table
+/// it built, and since meet and join commute the pair in the other order is
+/// the same entry. The language is the one a fresh product builds.
+#[test]
+fn a_product_of_two_tables_is_built_once() {
+    let a = language("a+b*");
+    let b = language("[ab]{2,5}");
+    let met = a.intersect(&b).expect("a small product");
+    let again = b.intersect(&a).expect("a small product");
+    assert!(
+        Arc::ptr_eq(&met.dfa, &again.dfa),
+        "the second meet built a table"
+    );
+    assert!(met.holds(b"ab") && met.holds(b"aab") && !met.holds(b"a") && !met.holds(b"ba"));
+    let joined = a.union(&b).expect("a small product");
+    assert!(
+        !Arc::ptr_eq(&joined.dfa, &met.dfa),
+        "a join is not the meet"
+    );
+    assert!(Arc::ptr_eq(
+        &joined.dfa,
+        &b.union(&a).expect("a small product").dfa
+    ));
+    assert!(joined.holds(b"ba") && joined.holds(b"a"));
+}
+
+/// The product memo holds no more than [`COMPILED_BYTES`], as the language
+/// memo does: a product that fills it exactly is kept beside what it holds,
+/// the next one starts it over, and one heavier than the bound alone is not
+/// kept at all.
+#[test]
+fn the_product_memo_starts_over_at_its_bound() {
+    let table = || Arc::new(Dfa::empty());
+    let tables = || [table(), table()];
+    let mut memo = Products::default();
+    memo.keep((1, 1, false), tables(), None, COMPILED_BYTES - 1);
+    memo.keep((2, 2, false), tables(), None, 1);
+    assert_eq!(memo.held, COMPILED_BYTES);
+    assert_eq!(memo.built.len(), 2);
+    memo.keep((3, 3, false), tables(), None, 1);
+    assert_eq!(memo.held, 1);
+    assert_eq!(memo.built.len(), 1);
+    memo.keep((4, 4, false), tables(), None, COMPILED_BYTES);
+    assert_eq!(
+        memo.held, COMPILED_BYTES,
+        "a product as heavy as the bound is kept alone"
+    );
+    memo.keep((5, 5, false), tables(), None, COMPILED_BYTES + 1);
+    assert_eq!(memo.held, COMPILED_BYTES, "a heavier one is not kept");
+    assert!(!memo.built.contains_key(&(5, 5, false)));
+}
+
+/// A complement, a word and an order bound built again are handed the table
+/// the first build got, so a product with one of them is found again.
+///
+/// The handle memo's whole claim, read through the memo it serves: the three
+/// are built anew on every ask, and the product memo finds a product by the
+/// addresses of its two tables. A different language is a different table.
+#[test]
+fn a_table_built_again_is_handed_the_first_ones_handle() {
+    let a = language("a+b*");
+    let first = a.complement();
+    let again = a.complement();
+    assert!(
+        Arc::ptr_eq(&first.dfa, &again.dfa),
+        "a complement built again is a second table"
+    );
+    let b = language("[ab]{2,5}");
+    let met = first.intersect(&b).expect("a small product");
+    assert!(
+        Arc::ptr_eq(&met.dfa, &again.intersect(&b).expect("a small product").dfa),
+        "the product with the complement was built again"
+    );
+    let word = |text: &[u8]| RegularSet::word(text).expect("a short word");
+    assert!(Arc::ptr_eq(&word(b"abc").dfa, &word(b"abc").dfa));
+    assert!(!Arc::ptr_eq(&word(b"abc").dfa, &word(b"abd").dfa));
+    let below = |bound: &[u8]| {
+        RegularSet::ordered(bound, false, true, Alphabet::Text).expect("a short bound")
+    };
+    assert!(Arc::ptr_eq(&below(b"b").dfa, &below(b"b").dfa));
+    assert!(below(b"b").holds(b"a") && !below(b"b").holds(b"c"));
+}
+
+/// The handle memo holds no more than [`COMPILED_BYTES`], as the other two
+/// do: a table that fills it exactly is kept beside what it holds, the next
+/// one starts it over, and one heavier than the bound alone is not kept at
+/// all.
+#[test]
+fn the_handle_memo_starts_over_at_its_bound() {
+    let table = |word: &[u8]| Arc::new(Dfa::word(word));
+    let mut memo = Handles::default();
+    memo.keep(table(b"a"), COMPILED_BYTES - 1);
+    memo.keep(table(b"b"), 1);
+    assert_eq!(memo.held, COMPILED_BYTES);
+    assert_eq!(memo.tables.len(), 2);
+    memo.keep(table(b"c"), 1);
+    assert_eq!(memo.held, 1);
+    assert_eq!(memo.tables.len(), 1);
+    memo.keep(table(b"d"), COMPILED_BYTES);
+    assert_eq!(
+        memo.held, COMPILED_BYTES,
+        "a table as heavy as the bound is kept alone"
+    );
+    memo.keep(table(b"e"), COMPILED_BYTES + 1);
+    assert_eq!(memo.held, COMPILED_BYTES, "a heavier one is not kept");
+    assert!(!memo.tables.contains(&Dfa::word(b"e")));
 }

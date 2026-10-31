@@ -38,7 +38,7 @@ use regex_automata::nfa::thompson;
 use regex_automata::util::syntax;
 use regex_automata::{Anchored, Input};
 use regex_syntax::hir::{self, Hir, HirKind, Look};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 
@@ -167,7 +167,7 @@ type Class = u16;
 /// which every table here passes through or is built as, asserts the table it
 /// reads and each one it builds: a malformed table stops a debug build where it
 /// is made.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Dfa {
     /// The class of each byte.
     classes: Vec<Class>,
@@ -1116,6 +1116,140 @@ impl Compiled {
 
 thread_local! {
     static COMPILED: RefCell<Compiled> = RefCell::new(Compiled::default());
+    static HANDLES: RefCell<Handles> = RefCell::new(Handles::default());
+    static PRODUCTS: RefCell<Products> = RefCell::new(Products::default());
+}
+
+/// The tables this thread built afresh, one handle a language.
+///
+/// [`Products`] finds a product again by the two tables' addresses, and a
+/// complement, a word and an order bound are built anew on every ask. Each at
+/// an address of its own, a product with one of them would never be found
+/// again, nor any product built on it, and a lowering asked again would
+/// minimize every table downstream of a complement again: a string bound beside
+/// a pattern of `\w` spent 25 ms a relation asked again, against 4 ms with the
+/// handles. Each table is minimal and canonically numbered, so two tables of one
+/// language are equal, and a table built again is handed the handle the first
+/// one got: one language is one address while the memo holds it, which is what
+/// the product memo's key needs. Bounded by the bytes it holds, as [`Compiled`]
+/// is.
+#[derive(Default)]
+struct Handles {
+    tables: FxHashSet<Arc<Dfa>>,
+    held: usize,
+}
+
+impl Handles {
+    /// The handle this thread gave `dfa`'s language, or a new one it keeps.
+    fn of(dfa: Dfa) -> Arc<Dfa> {
+        if let Some(held) = HANDLES.with_borrow(|memo| memo.tables.get(&dfa).cloned()) {
+            return held;
+        }
+        let table = Arc::new(dfa);
+        let weight = table.bytes();
+        HANDLES.with_borrow_mut(|memo| memo.keep(Arc::clone(&table), weight));
+        table
+    }
+
+    /// Keep `table`, weighing `weight` bytes, starting over where it would pass
+    /// [`COMPILED_BYTES`], as [`Compiled::keep`] does: a table heavier than the
+    /// bound alone is handed out and not kept.
+    fn keep(&mut self, table: Arc<Dfa>, weight: usize) {
+        if weight > COMPILED_BYTES {
+            return;
+        }
+        if self.held + weight > COMPILED_BYTES {
+            self.tables.clear();
+            self.held = 0;
+        }
+        self.held += weight;
+        self.tables.insert(table);
+    }
+}
+
+/// The products this thread built, by the two tables and the operation.
+///
+/// A product of two tables is a function of the two and of the operation: the
+/// tables are minimal and canonically numbered, so one language is one table,
+/// and the product is minimized the same way. Relations over records keyed by
+/// strings meet the same few key sets over and over -- a relation between two
+/// records nested past the depth the sets descend builds nine thousand products
+/// of thirteen hundred pairs, one pair two thousand four hundred times -- and
+/// each product refines two alphabets, walks the reachable pairs and minimizes.
+///
+/// Keyed by the tables' addresses, which name them while they live, and the
+/// memo holds both tables: an address held here cannot be reused by another
+/// table. Meet and join commute, so a pair is keyed in address order. Bounded
+/// as [`Compiled`] is, by the bytes the tables held weigh, and started over
+/// where a product would pass the bound; a product refused past [`MAX_STATES`]
+/// is held as the refusal it is.
+#[derive(Default)]
+struct Products {
+    built: FxHashMap<(usize, usize, bool), Product>,
+    held: usize,
+}
+
+/// One product held: its two tables, kept alive so their addresses stay
+/// theirs, and what the product built.
+struct Product {
+    _tables: [Arc<Dfa>; 2],
+    built: Option<Arc<Dfa>>,
+}
+
+impl Products {
+    /// The product of `a` and `b` under `union`, built once a pair while the
+    /// memo holds it.
+    fn of(a: &Arc<Dfa>, b: &Arc<Dfa>, union: bool) -> Option<Arc<Dfa>> {
+        let (mine, theirs) = (Arc::as_ptr(a) as usize, Arc::as_ptr(b) as usize);
+        let key = (mine.min(theirs), mine.max(theirs), union);
+        if let Some(held) =
+            PRODUCTS.with_borrow(|memo| memo.built.get(&key).map(|held| held.built.clone()))
+        {
+            return held;
+        }
+        let built = if union {
+            a.product(b, |mine, theirs| mine || theirs)
+        } else {
+            a.product(b, |mine, theirs| mine && theirs)
+        }
+        .map(Arc::new);
+        let weight = [a, b]
+            .into_iter()
+            .chain(&built)
+            .map(|table| table.bytes())
+            .sum();
+        PRODUCTS.with_borrow_mut(|memo| {
+            memo.keep(key, [Arc::clone(a), Arc::clone(b)], built.clone(), weight);
+        });
+        built
+    }
+
+    /// Keep `built` under `key`, starting over where it would pass
+    /// [`COMPILED_BYTES`], as [`Compiled::keep`] does: a product heavier than the
+    /// bound alone is built and not kept.
+    fn keep(
+        &mut self,
+        key: (usize, usize, bool),
+        tables: [Arc<Dfa>; 2],
+        built: Option<Arc<Dfa>>,
+        weight: usize,
+    ) {
+        if weight > COMPILED_BYTES {
+            return;
+        }
+        if self.held + weight > COMPILED_BYTES {
+            self.built.clear();
+            self.held = 0;
+        }
+        self.held += weight;
+        self.built.insert(
+            key,
+            Product {
+                _tables: tables,
+                built,
+            },
+        );
+    }
 }
 
 /// The longest guess [`RegularSet::a_text_of`] writes: a repetition counted in
@@ -1347,7 +1481,7 @@ impl RegularSet {
             return None;
         }
         Some(RegularSet {
-            dfa: Arc::new(Dfa::word(word)),
+            dfa: Handles::of(Dfa::word(word)),
         })
     }
 
@@ -1376,7 +1510,7 @@ impl RegularSet {
         let from = Dfa::ordered_from(bound, if above { inclusive } else { !inclusive });
         let side = if above { from } else { from.complement() };
         RegularSet {
-            dfa: Arc::new(side),
+            dfa: Handles::of(side),
         }
         .intersect(&RegularSet::all(alphabet))
     }
@@ -1429,18 +1563,14 @@ impl RegularSet {
     /// The words in either set, or `None` past [`MAX_STATES`].
     #[must_use]
     pub(crate) fn union(&self, other: &RegularSet) -> Option<RegularSet> {
-        self.dfa
-            .product(&other.dfa, |a, b| a || b)
-            .map(|dfa| RegularSet { dfa: Arc::new(dfa) })
+        Products::of(&self.dfa, &other.dfa, true).map(|dfa| RegularSet { dfa })
     }
 
     /// The words in both sets, the product [HVP05, §4.1], or `None` past
     /// [`MAX_STATES`].
     #[must_use]
     pub(crate) fn intersect(&self, other: &RegularSet) -> Option<RegularSet> {
-        self.dfa
-            .product(&other.dfa, |a, b| a && b)
-            .map(|dfa| RegularSet { dfa: Arc::new(dfa) })
+        Products::of(&self.dfa, &other.dfa, false).map(|dfa| RegularSet { dfa })
     }
 
     /// Every word this set does not hold, **over every byte string**.
@@ -1456,7 +1586,7 @@ impl RegularSet {
     #[must_use]
     pub(crate) fn complement(&self) -> RegularSet {
         RegularSet {
-            dfa: Arc::new(self.dfa.complement()),
+            dfa: Handles::of(self.dfa.complement()),
         }
     }
 }
