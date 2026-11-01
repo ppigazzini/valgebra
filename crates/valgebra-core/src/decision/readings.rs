@@ -984,7 +984,9 @@ const FINITE_KINDS: Kinds = bit(Kind::NoneType) + bit(Kind::Bool);
 /// without it; what it caps is a tower of unions of meets, whose tree is
 /// exponential in a term of linear size, read on a pair the rules declined.
 /// The schemas a kind is read off -- a map's key, a JSON universe, a guard --
-/// read in a few dozen nodes.
+/// read in a few dozen nodes. A literal spends none: it is a leaf whose kind
+/// is one question, so a table of constants is read for the one node its
+/// union is, and what the bound caps stays the nodes with members.
 pub(super) const KIND_WALK: u32 = 64;
 
 /// The kind's own bit.
@@ -1032,7 +1034,8 @@ impl<'a> KindWalk<'a> {
 
 /// [`Schema::kinds_held_whole`].
 fn whole(schema: &Schema, walk: &mut KindWalk<'_>) -> Kinds {
-    if !walk.read() {
+    // A literal holds no kind whole, and is read without a node.
+    if matches!(schema, Schema::Literal(_)) || !walk.read() {
         return 0;
     }
     match schema {
@@ -1068,6 +1071,13 @@ fn whole(schema: &Schema, walk: &mut KindWalk<'_>) -> Kinds {
 
 /// [`Schema::kinds_possibly_held`], on the same walk as [`whole`].
 fn possibly(schema: &Schema, walk: &mut KindWalk<'_>) -> Kinds {
+    // A literal may hold its constant's kind, read without a node.
+    if let Schema::Literal(constant) = schema {
+        return walk
+            .oracle
+            .literal_kind(*constant)
+            .map_or(EVERY_KIND, sharing);
+    }
     if !walk.read() {
         return EVERY_KIND;
     }

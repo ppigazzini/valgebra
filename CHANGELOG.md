@@ -86,10 +86,19 @@ answer of its own, or a repair to a change not yet released.
 - feat: records told apart by a required key share no value
 - feat: a container holds no more items than its shape can name
 - feat: a Fraction or a Decimal bound over the integers is read as a float one is
+- feat: a table of constants is read for its kinds at any width
 
 -->
 
 ### Added
+
+- **A table of constants is read for its kinds at any width.** The reading
+  that finds a kind a schema holds no value of stops after 64 nodes, and a
+  table of constants spent one a constant, so
+  `complement(union(int, Literal[tuple(range(63))]))` was `undecided` below
+  `nothing` though every `str` is in it. A constant is a leaf whose kind is
+  one question, and it spends no node now, so the complement is
+  `not_subset` at every width.
 
 - **A `Fraction` or a `Decimal` bound over the integers is read as a float one
   is.** Python compares an `int` with either exactly, so the set representation

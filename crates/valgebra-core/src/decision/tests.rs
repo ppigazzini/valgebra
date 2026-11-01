@@ -9235,9 +9235,14 @@ fn a_thinned_reading_the_rules_find_a_value_of_is_not_built() {
 
 /// A kind reading reads at most `KIND_WALK` nodes, and past them answers as
 /// though the schema might hold any kind: a union of `bytes` one short of the
-/// bound is read to hold bytes alone, and one at it is read to hold anything.
-/// The walk ends with the term without the bound; the bound caps a tower of
-/// unions of meets, whose tree is exponential in a term of linear size.
+/// bound is read to hold bytes alone, and one at it is read to hold anything;
+/// a member past it holds no kind whole, so a meet whose last member is past
+/// it holds none. The walk ends with the term without the bound; the bound
+/// caps a tower of unions of meets, whose tree is exponential in a term of
+/// linear size. A
+/// literal spends no node, so `int` beside a table of as many integer
+/// constants as the bound, and four times as many, is read to hold integers
+/// alone, and the same table holds no kind whole.
 #[test]
 fn a_kind_reading_stops_at_its_node_bound() {
     use super::readings::KIND_WALK;
@@ -9252,6 +9257,26 @@ fn a_kind_reading_stops_at_its_node_bound() {
         union_of(KIND_WALK).kinds_possibly_held(&NoLeafRelations, &[]),
         every_kind
     );
+    let past = Schema::Intersection(vec![union_of(KIND_WALK), Schema::Bytes].into());
+    assert_eq!(past.kinds_held_whole(&NoLeafRelations, &[]), 0);
+    let integers = (1u16 << Kind::Int.position()) | (1 << Kind::Bool.position());
+    for constants in [KIND_WALK, 4 * KIND_WALK] {
+        let table = |beside: Option<Schema>| {
+            Schema::Union(
+                beside
+                    .into_iter()
+                    .chain((0..constants).map(|_| Schema::Literal(ConstIx::new(2))))
+                    .collect::<Vec<_>>()
+                    .into(),
+            )
+        };
+        assert_eq!(
+            table(Some(Schema::Int)).kinds_possibly_held(&Apart, &[]),
+            integers,
+            "{constants} constants beside int"
+        );
+        assert_eq!(table(None).kinds_held_whole(&Apart, &[]), 0);
+    }
 }
 
 /// A subject holding every value of a kind the supertype holds none of is

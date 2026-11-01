@@ -480,6 +480,21 @@ _DECIDED = [
         nothing,
         id="~bool&int>Fraction(-1,3)-is-inhabited",
     ),
+    # A table of constants is read for its kinds without spending the kind
+    # reading's node bound a constant at a time, so the complement of `int`
+    # beside a table of integers holds every `str`, at any width.
+    pytest.param(
+        "refutes",
+        complement(union(int, *map(Validator, range(63)))),
+        nothing,
+        id="~(int|63-integer-table)-is-inhabited",
+    ),
+    pytest.param(
+        "refutes",
+        complement(union(int, *map(Validator, range(1000)))),
+        nothing,
+        id="~(int|1000-integer-table)-is-inhabited",
+    ),
     # A recursive schema holding a class meets its complement in nothing: the
     # constructor cannot vouch for the class, and the decision reads the
     # reference through its definition.
