@@ -1346,8 +1346,12 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
         | Constraint::Le(index)
         | Constraint::Lt(index) => integers(integer_bound(constraint, &pool.operand(*index)?)?),
         Constraint::MultipleOf(index) => {
-            let Operand::Integer(step) = pool.operand(*index)? else {
-                return None;
+            let step = match pool.operand(*index)? {
+                Operand::Integer(step) => step,
+                // `True` is the integer it is to `%`, as to a comparison; a zero
+                // step is refused before it is read.
+                Operand::Boolean(step) => i64::from(step),
+                _ => return None,
             };
             integers(IntSet::multiple_of(step)?)
         }

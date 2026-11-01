@@ -1367,6 +1367,20 @@ proptest! {
     }
 }
 
+/// `True` as a step over the integers is the step `1`, which every integer
+/// meets: `%` reads a boolean as the integer it is.
+#[test]
+fn a_true_step_is_read_as_the_integer_step() {
+    let stepped = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::MultipleOf(OperandIx::new(0))].into(),
+    };
+    let read = lower(&stepped, &Pool(vec![Operand::Boolean(true)]));
+    assert!(read.is_some(), "a true step lowers");
+    assert_eq!(read, lower(&stepped, &Pool(vec![Operand::Integer(1)])));
+    assert_eq!(read, lower(&Schema::Int, &Pool(Vec::new())));
+}
+
 /// A number a comparison is asked of, as Python reads it: `None` for a value
 /// no builtin number orders, whose comparison raises.
 fn as_number(value: &Value) -> Option<f64> {

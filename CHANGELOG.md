@@ -87,10 +87,20 @@ answer of its own, or a repair to a change not yet released.
 - feat: a container holds no more items than its shape can name
 - feat: a Fraction or a Decimal bound over the integers is read as a float one is
 - feat: a table of constants is read for its kinds at any width
+- feat: a class with one instance is its literal, and a True step is the step 1
 
 -->
 
 ### Added
+
+- **A class with one instance is its literal, and a `True` step is the step
+  `1`.** `type(...)` and `type(NotImplemented)` admit no subclass and make no
+  second object, so `instance_of(types.EllipsisType)` is `Literal[...]` and
+  `instance_of(types.NotImplementedType)` is `Literal[NotImplemented]`, as
+  `NoneType` is `None`; each pair was `undecided`. `%` reads `True` as the
+  integer it is, so `int` is below `Annotated[int, MultipleOf(True)]`, which
+  was `undecided`. A whole `float` or `Decimal` step stays apart from the
+  integer step: `(2**53 + 1) % 2.0` is `0.0`.
 
 - **A table of constants is read for its kinds at any width.** The reading
   that finds a kind a schema holds no value of stops after 64 nodes, and a

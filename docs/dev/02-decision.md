@@ -783,7 +783,9 @@ there.
 `NoneType` admits no subclass: it is below a set where the walk admits `None`,
 and it is the table of that value where a meet holding it is read one constant
 at a time (`a_meet_read_by_its_constants`). `bool`'s two values need no question
-here, the parts reading taking the kind a literal at a time.
+here, the parts reading taking the kind a literal at a time. The classes of
+`...` and `NotImplemented` admit no subclass and make no second instance, so
+the binding's `leaf_subtype` reads each as the literal of its one object too.
 
 ## The two routes to a subtype answer, and where they part
 

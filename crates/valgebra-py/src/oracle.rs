@@ -1561,6 +1561,16 @@ impl LeafRelations for PoolRelations<'_, '_> {
                         .ok()
                         .and_then(|class| self.heard(class.is_subclass(superclass)));
                 }
+                // A class with one instance and no subclass is the literal of
+                // that instance, as `None`'s kind is: `type(...)` and
+                // `type(NotImplemented)` refuse a subclass, and calling either
+                // returns its one object.
+                for only in [self.py.Ellipsis(), self.py.NotImplemented()] {
+                    let only = only.into_bound(self.py);
+                    if class.is(only.get_type()) {
+                        return self.is_member(sup, &only);
+                    }
+                }
                 // An enumeration whose members compare by identity is the union
                 // of them: the members are fixed when the class is defined, a
                 // class with any cannot be subclassed, and no other value is an

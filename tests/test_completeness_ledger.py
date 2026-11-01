@@ -29,6 +29,7 @@ the relation.
 import dataclasses
 import enum
 import itertools
+import types
 from decimal import Decimal
 from fractions import Fraction
 from typing import (
@@ -55,6 +56,7 @@ from valgebra import (
     Validator,
     anything,
     complement,
+    instance_of,
     intersection,
     nothing,
     recursive,
@@ -494,6 +496,27 @@ _DECIDED = [
         complement(union(int, *map(Validator, range(1000)))),
         nothing,
         id="~(int|1000-integer-table)-is-inhabited",
+    ),
+    # `True` is the integer step `1` to `%`, which every integer meets.
+    pytest.param(
+        "subtype",
+        int,
+        Annotated[int, at.MultipleOf(True)],
+        id="int<=int-step-True",
+    ),
+    # A class with one instance and no subclass is the literal of that
+    # instance, as `NoneType` is.
+    pytest.param(
+        "equivalent",
+        instance_of(types.EllipsisType),
+        Validator(...),
+        id="EllipsisType==Literal[...]",
+    ),
+    pytest.param(
+        "equivalent",
+        instance_of(types.NotImplementedType),
+        Validator(NotImplemented),
+        id="NotImplementedType==Literal[NotImplemented]",
     ),
     # A recursive schema holding a class meets its complement in nothing: the
     # constructor cannot vouch for the class, and the decision reads the

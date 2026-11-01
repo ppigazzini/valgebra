@@ -143,7 +143,8 @@ answers `"undecided"`.
   `Literal[Color.RED]`, and `~Literal[Color.RED]` is not empty. `None`'s kind
   is the literal of its one value, walked through the other side: `None` is
   not below `Literal[Color.RED]`, and `intersection(None, ~Literal[Color.RED])`
-  is not empty.
+  is not empty. So are `type(...)` and `type(NotImplemented)`, which admit no
+  subclass either: `instance_of(types.EllipsisType)` is `Literal[...]`.
 - **An enumeration against the union of its members**, when every instance of
   the class really is one of them -- made through the class, which
   `object.__new__` steps past

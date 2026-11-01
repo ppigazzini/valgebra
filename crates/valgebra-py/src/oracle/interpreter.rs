@@ -812,6 +812,29 @@ Below = type.__new__(type(Derived), 'Below', (Derived,), {})
     });
 }
 
+#[test]
+fn a_class_with_one_instance_and_no_subclass_is_below_its_literal() {
+    // `type(...)` and `type(NotImplemented)` refuse a subclass and have one
+    // object each, so `leaf_subtype` of either class walks that object: below
+    // a table holding it, outside one that does not.
+    Python::attach(|py| {
+        let values = vec![
+            py.Ellipsis(),
+            py.NotImplemented(),
+            built(py, "type(...)").unbind(),
+            built(py, "type(NotImplemented)").unbind(),
+        ];
+        asking(py, values, |oracle| {
+            let class = |slot| Schema::Instance(ClassIx::new(slot));
+            let literal = |slot| Schema::Literal(ConstIx::new(slot));
+            assert_eq!(oracle.leaf_subtype(&class(2), &literal(0)), Some(true));
+            assert_eq!(oracle.leaf_subtype(&class(2), &literal(1)), Some(false));
+            assert_eq!(oracle.leaf_subtype(&class(3), &literal(1)), Some(true));
+            assert_eq!(oracle.leaf_subtype(&class(3), &literal(0)), Some(false));
+        });
+    });
+}
+
 // THEORY: a-constant-is-the-values-equal-to-it
 #[test]
 fn none_is_below_a_schema_where_its_value_is() {
