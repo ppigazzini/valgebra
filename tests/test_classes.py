@@ -192,7 +192,6 @@ def test_typeddict_total_false_makes_keys_optional() -> None:
     assert not schema.is_valid({"email": 1})  # checked when present
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="Required marker")
 def test_typeddict_required_marker_within_total_false() -> None:
     class Part(TypedDict, total=False):
         nickname: str
@@ -1083,7 +1082,7 @@ def test_a_callable_annotation_erases_the_arrow_it_writes() -> None:
 _STDLIB_ATOMS: list[tuple[type, object, object]] = [
     (
         dt.datetime,
-        dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc),
+        dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
         "2026-01-01",
     ),
     (dt.date, dt.date(2026, 1, 1), "2026-01-01"),
@@ -1651,7 +1650,6 @@ def test_the_class_alone_is_isinstance_and_holds_the_declaration(value: object) 
             assert instance_of(cls).is_valid(value)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="Any is a class from 3.11")
 def test_the_class_alone_of_any_is_the_top_whatever_is_imported() -> None:
     """`instance_of(typing.Any)` is what `Validator(typing.Any)` is.
 

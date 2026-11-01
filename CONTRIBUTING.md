@@ -35,7 +35,7 @@ land.
 
 ## Setup
 
-Requirements: stable Rust (edition 2024, MSRV 1.88), Python >= 3.10, and
+Requirements: stable Rust (edition 2024, MSRV 1.88), Python >= 3.11, and
 [`uv`](https://docs.astral.sh/uv/).
 
 ```bash

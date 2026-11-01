@@ -369,7 +369,7 @@ likely to carry:
 - **`\B` on the empty string**: it matches here, and in `re` only from 3.14.
 - **The Unicode version**: this engine's classes, case folding and properties
   are Unicode 16.0's, and `re`'s are the interpreter's own
-  (`unicodedata.unidata_version`), 13.0 on Python 3.10 up to 17.0 on 3.15. A
+  (`unicodedata.unidata_version`), 14.0 on Python 3.11 up to 17.0 on 3.15. A
   character one version assigns and the other does not is read apart: `\w`
   admits U+1C89, a letter 16.0 adds, here and in `re` from 3.14, and `(?i)`
   folds U+A7CE and U+A7CF, a case pair 17.0 adds, in `re` from 3.15 and not

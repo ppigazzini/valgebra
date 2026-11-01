@@ -753,8 +753,8 @@ path wherever either is missing, which then refuses at the bound.
 
 **A class is its type pointer for its own instances.** `isinstance(obj, C)`
 with `type(obj) is C` answers yes before it asks `C`'s `__instancecheck__` --
-CPython's `PyObject_IsInstance` makes that test first, from 3.10 to the current
-branch -- so `check_instance` reads it off the type pointer (`is_exactly_a`),
+CPython's `PyObject_IsInstance` makes that test first, on every supported
+release and the current branch -- so `check_instance` reads it off the type pointer (`is_exactly_a`),
 and asks `isinstance` only of a subclass instance or another value. A list of
 `date`, or of one enumeration, costs 29% fewer instructions. PyPy implements
 `isinstance` otherwise, and there the call answers.

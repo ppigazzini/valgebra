@@ -428,7 +428,7 @@ def _empty_the_roll(tree: Path) -> None:
 _LIFECYCLE = "tests/test_python_lifecycle.py"
 
 
-_NOW = "TODAY = dt.datetime.now(dt.timezone.utc).date()"
+_NOW = "TODAY = dt.datetime.now(dt.UTC).date()"
 
 
 _RELEASE_ROW = re.compile(
@@ -584,11 +584,28 @@ def _import_an_unshipped_module(tree: Path) -> None:
     _edit(
         tree,
         "tests/floor_names.json",
-        '    "base64": {\n      "since": "3.10"\n    },',
-        '    "_planted_stdlib": {\n      "since": "3.10"\n    },\n'
-        '    "base64": {\n      "since": "3.10"\n    },',
+        '    "base64": {\n      "since": "3.11"\n    },',
+        '    "_planted_stdlib": {\n      "since": "3.11"\n    },\n'
+        '    "base64": {\n      "since": "3.11"\n    },',
     )
     _write(tree, "tests/_planted_import.py", "import _planted_stdlib\n")
+
+
+def _import_a_module_above_the_floor(tree: Path) -> None:
+    """Import a module the floor does not ship, dated as the release that does."""
+    _edit(
+        tree,
+        "tests/floor_names.json",
+        '    "base64": {\n      "since": "3.11"\n    },',
+        '    "annotationlib": {\n      "since": "3.14"\n    },\n'
+        '    "base64": {\n      "since": "3.11"\n    },',
+    )
+    _edit(
+        tree,
+        "tests/test_enums.py",
+        "import enum\n",
+        "import enum\nimport annotationlib\n",
+    )
 
 
 #: The linux x86_64 build row's interpreter list, as `release.yml` spells it.
@@ -915,8 +932,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "crates/valgebra-py/src/build/interpreter.rs",
-            '(Since(11), "typing.Never", "nothing"),',
-            '(Since(99), "typing.Never", "nothing"),',
+            "(Since(13), \"{'a': typing.ReadOnly[int]}\", \"{'a': int}\"),",
+            "(Since(99), \"{'a': typing.ReadOnly[int]}\", \"{'a': int}\"),",
         ),
         trips=("test_every_gate_has_an_enforced_lane_on_each_side",),
     ),
@@ -1047,8 +1064,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "matrix.python-version == '3.10') &&\n      ', full history'",
             "matrix.python-version == '3.11') &&\n      ', full history'",
+            "matrix.python-version == '3.12') &&\n      ', full history'",
         ),
         trips=("test_the_leg_that_takes_the_history_says_so_in_its_name",),
     ),
@@ -1333,14 +1350,13 @@ PLANTS = (
     Plant(
         "tests/test_floor_names.py",
         ("tests/test_enums.py",),
-        # The form itself, from the lane it reddened: a name that reaches
-        # `typing` one release above the floor, imported where importing the
-        # module runs it.
+        # The form itself: a name that reaches `typing` above the floor,
+        # imported where importing the module runs it.
         lambda tree: _edit(
             tree,
             "tests/test_enums.py",
-            "import sys",
-            "import sys\nfrom typing import NotRequired",
+            "import enum\n",
+            "import enum\nfrom typing import TypeIs\n",
         ),
         trips=("test_no_module_reads_a_name_outside_the_releases_that_have_it",),
     ),
@@ -2756,22 +2772,6 @@ PLANTS = (
             '    "__hash__": "builtin",',
         ),
         trips=("test_every_accepted_reason_is_a_sentence",),
-    ),
-    Plant(
-        # The version gate dropped from the import, so the floor's checker reads
-        # a name `typing` does not have there.
-        "tests/test_typed_consumer.py",
-        ("tests/typing/consumer.py",),
-        lambda tree: _edit(
-            tree,
-            "tests/typing/consumer.py",
-            "if sys.version_info >= (3, 11):\n"
-            "    from typing import Never, assert_type\n"
-            "else:  # the floor, where `typing` carries neither yet\n"
-            "    from typing_extensions import Never, assert_type\n",
-            "from typing import Never, assert_type\n",
-        ),
-        trips=("test_the_consumer_reads_assert_type_on_the_floor_too",),
     ),
     Plant(
         # Every row put through a wrapper of `assert_type`: the checker still
@@ -4370,8 +4370,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "tests/test_enums.py",
-            "import sys",
-            "import sys\nfrom typing import NotRequierd",
+            "import enum\n",
+            "import enum\nfrom typing import NotRequierd\n",
         ),
         trips=("test_every_name_read_is_one_the_table_dates",),
     ),
@@ -4381,17 +4381,18 @@ PLANTS = (
         "tests/test_floor_names.py",
         ("tests/test_enums.py",),
         lambda tree: _edit(
-            tree, "tests/test_enums.py", "import sys", "import sys\nimport zoneinfo"
+            tree,
+            "tests/test_enums.py",
+            "import enum\n",
+            "import enum\nimport zoneinfo\n",
         ),
         trips=("test_every_stdlib_module_imported_is_one_the_table_dates",),
     ),
     Plant(
-        # The import that reddened the floor leg, at module scope again.
+        # A module the floor does not ship, dated and imported at module scope.
         "tests/test_floor_names.py",
-        ("tests/test_enums.py",),
-        lambda tree: _edit(
-            tree, "tests/test_enums.py", "import sys", "import sys\nimport tomllib"
-        ),
+        ("tests/floor_names.json", "tests/test_enums.py"),
+        _import_a_module_above_the_floor,
         trips=(
             "test_no_module_imports_a_stdlib_module_outside_the_releases_that_ship_it",
         ),
@@ -4405,9 +4406,9 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "tests/floor_names.json",
-            '      "ABCMeta": {\n        "since": "3.10"\n      },',
-            '      "ABCMeta": {\n        "since": "3.10"\n      },\n'
-            '      "ABCMetaclass": {\n        "since": "3.10"\n      },',
+            '      "ABCMeta": {\n        "since": "3.11"\n      },',
+            '      "ABCMeta": {\n        "since": "3.11"\n      },\n'
+            '      "ABCMetaclass": {\n        "since": "3.11"\n      },',
         ),
         trips=("test_the_table_agrees_with_this_interpreter",),
     ),

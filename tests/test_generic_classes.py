@@ -106,7 +106,6 @@ def test_a_generic_record_class_reads_its_parameters_or_refuses() -> None:
         Validator(Twice)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="a generic TypedDict is 3.11")
 def test_a_type_variable_is_its_own_classs_parameter() -> None:
     """A class reusing the `TypeVar` its base is bound with has a parameter of its own.
 
@@ -186,9 +185,6 @@ def test_a_parameter_left_out_takes_its_default() -> None:
         assert Validator(Holder[str]).is_valid(Holder("one"))
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11), reason="NotRequired and a generic TypedDict are 3.11"
-)
 def test_a_qualifier_as_a_type_argument_is_refused() -> None:
     """A `TypedDict` qualifier qualifies an item where it is declared, and nowhere else.
 
@@ -224,7 +220,6 @@ def test_a_qualifier_as_a_type_argument_is_refused() -> None:
     assert not Validator(Holds[int]).is_valid({})
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="a TypeVarTuple is 3.11")
 def test_a_class_binding_a_list_of_types_or_a_signature_is_refused() -> None:
     """A `TypeVarTuple` stands for a list of types, which no form here takes.
 
@@ -303,9 +298,6 @@ def test_a_default_naming_an_earlier_parameter_reads_its_binding() -> None:
         assert not Validator(Same).is_valid(Same(["s"]))
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11), reason="a generic TypedDict or NamedTuple is 3.11"
-)
 def test_a_generic_typeddict_and_named_tuple_applied_read_their_arguments() -> None:
     """A generic `TypedDict` and `NamedTuple` read as the dataclass does.
 

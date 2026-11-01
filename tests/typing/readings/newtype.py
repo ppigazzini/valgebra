@@ -1,8 +1,6 @@
 """A `NewType` as a schema."""
 
-from typing import NewType
-
-from typing_extensions import reveal_type
+from typing import NewType, reveal_type
 
 from valgebra import Validator
 

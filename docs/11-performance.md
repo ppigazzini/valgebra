@@ -623,8 +623,8 @@ program that builds validators per request, and to no validation call.
   (`optional_attribute` in `build/classes.rs`), whose lookup answers without
   the error: a fifty-field `TypedDict` of `int` compiles in 59% fewer
   instructions there, and the binding gate's protocol build in 8.61% fewer
-  (`--binding-protocol`). From 3.13 PyO3 asks without the error, and 3.10 and
-  3.11 build it on either road.
+  (`--binding-protocol`). From 3.13 PyO3 asks without the error, and 3.11
+  builds it on either road.
 - **A validator is accepted on one walk of each tree.** `Schema::measure` in
   `crates/valgebra-core/src/ir.rs` reads the nesting depth, the node count and
   the self-reference marker in one level-by-level walk against two buffers, and
@@ -757,8 +757,8 @@ program that builds validators per request, and to no validation call.
   instruction count of a snapshot reading is *higher* than in place -- the copy
   is instructions, and the stall it removes is not -- which is why the wall
   clock decides this one. Before 3.12 allocating the copy may run a collection,
-  and a finalizer it runs may empty the list under the copy, so on 3.10 and
-  3.11 the copy holds the collector off for its own length: three calls, about
+  and a finalizer it runs may empty the list under the copy, so on 3.11 the
+  copy holds the collector off for its own length: three calls, about
   three hundred instructions a list, 1.4% to 1.6% of a thousand integers on the
   profiled wheels.
 - **A tuple's elements are borrowed**, because a tuple cannot change while the

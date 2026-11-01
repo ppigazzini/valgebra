@@ -993,7 +993,7 @@ fn slot_names(slots: &Bound<'_, PyAny>) -> PyResult<Vec<Box<str>>> {
 /// hook: `object`, which defines it, and the builtins a value's kind is read
 /// from, with `BaseException`.
 ///
-/// `CPython` 3.10 to 3.13 put a slot wrapper for the generic lookup in each of
+/// `CPython` 3.11 to 3.13 put a slot wrapper for the generic lookup in each of
 /// those namespaces, and 3.14 puts it in `object`'s alone; read as a hook, it
 /// would make every `int` or exception subclass's attributes code's answer on
 /// the older releases and not on the newer. The classes whose lookup is their
@@ -1043,8 +1043,8 @@ fn type_has(ty: &Bound<'_, PyType>, name: &Bound<'_, PyString>) -> PyResult<bool
 /// Before 3.13 `PyO3`'s `hasattr` is a `getattr` whose `AttributeError` is
 /// cleared, and on a type object the error's message is formatted before it
 /// is. The builtin `hasattr` asks a type through the lookup 3.12 gives it,
-/// which answers a miss without building the error; 3.10 and 3.11 build it
-/// either way. On 3.12 that error is most of what reading a dataclass's
+/// which answers a miss without building the error; 3.11 builds it either
+/// way. On 3.12 that error is most of what reading a dataclass's
 /// namespace costs, since every value type that is no data descriptor misses
 /// twice.
 #[cfg(not(Py_3_13))]

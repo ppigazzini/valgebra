@@ -1,19 +1,9 @@
-"""Read a TOML file this repository owns, with a parser.
-
-`tomllib` is in the standard library from 3.11. Below it, `tomli` is the same
-parser under its own name, and pytest requires it there, so every interpreter
-the suite runs on has one.
-"""
+"""Read a TOML file this repository owns, with the standard library's parser."""
 
 from __future__ import annotations
 
-import sys
+import tomllib
 from typing import TYPE_CHECKING, Any
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # the floor, where pytest's own dependency supplies the parser
-    import tomli as tomllib
 
 if TYPE_CHECKING:
     from pathlib import Path

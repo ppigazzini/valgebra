@@ -1,16 +1,12 @@
 import sys
 import typing
 from types import GenericAlias
-from typing import ForwardRef, Literal, TypedDict
+from typing import ForwardRef, Literal, NotRequired, Required, TypedDict
 
 import pytest
 
 import _deferred
 from valgebra import ValidationError, Validator
-
-# The floor each qualifier reaches `typing` at; see `_deferred`.
-if sys.version_info >= (3, 11):
-    from typing import NotRequired, Required
 
 
 def test_list_annotation_is_a_sequence() -> None:
@@ -84,7 +80,6 @@ def test_a_constant_is_still_a_literal_where_a_value_belongs() -> None:
     assert Validator({"state": "active"}).is_valid({"state": "active"})
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="NotRequired marker")
 def test_a_qualifier_survives_a_string_annotation() -> None:
     """`NotRequired` under `from __future__ import annotations` (PEP 563).
 
@@ -113,7 +108,6 @@ def test_a_qualifier_survives_a_string_annotation() -> None:
     assert not schema.is_valid({"c": "x"})
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="Required marker")
 def test_a_required_qualifier_survives_it_too() -> None:
     """The other direction: `Required` inside a `total=False` class."""
     assert sorted(_deferred.DeferredTotalFalse.__required_keys__) == []
@@ -163,7 +157,6 @@ def test_a_qualifier_wrapping_a_qualifier_survives_it_too() -> None:
     assert not schema.is_valid({"d": 2})
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="NotRequired marker")
 def test_a_deferred_typed_dict_matches_the_same_class_written_plainly() -> None:
     """The whole claim in one line: the future import changes no set."""
 

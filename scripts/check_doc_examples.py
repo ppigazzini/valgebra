@@ -40,16 +40,12 @@ import re
 import subprocess
 import sys
 import tempfile
+import tomllib
 from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
 from _lib import ROOT, arguments
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # the floor, where pytest's own dependency supplies the parser
-    import tomli as tomllib
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -77,7 +73,7 @@ _MUTATION = '`config.steps = "ten"` is the mutation the example shows caught'
 _WRONG_POINT = '`Point(1, "y")` is the wrong argument the block shows refused'
 _SHORT_TUPLE = (
     "`tuple[str, int, ...]` is this library's shorter spelling of a prefix and a "
-    "tail, which 3.10's `typing` can write, shown beside the spec's `*tuple`"
+    "tail, which a checker refuses, shown beside the spec's `*tuple`"
 )
 _FORWARD_REFERENCE = (
     '`list["Account"]` is the forward reference the frontend refuses to resolve'

@@ -1,6 +1,6 @@
 """`union` over two validators of different types."""
 
-from typing_extensions import reveal_type
+from typing import reveal_type
 
 from valgebra import Validator, union
 

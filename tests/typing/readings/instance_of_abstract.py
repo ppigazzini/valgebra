@@ -1,8 +1,7 @@
 """The instances of an abstract class, through `instance_of`."""
 
 import abc
-
-from typing_extensions import reveal_type
+from typing import reveal_type
 
 from valgebra import instance_of
 

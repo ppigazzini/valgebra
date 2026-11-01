@@ -5,41 +5,39 @@ module a string, which is what a large share of real code does. It lives in its
 own module because the effect is per-module and cannot be turned on inside a
 function.
 
-`Required` and `NotRequired` reach `typing` in 3.11 and `ReadOnly` in 3.13, and
-the builder asks `typing` itself for each marker -- a qualifier the running
-interpreter does not carry is not one it can be asked about. Each class below is
-guarded at the release that spells it, and the tests reading it skip beneath
-that floor.
+`ReadOnly` reaches `typing` in 3.13, and the builder asks `typing` itself for
+each marker -- a qualifier the running interpreter does not carry is not one it
+can be asked about. The class spelling it is guarded at that release, and the
+tests reading it skip beneath it.
 """
 
 from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import Annotated, TypedDict
+from typing import Annotated, NotRequired, Required, TypedDict
 
 import typing_extensions
 from annotated_types import Ge
 
-if sys.version_info >= (3, 11):
-    from typing import NotRequired, Required
 
-    class Deferred(TypedDict):
-        """A class whose qualifiers CPython cannot see.
+class Deferred(TypedDict):
+    """A class whose qualifiers CPython cannot see.
 
-        `__required_keys__` is computed from the annotations as written, and here
-        they are strings, so every key lands in it however it is qualified.
-        """
+    `__required_keys__` is computed from the annotations as written, and here
+    they are strings, so every key lands in it however it is qualified.
+    """
 
-        a: int
-        b: NotRequired[list[str]]
-        c: Required[str]
+    a: int
+    b: NotRequired[list[str]]
+    c: Required[str]
 
-    class DeferredTotalFalse(TypedDict, total=False):
-        """The other direction: `total=False` with one key pulled back to required."""
 
-        a: int
-        b: Required[str]
+class DeferredTotalFalse(TypedDict, total=False):
+    """The other direction: `total=False` with one key pulled back to required."""
+
+    a: int
+    b: Required[str]
 
 
 if sys.version_info >= (3, 13):

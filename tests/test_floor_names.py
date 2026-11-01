@@ -16,9 +16,9 @@ small: which release each public `typing` and `enum` name arrives in.
 
 So `floor_names.json` carries that, and this refuses a name a module reaches at
 import time before the release that spells it. The guard the tree already uses
-counts: inside ``if sys.version_info >= (3, 11):`` the lowest interpreter that
-reaches the line is 3.11, and the name is judged against *that*, which catches
-the other half of the same mistake -- a name guarded at 3.11 that arrives in
+counts: inside ``if sys.version_info >= (3, 12):`` the lowest interpreter that
+reaches the line is 3.12, and the name is judged against *that*, which catches
+the other half of the same mistake -- a name guarded at 3.12 that arrives in
 3.13.
 
 What is not judged: anything inside a function (it runs when a test runs, and a
@@ -392,27 +392,29 @@ def test_no_module_imports_a_stdlib_module_outside_the_releases_that_ship_it() -
 
 
 def test_the_reader_sees_a_module_the_floor_does_not_ship() -> None:
-    """The plant for the half above: the import that reddened the floor leg.
+    """The plant for the half above: a module the floor does not ship, imported.
 
     Written out rather than reached for, because the tree carries no such
     import: a check whose only evidence is that the tree passes is a check
     nobody has run against a tree that breaks it.
     """
-    planted = "import sys\nimport tomllib\n\nDATA = tomllib.loads('')\n"
+    planted = "import sys\nimport annotationlib\n\nFORMAT = annotationlib.Format\n"
     # Its span is written here rather than read from the table, because the
     # table dates what this tree imports and this tree does not import it any
     # more. What the row holds is the rule -- a module reached below the release
     # that ships it -- and the rule is the part a plant has to exercise.
-    spans = {"tomllib": ((3, 11), None)}
+    spans = {"annotationlib": ((3, 14), None)}
     early = {
         found.module
         for found in reader_of(planted).imports
         if (ships := spans.get(found.module)) is not None and ships[0] > found.lowest
     }
-    assert early == {"tomllib"}, "the floor's own leg caught this and no test did"
+    assert early == {"annotationlib"}, "the floor's own leg would catch this first"
 
     # The guarded form is the spelling that is allowed, and is not reported.
-    guarded = "import sys\n\nif sys.version_info >= (3, 11):\n    import tomllib\n"
+    guarded = (
+        "import sys\n\nif sys.version_info >= (3, 14):\n    import annotationlib\n"
+    )
     behind_a_guard = [
         found.module
         for found in reader_of(guarded).imports
@@ -544,12 +546,12 @@ def test_the_reader_sees_the_two_forms_that_reddened_the_lanes() -> None:
     planted = (
         "import enum\n"
         "import sys\n"
-        "from typing import NotRequired\n"
+        "from typing import TypeIs\n"
         "\n"
-        "class Planted(enum.StrEnum):\n"
-        "    a = 'a'\n"
+        "class Planted(enum.EnumDict):\n"
+        "    pass\n"
         "\n"
-        "if sys.version_info >= (3, 11):\n"
+        "if sys.version_info >= (3, 12):\n"
         "    from typing import ReadOnly\n"
     )
     reader = Reader("planted.py", deferred=False)
@@ -560,8 +562,8 @@ def test_the_reader_sees_the_two_forms_that_reddened_the_lanes() -> None:
         if (dated := _dated(use.module, use.name)) is not None and dated[0] > use.lowest
     }
     assert early == {
-        ("typing", "NotRequired"),
-        ("enum", "StrEnum"),
+        ("typing", "TypeIs"),
+        ("enum", "EnumDict"),
         ("typing", "ReadOnly"),
     }
 

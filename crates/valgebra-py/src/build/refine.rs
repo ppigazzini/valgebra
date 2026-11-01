@@ -939,7 +939,7 @@ impl<'py> Probes<'py> {
         }
         // A `__getattr__` answers for names no namespace holds, and so does a
         // `__getattribute__` other than the generic lookup. A builtin base that
-        // names the generic lookup in a namespace of its own -- `int` on 3.10 to
+        // names the generic lookup in a namespace of its own -- `int` on 3.11 to
         // 3.13 -- reads as one too, which gives up the saving and no answer.
         let lookup = intern!(py, "__getattribute__");
         if ty.getattr_opt(intern!(py, "__getattr__"))?.is_some()

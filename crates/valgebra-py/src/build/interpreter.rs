@@ -235,9 +235,6 @@ fn a_generic_class_binds_each_parameter_once() {
 #[test]
 fn a_type_variable_is_its_own_classs_parameter() {
     Python::attach(|py| {
-        if !Since(11).met(py) {
-            return;
-        }
         let program = r"import typing\nT = typing.TypeVar('T')\nU = typing.TypeVar('U')\nclass Box(typing.TypedDict, typing.Generic[T]):\n    a: T\nclass IntBoxOf(Box[int], typing.Generic[T]):\n    b: T\nclass Pair(typing.TypedDict, typing.Generic[T, U]):\n    first: T\n    second: U\nclass Crossed(Pair[U, T], typing.Generic[T, U]):\n    pass\n";
         let spelled =
             |form: &str| format!(r#"(lambda ns: (exec("{program}", ns), {form})[1])({{}})"#);
@@ -425,12 +422,6 @@ fn each_spelling_builds_its_own_schema() {
     });
 }
 
-/// The spellings a later release adds, each held where the release has it.
-///
-/// Apart from the table above because a row is read by whoever runs it, and
-/// these are read by fewer lanes: the release each needs rides on the row and
-/// [`Since`] says what that means. Together they are one table -- a spelling
-/// belongs to the frontend's dispatch whether or not the floor can write it.
 /// An object carrying `__metadata__` and no `__origin__` is not an `Annotated`
 /// form. It is read as every other object is, the literal of itself, rather
 /// than failing on the name it lacks; with both names it is the refinement.
@@ -449,60 +440,49 @@ fn metadata_without_an_origin_is_not_annotated() {
     });
 }
 
+/// The spellings a release after the first adds: the ones every supported
+/// release spells, and the rest held where the release has it.
+///
+/// Apart from the table above because a row is read by whoever runs it, and
+/// the later rows by fewer lanes: the release each needs rides on the row and
+/// [`Since`] says what that means. Together they are one table -- a spelling
+/// belongs to the frontend's dispatch whether or not the floor can write it.
 #[test]
 fn each_spelling_a_release_adds_builds_where_that_release_has_it() {
     Python::attach(|py| {
-        for (since, expression, wanted) in [
-            (Since(11), "typing.Never", "nothing"),
-            // The two unpacked tuple spellings: a star inside a subscript is
-            // a syntax error before 3.11, so the row cannot even be written
-            // for that release to read.
-            (
-                Since(11),
-                "tuple[str, *tuple[int, ...]]",
-                "tuple[str, int, ...]",
-            ),
-            (
-                Since(11),
-                "tuple[str, *tuple[int, bool]]",
-                "tuple[str, int, bool]",
-            ),
+        let builds = |expression: &str, wanted: &str| {
+            let got = built(py, expression).unwrap_or_else(|error| {
+                panic!("{expression} did not build: {error}");
+            });
+            assert_eq!(got, wanted, "{expression}");
+        };
+        for (expression, wanted) in [
+            ("typing.Never", "nothing"),
+            // The two unpacked tuple spellings of a prefix and a tail.
+            ("tuple[str, *tuple[int, ...]]", "tuple[str, int, ...]"),
+            ("tuple[str, *tuple[int, bool]]", "tuple[str, int, bool]"),
             // What a splice carries is read as the carrier's own arguments: a
             // star inside it unpacks and a `...` in it repeats, in either
             // spelling, and a splice of nothing splices nothing.
             (
-                Since(11),
                 "tuple[int, *tuple[str, *tuple[bool, ...]]]",
                 "tuple[int, str, bool, ...]",
             ),
             (
-                Since(11),
                 "tuple[int, typing.Unpack[tuple[str, typing.Unpack[tuple[bool, ...]]]]]",
                 "tuple[int, str, bool, ...]",
             ),
-            (
-                Since(11),
-                "tuple[*tuple[*tuple[int, ...]]]",
-                "tuple[int, ...]",
-            ),
-            (
-                Since(11),
-                "tuple[*tuple[int, str, ...]]",
-                "tuple[int, str, ...]",
-            ),
-            (
-                Since(11),
-                "tuple[*tuple[int, *tuple[()]], str]",
-                "tuple[int, str]",
-            ),
-            // A dict literal's field reads `ReadOnly` through, and a clause's
-            // value has no presence a qualifier could contradict.
+            ("tuple[*tuple[*tuple[int, ...]]]", "tuple[int, ...]"),
+            ("tuple[*tuple[int, str, ...]]", "tuple[int, str, ...]"),
+            ("tuple[*tuple[int, *tuple[()]], str]", "tuple[int, str]"),
+            // A clause's value has no presence a qualifier could contradict.
+            ("{str: typing.NotRequired[int]}", "dict[str, int]"),
+        ] {
+            builds(expression, wanted);
+        }
+        for (since, expression, wanted) in [
+            // A dict literal's field reads `ReadOnly` through.
             (Since(13), "{'a': typing.ReadOnly[int]}", "{'a': int}"),
-            (
-                Since(11),
-                "{str: typing.NotRequired[int]}",
-                "dict[str, int]",
-            ),
             // An alias in metadata is read through to what it names, and one
             // naming no `Annotated` alias is metadata nobody reads -- as are
             // aliases naming each other in a cycle, which name no form.
@@ -524,13 +504,9 @@ fn each_spelling_a_release_adds_builds_where_that_release_has_it() {
                 "int",
             ),
         ] {
-            if !since.met(py) {
-                continue;
+            if since.met(py) {
+                builds(expression, wanted);
             }
-            let got = built(py, expression).unwrap_or_else(|error| {
-                panic!("{expression} did not build: {error}");
-            });
-            assert_eq!(got, wanted, "{expression}");
         }
     });
 }
@@ -811,15 +787,11 @@ fn a_typing_form_is_refused_where_a_constant_or_a_type_argument_is_read() {
                 "typing.Literal[typing.NewType('U', int)]",
                 "rather than a constant",
             ),
+            ("typing.Literal[typing.Never]", "rather than a constant"),
         ] {
             refuses(expression, wanted);
         }
         for (since, expression, wanted) in [
-            (
-                Since(11),
-                "typing.Literal[typing.Never]",
-                "rather than a constant",
-            ),
             (
                 Since(12),
                 "typing.Literal[typing.TypeAliasType('A', int)]",
@@ -1180,11 +1152,9 @@ fn each_refusal_says_what_it_refuses() {
         ] {
             refuses(expression, wanted);
         }
-        // The star inside a subscript is a syntax error before 3.11, so below
-        // it the refusal the row reads is the *parser's* rather than this one's.
-        if Since(11).met(py) {
-            refuses("tuple[*list[int]]", "only a tuple can be unpacked");
-        }
+        // An unpack of something that is not a tuple: the star binds element
+        // types into a tuple, and a list has none to bind.
+        refuses("tuple[*list[int]]", "only a tuple can be unpacked");
     });
 }
 
@@ -1194,9 +1164,8 @@ fn each_refusal_says_what_it_refuses() {
 /// and a qualifier under `Annotated` where the spec and the runtime part.
 ///
 /// Apart from the table above, which they would carry past the length a test
-/// is held to, and gated by release where the form is: a star inside a
-/// subscript, `NotRequired`, `TypeAliasType` and `ReadOnly` each arrive in
-/// one.
+/// is held to, and gated by release where the form is: `TypeAliasType` and
+/// `ReadOnly` each arrive in one.
 #[test]
 fn each_refusal_of_a_form_read_as_another_set_says_what_it_refuses() {
     Python::attach(|py| {
@@ -1210,36 +1179,34 @@ fn each_refusal_of_a_form_read_as_another_set_says_what_it_refuses() {
                 "{expression} refused with {error}, which does not name {wanted}"
             );
         };
-        if Since(11).met(py) {
-            // A `...` repeats the one element written before it in its own
-            // tuple, which a splice is not, and a tail reached through a
-            // splice is still a tail.
-            refuses("tuple[*tuple[int, str], ...]", "are not one element");
-            refuses("tuple[int, *tuple[()], ...]", "are not one element");
-            refuses("tuple[int, *tuple[..., str]]", "cannot begin with one");
-            refuses(
-                "tuple[*tuple[int, *tuple[str, ...]], bool]",
-                "nothing may follow the tail",
-            );
-            // An unpacked tuple anywhere but a tuple's arguments, in both
-            // spellings: read as a type, the star is `tuple[int]`.
-            for expression in [
-                "[*tuple[int]][0]",
-                "list[*tuple[int]]",
-                "[*tuple[int]]",
-                "list[typing.Unpack[tuple[int]]]",
-            ] {
-                refuses(expression, "unpacks into the arguments");
-            }
-            // A presence qualifier on a dict literal's field, through what
-            // wraps it, where the key's `?` is the one marker.
-            for expression in [
-                "{'a': typing.NotRequired[int]}",
-                "{'a?': typing.Required[int]}",
-                "{'a': typing.Annotated[typing.NotRequired[int], 'm']}",
-            ] {
-                refuses(expression, "of a dict literal is a TypedDict qualifier");
-            }
+        // A `...` repeats the one element written before it in its own
+        // tuple, which a splice is not, and a tail reached through a
+        // splice is still a tail.
+        refuses("tuple[*tuple[int, str], ...]", "are not one element");
+        refuses("tuple[int, *tuple[()], ...]", "are not one element");
+        refuses("tuple[int, *tuple[..., str]]", "cannot begin with one");
+        refuses(
+            "tuple[*tuple[int, *tuple[str, ...]], bool]",
+            "nothing may follow the tail",
+        );
+        // An unpacked tuple anywhere but a tuple's arguments, in both
+        // spellings: read as a type, the star is `tuple[int]`.
+        for expression in [
+            "[*tuple[int]][0]",
+            "list[*tuple[int]]",
+            "[*tuple[int]]",
+            "list[typing.Unpack[tuple[int]]]",
+        ] {
+            refuses(expression, "unpacks into the arguments");
+        }
+        // A presence qualifier on a dict literal's field, through what
+        // wraps it, where the key's `?` is the one marker.
+        for expression in [
+            "{'a': typing.NotRequired[int]}",
+            "{'a?': typing.Required[int]}",
+            "{'a': typing.Annotated[typing.NotRequired[int], 'm']}",
+        ] {
+            refuses(expression, "of a dict literal is a TypedDict qualifier");
         }
         if Since(13).met(py) {
             refuses(
@@ -1518,9 +1485,6 @@ fn a_recursive_generic_alias_is_tied_by_its_arguments() {
 #[test]
 fn a_qualifier_as_a_type_argument_is_refused() {
     Python::attach(|py| {
-        if !Since(11).met(py) {
-            return;
-        }
         let holds = |argument: &str| {
             format!(
                 r#"(lambda ns: (exec("import typing\nT = typing.TypeVar('T')\nclass Holds(typing.TypedDict, typing.Generic[T]):\n    a: T\n", ns), ns['Holds'][{argument}])[1])({{}})"#
@@ -1549,9 +1513,6 @@ fn a_qualifier_as_a_type_argument_is_refused() {
 #[test]
 fn a_class_binding_a_list_of_types_is_refused_applied() {
     Python::attach(|py| {
-        if !Since(11).met(py) {
-            return;
-        }
         let row = |applied: &str| {
             format!(
                 r#"(lambda ns: (exec("import dataclasses, typing\nTs = typing.TypeVarTuple('Ts')\n@dataclasses.dataclass\nclass Row(typing.Generic[typing.Unpack[Ts]]):\n    a: int\n", ns), ns['Row']{applied})[1])({{}})"#
@@ -2866,19 +2827,8 @@ fn a_typed_dict_inherits_the_tail_its_base_states() {
 fn a_class_is_read_through_what_it_declares() {
     Python::attach(|py| {
         let namespace = namespace(py).expect("the corpus namespace builds");
-        // `NotRequired` reaches `typing` in 3.11, so the key it marks is
-        // declared where the interpreter has the marker to declare it with --
-        // the class is written the way a caller writes it, rather than built
-        // and then patched. Below 3.11 the record is the required half alone,
-        // which is the record that release gives a caller for this class.
-        let optional = Since(11).met(py);
-        let note = if optional {
-            "\x20   note: typing.NotRequired[int]\n"
-        } else {
-            ""
-        };
         py.run(
-            &CString::new(format!(
+            &CString::new(
                 "import dataclasses, typing\n\
                  @dataclasses.dataclass\n\
                  class Point:\n\
@@ -2886,8 +2836,8 @@ fn a_class_is_read_through_what_it_declares() {
                  \x20   tag: typing.ClassVar[str] = 'p'\n\
                  class Row(typing.TypedDict):\n\
                  \x20   name: str\n\
-                 {note}"
-            ))
+                 \x20   note: typing.NotRequired[int]\n",
+            )
             .expect("a source with no interior nul"),
             Some(&namespace),
             None,
@@ -2899,14 +2849,7 @@ fn a_class_is_read_through_what_it_declares() {
             ("Point", "Point"),
             // A `TypedDict` is a record, open as the typing spec defines
             // one, and `NotRequired` marks the key rather than its type.
-            (
-                "Row",
-                if optional {
-                    "{'name': str, 'note?': int, str: anything}"
-                } else {
-                    "{'name': str, str: anything}"
-                },
-            ),
+            ("Row", "{'name': str, 'note?': int, str: anything}"),
         ] {
             let annotation = namespace
                 .get_item(name)
@@ -2958,82 +2901,51 @@ fn a_qualifier_states_required_ness_only_from_the_outside() {
             ("int", None),
             ("list[int]", None),
             ("typing.Annotated[int, 1]", None),
-        ] {
-            assert_eq!(answer(expression), wanted, "{expression}");
-        }
-        // Every other row names a marker `typing` gained in 3.11, so each
-        // carries the release it needs: below it the name is an
-        // `AttributeError` and the row would be about the interpreter rather
-        // than about the walk. The rows themselves are what every lane above
-        // the floor drives.
-        for (since, expression, wanted) in [
             // Stated, and read.
-            (Since(11), "typing.Required[int]", Some(true)),
-            (Since(11), "typing.NotRequired[int]", Some(false)),
+            ("typing.Required[int]", Some(true)),
+            ("typing.NotRequired[int]", Some(false)),
             // Stated behind a qualifier that carries no answer of its own.
-            (
-                Since(11),
-                "typing.Required[typing.Annotated[int, 1]]",
-                Some(true),
-            ),
+            ("typing.Required[typing.Annotated[int, 1]]", Some(true)),
             // The one the walk must not read through: `list` is not a field
             // qualifier, so the search ends at it and never sees the
             // `Required` it holds.
-            (Since(11), "list[typing.Required[int]]", None),
+            ("list[typing.Required[int]]", None),
             // `Annotated` carries no answer of its own either, and what it
             // annotates may be the qualifier.
-            (
-                Since(11),
-                "typing.Annotated[typing.NotRequired[int], 1]",
-                Some(false),
-            ),
-            (
-                Since(11),
-                "typing.Annotated[typing.Required[int], 1]",
-                Some(true),
-            ),
-            (Since(11), "dict[str, typing.NotRequired[int]]", None),
+            ("typing.Annotated[typing.NotRequired[int], 1]", Some(false)),
+            ("typing.Annotated[typing.Required[int], 1]", Some(true)),
+            ("dict[str, typing.NotRequired[int]]", None),
             // A qualifier nested in itself says once what it says twice.
-            (
-                Since(11),
-                "typing.Required[typing.Required[int]]",
-                Some(true),
-            ),
-            (
-                Since(11),
-                "typing.NotRequired[typing.NotRequired[int]]",
-                Some(false),
-            ),
+            ("typing.Required[typing.Required[int]]", Some(true)),
+            ("typing.NotRequired[typing.NotRequired[int]]", Some(false)),
         ] {
-            if since.met(py) {
-                assert_eq!(answer(expression), wanted, "{expression}");
-            }
+            assert_eq!(answer(expression), wanted, "{expression}");
         }
         // And the walk reads on below the first that answers, so the opposite
         // one under it is found, through an `Annotated` between, and refused.
-        if Since(11).met(py) {
-            for expression in [
-                "typing.Required[typing.NotRequired[int]]",
-                "typing.NotRequired[typing.Required[int]]",
-                "typing.Required[typing.Annotated[typing.NotRequired[int], 1]]",
-            ] {
-                let hint = py
-                    .eval(
-                        &CString::new(expression).expect("no interior nul"),
-                        Some(&namespace),
-                        None,
-                    )
-                    .expect(expression);
-                assert!(qualified_required(&hint).is_err(), "{expression}");
-            }
+        for expression in [
+            "typing.Required[typing.NotRequired[int]]",
+            "typing.NotRequired[typing.Required[int]]",
+            "typing.Required[typing.Annotated[typing.NotRequired[int], 1]]",
+        ] {
+            let hint = py
+                .eval(
+                    &CString::new(expression).expect("no interior nul"),
+                    Some(&namespace),
+                    None,
+                )
+                .expect(expression);
+            assert!(qualified_required(&hint).is_err(), "{expression}");
         }
     });
 }
 
 /// A form `typing_extensions` spells with an object of its own reads as its
-/// `typing` spelling does: `Any` the top, `Never` the bottom, an alias its
-/// aliased type, a qualifier the type it qualifies, `Unpack` a tuple's tail,
-/// and `Self` a construct to refuse.
+/// `typing` spelling does: an alias its aliased type, `ReadOnly` the type it
+/// qualifies, and `Unpack` a tuple's tail. The forms every supported release
+/// spells in `typing` are `typing`'s own objects there -- `Any` the top,
+/// `Never` the bottom, a presence qualifier the type it qualifies, and `Self` a
+/// construct to refuse.
 ///
 /// The module is the installed one where there is one. The corpora run on an
 /// interpreter's own standard library, so where there is none a stand-in
@@ -3052,17 +2964,16 @@ fn a_typing_extensions_form_reads_as_its_typing_spelling() {
               \x20   extensions = types.ModuleType('typing_extensions')\n\
               \x20   class _SpecialForm:\n\
               \x20       pass\n\
-              \x20   class Any:\n\
-              \x20       pass\n\
               \x20   class TypeAliasType:\n\
               \x20       def __init__(self, name, value):\n\
               \x20           self.__name__ = name\n\
               \x20           self.__value__ = value\n\
               \x20           self.__type_params__ = ()\n\
-              \x20   for name in ('Never', 'Self', 'Required', 'NotRequired', 'ReadOnly', 'Unpack'):\n\
+              \x20   for name in ('Any', 'Never', 'Self', 'Required', 'NotRequired'):\n\
+              \x20       setattr(extensions, name, getattr(typing, name))\n\
+              \x20   for name in ('ReadOnly', 'Unpack'):\n\
               \x20       setattr(extensions, name, _SpecialForm())\n\
               \x20   extensions._SpecialForm = _SpecialForm\n\
-              \x20   extensions.Any = Any\n\
               \x20   extensions.TypeAliasType = TypeAliasType\n\
               \x20   sys.modules['typing_extensions'] = extensions\n\
               \x20   stand_in = True\n\
@@ -3170,9 +3081,6 @@ fn a_bare_generic_alias_unpacked_names_its_unbound_parameter() {
 #[test]
 fn a_qualifier_under_an_annotated_keeps_its_marker() {
     Python::attach(|py| {
-        if !Since(11).met(py) {
-            return;
-        }
         let record = built(
             py,
             "typing.TypedDict('Row', {'a': typing.Annotated[typing.NotRequired[int], at.Ge(0)], \
@@ -3195,9 +3103,6 @@ fn a_qualifier_under_an_annotated_keeps_its_marker() {
 #[test]
 fn a_field_is_built_from_the_hint_below_its_top_qualifiers() {
     Python::attach(|py| {
-        if !Since(11).met(py) {
-            return;
-        }
         let namespace = namespace(py).expect("the namespace builds");
         let eval = |expression: &str| {
             py.eval(
@@ -3354,9 +3259,6 @@ rusty_fork_test! {
     #[test]
     fn typing_unpack_reads_where_typing_extensions_was_never_loaded() {
         Python::attach(|py| {
-            if !Since(11).met(py) {
-                return;
-            }
             let loaded = py
                 .import("sys")
                 .and_then(|sys| sys.getattr("modules"))

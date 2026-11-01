@@ -346,44 +346,40 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
     ),
 ]
 
-if sys.version_info >= (3, 11):
-    # An unpack binds element types into a tuple, so what it names must have
-    # some: a list is homogeneous and binds none at runtime. Behind the guard
-    # because `Unpack` arrives one release above the floor.
-    REFUSALS.append(
-        (
-            "an unpack of something that is not a tuple",
-            tuple[typing.Unpack[list[int]]],  # ty: ignore[invalid-type-form]
-            NotImplementedError,
-            "only a tuple can be unpacked into a tuple schema",
-        )
+REFUSALS.append(
+    (
+        "an unpack of something that is not a tuple",
+        tuple[typing.Unpack[list[int]]],  # ty: ignore[invalid-type-form]
+        NotImplementedError,
+        "only a tuple can be unpacked into a tuple schema",
     )
-    # A dict literal says whether a key is required by the key's `?` alone, so
-    # a `TypedDict` qualifier on a field is refused rather than read as the
-    # type it wraps. Behind the guard because `NotRequired` arrives in 3.11.
-    REFUSALS.append(
-        (
-            "a presence qualifier on a dict-literal field",
-            {"a": typing.NotRequired[int]},
-            NotImplementedError,
-            "of a dict literal is a TypedDict qualifier",
-        )
+)
+# A dict literal says whether a key is required by the key's `?` alone, so
+# a `TypedDict` qualifier on a field is refused rather than read as the
+# type it wraps.
+REFUSALS.append(
+    (
+        "a presence qualifier on a dict-literal field",
+        {"a": typing.NotRequired[int]},
+        NotImplementedError,
+        "of a dict literal is a TypedDict qualifier",
     )
-    # Two presence qualifiers on one item, which the spec makes an error and
-    # which name two records, in either order and with `Annotated` between.
-    REFUSALS.extend(
-        (
-            f"both presence qualifiers: {spelling}",
-            typing.TypedDict("Both", {"a": spelling}),
-            NotImplementedError,
-            "says the key is both required and not required",
-        )
-        for spelling in (
-            typing.Required[typing.NotRequired[int]],
-            typing.NotRequired[typing.Required[int]],
-            typing.Required[Annotated[typing.NotRequired[int], 0]],  # ty: ignore[invalid-type-form]
-        )
+)
+# Two presence qualifiers on one item, which the spec makes an error and
+# which name two records, in either order and with `Annotated` between.
+REFUSALS.extend(
+    (
+        f"both presence qualifiers: {spelling}",
+        typing.TypedDict("Both", {"a": spelling}),
+        NotImplementedError,
+        "says the key is both required and not required",
     )
+    for spelling in (
+        typing.Required[typing.NotRequired[int]],
+        typing.NotRequired[typing.Required[int]],
+        typing.Required[Annotated[typing.NotRequired[int], 0]],  # ty: ignore[invalid-type-form]
+    )
+)
 
 if sys.version_info >= (3, 12):
     # A `type` alias unpacked into a tuple is read through to what it names, so

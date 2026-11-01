@@ -251,17 +251,12 @@ def test_a_quantifier_the_engines_read_apart_is_refused(
 def test_what_python_does_with_each_quantifier_refused() -> None:
     """`re` reads a `+` after a quantifier as possessive, and a spaced brace as text.
 
-    Possessive from 3.11, and an error before it: either way not this engine's
-    `(?:a?)+`, which admits `"aa"`. A brace that is not exactly a count is
-    literal text to `re`, in verbose mode too, where the whitespace after the
-    literal brace is dropped.
+    Possessive is not this engine's `(?:a?)+`, which admits `"aa"`. A brace
+    that is not exactly a count is literal text to `re`, in verbose mode too,
+    where the whitespace after the literal brace is dropped.
     """
-    if sys.version_info >= (3, 11):
-        assert re.fullmatch("a?+", "aa") is None
-        assert re.fullmatch(r"\d++\d", "12") is None
-    else:
-        with pytest.raises(re.error, match="multiple repeat"):
-            re.compile("a?+")
+    assert re.fullmatch("a?+", "aa") is None
+    assert re.fullmatch(r"\d++\d", "12") is None
     assert _matches("(?:a?)+", "aa")
     assert re.fullmatch("a{1, 3}", "a{1, 3}") is not None
     assert re.fullmatch("a{1, 3}", "aa") is None

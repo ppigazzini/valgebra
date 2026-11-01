@@ -221,9 +221,8 @@ pub(super) fn refuse_unhashable_literal(arg: &Bound<'_, PyAny>) -> PyResult<()> 
 ///
 /// Python rejects none of these subscriptions, and each reached the schema
 /// reading: `Literal[list[int]]` built `list[int]`, `Literal[NewType("U",
-/// int)]` built `int`, `Literal[Validator(int)]` the validator's set, and on
-/// 3.10, where `Any` is not yet a class, `Literal[Any]` built `Any`. A builtin
-/// scalar is answered first, so a wide `Literal` asks none of the rest.
+/// int)]` built `int`, and `Literal[Validator(int)]` the validator's set. A
+/// builtin scalar is answered first, so a wide `Literal` asks none of the rest.
 pub(super) fn refuse_literal_form(arg: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = arg.py();
     if super::is_builtin_scalar(arg) {
@@ -236,7 +235,6 @@ pub(super) fn refuse_literal_form(arg: &Bound<'_, PyAny>) -> PyResult<()> {
         .any(|form| arg.is(form.bind(py)));
     let form = arg.is(forms.any.bind(py))
         || bottom
-        || is_extension_top_or_bottom(arg)?
         || arg.is_exact_instance_of::<Validator>()
         || arg.getattr_opt(intern!(py, "__supertype__"))?.is_some()
         || forms
@@ -254,12 +252,6 @@ pub(super) fn refuse_literal_form(arg: &Bound<'_, PyAny>) -> PyResult<()> {
          values, or a constant to admit one",
         summarize(arg)?
     )))
-}
-
-/// Whether `arg` is `typing_extensions`' own `Any` or `Never`, an object of its
-/// own below the release that adds each to `typing` and `typing`'s from it on.
-fn is_extension_top_or_bottom(arg: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(is_extension(arg, |held| &held.any)? || is_extension(arg, |held| &held.never)?)
 }
 
 /// True if `origin` is `typing.Union` (from Union/Optional) or
@@ -310,22 +302,14 @@ fn field_qualifier(origin: &Bound<'_, PyAny>) -> PyResult<Option<Qualifier>> {
             return Ok(Some(qualifier));
         }
     }
-    // The same three from `typing_extensions`, which is where a release older
-    // than the one that adds a qualifier to `typing` spells it. A qualifier is
-    // a form and never a class, and the origin of every other annotated field
-    // is one, so a class is answered without asking.
+    // `ReadOnly` from `typing_extensions`, which is where a release older than
+    // the one that adds it to `typing` spells it. A qualifier is a form and
+    // never a class, and the origin of every other annotated field is one, so
+    // a class is answered without asking.
     if origin.is_instance_of::<PyType>() {
         return Ok(None);
     }
-    Ok(if is_extension(origin, |held| &held.required)? {
-        Some(Qualifier::Required)
-    } else if is_extension(origin, |held| &held.not_required)? {
-        Some(Qualifier::NotRequired)
-    } else if is_extension(origin, |held| &held.read_only)? {
-        Some(Qualifier::ReadOnly)
-    } else {
-        None
-    })
+    Ok(is_extension(origin, |held| &held.read_only)?.then_some(Qualifier::ReadOnly))
 }
 
 /// Refuse `Required` or `NotRequired` on a field of a dict literal.
@@ -490,16 +474,11 @@ pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Un
     if args.len() == 2 && is_ellipsis(&args.get_item(1)?) {
         return Ok(Some(Unpacked::Tail(args.get_item(0)?)));
     }
-    // `*tuple[()]` splices nothing, in the spelling 3.10 gives it too, where
-    // its one argument is the empty tuple and would splice in as an element.
-    if spells_the_empty_tuple(&args)? {
-        return Ok(Some(Unpacked::Fixed(PyTuple::empty(py), alias)));
-    }
     Ok(Some(Unpacked::Fixed(args, alias)))
 }
 
 /// Whether `origin` is `typing.Unpack`, or `typing_extensions.Unpack` where it
-/// is its own object: 3.10 has only the second. An argument with no origin is
+/// is its own object, as it is on 3.11. An argument with no origin is
 /// an ordinary element, and asks neither.
 fn is_unpack_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = origin.py();
@@ -526,25 +505,6 @@ fn unpacked_outside_a_tuple(spelling: &Bound<'_, PyAny>) -> PyResult<PyErr> {
          unpack a tuple into a tuple",
         summarize(spelling)?
     )))
-}
-
-/// Whether these type arguments spell `tuple[()]`.
-///
-/// No arguments on 3.11 and later; one argument that is the empty tuple on
-/// 3.10. `get_args` reports the two differently and `tuple[()]` means the same
-/// type on both, so the difference is read here instead of by every caller.
-fn spells_the_empty_tuple(args: &Bound<'_, PyTuple>) -> PyResult<bool> {
-    if args.is_empty() {
-        return Ok(true);
-    }
-    if args.len() != 1 {
-        return Ok(false);
-    }
-    let only = args.get_item(0)?;
-    match only.cast::<PyTuple>() {
-        Ok(tuple) => Ok(tuple.is_empty()),
-        Err(_) => Ok(false),
-    }
 }
 
 /// One tuple's arguments as [`build_tuple`] reads them: the carrier's, or a
@@ -587,14 +547,6 @@ pub(super) fn build_tuple(
     lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
-    // `tuple[()]` is the empty tuple, and the runtimes spell it two ways: 3.11
-    // and later give no type arguments, 3.10 gives one argument that *is* the
-    // empty tuple. Both name one type, so the older spelling is read here rather
-    // than reaching the loop below, which would take it for a tuple literal and
-    // refuse it.
-    if spells_the_empty_tuple(args)? {
-        return Ok(Schema::tuple(SeqShape::fixed(Vec::new())));
-    }
     let mut prefix: Vec<Bound<'_, PyAny>> = Vec::with_capacity(args.len());
     let mut tail: Option<Bound<'_, PyAny>> = None;
     // The tuples whose arguments are being read, the innermost splice last. A
@@ -877,41 +829,4 @@ fn refuse_a_field_named_twice(fields: &[Field]) -> PyResult<()> {
 pub(super) fn is_ellipsis(obj: &Bound<'_, PyAny>) -> bool {
     let py = obj.py();
     forms(py).is_ok_and(|forms| obj.is(forms.ellipsis.bind(py)))
-}
-
-#[cfg(all(test, feature = "interpreter-tests"))]
-mod empty_tuple_tests {
-    use super::spells_the_empty_tuple;
-    use pyo3::prelude::*;
-    use pyo3::types::{PyInt, PyTuple};
-
-    /// `tuple[()]` is the empty tuple type in both spellings `get_args` has.
-    ///
-    /// The interpreters disagree about the arguments: 3.11 and later report
-    /// none, 3.10 reports one argument that is the empty tuple. The second
-    /// shape cannot be produced by an annotation on the interpreter this
-    /// corpus runs, so it is built by hand -- a reading held only on the floor
-    /// interpreter is a reading no sweep here observes, and the 3.10 lane is a
-    /// long way to find out that the type became `tuple[anything, ...]`.
-    #[test]
-    fn the_empty_tuple_is_read_in_both_spellings_get_args_has() {
-        Python::attach(|py| {
-            let none: Vec<Bound<'_, PyAny>> = Vec::new();
-            let empty = PyTuple::new(py, none).expect("builds");
-            assert!(spells_the_empty_tuple(&empty).expect("reads"));
-
-            // The 3.10 shape: one argument, and it is the empty tuple.
-            let wrapped = PyTuple::new(py, [empty.clone()]).expect("builds");
-            assert!(spells_the_empty_tuple(&wrapped).expect("reads"));
-
-            // One argument that is a type is `tuple[int]`, which is a tuple of
-            // one element rather than of none.
-            let one = PyTuple::new(py, [PyInt::new(py, 1i64)]).expect("builds");
-            assert!(!spells_the_empty_tuple(&one).expect("reads"));
-
-            // Two arguments are two elements, whatever they are.
-            let two = PyTuple::new(py, [empty.clone(), empty]).expect("builds");
-            assert!(!spells_the_empty_tuple(&two).expect("reads"));
-        });
-    }
 }

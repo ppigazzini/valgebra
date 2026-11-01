@@ -1,8 +1,8 @@
 """A `TypeForm` overload, given an argument that is not a type form."""
 
-from typing import TypeVar, overload
+from typing import TypeVar, overload, reveal_type
 
-from typing_extensions import TypeForm, reveal_type
+from typing_extensions import TypeForm
 
 _S = TypeVar("_S")
 

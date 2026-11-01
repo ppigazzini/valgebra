@@ -1,171 +1,171 @@
 {
-  "floor": "3.10",
+  "floor": "3.11",
   "known_through": "3.15",
   "modules": {
     "typing": {
       "ABCMeta": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "AbstractSet": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Annotated": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Any": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "AnyStr": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "AsyncContextManager": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "AsyncGenerator": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "AsyncIterable": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "AsyncIterator": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Awaitable": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "BinaryIO": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "ByteString": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "CT_co": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Callable": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "ChainMap": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "ClassVar": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Collection": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Concatenate": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Container": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "ContextManager": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Coroutine": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Counter": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "DefaultDict": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Deque": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Dict": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "EXCLUDED_ATTRIBUTES": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Final": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "ForwardRef": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "FrozenSet": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Generator": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Generic": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "GenericAlias": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Hashable": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "IO": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "ItemsView": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Iterable": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Iterator": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "KT": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "KeysView": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "List": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Literal": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "LiteralString": {
         "since": "3.11"
       },
       "Mapping": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "MappingView": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Match": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "MethodDescriptorType": {
-        "since": "3.10",
+        "since": "3.11",
         "gone": "3.14"
       },
       "MethodWrapperType": {
-        "since": "3.10",
+        "since": "3.11",
         "gone": "3.14"
       },
       "MutableMapping": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "MutableSequence": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "MutableSet": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "NamedTuple": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "NamedTupleMeta": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Never": {
         "since": "3.11"
       },
       "NewType": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "NoDefault": {
         "since": "3.13"
@@ -174,31 +174,31 @@
         "since": "3.15"
       },
       "NoReturn": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "NotRequired": {
         "since": "3.11"
       },
       "Optional": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "OrderedDict": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "ParamSpec": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "ParamSpecArgs": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "ParamSpecKwargs": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Pattern": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Protocol": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "ReadOnly": {
         "since": "3.13"
@@ -207,67 +207,67 @@
         "since": "3.11"
       },
       "Reversible": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Self": {
         "since": "3.11"
       },
       "Sequence": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Set": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Sized": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "SupportsAbs": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "SupportsBytes": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "SupportsComplex": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "SupportsFloat": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "SupportsIndex": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "SupportsInt": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "SupportsRound": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "T": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "TYPE_CHECKING": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "T_co": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "T_contra": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Text": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "TextIO": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Tuple": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Type": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "TypeAlias": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "TypeAliasType": {
         "since": "3.12"
@@ -276,44 +276,44 @@
         "since": "3.15"
       },
       "TypeGuard": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "TypeIs": {
         "since": "3.13"
       },
       "TypeVar": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "TypeVarTuple": {
         "since": "3.11"
       },
       "TypedDict": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Union": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "Unpack": {
         "since": "3.11"
       },
       "VT": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "VT_co": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "V_co": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "ValuesView": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "WrapperDescriptorType": {
-        "since": "3.10",
+        "since": "3.11",
         "gone": "3.14"
       },
       "abstractmethod": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "annotationlib": {
         "since": "3.15"
@@ -325,16 +325,16 @@
         "since": "3.11"
       },
       "cast": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "clear_overloads": {
         "since": "3.11"
       },
       "collections": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "contextlib": {
-        "since": "3.10",
+        "since": "3.11",
         "gone": "3.13"
       },
       "copyreg": {
@@ -353,16 +353,16 @@
         "since": "3.14"
       },
       "final": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "functools": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "get_args": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "get_origin": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "get_overloads": {
         "since": "3.11"
@@ -371,53 +371,53 @@
         "since": "3.13"
       },
       "get_type_hints": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "io": {
-        "since": "3.10",
+        "since": "3.11",
         "gone": "3.13"
       },
       "is_protocol": {
         "since": "3.13"
       },
       "is_typeddict": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "no_type_check": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "no_type_check_decorator": {
-        "since": "3.10",
+        "since": "3.11",
         "gone": "3.15"
       },
       "operator": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "overload": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "override": {
         "since": "3.12"
       },
       "re": {
-        "since": "3.10",
+        "since": "3.11",
         "gone": "3.13"
       },
       "reveal_type": {
         "since": "3.11"
       },
       "runtime_checkable": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "stdlib_re": {
-        "since": "3.10",
+        "since": "3.11",
         "gone": "3.13"
       },
       "sys": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "types": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "warnings": {
         "since": "3.11",
@@ -432,13 +432,13 @@
         "since": "3.11"
       },
       "DynamicClassAttribute": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "EJECT": {
         "since": "3.11"
       },
       "Enum": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "EnumCheck": {
         "since": "3.11"
@@ -447,28 +447,28 @@
         "since": "3.13"
       },
       "EnumMeta": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "EnumType": {
         "since": "3.11"
       },
       "Flag": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "FlagBoundary": {
         "since": "3.11"
       },
       "IntEnum": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "IntFlag": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "KEEP": {
         "since": "3.11"
       },
       "MappingProxyType": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "NAMED_FLAGS": {
         "since": "3.11"
@@ -486,7 +486,7 @@
         "since": "3.11"
       },
       "auto": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "bin": {
         "since": "3.11"
@@ -533,10 +533,10 @@
         "since": "3.11"
       },
       "sys": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "unique": {
-        "since": "3.10"
+        "since": "3.11"
       },
       "verify": {
         "since": "3.11"
@@ -545,169 +545,169 @@
   },
   "stdlib": {
     "__future__": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "abc": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "argparse": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "ast": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "base64": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "builtins": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "collections": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "concurrent": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "contextlib": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "copy": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "ctypes": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "dataclasses": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "datetime": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "decimal": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "enum": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "fractions": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "functools": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "gc": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "html": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "importlib": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "io": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "itertools": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "json": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "math": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "numbers": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "operator": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "os": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "pathlib": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "pickle": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "platform": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "re": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "shlex": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "shutil": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "signal": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "statistics": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "struct": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "subprocess": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "sys": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "sysconfig": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "tarfile": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "tempfile": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "textwrap": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "threading": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "time": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "timeit": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "tokenize": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "tomllib": {
       "since": "3.11"
     },
     "tracemalloc": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "types": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "typing": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "unicodedata": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "uuid": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "warnings": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "weakref": {
-      "since": "3.10"
+      "since": "3.11"
     },
     "zipfile": {
-      "since": "3.10"
+      "since": "3.11"
     }
   }
 }

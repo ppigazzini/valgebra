@@ -63,7 +63,7 @@ FLOOR_NAMES = json.loads(
 
 #: The day the claims are read against. UTC, because a schedule PEP gives a day
 #: and no timezone, and a day of slack either way decides nothing.
-TODAY = dt.datetime.now(dt.timezone.utc).date()
+TODAY = dt.datetime.now(dt.UTC).date()
 
 
 class Release(NamedTuple):

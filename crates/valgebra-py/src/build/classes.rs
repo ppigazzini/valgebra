@@ -53,10 +53,9 @@ struct DataclassReading {
 
 /// Whether `ty` is a dataclass, read as `dataclasses.is_dataclass` reads it.
 ///
-/// That function's body, on every interpreter the matrix runs (3.10 to 3.15
+/// That function's body, on every interpreter the matrix runs (3.11 to 3.15
 /// and `PyPy`), is `hasattr(cls, "__dataclass_fields__")` once its argument is
-/// a class, which `ty` is: 3.10's further test for a `GenericAlias` cannot pass
-/// on an object that is a `type`. So the attribute is asked here and the
+/// a class, which `ty` is. So the attribute is asked here and the
 /// function is not called. That spares a Python frame on every class node past
 /// the enum arm, and it leaves `dataclasses` unimported by a schema that names
 /// classes and no dataclass, for the reason [`DATACLASS_READING`] gives.
@@ -223,16 +222,10 @@ pub(super) fn build_type_object(
     if is_truthy_attr(ty, intern!(py, "_is_protocol"))? {
         return build_protocol(ty, lits, defs);
     }
-    // `Any` is a class from 3.11, and `typing_extensions.Any` a class of its
-    // own on 3.10. Read as one, it is an instance check nothing passes.
+    // `Any` is a class. Read as one, it is an instance check nothing passes.
     // `read_annotation` answers `typing.Any` before it reaches this, which
-    // `instance_of` does not pass through: asked only as `typing_extensions`'
-    // copy, which is `typing`'s from 3.11, `instance_of(typing.Any)` would be
-    // the top where that module is loaded and refuse every value where not.
+    // `instance_of` does not pass through.
     if ty.is(forms.any.bind(py)) {
-        return Ok(Schema::ANY);
-    }
-    if is_extension(ty.as_any(), |held| &held.any)? {
         return Ok(Schema::ANY);
     }
     // Any other class names its instances: a bare class is an isinstance check.
@@ -275,8 +268,7 @@ pub(super) enum ProtocolMember<'py> {
 /// derivation that attribute caches -- the keys of each base's namespace and
 /// annotations along the `__mro__`, less the names Python and `typing` write
 /// there themselves. The cache is read first because the derivation of an
-/// older `typing` does not know the names a newer `typing_extensions` writes,
-/// and on 3.10 lists `__protocol_attrs__` itself as a member.
+/// older `typing` does not know the names a newer `typing_extensions` writes.
 ///
 /// A member is a property where the first class on the `__mro__` defining the
 /// name holds one or a `functools.cached_property`, data where an annotation names it, a method where the class
@@ -509,7 +501,7 @@ pub(super) fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &Bound<'_, PyString>)
 /// `_PyObject_LookupAttr`, which answers its miss without building the error,
 /// so there a class is asked through it, with a sentinel no attribute holds
 /// standing for absence. An error other than `AttributeError` propagates on
-/// either road. 3.10 and 3.11 build the error on both, and from 3.13 `PyO3`
+/// either road. 3.11 builds the error on both, and from 3.13 `PyO3`
 /// asks through the lookup that does not, so neither takes the detour; nor
 /// does an object that is not a class, which this lookup reads as `PyO3`
 /// does.
@@ -538,7 +530,7 @@ pub(super) fn optional_attribute<'py>(
 
 /// `obj.name`, or `None` where `obj` has no attribute of that name: `PyO3`'s
 /// `getattr_opt`, which asks without an exception from 3.13 and builds one
-/// either way on 3.10 and 3.11.
+/// either way on 3.11.
 #[cfg(not(all(Py_3_12, not(Py_3_13))))]
 pub(super) fn optional_attribute<'py>(
     obj: &Bound<'py, PyAny>,
@@ -1410,15 +1402,6 @@ pub(super) fn qualified_required<'py>(
                 says = Some(answer);
             }
         }
-        // `typing_extensions`' spellings, which are forms: the origin of an
-        // `Annotated` or a generic field is a class, and asks nothing.
-        if says.is_none() && !origin.is_instance_of::<PyType>() {
-            if is_extension(&origin, |held| &held.required)? {
-                says = Some(true);
-            } else if is_extension(&origin, |held| &held.not_required)? {
-                says = Some(false);
-            }
-        }
         if let Some(again) = says {
             if *stated.get_or_insert(again) != again {
                 return Err(not_implemented(format!(
@@ -1632,7 +1615,7 @@ pub(super) fn declared_fields<'py>(ty: &Bound<'py, PyType>) -> PyResult<Vec<Boun
 /// where that call should answer.
 ///
 /// The call is `tuple(f for f in ty.__dataclass_fields__.values() if
-/// f._field_type is _FIELD)` on every interpreter the matrix runs, 3.10 to 3.15
+/// f._field_type is _FIELD)` on every interpreter the matrix runs, 3.11 to 3.15
 /// and `PyPy`, and running that generator in Python is 15% of compiling a
 /// fifty-field dataclass. The same steps are taken here, in its order -- the
 /// table's values, each asked its `_field_type` and kept by identity with the

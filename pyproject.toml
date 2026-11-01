@@ -6,7 +6,7 @@ build-backend = "maturin"
 
 [project]
 name = "valgebra"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dynamic = ["version"]
 description = "Fast runtime validation via a closed Boolean algebra of schemas on a compiled Rust core."
 readme = "README.md"
@@ -25,7 +25,6 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -171,7 +170,7 @@ markers = [
 ]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 src = ["python", "tests"]
 
 [tool.ruff.lint]
@@ -197,8 +196,11 @@ ignore = [
 # messages, and carry descriptive (not commented-out) comments in data tables.
 # A test's name states its claim, so a docstring is written where there is more
 # to say than the name; and a helper typed `Any` takes any value on purpose,
-# since what a validator is handed is anything a caller has.
+# since what a validator is handed is anything a caller has. `Unpack[X]` is a
+# form under test, which the star builds as another object, so a row spells it
+# as written.
 "tests/**" = [
+    "UP044",
     "D100",
     "D101",
     "D102",
@@ -274,7 +276,7 @@ typeCheckingMode = "standard"
 # releases after the floor added.
 #
 # The floor is checked too, and separately: `ty check python/ --python-version
-# 3.10` reads the shipped package alone at the oldest release `requires-python`
+# 3.11` reads the shipped package alone at the oldest release `requires-python`
 # claims. Both run in the type lane, because one setting cannot answer both
 # questions -- the newest release accepts a construct the floor cannot import,
 # and the floor rejects the names the suite exists to exercise.

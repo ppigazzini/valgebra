@@ -100,8 +100,8 @@ jobs:
         # other ABI under this row's name. Each wheel is smoked on the PyPy it
         # is built for.
         platform:
-          - { runner: ubuntu-26.04, target: x86_64, pgo: true, interpreter: python3.10 python3.11 python3.12 python3.13 python3.14 python3.15 python3.14t python3.15t }
-          - { runner: ubuntu-26.04-arm, target: aarch64, pgo: true, interpreter: python3.10 python3.11 python3.12 python3.13 python3.14 python3.15 python3.14t python3.15t }
+          - { runner: ubuntu-26.04, target: x86_64, pgo: true, interpreter: python3.11 python3.12 python3.13 python3.14 python3.15 python3.14t python3.15t }
+          - { runner: ubuntu-26.04-arm, target: aarch64, pgo: true, interpreter: python3.11 python3.12 python3.13 python3.14 python3.15 python3.14t python3.15t }
           - { runner: ubuntu-26.04, target: x86_64, interpreter: pypy3.11, variant: pypy73 }
           - { runner: ubuntu-26.04-arm, target: aarch64, interpreter: pypy3.11, variant: pypy73 }
           - { runner: ubuntu-26.04, target: x86_64, manylinux: 2_28, interpreter: /opt/python/pp311-pypy311_pp80/bin/python, variant: pypy80 }
@@ -120,9 +120,9 @@ jobs:
           # step can fail there (maturin-action's README, python/cpython#127294),
           # and that job builds the interpreters by name. Windows arm64 installs
           # 3.12 onward.
-          - { runner: macos-26-intel, target: x86_64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
-          - { runner: macos-26, target: aarch64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
-          - { runner: windows-2025-vs2026, target: x64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.15" }
+          - { runner: macos-26-intel, target: x86_64, pgo: true, pythons: "3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
+          - { runner: macos-26, target: aarch64, pgo: true, pythons: "3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
+          - { runner: windows-2025-vs2026, target: x64, pgo: true, pythons: "3.11\n3.12\n3.13\n3.14\n3.15" }
           - { runner: windows-2025-vs2026, target: x64, pgo: true, pythons: "3.14t\n3.15t", interpreter: python3.14t python3.15t, variant: freethreaded }
           - { runner: windows-11-vs2026-arm, target: aarch64, pythons: "3.12\n3.13\n3.14\n3.15" }
     steps:
@@ -289,8 +289,8 @@ jobs:
           # bounds file: each is a build of its own, profiled on its own
           # interpreter, and a release with none of its wheels loaded ships a
           # build nothing ran.
-          - { name: linux-x86_64, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
-          - { name: linux-aarch64, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-arm-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
+          - { name: linux-x86_64, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-native, pythons: "3.11 3.15 3.14t 3.15t", imports: "3.12 3.13 3.14" }
+          - { name: linux-aarch64, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-arm-aarch64-native, pythons: "3.11 3.15 3.14t 3.15t", imports: "3.12 3.13 3.14" }
           # Each PyPy wheel is smoked on the PyPy it is built for, named by the
           # release that carries the ABI: 3.11.15 is PyPy 7.3 and 3.11.16 is
           # PyPy 8.0.
@@ -298,9 +298,9 @@ jobs:
           - { name: linux-aarch64-pypy73, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-arm-aarch64-pypy73, pythons: "pypy@3.11.15" }
           - { name: linux-x86_64-pypy80, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-pypy80, pythons: "pypy@3.11.16" }
           - { name: linux-aarch64-pypy80, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-arm-aarch64-pypy80, pythons: "pypy@3.11.16" }
-          - { name: macos-x86_64, runner: macos-26-intel, artifact: wheels-macos-26-intel-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
-          - { name: macos-arm64, runner: macos-26, artifact: wheels-macos-26-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t", imports: "3.11 3.12 3.13 3.14" }
-          - { name: windows-x64, runner: windows-2025-vs2026, artifact: wheels-windows-2025-vs2026-x64-native, pythons: "3.10 3.15", imports: "3.11 3.12 3.13 3.14" }
+          - { name: macos-x86_64, runner: macos-26-intel, artifact: wheels-macos-26-intel-x86_64-native, pythons: "3.11 3.15 3.14t 3.15t", imports: "3.12 3.13 3.14" }
+          - { name: macos-arm64, runner: macos-26, artifact: wheels-macos-26-aarch64-native, pythons: "3.11 3.15 3.14t 3.15t", imports: "3.12 3.13 3.14" }
+          - { name: windows-x64, runner: windows-2025-vs2026, artifact: wheels-windows-2025-vs2026-x64-native, pythons: "3.11 3.15", imports: "3.12 3.13 3.14" }
           - { name: windows-x64-freethreaded, runner: windows-2025-vs2026, artifact: wheels-windows-2025-vs2026-x64-freethreaded, pythons: "3.14t 3.15t" }
           - { name: windows-arm64, runner: windows-11-vs2026-arm, artifact: wheels-windows-11-vs2026-arm-aarch64-native, pythons: "3.12 3.15", imports: "3.13 3.14", host: "3.12\n3.13\n3.14\n3.15" }
     runs-on: ${{ matrix.wheel.runner }}
@@ -399,8 +399,8 @@ jobs:
       fail-fast: false
       matrix:
         wheel:
-          - { name: linux-x86_64-musl, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-musllinux_1_2, pythons: "3.10 3.14", imports: "3.11 3.12 3.13" }
-          - { name: linux-aarch64-musl, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-aarch64-musllinux_1_2, pythons: "3.10 3.14", imports: "3.11 3.12 3.13" }
+          - { name: linux-x86_64-musl, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-musllinux_1_2, pythons: "3.11 3.14", imports: "3.12 3.13" }
+          - { name: linux-aarch64-musl, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-aarch64-musllinux_1_2, pythons: "3.11 3.14", imports: "3.12 3.13" }
     runs-on: ${{ matrix.wheel.runner }}
     timeout-minutes: 45
     steps:

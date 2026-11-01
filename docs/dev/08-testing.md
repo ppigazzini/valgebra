@@ -75,10 +75,10 @@ Two more are refused, each by a test:
   refuses two columns that are one set:
   `test_the_representatives_are_that_many_different_sets` fails on a merged
   table.
-- **A `_floor.py` of named release gates.** A name such as `needs_311` can
+- **A `_floor.py` of named release gates.** A name such as `needs_313` can
   stand in for a `skipif` decorator, but not for an `if sys.version_info >=
-  (3, 11):` block guarding an import. `test_floor_names.py` reads the
-  comparison itself, so an import under `if HAS_311:` reads as one the floor
+  (3, 13):` block guarding an import. `test_floor_names.py` reads the
+  comparison itself, so an import under `if HAS_313:` reads as one the floor
   makes, and
   `test_no_module_reads_a_name_outside_the_releases_that_have_it` fails. The
   decorators would still go one at a time when the floor moves, because

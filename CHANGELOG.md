@@ -79,6 +79,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a signaling Decimal NaN is refused as a bound or a step, as nan is
 - fix: no value is longer than sys.maxsize
 - fix: a quantifier re refuses for repeating no atom is refused
+- feat: Python 3.11 is the floor, and 3.10 leaves the matrix
 
 -->
 
@@ -349,6 +350,16 @@ answer of its own, or a repair to a change not yet released.
   members. `complement(union(str, complement(list[list[int]])))` is `subset` of
   `list[list[int]]`, and the complement of a union is `subset` of the meet of
   the complements however its members nest, where both were `undecided`.
+
+### Changed
+
+- **The floor is Python 3.11.** CPython 3.10 reached the end of its security
+  support in October 2026, and the first release after that drops it, as
+  `docs/dev/09-releasing.md` states: no wheel is built for it, and
+  `requires-python` is `>=3.11`. Every release from 3.11 to 3.15 is supported,
+  the free-threaded builds of 3.14 and 3.15 among them, and 3.16 runs as a
+  forgiven prerelease lane. The readings `typing_extensions` gave a form only
+  3.10 spelled with an object of its own are gone with it.
 
 ### Fixed
 

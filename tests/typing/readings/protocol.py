@@ -1,8 +1,6 @@
 """A runtime-checkable protocol as a schema."""
 
-from typing import Protocol, runtime_checkable
-
-from typing_extensions import reveal_type
+from typing import Protocol, reveal_type, runtime_checkable
 
 from valgebra import Validator
 

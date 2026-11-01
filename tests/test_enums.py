@@ -18,7 +18,6 @@ is read as its members again fails here rather than in a caller's data.
 from __future__ import annotations
 
 import enum
-import sys
 from typing import Literal, Protocol, runtime_checkable
 
 import pytest
@@ -57,12 +56,8 @@ class Code(enum.IntEnum):
     OK = 1
 
 
-# `StrEnum` reaches `enum` in 3.11, and nothing below it spells the class this
-# row is about; the tests that read it skip beneath that floor.
-if sys.version_info >= (3, 11):
-
-    class Name(enum.StrEnum):
-        RED = "red"
+class Name(enum.StrEnum):
+    RED = "red"
 
 
 def test_a_plain_enumeration_is_the_union_of_its_members() -> None:
@@ -121,7 +116,6 @@ def test_an_enumeration_whose_members_are_not_two_values_stays_an_atom() -> None
     assert Validator(Code).is_valid(Code.OK)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="StrEnum")
 def test_a_string_enumeration_stays_an_atom_for_the_same_reason() -> None:
     # A `StrEnum` member equals the string behind it, which is the row above
     # over the other value kind a member can carry.
@@ -184,8 +178,7 @@ def test_every_refused_kind_still_answers_membership() -> None:
         (Base, Derived.X),
         (Code, Code.OK),
     ]
-    if sys.version_info >= (3, 11):
-        cases.append((Name, Name.RED))
+    cases.append((Name, Name.RED))
     for cls, value in cases:
         assert Validator(cls).is_valid(value), cls
         assert not Validator(cls).is_valid(object()), cls

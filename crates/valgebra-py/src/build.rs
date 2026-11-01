@@ -868,24 +868,19 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
 ///
 /// Before the release that adds a form to `typing`, `typing_extensions` defines
 /// it itself, so the name is a different object from anything [`Forms`] holds:
-/// `Any`, `Never`, `Self` and the `TypedDict` qualifiers on 3.10, and
-/// `TypeAliasType` before 3.15. Asked against `typing` alone, such a form reads
-/// as something it is not -- `Never` as a literal of the form object, `Any` as
-/// a class nothing is an instance of, `Required[int]` as an unsupported form.
+/// `Unpack` on 3.11, `ReadOnly` before 3.13 and `TypeAliasType` before 3.15.
+/// Asked against `typing` alone, such a form reads as something it is not --
+/// `ReadOnly[int]` as an unsupported form, an alias as a literal of itself.
 /// Where a release spells the form in `typing`, the two names are one object
 /// and nothing here changes a reading.
 ///
 /// Asked only where a form would otherwise be read as something else, so a
 /// schema that names none of them pays nothing for it.
 pub(crate) struct Extensions {
-    pub(crate) any: Option<Py<PyAny>>,
-    pub(crate) never: Option<Py<PyAny>>,
     type_alias_type: Option<Py<PyAny>>,
-    /// The class `Self`, `LiteralString` and `Never` are instances of below
-    /// 3.11, which is not `typing._SpecialForm`.
+    /// The class the special forms `typing_extensions` defines itself are
+    /// instances of, which is not `typing._SpecialForm`.
     special_form: Option<Py<PyAny>>,
-    pub(crate) required: Option<Py<PyAny>>,
-    pub(crate) not_required: Option<Py<PyAny>>,
     pub(crate) read_only: Option<Py<PyAny>>,
     pub(crate) unpack: Option<Py<PyAny>>,
     /// Its `Protocol`, which is its own below 3.14.
@@ -946,12 +941,8 @@ pub(crate) fn extensions(py: Python<'_>) -> PyResult<Option<&'static Extensions>
         Ok(module.getattr_opt(name)?.map(Bound::unbind))
     };
     let found = Extensions {
-        any: form("Any")?,
-        never: form("Never")?,
         type_alias_type: form("TypeAliasType")?,
         special_form: form("_SpecialForm")?,
-        required: form("Required")?,
-        not_required: form("NotRequired")?,
         read_only: form("ReadOnly")?,
         unpack: form("Unpack")?,
         protocol: form("Protocol")?,
@@ -976,8 +967,7 @@ pub(crate) fn is_extension(
 }
 
 /// What a `typing_extensions` form with no `typing` counterpart here reads as:
-/// `Never` is the bottom and a `TypeAliasType` its aliased type, as their
-/// `typing` spellings are.
+/// a `TypeAliasType` is its aliased type, as its `typing` spelling is.
 fn read_extension(
     obj: &Bound<'_, PyAny>,
     lits: &mut Pool,
@@ -987,13 +977,6 @@ fn read_extension(
     let Some(held) = extensions(py)? else {
         return Ok(None);
     };
-    if held
-        .never
-        .as_ref()
-        .is_some_and(|never| obj.is(never.bind(py)))
-    {
-        return Ok(Some(Schema::Nothing));
-    }
     if let Some(alias_type) = &held.type_alias_type
         && obj.is_instance(alias_type.bind(py))?
     {

@@ -125,8 +125,8 @@ release.
 | `dict[K, V]` | dicts whose keys are in `K` and values in `V` |
 | `tuple[A, B]` | length-2 tuples with `A` then `B` |
 | `tuple[T, ...]` | tuples of any length, every element in `T` |
-| `tuple[A, *tuple[B, ...]]` | a fixed prefix `A`, then zero or more `B` (see below; 3.11+) |
-| `tuple[A, B, ...]` | the same, in the spelling 3.10 can write and a static checker refuses |
+| `tuple[A, *tuple[B, ...]]` | a fixed prefix `A`, then zero or more `B` (see below) |
+| `tuple[A, B, ...]` | the same, in a shorter spelling a static checker refuses |
 | `typing.List`, `typing.Tuple`, `typing.Dict`, `typing.Set`, `typing.FrozenSet` | the class each aliases, bare or parametrized |
 | `typing.Deque`, `DefaultDict`, `OrderedDict`, `Counter`, `ChainMap`, `Type`, and every other `typing` alias of a class -- `typing.Sequence`, `typing.Mapping`, `typing.Text` among them | the class each aliases when bare; parametrized, refused, as `deque[int]` is, but `Callable[...]`, which reads as the class ([below](#classes)) |
 
@@ -222,7 +222,7 @@ tup = Validator(tuple[str, *tuple[int, ...]])  # the same shape, as a tuple
 assert tup.is_valid(("x", 1, 2))
 assert not tup.is_valid(["x", 1, 2])  # a list is not a member of the tuple form
 
-short = Validator(tuple[str, int, ...])  # the spelling 3.10 can write
+short = Validator(tuple[str, int, ...])  # the shorter spelling
 assert short == tup
 assert repr(tup) == "tuple[str, int, ...]"
 ```
@@ -1084,7 +1084,7 @@ where it carries the members.
 
 `test_a_protocol_admits_the_same_values_on_every_release` in
 `tests/test_frontend_forms.py` holds the values `isinstance` answers
-differently on 3.10 and 3.11 than from 3.12 -- a member a `__getattr__` hook
+differently on 3.11 than from 3.12 -- a member a `__getattr__` hook
 serves, a getter that raises, an unassigned slot -- to one answer on every
 interpreter the test matrix runs.
 

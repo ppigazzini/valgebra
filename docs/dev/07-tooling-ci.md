@@ -969,9 +969,9 @@ interpreter: a mutant two spellings of `typing.Union` cannot tell apart on 3.14
 is caught where they are two objects, and the ratchet reads it as caught. The
 same holds for what the lane's environment installs. The embedded interpreter
 imports from the lane's venv, where the lock puts `typing_extensions`, and on
-3.12 that module's `Required`, `NotRequired`, `Unpack`, `Any` and `Never` are
-`typing`'s own objects. So the frontend's arms for the module's own objects are
-killable only where it defines them -- 3.10, or the corpus row's stand-in on an
+3.13 that module's `ReadOnly` and `Unpack` are `typing`'s own objects. So the
+frontend's arms for the module's own objects are killable only where it
+defines them -- an older release, or the corpus row's stand-in on an
 interpreter that cannot import it -- and the notes in
 `scripts/mutation_baseline_walk.json` that cite the module say so. A reading only
 PyPy takes is compiled for PyPy alone, `#[cfg(PyPy)]`, so the sweep's build does

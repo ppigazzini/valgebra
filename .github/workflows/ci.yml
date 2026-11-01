@@ -71,7 +71,7 @@ env:
   # `tests/test_python_lifecycle.py` holds it to `requires-python`, and
   # `tests/test_version_gates.py` holds every release a step compares a leg
   # with to one the job's matrix runs.
-  FLOOR: "3.10"
+  FLOOR: "3.11"
   # The binding files the two binding sweeps examine, one per line. The
   # nightly sweeps every one and records the baseline; a push sweeps the ones
   # its change touches and is judged against that baseline. So the two read
@@ -426,7 +426,7 @@ jobs:
     # `name` may read `matrix` and not `env`.
     name: >-
       python ${{ matrix.python-version }} (${{ matrix.os }})${{
-      (matrix.os == 'ubuntu-26.04' && matrix.python-version == '3.10') &&
+      (matrix.os == 'ubuntu-26.04' && matrix.python-version == '3.11') &&
       ', full history' || '' }}
     needs: nightly-dispatch
     if: >-
@@ -456,7 +456,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-26.04]
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15", "3.15t", "3.16"]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15", "3.15t", "3.16"]
         # One representative interpreter on macOS and Windows, the newest
         # supported release, so the binding, the membership walk, the JSON path,
         # and the error model are exercised on every OS the release ships wheels

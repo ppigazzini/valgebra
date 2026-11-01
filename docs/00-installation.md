@@ -11,7 +11,7 @@ unsupported platform; it is a Rust extension built with
 
 ## From PyPI
 
-With **Python** 3.10 or newer:
+With **Python** 3.11 or newer:
 
 ```bash
 pip install valgebra
@@ -40,7 +40,7 @@ pip install annotated-types typing-extensions pytest fastapi pydantic
 ```
 
 Wheels are published for Linux (manylinux, x86_64 and aarch64), macOS (Intel and
-Apple silicon) and Windows x64 for every supported CPython, 3.10 through 3.15,
+Apple silicon) and Windows x64 for every supported CPython, 3.11 through 3.15,
 Windows arm64 from 3.12, free-threaded CPython 3.14 and 3.15 on Linux, macOS
 and Windows x64, and [PyPy 3.11](#pypy) on Linux. musllinux (x86_64 and
 aarch64) gets a wheel for each interpreter its build image carries, the set

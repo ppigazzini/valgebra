@@ -170,12 +170,10 @@ def test_an_object_carrying_metadata_and_no_origin_is_a_value() -> None:
 def test_a_typing_extensions_form_reads_as_its_typing_spelling() -> None:
     """`typing_extensions` spells a form with an object of its own before a release.
 
-    On 3.10 that is `Any`, `Never`, `Self`, `LiteralString`, the field
-    qualifiers and `Unpack`, and before 3.15 `TypeAliasType`. Read against
-    `typing` alone, `Never` would be a literal of the form object, `Any` a class
-    nothing is an instance of, `Required[int]` an unsupported form, and an alias
-    a literal of itself. Where a release spells the form in `typing` the two are
-    one object, and this reads the same.
+    On the floor that is `ReadOnly`, and before 3.15 `TypeAliasType`. Read
+    against `typing` alone, the qualifier would be an unsupported form and the
+    alias a literal of itself. Where a release spells the form in `typing` the
+    two are one object, and this reads the same.
     """
     extensions = pytest.importorskip("typing_extensions")
     assert Validator(extensions.Never) == Validator(nothing)
@@ -389,11 +387,7 @@ NO_SET: list[tuple[str, object]] = [
     ("a frozen set literal", frozenset({int})),
 ]
 
-if sys.version_info >= (3, 11):
-    # Two names the floor does not have. Read behind the guard rather than
-    # dropped, because both are forms a typed-Python author writes and the
-    # reading a schema would otherwise give them is the silent one.
-    NO_SET += [("Self", typing.Self), ("LiteralString", typing.LiteralString)]
+NO_SET += [("Self", typing.Self), ("LiteralString", typing.LiteralString)]
 
 if FROZENDICT is not None:
     # The dict literal's frozen sibling. A `frozendict` is not a `dict`, so it
@@ -434,7 +428,6 @@ def test_a_generic_parametrization_of_a_user_class_is_refused() -> None:
         Validator(Box[int])
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="Unpack arrives in 3.11")
 def test_an_unpack_outside_a_tuple_is_refused() -> None:
     """`Unpack[X]` binds element types into a tuple, so it has none alone."""
 
@@ -550,7 +543,7 @@ def test_a_protocol_admits_the_same_values_on_every_release() -> None:
     """A protocol reads each member by `getattr`, which every release answers alike.
 
     `isinstance` against a runtime-checkable protocol finds a member with
-    `hasattr` on 3.10 and 3.11 and with `inspect.getattr_static` from 3.12, so
+    `hasattr` on 3.11 and with `inspect.getattr_static` from 3.12, so
     a member a `__getattr__` hook serves, a getter that raises and an empty slot
     would each change sides at 3.12. The record reads the attribute the way an
     attribute access does: a hook serves it, a raising getter is no member, an
@@ -608,10 +601,7 @@ def test_a_qualifier_is_unwrapped_wherever_it_is_written() -> None:
     meets one at the top level too. Unwrapping is the reading in both places,
     which is what makes the two schemas equal rather than merely alike.
     """
-    for name in ("Required", "NotRequired"):
-        qualifier = getattr(typing, name, None)
-        if qualifier is None:  # pragma: no cover - both arrive in 3.11
-            continue
+    for qualifier in (typing.Required, typing.NotRequired):
         assert repr(Validator(qualifier[int])) == repr(Validator(int))
         assert Validator(qualifier[int]).is_valid(1)
         assert not Validator(qualifier[int]).is_valid("1")
@@ -622,20 +612,19 @@ def test_a_qualifier_nested_in_itself_is_read_as_the_one_qualifier() -> None:
 
     A form the typing spec calls an error is read where it names one set, and a
     qualifier nested in itself says once what it says twice; `ReadOnly` says
-    nothing about presence and nests the same way. Each spelling arrives in a
-    release above the floor, which is what the guards are for.
+    nothing about presence and nests the same way, from the release that spells
+    it, which is what the guard is for.
     """
-    if sys.version_info >= (3, 11):
 
-        class Twice(typing.TypedDict):
-            a: typing.Required[typing.Required[int]]  # ty: ignore[invalid-type-form]
-            b: typing.NotRequired[typing.NotRequired[int]]  # ty: ignore[invalid-type-form]
+    class Twice(typing.TypedDict):
+        a: typing.Required[typing.Required[int]]  # ty: ignore[invalid-type-form]
+        b: typing.NotRequired[typing.NotRequired[int]]  # ty: ignore[invalid-type-form]
 
-        class Once(typing.TypedDict):
-            a: typing.Required[int]
-            b: typing.NotRequired[int]
+    class Once(typing.TypedDict):
+        a: typing.Required[int]
+        b: typing.NotRequired[int]
 
-        assert Validator(Twice) == Validator(Once)
+    assert Validator(Twice) == Validator(Once)
     if sys.version_info >= (3, 13):
 
         class Held(typing.TypedDict):
@@ -745,10 +734,6 @@ def test_a_dataclass_is_read_through_its_fields_however_it_is_declared() -> None
     assert Validator(Frozen).is_valid(Frozen(1))
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="on 3.10 a string annotation of KW_ONLY does not resolve to a type",
-)
 def test_a_keyword_only_marker_is_a_declaration_rather_than_a_field() -> None:
     """`KW_ONLY` says how the constructor takes its arguments, not what is held.
 

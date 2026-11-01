@@ -274,11 +274,17 @@ def _wheel(tag: str) -> str:
 @pytest.mark.parametrize(
     ("tags", "ends"),
     [
-        (["cp310", "cp311", "cp312", "cp313", "cp314", "cp314t", "pypy311_pp73"], 0),
-        (["cp310", "cp314", "cp315"], 1),
+        (["cp311", "cp312", "cp313", "cp314", "cp314t", "pypy311_pp73"], 0),
+        (["cp311", "cp314", "cp315"], 1),
+        (["cp310", "cp311", "cp314"], 1),
         ([], 1),
     ],
-    ids=["the 0.0.18 set", "a release the image gained", "an empty artifact"],
+    ids=[
+        "the set the release builds",
+        "a release the image gained",
+        "a release below the floor",
+        "an empty artifact",
+    ],
 )
 def test_the_artifact_step_refuses_a_wheel_no_container_loads(
     tmp_path: Path, tags: list[str], ends: int

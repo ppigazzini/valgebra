@@ -5,7 +5,6 @@ zero or more elements matching the element before the trailing `...`. `[T, ...]`
 is the prefix-free (homogeneous) case, and `[T, T, ...]` is the non-empty list.
 """
 
-import sys
 import typing
 from collections.abc import Callable
 from typing import Any
@@ -69,18 +68,13 @@ def test_ellipsis_only_as_the_last_element() -> None:
 #
 # PEP 646 lets a tuple say "a fixed prefix, then more of this" as an *unpacked*
 # variadic tuple. It is the prefix-and-tail shape under another spelling, and a
-# reader who writes it means what `tuple[A, B, ...]` means. The star syntax is
-# 3.11+, so the forms are built rather than written: this file parses on the
-# support floor.
-
-requires_unpacking = pytest.mark.skipif(
-    sys.version_info < (3, 11),
-    reason="unpacking a tuple type into another arrived in 3.11 (PEP 646)",
-)
+# reader who writes it means what `tuple[A, B, ...]` means. The star is built by
+# a function, so the rows taking the two spellings as a parameter take it as
+# they take `Unpack`.
 
 
 def _starred(alias: Any) -> object:
-    """`*alias`, without the star syntax the support floor cannot parse."""
+    """`*alias`, the object the star in a subscript builds."""
     return next(iter(alias))
 
 
@@ -89,7 +83,6 @@ def _unpacked(alias: Any) -> object:
     return typing.Unpack[alias]
 
 
-@requires_unpacking
 @pytest.mark.parametrize("spell", [_starred, _unpacked], ids=["star", "Unpack"])
 def test_an_unpacked_variadic_tuple_is_the_prefix_and_tail_form(
     spell: Callable[[object], object],
@@ -104,7 +97,6 @@ def test_an_unpacked_variadic_tuple_is_the_prefix_and_tail_form(
     assert repr(schema) == "tuple[int, str, ...]"
 
 
-@requires_unpacking
 def test_an_unpacked_fixed_tuple_splices_its_elements() -> None:
     schema = Validator(tuple[bool, _starred(tuple[int, str])])  # ty: ignore[invalid-type-form]
     assert schema.is_valid((True, 1, "a"))
@@ -113,7 +105,6 @@ def test_an_unpacked_fixed_tuple_splices_its_elements() -> None:
     assert repr(schema) == "tuple[bool, int, str]"
 
 
-@requires_unpacking
 def test_an_unpacked_tuple_alone_is_its_own_shape() -> None:
     schema = Validator(tuple[_starred(tuple[str, ...])])  # ty: ignore[invalid-type-form]
     assert schema.is_valid(())
@@ -121,7 +112,6 @@ def test_an_unpacked_tuple_alone_is_its_own_shape() -> None:
     assert not schema.is_valid((1,))
 
 
-@requires_unpacking
 def test_an_element_after_the_tail_is_refused() -> None:
     # A sequence carries a fixed prefix and then a repeating tail, with nothing
     # after it. Reading this as any other shape would admit a different set.
@@ -129,7 +119,6 @@ def test_an_element_after_the_tail_is_refused() -> None:
         Validator(tuple[_starred(tuple[int, ...]), str])  # ty: ignore[invalid-type-form]
 
 
-@requires_unpacking
 def test_an_unpacked_type_variable_tuple_is_refused() -> None:
     # `*Ts` binds no element types at runtime, so there is nothing to check.
     with pytest.raises(NotImplementedError, match="only a tuple can be unpacked"):
@@ -139,7 +128,6 @@ def test_an_unpacked_type_variable_tuple_is_refused() -> None:
         )
 
 
-@requires_unpacking
 @pytest.mark.parametrize("spell", [_starred, _unpacked], ids=["star", "Unpack"])
 def test_a_spliced_tuple_unpacks_what_it_carries(
     spell: Callable[[object], object],
@@ -167,7 +155,6 @@ def test_a_spliced_tuple_unpacks_what_it_carries(
         Validator(tuple[spell(nested), bool])  # ty: ignore[invalid-type-form]
 
 
-@requires_unpacking
 def test_an_ellipsis_repeats_only_an_element_written_before_it() -> None:
     # The elements a splice brings in are not one element, and reading the last
     # of them as the repeated one admits a set the spelling does not say.
@@ -181,7 +168,6 @@ def test_an_ellipsis_repeats_only_an_element_written_before_it() -> None:
         Validator(tuple[int, _starred(tuple[..., str])])  # ty: ignore[invalid-type-form]
 
 
-@requires_unpacking
 @pytest.mark.parametrize("spell", [_starred, _unpacked], ids=["star", "Unpack"])
 def test_an_unpacked_tuple_outside_a_tuple_is_refused(
     spell: Callable[[object], object],
@@ -202,8 +188,8 @@ def test_an_unpacked_tuple_outside_a_tuple_is_refused(
 
 
 def test_an_unpacked_empty_tuple_splices_nothing() -> None:
-    # 3.10 spells `tuple[()]`'s arguments as the empty tuple itself, which
-    # spliced in as an element would be a tuple literal.
+    # `tuple[()]` holds no element, so spliced in it adds none, rather than
+    # being read as an element of its own.
     extensions = pytest.importorskip("typing_extensions")
     schema = Validator(tuple[int, extensions.Unpack[tuple[()]]])
     assert schema == Validator(tuple[int])

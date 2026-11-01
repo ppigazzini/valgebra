@@ -179,7 +179,7 @@ reads that answer as an `AttributeError` raised and cleared, and a class
 formats the error's message on the way, so on 3.12 a class is asked through
 the builtin `getattr` with a default (`optional_attribute` in
 `build/classes.rs`), whose lookup answers a class's miss without building it;
-3.10 and 3.11 build the error on either road. `__args__`, whose
+3.11 builds the error on either road. `__args__`, whose
 presence is all the dispatch reads, is asked by `hasattr`, one lookup through
 `PyObject_HasAttrWithError`. And a marker carries one or two
 of the eleven names and not the rest, so absence is the common answer, and giving
@@ -280,9 +280,8 @@ holds the first reading to exactly the five types.
 **A `typing_extensions` spelling reads as its `typing` one.** Before the release
 that adds a form to `typing`, `typing_extensions` defines it with an object of
 its own, and an identity check against `typing` alone reads it as something
-else: on 3.10 `Never` as a literal of the form object, `Any` as a class
-nothing is an instance of, and `Required[int]` as an unsupported form, and
-before 3.15 a `TypeAliasType` as a literal of the alias. `Extensions` in
+else: before 3.13 `ReadOnly[int]` as an unsupported form, and before 3.15 a
+`TypeAliasType` as a literal of the alias. `Extensions` in
 `build.rs` holds those objects, looked up in `sys.modules` once the module has
 finished loading -- a module is in `sys.modules` while its body runs, and a
 form read then would be kept as absent -- and is asked only where a form would
@@ -389,7 +388,7 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    nothing here asks `isinstance`, so one declaration is one set with the
    decorator, without it, and with its mark inherited from a base -- and the
    same set on every release, where `isinstance` finds a member by `hasattr`
-   on 3.10 and 3.11 and by `inspect.getattr_static` from 3.12.
+   on 3.11 and by `inspect.getattr_static` from 3.12.
    `test_a_protocol_admits_the_same_values_on_every_release` in
    `tests/test_frontend_forms.py` holds the values those two answer apart.
 
@@ -539,10 +538,8 @@ a dict or a set: the typing spec allows `None`, an enum member, or an `int`,
 a schema of its own rather than as a constant (`refuse_unhashable_literal` in
 `build/generics.rs`). A typing form is refused the same way, with the words
 for a form (`refuse_literal_form`): read as schemas, `Literal[list[int]]`
-would build `list[int]`, `Literal[NewType("U", int)]` `int`, a validator its
-set, and on 3.10, where `Any` is not yet a class, `Literal[Any]` `Any`. An
-exact builtin
-scalar is answered first, so a wide `Literal` asks none of the rest. The
+would build `list[int]`, `Literal[NewType("U", int)]` `int`, and a validator
+its set. An exact builtin scalar is answered first, so a wide `Literal` asks none of the rest. The
 refusal names the spelling that was meant. A constant the spec does not admit
 there -- a float, an instance -- is read all the same, as the constant
 `Validator(c)` reads it: the set is the same, the values of `c`'s type that

@@ -27,14 +27,8 @@ declares, so a method added to the surface arrives here with a caller using it.
 from __future__ import annotations
 
 import copy
-import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Literal, TypedDict
-
-if sys.version_info >= (3, 11):
-    from typing import Never, assert_type
-else:  # the floor, where `typing` carries neither yet
-    from typing_extensions import Never, assert_type
+from typing import TYPE_CHECKING, Annotated, Literal, Never, TypedDict, assert_type
 
 import annotated_types as at
 

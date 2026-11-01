@@ -1,6 +1,6 @@
 """A validator's method, on a class `|` a validator."""
 
-from typing_extensions import reveal_type
+from typing import reveal_type
 
 from valgebra import Validator
 

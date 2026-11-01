@@ -21,9 +21,9 @@
 
 from collections.abc import Callable
 from types import GenericAlias
-from typing import Any, Generic, Literal, NoReturn, TypeGuard, final, overload
+from typing import Any, Generic, Literal, Never, NoReturn, TypeGuard, final, overload
 
-from typing_extensions import Never, TypeVar
+from typing_extensions import TypeVar
 
 # The set a validator denotes, as a checker reads it: `Validator[int]` is a
 # validator whose members are ints. `Any` by default, so a bare `Validator` is
@@ -89,7 +89,7 @@ class Validator(Generic[_T]):
     @overload
     def __new__(cls, schema: object, /) -> Validator[object]: ...
     # `Validator[int]` is a `types.GenericAlias` at runtime, which an annotation
-    # evaluated at module level on 3.10 to 3.13 builds.
+    # evaluated at module level on 3.11 to 3.13 builds.
     def __class_getitem__(cls, key: object) -> GenericAlias: ...
     def validate(self, obj: object, /, *, fail_fast: bool = ...) -> None: ...
     # On an untyped validator the answer is a `bool`; on a typed one a `True`

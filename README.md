@@ -339,7 +339,7 @@ apples-to-apples and is gated against regression in CI; see the
 ## Install
 
 valgebra ships prebuilt wheels to PyPI, so installing it needs no Rust toolchain
-(Python ≥ 3.10):
+(Python ≥ 3.11):
 
 ```bash
 pip install valgebra

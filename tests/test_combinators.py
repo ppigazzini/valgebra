@@ -1,7 +1,6 @@
 import itertools
 import json
-import sys
-from typing import Annotated, Literal, NoReturn
+from typing import Annotated, Literal, Never, NoReturn
 
 import annotated_types as at
 import pytest
@@ -58,10 +57,7 @@ def test_typing_native_bound_spellings() -> None:
     assert not Validator(NoReturn).is_valid(None)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="typing.Never was added in 3.11")
 def test_never_is_the_bottom() -> None:
-    from typing import Never  # noqa: PLC0415 -- 3.11+ only, so import is gated
-
     assert Validator(Never).is_equivalent(nothing)
     assert Validator(Never).is_empty()
     assert not Validator(Never).is_valid(5)

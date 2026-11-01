@@ -1,8 +1,6 @@
 """`Any` as a schema."""
 
-from typing import Any
-
-from typing_extensions import reveal_type
+from typing import Any, reveal_type
 
 from valgebra import Validator
 

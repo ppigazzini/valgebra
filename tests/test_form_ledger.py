@@ -109,7 +109,7 @@ class Refuses:
 
     build: Callable[[], Any]
     says: str
-    needs: tuple[int, int] = (3, 10)
+    needs: tuple[int, int] = (3, 11)
 
 
 #: What the frontend says of a form that stands for a type rather than being
@@ -248,15 +248,8 @@ def _tuple_prefix_tail() -> GenericAlias:
     return GenericAlias(tuple, (int, str, ...))
 
 
-#: The unpacked spelling of the same tuple, which is a *syntax* error below the
-#: release the page marks it with -- so it is compiled at import where the
-#: interpreter has it, and the row falls back to the spelling it is the same as
-#: where it does not. Written through `exec` for the reason the alias above is.
-_UNPACKED: dict[str, Any] = {}
-if sys.version_info >= (3, 11):
-    exec(  # noqa: S102 - a fixed literal
-        "Unpacked = tuple[int, *tuple[str, ...]]", {}, _UNPACKED
-    )
+#: The unpacked spelling of the same tuple.
+_UNPACKED = tuple[int, *tuple[str, ...]]
 
 
 #: Every cell of the two pages' form tables, keyed by the cell's own text.
@@ -282,9 +275,7 @@ FORMS: dict[str, Reads | Refuses] = {
     "`tuple[A, B]`": Reads(tuple[int, str], (1, "a"), (1, 2)),
     "`tuple[T, ...]`": Reads(tuple[int, ...], (1, 2), ("a",)),
     "`tuple[A, B, ...]`": Reads(_tuple_prefix_tail(), (1, "a", "b"), (1, 2)),
-    "`tuple[A, *tuple[B, ...]]`": Reads(
-        _UNPACKED.get("Unpacked", _tuple_prefix_tail()), (1, "a"), (1, 2)
-    ),
+    "`tuple[A, *tuple[B, ...]]`": Reads(_UNPACKED, (1, "a"), (1, 2)),
     TYPING_ALIASES: Reads(typing.List[int], [1], ["a"]),  # noqa: UP006
     TYPING_ALIASES_BARE: Reads(typing.Deque, collections.deque([1]), [1]),  # noqa: UP006
     # -- the native forms ---------------------------------------------------
@@ -329,10 +320,8 @@ FORMS: dict[str, Reads | Refuses] = {
     "`Regex(p)`": Reads(Annotated[str, Regex("a+")], "aa", "b"),
     "`Predicate(f)`": Reads(Annotated[int, at.Predicate(lambda n: n > 0)], 1, 0),
     # -- and the forms that are refused rather than read --------------------
-    "`Self`": Refuses(lambda: typing.Self, A_TYPING_CONSTRUCT, needs=(3, 11)),
-    "`LiteralString`": Refuses(
-        lambda: typing.LiteralString, A_TYPING_CONSTRUCT, needs=(3, 11)
-    ),
+    "`Self`": Refuses(lambda: typing.Self, A_TYPING_CONSTRUCT),
+    "`LiteralString`": Refuses(lambda: typing.LiteralString, A_TYPING_CONSTRUCT),
     "`TypeVar`, `ParamSpec`, `TypeVarTuple`": Refuses(lambda: T, A_TYPING_CONSTRUCT),
     "`Final`, `ClassVar`": Refuses(
         lambda: typing.Final[int], "unsupported typing form with origin"
@@ -340,7 +329,6 @@ FORMS: dict[str, Reads | Refuses] = {
     "`Unpack[X]`": Refuses(
         lambda: typing.Unpack[tuple[int, ...]],
         "unpacks into the arguments",
-        needs=(3, 11),
     ),
     "a user `Generic[T]` class read by `isinstance` alone, applied": Refuses(
         lambda: Parametrized[int], "unsupported typing form with origin"
@@ -351,7 +339,6 @@ FORMS: dict[str, Reads | Refuses] = {
     "`Required`, `NotRequired` or `ReadOnly` as a class's type argument": Refuses(
         lambda: _holding_one()[typing.NotRequired[int]],
         "is a TypedDict qualifier",
-        needs=(3, 11),
     ),
     GENERIC_RECORDS: Reads(Box[int], Box(1), Box("one")),
     PROTOCOL_BASES: Refuses(lambda: Protocol, "the base a protocol is declared from"),
@@ -385,9 +372,23 @@ FORMS: dict[str, Reads | Refuses] = {
             {"a": typing.Required[typing.NotRequired[int]]},  # ty: ignore[invalid-type-form]
         ),
         BOTH_PRESENCES,
-        needs=(3, 11),
     ),
 }
+
+Ts = typing.TypeVarTuple("Ts")
+
+
+class GenericMovie(TypedDict, Generic[T]):
+    """A generic `TypedDict`, whose key reads its parameter."""
+
+    name: T
+
+
+class GenericPair(NamedTuple, Generic[T]):
+    """A generic named tuple, whose position reads its parameter."""
+
+    a: T
+
 
 #: The second spelling of a cell that names two forms, so the row is not held by
 #: whichever of the pair the entry above happened to pick.
@@ -397,6 +398,7 @@ ALSO: dict[str, list[Reads | Refuses]] = {
     ],
     "`TypeVar`, `ParamSpec`, `TypeVarTuple`": [
         Refuses(lambda: P, A_TYPING_CONSTRUCT),
+        Refuses(lambda: Ts, A_TYPING_CONSTRUCT),
     ],
     TYPING_ALIASES_BARE: [
         Refuses(
@@ -424,35 +426,13 @@ ALSO: dict[str, list[Reads | Refuses]] = {
                 {"a": typing.NotRequired[typing.Required[int]]},  # ty: ignore[invalid-type-form]
             ),
             BOTH_PRESENCES,
-            needs=(3, 11),
         ),
     ],
-}
-if sys.version_info >= (3, 11):
-    # The third of that cell's three forms arrives with the release that can
-    # spell an unpacked tuple, so it is asked where it exists and the row above
-    # carries the two the floor has.
-    Ts = typing.TypeVarTuple("Ts")
-    ALSO["`TypeVar`, `ParamSpec`, `TypeVarTuple`"].append(
-        Refuses(lambda: Ts, A_TYPING_CONSTRUCT, needs=(3, 11))
-    )
-
-    # A generic `TypedDict` and a generic named tuple arrive in 3.11 too, so
-    # before it the cell names the one form a caller can write there.
-    class GenericMovie(TypedDict, Generic[T]):
-        """A generic `TypedDict`, whose key reads its parameter."""
-
-        name: T
-
-    class GenericPair(NamedTuple, Generic[T]):
-        """A generic named tuple, whose position reads its parameter."""
-
-        a: T
-
-    ALSO[GENERIC_RECORDS] = [
+    GENERIC_RECORDS: [
         Reads(GenericMovie[int], {"name": 1}, {"name": "a"}),
         Reads(GenericPair[int], GenericPair(1), GenericPair("a")),
-    ]
+    ],
+}
 
 
 #: The cells that name more than one form, so the row above holds one of them
@@ -465,9 +445,8 @@ NAMES_MORE_THAN_ONE_FORM = {
     PROTOCOL_BASES,
     "a set or frozen set literal",
     PRESENCE_PAIR,
+    GENERIC_RECORDS,
 }
-if sys.version_info >= (3, 11):
-    NAMES_MORE_THAN_ONE_FORM.add(GENERIC_RECORDS)
 
 
 def _tables() -> list[tuple[Path, list[str], list[list[str]]]]:

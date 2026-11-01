@@ -1,6 +1,5 @@
 import dataclasses
 import enum
-import sys
 import typing
 from typing import Annotated, Any, Literal, TypedDict
 
@@ -184,14 +183,9 @@ def test_a_top_keeps_the_spelling_of_the_operand_on_its_left() -> None:
     assert repr(written_any | object) == "Any"
     assert repr(object | written_any) == "anything"
     assert repr(written_top | Any) == "anything"
-    # `Any` on the *left* of the operator needs an interpreter whose `Any`
-    # defers to the other operand. Before 3.11 it is a `_SpecialForm` whose
-    # `__or__` raises rather than returning `NotImplemented`, so `__ror__` is
-    # never reached and no schema can answer the operator at all. That is a
-    # property of the interpreter's `Any` and not of this join, which the row
-    # above states with the operands every supported interpreter can spell.
-    if sys.version_info >= (3, 11):
-        assert repr(Any | written_top) == "Any"
+    # `Any` on the *left* of the operator defers to the other operand, which
+    # keeps the spelling on its left as the row above does.
+    assert repr(Any | written_top) == "Any"
 
     # And the two are one schema whichever way round, which is what makes the
     # spelling the only thing the order decides here.

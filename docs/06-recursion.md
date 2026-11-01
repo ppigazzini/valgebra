@@ -64,7 +64,7 @@ naming each other. An alias that names itself **outside** a structural
 constructor — `type Bad = int | Bad` — is refused when the validator is built,
 for the reason the next section gives: it denotes no set a value settles.
 
-The syntax is Python 3.12 and later. On 3.10 and 3.11, write the fixpoint with
+The syntax is Python 3.12 and later. On 3.11, write the fixpoint with
 `recursive`.
 
 ## A generic alias, applied

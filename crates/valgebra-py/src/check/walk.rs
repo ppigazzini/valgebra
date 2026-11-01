@@ -1553,8 +1553,8 @@ fn check_instance(index: ClassIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '
 /// without asking the class anything.
 ///
 /// `CPython`'s `PyObject_IsInstance` makes this test first, before it looks up
-/// an `__instancecheck__` -- "quick test for an exact match", from 3.10 to the
-/// current branch -- so it is the same answer read off the type pointer, and a
+/// an `__instancecheck__` -- "quick test for an exact match", on every
+/// supported release and the current branch -- so it is the same answer read off the type pointer, and a
 /// value of the class a schema names pays neither the call nor the result it
 /// folds. A list of `date`, of one enumeration, of one dataclass is that case
 /// at every element. `PyPy` implements `isinstance` otherwise, so there the
