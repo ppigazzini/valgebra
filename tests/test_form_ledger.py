@@ -57,6 +57,7 @@ from typing import (
 
 import annotated_types as at
 import pytest
+import typing_extensions
 
 from _tree import ROOT
 from valgebra import Regex, Validator, instance_of
@@ -129,6 +130,10 @@ PROTOCOL_BASES = "bare `Protocol`, and a generic `Protocol[T]`"
 
 GENERIC_RECORDS = "a generic `TypedDict`, dataclass or `NamedTuple` applied, `Box[int]`"
 PRESENCE_PAIR = "`Required[NotRequired[X]]` and `NotRequired[Required[X]]`"
+QUALIFIER_ARGUMENTS = (
+    "`Required`, `NotRequired` or `ReadOnly` as a class's type argument "
+    "or a type parameter's default"
+)
 BOTH_PRESENCES = "says the key is both required and not required"
 
 #: The two rows of `typing` aliases: the five read bare or parametrized, and the
@@ -145,6 +150,15 @@ TYPING_ALIASES_BARE = (
 
 class Parametrized(Generic[T]):
     """A user generic, whose parameter is erased before a value exists."""
+
+
+def _extra_items_qualified() -> Any:
+    """Build a `TypedDict` whose extra items carry a presence qualifier."""
+    return typing_extensions.TypedDict(
+        "Record",
+        {"a": int},
+        extra_items=typing.NotRequired[int],  # ty: ignore[invalid-type-form]
+    )
 
 
 def _holding_one() -> typing.Any:
@@ -336,9 +350,12 @@ FORMS: dict[str, Reads | Refuses] = {
     "a class generic in a `TypeVarTuple` or a `ParamSpec`, applied": Refuses(
         lambda: Hooked[[int]], "stands for a list of types"
     ),
-    "`Required`, `NotRequired` or `ReadOnly` as a class's type argument": Refuses(
+    QUALIFIER_ARGUMENTS: Refuses(
         lambda: _holding_one()[typing.NotRequired[int]],
         "is a TypedDict qualifier",
+    ),
+    "`Required` or `NotRequired` as a `TypedDict`'s `extra_items`": Refuses(
+        _extra_items_qualified, "is a presence qualifier"
     ),
     GENERIC_RECORDS: Reads(Box[int], Box(1), Box("one")),
     PROTOCOL_BASES: Refuses(lambda: Protocol, "the base a protocol is declared from"),

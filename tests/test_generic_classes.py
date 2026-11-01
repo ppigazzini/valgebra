@@ -213,6 +213,45 @@ def test_a_default_written_as_a_string_is_refused() -> None:
         assert not Validator(ByDefault[int]).is_valid({"a": "int"})
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 13), reason="a type parameter's default is 3.13"
+)
+def test_a_qualifier_as_a_default_is_refused() -> None:
+    """A default reaches a field of the class left unapplied as an argument does.
+
+    The runtime keeps the key a qualified default reaches as declared, and read
+    as the item's own, the qualifier turned a required key optional and an
+    optional one required. It is refused as the same qualifier written as the
+    argument is, bare or under `Annotated`, and the class applied reads the
+    argument.
+    """
+    if sys.version_info >= (3, 13):
+        absent = typing.TypeVar(
+            "absent",
+            default=typing.NotRequired[int],  # ty: ignore[invalid-type-form]
+        )
+        present = typing.TypeVar(
+            "present",
+            default=typing.Annotated[typing.Required[int], "n"],  # ty: ignore[invalid-type-form]
+        )
+
+        class HoldsByDefault(typing.TypedDict, typing.Generic[absent]):
+            a: absent
+
+        class Optional(typing.TypedDict, typing.Generic[present], total=False):
+            a: present
+
+        @dataclasses.dataclass
+        class Holder(typing.Generic[absent]):
+            item: absent
+
+        for unapplied in (HoldsByDefault, Optional, Holder):
+            with pytest.raises(NotImplementedError, match="as the default of"):
+                Validator(unapplied)
+        assert not Validator(HoldsByDefault[int]).is_valid({})
+        assert Validator(Optional[int]).is_valid({})
+
+
 def test_a_qualifier_as_a_type_argument_is_refused() -> None:
     """A `TypedDict` qualifier qualifies an item where it is declared, and nowhere else.
 

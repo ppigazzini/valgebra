@@ -381,7 +381,8 @@ with a message instead:
 | `Unpack[X]` | binds element types into a `tuple[...]`, so it has no meaning alone, and nor has `*tuple[...]` outside one |
 | a user `Generic[T]` class read by `isinstance` alone, applied | the parameter is erased at runtime and the class declares no field it reaches, so the type argument narrows nothing |
 | a class generic in a `TypeVarTuple` or a `ParamSpec`, applied | the parameter stands for a list of types or a signature, which no form here binds a field to |
-| `Required`, `NotRequired` or `ReadOnly` as a class's type argument | a qualifier qualifies a `TypedDict` item where it is declared and nowhere else (PEP 655, PEP 705), and the runtime keeps the key it reaches as declared |
+| `Required`, `NotRequired` or `ReadOnly` as a class's type argument or a type parameter's default | a qualifier qualifies a `TypedDict` item where it is declared and nowhere else (PEP 655, PEP 705), and the runtime keeps the key it reaches as declared |
+| `Required` or `NotRequired` as a `TypedDict`'s `extra_items` | PEP 728 makes it an error: an extra key is never required, so the qualifier says nothing true of it; `ReadOnly` is read through there |
 | bare `Protocol`, and a generic `Protocol[T]` | the base a protocol is declared from declares no member, and a protocol over a type parameter names one set per argument |
 | a `Protocol` member declared `ClassVar` or `Final` | the qualifier says where the value lives rather than what it is |
 | a set or frozen set literal | `{int}` and `frozenset({int})` name containers, which are `set[T]` and `frozenset[T]` |
@@ -397,10 +398,11 @@ A qualifier is the exception that is read rather than refused:
 `Required[X]`, `NotRequired[X]` and `ReadOnly[X]` survive hint resolution
 because field metadata is kept, so the frontend unwraps them and compiles the
 type they qualify. Written outside a record they are unwrapped just the same,
-which makes `Validator(Required[int])` the same schema as `Validator(int)`. A
-dict literal's field is the one place `Required` and `NotRequired` are refused,
-because the literal says whether a key is required by its `?` alone and the
-qualifier would say it a second time ([records](#a-field-is-required-by-its-key)).
+which makes `Validator(Required[int])` the same schema as `Validator(int)`.
+Besides the places the table above names, a dict literal's field refuses
+`Required` and `NotRequired`, because the literal says whether a key is
+required by its `?` alone and the qualifier would say it a second time
+([records](#a-field-is-required-by-its-key)).
 
 ## Unions and `Optional`
 

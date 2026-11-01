@@ -93,6 +93,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a word's length bound is counted by a table built directly
 - fix: a type parameter's default written as a string is refused
 - fix: a TypedDict's extra_items given as a string is the type it names
+- fix: a TypedDict qualifier given as a default or as extra_items is refused
 
 -->
 
@@ -473,6 +474,18 @@ answer of its own, or a repair to a change not yet released.
   3.10 spelled with an object of its own are gone with it.
 
 ### Fixed
+
+- **A `TypedDict` qualifier given as a default or as `extra_items` is
+  refused.** A class left unapplied takes each parameter's default, which
+  reaches its fields as an argument does, and `NotRequired[int]` as the
+  default read as the item's own: the key turned optional, `{}` admitted and
+  the class proved equal to one declaring `a: NotRequired[int]`, though the
+  runtime keeps `a` required; a `Required` default turned an optional key
+  required, and a dataclass's field dropped the qualifier. A qualifier as a
+  parameter's default is refused as the same qualifier written as the
+  argument is, bare or under `Annotated`. `Required` and `NotRequired` as
+  `extra_items`, which PEP 728 calls an error, are refused there too, where
+  they built as the type they wrap; `ReadOnly` is read through.
 
 - **A `TypedDict`'s `extra_items` given as a string is the type it names.**
   PEP 728 takes a type expression there, and a string where one goes is a

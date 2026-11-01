@@ -662,29 +662,41 @@ fn one_type_each(class: &Bound<'_, PyType>, parameters: &Bound<'_, PyTuple>) -> 
 /// item's own, turning a required key optional, or vanished from a dataclass's
 /// field. Read through `Annotated`, which a qualifier may sit under.
 fn no_qualifier_among(class: &Bound<'_, PyType>, arguments: &Bound<'_, PyTuple>) -> PyResult<()> {
+    for argument in arguments.iter() {
+        no_qualifier_as(class, &argument, "a type argument")?;
+    }
+    Ok(())
+}
+
+/// Refuse `given` where it is a `TypedDict` qualifier `class` takes as `role`:
+/// a type argument, or a parameter's default, which reaches a field of the
+/// class left unapplied as an argument would and is no item either.
+fn no_qualifier_as(
+    class: &Bound<'_, PyType>,
+    given: &Bound<'_, PyAny>,
+    role: &str,
+) -> PyResult<()> {
     let py = class.py();
     let forms = forms(py)?;
-    for argument in arguments.iter() {
-        let mut held = argument.clone();
-        // Bounded as a literal's field is read, so the loop ends whatever a
-        // form's `__origin__` claims.
-        for _ in 0..MAX_QUALIFIER_DEPTH {
-            if !held.get_type().is(forms.annotated_alias.bind(py)) {
-                break;
-            }
-            held = held.getattr(intern!(py, "__origin__"))?;
+    let mut held = given.clone();
+    // Bounded as a literal's field is read, so the loop ends whatever a
+    // form's `__origin__` claims.
+    for _ in 0..MAX_QUALIFIER_DEPTH {
+        if !held.get_type().is(forms.annotated_alias.bind(py)) {
+            break;
         }
-        let origin = forms.get_origin.bind(py).call1((&held,))?;
-        if is_field_qualifier(&origin)? {
-            return Err(not_implemented(format!(
-                "{} as a type argument of {} is a TypedDict qualifier, which \
-                 qualifies an item where it is declared and nowhere else: declare \
-                 the field Required, NotRequired or ReadOnly in the class, and pass \
-                 the type alone",
-                summarize(&argument)?,
-                super::declared_name(class.as_any())?
-            )));
-        }
+        held = held.getattr(intern!(py, "__origin__"))?;
+    }
+    let origin = forms.get_origin.bind(py).call1((&held,))?;
+    if is_field_qualifier(&origin)? {
+        return Err(not_implemented(format!(
+            "{} as {role} of {} is a TypedDict qualifier, which qualifies an \
+             item where it is declared and nowhere else: declare the field \
+             Required, NotRequired or ReadOnly in the class, and give the type \
+             alone",
+            summarize(given)?,
+            super::declared_name(class.as_any())?
+        )));
     }
     Ok(())
 }
@@ -753,7 +765,11 @@ impl<'py> Scopes<'py> {
         for (at, parameter) in parameters.iter().enumerate() {
             let written = applied.and_then(|args| args.get_item(at).ok());
             let argument = match defaulted(&parameter, written.as_ref())? {
-                Some(default) => super::substitute(&default, &parameters, &arguments)?,
+                Some(default) => {
+                    let role = format!("the default of {}", super::declared_name(&parameter)?);
+                    no_qualifier_as(ty, &default, &role)?;
+                    super::substitute(&default, &parameters, &arguments)?
+                }
                 None => written.unwrap_or_else(|| parameter.clone()),
             };
             if !argument.is(&parameter) {
@@ -1528,7 +1544,20 @@ fn stated_tail<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Tail<'py>>> {
     if let Some(extra) = optional_attribute(ty, intern!(py, "__extra_items__"))?
         && !gave_no_extra_items(ty, &extra)?
     {
-        return Ok(Some(Tail::Typed(annotation_of(ty, extra)?)));
+        let extra = annotation_of(ty, extra)?;
+        // PEP 728: "It is an error to use `Required[]` or `NotRequired[]` with
+        // `extra_items`". An extra key is never required, and dropped, the
+        // qualifier would read as the type it wraps. `ReadOnly` is admitted.
+        if qualified_required(&extra)?.0.is_some() {
+            return Err(not_implemented(format!(
+                "extra_items={} of {} is a presence qualifier, which PEP 728 \
+                 refuses there: an extra key is never required, so give the type \
+                 alone",
+                summarize(&extra)?,
+                super::declared_name(ty.as_any())?
+            )));
+        }
+        return Ok(Some(Tail::Typed(extra)));
     }
     Ok(None)
 }

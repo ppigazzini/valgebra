@@ -150,6 +150,28 @@ def test_a_typeddict_is_the_record_its_pep_728_spelling_names(
     assert Validator(record) == Validator(literal)
 
 
+@pytest.mark.parametrize("implementation", ["typing", "typing_extensions"])
+def test_a_presence_qualifier_as_extra_items_is_refused(implementation: str) -> None:
+    """A presence qualifier is no `extra_items`, which PEP 728 calls an error.
+
+    "It is an error to use `Required[]` or `NotRequired[]` with `extra_items`."
+    An extra key is never required, and the qualifier dropped read as the type
+    it wraps. `ReadOnly` is admitted there, and read through.
+    """
+    module = pytest.importorskip(implementation)
+    if not hasattr(module, "NoExtraItems"):
+        pytest.skip(f"{implementation} has no PEP 728 on this release")
+    for qualified in (typing.NotRequired[int], typing.Required[int]):
+        record = module.TypedDict("Record", {"a": int}, extra_items=qualified)
+        with pytest.raises(NotImplementedError, match="presence qualifier"):
+            Validator(record)
+    if hasattr(module, "ReadOnly"):
+        read_only = module.TypedDict(
+            "Record", {"a": int}, extra_items=module.ReadOnly[int]
+        )
+        assert Validator(read_only) == Validator({"a": int, str: int})
+
+
 class _Coordinate(typing.TypedDict):
     """A class of this module, which an `extra_items` below names by a string."""
 

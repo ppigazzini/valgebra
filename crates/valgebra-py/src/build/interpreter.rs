@@ -2682,6 +2682,48 @@ fn a_default_written_as_a_string_is_refused_as_a_forward_reference() {
     });
 }
 
+/// A `TypedDict` qualifier is refused where a class takes it as a parameter's
+/// default, as where it takes it as an argument, and `Required` or
+/// `NotRequired` as `extra_items`, which PEP 728 calls an error.
+#[test]
+fn a_qualifier_as_a_default_or_as_extra_items_is_refused() {
+    Python::attach(|py| {
+        let namespace = namespace(py).expect("the corpus namespace builds");
+        let mut source = String::from(
+            "import typing\n\
+             class Extra(typing.TypedDict):\n\
+             \x20   a: int\n\
+             Extra.__extra_items__ = typing.NotRequired[int]\n",
+        );
+        let mut refused = vec![("Extra", "is a presence qualifier")];
+        if Since(13).met(py) {
+            source.push_str(
+                "X = typing.TypeVar('X', default=typing.NotRequired[int])\n\
+                 class HoldsByDefault(typing.TypedDict, typing.Generic[X]):\n\
+                 \x20   a: X\n",
+            );
+            refused.push(("HoldsByDefault", "as the default of X"));
+        }
+        py.run(
+            &CString::new(source).expect("a source with no interior nul"),
+            Some(&namespace),
+            None,
+        )
+        .expect("the corpus classes define");
+        for (name, wanted) in refused {
+            let class = namespace
+                .get_item(name)
+                .expect("the namespace answers")
+                .expect("the class is in it");
+            let refusal = match build_schema(&class, &mut Pool::default(), &mut Vec::new()) {
+                Err(refusal) => refusal.to_string(),
+                Ok(schema) => panic!("{name} built {schema:?}"),
+            };
+            assert!(refusal.contains(wanted), "{name}: {refusal}");
+        }
+    });
+}
+
 /// A `TypedDict` says which keys it admits beyond the ones it declares, and
 /// the two ways it says so are read.
 #[test]
