@@ -10676,6 +10676,85 @@ fn a_refinement_admits_the_empty_container_where_its_base_and_bounds_do() {
     );
 }
 
+/// The exact empty container is read three ways: held, refused, or unread.
+///
+/// The top holds it, and so does `Any` of at most zero. A complement negates
+/// its inner answer, so `~{"a": int}` holds `{}`; a least length above zero
+/// refuses it and a predicate leaves it unread; a union holds it where one
+/// member does, and a meet refuses it where one member does. A
+/// meet whose members each hold it is inhabited by it -- two set refinements,
+/// and a length-zero dict beside the complement of a record requiring a key --
+/// and one member left unread leaves the meet undecided.
+#[test]
+fn the_exact_empty_container_is_held_refused_or_unread() {
+    let refined = |base: Schema, constraint: Constraint| Schema::Refine {
+        base: Arc::new(base),
+        constraints: vec![constraint].into(),
+    };
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let ints = Schema::mapping(MapClause {
+        key: Schema::Str,
+        value: Schema::Int,
+    });
+    let requiring = Schema::record(
+        vec![Field {
+            name: "a".into(),
+            schema: Schema::Int,
+            required: true,
+        }],
+        Openness::Open,
+    );
+    let called = refined(
+        Schema::set(Schema::Int),
+        Constraint::Predicate(PredIx::new(0)),
+    );
+    assert_eq!(requiring.holds_the_exact_empty(Kind::Dict), Some(false));
+    assert_eq!(
+        not(requiring.clone()).holds_the_exact_empty(Kind::Dict),
+        Some(true)
+    );
+    assert_eq!(
+        refined(Schema::set(Schema::Int), Constraint::MinLen(1)).holds_the_exact_empty(Kind::Set),
+        Some(false)
+    );
+    assert_eq!(called.holds_the_exact_empty(Kind::Set), None);
+    assert_eq!(not(called.clone()).holds_the_exact_empty(Kind::Set), None);
+    assert_eq!(
+        refined(Schema::ANYTHING, Constraint::MaxLen(0)).holds_the_exact_empty(Kind::List),
+        Some(true)
+    );
+    assert_eq!(Schema::Int.holds_the_exact_empty(Kind::Set), Some(false));
+    assert_eq!(
+        Schema::Union(vec![Schema::Int, called.clone(), Schema::set(Schema::Str)].into())
+            .holds_the_exact_empty(Kind::Set),
+        Some(true)
+    );
+    assert_eq!(
+        Schema::Intersection(vec![called.clone(), Schema::Int].into())
+            .holds_the_exact_empty(Kind::Set),
+        Some(false)
+    );
+    let verdict = |members: Vec<Schema>| Schema::Intersection(members.into()).verdict();
+    assert_eq!(
+        verdict(vec![
+            refined(Schema::set(Schema::Str), Constraint::MaxLen(0)),
+            refined(Schema::set(Schema::ANYTHING), Constraint::MaxLen(1)),
+        ]),
+        Verdict::Inhabited
+    );
+    assert_eq!(
+        verdict(vec![refined(ints, Constraint::MaxLen(0)), not(requiring)]),
+        Verdict::Inhabited
+    );
+    assert_eq!(
+        verdict(vec![
+            refined(Schema::set(Schema::Str), Constraint::MaxLen(0)),
+            called
+        ]),
+        Verdict::Unknown
+    );
+}
+
 /// A refinement at most zero long is the empty container of its base's kind,
 /// below every supertype holding that container; and a meet of members that
 /// each hold it is inhabited by it, though the elements share nothing.

@@ -418,8 +418,13 @@ answers `"undecided"`.
   runs from its required fields to all of them: `{"a": int}` is `subset` of
   `Annotated[dict[str, int], Len(1, 1)]`, and `{"a": int, "b": int}`
   `not_subset` of `Annotated[dict[str, int], MaxLen(1)]`. A set or a dict
-  bounded to length zero is the empty one, below every shape that holds it, and
-  a meet whose members each hold it is not empty. A bound over a mapping's
+  bounded to length zero holds the empty ones alone, and is below every set or
+  dict shape of its kind holding each of them, a refinement under bounds that
+  admit zero among them; below a complement it declines. A meet whose members
+  each hold the exact empty one, read off their shapes, is not empty, and a
+  complement holds it where its inner shape refuses it, so
+  `Annotated[dict[str, int], MaxLen(0)] & ~{"a": int}` is `not_subset` of
+  `nothing`, on `{}`. A bound over a mapping's
   clauses is not counted, and declines. A bound over a list is an automaton with a
   state per element, and the sets compare two such bounds up to about 1,340
   elements over a list of integers before the work a relation may spend runs

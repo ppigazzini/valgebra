@@ -487,6 +487,77 @@ impl Schema {
         }
     }
 
+    /// Whether the exact empty container of `kind` -- `[]`, `()`, `set()`,
+    /// `frozenset()` or `{}` -- is a value of this schema, read off the
+    /// constructors: `Some` where the shape says, `None` where it cannot.
+    ///
+    /// Three-valued where [`admits_the_empty`](Self::admits_the_empty) is not,
+    /// so a complement reads as its inner answer negated: `~{"a": int}` holds
+    /// `{}`, which `{"a": int}` refuses for the key it requires. A refinement
+    /// keeps the answer under length bounds that admit zero and refuses it
+    /// under a least length above zero; any other constraint is unread. A
+    /// union holds it where a member does and a meet where every member does.
+    /// One value is all a meet needs to be inhabited, so the subclasses' empty
+    /// instances are not read, and a class, a literal and a reference are not
+    /// read at all.
+    pub(super) fn holds_the_exact_empty(&self, kind: Kind) -> Option<bool> {
+        match self {
+            Schema::Anything(_) => Some(true),
+            Schema::Nothing
+            | Schema::NoneType
+            | Schema::Bool
+            | Schema::Int
+            | Schema::Float
+            | Schema::Str
+            | Schema::Bytes => Some(false),
+            Schema::Seq { shape, .. } => {
+                Some(self.type_tag() == Some(kind) && shape.prefix.is_empty())
+            }
+            Schema::Coll { .. } => Some(self.type_tag() == Some(kind)),
+            Schema::KeyedMap { fields, .. } => {
+                Some(kind == Kind::Dict && fields.iter().all(|field| !field.required))
+            }
+            Schema::Refine { base, constraints } => {
+                if !base.holds_the_exact_empty(kind)? {
+                    return Some(false);
+                }
+                let mut held = Some(true);
+                for constraint in constraints.iter() {
+                    match constraint {
+                        Constraint::MinLen(0) | Constraint::MaxLen(_) => {}
+                        Constraint::MinLen(_) => return Some(false),
+                        _ => held = None,
+                    }
+                }
+                held
+            }
+            Schema::Complement(inner) => inner.holds_the_exact_empty(kind).map(|held| !held),
+            Schema::Union(members) => {
+                let mut held = Some(false);
+                for member in members.iter() {
+                    match member.holds_the_exact_empty(kind) {
+                        Some(true) => return Some(true),
+                        Some(false) => {}
+                        None => held = None,
+                    }
+                }
+                held
+            }
+            Schema::Intersection(members) => {
+                let mut held = Some(true);
+                for member in members.iter() {
+                    match member.holds_the_exact_empty(kind) {
+                        Some(false) => return Some(false),
+                        Some(true) => {}
+                        None => held = None,
+                    }
+                }
+                held
+            }
+            _ => None,
+        }
+    }
+
     /// Whether every value of `kind` belongs to this schema, read off the
     /// constructors: [`kinds_held_whole`](Self::kinds_held_whole) at one kind,
     /// with no reference unfolded.

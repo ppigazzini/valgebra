@@ -18,7 +18,15 @@ from typing import TYPE_CHECKING, Annotated
 import annotated_types as at
 import pytest
 
-from valgebra import Regex, ValidationError, Validator, nothing, union
+from valgebra import (
+    Regex,
+    ValidationError,
+    Validator,
+    complement,
+    intersection,
+    nothing,
+    union,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -667,6 +675,28 @@ def test_the_lengths_a_value_can_have_still_build() -> None:
     assert Validator(Annotated[str, at.MinLen(0)]).is_valid("")
     assert Validator(Annotated[str, at.MinLen(3)]).is_valid("abc")
     assert Validator(Annotated[str, at.MaxLen(0)]).is_valid("")
+
+
+def test_a_meet_whose_members_each_hold_the_empty_container_holds_it() -> None:
+    """The exact empty container in every member is a value of the meet.
+
+    Each member is read for `set()` or `{}` off its shape: a length bound that
+    admits zero keeps it, and a complement holds it where its inner set refuses
+    it, as `{"a": int}` does for the key it requires. A member whose
+    constraint the reading cannot read, a predicate, leaves the meet undecided.
+    """
+    at_most_none = Validator(Annotated[set[str], at.MaxLen(0)])
+    at_most_one = Validator(Annotated[set, at.MaxLen(1)])
+    no_items = Validator(Annotated[dict[str, int], at.MaxLen(0)])
+    without_a = complement(Validator({"a": int}))
+    for meet, empty in (
+        (intersection(at_most_none, at_most_one), set()),
+        (intersection(no_items, without_a), {}),
+    ):
+        assert meet.is_valid(empty)
+        assert meet.relation_to(nothing) == "not_subset"
+    called = Validator(Annotated[set[str], lambda value: len(value) < 2])
+    assert intersection(at_most_none, called).relation_to(nothing) == "undecided"
 
 
 def test_a_set_of_a_narrow_element_cannot_be_longer_than_the_element() -> None:

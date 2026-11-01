@@ -655,29 +655,39 @@ fn literal_verdict(literal: &Schema, constant: ConstIx, cx: &Cx<'_>) -> Verdict 
     }
 }
 
-/// `Inhabited` where every member of the meet holds the empty container of one
-/// kind, which is then a value of every member; `Unknown` otherwise.
+/// `Inhabited` where every member of the meet holds the exact empty container
+/// of one kind, which is then a value of every member; `Unknown` otherwise.
 ///
-/// A sequence shape with no prefix holds the empty sequence whatever its
-/// element admits, a set shape the empty set, and a mapping that requires no
-/// field the empty dict, and a refinement of one keeps it under length bounds
-/// that admit zero ([`Schema::admits_the_empty`]), so the meet holds it with no
+/// The kinds asked are the containers the members name, a refinement naming
+/// its base's, and each member is read by
+/// [`holds_the_exact_empty`](Schema::holds_the_exact_empty): a sequence shape
+/// with no prefix holds the empty sequence whatever its element admits, a set
+/// shape the empty set, a mapping that requires no field the empty dict, a
+/// refinement of one under length bounds that admit zero, and a complement
+/// where its inner set refuses it. So the meet holds the container with no
 /// element read: `[] & list[t]` has the empty list as a value where `t` is a
-/// definition the recursion is resolving and reads as empty, and
-/// `set[Literal["a"]] & Annotated[set[int], MaxLen(1)]` the empty set, though
-/// no member is in both elements.
+/// definition the recursion is resolving and reads as empty,
+/// `set[Literal["a"]] & Annotated[set[int], MaxLen(1)]` the empty set though no
+/// member is in both elements, and `Annotated[dict[str, int], MaxLen(0)] &
+/// ~{"a": int}` the empty dict. A member the reading cannot read declines it.
 fn the_empty_container_in_every_member(members: &[Schema]) -> Verdict {
-    let Some(kind) = members.iter().find_map(|member| match member {
-        Schema::Seq { .. } | Schema::Coll { .. } | Schema::KeyedMap { .. } => member.type_tag(),
-        _ => None,
-    }) else {
-        return Verdict::Unknown;
-    };
-    if members.iter().all(|member| member.admits_the_empty(kind)) {
-        Verdict::Inhabited
-    } else {
-        Verdict::Unknown
+    let named = members.iter().filter_map(|member| {
+        member.type_tag().filter(|kind| {
+            matches!(
+                kind,
+                Kind::List | Kind::Tuple | Kind::Set | Kind::FrozenSet | Kind::Dict
+            )
+        })
+    });
+    for kind in named {
+        if members
+            .iter()
+            .all(|member| member.holds_the_exact_empty(kind) == Some(true))
+        {
+            return Verdict::Inhabited;
+        }
     }
+    Verdict::Unknown
 }
 
 /// The verdict of the meet `members` with every branch of a union member

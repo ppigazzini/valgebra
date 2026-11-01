@@ -81,10 +81,22 @@ answer of its own, or a repair to a change not yet released.
 - fix: a quantifier re refuses for repeating no atom is refused
 - feat: Python 3.11 is the floor, and 3.10 leaves the matrix
 - feat: a literal holds its constant where its own walk admits it
+- feat: a meet holds the exact empty container its members each hold
 
 -->
 
 ### Added
+
+- **A meet holds the exact empty container its members each hold.** The
+  reading found the container's kind on a bare container member alone, and
+  read each member two ways, so `Annotated[set[str], MaxLen(0)] &
+  Annotated[set, MaxLen(1)]` and `Annotated[dict[str, int], MaxLen(0)] &
+  ~{"a": int}` were `undecided` below `nothing`, though `set()` and `{}` are
+  in them. Each member is now read three ways for the exact empty container
+  of a kind a member names: a refinement keeps it under length bounds that
+  admit zero, and a complement holds it where its inner shape refuses it.
+  Both meets are `not_subset` of `nothing`. A member the reading cannot read,
+  a predicate among them, leaves the meet undecided.
 
 - **A literal holds its constant where its own walk admits it.** The relations
   read a literal's constant as a value only under an equality they trust, so
