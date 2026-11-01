@@ -9995,6 +9995,96 @@ fn a_length_the_supertype_leaves_out_refutes_at_any_size() {
     assert_ne!(relation(&none, &at_most_64), Relation::Fails);
 }
 
+/// A union refuses a length each branch leaves out, so the length rule reads
+/// one at any size: a refinement branch admits no length outside its bounds,
+/// whatever its base, and a branch of another kind admits none. The length
+/// asked is the least the subject holds that no branch admits, so a gap
+/// between two branches refutes and bounds covering every length do not. A
+/// complement holding none of the subject's kind is such a branch too, and no
+/// rule drops it before the length is read. A branch of the subject's kind
+/// with no bound leaves the union unread, a meet as much as a shape -- the
+/// lists past a length, spelled with a complement -- and a short interval read
+/// after a longer one covers no length the longer did not: neither union,
+/// each holding every list the subject does, is refuted.
+#[test]
+fn a_length_every_branch_leaves_out_refutes_a_union_at_any_size() {
+    let relation =
+        |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &NoLeafRelations, &[]);
+    let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let bounded = |constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(ints.clone()),
+        constraints: constraints.into(),
+    };
+    let union = |branches: Vec<Schema>| Schema::Union(branches.into());
+    let nonempty = bounded(vec![Constraint::MinLen(1)]);
+    for most in [1_000, 5_000, 1 << 20] {
+        assert_eq!(
+            relation(
+                &nonempty,
+                &union(vec![
+                    bounded(vec![Constraint::MaxLen(1)]),
+                    bounded(vec![Constraint::MaxLen(most)]),
+                ])
+            ),
+            Relation::Fails,
+            "{most}"
+        );
+    }
+    let gap = union(vec![
+        bounded(vec![Constraint::MaxLen(2)]),
+        bounded(vec![Constraint::MinLen(4_000)]),
+    ]);
+    assert_eq!(relation(&nonempty, &gap), Relation::Fails);
+    let covered = union(vec![
+        bounded(vec![Constraint::MaxLen(3_000)]),
+        bounded(vec![Constraint::MinLen(3_001)]),
+    ]);
+    assert_ne!(relation(&nonempty, &covered), Relation::Fails);
+    let other_kind = union(vec![Schema::Int, bounded(vec![Constraint::MaxLen(5_000)])]);
+    assert_eq!(relation(&nonempty, &other_kind), Relation::Fails);
+    // The length rule's own answers, read apart from the relation, whose set
+    // reading refutes these pairs a step later at a cost that grows with them.
+    let by_length = |sub: &Schema, sup: &Schema| {
+        let budget = Budget::new(DECISION_BUDGET);
+        sub.read_by_length(sup, &mut Cx::new(&NoLeafRelations, &[], &budget))
+    };
+    assert_eq!(by_length(&nonempty, &gap), Relation::Fails);
+    assert_eq!(by_length(&nonempty, &other_kind), Relation::Fails);
+    let words = |constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: constraints.into(),
+    };
+    let beside_a_complement = union(vec![
+        Schema::Complement(Arc::new(Schema::union([Schema::Str, Schema::Int]))),
+        words(vec![Constraint::MaxLen(5_000)]),
+    ]);
+    assert_eq!(
+        relation(&words(vec![Constraint::MinLen(1)]), &beside_a_complement),
+        Relation::Fails
+    );
+    let unbounded = union(vec![
+        Schema::list(SeqShape::homogeneous(Schema::ANYTHING)),
+        bounded(vec![Constraint::MaxLen(5_000)]),
+    ]);
+    assert_ne!(relation(&nonempty, &unbounded), Relation::Fails);
+    let longer = Schema::Intersection(
+        vec![
+            ints.clone(),
+            Schema::Complement(Arc::new(bounded(vec![Constraint::MaxLen(5_000)]))),
+        ]
+        .into(),
+    );
+    let past_and_within = union(vec![longer, bounded(vec![Constraint::MaxLen(5_000)])]);
+    assert_ne!(relation(&nonempty, &past_and_within), Relation::Fails);
+    let ten = bounded(vec![Constraint::MinLen(1), Constraint::MaxLen(10)]);
+    let overlapping = union(vec![
+        bounded(vec![Constraint::MaxLen(6)]),
+        bounded(vec![Constraint::MinLen(4), Constraint::MaxLen(10)]),
+        bounded(vec![Constraint::MinLen(5), Constraint::MaxLen(5)]),
+    ]);
+    assert_ne!(relation(&ten, &overlapping), Relation::Fails);
+}
+
 /// A respelled pair spends no more than [`RESPELLING`] steps.
 ///
 /// Towers of `(T, list[T])` reach each level twice, so their inclusion costs

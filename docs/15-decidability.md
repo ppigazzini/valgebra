@@ -436,7 +436,11 @@ answers `"undecided"`.
   word, a sequence with a repeated element, a mapping keyed by every name --
   is refuted below a bound leaving one of those lengths out, at any size:
   `Annotated[str, MaxLen(256)]` is `not_subset` of `Annotated[str,
-  MaxLen(64)]`, on a text of 65 code points. A union of bounds covering a
+  MaxLen(64)]`, on a text of 65 code points. A union is refused a length its
+  branches each leave out the same way, a branch of another kind leaving out
+  every length, so `Annotated[list[int], MinLen(1)]` is `not_subset` of
+  `Annotated[list[int], MaxLen(1)] | Annotated[list[int], MaxLen(3000)]`, on
+  3,001 integers. A union of bounds covering a
   word's lengths past the state bound is not read: `Annotated[str,
   MaxLen(1000)]` below `MaxLen(64) | MinLen(65)` over `str` declines. That decides a
   fixpoint every unfolding of which needs one more element -- each element is a

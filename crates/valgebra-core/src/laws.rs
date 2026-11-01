@@ -4554,6 +4554,45 @@ fn a_length_bound_at_a_position_is_separated_by_a_set_of_its_own() {
 }
 
 // THEORY: each-kind-is-closed
+/// A union of length bounds is separated by a sequence one longer than every
+/// branch admits.
+///
+/// The pair: `list[int]` of at least one element, against the union of the
+/// same list bounded to none and to two. It is refuted by a list of three
+/// integers, which no branch's bound admits.
+#[test]
+fn a_union_of_length_bounds_is_separated_by_a_length_no_branch_admits() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let bounded = |constraint: Constraint| Schema::Refine {
+        base: Arc::new(ints.clone()),
+        constraints: vec![constraint].into(),
+    };
+    let a = bounded(Constraint::MinLen(1));
+    let b = Schema::Union(
+        vec![
+            bounded(Constraint::MaxLen(0)),
+            bounded(Constraint::MaxLen(2)),
+        ]
+        .into(),
+    );
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
+}
+
+// THEORY: each-kind-is-closed
 /// The universe separates a pair whose sequences sit under a wrapper.
 ///
 /// `tuple[*Any]` of at least three is refuted below `¬tuple[*None]`: a tuple

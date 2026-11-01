@@ -82,10 +82,21 @@ answer of its own, or a repair to a change not yet released.
 - feat: Python 3.11 is the floor, and 3.10 leaves the matrix
 - feat: a literal holds its constant where its own walk admits it
 - feat: a meet holds the exact empty container its members each hold
+- feat: a length every branch of a union leaves out refutes at any size
 
 -->
 
 ### Added
+
+- **A length every branch of a union leaves out refutes at any size.** A
+  refinement holding a value of every length its bounds admit was refuted by
+  a length one bound leaves out, and against a union of bounds only as far as
+  the set representation counts, about 1,400 elements of a list:
+  `Annotated[list[int], MinLen(1)]` below `Annotated[list[int], MaxLen(1)] |
+  Annotated[list[int], MaxLen(3000)]` was `undecided`. A union refuses a value
+  each branch refuses, so the least length no branch's bounds admit, a branch
+  of another kind admitting none, is the witness at any size, a gap between
+  two branches among them. Bounds covering every length refute nothing.
 
 - **A meet holds the exact empty container its members each hold.** The
   reading found the container's kind on a bare container member alone, and

@@ -337,22 +337,41 @@ impl Schema {
     /// way is the bound rules' [JV20, Fig. 3.4]; this is what they leave
     /// undecided, and what a pattern counting past a few hundred code points
     /// no longer holds.
+    ///
+    /// A union refuses a value where each branch does, so a length every
+    /// branch leaves out is the same witness: a branch that is a refinement
+    /// admits no length outside its bounds, whatever its base and its other
+    /// constraints, and a branch holding no value of the subject's kind admits
+    /// none. Any other branch leaves the union unread. The length asked is the
+    /// least one from the subject's least that no branch's bounds admit.
     fn length_refused(&self, other: &Schema, cx: &mut Cx<'_>) -> bool {
-        let (
-            Schema::Refine { base, constraints },
-            Schema::Refine {
-                constraints: theirs,
-                ..
-            },
-        ) = (self, other)
-        else {
+        let Schema::Refine { base, constraints } = self else {
             return false;
+        };
+        let branches = match other {
+            Schema::Refine { .. } => core::slice::from_ref(other),
+            Schema::Union(members) => &members[..],
+            _ => return false,
         };
         if !constraints
             .iter()
             .all(|constraint| matches!(constraint, Constraint::MinLen(_) | Constraint::MaxLen(_)))
         {
             return false;
+        }
+        let Some(kind) = base.type_tag() else {
+            return false;
+        };
+        let mut admitted: Vec<(usize, Option<usize>)> = Vec::with_capacity(branches.len());
+        for branch in branches {
+            match branch {
+                Schema::Refine {
+                    constraints: theirs,
+                    ..
+                } => admitted.push((shortest(theirs.iter()), longest(theirs.iter()))),
+                _ if branch.holds_no_value_of(kind, cx.oracle) => {}
+                _ => return false,
+            }
         }
         let Some(from) = base.every_length_from(cx) else {
             return false;
@@ -362,8 +381,19 @@ impl Schema {
         if most < least {
             return false;
         }
-        least < shortest(theirs.iter())
-            || longest(theirs.iter()).is_some_and(|allowed| most > allowed)
+        admitted.sort_unstable();
+        let mut length = least;
+        for (low, high) in admitted {
+            if low > length {
+                break;
+            }
+            match high {
+                None => return false,
+                Some(high) if high >= length => length = high.saturating_add(1),
+                Some(_) => {}
+            }
+        }
+        length <= most
     }
 
     /// The least length from which this shape holds a value of every length,

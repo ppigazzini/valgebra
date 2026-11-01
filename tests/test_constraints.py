@@ -677,6 +677,34 @@ def test_the_lengths_a_value_can_have_still_build() -> None:
     assert Validator(Annotated[str, at.MaxLen(0)]).is_valid("")
 
 
+def test_a_length_every_branch_leaves_out_refutes_a_union() -> None:
+    """A union of length bounds is refuted at a length no branch admits.
+
+    `list[int]` of at least one element holds a list of every length, so a
+    union of `MaxLen` variants is refuted by one longer than every branch
+    admits, at any size, and so is a gap between two branches. Bounds covering
+    every length refute nothing. The text form reads the same way.
+    """
+    nonempty = Validator(Annotated[list[int], at.MinLen(1)])
+    for most in (1_000, 3_000, 100_000):
+        variants = union(
+            Annotated[list[int], at.MaxLen(1)], Annotated[list[int], at.MaxLen(most)]
+        )
+        assert nonempty.relation_to(variants) == "not_subset"
+    gap = union(
+        Annotated[list[int], at.MaxLen(2)], Annotated[list[int], at.MinLen(4_000)]
+    )
+    assert nonempty.relation_to(gap) == "not_subset"
+    assert not gap.is_valid([0, 0, 0])
+    covered = union(
+        Annotated[list[int], at.MaxLen(3)], Annotated[list[int], at.MinLen(4)]
+    )
+    assert nonempty.relation_to(covered) != "not_subset"
+    text = Validator(Annotated[str, at.MaxLen(3_000)])
+    words = union(Annotated[str, at.MaxLen(64)], Annotated[str, at.MinLen(2_000)])
+    assert text.relation_to(words) == "not_subset"
+
+
 def test_a_meet_whose_members_each_hold_the_empty_container_holds_it() -> None:
     """The exact empty container in every member is a value of the meet.
 
