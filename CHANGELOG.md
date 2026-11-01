@@ -96,6 +96,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a TypedDict qualifier given as a default or as extra_items is refused
 - fix: a field wrapped past the qualifiers read is refused as too deep
 - feat: a sized base written bare is read as its refinement under no bound
+- fix: a narrowed meet's verdict is read once a query where it rests on nothing -- internal
 
 -->
 

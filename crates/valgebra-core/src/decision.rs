@@ -181,6 +181,7 @@ impl Budget {
 pub(super) fn descending<T>(budget: &Budget, refused: T, descent: impl FnOnce() -> T) -> T {
     let depth = budget.depth.get();
     if depth >= MAX_DECISION_DEPTH {
+        a_bound_is_met();
         return refused;
     }
     budget.depth.set(depth + 1);
@@ -346,13 +347,36 @@ pub(crate) fn kind_reading(
 /// Spend one unit of `budget`; returns `false` when it is already exhausted, the
 /// signal a budgeted decision uses to stop and report the conservative answer.
 pub(super) fn spend(budget: &Budget) -> bool {
-    match budget.steps.get().checked_sub(1) {
-        Some(remaining) => {
-            budget.steps.set(remaining);
-            true
-        }
-        None => false,
+    if let Some(remaining) = budget.steps.get().checked_sub(1) {
+        budget.steps.set(remaining);
+        true
+    } else {
+        a_bound_is_met();
+        false
     }
+}
+
+thread_local! {
+    /// How many times a reading on this thread has stopped at a step or a
+    /// depth bound ([`bounds_met`]): a step refused, a level refused, and a
+    /// reading declined for want of a step.
+    static BOUNDS_MET: Cell<u64> = const { Cell::new(0) };
+}
+
+/// Count a reading stopped at a step or a depth bound: where it answered
+/// `Unknown` for want of a step or a level, which more of either might decide.
+fn a_bound_is_met() {
+    BOUNDS_MET.with(|met| met.set(met.get() + 1));
+}
+
+/// How many readings on this thread have stopped at a bound so far.
+///
+/// Read before and after a reading: where the count moved, its `Unknown` is a
+/// function of the steps and the depth it was read with as well as of its
+/// terms, and where it did not, a reading of the same terms with as many steps
+/// and no deeper declines alike (`narrowed_by_its_members`, in [`emptiness`]).
+pub(super) fn bounds_met() -> u64 {
+    BOUNDS_MET.with(Cell::get)
 }
 
 impl SeqShape {
@@ -981,6 +1005,7 @@ impl Schema {
         // tuple against its two thousand corners, read a part at a time cost
         // seventy times what the decline did and answered nothing more.
         if cx.budget.left() == 0 {
+            a_bound_is_met();
             return Relation::Unknown;
         }
         if let Schema::Union(members) = self {
@@ -1893,6 +1918,7 @@ impl Schema {
                 Relation::Holds => {}
             }
             if declined && cx.budget.left() == 0 {
+                a_bound_is_met();
                 return Relation::Unknown;
             }
         }

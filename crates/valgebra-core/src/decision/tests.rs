@@ -11372,6 +11372,173 @@ fn the_readings_held_are_bounded() {
     assert_eq!(READINGS.with(|readings| readings.borrow().len()), 1);
 }
 
+/// A narrowed meet's verdict is held for the query that read it with nothing
+/// assumed, where it is decided or no bound stopped the reading, and read back
+/// for no step; a reading a bound stopped, or one read under a hypothesis, is
+/// held nowhere. `object & (~object | {tag: int})` narrows to an inhabited
+/// record, and `int & (~int | odd)` to the integers a predicate keeps, an
+/// `Unknown` no bound stopped.
+// THEORY: a-memo-is-revertible-or-absent
+#[test]
+fn a_narrowed_meet_is_held_where_it_rests_on_nothing() {
+    use super::emptiness::{NARROWED, narrowed_by_its_members};
+    let object = open(Vec::new());
+    let guarded = [
+        object.clone(),
+        Schema::union([
+            object.complement(),
+            open(vec![field("tag", Schema::Int, true)]),
+        ]),
+    ];
+    let odd = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    let predicate = [Schema::Int, Schema::union([Schema::Int.complement(), odd])];
+    let held = |members: &[Schema], cx: &Cx<'_>| {
+        let narrowed = narrowed_meet(members, cx).expect("the guard narrows");
+        NARROWED.with_borrow(|held| held.get(&(cx.query(), narrowed)).copied())
+    };
+    for (members, verdict) in [
+        (&guarded, Verdict::Inhabited),
+        (&predicate, Verdict::Unknown),
+    ] {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        assert_eq!(narrowed_by_its_members(members, &mut cx), Some(verdict));
+        assert_eq!(held(members, &cx), Some(verdict), "held for the query");
+        let left = budget.left();
+        assert_eq!(narrowed_by_its_members(members, &mut cx), Some(verdict));
+        assert_eq!(budget.left(), left, "read back for no step");
+    }
+    let none = Budget::new(0);
+    let mut spent = Cx::new(&NoLeafRelations, &[], &none);
+    assert_eq!(
+        narrowed_by_its_members(&guarded, &mut spent),
+        Some(Verdict::Unknown)
+    );
+    assert_eq!(held(&guarded, &spent), None, "a bound stopped it");
+    let assuming = |assume: &dyn Fn(&mut Cx<'_>)| {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        assume(&mut cx);
+        let verdict = narrowed_by_its_members(&guarded, &mut cx);
+        (verdict, held(&guarded, &cx))
+    };
+    let decided = (Some(Verdict::Inhabited), None);
+    assert_eq!(
+        assuming(&|cx| cx.trail.push((Schema::Int, Schema::Str))),
+        decided,
+        "a goal assumed"
+    );
+    assert_eq!(
+        assuming(&|cx| cx.visiting.push(DefIx::new(0))),
+        decided,
+        "a definition being resolved"
+    );
+    let narrowing = Cell::new(None);
+    assert_eq!(
+        assuming(&|cx| narrowing.set(Some(Narrowing::open(cx.query())))),
+        decided,
+        "a narrowed question open"
+    );
+    drop(narrowing);
+    assert_eq!(NARROWING.with(Cell::get), 0);
+}
+
+/// The narrowed meets held are emptied at the readings' bound, and what is
+/// held after is the verdict that found the table full; below the bound, a
+/// second verdict is held beside the first.
+#[test]
+fn the_narrowed_meets_held_are_bounded() {
+    use super::emptiness::{NARROWED, narrowed_by_its_members};
+    NARROWED.with_borrow_mut(|held| {
+        held.clear();
+        for query in 0..READINGS_HELD {
+            held.insert((u64::MAX - query as u64, Schema::Int), Verdict::Unknown);
+        }
+    });
+    let object = open(Vec::new());
+    let guarded = |tag: Schema| {
+        [
+            object.clone(),
+            Schema::union([
+                object.clone().complement(),
+                open(vec![field("tag", tag, true)]),
+            ]),
+        ]
+    };
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    let _int = narrowed_by_its_members(&guarded(Schema::Int), &mut cx);
+    assert_eq!(
+        NARROWED.with_borrow(std::collections::HashMap::len),
+        1,
+        "emptied"
+    );
+    let _str = narrowed_by_its_members(&guarded(Schema::Str), &mut cx);
+    assert_eq!(
+        NARROWED.with_borrow(std::collections::HashMap::len),
+        2,
+        "kept below it"
+    );
+}
+
+/// A reading stopped at a bound is counted wherever it stops: a step refused,
+/// a level refused, the parts left unread for want of a step, and the members
+/// of a union left unasked for want of one, counted beside what its first
+/// member's own refusal counts. A step spent is no stop.
+#[test]
+fn every_stop_at_a_bound_is_counted() {
+    let moved = |stop: &dyn Fn()| {
+        let before = bounds_met();
+        stop();
+        bounds_met() - before
+    };
+    assert_eq!(
+        moved(&|| {
+            let _spent = spend(&Budget::new(1));
+        }),
+        0,
+        "a step spent"
+    );
+    assert_eq!(
+        moved(&|| {
+            let _refused = spend(&Budget::new(0));
+        }),
+        1,
+        "a step refused"
+    );
+    let deep = Budget::new(DECISION_BUDGET);
+    deep.depth.set(MAX_DECISION_DEPTH);
+    assert_eq!(
+        moved(&|| descending(&deep, (), || ())),
+        1,
+        "a level refused"
+    );
+    let none = Budget::new(0);
+    let parts = || {
+        let mut cx = Cx::new(&NoLeafRelations, &[], &none);
+        let _answer = Schema::Int.decided_by_parts(&Schema::Str, &mut cx, false);
+    };
+    assert_eq!(moved(&parts), 1, "the parts unread");
+    let odd = |index| Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Predicate(PredIx::new(index))].into(),
+    };
+    let alone = || {
+        let mut cx = Cx::new(&NoLeafRelations, &[], &none);
+        let _answer = odd(0).is_subtype_rec(&Schema::Str, &mut cx);
+    };
+    let members = [odd(0), odd(1)];
+    let union = Schema::union(members.clone());
+    let unasked = || {
+        let mut cx = Cx::new(&NoLeafRelations, &[], &none);
+        let _answer = union.union_below(&members, &Schema::Str, &mut cx);
+    };
+    assert_eq!(moved(&unasked), moved(&alone) + 1, "the members unasked");
+}
+
 /// A reading run within a cap spends no more than the cap, and the query is
 /// charged what it spent: the steps left after it are the steps left before it
 /// less those, whatever the cap was.

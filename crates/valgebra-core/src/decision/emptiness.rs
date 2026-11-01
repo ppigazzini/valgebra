@@ -16,7 +16,9 @@
 //! here decline, the question is asked once more of the *set* the schema
 //! denotes, under the lowering's bound on what building it may cost.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+
+use rustc_hash::FxHashMap;
 
 use crate::descr::classes::Reach;
 use crate::descr::lower::{Constants, an_empty_reading_stands, read_widened};
@@ -33,8 +35,9 @@ use super::records::{
     empty_without_the_maps_unread, keyed_map_meet_verdict, keyed_map_minus_keyed_maps,
 };
 use super::{
-    Budget, Cx, DECISION_BUDGET, LeafRelations, NoLeafRelations, RESPELLING, descending,
-    has_complementary_pair, has_disjoint_pair, pushed_complement_is_placed, spend,
+    Budget, Cx, DECISION_BUDGET, LeafRelations, NARROWING, NoLeafRelations, READINGS_HELD,
+    RESPELLING, bounds_met, descending, has_complementary_pair, has_disjoint_pair,
+    pushed_complement_is_placed, spend,
 };
 
 impl Schema {
@@ -786,11 +789,52 @@ fn the_empty_container_in_every_member(members: &[Schema]) -> Verdict {
 /// clauses and past [`MAX_DISTRIBUTED_TERMS`]. A union is narrowed only by the
 /// members beside it, never by itself: a branch meets its own union in itself.
 ///
+/// A query asks one narrowed meet many times over where the rules decline it,
+/// since every goal that reaches it reads it again: a record of guarded
+/// records three deep, below the complement of a record, read its narrowed
+/// fields more than a hundred times at thirty thousand steps a reading, and
+/// spent the query's million steps before the reading that answers. So the
+/// verdict is held for the query ([`NARROWED`]) where it was read with
+/// nothing assumed -- no goal on the trail, no definition being resolved, no
+/// meet open for the query's budget, no narrowed question open -- and is
+/// decided, or no reading under it stopped at a step or a depth bound
+/// ([`bounds_met`]). Read back, it is the answer a reading
+/// of the same terms gives with as many steps left and no deeper, and a
+/// reading with fewer steps or deeper gives it too or stops at a bound: the
+/// memo takes no answer away, and spares the steps. An `Unknown` a bound
+/// stopped is not held, since more steps may decide it, and nothing read under
+/// a hypothesis is, which is what a memo inside the coinductive procedure owes
+/// (`docs/dev/10-theory.md`, "A cache under coinduction is revertible or
+/// absent").
+///
 /// Out of line: asked of every meet the rules decline, it answers `None` at the
 /// first look where no member is a union.
 #[inline(never)]
-fn narrowed_by_its_members(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdict> {
-    Some(narrowed_meet(members, cx)?.empty_and_region(cx).0)
+pub(super) fn narrowed_by_its_members(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdict> {
+    let narrowed = narrowed_meet(members, cx)?;
+    let query = cx.query();
+    if !(cx.trail.is_empty()
+        && cx.visiting.is_empty()
+        && !OpenMeet::any_open(cx.budget)
+        && NARROWING.with(Cell::get) != query)
+    {
+        return Some(narrowed.empty_and_region(cx).0);
+    }
+    let key = (query, narrowed);
+    if let Some(known) = NARROWED.with_borrow(|held| held.get(&key).copied()) {
+        return Some(known);
+    }
+    let before = bounds_met();
+    let verdict = key.1.empty_and_region(cx).0;
+    if verdict != Verdict::Unknown || bounds_met() == before {
+        NARROWED.with_borrow_mut(|held| {
+            if held.len() >= READINGS_HELD {
+                held.clear();
+            }
+            held.insert(key, verdict);
+        });
+    }
+    Some(verdict)
 }
 
 /// The meet of `members` with every branch of a union member dropped that
@@ -1101,6 +1145,13 @@ fn normal_form_within(members: &[Schema], bound: usize) -> bool {
 }
 
 thread_local! {
+    /// The verdicts of the narrowed meets the queries on this thread read
+    /// resting on no open hypothesis, by query number
+    /// ([`narrowed_by_its_members`]). Held beside the query for the reason
+    /// [`Readings`](super::Readings) is, and emptied at [`READINGS_HELD`]
+    /// verdicts as that memo is.
+    pub(super) static NARROWED: RefCell<FxHashMap<(u64, Schema), Verdict>> =
+        RefCell::new(FxHashMap::default());
     /// The meets open on this thread's emptiness paths, each beside the address
     /// of the budget of the query that opened it.
     ///

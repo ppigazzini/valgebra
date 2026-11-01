@@ -1088,6 +1088,27 @@ under the same sets shares the number, and the memo is emptied at
 `READINGS_HELD` answers. `a_query_keeps_its_readings_to_itself` and
 `the_readings_held_are_bounded` in `decision/tests.rs` hold the two claims.
 
+**A narrowed meet's verdict is read once a query where it rests on nothing.**
+A union in a meet narrowed by the complements beside it
+(`narrowed_by_its_members` in `decision/emptiness.rs`) is read under the
+query's steps, and a query whose rules decline the narrowed meet asks it again
+at every goal reaching it: a record of guarded records three deep, below the
+complement of a record, read its narrowed fields more than a hundred times at
+thirty thousand steps a reading, and spent its million steps before the
+reading that answers. The verdict is held under the query's number (`NARROWED`)
+where it was read with nothing assumed -- the trail and `visiting` empty, no
+meet open for the query's budget, no narrowed question open -- and is decided,
+or no reading under it stopped at a bound: `bounds_met` in `decision.rs` counts
+each stop, a step refused, a level refused, and a reading declined for want of
+a step. A verdict so read is the answer a reading of the same terms gives with
+as many steps left and no deeper, and a reading with fewer steps or deeper
+gives it too or stops at a bound, so the memo takes no answer away; an
+`Unknown` a bound stopped is not held, since more steps may decide it. The memo
+is emptied at `READINGS_HELD` verdicts as the readings are.
+`a_narrowed_meet_is_held_where_it_rests_on_nothing`,
+`the_narrowed_meets_held_are_bounded` and `every_stop_at_a_bound_is_counted`
+in `decision/tests.rs` hold the three claims.
+
 **One context carries a query through both recursions.** The oracle, the
 definitions, the budget and two stacks of hypotheses travel together in
 `decision::Cx`, built where a query starts and handed down by `&mut`: the trail

@@ -1257,6 +1257,50 @@ def test_a_narrowed_meet_left_open_leaves_steps_to_the_readings_after_it() -> No
     assert guarded.relation_to(union(obj, complement(Validator(str)))) == "subset"
 
 
+def test_a_declined_narrowed_meet_is_read_once_a_query() -> None:
+    """A narrowed meet the rules decline is not read again by every goal.
+
+    A record whose field is a dict of guarded records three deep shares no
+    value with a record whose same field is `True` or a word. The narrowed
+    guards decline, and read again at each goal reaching them they spent the
+    query's steps before the field meet was proved empty.
+    """
+    json = recursive(
+        lambda j: union(
+            None,
+            bool,
+            int,
+            float,
+            str,
+            Validator(list[j]),  # ty: ignore[invalid-type-form]
+            Validator({str: j}),
+        )
+    )
+    obj = Validator(dict[str, json])  # ty: ignore[invalid-type-form]
+
+    def guard(field: Any) -> Validator[Any]:
+        return intersection(
+            obj,
+            union(complement(obj), Validator({"tag": field}).open()),
+            union(complement(obj), Validator({"tag": json}).open()),
+        )
+
+    number = intersection(union(int, float), complement(bool))
+    at_least_zero = union(Annotated[int, at.Ge(0)], Annotated[float, at.Ge(0)])
+    nested = guard(guard(guard(intersection(number, at_least_zero))))
+    record = Validator({"a": nested}).close()
+    other = Validator(
+        {
+            "a": intersection(json, Literal[True, "a"]),
+            "b?": Validator({"a": json}).open(),
+            str: Validator(
+                {"a": Validator(tuple[json, ...])}  # ty: ignore[invalid-type-form]
+            ).close(),
+        }
+    )
+    assert record.relation_to(complement(other)) == "subset"
+
+
 def test_a_length_reading_asks_no_second_exploration_of_an_element() -> None:
     """A set's element is read empty without the rules exploring it again.
 
