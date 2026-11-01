@@ -687,7 +687,10 @@ a `#` inside a class under verbose mode, and outside a class the escapes `\<`,
 `\>` and `\b{`, which this engine reads as word boundaries and `re` as the
 characters, a `+` after a quantifier, which `re` reads as possessive, and a
 count holding whitespace or a verbose comment, which `re` reads as text, each
-named by the reading this engine would give it. A count is read by this
+named by the reading this engine would give it. A quantifier on a quantifier or
+on an assertion, which this engine reads and `re` refuses, is refused in `re`'s
+words, "multiple repeat" and "nothing to repeat" (`Before` in the same module
+holds what stands before a quantifier). A count is read by this
 engine's grammar (`counted`), so a brace it refuses at the parse is left to
 the parse rather than called a count.
 

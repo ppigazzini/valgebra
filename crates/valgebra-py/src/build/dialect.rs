@@ -47,6 +47,15 @@
 //! well. Each is refused by what it is here. The escapes that take braces --
 //! `\p{..}`, `\P{..}`, `\x{..}`, `\u{..}`, `\U{..}` -- are skipped whole, so
 //! their braces are no count and the quantifier after one is the first.
+//!
+//! The converse direction is a pattern this engine spells and `re` does not,
+//! which builds here with a meaning no `re` call can check. `re` repeats an
+//! atom and nothing else: a quantifier on a quantifier is "multiple repeat"
+//! to it, and one on an assertion "nothing to repeat", where this engine reads
+//! `a{2}{3}` as `a{6}`, `a**` as `(?:a*)*` and `^*` as the empty match. Each is
+//! refused in `re`'s words. A `?` right after a quantifier makes it lazy and
+//! a `+` possessive, and only right after: past a space or a comment in
+//! verbose mode, `re` reads either as a quantifier of its own.
 
 use std::iter::Peekable;
 
@@ -74,21 +83,24 @@ pub(crate) fn reject_reserved_class_syntax(pattern: &str) -> PyResult<()> {
     // outside each group the cursor is inside, which the group's `)` restores.
     let mut verbose = false;
     let mut outer: Vec<bool> = Vec::new();
-    // Whether the character just read was a quantifier outside a class, which
-    // is what makes a `+` after it possessive to `re`.
-    let mut quantified = false;
+    // What stands before a quantifier outside a class, which decides whether
+    // `re` reads one there at all.
+    let mut before = Before::Atom;
     // The cursor advances by taking from the iterator and never by arithmetic,
     // so the scan terminates by construction: an arm that looks ahead either
     // takes what it saw or leaves it for the next turn.
     while let Some((at, here)) = cursor.next() {
         let next = cursor.peek().copied();
-        let after_quantifier = std::mem::replace(&mut quantified, false);
+        let previous = std::mem::replace(&mut before, Before::Atom);
         match here {
             // Inside a class in verbose mode, the two characters the engines
             // read differently, before any arm below reads them as members.
             symbol if inside && verbose && (symbol.is_whitespace() || symbol == '#') => {
                 return Err(verbose_member(symbol, pattern, at));
             }
+            // Outside one, whitespace both skip, which leaves what it follows
+            // where it was, a quantifier no longer right before the cursor.
+            symbol if verbose && symbol.is_whitespace() => before = previous.skipped(),
             '(' if !inside => {
                 outer.push(verbose);
                 // `(?flags)` sets them for the rest of the group it stands in,
@@ -116,12 +128,20 @@ pub(crate) fn reject_reserved_class_syntax(pattern: &str) -> PyResult<()> {
                         break;
                     }
                 }
+                before = previous.skipped();
             }
             // An escape carries its character with it, whichever side of a
             // class it is on: `[\[&&x]` holds an operator and no nested set.
-            '\\' => read_escape(&mut cursor, inside, pattern, at)?,
-            '+' if !inside && after_quantifier => return Err(possessive(pattern, at)),
-            '?' | '*' | '+' => quantified = !inside,
+            '\\' => {
+                if read_escape(&mut cursor, inside, pattern, at)? {
+                    before = Before::Assertion;
+                }
+            }
+            // An anchor is an assertion outside a class and a member inside
+            // one, and the arm takes no guard: what it sets is replaced at the
+            // next character, and inside a class no arm reads it.
+            '^' | '$' => before = Before::Assertion,
+            '?' | '*' | '+' if !inside => before = previous.quantified(here, pattern, at)?,
             '{' if !inside => {
                 if let Some((length, spaced)) =
                     counted(chars.get(at + 1..).unwrap_or_default(), verbose)
@@ -132,7 +152,7 @@ pub(crate) fn reject_reserved_class_syntax(pattern: &str) -> PyResult<()> {
                     for _ in 0..length {
                         cursor.next();
                     }
-                    quantified = true;
+                    before = previous.quantified('{', pattern, at)?;
                 }
             }
             '[' if !inside => {
@@ -192,8 +212,49 @@ pub(crate) fn reject_reserved_class_syntax(pattern: &str) -> PyResult<()> {
     Ok(())
 }
 
+/// What stands before a quantifier outside a class, as `re` reads it: a
+/// quantifier repeats an atom, and `re` refuses one on anything else.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Before {
+    /// An atom, a group or a class closed, or the start: what a quantifier
+    /// repeats, or what the compile refuses to.
+    Atom,
+    /// A quantifier just read, which a `?` right after makes lazy and a `+`
+    /// right after makes possessive to `re`.
+    Quantifier,
+    /// A quantifier made lazy, or one a verbose space or comment follows: a
+    /// quantifier after it repeats a repetition.
+    Repeated,
+    /// An assertion, `^`, `$`, `\A`, `\z`, `\b` or `\B`, which matches no
+    /// character for a quantifier to repeat.
+    Assertion,
+}
+
+impl Before {
+    /// What stands before the cursor after a verbose space or comment: the
+    /// same, except that a quantifier is no longer right before it.
+    const fn skipped(self) -> Before {
+        match self {
+            Before::Quantifier => Before::Repeated,
+            other => other,
+        }
+    }
+
+    /// What stands before the cursor after the quantifier `symbol` at `at`,
+    /// `{` for a count, or the refusal `re`'s grammar gives it.
+    fn quantified(self, symbol: char, pattern: &str, at: usize) -> PyResult<Before> {
+        match (self, symbol) {
+            (Before::Atom, _) => Ok(Before::Quantifier),
+            (Before::Quantifier, '?') => Ok(Before::Repeated),
+            (Before::Quantifier, '+') => Err(possessive(pattern, at)),
+            (Before::Quantifier | Before::Repeated, _) => Err(multiple_repeat(pattern, at)),
+            (Before::Assertion, _) => Err(nothing_to_repeat(pattern, at)),
+        }
+    }
+}
+
 /// Read the escape whose `\` sits at `at`, taking its character from the
-/// cursor.
+/// cursor, and answer whether it is an assertion outside a class.
 ///
 /// Outside a class three escapes are assertions here and literals to `re`:
 /// `\<` and `\>` the start and end of a word, and `\b{` the start of a named
@@ -205,10 +266,10 @@ fn read_escape<I: Iterator<Item = (usize, char)>>(
     inside: bool,
     pattern: &str,
     at: usize,
-) -> PyResult<()> {
+) -> PyResult<bool> {
     let escaped = cursor.next().map(|(_, symbol)| symbol);
     if inside {
-        return Ok(());
+        return Ok(false);
     }
     let braced = cursor.peek().map(|&(_, symbol)| symbol) == Some('{');
     let boundary = match escaped {
@@ -227,7 +288,7 @@ fn read_escape<I: Iterator<Item = (usize, char)>>(
             }
         }
     }
-    Ok(())
+    Ok(matches!(escaped, Some('A' | 'z' | 'b' | 'B')))
 }
 
 /// Read an inline flag group at the start of `rest`, which follows a `(`.
@@ -395,6 +456,26 @@ fn possessive(pattern: &str, index: usize) -> PyErr {
          again here, so the two read the pattern as different sets. This engine \
          has no possessive quantifier: write `(?:...)+` around the quantified \
          item to repeat it."
+    ))
+}
+
+/// The refusal for a quantifier on a quantifier, which `re` refuses.
+fn multiple_repeat(pattern: &str, index: usize) -> PyErr {
+    PyValueError::new_err(format!(
+        "a quantifier after a quantifier at position {index} in {pattern:?}: \
+         `re` refuses it as a multiple repeat, and this engine repeats the \
+         repetition, a meaning no `re` call can check. Write a group around \
+         the quantified item, as `(?:a{{2}}){{3}}`, to repeat a repetition."
+    ))
+}
+
+/// The refusal for a quantifier on an assertion, which `re` refuses.
+fn nothing_to_repeat(pattern: &str, index: usize) -> PyErr {
+    PyValueError::new_err(format!(
+        "a quantifier after an assertion at position {index} in {pattern:?}: \
+         `re` refuses it as nothing to repeat, since an assertion matches no \
+         character, and this engine repeats the empty match, a meaning no \
+         `re` call can check. Leave the assertion unquantified."
     ))
 }
 

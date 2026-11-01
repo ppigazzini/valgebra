@@ -450,6 +450,15 @@ a `ValueError` naming it. This engine has no possessive quantifier: write
 `(?:a?)+` to repeat the quantified item. Write a count without whitespace, or
 `\{` for the text.
 
+A quantifier repeats an atom in `re`, and nothing else. This engine reads one
+on a quantifier and one on an assertion too: `a{2}{3}` as `a{6}`, `a**` as
+`(?:a*)*`, and `^*` as the empty match, where `re` refuses each, as a
+"multiple repeat" and "nothing to repeat". Each raises a `ValueError` in those
+words, so a pattern means nothing here that `re` cannot check. A `?` right
+after a quantifier makes it lazy in both, and only right after: in verbose
+mode, `a* ?` is a quantifier on a quantifier to `re`. Write a group,
+`(?:a{2}){3}`, to repeat a repetition, and leave an assertion unquantified.
+
 **A pattern Python spells and this engine does not is refused**, which is the
 loud direction and the one to prefer. A lookaround (`(?=...)`, `(?<=...)`), a
 backreference (`\1`, `(?P=name)`), an inline comment (`(?#...)`), a named

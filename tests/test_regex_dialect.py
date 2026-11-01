@@ -217,8 +217,24 @@ def test_a_verbose_class_member_is_refused_rather_than_dropped(
         ("a{2}+", "possessive"),
         ("a{1, 3}", "whitespace inside the counted repetition"),
         ("(?x)a{1, 3}", "whitespace inside the counted repetition"),
+        ("a{2}{3}", "multiple repeat"),
+        ("a**", "multiple repeat"),
+        ("(?x)a* ?", "multiple repeat"),
+        ("^*", "nothing to repeat"),
+        (r"\b+", "nothing to repeat"),
     ],
-    ids=["optional", "digits", "count", "spaced-count", "verbose-spaced-count"],
+    ids=[
+        "optional",
+        "digits",
+        "count",
+        "spaced-count",
+        "verbose-spaced-count",
+        "stacked-count",
+        "stacked-star",
+        "verbose-stacked",
+        "quantified-anchor",
+        "quantified-boundary",
+    ],
 )
 def test_a_quantifier_the_engines_read_apart_is_refused(
     pattern: str, said: str
@@ -253,6 +269,29 @@ def test_what_python_does_with_each_quantifier_refused() -> None:
 
 
 @pytest.mark.parametrize(
+    ("pattern", "said"),
+    [
+        ("a{2}{3}", "multiple repeat"),
+        ("a**", "multiple repeat"),
+        ("a*??", "multiple repeat"),
+        ("(?x)a* ?", "multiple repeat"),
+        ("^*", "nothing to repeat"),
+        (r"\b+", "nothing to repeat"),
+    ],
+)
+def test_re_refuses_each_quantifier_on_no_atom(pattern: str, said: str) -> None:
+    """`re` repeats an atom only, and refuses the rest in the words quoted.
+
+    This engine reads each: `a{2}{3}` as `a{6}`, which admits `"aaaaaa"`, and
+    `^*` as the empty match. Grouped, the same repetition is one both read.
+    """
+    with pytest.raises(re.error, match=said):
+        re.compile(pattern)
+    assert re.fullmatch("(?:a{2}){3}", "aaaaaa") is not None
+    assert _matches("(?:a{2}){3}", "aaaaaa")
+
+
+@pytest.mark.parametrize(
     "topic",
     [
         "[[:alpha:]]",
@@ -266,6 +305,8 @@ def test_what_python_does_with_each_quantifier_refused() -> None:
         r"\B` on the empty string",
         "possessive",
         "whitespace in its braces",
+        "multiple repeat",
+        "nothing to repeat",
     ],
     ids=[
         "posix-classes",
@@ -279,6 +320,8 @@ def test_what_python_does_with_each_quantifier_refused() -> None:
         "non-boundary",
         "possessive-quantifier",
         "spaced-count",
+        "stacked-quantifier",
+        "quantified-assertion",
     ],
 )
 def test_the_page_names_the_divergence(topic: str) -> None:

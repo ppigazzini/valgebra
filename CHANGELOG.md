@@ -78,6 +78,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a class prints as its name only where its name builds the meet
 - fix: a signaling Decimal NaN is refused as a bound or a step, as nan is
 - fix: no value is longer than sys.maxsize
+- fix: a quantifier re refuses for repeating no atom is refused
 
 -->
 
@@ -350,6 +351,14 @@ answer of its own, or a repair to a change not yet released.
   the complements however its members nest, where both were `undecided`.
 
 ### Fixed
+
+- **A quantifier `re` refuses for repeating no atom is refused.** `re`
+  repeats an atom and refuses a quantifier on a quantifier, `a{2}{3}` or `a**`,
+  as a "multiple repeat", and one on an assertion, `^*` or `\b+`, as "nothing
+  to repeat". Each was built here with a meaning of this engine's, `a{2}{3}`
+  admitting `"aaaaaa"`, which no `re` call could check. Each now raises a
+  `ValueError` in `re`'s words. A lazy quantifier, `a*?`, is read as before,
+  and `(?:a{2}){3}` repeats a repetition in both.
 
 - **No value is longer than `sys.maxsize`.** CPython counts a length in a
   `Py_ssize_t` and `len()` raises past `sys.maxsize`, while a length bound was

@@ -80,14 +80,54 @@ fn a_reserved_form_is_refused_by_the_operator_it_would_have_read() {
         (r"[a]\<", "the start of a word"),
         // A `+` after a quantifier: possessive to `re` from 3.11 and an error
         // before, a second repetition here. `a?+` refuses `"aa"` there and
-        // admits it here. After a lazy quantifier `re` raises, and the scan
-        // refuses it in the same words rather than read it.
+        // admits it here.
         ("a?+", "possessive"),
         ("a*+", "possessive"),
         ("a++", "possessive"),
         (r"\d++\d", "possessive"),
         ("(?:a)?+", "possessive"),
-        ("a+?+", "possessive"),
+        // Any other quantifier on a quantifier, which `re` refuses as a
+        // multiple repeat and this engine reads as a repetition repeated:
+        // `a{2}{3}` is `a{6}` here. After a lazy `?` the quantifier is
+        // complete, so a `+` there is a third repetition and no possessive.
+        ("a**", "multiple repeat"),
+        ("a?*", "multiple repeat"),
+        ("a+*", "multiple repeat"),
+        ("a{2}*", "multiple repeat"),
+        ("a{2}{3}", "multiple repeat"),
+        ("a{2,}{3}", "multiple repeat"),
+        ("(?:ab){2}{2}", "multiple repeat"),
+        ("a*{2}", "multiple repeat"),
+        ("a*??", "multiple repeat"),
+        ("a*?*", "multiple repeat"),
+        ("a+?+", "multiple repeat"),
+        ("a{2}??", "multiple repeat"),
+        ("a{2}?{3}", "multiple repeat"),
+        (r"\p{L}{2}*", "multiple repeat"),
+        // In verbose mode a space or a comment between them changes nothing
+        // about the stack, and a `?` or `+` past one is a quantifier of its
+        // own to `re`, which takes neither as lazy or possessive there.
+        ("(?x)a* *", "multiple repeat"),
+        ("(?x)a*\n*", "multiple repeat"),
+        ("(?x)a* #c\n*", "multiple repeat"),
+        ("(?x)a{2} {3}", "multiple repeat"),
+        ("(?x)a* ?", "multiple repeat"),
+        ("(?x)a* +", "multiple repeat"),
+        // A quantifier on an assertion, which matches no character: `re`
+        // refuses it as nothing to repeat, and this engine repeats the empty
+        // match.
+        ("^*", "nothing to repeat"),
+        ("$*", "nothing to repeat"),
+        ("^?", "nothing to repeat"),
+        ("$+", "nothing to repeat"),
+        ("^{2}", "nothing to repeat"),
+        ("a^*", "nothing to repeat"),
+        ("(?m)^*", "nothing to repeat"),
+        (r"\A*", "nothing to repeat"),
+        (r"\z*", "nothing to repeat"),
+        (r"\b*", "nothing to repeat"),
+        (r"\B+", "nothing to repeat"),
+        ("(?x)^ *", "nothing to repeat"),
         // A count is a quantifier too, and taken whole: the `+` is read with
         // the cursor just past its `}`. An escape's braces are taken whole
         // before it, so the count after one is still a count.
@@ -210,6 +250,25 @@ fn a_form_the_two_engines_agree_on_is_left_alone() {
         // Inside a class a `+`, a `?` and a brace are members to both.
         "[a?+]",
         "[a{1, 3}]",
+        // A repetition repeated through a group, which both read alike, and a
+        // quantifier after a class, an escaped character, or a group around
+        // an assertion: each repeats an atom.
+        "(?:a*)*",
+        "(?:a{2}){3}",
+        "(?:^)*",
+        r"(?:\b)+",
+        "[a*]*",
+        r"\**",
+        r"\^*",
+        r"\$+",
+        "a*?b*",
+        "a{2}?b{3}",
+        // Outside verbose mode a space is an atom, which a quantifier repeats.
+        "^ *",
+        "a* *",
+        // In verbose mode, whitespace before a quantifier's operand is skipped.
+        "(?x)a *",
+        "(?x) ^a*",
         // An escaped brace is a literal to both, and so is what follows it.
         r"a\{1, 3}",
     ] {
