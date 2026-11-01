@@ -98,6 +98,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a sized base written bare is read as its refinement under no bound
 - fix: a narrowed meet's verdict is read once a query where it rests on nothing -- internal
 - fix: a refutation stands on a length every interpreter builds
+- fix: a standard-library value type is the class the interpreter's module binds
 
 -->
 
@@ -491,6 +492,21 @@ answer of its own, or a repair to a change not yet released.
   3.10 spelled with an object of its own are gone with it.
 
 ### Fixed
+
+- **A standard-library value type is the class the interpreter's module
+  binds.** The relations read `Decimal`, `Fraction`, the `datetime` types,
+  `UUID`, the `ipaddress` types and the `pathlib` paths as ordering, dividing
+  and measuring as their `==` says, and found each by identity with the class
+  its module binds in `sys.modules`. A program's own `fractions.py` or
+  `decimal.py`, beside its script, is imported under that name, so a class of
+  the program's was read as the standard library's, its order and its
+  equality trusted as a value type's. A module is now the standard library's
+  where the import system loaded it from the directory
+  `sysconfig.get_path("stdlib")` names, or froze or built it in, and a module
+  of the program's own leaves its classes declined: beside a `Fraction` of the
+  program's comparing as `5`, `Annotated[int, Ge(1)]` against
+  `Annotated[int, Gt(Fraction(1))]` is `undecided`, `2` being in the one and
+  not the other.
 
 - **A refutation stands on a length every interpreter builds.** A container
   holds its items in one allocation, which the allocator refuses past

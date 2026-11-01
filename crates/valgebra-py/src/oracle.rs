@@ -355,20 +355,106 @@ fn is_exact_rational(ty: &Bound<'_, PyType>) -> PyResult<bool> {
 
 /// Whether `ty` is exactly the class `name` the standard-library `module`
 /// binds, asked as [`is_a_value_type`] asks: by identity, among the modules
-/// imported so far.
+/// imported so far, where the module is the interpreter's
+/// ([`ships_with_the_interpreter`]).
 ///
 /// The modules are read as the dict they are, whose lookup raises nothing
 /// where `module` is not imported. Asked of every bound a refinement over the
 /// integers compares, a `KeyError` made and dropped a bound was a third of
 /// the time an emptiness over the JSON value took.
-fn is_stdlib_class(ty: &Bound<'_, PyType>, module: &str, name: &str) -> PyResult<bool> {
+fn is_stdlib_class(ty: &Bound<'_, PyType>, module: &'static str, name: &str) -> PyResult<bool> {
     let modules = SYS_MODULES
         .import(ty.py(), "sys", "modules")?
         .cast::<PyDict>()?;
-    let Some(module) = modules.get_item(module)? else {
+    let Some(bound) = modules.get_item(module)? else {
         return Ok(false);
     };
-    Ok(module.getattr_opt(name)?.is_some_and(|class| class.is(ty)))
+    if !bound.getattr_opt(name)?.is_some_and(|class| class.is(ty)) {
+        return Ok(false);
+    }
+    ships_with_the_interpreter(module, &bound)
+}
+
+/// Whether `module`, the module `sys.modules` binds to `name`, is the one the
+/// interpreter ships: frozen or built into it, or loaded from the directory
+/// the standard library lives in, `sysconfig.get_path("stdlib")`.
+///
+/// A program's own `fractions.py`, beside its script or on its path, is
+/// imported under the standard library's name, and the class it binds is the
+/// program's: one comparing as `5` and rounding as `0` and `1` would read as a
+/// `Fraction` ordering as its `==` says. So a class is a value type only where
+/// the module binding it is the interpreter's. The directory is `stdlib` and
+/// never `platstdlib`, which in a virtual environment is the environment's own
+/// and holds its `site-packages`, and the origin is the one the import system
+/// recorded, read resolved and in the platform's case. A module this cannot
+/// place -- one with no origin, or a standard library read from an archive --
+/// is taken for none of the interpreter's, so its classes order as unknown,
+/// the decline.
+///
+/// What the interpreter's module imports in turn is the interpreter's too:
+/// `decimal` binds `_decimal`'s class, and a program replacing that
+/// accelerator, or a class the module binds, changes the interpreter
+/// (`docs/14-soundness.md`).
+///
+/// Read once for each module object and kept under its name, so a
+/// `sys.modules` entry replaced is read again, and the names being those of
+/// [`STDLIB_VALUE_TYPES`], the record holds six at most. It is a dict, so a
+/// module the record lets go of is released with no lock held.
+fn ships_with_the_interpreter(name: &'static str, module: &Bound<'_, PyAny>) -> PyResult<bool> {
+    static READ: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
+    let py = module.py();
+    let read = READ
+        .get_or_try_init(py, || Ok::<_, PyErr>(PyDict::new(py).unbind()))?
+        .bind(py);
+    if let Some(held) = read.get_item(name)? {
+        let (kept, verdict): (Bound<'_, PyAny>, bool) = held.extract()?;
+        if kept.is(module) {
+            return Ok(verdict);
+        }
+    }
+    let verdict = placed_in_the_standard_library(module)?;
+    read.set_item(name, (module, verdict))?;
+    Ok(verdict)
+}
+
+/// Whether the import system loaded `module` from the interpreter itself or
+/// from the standard library's directory ([`ships_with_the_interpreter`]).
+fn placed_in_the_standard_library(module: &Bound<'_, PyAny>) -> PyResult<bool> {
+    static ROOT: PyOnceLock<Option<String>> = PyOnceLock::new();
+    let py = module.py();
+    let spec = module.getattr_opt(intern!(py, "__spec__"))?;
+    let Some(origin) = spec
+        .filter(|spec| !spec.is_none())
+        .map(|spec| spec.getattr_opt(intern!(py, "origin")))
+        .transpose()?
+        .flatten()
+        .and_then(|origin| origin.extract::<String>().ok())
+    else {
+        return Ok(false);
+    };
+    if origin == "frozen" || origin == "built-in" {
+        return Ok(true);
+    }
+    let resolved = |path: &str| -> PyResult<String> {
+        let paths = py.import(intern!(py, "os"))?.getattr(intern!(py, "path"))?;
+        let real = paths.call_method1(intern!(py, "realpath"), (path,))?;
+        paths
+            .call_method1(intern!(py, "normcase"), (real,))?
+            .extract()
+    };
+    let root = ROOT.get_or_try_init(py, || {
+        let stdlib = py
+            .import(intern!(py, "sysconfig"))?
+            .call_method1(intern!(py, "get_path"), ("stdlib",))?;
+        if stdlib.is_none() {
+            return Ok::<_, PyErr>(None);
+        }
+        Ok(Some(resolved(&stdlib.extract::<String>()?)?))
+    })?;
+    let Some(root) = root else {
+        return Ok(false);
+    };
+    Ok(std::path::Path::new(&resolved(&origin)?).starts_with(root))
 }
 
 /// The digits past which a bound is not rounded to an `int`: the
@@ -403,10 +489,11 @@ static SYS_MODULES: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 /// [`STDLIB_VALUE_TYPES`].
 ///
 /// Asked by identity with the class the module that defines it binds, never by
-/// the `__module__` or the name a class states: a class body can state any,
-/// and a module of the program's own can take a standard-library name. A
-/// module not imported defines no class a value has, so it is looked up among
-/// the imported ones and never imported here. A subclass is none of these.
+/// the `__module__` or the name a class states: a class body can state any.
+/// And the module is the interpreter's ([`ships_with_the_interpreter`]): one of
+/// the program's own can take a standard-library name. A module not imported
+/// defines no class a value has, so it is looked up among the imported ones
+/// and never imported here. A subclass is none of these.
 fn is_a_value_type(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let py = ty.py();
     let builtins = [
@@ -423,13 +510,16 @@ fn is_a_value_type(ty: &Bound<'_, PyType>) -> PyResult<bool> {
         return Ok(true);
     }
     let modules = SYS_MODULES.import(py, "sys", "modules")?;
-    for (module, names) in STDLIB_VALUE_TYPES {
-        let Some(module) = modules.get_item(*module).ok() else {
+    for (name, classes) in STDLIB_VALUE_TYPES {
+        let Some(module) = modules.get_item(*name).ok() else {
             continue;
         };
-        for name in *names {
-            if module.getattr_opt(*name)?.is_some_and(|class| class.is(ty)) {
-                return Ok(true);
+        for class in *classes {
+            if module
+                .getattr_opt(*class)?
+                .is_some_and(|class| class.is(ty))
+            {
+                return ships_with_the_interpreter(name, &module);
             }
         }
     }

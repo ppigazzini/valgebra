@@ -702,7 +702,10 @@ declined rather than read as that one: a builtin subclass with an `__eq__` or
 an order of its own (`equal_values_read_alike`, `compare`), a sequence bound
 whose items a value's items may not order against, an enumeration whose
 `_missing_` or metaclass hooks are its own, a class whose `__slots__` or `mro()`
-code writes after the class is made. A rule that reads an answer's negative
+code writes after the class is made, and a class a module of the program's own
+binds under a standard-library name, which the value types are read by identity
+with (`ships_with_the_interpreter` in `oracle.rs` places a module by where the
+import system loaded it). A rule that reads an answer's negative
 side as a refutation states at its site what that negative means for `nan`,
 for a class this oracle does not trust, and for a question it declined.
 

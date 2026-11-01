@@ -22,6 +22,7 @@
 use std::ffi::CString;
 
 use pyo3::types::{PyDict, PyList};
+use rusty_fork::rusty_fork_test;
 
 use super::*;
 use crate::validator::Validator;
@@ -1876,4 +1877,92 @@ fn a_signal_reading_a_class_is_the_answer() {
         );
         quiet(oracle);
     });
+}
+
+/// A module built under `name` whose import the import system recorded at
+/// `origin`, `None` for no origin.
+fn module_from<'py>(py: Python<'py>, name: &str, origin: Option<&str>) -> Bound<'py, PyAny> {
+    let module = pyo3::types::PyModule::new(py, name).expect("a module object");
+    let options = PyDict::new(py);
+    options.set_item("origin", origin).expect("a dict holds it");
+    let spec = py
+        .import("importlib.machinery")
+        .and_then(|machinery| machinery.getattr("ModuleSpec"))
+        .and_then(|spec| spec.call((name, py.None()), Some(&options)))
+        .expect("a module spec");
+    module
+        .setattr("__spec__", spec)
+        .expect("a module takes a spec");
+    module.into_any()
+}
+
+// THEORY: a-constant-is-the-values-equal-to-it
+/// The standard library's module is the one the interpreter ships: loaded
+/// from the directory `sysconfig` names for it, or frozen or built in. One
+/// loaded from elsewhere under its name is the program's own, one with no
+/// origin is placed nowhere, and a module replaced under a name is read again
+/// rather than answered from the one before it.
+#[test]
+fn the_standard_library_is_the_module_the_interpreter_ships() {
+    Python::attach(|py| {
+        let ships = |module: &Bound<'_, PyAny>| {
+            ships_with_the_interpreter("fractions", module).expect("a module is placed")
+        };
+        let shipped = py
+            .import("fractions")
+            .expect("fractions imports")
+            .into_any();
+        assert!(ships(&shipped), "the module the interpreter loaded");
+        let elsewhere = module_from(py, "fractions", Some("/nowhere/fractions.py"));
+        assert!(!ships(&elsewhere), "a program's own, under the name");
+        assert!(ships(&shipped), "the shipped module, read again");
+        let stdlib: String = py
+            .import("sysconfig")
+            .and_then(|sysconfig| sysconfig.call_method1("get_path", ("stdlib",)))
+            .and_then(|path| path.extract())
+            .expect("the standard library's directory");
+        let inside = format!("{stdlib}/fractions.py");
+        assert!(ships(&module_from(py, "fractions", Some(&inside))));
+        assert!(ships(&module_from(py, "fractions", Some("frozen"))));
+        assert!(ships(&module_from(py, "fractions", Some("built-in"))));
+        assert!(!ships(&module_from(py, "fractions", None)), "no origin");
+        let unplaced = pyo3::types::PyModule::new(py, "fractions").expect("a module object");
+        assert!(!ships(unplaced.as_any()), "no spec");
+    });
+}
+
+rusty_fork_test! {
+    /// A class a module of the program's own binds under a standard-library
+    /// name is neither an exact rational nor a value type, and the shipped
+    /// class is neither while the name binds the other module: the class is
+    /// asked by identity with what the interpreter's module binds. Run in a
+    /// process of its own, since `sys.modules` is swapped.
+    #[test]
+    fn a_class_a_shadowing_module_binds_is_no_value_type() {
+        Python::attach(|py| {
+            let modules = py
+                .import("sys")
+                .and_then(|sys| sys.getattr("modules"))
+                .expect("sys.modules");
+            let shipped = py.import("fractions").expect("fractions imports");
+            let fraction = shipped.getattr("Fraction").expect("Fraction");
+            let fraction = fraction.cast::<PyType>().expect("a class");
+            let shadow = module_from(py, "fractions", Some("/nowhere/fractions.py"));
+            py.run(
+                c"class Fraction:\n    pass\n",
+                Some(&shadow.getattr("__dict__").unwrap().cast_into::<PyDict>().unwrap()),
+                None,
+            )
+            .expect("the shadow's class");
+            let own = shadow.getattr("Fraction").unwrap();
+            let own = own.cast::<PyType>().unwrap();
+            modules.set_item("fractions", &shadow).unwrap();
+            assert!(!is_exact_rational(own).unwrap());
+            assert!(!is_a_value_type(own).unwrap());
+            assert!(!is_exact_rational(fraction).unwrap(), "the name binds the shadow");
+            modules.set_item("fractions", &shipped).unwrap();
+            assert!(is_exact_rational(fraction).unwrap());
+            assert!(is_a_value_type(fraction).unwrap());
+        });
+    }
 }

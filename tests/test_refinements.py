@@ -3,7 +3,9 @@ import functools
 import json
 import math
 import operator
+import pathlib
 import re
+import subprocess
 import sys
 import types
 import typing
@@ -708,6 +710,73 @@ def test_an_emptiness_query_runs_a_bound_comparison() -> None:
         sys.setprofile(None)
     assert empty
     assert compared, "deciding the bound conjunction ordered the two operands"
+
+
+_SHADOW = """
+import numbers
+
+
+class {name}:
+    \"\"\"Compares as 5 and rounds as 0 and 1.\"\"\"
+
+    def __init__(self, *args): pass
+    def __floor__(self): return 0
+    def __ceil__(self): return 1
+    def __lt__(self, other): return 5 < other
+    def __le__(self, other): return 5 <= other
+    def __gt__(self, other): return 5 > other
+    def __ge__(self, other): return 5 >= other
+    def __eq__(self, other): return 5 == other
+    def __hash__(self): return 5
+
+
+numbers.Rational.register({name})
+"""
+
+_ASKED_UNDER_THE_SHADOW = """
+import sys
+sys.path.insert(0, sys.argv[1])
+from {module} import {name}
+from typing import Annotated
+from annotated_types import Ge, Gt
+from valgebra import Validator
+above = Validator(Annotated[int, Gt({name}(1))])
+from_one = Validator(Annotated[int, Ge(1)])
+print(from_one.relation_to(above), from_one.is_valid(2), above.is_valid(2))
+"""
+
+
+@pytest.mark.parametrize(
+    ("module", "name"), [("fractions", "Fraction"), ("decimal", "Decimal")]
+)
+def test_a_module_of_the_programs_own_under_a_standard_library_name_is_its_own(
+    tmp_path: pathlib.Path, module: str, name: str
+) -> None:
+    """A class a shadowing module binds is the program's, not a value type.
+
+    A `fractions.py` or `decimal.py` beside a program is imported under the
+    standard library's name, and its class here compares as `5` and rounds as
+    `0` and `1`. Read as the standard library's, `Gt` of it rounded to `Ge(1)`
+    and `Ge(1)` read as below it, though `2` is in the one and not the other.
+    The module is placed by where the import system loaded it from, so the
+    class orders as unknown and the pair declines. Asked in a child, whose
+    path the shadow heads.
+    """
+    (tmp_path / f"{module}.py").write_text(_SHADOW.format(name=name), encoding="utf-8")
+    asked = subprocess.run(  # noqa: S603 -- fixed interpreter, in-repo program
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            _ASKED_UNDER_THE_SHADOW.format(module=module, name=name),
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert asked.stdout.split() == ["undecided", "True", "False"], asked.stderr
 
 
 class _CountedBound(str):

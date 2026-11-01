@@ -385,7 +385,14 @@ The soundness is relative to a small, explicit trust base:
   `ipaddress` addresses, networks and interfaces, and the `pathlib` paths: each
   orders, divides and measures, where it does, as its `==` says. A class stating
   one of their modules is none of them, and a module of the program's own
-  imported under one of those names is what the program means by it. A class
+  imported under one of those names is its own, and so are its classes: the
+  module is the interpreter's where the import system loaded it from the
+  directory `sysconfig.get_path("stdlib")` names, or froze or built it in, and
+  a module placed nowhere -- one with no origin, or a standard library read
+  from an archive -- is taken for the program's, whose classes are declined.
+  What that module imports in turn, an accelerator such as `_decimal`, is the
+  interpreter's as well: a program replacing it, or a class the module binds,
+  changes the interpreter, and is outside the base. A class
   whose `__eq__` is its own is read by none of those, so a proof by its constant
   is not made: a case-insensitive `str` subclass holds `"A"` in the literal of
   `"a"`, which `Regex("a")` refuses, and an `__eq__` that is not transitive
