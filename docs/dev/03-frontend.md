@@ -583,7 +583,10 @@ optional one, and any other key is a schema governing the rest. The `?` is the
 literal's one presence marker, so a `Required` or `NotRequired` on a field,
 read through `Annotated` and `ReadOnly`, is refused naming the key's spelling
 (`refuse_a_presence_qualifier`): unwrapped as a qualifier is everywhere else,
-`{"a": NotRequired[int]}` would require `a`. A class, a builtin alias and an
+`{"a": NotRequired[int]}` would require `a`. The reading stops at
+`MAX_QUALIFIER_DEPTH` wrappers and refuses the field there as nesting too deep,
+since built, the field would drop a qualifier it did not reach. A class, a
+builtin alias and an
 `X | Y` are no qualifier, and are told by their exact type before the
 `get_origin` call a qualifier needs. A tuple literal
 and a set literal are refused rather than accepted, since `tuple[A, B]` and

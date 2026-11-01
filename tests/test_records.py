@@ -1,3 +1,5 @@
+import sys
+import typing
 from typing import Annotated, Any, Literal, TypedDict
 
 import pytest
@@ -56,13 +58,38 @@ def test_a_field_wrapping_itself_is_refused_by_depth() -> None:
     """Reading through a field's wrappers for a qualifier ends.
 
     An `Annotated` alias whose `__origin__` names itself wraps itself forever,
-    so the reading stops at `MAX_QUALIFIER_DEPTH` and the build's depth guard
-    refuses it.
+    so the reading stops at `MAX_QUALIFIER_DEPTH` and refuses the field.
     """
     looped = Annotated[int, "meta"]
     looped.__origin__ = looped  # ty: ignore[invalid-assignment]
     with pytest.raises(ValueError, match="nesting is too deep"):
         Validator({"a": looped})
+
+
+@pytest.mark.skipif(sys.version_info < (3, 13), reason="ReadOnly is 3.13")
+def test_a_qualifier_past_the_wrappers_read_is_refused_by_depth() -> None:
+    """A finite stack of wrappers past the bound is refused, never built.
+
+    A dict literal refuses `Required` and `NotRequired` on a field, read through
+    `ReadOnly`. Built past `MAX_QUALIFIER_DEPTH` (8) layers, the field dropped
+    the qualifier under them: the key it calls optional was required, and one
+    it calls required was optional. Past the bound it is refused as nesting too
+    deep, as a wrapper naming itself is.
+    """
+    if sys.version_info >= (3, 13):
+
+        def under_read_only(depth: int, qualified: object) -> object:
+            for _ in range(depth):
+                qualified = typing.ReadOnly[qualified]
+            return qualified
+
+        with pytest.raises(NotImplementedError, match="TypedDict qualifier"):
+            Validator({"a": under_read_only(7, typing.NotRequired[int])})
+        for depth in (8, 12):
+            with pytest.raises(ValueError, match="nesting is too deep"):
+                Validator({"a": under_read_only(depth, typing.NotRequired[int])})
+            with pytest.raises(ValueError, match="nesting is too deep"):
+                Validator({"a?": under_read_only(depth, typing.Required[int])})
 
 
 def test_record_is_closed_by_default() -> None:

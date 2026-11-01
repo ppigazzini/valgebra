@@ -372,12 +372,22 @@ fn refuse_a_presence_qualifier(key: &str, value: &Bound<'_, PyAny>) -> PyResult<
             None => return Ok(()),
         }
     }
-    Ok(())
+    // Past the bound the qualifier under the wrappers is unread, and built,
+    // the field would drop it: `{"a": ReadOnly[...[NotRequired[int]]]}` eight
+    // layers down required the key the qualifier calls optional. A bound errs
+    // by refusing, as the build's own depth does.
+    let name = key.strip_suffix('?').unwrap_or(key);
+    Err(PyValueError::new_err(format!(
+        "schema nesting is too deep: the field {name:?} of a dict literal wraps \
+         its type in more than {MAX_QUALIFIER_DEPTH} Annotated or ReadOnly \
+         layers, past which a Required or NotRequired under them is not read"
+    )))
 }
 
 /// How many `Annotated` and `ReadOnly` wrappers [`refuse_a_presence_qualifier`]
 /// reads through: more than any spelling nests, since `Annotated` flattens
-/// itself and a qualifier qualifies once.
+/// itself and a qualifier qualifies once. A field wrapped past it is refused as
+/// nesting too deep, never built with what lies under the wrappers unread.
 pub(super) const MAX_QUALIFIER_DEPTH: usize = 8;
 
 /// Compile a *type argument* of a typing form.

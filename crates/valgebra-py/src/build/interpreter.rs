@@ -2682,6 +2682,31 @@ fn a_default_written_as_a_string_is_refused_as_a_forward_reference() {
     });
 }
 
+/// A dict literal's field wrapped past the wrappers its qualifier reading reads
+/// is refused as nesting too deep, never built with the qualifier under them
+/// dropped; one layer short of the bound, the qualifier is read and refused.
+#[test]
+fn a_qualifier_past_the_wrappers_read_is_refused_by_depth() {
+    Python::attach(|py| {
+        if !Since(13).met(py) {
+            return;
+        }
+        let wrapped = |depth: usize| {
+            format!(
+                "{{'a': {}typing.NotRequired[int]{}}}",
+                "typing.ReadOnly[".repeat(depth),
+                "]".repeat(depth)
+            )
+        };
+        let refusal = |depth: usize| match built(py, &wrapped(depth)) {
+            Err(refusal) => refusal.to_string(),
+            Ok(schema) => panic!("{depth} layers built {schema}"),
+        };
+        assert!(refusal(7).contains("TypedDict qualifier"), "{}", refusal(7));
+        assert!(refusal(8).contains("nesting is too deep"), "{}", refusal(8));
+    });
+}
+
 /// A `TypedDict` qualifier is refused where a class takes it as a parameter's
 /// default, as where it takes it as an argument, and `Required` or
 /// `NotRequired` as `extra_items`, which PEP 728 calls an error.

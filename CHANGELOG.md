@@ -94,6 +94,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a type parameter's default written as a string is refused
 - fix: a TypedDict's extra_items given as a string is the type it names
 - fix: a TypedDict qualifier given as a default or as extra_items is refused
+- fix: a field wrapped past the qualifiers read is refused as too deep
 
 -->
 
@@ -474,6 +475,14 @@ answer of its own, or a repair to a change not yet released.
   3.10 spelled with an object of its own are gone with it.
 
 ### Fixed
+
+- **A field wrapped past the qualifiers read is refused as too deep.** A dict
+  literal refuses `Required` and `NotRequired` on a field, read through
+  `Annotated` and `ReadOnly` up to eight layers. Past them the field was
+  built with the qualifier dropped: `{"a": ReadOnly[...[NotRequired[int]]]}`
+  eight layers down required the key the qualifier calls optional, and
+  `"a?"` over `Required[int]` the other way. The field is refused there as
+  nesting too deep, as a wrapper naming itself already was.
 
 - **A `TypedDict` qualifier given as a default or as `extra_items` is
   refused.** A class left unapplied takes each parameter's default, which
