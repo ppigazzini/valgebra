@@ -6,7 +6,7 @@ use crate::descr::classes::{Class, Reach};
 use crate::descr::lower::{Operand, lower_widened};
 use crate::descr::regular::{Alphabet, RegularSet};
 use crate::ir::{Attribute, CollKind, Field, MapClause, OperandIx, SeqKind, Spelling};
-use crate::ir::{DefIx, LONGEST, Openness};
+use crate::ir::{DefIx, LONGEST, Openness, REACHED};
 use crate::kind::Kind;
 use crate::oracle::tests::Pure;
 
@@ -9969,10 +9969,13 @@ fn a_union_holding_a_complement_is_asked_as_its_difference() {
 
 /// No value is longer than [`LONGEST`], `sys.maxsize`: the data model has
 /// `len()` raise past it. So a bound at it leaves no length out, and nothing is
-/// refuted below it for holding a longer value: a list, a set of integers and
-/// a word longer than three are each declined there, and each is refuted one
-/// below it, where a value of the longest length is the one left out. A subject
-/// bounded past it is read as reaching it and no further.
+/// refuted below it for holding a longer value. Nor below the bound one short
+/// of it: a container of the longest length is one no interpreter builds, and a
+/// witness is given a length at most [`REACHED`], which every container
+/// reaches. A list, a set of integers and a word longer than three are each
+/// declined below `LONGEST - 1` and below `REACHED`, and refuted below
+/// `REACHED - 1` by a value of the reached length. A subject bounded past
+/// `LONGEST` is read as reaching it and no further.
 #[test]
 fn no_value_is_longer_than_the_longest_length() {
     let relation =
@@ -9995,10 +9998,17 @@ fn no_value_is_longer_than_the_longest_length() {
             Relation::Fails,
             "{subject:?} holds no value longer than the longest"
         );
+        for unbuilt in [LONGEST - 1, REACHED] {
+            assert_ne!(
+                relation(&subject, &at_most(unbuilt)),
+                Relation::Fails,
+                "{subject:?} is refuted by a value no interpreter builds"
+            );
+        }
         assert_eq!(
-            relation(&subject, &at_most(LONGEST - 1)),
+            relation(&subject, &at_most(REACHED - 1)),
             Relation::Fails,
-            "{subject:?} holds a value of the longest length"
+            "{subject:?} holds a value of the reached length"
         );
     }
     let unbounded_past = bounded(Schema::Str, vec![Constraint::MaxLen(usize::MAX)]);

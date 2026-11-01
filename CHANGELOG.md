@@ -97,6 +97,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a field wrapped past the qualifiers read is refused as too deep
 - feat: a sized base written bare is read as its refinement under no bound
 - fix: a narrowed meet's verdict is read once a query where it rests on nothing -- internal
+- fix: a refutation stands on a length every interpreter builds
 
 -->
 
@@ -490,6 +491,16 @@ answer of its own, or a repair to a change not yet released.
   3.10 spelled with an object of its own are gone with it.
 
 ### Fixed
+
+- **A refutation stands on a length every interpreter builds.** A container
+  holds its items in one allocation, which the allocator refuses past
+  `sys.maxsize` bytes, so CPython builds no list longer than `sys.maxsize //
+  8` and no set past about a fifty-third of it. The relations read a length up
+  to `sys.maxsize` as one a value has: `Annotated[list[int],
+  MinLen(sys.maxsize // 8 + 1)]` was `not_subset` of `nothing`, on a list no
+  interpreter builds. A witness is now given a length at most `sys.maxsize //
+  128`, which every kind reaches on every supported interpreter, and a pair
+  whose witness is longer is `undecided`.
 
 - **A field wrapped past the qualifiers read is refused as too deep.** A dict
   literal refuses `Required` and `NotRequired` on a field, read through

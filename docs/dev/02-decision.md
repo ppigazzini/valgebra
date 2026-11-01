@@ -1626,7 +1626,14 @@ oracle, `literals_counted_apart`, which hashes the constants whose equality it
 trusts, and a pair at a time only where it declines: asked pairwise, a set
 over sixteen thousand literals put a hundred million questions to the
 interpreter), and
-`required_fields_refused` the value of a record's required fields alone. And a
+`required_fields_refused` the value of a record's required fields alone. A
+value named by its length is given one at most `REACHED` (`ir.rs`), and so is
+an emptiness `refinement_verdict` reads inhabited: `LONGEST` is where no value
+is longer, but a container stops where the one allocation holding its items
+does, a list at `sys.maxsize // 8` on CPython and a set near a fifty-third, so
+a witness between the two is no value on some interpreter, and the pair
+declines. `a_refutation_stands_on_a_length_every_interpreter_builds` in
+`laws.rs` holds both readings to the bound on every sized kind. And a
 refinement at most zero long is the empty container of its base's kind,
 `read_by_length` holding it below every shape that admits it
 (`admits_the_empty`), and a subject holding that container refuted below a

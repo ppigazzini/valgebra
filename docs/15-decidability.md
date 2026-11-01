@@ -451,7 +451,9 @@ answers `"undecided"`.
   state bound; past 4,094 the bound is refused before it is built. A
   refinement whose base holds a value of every length its bounds admit -- a
   word, a sequence with a repeated element, a mapping keyed by every name --
-  is refuted below a bound leaving one of those lengths out, at any size:
+  is refuted below a bound leaving one of those lengths out, at any length
+  up to `sys.maxsize // 128` (past it, below, a container is one some
+  interpreter does not build):
   `Annotated[str, MaxLen(256)]` is `not_subset` of `Annotated[str,
   MaxLen(64)]`, on a text of 65 code points. A base written bare is its
   refinement under no bound, every length being at least zero, so `str` is
@@ -1069,6 +1071,20 @@ the shape. What is left below is what the descriptor cannot hold.
   the direction a value refutes, and `subset` in the direction the carrier
   proves. Python's integers are unbounded and the carrier is not, which is a
   property of the representation rather than of the schema.
+
+- **A length past the one every interpreter builds.** A container holds its
+  items in one allocation, which the allocator refuses past `sys.maxsize`
+  bytes whatever the memory, so each kind stops short of `sys.maxsize` by its
+  item's size: CPython builds no list longer than `sys.maxsize // 8`, and no
+  set past about a fifty-third of it. A refutation names a value, and one
+  standing on a longer list stands on none. So a relation or an emptiness
+  whose witness is longer than `sys.maxsize // 128`, a length every kind
+  reaches on every interpreter the package supports, declines: `list[int]`
+  below `Annotated[list[int], MaxLen(sys.maxsize // 8)]`, which no list
+  escapes, is `undecided`, and so is `Annotated[list[int], MinLen(sys.maxsize
+  // 8 + 1)]` against `nothing`. Up to that length the witness stands:
+  `list[int]` is `not_subset` of `Annotated[list[int], MaxLen(sys.maxsize //
+  128 - 1)]`.
 
 - **Two moduli `%` reads in different kinds of number.** Dividing is a fact
   about the steps, and `%` asks it of a value in the kind the value and the

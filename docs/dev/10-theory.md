@@ -796,13 +796,15 @@ every value of `t1` is a value of `t2`, and `is_equivalent` is both directions
 [Cas24, Def. 4].
 A proof from either decider admits no counterexample the walk can find, and a
 refutation from either stands on a value the walk refuses, over the structural
-fragment, over maps keyed by every hashable kind, and over a recursive pair alike. **[LOAD-BEARING: subtyping-is-inclusion]**
+fragment, over maps keyed by every hashable kind, and over a recursive pair alike.
+A value is one the interpreter builds, so a witness named by its length is at
+most the length every container reaches. **[LOAD-BEARING: subtyping-is-inclusion]**
 
 SOURCE: §13.0 "**Subtyping, defined.** UIN Definition 4"
 
 IMPLEMENTED-BY: decision.rs::Schema::equivalence_relation
 
-HELD-BY: a_meet_read_empty_at_the_root_bounds_the_relation, subtyping_is_sound_over_the_structural_fragment, a_refutation_is_a_value, a_map_relation_stands_on_a_dict, a_proof_over_a_fixpoint_has_no_witness_against_it, test_no_proof_is_refuted_by_a_value, test_a_claimed_refutation_stands_on_a_value
+HELD-BY: a_meet_read_empty_at_the_root_bounds_the_relation, subtyping_is_sound_over_the_structural_fragment, a_refutation_is_a_value, a_refutation_stands_on_a_length_every_interpreter_builds, a_map_relation_stands_on_a_dict, a_proof_over_a_fixpoint_has_no_witness_against_it, test_no_proof_is_refuted_by_a_value, test_a_claimed_refutation_stands_on_a_value
 
 **A cut reference proves, and refutes past the kinds it reaches.** The
 descriptor decides `a <= b` by

@@ -647,7 +647,8 @@ def test_a_length_past_the_longest_a_value_has_is_refused() -> None:
     CPython counts a length in a `Py_ssize_t`, and `len()` raises past it, so a
     bound past it names no length a value can have and is refused, as a whole
     float equal to one is; the bound at it builds. Nothing is refuted below it
-    for holding a longer value, and one below it is refuted at the longest.
+    for holding a longer value, and nothing below the bound one short of it
+    either: a list or a set that long is one no interpreter builds.
     """
     longest = sys.maxsize
     for past in (
@@ -668,8 +669,61 @@ def test_a_length_past_the_longest_a_value_has_is_refused() -> None:
         )
         assert (
             Validator(subject).relation_to(Annotated[base, at.MaxLen(longest - 1)])
-            == "not_subset"
+            != "not_subset"
         )
+
+
+def test_a_refutation_stands_on_a_length_every_interpreter_builds() -> None:
+    """A value longer than some interpreter builds is no witness.
+
+    A container holds its items in one allocation, which the allocator refuses
+    past `sys.maxsize` bytes whatever the memory: CPython builds no list longer
+    than `sys.maxsize // 8`, and a set stops at about a fifty-third of it. So
+    `list[int]` is below `MaxLen(sys.maxsize // 8)` and the bare base is
+    declined there rather than refuted by a list one longer, and the bound's
+    complement is declined rather than held inhabited. A refutation is given a
+    length every kind reaches on every interpreter, `sys.maxsize // 128`, and
+    is refuted up to it, over each sized kind.
+    """
+    list_most = sys.maxsize // 8
+    reached = sys.maxsize // 128
+    assert (
+        Validator(list[int]).relation_to(Annotated[list[int], at.MaxLen(list_most)])
+        == "undecided"
+    )
+    assert (
+        Validator(tuple[int, ...]).relation_to(
+            Annotated[tuple[int, ...], at.MaxLen(list_most)]
+        )
+        == "undecided"
+    )
+    too_long = Validator(Annotated[list[int], at.MinLen(list_most + 1)])
+    assert too_long.relation_to(nothing) == "undecided"
+    one_or_most = union(
+        Annotated[list[int], at.MaxLen(1)], Annotated[list[int], at.MaxLen(list_most)]
+    )
+    nonempty = Validator(Annotated[list[int], at.MinLen(1)])
+    assert nonempty.relation_to(one_or_most) == "undecided"
+    one_or_longest = union(
+        Annotated[str, at.MaxLen(1)], Annotated[str, at.MaxLen(sys.maxsize - 64)]
+    )
+    assert (
+        Validator(Annotated[str, at.MinLen(1)]).relation_to(one_or_longest)
+        == "undecided"
+    )
+    for base in (str, bytes, list[int], tuple[int, ...], set[int], dict[str, int]):
+        within = Annotated[base, at.MaxLen(reached - 1)]
+        assert Validator(base).relation_to(within) == "not_subset", base
+        past = Annotated[base, at.MaxLen(reached)]
+        assert Validator(base).relation_to(past) == "undecided", base
+        assert (
+            Validator(Annotated[base, at.MinLen(reached)]).relation_to(nothing)
+            == "not_subset"
+        ), base
+        assert (
+            Validator(Annotated[base, at.MinLen(reached + 1)]).relation_to(nothing)
+            == "undecided"
+        ), base
 
 
 def test_the_lengths_a_value_can_have_still_build() -> None:

@@ -6881,6 +6881,53 @@ proptest! {
     }
 
     // THEORY: subtyping-is-inclusion
+    /// A refutation stands on a length every interpreter builds.
+    ///
+    /// [`a_refutation_is_a_value`] builds its witness, which a length of
+    /// `2**56` is not, so the readings naming a witness by its length are held
+    /// here to [`REACHED`](crate::ir::REACHED), over every sized kind, at bounds
+    /// drawn about it and about [`LONGEST`]. A kind, bare or under `MinLen(0)`,
+    /// below its refinement by `MaxLen(n)` is refuted, by a value of `n + 1`
+    /// items, exactly where that length is at most `REACHED`; the refinement by
+    /// `MinLen(n)` is held inhabited exactly where `n` is, and is never read
+    /// empty. Past it both decline: some interpreter's containers stop short of
+    /// such a length, and a schema does not say whose.
+    #[test]
+    fn a_refutation_stands_on_a_length_every_interpreter_builds(
+        kind in 0usize..6,
+        near in prop_oneof![Just(crate::ir::REACHED), Just(LONGEST)],
+        offset in -2isize..=2,
+        bare in any::<bool>(),
+    ) {
+        let reached = crate::ir::REACHED;
+        let n = near.saturating_add_signed(offset).min(LONGEST);
+        let base = match kind {
+            0 => Schema::Str,
+            1 => Schema::Bytes,
+            2 => Schema::list(SeqShape::homogeneous(Schema::Int)),
+            3 => Schema::tuple(SeqShape::homogeneous(Schema::Int)),
+            4 => Schema::set(Schema::Int),
+            _ => Schema::mapping(MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }),
+        };
+        let subject = if bare {
+            base.clone()
+        } else {
+            Schema::refine(base.clone(), vec![Constraint::MinLen(0)])
+        };
+        let at_most = Schema::refine(base.clone(), vec![Constraint::MaxLen(n)]);
+        let refuted = subject.subtype_relation_under(&at_most, &NoLeafRelations, &[])
+            == Relation::Fails;
+        prop_assert_eq!(refuted, n < reached, "{:?} <= {:?}", subject, at_most);
+        let at_least = Schema::refine(base, vec![Constraint::MinLen(n)]);
+        let verdict = at_least.verdict();
+        prop_assert_ne!(verdict, Verdict::Empty, "{:?}", at_least);
+        prop_assert_eq!(verdict == Verdict::Inhabited, n <= reached, "{:?}", at_least);
+    }
+
+    // THEORY: subtyping-is-inclusion
     /// A relation between two maps stands on a dict, whatever kinds key it.
     ///
     /// [`a_refutation_is_a_value`] draws maps keyed by strings, because its

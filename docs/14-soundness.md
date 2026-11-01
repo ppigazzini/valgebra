@@ -270,7 +270,10 @@ The soundness is relative to a small, explicit trust base:
   the value; a constant's `==`, which a record's key lookup asks too; a bound's
   comparison; a length; and a step's `%`. The language reference sets rules
   for comparisons, and the data model has `__len__` return the object's length,
-  at most `sys.maxsize`, past which `len()` raises, so no value is longer;
+  at most `sys.maxsize`, past which `len()` raises, so no value is longer, and
+  a container is no longer than the one allocation holding its items allows,
+  so a refutation stands on a length every interpreter builds,
+  `sys.maxsize // 128`, and declines past it;
   not-a-number is the exception those rules name, and it is read as one:
   `Literal[nan]` is empty and `Ge(nan)` is refused. A value whose method
   answers two calls differently is outside the sets the law is about: `P`

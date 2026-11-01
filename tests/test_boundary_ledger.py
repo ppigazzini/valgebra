@@ -44,6 +44,7 @@ from __future__ import annotations
 import enum
 import itertools
 import re
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
@@ -346,6 +347,18 @@ ROWS: dict[str, Row] = {
             Annotated[int, at.Ge(2**70 + 1)],
             Annotated[int, at.Ge(2**70)],
             "subset",
+        ),
+    ),
+    "A length past the one every interpreter builds.": Declines(
+        list[int],
+        Annotated[list[int], at.MaxLen(sys.maxsize // 8)],
+        "each kind's own longest on the interpreter that runs, which a schema "
+        "does not name",
+        # Up to the length every kind reaches, the witness stands.
+        beside=(
+            list[int],
+            Annotated[list[int], at.MaxLen(sys.maxsize // 128 - 1)],
+            "not_subset",
         ),
     ),
     "Two moduli `%` reads in different kinds of number.": Declines(

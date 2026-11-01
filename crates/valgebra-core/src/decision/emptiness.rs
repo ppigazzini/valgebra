@@ -22,7 +22,7 @@ use rustc_hash::FxHashMap;
 
 use crate::descr::classes::Reach;
 use crate::descr::lower::{Constants, an_empty_reading_stands, read_widened};
-use crate::ir::{Attribute, ClassIx, ConstIx, Constraint, Constraints, Schema};
+use crate::ir::{Attribute, ClassIx, ConstIx, Constraint, Constraints, REACHED, Schema};
 use crate::kind::{Kind, Region, Regions};
 use crate::oracle::denotes_a_set_within;
 use crate::verdict::{Relation, Verdict};
@@ -1306,13 +1306,23 @@ fn refinement_verdict(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>)
     // end of them -- holds one of a length a bound the lengths satisfy admits:
     // the least is the prefix's length, which the check above has read against
     // the bound's most.
-    match repeated_element(base) {
-        Some(_) if shortest(constraints.iter()) == 0 => Verdict::Inhabited,
+    let least = shortest(constraints.iter());
+    let verdict = match repeated_element(base) {
+        Some(_) if least == 0 => Verdict::Inhabited,
         Some(element) if repeats_a_member(base) => element.verdict_rec(cx),
-        Some(element) => distinct_members(element, shortest(constraints.iter()), cx.oracle),
+        Some(element) => distinct_members(element, least, cx.oracle),
         None if base.every_length_from(cx).is_some() => Verdict::Inhabited,
         None => Verdict::Unknown,
+    };
+    // A value of the least length is the witness, and one longer than every
+    // interpreter builds is none: `Annotated[list[int], MinLen(2**60 + 1)]`
+    // holds no list CPython can make. Its emptiness is not read either: a
+    // length past the bound reaches some kinds on some interpreters and not
+    // others ([`REACHED`]). An empty element proves it at any length.
+    if verdict == Verdict::Inhabited && least > REACHED {
+        return Verdict::Unknown;
     }
+    verdict
 }
 
 /// Whether an order bound over `int` is met by an integer, asked of the oracle.

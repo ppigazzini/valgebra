@@ -1358,6 +1358,27 @@ impl SeqShape {
 /// longer is no value: no list is longer than `MaxLen(LONGEST)` lets through.
 pub const LONGEST: usize = isize::MAX.unsigned_abs();
 
+/// The longest length a refutation's value is given, `sys.maxsize // 128`: a
+/// length every container the decision builds reaches on every interpreter the
+/// package supports.
+///
+/// [`LONGEST`] is what no value passes, and a proof reads lengths up to it. It
+/// is not a length every container reaches. A container holds its items in one
+/// allocation, which the allocator refuses past `sys.maxsize` bytes, whatever
+/// the memory, so each kind stops where that allocation does. On `CPython` a
+/// list holds at most `sys.maxsize // 8` items (`py_list_resize`), a dict
+/// about a forty-eighth (`new_keys_object`), and a set, the tightest, about a
+/// fifty-third, a table of 16-byte entries filled to three fifths
+/// (`set_table_resize`). On `PyPy` one array holds at most `sys.maxsize` bytes
+/// (`incminimark.external_malloc`), and a dict's entries take at most 36 bytes
+/// an item with their growth (`rordereddict`), its sets being dicts. A
+/// refutation names a value outside a set, so one standing on a list of
+/// `sys.maxsize // 8 + 1` items stands on no value. Past this length a witness
+/// is declined, and so is the emptiness it would refute: a length in
+/// `(REACHED, LONGEST]` reaches some kinds on some interpreters and not others,
+/// which a schema does not say. It sits 2.4 times below the set.
+pub(crate) const REACHED: usize = LONGEST / 128;
+
 /// A constraint narrowing a [`Schema::Refine`] base set.
 ///
 /// Comparison and predicate operands live in the validator's object pool; the

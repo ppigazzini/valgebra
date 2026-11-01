@@ -15,7 +15,7 @@
 //! that cannot name a value declines, and the pair stays undecided.
 
 use crate::descr::regular::{Alphabet, RegularSet};
-use crate::ir::{ClassIx, CollKind, ConstIx, Constraint, LONGEST, Schema, SeqKind};
+use crate::ir::{ClassIx, CollKind, ConstIx, Constraint, REACHED, Schema, SeqKind};
 use crate::kind::{Kind, Region, Regions};
 use crate::verdict::{Relation, Verdict};
 
@@ -324,14 +324,15 @@ impl Schema {
     /// ([`every_length_from`](Self::every_length_from)), and where its
     /// constraints are length bounds alone, none excludes such a value: the
     /// subject holds one of each length from the larger of that least and its
-    /// `MinLen` to its `MaxLen`, or to [`LONGEST`] where it writes none, since
-    /// no value is longer. A length the supertype's bounds leave out --
-    /// below its `MinLen`, or above its `MaxLen` -- is then a value outside the
-    /// supertype whatever its base: `Annotated[str, MaxLen(256)]` holds a text
-    /// of 65 code points, which `MaxLen(64)` refuses. The entailment the other
-    /// way is the bound rules' [JV20, Fig. 3.4]; this is what they leave
-    /// undecided, and what a pattern counting past a few hundred code points
-    /// no longer holds.
+    /// `MinLen` to its `MaxLen`, and to [`REACHED`] at most, the longest a
+    /// container every interpreter builds: [`LONGEST`](crate::ir::LONGEST) is
+    /// where no value is longer, and a length between the two is no witness. A
+    /// length the supertype's bounds leave out -- below its `MinLen`, or above
+    /// its `MaxLen` -- is then a value outside the supertype whatever its base:
+    /// `Annotated[str, MaxLen(256)]` holds a text of 65 code points, which
+    /// `MaxLen(64)` refuses. The entailment the other way is the bound rules'
+    /// [JV20, Fig. 3.4]; this is what they leave undecided, and what a pattern
+    /// counting past a few hundred code points no longer holds.
     ///
     /// A union refuses a value where each branch does, so a length every
     /// branch leaves out is the same witness: a branch that is a refinement
@@ -385,7 +386,7 @@ impl Schema {
             return false;
         };
         let least = from.max(shortest(constraints.iter()));
-        let most = longest(constraints.iter()).unwrap_or(LONGEST).min(LONGEST);
+        let most = longest(constraints.iter()).unwrap_or(REACHED).min(REACHED);
         if most < least {
             return false;
         }
