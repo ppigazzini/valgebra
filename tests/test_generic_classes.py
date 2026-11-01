@@ -185,6 +185,34 @@ def test_a_parameter_left_out_takes_its_default() -> None:
         assert Validator(Holder[str]).is_valid(Holder("one"))
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 13), reason="a type parameter's default is 3.13"
+)
+def test_a_default_written_as_a_string_is_refused() -> None:
+    """A string default is a forward reference: PEP 696 makes it a type expression.
+
+    Substituted into a field that is the parameter alone, it was the literal of
+    its text, admitting the word and refusing every integer. It is refused as the
+    same string written as the argument is, and the class applied to a type
+    reads that type.
+    """
+    if sys.version_info >= (3, 13):
+        worded = typing.TypeVar("worded", default="int")
+
+        class ByDefault(typing.TypedDict, typing.Generic[worded]):
+            a: worded
+
+        @dataclasses.dataclass
+        class Holder(typing.Generic[worded]):
+            item: worded
+
+        for unapplied in (ByDefault, Holder):
+            with pytest.raises(NotImplementedError, match="forward reference"):
+                Validator(unapplied)
+        assert Validator(ByDefault[int]).is_valid({"a": 5})
+        assert not Validator(ByDefault[int]).is_valid({"a": "int"})
+
+
 def test_a_qualifier_as_a_type_argument_is_refused() -> None:
     """A `TypedDict` qualifier qualifies an item where it is declared, and nowhere else.
 

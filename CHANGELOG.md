@@ -91,6 +91,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a Decimal bound with a vast exponent is not rounded to an int
 - feat: a meet holding one complement is read as the relation it is
 - feat: a word's length bound is counted by a table built directly
+- fix: a type parameter's default written as a string is refused
 
 -->
 
@@ -471,6 +472,15 @@ answer of its own, or a repair to a change not yet released.
   3.10 spelled with an object of its own are gone with it.
 
 ### Fixed
+
+- **A type parameter's default written as a string is refused.** PEP 696
+  makes a default a type expression, and a string there a forward reference,
+  which the runtime keeps as written. A field that is the parameter alone read
+  it as the value it is: under `W = TypeVar("W", default="int")`, `a: W` was the
+  literal `'int'`, admitting the word and refusing every integer, in a
+  `TypedDict`, a dataclass and a `NamedTuple` left unapplied. It is refused as
+  a forward reference, as the same string written as the argument is and as
+  `list[W]` already was.
 
 - **A `Decimal` bound with a vast exponent is not rounded to an `int`.** The
   rule that finds no integer between two bounds rounded each to an `int`, and

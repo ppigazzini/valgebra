@@ -2648,6 +2648,40 @@ fn a_subscripted_validator_is_an_annotation_and_not_a_schema() {
     });
 }
 
+/// A type parameter's default written as a string is a forward reference, and
+/// a field that is the parameter alone refuses it as the same string written as
+/// the argument is, rather than reading it as the literal of its text.
+#[test]
+fn a_default_written_as_a_string_is_refused_as_a_forward_reference() {
+    Python::attach(|py| {
+        if !Since(13).met(py) {
+            return;
+        }
+        let namespace = namespace(py).expect("the corpus namespace builds");
+        py.run(
+            c"import typing\n\
+              W = typing.TypeVar('W', default='int')\n\
+              class ByDefault(typing.TypedDict, typing.Generic[W]):\n\
+              \x20   a: W\n",
+            Some(&namespace),
+            None,
+        )
+        .expect("the corpus class defines");
+        let class = namespace
+            .get_item("ByDefault")
+            .expect("the namespace answers")
+            .expect("the class is in it");
+        let refusal = match build_schema(&class, &mut Pool::default(), &mut Vec::new()) {
+            Err(refusal) => refusal.to_string(),
+            Ok(schema) => panic!("ByDefault built {schema:?}"),
+        };
+        assert!(
+            refusal.contains("'int' is a forward reference"),
+            "{refusal}"
+        );
+    });
+}
+
 /// A `TypedDict` says which keys it admits beyond the ones it declares, and
 /// the two ways it says so are read.
 #[test]

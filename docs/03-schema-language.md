@@ -303,7 +303,11 @@ assert Validator(["active"]).is_valid(["active"])  # a list of that literal
 ```
 
 A class's own annotations are a different matter: `Validator(SomeClass)` resolves
-their strings for you (see [classes](#classes)).
+their strings for you (see [classes](#classes)). A type parameter's default is
+not one of them: PEP 696 makes it a type expression, and the runtime keeps a
+string default as written, so a field that is the parameter alone is refused
+as a forward reference where its default is a string, as the same string
+written as the argument is.
 
 ### Anything unrecognized is a literal
 

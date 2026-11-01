@@ -445,6 +445,14 @@ fn default_of<'py>(parameter: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, 
 /// own `__parameters__`, each replaced by its argument. A form naming none of
 /// them is left as written: a generic class has `__parameters__` of its own,
 /// and indexing it would turn the class into an application of it.
+///
+/// A string a parameter stands for is a forward reference, and is refused
+/// where it is substituted, whole or into a form. Only a default is one: an
+/// argument written as a string reaches here as the `ForwardRef` `typing`
+/// makes of it, which the build refuses, while a default is kept as written.
+/// Read as the value it is, `a: W` under `W = TypeVar("W", default="int")`
+/// would be the literal `'int'`, admitting the word and refusing every
+/// integer.
 fn substitute<'py>(
     value: &Bound<'py, PyAny>,
     parameters: &Bound<'py, PyTuple>,
@@ -457,6 +465,9 @@ fn substitute<'py>(
             .and_then(|at| arguments.get(at))
     };
     if let Some(argument) = argument_for(value) {
+        if argument.is_instance_of::<PyString>() {
+            return Err(forward_reference(argument)?);
+        }
         return Ok(argument.clone());
     }
     let Some(variables) = value.getattr_opt(intern!(value.py(), "__parameters__"))? else {
