@@ -126,9 +126,11 @@ time, since the subject is below it where it is below each member and outside
 it where it is outside one, by either decider, beside a member neither reads.
 The rules asked each member already, at the root of the query, where no
 hypothesis is open, so the members they placed are kept beside the query, by
-its number, and read back rather than asked again
-(`below_each_member_at_the_root`): asked again, a meet of records costs the
-query a second time.
+its number, and read back rather than asked again, for a meet supertype
+(`below_each_member_at_the_root`) and a union subject alike
+(`each_member_below_at_the_root`): asked again, a meet of records costs the
+query a second time, and a union of refined integers drawn eight deep half of
+it.
 What it reaches is the descriptor's
 bounds: a union of tagged records is past the node bound as a pair and a record
 and the one branch it meets are not, and a branch holding a reference beside a

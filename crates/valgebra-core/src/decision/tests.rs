@@ -6829,6 +6829,113 @@ fn a_meet_supertypes_members_are_asked_once_a_query() {
     }
 }
 
+/// The parts reading of a union subject reads what the rules answered of each
+/// member at the root of the query rather than asking them again: each
+/// member's goal against the supertype is asked once a query. The member the
+/// rules placed -- a predicate's refinement, which is a branch of the
+/// supertype -- is read as placed, and the member they declined is read by the
+/// set representation alone, which a supertype holding a predicate leaves
+/// open.
+#[test]
+fn a_union_subjects_members_are_asked_once_a_query() {
+    let refine = |base: Schema, constraint| Schema::Refine {
+        base: Arc::new(base),
+        constraints: vec![constraint].into(),
+    };
+    let opaque = refine(Schema::ANYTHING, Constraint::Predicate(PredIx::new(0)));
+    let words = refine(Schema::Str, Constraint::Regex("a*".into()));
+    let supertype = Schema::Union(vec![opaque.clone(), words].into());
+    let a_plus = refine(Schema::Str, Constraint::Regex("a+".into()));
+    for members in [
+        vec![opaque.clone(), Schema::Str],
+        vec![opaque.clone(), a_plus],
+    ] {
+        let subject = Schema::Union(members.clone().into());
+        let (answer, asked) = goal_tests::goals::tabled(|| {
+            subject.subtype_relation_under(&supertype, &NoLeafRelations, &[])
+        });
+        assert_eq!(answer, Relation::Unknown, "{subject:?}");
+        for member in members {
+            assert_eq!(
+                asked.get(&(member.clone(), supertype.clone())),
+                Some(&1),
+                "{member:?}"
+            );
+        }
+    }
+}
+
+/// A union is below where each member is, and outside where one is: a member
+/// the rules decline does not end the reading while the query has a step left,
+/// so a member after it that is refuted refutes the union -- below the root, a
+/// member at a time, and at the root, where the members placed are kept.
+#[test]
+fn a_declined_member_leaves_the_rest_of_a_union_read() {
+    let opaque = Schema::Refine {
+        base: Arc::new(Schema::ANYTHING),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    let members: Members = vec![opaque, Schema::Int].into();
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    assert_eq!(
+        Schema::each_below(members.iter(), &Schema::Str, &mut cx),
+        Relation::Fails
+    );
+    budget.depth.set(1);
+    assert_eq!(
+        Schema::each_member_below_at_the_root(&members, &Schema::Str, &mut cx),
+        Relation::Fails
+    );
+}
+
+/// A union's record is read a bit a member: the parts reading takes a member
+/// the rules placed as below the supertype and asks the set representation of
+/// the rest, which reads no predicate, so the union holds where every member
+/// was placed and declines where one was not. The root arm keeps the bit of
+/// each member it placed, the second here.
+#[test]
+fn a_kept_union_is_read_a_member_at_a_time() {
+    let opaque = |at| Schema::Refine {
+        base: Arc::new(Schema::ANYTHING),
+        constraints: vec![Constraint::Predicate(PredIx::new(at))].into(),
+    };
+    let members: Members = vec![opaque(0), opaque(1)].into();
+    let union = Schema::Union(Arc::clone(&members));
+    let other = opaque(2);
+    for (placed, relation) in [
+        (0b11, Relation::Holds),
+        (0b01, Relation::Unknown),
+        (0b10, Relation::Unknown),
+        (0b00, Relation::Unknown),
+    ] {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        let query = cx.query();
+        HELD.with_borrow_mut(|held| {
+            *held = Some((query, other.clone(), Arc::clone(&members), placed));
+        });
+        assert_eq!(
+            union.decided_by_parts(&other, &mut cx, true),
+            relation,
+            "{placed:#b}"
+        );
+    }
+    let below = Schema::Union(vec![opaque(1), opaque(3)].into());
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    budget.depth.set(1);
+    assert_eq!(
+        Schema::each_member_below_at_the_root(&members, &below, &mut cx),
+        Relation::Unknown
+    );
+    let kept = HELD.with_borrow_mut(Option::take);
+    assert_eq!(
+        kept.map(|(at, of, _, placed)| (at, of, placed)),
+        Some((cx.query(), below, 0b10))
+    );
+}
+
 /// What the rules answered of a meet's members at a query's root is read back
 /// by that query alone, for that subject and those members alone: another
 /// query's record, another subject's and another meet's are none of its.

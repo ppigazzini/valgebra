@@ -1016,17 +1016,22 @@ impl Schema {
             // the same, which is the one answer such a pair gives.
             let (read, side) = other.read_as_a_supertype();
             let lowers = lower_unfolded(read, cx.defs, side, cx.oracle).is_some();
-            return Relation::all(members.iter().map(|member| {
-                member
-                    .is_subtype_rec(other, cx)
-                    .or_else(|| {
-                        if lowers {
-                            member.descriptor_contained_in(other, cx.oracle, cx.defs)
-                        } else {
-                            Relation::proven(cx.denotes_no_value(member))
-                        }
-                    })
-                    .or_else(|| member.decided_by_parts(other, cx, false))
+            // What the rules answered of each member at the root is read back
+            // rather than asked again ([`Schema::each_member_below_at_the_root`]).
+            let held = cx.held_below(other, members);
+            return Relation::all(members.iter().enumerate().map(|(at, member)| {
+                match held {
+                    Some(held) => Relation::proven(held >> at & 1 == 1),
+                    None => member.is_subtype_rec(other, cx),
+                }
+                .or_else(|| {
+                    if lowers {
+                        member.descriptor_contained_in(other, cx.oracle, cx.defs)
+                    } else {
+                        Relation::proven(cx.denotes_no_value(member))
+                    }
+                })
+                .or_else(|| member.decided_by_parts(other, cx, false))
             }));
         }
         if let (Schema::KeyedMap { fields: fa, .. }, Schema::KeyedMap { fields: fb, .. }) =
@@ -1898,7 +1903,59 @@ impl Schema {
                 cx,
             );
         }
+        if cx.budget.depth.get() == 1
+            && let Schema::Union(kept) = self
+        {
+            return Schema::each_member_below_at_the_root(kept, other, cx);
+        }
         Schema::each_below(members, other, cx)
+    }
+
+    /// [`union_below`](Self::union_below) at the root of a query, where no
+    /// hypothesis is open, so what the rules answer of a member is an answer
+    /// about that pair: where they decline the union, the members they place
+    /// below `other` are kept for the query ([`HELD`]), and the parts reading
+    /// asks the set representation of the members left rather than the rules
+    /// again, which would read the answers this arm read -- on a union of
+    /// refined integers drawn eight deep, half of the query a second time.
+    /// The meet supertype's arm keeps its members alike
+    /// ([`below_each_member_at_the_root`](Self::below_each_member_at_the_root)).
+    ///
+    /// Out of line, with the depth tested by the caller.
+    #[inline(never)]
+    fn each_member_below_at_the_root(
+        members: &Members,
+        other: &Schema,
+        cx: &mut Cx<'_>,
+    ) -> Relation {
+        let keeps = members.len() <= MEMBERS_HELD;
+        let mut placed = 0u64;
+        let mut declined = false;
+        for (at, member) in members.iter().enumerate() {
+            match member.is_subtype_rec(other, cx) {
+                Relation::Fails => return Relation::Fails,
+                Relation::Unknown => declined = true,
+                Relation::Holds => {
+                    if keeps {
+                        placed |= 1 << at;
+                    }
+                }
+            }
+            if declined && cx.budget.left() == 0 {
+                a_bound_is_met();
+                return Relation::Unknown;
+            }
+        }
+        if !declined {
+            return Relation::Holds;
+        }
+        if keeps {
+            let query = cx.query();
+            HELD.with_borrow_mut(|held| {
+                *held = Some((query, other.clone(), Arc::clone(members), placed));
+            });
+        }
+        Relation::Unknown
     }
 
     /// Whether each of `members` is below `other`, as the arm calling this
@@ -2459,7 +2516,11 @@ thread_local! {
     /// The meet supertype the rules last declined at the root of a query on
     /// this thread ([`Schema::below_each_member_at_the_root`]): the query's
     /// number, the subject, the members, and the members the subject was
-    /// placed below, one bit each. Held beside the query for the reason
+    /// placed below, one bit each; or the union subject they last declined
+    /// there ([`Schema::each_member_below_at_the_root`]): the number, the
+    /// supertype, the union's members, and the members placed below it. The
+    /// root pair is one of the two, and each is read back by the pair it
+    /// names. Held beside the query for the reason
     /// [`Readings`] is, and by number, so a query reads back only what it
     /// kept, and the members' storage is held, so no other meet's members are
     /// at that address while the record stands.
