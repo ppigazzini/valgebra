@@ -453,7 +453,16 @@ answers `"undecided"`.
   word, a sequence with a repeated element, a mapping keyed by every name --
   is refuted below a bound leaving one of those lengths out, at any size:
   `Annotated[str, MaxLen(256)]` is `not_subset` of `Annotated[str,
-  MaxLen(64)]`, on a text of 65 code points. A union is refused a length its
+  MaxLen(64)]`, on a text of 65 code points. A base written bare is its
+  refinement under no bound, every length being at least zero, so `str` is
+  `not_subset` of `Annotated[str, MaxLen(1000)]` and `dict[str, int]` of
+  `Annotated[dict, MaxLen(2)]`; a set's lengths run to the values its element
+  holds apart, so `Annotated[set[int], MinLen(1)]` is `not_subset` of
+  `Annotated[set[int], MinLen(2)]`, on `{0}`. A subject holding the empty
+  container of its kind, a refinement under bounds that admit zero among
+  them, is refuted below a supertype refusing it: `Annotated[set[int],
+  MinLen(0)]` below `Annotated[set, MinLen(1)]`, on `set()`, and
+  `Annotated[dict, MaxLen(0)]` below `{"a": int}`, on `{}`. A union is refused a length its
   branches each leave out the same way, a branch of another kind leaving out
   every length, so `Annotated[list[int], MinLen(1)]` is `not_subset` of
   `Annotated[list[int], MaxLen(1)] | Annotated[list[int], MaxLen(3000)]`, on
@@ -1034,9 +1043,10 @@ the shape. What is left below is what the descriptor cannot hold.
   MinLen(3)]` is decided empty and `Annotated[list[int], MaxLen(0)]` is the
   empty list. A set and a dict have a length their components do not count, and
   a bound over one of those refuses rather than being lowered as if it did.
-  What the rules read of one -- whether a set under a bound has a value, and
-  the lengths a set's element and a record's fields keep to -- is the bullet on
-  a length bound above. What they do not read is which members a length leaves:
+  What the rules read of one -- whether a set under a bound has a value, the
+  lengths a set's element and a record's fields keep to, and a length a
+  supertype's bounds leave out -- is the bullet on a length bound above. What
+  they do not read is which members a length leaves:
   `Annotated[set[Literal[1, 2]], Len(1, 1)]` holds `{1}` and `{2}` alone and is
   below `set[Literal[1]] | set[Literal[2]]`, and the pair answers `undecided`.
 

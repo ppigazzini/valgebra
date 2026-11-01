@@ -4023,14 +4023,14 @@ fn a_refinement_as_the_supertype_carries_its_base_s_refutation() {
         ),
         Relation::Fails
     );
-    // A shape that holds no empty list has no such value, so the same pair
-    // with a prefix is unproven rather than refuted.
+    // A shape that holds no empty list holds a list of one, which the bound
+    // of two refuses as well: refuted on `[0]`.
     assert_eq!(
         relation(
             &Schema::list(SeqShape::prefix_tail([Schema::Int], Schema::Int)),
             &bounded_list
         ),
-        Relation::Unknown
+        Relation::Fails
     );
     // A refinement of the same base is the refinements' own rule, which reads
     // the constraints rather than this one.
@@ -10008,6 +10008,74 @@ fn no_value_is_longer_than_the_longest_length() {
             &bounded(Schema::Str, vec![Constraint::MaxLen(LONGEST)])
         ),
         Relation::Fails
+    );
+}
+
+// THEORY: a-refinement-narrows-its-base
+/// A sized base written bare is its refinement under no bound, and is read as
+/// one: refuted below a bound leaving one of its lengths out. A set holds a set
+/// of each length up to the values its element holds apart, and a subject
+/// holding the empty container of its kind is refuted below a supertype
+/// refusing it, through a refinement whose bounds admit zero.
+#[test]
+fn a_sized_base_written_bare_reads_as_its_refinement() {
+    let relation =
+        |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &NoLeafRelations, &[]);
+    let bounded = |base: Schema, constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(base),
+        constraints: constraints.into(),
+    };
+    let names = Schema::mapping(MapClause {
+        key: Schema::Str,
+        value: Schema::Int,
+    });
+    let any_map = Schema::mapping(MapClause {
+        key: Schema::ANYTHING,
+        value: Schema::ANYTHING,
+    });
+    let any_set = Schema::set(Schema::ANYTHING);
+    for (subject, supertype) in [
+        (
+            Schema::Str,
+            bounded(Schema::Str, vec![Constraint::MaxLen(1000)]),
+        ),
+        (
+            names.clone(),
+            bounded(any_map.clone(), vec![Constraint::MaxLen(2)]),
+        ),
+        (
+            bounded(Schema::set(Schema::Int), vec![Constraint::MinLen(0)]),
+            bounded(any_set.clone(), vec![Constraint::MaxLen(2)]),
+        ),
+        (
+            bounded(Schema::set(Schema::Int), vec![Constraint::MaxLen(10)]),
+            bounded(any_set.clone(), vec![Constraint::MinLen(1)]),
+        ),
+        (
+            bounded(any_map, vec![Constraint::MaxLen(0)]),
+            Schema::record(
+                vec![Field {
+                    name: "a".into(),
+                    schema: Schema::Int,
+                    required: true,
+                }],
+                Openness::Closed,
+            ),
+        ),
+    ] {
+        assert_eq!(
+            relation(&subject, &supertype),
+            Relation::Fails,
+            "{subject:?} <= {supertype:?}"
+        );
+    }
+    // A set of an element holding two values apart has no set of three.
+    assert_eq!(
+        relation(
+            &bounded(Schema::set(Schema::Bool), vec![Constraint::MinLen(0)]),
+            &bounded(any_set, vec![Constraint::MaxLen(2)])
+        ),
+        Relation::Holds
     );
 }
 

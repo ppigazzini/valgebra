@@ -95,10 +95,24 @@ answer of its own, or a repair to a change not yet released.
 - fix: a TypedDict's extra_items given as a string is the type it names
 - fix: a TypedDict qualifier given as a default or as extra_items is refused
 - fix: a field wrapped past the qualifiers read is refused as too deep
+- feat: a sized base written bare is read as its refinement under no bound
 
 -->
 
 ### Added
+
+- **A sized base written bare is read as its refinement under no bound.** A
+  word, a byte string, a list, a set and a mapping each have a length at least
+  zero, so `str` and `Annotated[str, MinLen(0)]` are one set, and the
+  relation reads them alike: `str` is `not_subset` of `Annotated[str,
+  MaxLen(1000)]` and `dict[str, int]` of `Annotated[dict, MaxLen(2)]`, where
+  only the refinement was refuted. A set's lengths run to the values its
+  element holds apart, so `Annotated[set[int], MinLen(1)]` is `not_subset` of
+  `Annotated[set[int], MinLen(2)]`, on `{0}`. And a subject holding the empty
+  container of its kind, a refinement under bounds that admit zero among
+  them, is refuted below a supertype refusing it: `Annotated[set[int],
+  MinLen(0)]` below `Annotated[set, MinLen(1)]` on `set()`, and
+  `Annotated[dict, MaxLen(0)]` below `{"a": int}` on `{}`.
 
 - **A word's length bound is counted by a table built directly.** A length bound
   over `str` is a table of seven states a code point, which the pattern compiler

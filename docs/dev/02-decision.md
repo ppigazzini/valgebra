@@ -1598,8 +1598,8 @@ one does -- Sub-Base [JV20, Fig. 3.4] with the shape's lengths among the
 subject's constraints, the step the property-count rule [BBC+26, (object)]
 cannot take for a record whose fields keep it short -- so a proof below a
 bound's base carries to the refinement. The refutations name a value:
-`longer_than` a set of one member past a maximum where the element holds that
-many apart (`holds_apart` in `decision/emptiness.rs`, which counts a union's
+`length_refused` a set of one member past a maximum where the element holds
+that many apart (`holds_apart` in `decision/emptiness.rs`, which counts a union's
 literals within one kind, since `1 == True` across two, in one question to the
 oracle, `literals_counted_apart`, which hashes the constants whose equality it
 trusts, and a pair at a time only where it declines: asked pairwise, a set
@@ -1608,7 +1608,13 @@ interpreter), and
 `required_fields_refused` the value of a record's required fields alone. And a
 refinement at most zero long is the empty container of its base's kind,
 `read_by_length` holding it below every shape that admits it
-(`admits_the_empty`). Two counts are left loose: an optional field that can
+(`admits_the_empty`), and a subject holding that container refuted below a
+supertype refusing it (`the_empty_refused`, both sides read by
+`holds_the_exact_empty`). `length_refused` reads a sized base written bare as
+its refinement under no bound, and a set's lengths up to the values its
+element holds apart, and the law
+`a_sized_base_and_its_least_length_zero_are_read_alike` holds the two
+spellings to one answer. Two counts are left loose: an optional field that can
 hold no value counts toward a closed record's most, and a refinement of a set
 is not split into the sets its length leaves, so `Annotated[set[Literal[1,
 2]], Len(1, 1)]` is not read as `{1}` or `{2}` against a union of sets.

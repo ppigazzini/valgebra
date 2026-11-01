@@ -243,16 +243,17 @@ impl Schema {
             && self.star_element().is_some()
     }
 
-    /// What a container's length settles of the pair, where a container or a
+    /// What a container's length settles of the pair, where a sized value or a
     /// refinement of one is the subject: `Holds` for a refinement whose length
     /// is at most zero -- the empty container of its kind and nothing else --
-    /// below a supertype admitting that container, `Fails` for a shape that
-    /// holds one longer than the supertype's maximum length
-    /// ([`longer_than`](Self::longer_than)), a record whose required fields
-    /// alone are a length the supertype refuses
-    /// ([`required_fields_refused`](Self::required_fields_refused)), or a
-    /// refinement holding a length the supertype's bounds leave out
-    /// ([`length_refused`](Self::length_refused)), `Unknown` otherwise.
+    /// below a supertype admitting that container, `Fails` for a record whose
+    /// required fields alone are a length the supertype refuses
+    /// ([`required_fields_refused`](Self::required_fields_refused)), a
+    /// subject holding a length the supertype's bounds leave out
+    /// ([`length_refused`](Self::length_refused)) -- a sequence or a set one
+    /// longer than the supertype's maximum among them -- or one holding the
+    /// empty container of its kind, which the supertype refuses
+    /// ([`the_empty_refused`](Self::the_empty_refused)), `Unknown` otherwise.
     ///
     /// Out of line behind the discriminant test its caller asks, so a pair of
     /// any other shape pays the one test.
@@ -268,59 +269,30 @@ impl Schema {
         {
             return Relation::Holds;
         }
-        if self.longer_than(other, cx)
-            || self.required_fields_refused(other, cx)
+        if self.required_fields_refused(other, cx)
             || self.length_refused(other, cx)
+            || self.the_empty_refused(other)
         {
             return Relation::Fails;
         }
         Relation::Unknown
     }
 
-    /// Whether the subject holds a sequence longer than the supertype's length
-    /// bound lets through.
+    /// Whether the exact empty container of the subject's kind is one of its
+    /// values and none of the supertype's: a value of the subject outside the
+    /// supertype, read on both sides by
+    /// [`holds_the_exact_empty`](Self::holds_the_exact_empty).
     ///
-    /// The dual of [`shorter_than`](Self::shorter_than). A sequence shape with
-    /// a repeated element holds its prefix followed by the element as many
-    /// times as a value likes, so where the supertype bounds the length from
-    /// above, the prefix and then the element one time past the bound is a
-    /// value of the subject the bound refuses, whatever the supertype's base.
-    /// It stands on a value at every prefix position and of the element, which
-    /// the emptiness reading proves -- a list of a type no value has is the
-    /// empty list alone. Read off the bare shape, for the reason
-    /// `shorter_than` gives: a constraint this does not read may bound the
-    /// subject's own length. The value one past the bound is a value only where
-    /// that length is one a value has, so a bound at [`LONGEST`] refuses nothing
-    /// here: no list is longer than `sys.maxsize`.
-    ///
-    /// A set holds each member once, so its value one past the bound is that
-    /// many members its element holds apart under `==`
-    /// ([`holds_apart`]): `{1, 2}` is a
-    /// `set[Literal[1, 2]]` that `MaxLen(1)` refuses.
-    pub(super) fn longer_than(&self, other: &Schema, cx: &mut Cx<'_>) -> bool {
-        let Schema::Refine { constraints, .. } = other else {
-            return false;
-        };
-        if let Schema::Coll { element, .. } = self {
-            return longest(constraints.iter())
-                .and_then(|most| most.checked_add(1))
-                .filter(|wanted| *wanted <= LONGEST)
-                .is_some_and(|wanted| holds_apart(element, wanted, cx.oracle));
-        }
-        let Schema::Seq { shape, .. } = self else {
-            return false;
-        };
-        let (Some(element), true) = (
-            shape.tail.as_deref(),
-            longest(constraints.iter()).is_some_and(|most| most < LONGEST),
-        ) else {
-            return false;
-        };
-        shape
-            .prefix
-            .iter()
-            .chain([element])
-            .all(|position| position.verdict_rec(cx) == Verdict::Inhabited)
+    /// The reading the bare shapes have through their own rules, read through a
+    /// refinement whose bounds admit zero, which is the same set where the
+    /// base is sized: `Annotated[set[int], MinLen(0)]` holds `set()`, which
+    /// `MinLen(1)` refuses, as `set[int]` does, and `Annotated[dict,
+    /// MaxLen(0)]` holds `{}`, which `{"a": int}` refuses.
+    fn the_empty_refused(&self, other: &Schema) -> bool {
+        self.type_tag().is_some_and(|kind| {
+            self.holds_the_exact_empty(kind) == Some(true)
+                && other.holds_the_exact_empty(kind) == Some(false)
+        })
     }
 
     /// Whether a record's value of its required fields alone has a length the
@@ -367,9 +339,18 @@ impl Schema {
     /// constraints, and a branch holding no value of the subject's kind admits
     /// none. Any other branch leaves the union unread. The length asked is the
     /// least one from the subject's least that no branch's bounds admit.
+    ///
+    /// A base written bare is its refinement under no bound: every length is
+    /// at least zero, so `str` and `Annotated[str, MinLen(0)]` are one set,
+    /// and read alike. A set holds a set of each length up to the values its
+    /// element holds apart under `==` ([`holds_apart`]), which the length
+    /// asked is held to. So a shape written bare is refuted one past a
+    /// maximum: `list[int]` below `Annotated[list[int], MaxLen(1)]` on
+    /// `[0, 0]`, and `set[Literal[1, 2]]` below `MaxLen(1)` on `{1, 2}`.
     fn length_refused(&self, other: &Schema, cx: &mut Cx<'_>) -> bool {
-        let Schema::Refine { base, constraints } = self else {
-            return false;
+        let (base, constraints): (&Schema, &[Constraint]) = match self {
+            Schema::Refine { base, constraints } => (base, constraints),
+            bare => (bare, &[]),
         };
         let branches = match other {
             Schema::Refine { .. } => core::slice::from_ref(other),
@@ -396,7 +377,11 @@ impl Schema {
                 _ => return false,
             }
         }
-        let Some(from) = base.every_length_from(cx) else {
+        let from = match base {
+            Schema::Coll { .. } => Some(0),
+            _ => base.every_length_from(cx),
+        };
+        let Some(from) = from else {
             return false;
         };
         let least = from.max(shortest(constraints.iter()));
@@ -417,6 +402,10 @@ impl Schema {
             }
         }
         length <= most
+            && match base {
+                Schema::Coll { element, .. } => holds_apart(element, length, cx.oracle),
+                _ => true,
+            }
     }
 
     /// The least length from which this shape holds a value of every length,

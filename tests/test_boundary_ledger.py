@@ -316,12 +316,16 @@ ROWS: dict[str, Row] = {
         beside=(bytes, complement(_CHAIN), "subset"),
     ),
     "A length bound over a set or a dict, in the sets.": Declines(
-        Annotated[set[int], at.MinLen(1)],
-        Annotated[set[int], at.MinLen(2)],
+        Annotated[set[Literal[1, 2]], at.Len(1, 1)],
+        union(set[Literal[1]], set[Literal[2]]),
         "a length in the powerset lattice, which holds members rather than a count",
-        # The same bound over a sequence is a shape the automaton holds, so a
-        # length above the positions there are is decided empty.
-        beside=(Annotated[tuple[int, int], at.MinLen(3)], nothing, "subset"),
+        # A length the supertype's bounds leave out is what the rules read of
+        # a set, on a value of that length its element holds apart.
+        beside=(
+            Annotated[set[int], at.MinLen(1)],
+            Annotated[set[int], at.MinLen(2)],
+            "not_subset",
+        ),
     ),
     "A set that needs two members Python's `==` makes one.": Declines(
         set[Literal[1, True]],

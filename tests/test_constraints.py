@@ -1000,3 +1000,29 @@ def test_an_order_bound_over_words_is_decided_as_the_words_it_admits() -> None:
     assert Validator(text(at.Gt("퟿"))).is_valid(surrogate)
     assert not Validator(text(at.Ge(""))).is_valid(surrogate)
     assert Validator(text(at.Gt("퟿"))).relation_to(text(at.Ge(""))) == "not_subset"
+
+
+def test_a_sized_base_and_its_least_length_zero_are_one_set() -> None:
+    """`X` and `Annotated[X, MinLen(0)]` are one set for a sized `X`, and read alike.
+
+    A base written bare is its refinement under no bound, so a length a
+    supertype's bounds leave out refutes it as it refutes the refinement, and
+    a set or a dict holding its empty one is refuted below a supertype refusing
+    it, through bounds that admit zero.
+    """
+    pairs = [
+        (str, Annotated[str, at.MaxLen(1000)]),
+        (dict[str, int], Annotated[dict, at.MaxLen(2)]),
+        (set[int], Annotated[set, at.MaxLen(2)]),
+        (set[int], Annotated[set, at.MinLen(1)]),
+        (frozenset[int], Annotated[frozenset, at.Len(1, 3)]),
+    ]
+    for base, supertype in pairs:
+        spelled = Annotated[base, at.MinLen(0)]
+        assert Validator(base).relation_to(supertype) == "not_subset", base
+        assert Validator(spelled).relation_to(supertype) == "not_subset", base
+    empty_dict = Annotated[dict, at.MaxLen(0)]
+    assert Validator(empty_dict).relation_to({"a": int}) == "not_subset"
+    assert Validator(empty_dict).relation_to(Validator({"a": int}).open()) == (
+        "not_subset"
+    )

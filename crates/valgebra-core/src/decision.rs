@@ -2248,6 +2248,8 @@ impl Schema {
                 if matches!(
                     self,
                     Schema::Refine { .. }
+                        | Schema::Str
+                        | Schema::Bytes
                         | Schema::Seq { .. }
                         | Schema::Coll { .. }
                         | Schema::KeyedMap { .. }

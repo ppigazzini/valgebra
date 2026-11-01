@@ -3901,6 +3901,19 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
     // below, and nothing reads the pool after this pass.
     let cap = CAP_PER_NODE * 4;
     let mut made = Vec::new();
+    // A set or a record a schema names, at the widths a bound in either
+    // schema names ([`sized_past`]): `dict[str, set[Any]]` below `Any` of at
+    // most one is refuted by a dict of two keys whose values are sets. First,
+    // because they are few and the crossings below can fill the cap.
+    let mut sized: Vec<&Schema> = Vec::new();
+    for schema in schemas {
+        sized_named_by(schema, &mut sized);
+    }
+    for mine in sized {
+        for theirs in schemas {
+            made.extend(sized_past(mine, theirs));
+        }
+    }
     'crossed: for (container, mine) in &shapes {
         if mine.tail.is_some() {
             continue; // no fixed width to fill
@@ -4201,6 +4214,24 @@ fn shapes_named_by<'a>(schema: &'a Schema, out: &mut Vec<(SeqKind, &'a SeqShape)
         Schema::Union(members) | Schema::Intersection(members) => {
             for member in members.iter() {
                 shapes_named_by(member, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The sets and the records a schema names, through the wrappers
+/// [`shapes_named_by`] looks through: the sized schemas whose own values tell
+/// them from a length bound, where a sequence is crossed with the other
+/// schema's elements instead.
+fn sized_named_by<'a>(schema: &'a Schema, out: &mut Vec<&'a Schema>) {
+    match schema {
+        Schema::Coll { .. } | Schema::KeyedMap { .. } => out.push(schema),
+        Schema::Refine { base, .. } => sized_named_by(base, out),
+        Schema::Complement(inner) => sized_named_by(inner, out),
+        Schema::Union(members) | Schema::Intersection(members) => {
+            for member in members.iter() {
+                sized_named_by(member, out);
             }
         }
         _ => {}
@@ -4514,6 +4545,49 @@ fn a_length_bound_over_a_record_is_separated_by_a_mapping_it_admits() {
     let b = Schema::Coll {
         container: CollKind::Set,
         element: Arc::new(Schema::ANYTHING),
+    };
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
+}
+
+// THEORY: each-kind-is-closed
+/// A length bound over the top is separated from a record by a mapping of the
+/// record's own at a width the bound refuses.
+///
+/// The pair, as the law drew it: `dict[str, set[Any]]` against `Any` of at
+/// most one. It is refuted by `{"a": set(), "b": set()}`, a dict of two keys
+/// whose values the clause takes. The bound builds its widths from one integer
+/// repeated, which the clause does not take, and the record builds its own
+/// member at the width of none.
+#[test]
+fn a_length_bound_over_the_top_is_separated_by_a_record_of_its_own() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let a = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: Schema::Coll {
+                container: CollKind::Set,
+                element: Arc::new(Schema::ANYTHING),
+            },
+        }]
+        .into(),
+    };
+    let b = Schema::Refine {
+        base: Arc::new(Schema::ANYTHING),
+        constraints: vec![Constraint::MaxLen(1)].into(),
     };
     assert_eq!(
         a.subtype_relation_under(&b, &NoLeafRelations, &defs),
@@ -8270,5 +8344,82 @@ proptest! {
         if rules != Relation::Unknown && sets != Relation::Unknown {
             prop_assert_eq!(rules, sets, "{:?} <= {:?}", a, b);
         }
+    }
+}
+
+/// A base whose values each have a length, every length at least zero -- a
+/// word, a byte string, a list, a set or a mapping -- beside the base of its
+/// whole kind.
+fn a_sized_base() -> impl Strategy<Value = (Schema, Schema)> {
+    let frozen = |element: Schema| Schema::Coll {
+        container: CollKind::FrozenSet,
+        element: Arc::new(element),
+    };
+    let map = |key, value| Schema::mapping(MapClause { key, value });
+    let list = |element| Schema::list(SeqShape::homogeneous(element));
+    prop_oneof![
+        Just((Schema::Str, Schema::Str)),
+        Just((Schema::Bytes, Schema::Bytes)),
+        Just((list(Schema::Int), list(Schema::ANYTHING))),
+        Just((Schema::set(Schema::Int), Schema::set(Schema::ANYTHING))),
+        Just((Schema::set(Schema::Bool), Schema::set(Schema::ANYTHING))),
+        Just((frozen(Schema::Int), frozen(Schema::ANYTHING))),
+        Just((
+            map(Schema::Str, Schema::Int),
+            map(Schema::ANYTHING, Schema::ANYTHING)
+        )),
+        Just((
+            map(Schema::Int, Schema::Str),
+            map(Schema::ANYTHING, Schema::ANYTHING)
+        )),
+    ]
+}
+
+/// A supertype bounding the length of the subject's base or of its whole
+/// kind, or a union of two such.
+fn a_length_bounded_supertype(base: Schema, whole: Schema) -> impl Strategy<Value = Schema> {
+    let bound = prop_oneof![
+        (0usize..6).prop_map(Constraint::MinLen),
+        (0usize..6).prop_map(Constraint::MaxLen),
+    ];
+    let refined = (
+        prop_oneof![Just(base), Just(whole)],
+        prop::collection::vec(bound, 1..3),
+    )
+        .prop_map(|(base, constraints)| Schema::Refine {
+            base: Arc::new(base),
+            constraints: constraints.into(),
+        });
+    prop_oneof![
+        refined.clone(),
+        (refined.clone(), refined).prop_map(|(a, b)| Schema::Union(vec![a, b].into())),
+    ]
+}
+
+proptest! {
+    // A bounded shrink, so a broken bound cannot turn a caught mutation into a
+    // run that outlasts a sweep: see `budget::law`.
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    /// A sized base and its refinement by `MinLen(0)` are one set, every length
+    /// being at least zero, and the relation reads the two spellings alike
+    /// below a supertype bounding the length.
+    #[test]
+    fn a_sized_base_and_its_least_length_zero_are_read_alike(
+        (base, supertype) in a_sized_base().prop_flat_map(|(base, whole)| {
+            (Just(base.clone()), a_length_bounded_supertype(base, whole))
+        }),
+    ) {
+        let _armed = crate::descr::budget::law();
+        let spelled = Schema::Refine {
+            base: Arc::new(base.clone()),
+            constraints: vec![Constraint::MinLen(0)].into(),
+        };
+        let bare = base.subtype_relation_under(&supertype, &NoLeafRelations, &[]);
+        let refined = spelled.subtype_relation_under(&supertype, &NoLeafRelations, &[]);
+        prop_assert_eq!(bare, refined, "{:?} <= {:?}", base, supertype);
     }
 }
