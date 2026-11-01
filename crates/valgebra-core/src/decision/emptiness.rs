@@ -1386,7 +1386,7 @@ pub(super) fn value_count_bounds(schema: &Schema, oracle: &dyn LeafRelations) ->
     }
 }
 
-/// Whether a sequence base's own lengths and the refinement's length bounds
+/// Whether a container base's own lengths and the refinement's length bounds
 /// share none.
 ///
 /// A sequence is never shorter than its fixed positions, and never longer where
@@ -1394,19 +1394,56 @@ pub(super) fn value_count_bounds(schema: &Schema, oracle: &dyn LeafRelations) ->
 /// times. So `MinLen(5)` over a list of exactly three elements, or `MaxLen(1)`
 /// over one of at least two, admits no sequence, whatever the conjunction's
 /// other constraints say.
+///
+/// A set of an element with no value is the empty set alone. A mapping is never
+/// shorter than its required fields, and holds no more keys than its fields and
+/// the keys each clause can take: none where the clause's value has no value,
+/// and otherwise as many as its key holds apart ([`value_count_bounds`]). So
+/// `dict[str, int & str]` and `set[int & str]` under `MinLen(1)`, `dict[bool,
+/// int]` under `MinLen(3)` and the closed `{"a": int}` under `MinLen(2)` admit
+/// no value.
 fn lengths_miss_the_shape(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>) -> bool {
-    let Schema::Seq { shape, .. } = base else {
-        return false;
+    let (least, most) = match base {
+        Schema::Seq { shape, .. } => {
+            let open = shape
+                .tail
+                .as_deref()
+                .is_some_and(|tail| !tail.is_empty_rec(cx));
+            (shape.prefix.len(), (!open).then_some(shape.prefix.len()))
+        }
+        Schema::Coll { element, .. } => (0, read_empty(element, cx).then_some(0)),
+        Schema::KeyedMap { fields, defaults } => {
+            let required = fields.iter().filter(|field| field.required).count();
+            let mut most = Some(fields.len());
+            for clause in defaults.iter() {
+                if read_empty(&clause.value, cx) {
+                    continue;
+                }
+                let (_, keys) = value_count_bounds(&clause.key, cx.oracle);
+                most = most
+                    .filter(|_| keys != usize::MAX)
+                    .map(|held| held.saturating_add(keys));
+            }
+            (required, most)
+        }
+        _ => return false,
     };
-    let fixed = shape.prefix.len();
-    if longest(constraints.iter()).is_some_and(|most| most < fixed) {
-        return true;
-    }
-    let open = shape
-        .tail
-        .as_deref()
-        .is_some_and(|tail| !tail.is_empty_rec(cx));
-    !open && shortest(constraints.iter()) > fixed
+    longest(constraints.iter()).is_some_and(|allowed| allowed < least)
+        || most.is_some_and(|most| shortest(constraints.iter()) > most)
+}
+
+/// Whether `schema` holds no value as its shape says or as the set
+/// representation reads it for the query ([`Cx::denotes_no_value`]), asked
+/// without the rules' exploration.
+///
+/// A length reading asks this of a set's element and of a mapping clause's
+/// value, inside an emptiness question the rules are already exploring. Asked
+/// through the rules, it started a second exploration of each, which runs once
+/// for every question that reaches the container and multiplies with the
+/// nesting; read here, an element the set representation cannot place is
+/// counted as holding a value, which only leaves a length bound unread.
+fn read_empty(schema: &Schema, cx: &Cx<'_>) -> bool {
+    matches!(schema, Schema::Nothing) || cx.denotes_no_value(schema)
 }
 
 /// The one element schema a container repeats, for the containers that repeat

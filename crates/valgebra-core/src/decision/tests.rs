@@ -9995,6 +9995,46 @@ fn a_length_the_supertype_leaves_out_refutes_at_any_size() {
     assert_ne!(relation(&none, &at_most_64), Relation::Fails);
 }
 
+/// A container's own lengths bound a refinement of it: a set of an element
+/// with no value is the empty set alone, a mapping holds no more keys than its
+/// fields and what each clause with a value can take, and a closed record no
+/// more than its fields. A bound past those lengths empties the refinement,
+/// and one they reach does not.
+#[test]
+fn a_container_holds_no_more_items_than_its_shape_can_name() {
+    let at_least = |base: Schema, least: usize| {
+        Schema::Refine {
+            base: Arc::new(base),
+            constraints: vec![Constraint::MinLen(least)].into(),
+        }
+        .verdict()
+    };
+    let none = Schema::Intersection(vec![Schema::Int, Schema::Str].into());
+    let mapping = |key: Schema, value: Schema| Schema::mapping(MapClause { key, value });
+    assert_eq!(at_least(Schema::set(none.clone()), 1), Verdict::Empty);
+    assert_eq!(at_least(mapping(Schema::Str, none), 1), Verdict::Empty);
+    assert_eq!(
+        at_least(mapping(Schema::Bool, Schema::Int), 3),
+        Verdict::Empty
+    );
+    assert_eq!(
+        at_least(mapping(Schema::NoneType, Schema::Int), 2),
+        Verdict::Empty
+    );
+    let closed = Schema::record(vec![field("a", Schema::Int, false)], Openness::Closed);
+    assert_eq!(at_least(closed.clone(), 2), Verdict::Empty);
+    assert_ne!(at_least(closed, 1), Verdict::Empty);
+    assert_ne!(
+        at_least(mapping(Schema::Bool, Schema::Int), 2),
+        Verdict::Empty
+    );
+    assert_ne!(
+        at_least(mapping(Schema::Str, Schema::Int), 9),
+        Verdict::Empty
+    );
+    assert_ne!(at_least(Schema::set(Schema::Int), 9), Verdict::Empty);
+}
+
 /// Two records requiring one key share no value where the key's schemas share
 /// none, so two unions of records told apart by that key are disjoint a record
 /// pair at a time: thirty-two records a side meet in nothing, read without

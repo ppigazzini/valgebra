@@ -435,8 +435,12 @@ answers `"undecided"`.
   each hold the exact empty one, read off their shapes, is not empty, and a
   complement holds it where its inner shape refuses it, so
   `Annotated[dict[str, int], MaxLen(0)] & ~{"a": int}` is `not_subset` of
-  `nothing`, on `{}`. A bound over a mapping's
-  clauses is not counted, and declines. A bound over a list is an automaton with a
+  `nothing`, on `{}`. A set of an element with no value is the empty set
+  alone, and a mapping holds no more keys than its fields and the keys each
+  clause with a value can take, so `set[int & str]` and `dict[str, int & str]`
+  under `MinLen(1)`, `dict[bool, int]` under `MinLen(3)` and the closed
+  `{"a?": int}` under `MinLen(2)` are empty. A bound a mapping's clauses reach
+  is not counted further, and declines. A bound over a list is an automaton with a
   state per element, and the sets compare two such bounds up to about 1,340
   elements over a list of integers before the work a relation may spend runs
   out; past that they decline. A bound over a `str` or `bytes` is a pattern

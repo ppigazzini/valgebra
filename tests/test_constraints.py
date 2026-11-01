@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Annotated
 
 import annotated_types as at
 import pytest
+import typing_extensions
 
 from valgebra import (
     Regex,
@@ -703,6 +704,41 @@ def test_a_length_every_branch_leaves_out_refutes_a_union() -> None:
     text = Validator(Annotated[str, at.MaxLen(3_000)])
     words = union(Annotated[str, at.MaxLen(64)], Annotated[str, at.MinLen(2_000)])
     assert text.relation_to(words) == "not_subset"
+
+
+def test_a_container_holds_no_more_items_than_its_shape_can_name() -> None:
+    """A length bound past the items a shape can hold empties it.
+
+    A set of an element with no value holds `set()` alone, a mapping no more
+    keys than its fields and what each clause with a value can take -- none
+    where the value has no value, two for a `bool` key -- and a closed record
+    no more than its fields. A bound those lengths reach stays inhabited.
+    """
+
+    class OneOptional(typing_extensions.TypedDict, total=False, closed=True):
+        a: int
+
+    class OneRequired(typing_extensions.TypedDict, closed=True):
+        a: int
+        b: typing_extensions.NotRequired[int]
+
+    no_value = intersection(int, str)
+    for empty in (
+        Annotated[dict[str, nothing], at.MinLen(1)],  # ty: ignore[invalid-type-form]
+        Annotated[dict[int, no_value], at.MinLen(1)],  # ty: ignore[invalid-type-form]
+        Annotated[set[no_value], at.MinLen(1)],  # ty: ignore[invalid-type-form]
+        Annotated[frozenset[no_value], at.MinLen(1)],  # ty: ignore[invalid-type-form]
+        Annotated[dict[bool, int], at.MinLen(3)],
+        Annotated[dict[None, int], at.MinLen(2)],
+        Annotated[OneOptional, at.MinLen(2)],
+    ):
+        assert Validator(empty).relation_to(nothing) == "subset", empty
+    for reached, value in (
+        (Annotated[dict[bool, int], at.MinLen(2)], {True: 1, False: 2}),
+        (Annotated[OneRequired, at.MinLen(2)], {"a": 1, "b": 2}),
+    ):
+        assert Validator(reached).is_valid(value)
+        assert Validator(reached).relation_to(nothing) != "subset"
 
 
 def test_a_meet_whose_members_each_hold_the_empty_container_holds_it() -> None:

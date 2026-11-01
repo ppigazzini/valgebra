@@ -1168,6 +1168,48 @@ def test_a_narrowed_meet_left_open_leaves_steps_to_the_readings_after_it() -> No
     assert guarded.relation_to(union(obj, complement(Validator(str)))) == "subset"
 
 
+def test_a_length_reading_asks_no_second_exploration_of_an_element() -> None:
+    """A set's element is read empty without the rules exploring it again.
+
+    The supertype holds every value: the JSON values, the integers, and every
+    set but those of at most one member, which the last branch takes back in
+    as a frozenset of JSON values under `MinLen(1)` beside the non-numbers.
+    Asked of a union holding the JSON values, the length reading of that
+    frozenset asked the rules whether its element was empty, inside the
+    emptiness the rules were exploring, once for every question reaching it,
+    and the query spent its steps before the proof. Read from the set
+    representation instead, the pair is `subset`.
+    """
+    json = recursive(
+        lambda j: union(
+            None,
+            bool,
+            int,
+            float,
+            str,
+            Validator(list[j]),  # ty: ignore[invalid-type-form]
+            Validator({str: j}),
+        )
+    )
+    number = intersection(union(int, float), complement(bool))
+    not_numbers = intersection(complement(number), complement(union(int, number)))
+    frozen = Annotated[frozenset[json], at.MinLen(1)]  # ty: ignore[invalid-type-form]
+    universal = union(
+        union(json, union(complement(Annotated[set, at.MaxLen(1)]), int)),
+        intersection(
+            complement(int),
+            complement(
+                intersection(
+                    complement(int),
+                    union(number, intersection(frozen, complement(number))),
+                )
+            ),
+        ),
+    )
+    assert union(not_numbers, json).relation_to(universal) == "subset"
+    assert union(not_numbers, str).relation_to(universal) == "subset"
+
+
 def test_a_complemented_union_is_read_by_de_morgan_below_any_supertype() -> None:
     """A complement of a union is the meet of its branches' complements.
 

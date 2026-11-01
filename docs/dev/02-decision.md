@@ -1557,7 +1557,14 @@ refinement empty -- would be answered not below it by the rules asked next.
 `lengths_miss_the_shape` in `decision/emptiness.rs` reads the shape, the
 seed `below-the-complement-of-a-length-the-shape-cannot-take` keeps the input,
 and `every_set_is_below_the_complement_of_an_empty_set` in `decision/tests.rs`
-keeps the pair.
+keeps the pair. A set's element and a mapping clause's value are read empty by
+their shape or by the set representation's reading the query keeps
+(`read_empty`), never by the rules exploring them again: asked inside the
+emptiness the rules are exploring, a second exploration ran once for every
+question reaching the container, and a union of the JSON values beside a
+frozenset under `MinLen(1)` spent its steps before the proof. An element the
+set representation does not place is counted as holding a value, which leaves
+a bound unread and refutes nothing.
 
 **A set's and a record's lengths are read off their shapes.** The set
 representation has no part for either length, so the rules read what the shape

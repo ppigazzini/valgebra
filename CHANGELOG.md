@@ -84,10 +84,21 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet holds the exact empty container its members each hold
 - feat: a length every branch of a union leaves out refutes at any size
 - feat: records told apart by a required key share no value
+- feat: a container holds no more items than its shape can name
 
 -->
 
 ### Added
+
+- **A container holds no more items than its shape can name.** A length bound
+  over a sequence was read against the sequence's own lengths, and over a set
+  or a mapping only where the element's values were counted.
+  `Annotated[dict[str, nothing], MinLen(1)]`, `Annotated[set[int & str],
+  MinLen(1)]`, `Annotated[dict[bool, int], MinLen(3)]` and the closed
+  `{"a?": int}` under `MinLen(2)` were `undecided` below `nothing`. A set of an
+  element with no value is the empty set alone, and a mapping holds no more
+  keys than its fields and what each clause with a value can take, its key's
+  values kept apart, so each is empty.
 
 - **Records told apart by a required key share no value.** Two records
   requiring one key whose schemas share no value are disjoint, and two unions
