@@ -213,7 +213,11 @@ answers `"undecided"`.
   words and is decided as one: Python orders two words symbol by symbol, a
   prefix first, so `Annotated[str, Gt("a")]` is `Annotated[str, Ge("a\x00")]`
   and `Annotated[str, Lt("")]` is empty; a lone surrogate is ordered where its
-  code point puts it.
+  code point puts it. The words are Unicode scalar values, which no lone
+  surrogate is, so a bound whose constant holds one is read where it stands
+  and not under a complement: `Annotated[str, Ge("\ue000")]` is `subset` of
+  `Annotated[str, Ge("\ud800")]`, and the meet of the first with the
+  complement of the second declines below `nothing`.
   A constraint is asked of one value at a time, so a refinement of a union is
   the union of its refined branches: `Annotated[int | float, Ge(0)]` is the
   non-negative ints and the non-negative floats, decided as each is, and a
@@ -968,8 +972,12 @@ the shape. What is left below is what the descriptor cannot hold.
     **An unfolding spends depth.** The fixpoint's body sits one level below
     every member that names it, so a member met with a recursive universe under
     a complement nests deeper than the rest. What the depth a build descends
-    bounds is the containers it starts: a scalar past it is read, and a cut
-    reference is one, so `str & ~(str & json)` is proved as `str & ~json` is. A
+    bounds is the containers it starts: a scalar past it is read by its kind's
+    regions, and a cut reference is one, so `str & ~(str & json)` is proved as
+    `str & ~json` is. The regions are intervals over the reals, so an integer
+    bound past the depth is not rounded: `Annotated[int, Gt(4), Lt(7)]` is
+    `subset` of `Annotated[int, Ge(5), Le(6)]` five lists deep and declines six
+    deep, where the closed range is still proved below the open one. A
     container past the depth is not built: beside the members a proof needs,
     its member is left out of the reading and the proof stands, as a
     [predicate](#undecidable-at-runtime) is, and where it is the member the

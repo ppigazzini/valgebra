@@ -1682,6 +1682,27 @@ def _missed(why: str) -> pytest.MarkDecorator:
 
 
 _LEDGERED: list[object] = [
+    # Past the depth a build descends, a scalar is read by its kind's regions,
+    # intervals over the reals that round no integer bound: the open range is
+    # the closed one over `int`, and six lists deep it is not seen to be.
+    pytest.param(
+        "subtype",
+        list[list[list[list[list[list[Annotated[int, at.Gt(4), at.Lt(7)]]]]]]],
+        list[list[list[list[list[list[Annotated[int, at.Ge(5), at.Le(6)]]]]]]],
+        id="int(4,7)<=int[5,6]-six-lists-deep",
+        marks=_missed("a scalar past the depth is read over the reals, unrounded"),
+    ),
+    # The words are Unicode scalar values, and no lone surrogate is one, so a
+    # bound whose constant holds one is not complemented.
+    pytest.param(
+        "empty",
+        intersection(
+            Annotated[str, at.Ge("\ue000")], complement(Annotated[str, at.Ge("\ud800")])
+        ),
+        None,
+        id="empty:str>=U+E000&~(str>=U+D800)",
+        marks=_missed("a bound holding a lone surrogate is not complemented"),
+    ),
     # The record rule's width from the other side: seven fields against their
     # 128 corners spend the decision budget before the split finishes, as seven
     # tuple components do, and the difference is past every bound a lowering
