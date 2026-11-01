@@ -1753,7 +1753,8 @@ _LEDGERED: list[object] = [
         marks=_missed("a scalar past the depth is read over the reals, unrounded"),
     ),
     # The words are Unicode scalar values, and no lone surrogate is one, so a
-    # bound whose constant holds one is not complemented.
+    # bound whose constant holds one is not complemented; its meet with a
+    # complement is read as the relation between the two bounds.
     pytest.param(
         "empty",
         intersection(
@@ -1761,7 +1762,6 @@ _LEDGERED: list[object] = [
         ),
         None,
         id="empty:str>=U+E000&~(str>=U+D800)",
-        marks=_missed("a bound holding a lone surrogate is not complemented"),
     ),
     # The record rule's width from the other side: seven fields against their
     # 128 corners spend the decision budget before the split finishes, as seven
@@ -2163,7 +2163,6 @@ _TRANSLATED: list[object] = [
         intersection(_JSON, complement(union(_JSON, str))),
         None,
         id="json:empty:json&~(json|str)",
-        marks=_missed("the question through a complement is asked of a meet"),
     ),
     pytest.param(
         "refutes",

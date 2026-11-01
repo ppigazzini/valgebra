@@ -661,23 +661,21 @@ def disagreements() -> list[str]:
 def test_the_two_deciders_are_measured_against_each_other(
     disagreements: list[str],
 ) -> None:
-    """The count is recorded, so it can only shrink.
+    """The count is recorded, so it can only shrink, and it stands at none.
 
     Neither decider is wrong where they differ: `is_subtype_of` carries a
     coinductive rule for recursion that the emptiness route reaches by a single
-    unfolding, so the rule side proves more about a fixpoint. What the number
-    holds is that the gap does not *grow* -- a change that made either less
-    complete would show up here rather than in a caller's undecided relation.
+    unfolding, so the rule side proves more about a fixpoint. `is_empty` reads
+    a meet holding one complement as the relation it is where its own readings
+    decline, so `a & ~b` is asked as `a <= b`, and the fixpoints are answered
+    alike. What the number holds is that no gap opens -- a change that made
+    either less complete would show up here rather than in a caller's
+    undecided relation.
     """
-    assert len(disagreements) <= 1, (
+    assert not disagreements, (
         f"{len(disagreements)} pairs where the two deciders disagree, up from "
-        "the recorded 1:\n" + "\n".join(disagreements[:10])
+        "the recorded 0:\n" + "\n".join(disagreements[:10])
     )
-    # Every one of them is about a fixpoint, which is the whole of the known
-    # gap: a rule that assumes its goal decides more about a recursive schema
-    # than one unfolding of it does. A disagreement over anything else is a new
-    # fact and fails the line above by arriving.
-    assert all("mu t" in row for row in disagreements), disagreements
 
 
 def test_neither_decider_is_unsound_where_they_disagree(

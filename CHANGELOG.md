@@ -89,10 +89,23 @@ answer of its own, or a repair to a change not yet released.
 - feat: a table of constants is read for its kinds at any width
 - feat: a class with one instance is its literal, and a True step is the step 1
 - fix: a Decimal bound with a vast exponent is not rounded to an int
+- feat: a meet holding one complement is read as the relation it is
 
 -->
 
 ### Added
+
+- **A meet holding one complement is read as the relation it is.** `R & ~I` is
+  empty exactly where `R <= I`, so where every decider declines a meet's
+  emptiness, `is_empty` and the relation below `nothing` ask that relation's
+  rules under the steps the query has left, as the relation is asked: a union
+  of length bounds proved below another meets its complement in nothing to
+  both. A meet of two records over the JSON value whose field holds a
+  `complex`, met with the complement of the record of JSON fields, is `subset`
+  below `nothing`, as the relation between the two is, and `Annotated[str,
+  Ge("\ue000")]` met with the complement of `Annotated[str, Ge("\ud800")]` is
+  empty. The complement of a callback, or of a class whose `isinstance` is
+  code, is no set, and its meet is not read so.
 
 - **A class with one instance is its literal, and a `True` step is the step
   `1`.** `type(...)` and `type(NotImplemented)` admit no subclass and make no

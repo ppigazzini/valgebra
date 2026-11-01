@@ -23,7 +23,7 @@ use crate::descr::lower::{Constants, an_empty_reading_stands, read_widened};
 use crate::ir::{Attribute, ClassIx, ConstIx, Constraint, Constraints, Schema};
 use crate::kind::{Kind, Region, Regions};
 use crate::oracle::denotes_a_set_within;
-use crate::verdict::Verdict;
+use crate::verdict::{Relation, Verdict};
 
 use super::constraints::{
     Density, Multiples, bounds_unsatisfiable, longest, shortest, tightest_bounds,
@@ -79,7 +79,90 @@ impl Schema {
     /// bound conjunction (a lower bound above an upper bound) is detected.
     #[must_use]
     pub fn is_empty_with(&self, oracle: &dyn LeafRelations, defs: &[Schema]) -> bool {
-        self.empty_under(&mut Cx::new(oracle, defs, &Budget::new(DECISION_BUDGET)))
+        let budget = Budget::new(DECISION_BUDGET);
+        let cx = &mut Cx::new(oracle, defs, &budget);
+        self.empty_under(cx)
+            || (matches!(self, Schema::Intersection(_))
+                && self.below_the_set_it_complements(cx).holds())
+            || (matches!(self, Schema::Complement(_))
+                && self.complement_of_the_universe(cx).holds())
+    }
+
+    /// A meet holding one complement, read as the relation it is, at the root
+    /// of a question every decider declined: `R ∩ ¬I` is empty exactly where
+    /// `R ⊆ I` [FCB08, §4.1], `R` the meet of the other members. The relation's
+    /// rules read a record below a record field by field where the meet's
+    /// readings distribute it, so a meet of records over the JSON value whose
+    /// field holds a `complex`, met with the complement of the record of JSON
+    /// fields, is proved empty. `is_empty`, the relation below `Nothing` and
+    /// the relation's two lattice bounds -- a meet it reads empty is below
+    /// every supertype, and a subject below a complement is asked through its
+    /// meet with the inner set -- all ask it, so they answer alike, as they ask
+    /// [`complement_of_the_universe`](Self::complement_of_the_universe) of a
+    /// complement; asked inside every meet a question reaches, it took the
+    /// steps the questions around it decided with.
+    ///
+    /// One complement, so the pair asked is the one the relation asks of the
+    /// same terms, and a meet of the members against one of their inner sets,
+    /// so a query's goals stay drawn from its own terms. `I` must denote a set:
+    /// a callback, or a class whose `isinstance` is code, may answer its two
+    /// occurrences apart, so `P ∩ ¬P` holds a value the relation `P ⊆ P` says
+    /// nothing about.
+    ///
+    /// Asked under the steps the question has left, as the relation of the same
+    /// pair is, so the two spellings decide alike: under [`RESPELLING`] steps
+    /// the rules declined a union of length bounds below another that the
+    /// relation proves, and the meet of the one with the other's complement was
+    /// `undecided` beside a `subset`. The steps are an allowance of its own,
+    /// charged to nothing, so they starve no reading after it; the rules it
+    /// asks never ask it again, so a query asks it a fixed number of times and
+    /// spends at most that multiple of its budget. The relation's set readings
+    /// are not asked here: they reach this reading again through the
+    /// respellings, each time under steps of its own and at no depth, and drawn
+    /// questions overflowed the stack. Out of line behind the discriminant test
+    /// its callers ask, so a question about any schema but a meet pays the one
+    /// test.
+    #[inline(never)]
+    pub(super) fn below_the_set_it_complements(&self, cx: &Cx<'_>) -> Relation {
+        let Schema::Intersection(members) = self else {
+            return Relation::Unknown;
+        };
+        let mut complements = members.iter().filter_map(|member| match member {
+            Schema::Complement(inner) => Some(inner),
+            _ => None,
+        });
+        let (Some(inner), None) = (complements.next(), complements.next()) else {
+            return Relation::Unknown;
+        };
+        if !denotes_a_set_within(inner, cx.oracle, cx.defs) {
+            return Relation::Unknown;
+        }
+        let rest = Schema::meet_within(
+            members
+                .iter()
+                .filter(|member| !matches!(member, Schema::Complement(_)))
+                .cloned(),
+            cx.defs,
+        );
+        let allowance = Budget::new(cx.budget.left());
+        rest.is_subtype_rec(inner, &mut cx.within_this_query(&allowance))
+    }
+
+    /// A complement read as the relation it is, at the root of a question every
+    /// decider declined: `¬I` holds no value exactly where `I` holds every
+    /// value [FCB08, Def. 4.1], so it is asked as the universe below `I`. The
+    /// relation reads a complement below a complement by their inner sets
+    /// [FCB08, §4.1], which proves `anything` below `¬¬I` where `I` is the
+    /// universe; asked here, `is_empty` and the relation below `Nothing` answer
+    /// alike: `¬(0 ∪ ¬(tuple[int] ∩ tuple[str]))` holds no value, its inner set
+    /// holding the complement of an empty meet. Under [`RESPELLING`] steps of
+    /// what the question has left.
+    pub(super) fn complement_of_the_universe(&self, cx: &Cx<'_>) -> Relation {
+        let Schema::Complement(inner) = self else {
+            return Relation::Unknown;
+        };
+        let allowance = Budget::new(cx.budget.left().min(RESPELLING));
+        Schema::ANYTHING.is_subtype_rec(inner, &mut cx.within_this_query(&allowance))
     }
 
     /// [`Self::is_empty_with`] in one query, whose budget and readings a union's

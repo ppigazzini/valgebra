@@ -1128,6 +1128,95 @@ def test_a_narrowed_meet_left_open_is_distributed_as_written() -> None:
     assert tagged.is_empty()
 
 
+def test_a_meet_holding_a_complement_is_read_as_its_relation() -> None:
+    """A meet with a complement is empty where the rest is below the inner set.
+
+    `R & ~I` is empty exactly where `R <= I`. A meet of two records over the
+    JSON value whose one field is a `complex` is below the record of JSON
+    fields, field by field, and a closed record whose field is a word and a
+    tagged record is below a union holding every such record; met with each
+    complement, the meet's readings decline and the relation proves it.
+
+    The relation is asked under the steps the question has left, as the
+    relation of the same pair is: two unions of length bounds over `bytes`
+    that the rules decide past a respelling's steps answer alike as a
+    relation and as a meet.
+    """
+    json = recursive(
+        lambda j: union(
+            None,
+            bool,
+            int,
+            float,
+            str,
+            Validator(list[j]),  # ty: ignore[invalid-type-form]
+            Validator({str: j}),
+        )
+    )
+    text_or_json = union(str, intersection(json, complement(str)))
+    complex_field = intersection(
+        Validator({"a": text_or_json}), Validator({"a": complex})
+    )
+    json_field = Validator({"a": json})
+    assert complex_field.relation_to(json_field) == "subset"
+    assert intersection(complex_field, complement(json_field)).is_empty()
+
+    words = complement(union(complement(str), Annotated[str, at.Len(2, 4)]))
+    tagged = Validator({"tag": Literal[0], str: json})
+    word_record = Validator({"a": intersection(tagged, words)}).close()
+    text_or_tagged = union(
+        Validator({"a": union(complement(str), Annotated[str, at.Len(1, 3)])}).close(),
+        Validator({"a": Validator({"tag": Literal["b"], str: json}), str: object}),
+    )
+    assert word_record.relation_to(text_or_tagged) == "subset"
+    meet = intersection(word_record, complement(text_or_tagged))
+    assert meet.relation_to(nothing) == "subset"
+
+    def size(*bounds: object) -> object:
+        return Annotated[bytes, *bounds]
+
+    def between(least: int, most: int) -> object:
+        return size(at.Len(least, most))
+
+    def at_least(least: int) -> object:
+        return size(at.MinLen(least))
+
+    def at_most(most: int) -> object:
+        return size(at.MaxLen(most))
+
+    def outside(term: object) -> object:
+        return intersection(bytes, complement(term))
+
+    inner_union = union(
+        intersection(
+            intersection(between(65, 255), at_least(63)),
+            union(between(65, 257), between(2, 4095)),
+        ),
+        union(between(64, 1000), union(between(0, 5), at_least(5))),
+    )
+    narrow = intersection(at_least(256), intersection(inner_union, at_most(512)))
+    wide = union(
+        intersection(
+            union(
+                union(at_least(0), at_least(2)),
+                outside(union(at_most(256), at_least(63))),
+            ),
+            union(
+                intersection(at_least(5), union(at_least(63), at_most(63))),
+                union(between(1, 65), intersection(at_most(64), between(254, 2048))),
+            ),
+        ),
+        outside(
+            union(
+                intersection(outside(at_least(1)), at_least(254)),
+                union(outside(between(65, 9999)), at_least(4095)),
+            )
+        ),
+    )
+    assert narrow.relation_to(wide) == "subset"
+    assert intersection(narrow, complement(wide)).relation_to(nothing) == "subset"
+
+
 def test_a_narrowed_meet_left_open_leaves_steps_to_the_readings_after_it() -> None:
     """The distribution after an undecided narrowing spends a bounded share.
 

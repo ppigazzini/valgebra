@@ -219,7 +219,7 @@ answers `"undecided"`.
   surrogate is, so a bound whose constant holds one is read where it stands
   and not under a complement: `Annotated[str, Ge("\ue000")]` is `subset` of
   `Annotated[str, Ge("\ud800")]`, and the meet of the first with the
-  complement of the second declines below `nothing`.
+  complement of the second is read as that relation, and is empty.
   A constraint is asked of one value at a time, so a refinement of a union is
   the union of its refined branches: `Annotated[int | float, Ge(0)]` is the
   non-negative ints and the non-negative floats, decided as each is, and a

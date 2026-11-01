@@ -2280,16 +2280,30 @@ PLANTS = (
         trips=("test_the_ledger_is_serializable_for_a_report",),
     ),
     Plant(
-        # A fixpoint schema added to the universe, bringing a disagreement the
-        # recorded count does not carry.
+        # A schema running a callback added to the universe under two names,
+        # bringing a disagreement the recorded count does not carry: the rules
+        # place it below itself, and the emptiness reading takes no complement
+        # whose two occurrences may answer apart.
         "tests/test_completeness_probe.py",
         ("tests/test_completeness_probe.py",),
-        lambda tree: _edit(
+        lambda tree: _edits(
             tree,
             "tests/test_completeness_probe.py",
-            '    ("mu t.None|{a:int,next:t}", _LINKED),\n',
-            '    ("mu t.None|{a:int,next:t}", _LINKED),\n'
-            '    ("{a:int,next:mu t}", _v({"a": int, "next": _LINKED})),\n',
+            (
+                "# Small schemas, chosen to cross the kinds",
+                (
+                    "_EVEN = _v(Annotated[int, at.Predicate(lambda v: v % 2 == 0)])"
+                    "\n\n\n# Small schemas, chosen to cross the kinds"
+                ),
+            ),
+            (
+                '    ("mu t.None|{a:int,next:t}", _LINKED),\n',
+                (
+                    '    ("mu t.None|{a:int,next:t}", _LINKED),\n'
+                    '    ("even", _EVEN),\n'
+                    '    ("even again", _EVEN),\n'
+                ),
+            ),
         ),
         trips=("test_the_two_deciders_are_measured_against_each_other",),
     ),

@@ -833,6 +833,42 @@ impl Schema {
                 .any(|member| matches!(member, Schema::Complement(_)) || the_dicts_top(member)),
             _ => false,
         };
+        // A subject below a table of constants is one whose meet with the
+        // table's complement holds no value, `a ⊆ T` being `a ∧ ¬T = ∅`
+        // [FCB08, §4.1], read as `is_empty` reads that meet, so the two answer
+        // alike where no oracle kinds the constants: `None ∧ (int ∪ 1)` meets
+        // `¬1` in nothing and is below `1`.
+        if finite_set(other).is_some() {
+            let difference =
+                Schema::meet_within([self.clone(), other.clone().complement()], cx.defs);
+            let allowance = Budget::new(cx.budget.left().min(RESPELLING));
+            let part = &mut cx.within_this_query(&allowance);
+            if difference.empty_under(part)
+                || (matches!(difference, Schema::Intersection(_))
+                    && difference.below_the_set_it_complements(part).holds())
+            {
+                return Relation::Holds;
+            }
+        }
+        if matches!(other, Schema::Nothing) {
+            return match self {
+                Schema::Intersection(_) => self.below_the_set_it_complements(cx),
+                Schema::Complement(_) => self.complement_of_the_universe(cx),
+                _ => Relation::Unknown,
+            };
+        }
+        // The relation's two lattice bounds read those readings too: a meet or
+        // a complement they read empty is below every supertype
+        // [BBC+26, (uninhabited)], and a subject below a complement is asked
+        // through its meet with the inner set (below), so `is_empty` and the
+        // relation answer alike.
+        if (matches!(self, Schema::Intersection(_))
+            && self.below_the_set_it_complements(cx).holds())
+            || (matches!(self, Schema::Complement(_))
+                && self.complement_of_the_universe(cx).holds())
+        {
+            return Relation::Holds;
+        }
         if !meets && !negates {
             return Relation::Unknown;
         }
@@ -879,6 +915,7 @@ impl Schema {
         meet.is_subtype_rec(&Schema::Nothing, cx)
             .or_else(|| inner.is_subtype_rec(&self.clone().complement(), cx))
             .or_else(|| Relation::proven(meet.empty_under(cx)))
+            .or_else(|| meet.below_the_set_it_complements(cx))
     }
 
     /// The pair asked of its parts, where both deciders declined it whole.

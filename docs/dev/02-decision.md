@@ -812,19 +812,25 @@ other, and it is why a bound the *rules* can reach must be reached there rather
 than left to this route: the route is not available on the pairs that need it
 most.
 
-They do not always agree, and the disagreement is *incompleteness* rather than a
-wrong answer: `a.is_subtype_of(b)` can be `True` while
-`intersection(a, complement(b)).is_empty()` is `False`. Every case measured is a
-**fixpoint**. The rules carry a coinductive hypothesis -- a goal already being
-proven on the path is assumed -- which decides a recursive schema against itself
-and against its own body; the emptiness route unfolds a reference once and asks
-the descriptor, which settles what kinds a body admits and not what a fixpoint
-equals.
+Where they differ, the difference is *incompleteness* rather than a wrong
+answer: `a.is_subtype_of(b)` can be `True` while
+`intersection(a, complement(b)).is_empty()` is `False`. The rules carry a
+coinductive hypothesis -- a goal already being proven on the path is assumed --
+which decides a recursive schema against itself and against its own body; the
+emptiness route alone unfolds a reference once and asks the descriptor, which
+settles what kinds a body admits and not what a **fixpoint** equals. `is_empty`
+reads a meet holding one complement as the relation it is, where its own
+readings decline, so `a & ~b` is asked as `a <= b` and the fixpoints are
+answered alike. That reading asks the relation's rules under the steps the
+question has left, as the relation is asked. What it leaves apart is a
+complement it does not take -- one running a callback, whose two occurrences
+may answer apart, so `P <= P` holds while `P & ~P` is not proved empty -- and a
+pair only the set readings after the rules prove, which it does not ask.
 
 `tests/test_completeness_probe.py` measures the gap over the survey corpus and
-holds it to the count recorded there, each pair carrying a fixpoint. That is a ratchet rather
-than a target: a change making either route less complete widens it, and a
-disagreement over anything but a fixpoint is a new fact that fails on arrival.
+holds it to the count recorded there, which is none. That is a ratchet rather
+than a target: a change making either route less complete opens it, and fails
+on arrival.
 The same test checks the emptiness route for soundness against the value
 universe, which the survey beside it does not walk.
 

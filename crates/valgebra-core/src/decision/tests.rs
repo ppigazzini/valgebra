@@ -11243,3 +11243,99 @@ fn a_complemented_union_is_asked_as_the_meet_of_its_branches_complements() {
     assert_eq!(relation(&dicts), Relation::Holds);
     assert_eq!(relation(&Schema::Str), Relation::Fails);
 }
+
+// THEORY: subtyping-is-inclusion
+/// The relation and `is_empty` read alike at the root: a meet read empty by
+/// the relation of its members below the set its one complement takes out, a
+/// complement read empty as the universe below its inner set, and a subject
+/// below a table of constants whose meet with the table's complement is read
+/// empty. The draws are the laws' (`what_is_read_empty_bounds_the_relation`,
+/// `below_nothing_exactly_where_read_empty`), with no oracle to kind the
+/// constants.
+#[test]
+fn a_meet_read_empty_at_the_root_bounds_the_relation() {
+    let constant = |at: usize| Schema::Literal(ConstIx::new(at));
+    let relation =
+        |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &NoLeafRelations, &[]);
+    let none_and_zero = Schema::Intersection(
+        vec![
+            Schema::Intersection(vec![Schema::NoneType, constant(0)].into()),
+            Schema::Complement(Arc::new(Schema::Union(
+                vec![constant(0), constant(1)].into(),
+            ))),
+        ]
+        .into(),
+    );
+    assert!(
+        Schema::meet_within([none_and_zero.clone(), Schema::NoneType], &[])
+            .is_empty_with(&NoLeafRelations, &[])
+    );
+    assert_eq!(
+        relation(&none_and_zero, &Schema::NoneType.complement()),
+        Relation::Holds
+    );
+    let empty = Schema::meet([
+        constant(1),
+        constant(2),
+        Schema::union([constant(0), constant(2), constant(3)]).complement(),
+    ]);
+    assert!(empty.is_empty_with(&NoLeafRelations, &[]));
+    let list = Schema::list(SeqShape::homogeneous(Schema::union([
+        constant(1),
+        constant(3),
+    ])));
+    assert_eq!(relation(&empty, &list), Relation::Holds);
+    assert_eq!(
+        relation(&Schema::ANYTHING, &empty.clone().complement()),
+        Relation::Holds
+    );
+    // Below a table of constants, a subject whose meet with the table's
+    // complement is read empty: `None ∧ (int ∪ 1)` below `1`.
+    let none_or_one = Schema::meet([Schema::NoneType, Schema::union([Schema::Int, constant(1)])]);
+    assert!(
+        Schema::meet_within([none_or_one.clone(), constant(1).complement()], &[])
+            .is_empty_with(&NoLeafRelations, &[])
+    );
+    assert_eq!(relation(&none_or_one, &constant(1)), Relation::Holds);
+    // A complement whose inner set holds every value, the complement of an
+    // empty meet among its branches: empty to `is_empty`, below `nothing` and
+    // below every supertype, as `anything` is below its complement.
+    let tuple_of = |item: Schema| Schema::tuple(SeqShape::fixed([item]));
+    let no_value = Schema::Complement(Arc::new(Schema::Union(
+        vec![
+            constant(0),
+            Schema::Complement(Arc::new(Schema::Intersection(
+                vec![tuple_of(Schema::Int), tuple_of(Schema::Str)].into(),
+            ))),
+        ]
+        .into(),
+    )));
+    assert!(no_value.is_empty_with(&NoLeafRelations, &[]));
+    assert_eq!(relation(&no_value, &Schema::Nothing), Relation::Holds);
+    assert_eq!(relation(&no_value, &Schema::NoneType), Relation::Holds);
+    assert_eq!(
+        relation(&Schema::ANYTHING, &no_value.clone().complement()),
+        Relation::Holds
+    );
+}
+
+/// Below `nothing`, a meet holding one complement is asked as the relation it
+/// is: `R ∩ ¬I` holds no value exactly where `R ⊆ I`, and a value of `R`
+/// outside `I` is a value of the meet. Asked of the respelling itself, so a
+/// reading of the meet elsewhere that answers first stands in for neither
+/// answer: `int ∩ ¬(int ∪ str)` is below `nothing`, and `int ∩ ¬str` is refuted
+/// there, on an integer.
+#[test]
+fn a_meet_below_nothing_is_asked_below_the_set_it_complements() {
+    let budget = Budget::new(DECISION_BUDGET);
+    let cx = Cx::new(&NoLeafRelations, &[], &budget);
+    let meet = |inner: Schema| {
+        Schema::Intersection(vec![Schema::Int, Schema::Complement(Arc::new(inner))].into())
+    };
+    let below_nothing = |subject: &Schema| subject.decided_as_respelled(&Schema::Nothing, &cx);
+    assert_eq!(
+        below_nothing(&meet(Schema::union([Schema::Int, Schema::Str]))),
+        Relation::Holds
+    );
+    assert_eq!(below_nothing(&meet(Schema::Str)), Relation::Fails);
+}
