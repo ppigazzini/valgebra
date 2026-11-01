@@ -89,8 +89,9 @@ pub(crate) mod goals {
         (answer, table.into_keys().collect())
     }
 
-    /// Run `query` with the table installed, and hand the table back.
-    fn tabled<T>(query: impl FnOnce() -> T) -> (T, FxHashMap<(Schema, Schema), u32>) {
+    /// Run `query` with the table installed, and hand the table back: every
+    /// goal it asked, with how often.
+    pub(crate) fn tabled<T>(query: impl FnOnce() -> T) -> (T, FxHashMap<(Schema, Schema), u32>) {
         ASKED.with(|asked| {
             let mut slot = asked.borrow_mut();
             assert!(slot.is_none(), "a count is already running on this thread");

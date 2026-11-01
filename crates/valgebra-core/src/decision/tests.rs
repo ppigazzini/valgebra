@@ -6764,6 +6764,113 @@ fn a_meet_supertype_is_decided_a_member_at_a_time() {
     );
 }
 
+/// The parts reading of a meet supertype reads what the rules answered of each
+/// member at the root of the query rather than asking them again, so no goal
+/// of the query is asked twice: the member the rules declined is read by the
+/// set representation as before, and refutes the meet, and a member the rules
+/// placed beside one nothing reads leaves it open. A meet wider than
+/// [`MEMBERS_HELD`] keeps nothing, and its members are asked again.
+#[test]
+fn a_meet_supertypes_members_are_asked_once_a_query() {
+    let refine = |base: Schema, constraint| Schema::Refine {
+        base: Arc::new(base),
+        constraints: vec![constraint].into(),
+    };
+    let pattern = refine(Schema::Str, Constraint::Regex("a+".into()));
+    let opaque = refine(Schema::ANYTHING, Constraint::Predicate(PredIx::new(0)));
+    let meet = Schema::Intersection(vec![pattern.clone(), opaque.clone()].into());
+    for (subject, relation) in [
+        (Schema::Str, Relation::Fails),
+        (pattern.clone(), Relation::Unknown),
+    ] {
+        let (answer, counts) = goal_tests::goals::counted(|| {
+            subject.subtype_relation_under(&meet, &NoLeafRelations, &[])
+        });
+        assert_eq!(answer, relation, "{subject:?}");
+        assert!(counts.asked >= 2, "{subject:?}: {counts:?}");
+        assert_eq!(counts.repeated, 0, "{subject:?}: {counts:?}");
+    }
+    // A member the rules placed is read as placed, though no set reading
+    // reads it: `opaque` is a member of the subject, and the subject's pattern
+    // is inside the meet's by the set reading alone.
+    let holding = Schema::Intersection(
+        vec![
+            refine(Schema::Str, Constraint::Regex("a|aa+".into())),
+            opaque.clone(),
+        ]
+        .into(),
+    );
+    let subject = Schema::Intersection(vec![opaque.clone(), pattern.clone()].into());
+    assert_eq!(
+        subject.subtype_relation_under(&holding, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    // The member refuted first, at the width kept and one past it.
+    let first = refine(Schema::Str, Constraint::Regex("a+".into()));
+    for (width, times) in [(MEMBERS_HELD, 1), (MEMBERS_HELD + 1, 2)] {
+        let members: Vec<Schema> = [first.clone()]
+            .into_iter()
+            .chain(
+                (1..width - 1).map(|at| refine(Schema::Str, Constraint::Regex(format!("a+{at}")))),
+            )
+            .chain([opaque.clone()])
+            .collect();
+        assert_eq!(members.len(), width);
+        let meet = Schema::Intersection(members.into());
+        let (answer, asked) = goal_tests::goals::tabled(|| {
+            Schema::Str.subtype_relation_under(&meet, &NoLeafRelations, &[])
+        });
+        assert_eq!(answer, Relation::Fails, "{width}");
+        assert_eq!(
+            asked.get(&(Schema::Str, first.clone())),
+            Some(&times),
+            "{width}"
+        );
+    }
+}
+
+/// What the rules answered of a meet's members at a query's root is read back
+/// by that query alone, for that subject and those members alone: another
+/// query's record, another subject's and another meet's are none of its.
+#[test]
+fn a_kept_meet_is_read_back_by_its_own_query_and_pair() {
+    let members: Members = vec![Schema::Int, Schema::Str].into();
+    let budget = Budget::new(DECISION_BUDGET);
+    let cx = Cx::new(&NoLeafRelations, &[], &budget);
+    let query = cx.query();
+    let keep = |number: u64, subject: &Schema, members: &Members| {
+        HELD.with_borrow_mut(|held| {
+            *held = Some((number, subject.clone(), Arc::clone(members), 0b10));
+        });
+    };
+    keep(query, &Schema::Bool, &members);
+    assert_eq!(cx.held_below(&Schema::Bool, &members), Some(0b10));
+    assert_eq!(
+        cx.held_below(&Schema::Bool, &members),
+        None,
+        "taken as read"
+    );
+    keep(query + 1, &Schema::Bool, &members);
+    assert_eq!(
+        cx.held_below(&Schema::Bool, &members),
+        None,
+        "another query's"
+    );
+    keep(query, &Schema::Float, &members);
+    assert_eq!(
+        cx.held_below(&Schema::Bool, &members),
+        None,
+        "another subject's"
+    );
+    let spelled_alike: Members = vec![Schema::Int, Schema::Str].into();
+    keep(query, &Schema::Bool, &spelled_alike);
+    assert_eq!(
+        cx.held_below(&Schema::Bool, &members),
+        None,
+        "another meet's"
+    );
+}
+
 // THEORY: a-cut-reference-proves
 /// A value of no kind refutes a pair past a cut as a value of a kind does: a
 /// direct instance of a plain class is outside a fixpoint holding every kind

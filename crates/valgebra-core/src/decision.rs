@@ -18,6 +18,7 @@ mod readings;
 mod records;
 
 use std::cell::{Cell, OnceCell, RefCell};
+use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
@@ -25,7 +26,7 @@ use crate::descr::budget;
 use crate::descr::lower::{
     Constants, WORK, an_empty_reading_stands, lower_unfolded, parts_a_cut_reaches, read_widened,
 };
-use crate::ir::{Constraint, DefIx, Polarity, Schema, SeqShape};
+use crate::ir::{Constraint, DefIx, Members, Polarity, Schema, SeqShape};
 use crate::kind::{Region, Regions};
 use crate::unordered_pairs;
 use crate::verdict::{Relation, Verdict};
@@ -951,7 +952,8 @@ impl Schema {
     /// where one member is, a meet being the intersection of its members'
     /// sets [FCB08, Def. 4.1], in Kleene's strong conjunction: a member refuted
     /// by either decider refutes the meet beside a member neither reads. The
-    /// rules ask each member already, by their own readings alone; what this
+    /// rules ask each member already, by their own readings alone, and what
+    /// they answered at the root is read back ([`Cx::held_below`]); what this
     /// adds is the set representation asked of one member, where a member that
     /// runs a callback -- a predicate, a class whose `isinstance` is code --
     /// refuses the whole meet a lowering: `int` is outside `Ge(0)` at `-1`, and
@@ -1018,9 +1020,13 @@ impl Schema {
             {
                 return Relation::Unknown;
             }
-            return Relation::all(members.iter().map(|member| {
-                self.is_subtype_rec(member, cx)
-                    .or_else(|| self.descriptor_contained_in(member, cx.oracle, cx.defs))
+            let held = cx.held_below(self, members);
+            return Relation::all(members.iter().enumerate().map(|(at, member)| {
+                match held {
+                    Some(held) => Relation::proven(held >> at & 1 == 1),
+                    None => self.is_subtype_rec(member, cx),
+                }
+                .or_else(|| self.descriptor_contained_in(member, cx.oracle, cx.defs))
             }));
         }
         let Schema::Union(branches) = other else {
@@ -1781,6 +1787,50 @@ impl Schema {
         self.or_bounded(answer, other, cx)
     }
 
+    /// A subject below a meet, a member at a time: `A ⊆ (Y ∩ Z)` iff `A ⊆ Y`
+    /// and `A ⊆ Z`. At the root of a query, what the rules answer of each
+    /// member is kept ([`below_each_member_at_the_root`]); below it nothing is.
+    ///
+    /// [`below_each_member_at_the_root`]: Self::below_each_member_at_the_root
+    fn below_each_member(&self, members: &Members, cx: &mut Cx<'_>) -> Relation {
+        if cx.budget.depth.get() == 1 {
+            return self.below_each_member_at_the_root(members, cx);
+        }
+        Relation::all(members.iter().map(|m| self.is_subtype_rec(m, cx)))
+    }
+
+    /// [`below_each_member`](Self::below_each_member) at the root of a query.
+    ///
+    /// There no hypothesis is open -- every stack of them is pushed by a level
+    /// above the goal reading it -- so what the rules answer of a member is an
+    /// answer about that pair. Where they decline the meet, the members they
+    /// place the subject below are kept for the query ([`HELD`]), and the
+    /// parts reading asks the set representation of the members left: asking
+    /// the rules again of each one reads the answers this arm read, which on a
+    /// meet of records is the cost of the whole query a second time.
+    ///
+    /// Out of line, with the depth tested by the caller: the goals below the
+    /// root are most of a query's meets, and they keep nothing.
+    #[inline(never)]
+    fn below_each_member_at_the_root(&self, members: &Members, cx: &mut Cx<'_>) -> Relation {
+        let keeps = members.len() <= MEMBERS_HELD;
+        let mut placed = 0u64;
+        let answer = Relation::all(members.iter().enumerate().map(|(at, member)| {
+            let answer = self.is_subtype_rec(member, cx);
+            if keeps && answer == Relation::Holds {
+                placed |= 1 << at;
+            }
+            answer
+        }));
+        if keeps && answer == Relation::Unknown {
+            let query = cx.query();
+            HELD.with_borrow_mut(|held| {
+                *held = Some((query, self.clone(), Arc::clone(members), placed));
+            });
+        }
+        answer
+    }
+
     /// A union below `other`, member by member, as the arm calling this states.
     ///
     /// A table of constants below the complement of another is the two tables
@@ -1892,9 +1942,7 @@ impl Schema {
             // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z [BBC+26, (anyOf-l)]; A ⊆ (Y ∩ Z)
             // iff A ⊆ Y and A ⊆ Z.
             (Schema::Union(members), _) => self.union_below(members, other, cx),
-            (_, Schema::Intersection(members)) => {
-                Relation::all(members.iter().map(|m| self.is_subtype_rec(m, cx)))
-            }
+            (_, Schema::Intersection(members)) => self.below_each_member(members, cx),
             // A meet is placed by the member rule where a member is below the
             // supertype, and where none is -- the meet is a branch of a
             // definition, say -- the reference it may be asked against is
@@ -2318,6 +2366,10 @@ pub(super) struct Cx<'a> {
     query: Cell<u64>,
 }
 
+/// The widest meet whose members' answers at the root are kept ([`HELD`]), one
+/// bit a member: past it the parts reading asks the rules again.
+const MEMBERS_HELD: usize = u64::BITS as usize;
+
 /// The answers the set representation gave the query running on this thread,
 /// by the schemas asked and by the oracle and definitions they were read under.
 ///
@@ -2376,6 +2428,14 @@ thread_local! {
     static NARROWING: Cell<u64> = const { Cell::new(0) };
     /// The number the next query to read on this thread is given.
     static QUERIES: Cell<u64> = const { Cell::new(0) };
+    /// The meet supertype the rules last declined at the root of a query on
+    /// this thread ([`Schema::below_each_member_at_the_root`]): the query's
+    /// number, the subject, the members, and the members the subject was
+    /// placed below, one bit each. Held beside the query for the reason
+    /// [`Readings`] is, and by number, so a query reads back only what it
+    /// kept, and the members' storage is held, so no other meet's members are
+    /// at that address while the record stands.
+    static HELD: RefCell<Option<(u64, Schema, Members, u64)>> = const { RefCell::new(None) };
 }
 
 impl<'a> Cx<'a> {
@@ -2393,6 +2453,20 @@ impl<'a> Cx<'a> {
             visiting: Vec::new(),
             query: Cell::new(0),
         }
+    }
+
+    /// The members of `members` the rules placed `subject` below at the root of
+    /// this query, one bit each, where they declined that meet there; `None`
+    /// where they did not ([`HELD`]).
+    ///
+    /// The record is taken as it is read: a query reads it once, after the
+    /// rules, and nothing a finished query kept is left to occupy the thread.
+    fn held_below(&self, subject: &Schema, members: &Members) -> Option<u64> {
+        let query = self.query.get();
+        HELD.with_borrow_mut(Option::take)
+            .and_then(|(at, of, kept, placed)| {
+                (at == query && Arc::ptr_eq(&kept, members) && of == *subject).then_some(placed)
+            })
     }
 
     /// A context for a part of this query, which reads the same sets and so
