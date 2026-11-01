@@ -1504,7 +1504,11 @@ The refutation is the bindings' to give: two constants at two pool positions are
 two *values* only where their type's equality can be trusted, and a constant
 that does not equal itself — `float("nan")` — denotes no value at all, so
 `Literal[float("nan")]` is the empty set and is below everything. Where the
-equality cannot be trusted, a refutation stays undecided rather than guessing.
+equality cannot be trusted, a refutation between two constants stays undecided
+rather than guessing. One constant is still a value of its own literal where
+the literal's walk admits it, so `Literal[Decimal("1.5")]` is `not_subset` of
+`nothing`, and a literal of a `str` subclass equal to `"a"` is `not_subset` of
+`Literal["A"]`; a constant the walk refuses, or raises on, proves nothing.
 A proof does not ask: `Literal[c]` is below `Literal[d]` where `c == d`, which
 holds only of an equality that is transitive, as
 [the trust base](14-soundness.md#what-this-argument-assumes) says.

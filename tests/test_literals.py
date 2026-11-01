@@ -1,5 +1,7 @@
 import builtins
 import enum
+from datetime import date
+from decimal import Decimal
 from fractions import Fraction
 from typing import Literal
 
@@ -103,6 +105,46 @@ def test_a_proof_between_constants_needs_a_transitive_equality() -> None:
 
 class _Member(enum.Enum):
     A = 1
+
+
+def test_a_literal_holds_its_constant_where_its_walk_admits_it() -> None:
+    """A constant the walk admits into its own literal is a value of it.
+
+    The oracle reads two constants together only under an equality it trusts,
+    and a `Decimal`, a `Fraction`, a `date` or a class with an `__eq__` of its
+    own is not one: its literal was neither empty nor inhabited, so a
+    refutation over it stood on nothing. The walk of the literal admits the
+    constant, so the constant is the value the refutation stands on. A walk
+    that refuses the constant, or raises on it, proves nothing either way.
+    """
+
+    class Folded(str):
+        __slots__ = ()
+        __hash__ = str.__hash__
+
+        def __eq__(self, other: object) -> bool:
+            return isinstance(other, str) and self.lower() == other.lower()
+
+    class Unequal:
+        __hash__ = object.__hash__
+
+        def __eq__(self, other: object) -> bool:
+            return False
+
+    class Raising:
+        __hash__ = object.__hash__
+
+        def __eq__(self, other: object) -> bool:
+            raise RuntimeError
+
+    for constant in (Decimal("1.5"), Fraction(1, 3), date(2020, 1, 1), Folded("a")):
+        literal = Literal[constant]  # ty: ignore[invalid-type-form]
+        assert Validator(literal).relation_to(nothing) == "not_subset"
+    folded = Literal[Folded("a")]  # ty: ignore[invalid-type-form]
+    assert Validator(folded).relation_to(Literal["A"]) == "not_subset"
+    for constant in (Unequal(), Raising(), Decimal("NaN")):
+        literal = Literal[constant]  # ty: ignore[invalid-type-form]
+        assert Validator(literal).relation_to(nothing) == "undecided"
 
 
 # THEORY: a-constant-is-the-values-equal-to-it

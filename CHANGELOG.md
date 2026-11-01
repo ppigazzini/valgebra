@@ -80,10 +80,20 @@ answer of its own, or a repair to a change not yet released.
 - fix: no value is longer than sys.maxsize
 - fix: a quantifier re refuses for repeating no atom is refused
 - feat: Python 3.11 is the floor, and 3.10 leaves the matrix
+- feat: a literal holds its constant where its own walk admits it
 
 -->
 
 ### Added
+
+- **A literal holds its constant where its own walk admits it.** The relations
+  read a literal's constant as a value only under an equality they trust, so
+  `Literal[Decimal("1.5")]`, a `Fraction`, a `date`, a `UUID` or a class with
+  an `__eq__` of its own was neither empty nor inhabited, and `undecided`
+  below `nothing`. The walk of the literal admitting its constant now proves
+  the literal holds it: each of those is `not_subset` of `nothing`, and a
+  literal of a `str` subclass equal to `"a"` of `Literal["A"]`. A constant the
+  walk refuses or raises on proves nothing, as before.
 
 - **A length the supertype's bounds leave out refutes at any size.** A
   refinement whose constraints are length bounds alone, over a base holding a

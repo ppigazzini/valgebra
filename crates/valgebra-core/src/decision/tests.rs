@@ -4634,6 +4634,42 @@ fn a_constant_is_read_under_a_complement_through_its_inner_set() {
     assert_eq!(verdict(&NoComplements(Walked::new())), Verdict::Empty);
 }
 
+/// A literal whose constant's equality the oracle does not trust is read by its
+/// walk: the constant is a value of its literal where the membership walk of
+/// the literal admits it, and a refutation over the literal stands on that
+/// value. A walk that refuses the constant, or stops on it, proves neither.
+#[test]
+fn a_literal_holds_its_constant_where_its_walk_admits_it() {
+    /// One constant whose equality is not trusted, whose own literal's walk
+    /// answers `.0`, and which no value of `nothing` is.
+    struct Untrusted(Option<bool>);
+    impl Constants for Untrusted {}
+    impl LeafRelations for Untrusted {
+        fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
+            match (sub, sup) {
+                (Schema::Literal(_), Schema::Literal(_)) => self.0,
+                (Schema::Literal(_), Schema::Nothing) => Some(false),
+                _ => None,
+            }
+        }
+        fn literals_disjoint(&self, _left: ConstIx, _right: ConstIx) -> Option<bool> {
+            None
+        }
+    }
+    let literal = Schema::Literal(ConstIx::new(0));
+    let verdict = |oracle: &dyn LeafRelations| {
+        literal.verdict_rec(&mut Cx::new(oracle, &[], &Budget::new(DECISION_BUDGET)))
+    };
+    assert_eq!(verdict(&Untrusted(Some(true))), Verdict::Inhabited);
+    assert_eq!(verdict(&Untrusted(Some(false))), Verdict::Unknown);
+    assert_eq!(verdict(&Untrusted(None)), Verdict::Unknown);
+    let below_nothing =
+        |oracle: &dyn LeafRelations| literal.subtype_relation_under(&Schema::Nothing, oracle, &[]);
+    assert_eq!(below_nothing(&Untrusted(Some(true))), Relation::Fails);
+    assert_eq!(below_nothing(&Untrusted(Some(false))), Relation::Unknown);
+    assert_eq!(below_nothing(&Untrusted(None)), Relation::Unknown);
+}
+
 /// A schema the rules prove **inhabited** is not lowered.
 ///
 /// The descriptor is the second reading of one question, asked where the rules

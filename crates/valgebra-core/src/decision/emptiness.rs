@@ -432,26 +432,12 @@ impl Schema {
             // to `c`, which holds `c` itself exactly when `c` equals itself. A
             // constant that does not -- a `nan` -- denotes the empty set, and
             // every other constant is a value, which is what makes a refutation
-            // naming one a refutation at all.
+            // naming one a refutation at all ([`literal_verdict`]).
             //
-            // The core cannot read a constant, and this asks the oracle the
-            // question it already answers: whether two constants denote
-            // disjoint singletons, asked of one constant *against itself*. A
-            // set disjoint from itself is the empty one, and a set that shares
-            // a value with itself has a value. The oracle declines for a type
-            // whose equality it does not trust, and the literal stays unknown
-            // there.
-            Schema::Literal(constant) => (
-                match cx.oracle.literals_disjoint(*constant, *constant) {
-                    Some(true) => Verdict::Empty,
-                    Some(false) => Verdict::Inhabited,
-                    None => Verdict::Unknown,
-                },
-                // A literal is a *subset* of its kind's region rather than the
-                // whole of it, so it has no region set of its own: one would
-                // read `int <= Literal[1]` as proven.
-                Regions::Unknown,
-            ),
+            // A literal is a *subset* of its kind's region rather than the whole
+            // of it, so it has no region set of its own: one would read
+            // `int <= Literal[1]` as proven.
+            Schema::Literal(constant) => (literal_verdict(self, *constant, cx), Regions::Unknown),
             // A class is a set of objects the core cannot read, so this asks
             // the oracle the one question it already answers about one:
             // whether the atom denotes a set at all -- a class whose metaclass
@@ -647,6 +633,26 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
         settled => settled,
     };
     (verdict, region)
+}
+
+/// The verdict of a literal. The core cannot read a constant, and this asks
+/// the oracle the question it already answers: whether two constants denote
+/// disjoint singletons, asked of one constant *against itself*. A set
+/// disjoint from itself is the empty one, and a set that shares a value
+/// with itself has a value. The oracle declines for a type whose equality
+/// it does not trust, and there the membership walk is asked instead: the
+/// constant is a value of its literal where the walk of the literal admits
+/// it, which is that definition run on the one value it names. A walk that
+/// stopped answers nothing (`leaf_subtype`), and a refusal proves no
+/// emptiness, since a value of the type may equal the constant that the
+/// constant does not.
+fn literal_verdict(literal: &Schema, constant: ConstIx, cx: &Cx<'_>) -> Verdict {
+    match cx.oracle.literals_disjoint(constant, constant) {
+        Some(true) => Verdict::Empty,
+        Some(false) => Verdict::Inhabited,
+        None if cx.oracle.leaf_subtype(literal, literal) == Some(true) => Verdict::Inhabited,
+        None => Verdict::Unknown,
+    }
 }
 
 /// `Inhabited` where every member of the meet holds the empty container of one
