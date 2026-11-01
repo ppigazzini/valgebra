@@ -68,6 +68,15 @@ pub(crate) struct PoolRelations<'py, 'pool> {
     /// asking walked the class's `__mro__` twice for `__eq__` and read its
     /// flags, which was half of such a query.
     identity: RefCell<FxHashMap<usize, bool>>,
+    /// What [`LeafRelations::no_int_between`] answered of each interval the
+    /// query asked, by its operands and their strictness. A refinement over the
+    /// integers is asked it at every verdict the rules read of the refinement,
+    /// and a meet distributed through a fixpoint reads one refinement tens of
+    /// thousands of times, each asking a floor or a ceiling of each bound and
+    /// the standard library's classes of both in the interpreter. An answer is
+    /// a function of the two constants, which the pool holds for the query; a
+    /// decline is asked again, as a lookup that raised is.
+    intervals: RefCell<FxHashMap<(OperandIx, bool, OperandIx, bool), bool>>,
     /// The first fatal signal a probe raised, for the query to re-raise.
     ///
     /// A probe runs user code -- a predicate, an `__eq__`, a rich comparison, a
@@ -97,6 +106,7 @@ impl<'py, 'pool> PoolRelations<'py, 'pool> {
             classes: RefCell::default(),
             attributes: RefCell::default(),
             identity: RefCell::default(),
+            intervals: RefCell::default(),
             fatal: RefCell::default(),
         }
     }
@@ -1884,6 +1894,26 @@ impl LeafRelations for PoolRelations<'_, '_> {
     }
 
     fn no_int_between(
+        &self,
+        lo: OperandIx,
+        lo_strict: bool,
+        hi: OperandIx,
+        hi_strict: bool,
+    ) -> Option<bool> {
+        let key = (lo, lo_strict, hi, hi_strict);
+        if let Some(&known) = self.intervals.borrow().get(&key) {
+            return Some(known);
+        }
+        let answer = self.reads_no_int_between(lo, lo_strict, hi, hi_strict)?;
+        self.intervals.borrow_mut().insert(key, answer);
+        Some(answer)
+    }
+}
+
+impl PoolRelations<'_, '_> {
+    /// [`LeafRelations::no_int_between`] read from the two constants, which
+    /// the trait's method keeps for the query.
+    fn reads_no_int_between(
         &self,
         lo: OperandIx,
         lo_strict: bool,

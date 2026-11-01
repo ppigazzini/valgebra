@@ -199,6 +199,31 @@ fn an_operand_reports_the_kind_its_value_has() {
     });
 }
 
+/// An interval the query asked is read once and kept: the same operands and
+/// strictness answer from what was kept, another strictness is its own
+/// interval, and a decline is not kept, so it is read again.
+#[test]
+fn an_interval_asked_twice_is_read_once() {
+    Python::attach(|py| {
+        let values = ["2.1", "2.9", "__import__('decimal').Decimal('1e4300')"]
+            .into_iter()
+            .map(|source| built(py, source).unbind())
+            .collect();
+        asking(py, values, |oracle| {
+            let between = |lo, lo_strict, hi, hi_strict| {
+                oracle.no_int_between(OperandIx::new(lo), lo_strict, OperandIx::new(hi), hi_strict)
+            };
+            assert_eq!(between(0, true, 1, true), Some(true));
+            assert_eq!(between(0, true, 1, true), Some(true));
+            assert_eq!(oracle.intervals.borrow().len(), 1, "one interval kept");
+            assert_eq!(between(0, false, 1, false), Some(true));
+            assert_eq!(oracle.intervals.borrow().len(), 2, "its own interval");
+            assert_eq!(between(2, false, 2, false), None);
+            assert_eq!(oracle.intervals.borrow().len(), 2, "a decline is not kept");
+        });
+    });
+}
+
 #[test]
 fn a_decimal_bound_past_the_rounded_digits_is_not_rounded() {
     // Rounding a `Decimal` to an `int` takes time quadratic in its digits, so
