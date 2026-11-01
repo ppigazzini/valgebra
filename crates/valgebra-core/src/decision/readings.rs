@@ -15,7 +15,7 @@
 //! that cannot name a value declines, and the pair stays undecided.
 
 use crate::descr::regular::{Alphabet, RegularSet};
-use crate::ir::{ClassIx, CollKind, Constraint, LONGEST, Schema, SeqKind};
+use crate::ir::{ClassIx, CollKind, ConstIx, Constraint, LONGEST, Schema, SeqKind};
 use crate::kind::{Kind, Region, Regions};
 use crate::verdict::{Relation, Verdict};
 
@@ -75,6 +75,14 @@ impl Schema {
         // never see it.
         match (self, other) {
             (Schema::Union(members), _) => {
+                // Two discriminated unions are read at their tag, before the
+                // arms read every pair of their records.
+                if let Schema::Union(theirs) = other
+                    && matches!(members.first(), Some(Schema::KeyedMap { .. }))
+                    && let Some(answer) = tagged_unions_disjoint(members, theirs, oracle)
+                {
+                    return answer;
+                }
                 return !members.is_empty()
                     && members.iter().all(|m| m.disjoint_with(other, oracle));
             }
@@ -87,6 +95,21 @@ impl Schema {
             // question for them. Ask the oracle about the constants instead.
             (Schema::Literal(a), Schema::Literal(b)) => {
                 return oracle.literals_disjoint(*a, *b).unwrap_or(false);
+            }
+            // Two records requiring one key share no value where the key's two
+            // schemas share none: a dict in both holds the key, and its value
+            // there is in both schemas. A discriminated union is two sets of
+            // such records, told apart by a constant under one key, and the
+            // union arms above read it a record pair at a time, so its meet is
+            // empty without the distribution of every pair into a record.
+            (Schema::KeyedMap { fields: mine, .. }, Schema::KeyedMap { fields: theirs, .. }) => {
+                return mine.iter().filter(|field| field.required).any(|field| {
+                    theirs.iter().any(|other| {
+                        other.required
+                            && other.name == field.name
+                            && field.schema.disjoint_with(&other.schema, oracle)
+                    })
+                });
             }
             _ => {}
         }
@@ -1299,5 +1322,89 @@ impl Schema {
             }
             _ => false,
         }
+    }
+}
+
+/// Whether two unions of records each pinning one required key to a constant
+/// share no value, read at that key; `None` where they are not two such
+/// unions or the oracle declines to pair their constants ([`tag_pairs`]).
+///
+/// Two records requiring one key share no value where its two schemas share
+/// none (the record pair arm of [`Schema::disjoint_with`]), and two constants
+/// apart are two such schemas, so a pair of records pinned to constants apart
+/// is disjoint by its tag. The pairs the oracle names are read whole, and
+/// every other pair is answered by the tags: the answer the pairwise arms
+/// give, for one pass over the tags in place of a question a pair.
+///
+/// Out of line, asked where the first member is a record.
+#[inline(never)]
+fn tagged_unions_disjoint(
+    mine: &[Schema],
+    theirs: &[Schema],
+    oracle: &dyn LeafRelations,
+) -> Option<bool> {
+    let pairs = tag_pairs(mine, theirs, oracle)?;
+    Some(pairs.into_iter().all(|(at, other)| {
+        mine.get(at)
+            .zip(theirs.get(other))
+            .is_some_and(|(left, right)| left.disjoint_with(right, oracle))
+    }))
+}
+
+/// The pairs of positions, one in `mine` and one in `theirs`, whose records
+/// pin a shared required key to constants sharing a value
+/// ([`LeafRelations::literals_paired`]); every pair not named is two records
+/// disjoint by that key. `None` where some member of either is no record
+/// pinning the key, or the oracle declines.
+///
+/// The key is one the first member requires, pinned in every member of both
+/// unions; a constant is written as a literal or as the union of one the
+/// frontend builds for `Literal[c]`. The pairs come ordered by their position
+/// in `mine`.
+///
+/// Out of line, and asked only where the first member is a record, a
+/// discriminant test its callers make: the union arms it sits beside are on
+/// every relation's path, and a pair of unions of anything else pays that
+/// test alone.
+#[inline(never)]
+pub(super) fn tag_pairs(
+    mine: &[Schema],
+    theirs: &[Schema],
+    oracle: &dyn LeafRelations,
+) -> Option<Vec<(usize, usize)>> {
+    let Some(Schema::KeyedMap { fields, .. }) = mine.first() else {
+        return None;
+    };
+    fields
+        .iter()
+        .filter(|field| field.required)
+        .find_map(|field| {
+            let tags = |members: &[Schema]| {
+                members
+                    .iter()
+                    .map(|member| pinned(member, &field.name))
+                    .collect::<Option<Vec<ConstIx>>>()
+            };
+            let mut pairs = oracle.literals_paired(&tags(mine)?, &tags(theirs)?)?;
+            pairs.sort_unstable();
+            Some(pairs)
+        })
+}
+
+/// The constant `member`, a record, pins its required key `name` to.
+fn pinned(member: &Schema, name: &str) -> Option<ConstIx> {
+    let Schema::KeyedMap { fields, .. } = member else {
+        return None;
+    };
+    let field = fields
+        .iter()
+        .find(|field| field.required && *field.name == *name)?;
+    match &field.schema {
+        Schema::Literal(constant) => Some(*constant),
+        Schema::Union(members) => match &members[..] {
+            [Schema::Literal(constant)] => Some(*constant),
+            _ => None,
+        },
+        _ => None,
     }
 }

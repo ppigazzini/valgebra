@@ -1658,6 +1658,51 @@ impl LeafRelations for PoolRelations<'_, '_> {
         Some(seen.len())
     }
 
+    /// [`literal_sets_disjoint`](LeafRelations::literal_sets_disjoint)'s one
+    /// pass, pairing: the right constants' positions held in one dict by
+    /// their `(type, value)` pair, and each left constant found there, so a
+    /// pair named shares a value and every other pair is two literals apart.
+    /// Only where every constant's equality is one this oracle trusts, the
+    /// condition the pair form applies; a constant unequal to itself, `nan`,
+    /// is paired with none, being a value of no literal.
+    fn literals_paired(&self, left: &[ConstIx], right: &[ConstIx]) -> Option<Vec<(usize, usize)>> {
+        let positions = PyDict::new(self.py);
+        for (at, index) in right.iter().enumerate() {
+            let value = self.literals.get(index.get())?.bind(self.py);
+            if self.literal_kind(*index).is_none()
+                && !self.compares_by_identity(&value.get_type())?
+            {
+                return None;
+            }
+            let key = (value.get_type(), value);
+            if let Some(held) = self.heard(positions.get_item(&key))? {
+                self.heard(held.cast_into::<PyList>().ok()?.append(at))?;
+            } else {
+                let held = self.heard(PyList::new(self.py, [at]))?;
+                self.heard(positions.set_item(key, held))?;
+            }
+        }
+        let mut pairs = Vec::new();
+        for (at, index) in left.iter().enumerate() {
+            let value = self.literals.get(index.get())?.bind(self.py);
+            if self.literal_kind(*index).is_none()
+                && !self.compares_by_identity(&value.get_type())?
+            {
+                return None;
+            }
+            let Some(held) = self.heard(positions.get_item((value.get_type(), value)))? else {
+                continue;
+            };
+            if !self.heard(value.eq(value))? {
+                continue;
+            }
+            for other in held.try_iter().ok()? {
+                pairs.push((at, self.heard(other)?.extract().ok()?));
+            }
+        }
+        Some(pairs)
+    }
+
     /// Whether the constant is the only value of its exact type that `==` it,
     /// which makes its literal the model's singleton [FCB08, §4.2].
     ///

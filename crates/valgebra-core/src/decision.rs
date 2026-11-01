@@ -38,7 +38,7 @@ use literals::{
     spills_past_a_table, the_constant_speaks_for_the_literal,
 };
 use products::{linear_subtype, seq_splits_across_union};
-use readings::{outside_every_kind, refuted_by_a_multiple, tables_disjoint};
+use readings::{outside_every_kind, refuted_by_a_multiple, tables_disjoint, tag_pairs};
 use records::{
     a_shared_field_refuted_by_the_sets, attr_record_subtype, keyed_map_splits_across_union,
     keyed_map_subtype, keyed_meet_below,
@@ -1768,6 +1768,36 @@ impl Schema {
         {
             return Relation::decided(disjoint);
         }
+        // Two discriminated unions: a member whose tag no member of the other
+        // pins shares no value with it, and is below its complement by that
+        // tag alone, so only the members a pair names are read (`tag_pairs`).
+        // Read a member at a time, every member against every member of the
+        // other, two unions of sixteen hundred records took a quarter second.
+        if let Schema::Complement(inner) = other
+            && let Schema::Union(theirs) = &**inner
+            && matches!(members.first(), Some(Schema::KeyedMap { .. }))
+            && let Some(pairs) = tag_pairs(members, theirs, cx.oracle)
+        {
+            let mut named: Vec<usize> = pairs.into_iter().map(|(at, _)| at).collect();
+            named.dedup();
+            return Schema::each_below(
+                named.into_iter().filter_map(|at| members.get(at)),
+                other,
+                cx,
+            );
+        }
+        Schema::each_below(members, other, cx)
+    }
+
+    /// Whether each of `members` is below `other`, as the arm calling this
+    /// states: `Fails` at the first refuted, `Unknown` where one declined, and
+    /// `Unknown` at once where one declined with the query's steps spent.
+    #[inline]
+    fn each_below<'m>(
+        members: impl IntoIterator<Item = &'m Schema>,
+        other: &Schema,
+        cx: &mut Cx<'_>,
+    ) -> Relation {
         let mut declined = false;
         for member in members {
             match member.is_subtype_rec(other, cx) {

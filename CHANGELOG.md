@@ -83,10 +83,22 @@ answer of its own, or a repair to a change not yet released.
 - feat: a literal holds its constant where its own walk admits it
 - feat: a meet holds the exact empty container its members each hold
 - feat: a length every branch of a union leaves out refutes at any size
+- feat: records told apart by a required key share no value
 
 -->
 
 ### Added
+
+- **Records told apart by a required key share no value.** Two records
+  requiring one key whose schemas share no value are disjoint, and two unions
+  of them are read a record pair at a time, so two discriminated unions whose
+  tags are apart meet in nothing at any width. Sixteen records a side were
+  `undecided` below `nothing`, the meet distributed into record meets past the
+  work a decision may spend, and thirty-two below the other's complement; two
+  hundred now decide in a few milliseconds. Where each record pins the key to
+  one constant, the two unions are read at the tag, only records whose
+  constants share a value read whole, so sixteen hundred a side answer in
+  about a millisecond, the meet and the complement alike.
 
 - **A length every branch of a union leaves out refutes at any size.** A
   refinement holding a value of every length its bounds admit was refuted by

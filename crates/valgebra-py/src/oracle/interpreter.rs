@@ -255,6 +255,40 @@ fn two_sets_of_constants_are_disjoint_when_no_member_is_shared() {
     });
 }
 
+#[test]
+fn two_sets_of_constants_are_paired_where_they_share_a_value() {
+    // `literals_paired` names the pairs of positions whose constants share a
+    // value, by `(type, value)` as a literal reads its constant: `1` pairs with
+    // another `1` and with neither `True` nor `1.0`, a word with an equal word,
+    // and the one `nan` in both sets with nothing, being no literal's value. A
+    // constant whose equality is its own declines the whole question.
+    Python::attach(|py| {
+        let values: Vec<Py<PyAny>> = built(
+            py,
+            "[1, True, 1.0, 'a', float('nan'), int('1'), 2, 'a' * 1,\
+              type('Own', (), {'__eq__': lambda self, other: True,\
+                               '__hash__': lambda self: 0})()]",
+        )
+        .try_iter()
+        .unwrap()
+        .map(|value| value.unwrap().unbind())
+        .collect();
+        asking(py, values, |oracle| {
+            let ix = |slots: &[usize]| -> Vec<ConstIx> {
+                slots.iter().map(|slot| ConstIx::new(*slot)).collect()
+            };
+            let paired = |a: &[usize], b: &[usize]| oracle.literals_paired(&ix(a), &ix(b));
+            assert_eq!(
+                paired(&[0, 3, 4], &[1, 2, 5, 7, 4, 6]),
+                Some(vec![(0, 2), (1, 3)])
+            );
+            assert_eq!(paired(&[0], &[]), Some(vec![]), "nothing to pair with");
+            assert_eq!(paired(&[0], &[8]), None, "an equality of its own");
+            assert_eq!(paired(&[8], &[0]), None);
+        });
+    });
+}
+
 // THEORY: a-constant-is-the-values-equal-to-it
 #[test]
 fn a_constant_unequal_to_itself_is_shared_by_no_two_sets() {

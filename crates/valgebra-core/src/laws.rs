@@ -382,6 +382,29 @@ impl LeafRelations for CorpusOracle {
         let (left, right) = (read(left)?, read(right)?);
         Some(!left.iter().any(|value| right.contains(value)))
     }
+
+    /// The pairs form of the same relation, which two tagged unions ask, so
+    /// the reading at their tag is under the properties too.
+    fn literals_paired(&self, left: &[ConstIx], right: &[ConstIx]) -> Option<Vec<(usize, usize)>> {
+        let read = |set: &[ConstIx]| {
+            set.iter()
+                .map(|index| self.constant(*index))
+                .collect::<Option<Vec<_>>>()
+        };
+        let (left, right) = (read(left)?, read(right)?);
+        Some(
+            left.iter()
+                .enumerate()
+                .flat_map(|(at, value)| {
+                    right
+                        .iter()
+                        .enumerate()
+                        .filter(move |(_, other)| *other == value)
+                        .map(move |(other, _)| (at, other))
+                })
+                .collect(),
+        )
+    }
 }
 
 fn union(a: Schema, b: Schema) -> Schema {

@@ -577,6 +577,17 @@ corpus of its own driving every question below
   before the union rule distributes the subject (`tables_disjoint`);
 - `literals_disjoint` — do these two constants share a value, the one-pair form
   of the question above;
+- `literals_paired` — which pairs of constants, one from each set, share a
+  value. What two discriminated unions ask of their tags: each record pins a
+  required key to a constant, a pair pinned to constants apart is disjoint by
+  that key, so only the pairs named are read whole (`tag_pairs` in
+  `decision/readings.rs`): the disjointness reading of the two unions, and a
+  union below the complement of the other (`union_below`), which reads only the
+  members a pair names. Read a pair at a time, two unions of sixteen hundred
+  records are two and a half million `literals_disjoint` calls and a quarter of
+  a second, and read at the tag about a millisecond. An implementor that can
+  hash its constants answers in one pass; the default declines and the pairs
+  stand;
 - `literals_counted_apart` — how many values these constants of one kind hold
   apart under `==`, which is how many members a set drawn from their literals
   can reach before a length bound is read against it (`literals_apart`). The

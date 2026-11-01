@@ -9995,6 +9995,169 @@ fn a_length_the_supertype_leaves_out_refutes_at_any_size() {
     assert_ne!(relation(&none, &at_most_64), Relation::Fails);
 }
 
+/// Two records requiring one key share no value where the key's schemas share
+/// none, so two unions of records told apart by that key are disjoint a record
+/// pair at a time: thirty-two records a side meet in nothing, read without
+/// distributing the meet into a thousand record meets. A key one side does not
+/// require, or schemas that share a value, prove nothing.
+#[test]
+fn records_told_apart_by_a_required_key_share_no_value() {
+    let record = |key: Schema, other: &str, required: bool| {
+        Schema::record(
+            vec![
+                Field {
+                    name: "k".into(),
+                    schema: key,
+                    required,
+                },
+                Field {
+                    name: other.into(),
+                    schema: Schema::Int,
+                    required: true,
+                },
+            ],
+            Openness::Closed,
+        )
+    };
+    let side = |key: Schema, prefix: &str| {
+        Schema::Union(
+            (0..32)
+                .map(|at| record(key.clone(), &format!("{prefix}{at}"), true))
+                .collect::<Vec<_>>()
+                .into(),
+        )
+    };
+    let (ints, strs) = (side(Schema::Int, "a"), side(Schema::Str, "b"));
+    assert!(ints.disjoint(&strs));
+    assert_eq!(
+        Schema::Intersection(vec![ints.clone(), strs].into()).verdict(),
+        Verdict::Empty
+    );
+    assert!(
+        !ints.disjoint(&side(Schema::Int, "b")),
+        "the keys share a value"
+    );
+    assert!(
+        !record(Schema::Int, "a", true).disjoint(&record(Schema::Str, "a", false)),
+        "the other record does not require the key"
+    );
+}
+
+/// Two unions of records each pinning a required key to a constant are read
+/// at that key: the oracle pairs the constants sharing a value, those pairs
+/// are read whole, and every other pair is apart by its tag. Fifty records a
+/// side told apart meet in nothing with no pairwise question asked; a shared
+/// constant is read through the rest of its two records, apart where another
+/// required key is and sharing a value where none is; and an oracle that
+/// declines to pair leaves the pairwise reading, which answers alike. The
+/// tag is the second key each record requires, `a` sorting first.
+#[test]
+fn two_tagged_unions_are_read_at_their_tag() {
+    struct Tags(core::cell::Cell<usize>, bool);
+    impl Constants for Tags {}
+    impl LeafRelations for Tags {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            None
+        }
+        fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+            self.0.set(self.0.get() + 1);
+            Some(left != right)
+        }
+        fn literals_paired(
+            &self,
+            left: &[ConstIx],
+            right: &[ConstIx],
+        ) -> Option<Vec<(usize, usize)>> {
+            self.1.then(|| {
+                left.iter()
+                    .enumerate()
+                    .flat_map(|(at, mine)| {
+                        right
+                            .iter()
+                            .enumerate()
+                            .filter(move |(_, theirs)| *theirs == mine)
+                            .map(move |(other, _)| (at, other))
+                    })
+                    .collect()
+            })
+        }
+    }
+    let record = |tag: usize, other: &str, value: Schema| {
+        Schema::record(
+            vec![
+                field(
+                    "k",
+                    Schema::Union(vec![Schema::Literal(ConstIx::new(tag))].into()),
+                    true,
+                ),
+                field(other, value, true),
+            ],
+            Openness::Closed,
+        )
+    };
+    let side = |tags: std::ops::Range<usize>, value: Schema| {
+        Schema::Union(
+            tags.map(|tag| record(tag, "a", value.clone()))
+                .collect::<Vec<_>>()
+                .into(),
+        )
+    };
+    let asked = |pairs: bool, left: &Schema, right: &Schema| {
+        let oracle = Tags(core::cell::Cell::new(0), pairs);
+        (left.disjoint_with(right, &oracle), oracle.0.get())
+    };
+    let (low, high) = (side(0..50, Schema::Int), side(50..100, Schema::Int));
+    assert_eq!(
+        asked(true, &low, &high),
+        (true, 0),
+        "apart, by the tags alone"
+    );
+    let (answer, pairwise) = asked(false, &low, &high);
+    assert!(
+        answer && pairwise >= 2500,
+        "the pairwise reading, {pairwise} asks"
+    );
+    let shared_apart = side(49..99, Schema::Str);
+    assert!(
+        asked(true, &low, &shared_apart).0,
+        "tag 49 shared, `a` apart"
+    );
+    assert!(asked(false, &low, &shared_apart).0);
+    let shared = side(49..99, Schema::Int);
+    assert!(
+        !asked(true, &low, &shared).0,
+        "tag 49 shared, and its records meet"
+    );
+    assert!(!asked(false, &low, &shared).0);
+    // Below the complement, a member is read only where a pair names it.
+    let below = |left: &Schema, right: &Schema| {
+        let oracle = Tags(core::cell::Cell::new(0), true);
+        let budget = Budget::new(DECISION_BUDGET);
+        let answer = left.subtype_relation(&right.clone().complement(), &oracle, &[], &budget);
+        (answer, oracle.0.get())
+    };
+    assert_eq!(below(&low, &high), (Relation::Holds, 0));
+    // The pairs are read under one key on both sides, never under whichever
+    // key a record pins first: `b` pins a constant on one side alone.
+    let pinning = |key: &str, tag: usize| field(key, Schema::Literal(ConstIx::new(tag)), true);
+    let wider = Schema::record(
+        vec![
+            field("a", Schema::Int, true),
+            pinning("b", 7),
+            pinning("k", 0),
+        ],
+        Openness::Closed,
+    );
+    let oracle = Tags(core::cell::Cell::new(0), true);
+    assert_eq!(
+        tag_pairs(&[record(0, "a", Schema::Int)], &[wider], &oracle),
+        Some(vec![(0, 0)])
+    );
+    let (answer, pairwise) = below(&low, &shared);
+    assert_ne!(answer, Relation::Holds, "tag 49's records meet");
+    assert!(pairwise <= 100, "one member read whole, {pairwise} asks");
+}
+
 /// A union refuses a length each branch leaves out, so the length rule reads
 /// one at any size: a refinement branch admits no length outside its bounds,
 /// whatever its base, and a branch of another kind admits none. The length

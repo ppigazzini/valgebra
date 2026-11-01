@@ -267,7 +267,14 @@ answers `"undecided"`.
   one side requires cannot hold: because the types the two give it share no value,
   or because the other side is closed and does not declare it. Only a required key
   can do this — a meet of two mappings, or of two optional fields, always contains
-  the empty dict.
+  the empty dict. Two unions of records told apart that way share no value at
+  any width, each record of one read against each of the other by the key both
+  require: two discriminated unions of two hundred records whose tags are apart
+  meet in nothing, where distributing the meet into record meets runs out of
+  work at sixteen. Where every record pins the key to one constant, the two
+  unions are read at the tag: only records whose constants share a value are
+  read whole, so two unions of sixteen hundred records each answer in about a
+  millisecond.
 
     A record is decided against a **union of records it splits across** as
     well, by the fixed sequence's rule one kind over: Castagna's

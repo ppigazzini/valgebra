@@ -5,7 +5,15 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import ValidationError, Validator, recursive, union
+from valgebra import (
+    ValidationError,
+    Validator,
+    complement,
+    intersection,
+    nothing,
+    recursive,
+    union,
+)
 
 
 def test_pep604_union_accepts_either_branch() -> None:
@@ -224,6 +232,33 @@ class _CountedKey(str):
         return str.__eq__(self, other)
 
     __hash__ = str.__hash__
+
+
+def test_two_unions_told_apart_by_their_tags_share_no_value() -> None:
+    """Records requiring one key share no value where the key's sets share none.
+
+    So two discriminated unions whose tags are apart meet in nothing, at any
+    width: a dict in both would hold the key with a value of both tag sets.
+    Read a record pair at a time, two hundred records a side are decided
+    where distributing the meet into record meets ran out of work at sixteen.
+    A tag the two sides share leaves the meet inhabited.
+    """
+
+    def tagged(width: int, sign: int, value: type) -> Validator[object]:
+        return union(
+            *[
+                Validator({"k": Literal[sign * (at + 1)], "v": value})  # ty: ignore[invalid-type-form]
+                for at in range(width)
+            ]
+        )
+
+    for width in (16, 32, 200):
+        positive, negative = tagged(width, 1, str), tagged(width, -1, int)
+        assert intersection(positive, negative).relation_to(nothing) == "subset"
+        assert positive.relation_to(complement(negative)) == "subset"
+    shared = intersection(tagged(4, 1, str), Validator({"k": Literal[1], "v": str}))
+    assert shared.relation_to(nothing) == "not_subset"
+    assert shared.is_valid({"k": 1, "v": "a"})
 
 
 def test_a_tagged_union_reads_its_tag_once() -> None:

@@ -78,6 +78,26 @@ pub trait LeafRelations: Constants {
         None
     }
 
+    /// The pairs of positions, one in `left` and one in `right`, whose
+    /// constants share a value, or `None` to leave it to the pairwise
+    /// question: every pair not named is one
+    /// [`literals_disjoint`](Self::literals_disjoint) answers disjoint.
+    ///
+    /// What two discriminated unions ask of their tags. Each record pins one
+    /// required key to a constant, and two records pinned to constants apart
+    /// share no value, so only the pairs named here are read whole: asked a
+    /// pair at a time, two unions of sixteen hundred records put two and a
+    /// half million questions to the bindings. An implementor that can hash
+    /// its constants answers in one pass; the default declines, and the pairs
+    /// stand.
+    fn literals_paired(
+        &self,
+        _left: &[ConstIx],
+        _right: &[ConstIx],
+    ) -> Option<Vec<(usize, usize)>> {
+        None
+    }
+
     /// How many values `constants` hold apart under `==`, each a constant of
     /// one kind that is a value, or `None` to leave it to the pairwise
     /// question.
