@@ -264,6 +264,38 @@ mod interpreter {
             assert!(tagged_union_plan(py, &unpinned, &pool).is_none());
         });
     }
+
+    /// The index plans an attribute record's names and a record's keys, each
+    /// interned once, and hands every one of them to the validator's
+    /// traversal ([`ValidatorIndex::interned_names`]); an attribute record with
+    /// no attribute has nothing to plan.
+    #[test]
+    fn the_index_interns_the_names_it_plans_and_hands_them_over() {
+        Python::attach(|py| {
+            let attribute = |name: &str| valgebra_core::Attribute {
+                name: name.into(),
+                schema: Schema::Int,
+            };
+            let attrs = Schema::attr_record(vec![attribute("x"), attribute("y")]);
+            let record = Schema::record(
+                vec![valgebra_core::Field {
+                    name: "a".into(),
+                    schema: Schema::Str,
+                    required: true,
+                }],
+                valgebra_core::Openness::Closed,
+            );
+            let schema = Schema::union([attrs, record, Schema::attr_record(Vec::new())]);
+            let index = build_index(py, &schema, &[], &[]);
+            assert_eq!(index.attrs.len(), 1, "one attribute record holds names");
+            let mut names: Vec<String> = index
+                .interned_names()
+                .map(|name| name.bind(py).to_string())
+                .collect();
+            names.sort();
+            assert_eq!(names, ["a", "x", "y"]);
+        });
+    }
 }
 
 /// Two validators holding one text hold one program while either lives

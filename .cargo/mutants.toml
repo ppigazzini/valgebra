@@ -193,6 +193,19 @@ exclude_re = [
     # one count either side of it and across it. Flipping the comparison moves
     # the cost and no count, for the reason above.
     "replace <= with > in distinct_keys",
+    # `Probes` reads a marker's optional attributes through the names its type
+    # carries, and through the marker's own dictionary for the rest, rather
+    # than asking `getattr` for every name -- the reading the mask stands in
+    # for, which answers alike and gives up only the saving. Reading the
+    # marker's `__dict__` where the type's mask says it keeps none finds none,
+    # since the mask was read off that same `__dict__`, and asking `getattr`
+    # for a name the type does not carry is the path a hook takes already: the
+    # cost moves and no answer. `^` for the `|` that joins a probe's bit to the
+    # hook's is the same mask, the two bits being apart. The mutants that do
+    # change a reading -- the bit tests inverted, `^` for the `&` -- stay in
+    # the sweep and are killed.
+    "build/refine\\.rs:.*: replace & with \\| in Probes<'py>::(of|get)$",
+    "build/refine\\.rs:.*: replace \\| with \\^ in Probes<'py>::get$",
 ]
 
 # A few mutants run longer than the baseline; give generous headroom over it.

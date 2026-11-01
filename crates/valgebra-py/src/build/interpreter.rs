@@ -3485,3 +3485,25 @@ fn a_class_names_only_the_pair_its_name_builds() {
         }
     });
 }
+
+/// The marker cache keeps the types it reads up to its bound and no further:
+/// a program building a marker class per call grows it to
+/// [`MAX_MARKER_TYPES`] and stops there, each type past it read afresh.
+#[test]
+fn the_marker_cache_stops_at_its_bound() {
+    Python::attach(|py| {
+        let make = py.get_type::<pyo3::types::PyType>();
+        for at in 0..=MAX_MARKER_TYPES {
+            let class = make
+                .call1((
+                    format!("Marker{at}"),
+                    pyo3::types::PyTuple::empty(py),
+                    pyo3::types::PyDict::new(py),
+                ))
+                .unwrap();
+            Probes::of(&class.call0().unwrap()).unwrap();
+        }
+        let held = CARRIED.get(py).expect("read").bind(py).len();
+        assert_eq!(held, MAX_MARKER_TYPES);
+    });
+}

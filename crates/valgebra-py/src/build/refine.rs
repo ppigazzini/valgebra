@@ -836,7 +836,7 @@ const _: () = {
 /// per-object lock, and two threads that miss on one type both compute the same
 /// mask and write it, since the mask is a property of the type and not of
 /// either thread. The `PyOnceLock` around it makes the dict itself arrive once.
-static CARRIED: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
+pub(super) static CARRIED: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
 
 /// How many marker types the mask cache keeps.
 ///
@@ -849,8 +849,9 @@ static CARRIED: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
 /// slower than the cache, and no worse than having none.
 ///
 /// The far side is exercised by `tests/test_adversarial_bounds.py`, which
-/// builds marker types well past this and reads the same answers from them.
-const MAX_MARKER_TYPES: usize = 256;
+/// builds marker types well past this and reads the same answers from them,
+/// and `the_marker_cache_stops_at_its_bound` holds the cache to it.
+pub(super) const MAX_MARKER_TYPES: usize = 256;
 
 /// How a marker's optional attributes are read, decided once per marker.
 ///

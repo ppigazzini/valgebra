@@ -9060,6 +9060,69 @@ fn keyed_maps_met_are_one_record() {
     assert_ne!(rules(&closed_beside, &closed(Schema::Int)), Relation::Fails);
 }
 
+/// A star sequence or a set below a refinement requiring an element is
+/// refuted by the rules on the empty one, whatever the element and the
+/// refinement's base: an element with no value leaves the empty container a
+/// value, and a reference, whose empty container no reading of the shapes
+/// answers for, is no obstacle, the bound alone leaving the empty one out.
+#[test]
+fn the_empty_container_refutes_a_bound_requiring_an_element_over_any_base() {
+    let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let defs = [ints.clone()];
+    let none_of = |element: Schema| Schema::list(SeqShape::homogeneous(element));
+    let at_least_one = Schema::Refine {
+        base: Arc::new(Schema::Ref(DefIx::new(0))),
+        constraints: vec![Constraint::MinLen(1)].into(),
+    };
+    for subject in [
+        ints,
+        Schema::set(Schema::Int),
+        none_of(Schema::Nothing),
+        Schema::set(Schema::Nothing),
+    ] {
+        let budget = Budget::new(DECISION_BUDGET);
+        assert_eq!(
+            subject.subtype_relation(&at_least_one, &NoLeafRelations, &defs, &budget),
+            Relation::Fails,
+            "{subject:?}"
+        );
+    }
+}
+
+/// The rule relating a meet of keyed maps as one record, asked itself, where
+/// another reading may answer the pair first: two closed records whose `tier`
+/// meets in a string are refuted below the record whose `tier` is an integer,
+/// and beside a member of another shape the rule gives no refutation, since
+/// the member may admit nothing.
+#[test]
+fn the_keyed_map_rule_refutes_where_the_maps_are_all_the_meet_holds() {
+    let closed = |tier: Schema| {
+        Schema::record(
+            vec![field("id", Schema::Str, true), field("tier", tier, true)],
+            Openness::Closed,
+        )
+    };
+    let members = [
+        closed(Schema::union([Schema::Int, Schema::Str])),
+        closed(Schema::union([Schema::Str, Schema::Bytes])),
+    ];
+    let rule = |members: &[Schema]| {
+        let budget = Budget::new(DECISION_BUDGET);
+        keyed_meet_below(
+            members,
+            &closed(Schema::Int),
+            &mut Cx::new(&NoLeafRelations, &[], &budget),
+        )
+    };
+    assert_eq!(rule(&members), Relation::Fails);
+    let opaque = Schema::Refine {
+        base: Arc::new(Schema::ANYTHING),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    let beside = [members[0].clone(), members[1].clone(), opaque];
+    assert_eq!(rule(&beside), Relation::Unknown);
+}
+
 // THEORY: a-record-splits-across-a-union
 /// A map minus a map it is below is empty beside a member no rule reads.
 ///
@@ -10945,10 +11008,15 @@ fn a_set_is_as_long_as_the_values_its_element_holds_apart() {
             under_lengths(&flags, &of_flags(1), &NoLeafRelations),
             Relation::Fails
         );
-        // An integer element holds as many values as any bound names.
+        // An integer element holds as many values as any bound names, and an
+        // element with none holds no member: the empty set alone.
         assert_eq!(
             under_lengths(&set(Schema::Int), &of_ints(5), &NoLeafRelations),
             Relation::Fails
+        );
+        assert_eq!(
+            under_lengths(&set(Schema::Nothing), &of_ints(0), &NoLeafRelations),
+            Relation::Holds
         );
         // And a refinement's base lends its lengths to the refinement's own --
         // the lengths it holds, and no bound past them.
