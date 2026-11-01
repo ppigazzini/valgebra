@@ -1341,3 +1341,58 @@ fn the_handle_memo_starts_over_at_its_bound() {
     assert_eq!(memo.held, COMPILED_BYTES, "a heavier one is not kept");
     assert!(!memo.tables.contains(&Dfa::word(b"e")));
 }
+
+/// A counted code point or byte, built directly, is the table the pattern
+/// compiler builds and minimizes, at every count the compiler can build: the
+/// minimal form is unique [DV14, Thm. 1], so the two are one table. Past what
+/// the compiler builds, the direct table is held to the state bound alone:
+/// seven states a code point and two beside them.
+#[test]
+fn a_counted_symbol_is_the_table_the_compiler_builds() {
+    for alphabet in [Alphabet::Text, Alphabet::Bytes] {
+        for count in [0, 1, 2, 3, 7, 40, 255] {
+            for at_least in [false, true] {
+                let unit = super::code_point(alphabet);
+                let pattern = if at_least {
+                    format!("{unit}{{{count},}}")
+                } else {
+                    format!("{unit}{{0,{count}}}")
+                };
+                // Determinized from the parse rather than compiled through the
+                // memo, which keeps a counted table under this very text: read
+                // through it, the comparison could be the table with itself.
+                let parsed = regex_automata::util::syntax::parse_with(
+                    &pattern,
+                    &regex_automata::util::syntax::Config::new().utf8(false),
+                )
+                .expect("the pattern parses");
+                let compiled = RegularSet::determinize(&parsed).expect("within the build");
+                assert_eq!(
+                    *compiled.dfa,
+                    Dfa::counted(count, at_least, alphabet),
+                    "{pattern}"
+                );
+            }
+        }
+    }
+    let largest = (MAX_STATES - 2) / 7;
+    assert!(RegularSet::at_most(largest, Alphabet::Text).is_some());
+    assert!(RegularSet::at_most(largest + 1, Alphabet::Text).is_none());
+    assert!(RegularSet::at_least(largest, Alphabet::Text).is_some());
+    assert!(RegularSet::at_least(MAX_STATES - 2, Alphabet::Bytes).is_some());
+    assert!(RegularSet::at_least(MAX_STATES - 1, Alphabet::Bytes).is_none());
+}
+
+/// A counted table is built once a thread and kept under the text the
+/// compiler would build it from: asked again, the table is read back.
+#[test]
+fn a_counted_table_is_kept_under_the_compilers_text() {
+    let text = format!("{}{{0,{}}}", super::code_point(Alphabet::Text), 500);
+    COMPILED.with_borrow_mut(|memo| memo.raw.remove(text.as_str()));
+    let first = RegularSet::at_most(500, Alphabet::Text).expect("within the bound");
+    let kept = COMPILED.with_borrow(|memo| memo.raw.get(text.as_str()).cloned());
+    let kept = kept.flatten().expect("kept under the compiler's text");
+    assert!(Arc::ptr_eq(&kept.dfa, &first.dfa));
+    let again = RegularSet::at_most(500, Alphabet::Text).expect("within the bound");
+    assert!(Arc::ptr_eq(&again.dfa, &first.dfa));
+}

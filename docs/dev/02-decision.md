@@ -307,8 +307,15 @@ it meets refuses.
 for every difference it is asked, and a build is a function of the text and the
 alphabet alone, so a thread keeps each language it built under the text it was
 built from, a refusal among them, and hands it back for that text again,
-found before the text is parsed. The memo is bounded by the bytes it holds,
-`COMPILED_BYTES`, and starts over past it.
+found before the text is parsed. A length bound's counted table, built
+directly rather than compiled, is kept the same way under the text the compiler
+would build it from (`RegularSet::counted`), which
+`a_counted_symbol_is_the_table_the_compiler_builds` holds to the compiled
+table, so the key names one language whichever route reads it: a relation
+reading `MaxLen(500)` beside a pattern rebuilt and minimized that table each
+time it was asked again, most of a millisecond, and reads it back in five
+microseconds (`a_counted_table_is_kept_under_the_compilers_text`). The memo is
+bounded by the bytes it holds, `COMPILED_BYTES`, and starts over past it.
 
 **A thread builds a product of two tables once** (`Products` in
 `descr/regular.rs`). A meet or a join of two languages is a function of the two

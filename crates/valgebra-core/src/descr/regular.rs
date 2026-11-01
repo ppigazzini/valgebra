@@ -470,6 +470,128 @@ impl Dfa {
         .minimal()
     }
 
+    /// The words of `count` code points or bytes or fewer, or, `at_least`,
+    /// of `count` or more, as the minimal table built directly.
+    ///
+    /// The pattern compiler unrolls a counted code point into a table of some
+    /// sixteen states a count, which minimizing folds to seven: the state
+    /// bound refused that table from 256 counts, after building it, 33 ms at
+    /// 2,000. Built as a chain, each count of text is a code point's first
+    /// byte and the six states its continuation bytes pass through -- one
+    /// left, two, three, and the narrowed first continuation after `E0`, `F0`
+    /// and `F4` -- and each count of bytes is one byte. A code point is UTF-8
+    /// read as bytes, a lone surrogate among them, since a `str` may carry one
+    /// and `"\u{d800}"` is one character long: the kind's universe
+    /// ([`Dfa::wtf8`]) taken one character at a time. A test holds the table
+    /// to the one the compiler builds from that expansion, at every count it
+    /// can build.
+    fn counted(count: usize, at_least: bool, alphabet: Alphabet) -> Dfa {
+        // The byte classes of a code point, as rows of (first, last, class):
+        // continuation bytes in three runs, ASCII, the leads, and the bytes no
+        // code point holds.
+        const TEXT: [(u8, u8, Class); 11] = [
+            (0x80, 0x8F, 0),
+            (0x90, 0x9F, 1),
+            (0xA0, 0xBF, 2),
+            (0x00, 0x7F, 3),
+            (0xC2, 0xDF, 4),
+            (0xE0, 0xE0, 5),
+            (0xE1, 0xEF, 6),
+            (0xF0, 0xF0, 7),
+            (0xF1, 0xF3, 8),
+            (0xF4, 0xF4, 9),
+            (0xC0, 0xC1, 10),
+        ];
+        let (per_count, class_count) = match alphabet {
+            Alphabet::Text => (7, 11),
+            Alphabet::Bytes => (1, 1),
+        };
+        let mut classes: Vec<Class> = vec![10; 256];
+        if let Alphabet::Text = alphabet {
+            for (first, last, class) in TEXT {
+                for byte in first..=last {
+                    if let Some(slot) = classes.get_mut(usize::from(byte)) {
+                        *slot = class;
+                    }
+                }
+            }
+        } else {
+            classes.fill(0);
+        }
+        // Each count's states at `per_count * count`, then the dead state.
+        let states = per_count * (count + 1) + 1;
+        let dead = u32::try_from(states - 1).unwrap_or(0);
+        let at =
+            |level: usize, offset: usize| u32::try_from(per_count * level + offset).unwrap_or(0);
+        let mut transitions = vec![dead; states * class_count];
+        let mut set = |from: u32, class: Class, to: u32| {
+            if let Some(slot) =
+                transitions.get_mut(from as usize * class_count + usize::from(class))
+            {
+                *slot = to;
+            }
+        };
+        for level in 0..=count {
+            // Where a code point read at this level ends: the next count, the
+            // same one past `count` where the language runs on, and nowhere
+            // past `count` where it stops there.
+            let next = if level < count {
+                Some(at(level + 1, 0))
+            } else if at_least {
+                Some(at(level, 0))
+            } else {
+                None
+            };
+            let Some(next) = next else {
+                continue;
+            };
+            let start = at(level, 0);
+            if let Alphabet::Bytes = alphabet {
+                set(start, 0, next);
+                continue;
+            }
+            let (one, two, three) = (at(level, 1), at(level, 2), at(level, 3));
+            set(start, 3, next);
+            set(start, 4, one);
+            set(start, 6, two);
+            set(start, 8, three);
+            for continuation in 0..3 {
+                set(one, continuation, next);
+                set(two, continuation, one);
+                set(three, continuation, two);
+            }
+            // The leads whose first continuation is narrowed -- `E0` to
+            // `A0..BF`, `F0` to `90..BF`, `F4` to `80..8F` -- each leaving the
+            // continuations its width has left.
+            for (lead, narrowed, allowed, then) in [
+                (5, at(level, 4), &[2][..], one),
+                (7, at(level, 5), &[1, 2][..], two),
+                (9, at(level, 6), &[0][..], two),
+            ] {
+                set(start, lead, narrowed);
+                for class in allowed {
+                    set(narrowed, *class, then);
+                }
+            }
+        }
+        let mut accepting = vec![false; states];
+        for level in 0..=count {
+            if at_least && level < count {
+                continue;
+            }
+            if let Some(flag) = accepting.get_mut(at(level, 0) as usize) {
+                *flag = true;
+            }
+        }
+        Dfa {
+            classes,
+            class_count,
+            transitions,
+            accepting,
+        }
+        .minimal()
+    }
+
     /// The one-word automaton, at any length. [`RegularSet::word`] holds it to
     /// the bound; a test reads a chain longer than the bound through this.
     /// Every state has an edge on every class, the stray ones to a dead state,
@@ -1518,26 +1640,52 @@ impl RegularSet {
     /// The words of at least `length` symbols -- code points for
     /// [`Alphabet::Text`], bytes for [`Alphabet::Bytes`].
     ///
-    /// A table counting to `length` holds a state for each count it tells
-    /// apart, so a bound past [`MAX_STATES`] is refused before it is written,
-    /// as a literal word and a sequence's bound are ([`chain_fits`]): the
-    /// pattern would be compiled first, one copy of a code point for each.
+    /// A table counting to `length` holds the states each count tells apart,
+    /// seven a code point and one a byte, and a dead state and one past the
+    /// count, so a bound whose table passes [`MAX_STATES`] is refused before
+    /// it is built, as a literal word and a sequence's bound are
+    /// ([`chain_fits`]). Built directly ([`Dfa::counted`]), not compiled.
     #[must_use]
     pub(crate) fn at_least(length: usize, alphabet: Alphabet) -> Option<RegularSet> {
-        if !chain_fits(length) {
-            return None;
-        }
-        RegularSet::compile(&format!("{}{{{length},}}", code_point(alphabet)), false)
+        RegularSet::counted(length, true, alphabet)
     }
 
     /// The words of at most `length` symbols, refused past [`MAX_STATES`] as
     /// [`at_least`](Self::at_least) is.
     #[must_use]
     pub(crate) fn at_most(length: usize, alphabet: Alphabet) -> Option<RegularSet> {
-        if !chain_fits(length) {
+        RegularSet::counted(length, false, alphabet)
+    }
+
+    /// [`Dfa::counted`] within [`MAX_STATES`]: seven states a code point, one
+    /// a byte, and the two [`chain_fits`] counts beside them.
+    ///
+    /// Built once a thread ([`memoized`](Self::memoized)), under the text the
+    /// compiler would build the same table from -- [`code_point`] counted --
+    /// whose table `a_counted_symbol_is_the_table_the_compiler_builds` holds
+    /// to this one, so the key names one language whichever route reads it.
+    /// A lowering reads a bound again for every difference it is asked, and a
+    /// table counting to five hundred took most of a millisecond to build and
+    /// minimize each time.
+    fn counted(length: usize, at_least: bool, alphabet: Alphabet) -> Option<RegularSet> {
+        let per_count = match alphabet {
+            Alphabet::Text => 7,
+            Alphabet::Bytes => 1,
+        };
+        if !length.checked_mul(per_count).is_some_and(chain_fits) {
             return None;
         }
-        RegularSet::compile(&format!("{}{{0,{length}}}", code_point(alphabet)), false)
+        let unit = code_point(alphabet);
+        let text = if at_least {
+            format!("{unit}{{{length},}}")
+        } else {
+            format!("{unit}{{0,{length}}}")
+        };
+        RegularSet::memoized(&text, false, || {
+            Some(RegularSet {
+                dfa: Handles::of(Dfa::counted(length, at_least, alphabet)),
+            })
+        })
     }
 
     /// Whether this set holds no word.
@@ -1591,16 +1739,15 @@ impl RegularSet {
     }
 }
 
-/// The pattern for one symbol of an alphabet, written over **bytes**.
+/// The pattern for one symbol of an alphabet, written over **bytes**: what a
+/// test compiles to hold [`Dfa::counted`] to, and the text a counted table is
+/// kept under ([`RegularSet::counted`]).
 ///
-/// A length bound counts the symbols a value has, and for text a symbol is a
-/// code point -- a lone surrogate among them, since a `str` may carry one and
-/// `"\u{d800}"` is one character long. UTF-8 mode cannot spell that character,
-/// so the expansion is written out and read as bytes: it is the kind's universe
-/// ([`Dfa::wtf8`]) taken one character at a time.
-///
-/// Neither arm skips a newline. A length bound is about how many symbols the
-/// word has, not about which of them a pattern would pass over.
+/// For text a symbol is a code point -- a lone surrogate among them, since a
+/// `str` may carry one and `"\u{d800}"` is one character long. UTF-8 mode
+/// cannot spell that character, so the expansion is written out and read as
+/// bytes: it is the kind's universe ([`Dfa::wtf8`]) taken one character at a
+/// time. Neither arm skips a newline.
 const fn code_point(alphabet: Alphabet) -> &'static str {
     match alphabet {
         Alphabet::Text => concat!(

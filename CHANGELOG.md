@@ -90,10 +90,21 @@ answer of its own, or a repair to a change not yet released.
 - feat: a class with one instance is its literal, and a True step is the step 1
 - fix: a Decimal bound with a vast exponent is not rounded to an int
 - feat: a meet holding one complement is read as the relation it is
+- feat: a word's length bound is counted by a table built directly
 
 -->
 
 ### Added
+
+- **A word's length bound is counted by a table built directly.** A length bound
+  over `str` is a table of seven states a code point, which the pattern compiler
+  reached through one of some sixteen and refused past 255 code points after
+  building it: `Annotated[str, MaxLen(2000)]` met with a record's field took 35
+  ms to be found too large, and the first `is_empty` of a record of
+  length-bounded strings over the JSON value paid it again for each new
+  validator. Built directly, a bound is read up to 584 code points and refused
+  at once past them, and that `is_empty` answers in a tenth of a millisecond.
+  The table is built once a thread, so a relation asked again reads it back.
 
 - **A meet holding one complement is read as the relation it is.** `R & ~I` is
   empty exactly where `R <= I`, so where every decider declines a meet's
