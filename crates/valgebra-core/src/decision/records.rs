@@ -880,22 +880,75 @@ fn record_of_maps<'s>(members: &'s [Schema], cx: &Cx<'_>) -> Option<Met<'s>> {
             .collect::<Option<Vec<Schema>>>()
             .map(Schema::meet)
     });
-    let mut spelled: Vec<&'s str> = read
+    let labels: Vec<&Labels<'s>> = read.iter().map(|(_, labels)| labels).collect();
+    Some(Met {
+        parts,
+        named: labels_met(&labels),
+    })
+}
+
+/// Every name the maps label, each met across them as [`Labels::slot`] reads
+/// it in each: the type a map declares it with, or that map's default where it
+/// declares none; absent only where every map allows its absence.
+///
+/// A meet is the set of its members [FCB08, Def. 4.1], and the maps that label
+/// no name give it their defaults, which are a few distinct schemas however
+/// many maps hold them. So a name's meet is built from the maps that label it
+/// and the defaults of the maps left, each once, and it is the meet a slot of
+/// every map builds. A slot a map is the square of the meet's width: a
+/// thousand records met, each with one field, are a million slots.
+fn labels_met<'s>(maps: &[&Labels<'s>]) -> Vec<(&'s str, Slot)> {
+    // The distinct defaults, with how many maps give each, and the one each
+    // map gives.
+    let mut defaults: Vec<(Option<&'s Schema>, usize)> = Vec::new();
+    let given: Vec<usize> = maps
         .iter()
-        .flat_map(|(_, labels)| labels.named.iter().map(|(name, _)| *name))
-        .collect();
-    spelled.sort_unstable();
-    spelled.dedup();
-    let named = spelled
-        .into_iter()
-        .map(|name| {
-            let slots: Vec<Slot> = read.iter().map(|(_, labels)| labels.slot(name)).collect();
-            let absent = slots.iter().all(|slot| slot.absent);
-            let ty = Schema::meet(slots.into_iter().map(|slot| slot.ty));
-            (name, Slot { ty, absent })
+        .map(|labels| {
+            if let Some(at) = defaults.iter().position(|(rest, _)| *rest == labels.rest) {
+                if let Some((_, given)) = defaults.get_mut(at) {
+                    *given += 1;
+                }
+                at
+            } else {
+                defaults.push((labels.rest, 1));
+                defaults.len() - 1
+            }
         })
         .collect();
-    Some(Met { parts, named })
+    let mut labeled: Vec<(&'s str, usize, &Slot)> = maps
+        .iter()
+        .enumerate()
+        .flat_map(|(at, labels)| {
+            labels
+                .named
+                .iter()
+                .map(move |(name, slot)| (*name, at, slot))
+        })
+        .collect();
+    labeled.sort_unstable_by_key(|(name, at, _)| (*name, *at));
+    let mut left = Vec::with_capacity(defaults.len());
+    labeled
+        .chunk_by(|a, b| a.0 == b.0)
+        .filter_map(|labeling| {
+            let (name, _, _) = labeling.first()?;
+            left.clear();
+            left.extend(defaults.iter().map(|(_, given)| *given));
+            for (_, at, _) in labeling {
+                if let Some(left) = given.get(*at).and_then(|group| left.get_mut(*group)) {
+                    *left -= 1;
+                }
+            }
+            let declared = labeling.iter().map(|(_, _, slot)| slot.ty.clone());
+            let read_as_default = defaults
+                .iter()
+                .zip(&left)
+                .filter(|(_, left)| **left > 0)
+                .map(|((rest, _), _)| rest.map_or(Schema::Nothing, Schema::clone));
+            let ty = Schema::meet(declared.chain(read_as_default));
+            let absent = labeling.iter().all(|(_, _, slot)| slot.absent);
+            Some((*name, Slot { ty, absent }))
+        })
+        .collect()
 }
 
 /// R◦ as [`record_of_maps`] builds it, owned, since each part and label is a
