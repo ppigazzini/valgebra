@@ -2698,7 +2698,10 @@ fn a_typed_dict_says_which_other_keys_it_admits() {
                  Closed.__closed__ = True\n\
                  class Extra(typing.TypedDict):\n\
                  \x20   name: str\n\
-                 Extra.__extra_items__ = int\n",
+                 Extra.__extra_items__ = int\n\
+                 class Worded(typing.TypedDict):\n\
+                 \x20   name: str\n\
+                 Worded.__extra_items__ = 'int | None'\n",
             )
             .expect("a source with no interior nul"),
             Some(&namespace),
@@ -2714,6 +2717,9 @@ fn a_typed_dict_says_which_other_keys_it_admits() {
             ("Closed", "{'name': str}"),
             // `extra_items` types the rest rather than admitting anything.
             ("Extra", "{'name': str, str: int}"),
+            // A string there is the type expression it spells, resolved as
+            // the class's own annotations are, never the literal of its text.
+            ("Worded", "{'name': str, str: None | int}"),
         ] {
             let annotation = namespace
                 .get_item(name)

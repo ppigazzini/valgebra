@@ -150,6 +150,38 @@ def test_a_typeddict_is_the_record_its_pep_728_spelling_names(
     assert Validator(record) == Validator(literal)
 
 
+class _Coordinate(typing.TypedDict):
+    """A class of this module, which an `extra_items` below names by a string."""
+
+    x: int
+
+
+@pytest.mark.parametrize("implementation", ["typing", "typing_extensions"])
+def test_a_string_given_as_extra_items_is_the_type_it_names(
+    implementation: str,
+) -> None:
+    """`extra_items` takes a type expression, and a string is one written as text.
+
+    The runtime keeps the string as written. Read as the value it is, it was the
+    literal of its text, admitting the word and refusing what it names; it is
+    resolved as the class's own annotations are, in the module that defines it,
+    and a subclass that says nothing reads its base's.
+    """
+    module = pytest.importorskip(implementation)
+    if not hasattr(module, "NoExtraItems"):
+        pytest.skip(f"{implementation} has no PEP 728 on this release")
+    counts = module.TypedDict("Counts", {"total": int}, extra_items="int | None")
+    more = type(counts)("More", (counts,), {"__annotations__": {}})
+    for record in (counts, more):
+        assert Validator(record).is_valid({"total": 1, "apples": 3})
+        assert Validator(record).is_valid({"total": 1, "apples": None})
+        assert not Validator(record).is_valid({"total": 1, "apples": "int | None"})
+    points = module.TypedDict("Points", {"total": int}, extra_items="_Coordinate")
+    assert Validator(points).is_valid({"total": 1, "p": {"x": 1}})
+    assert not Validator(points).is_valid({"total": 1, "p": "_Coordinate"})
+    assert Validator(points) == Validator({"total": int, str: _Coordinate})
+
+
 @pytest.mark.parametrize("implementation", ["typing", "typing_extensions"])
 def test_a_typeddict_inherits_the_keys_its_base_does_not_name(
     implementation: str,

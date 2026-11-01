@@ -14,8 +14,8 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
-    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyNone, PySet, PyString, PyTuple,
-    PyType,
+    IntoPyDict, PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyMapping, PyNone,
+    PySet, PyString, PyTuple, PyType,
 };
 use valgebra_core::{Attribute, Field, MapClause, Schema, SeqKind, SeqShape};
 
@@ -1528,9 +1528,56 @@ fn stated_tail<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Tail<'py>>> {
     if let Some(extra) = optional_attribute(ty, intern!(py, "__extra_items__"))?
         && !gave_no_extra_items(ty, &extra)?
     {
-        return Ok(Some(Tail::Typed(extra)));
+        return Ok(Some(Tail::Typed(annotation_of(ty, extra)?)));
     }
     Ok(None)
+}
+
+/// `extra` as the type expression PEP 728 takes for `extra_items`: a string
+/// resolved as `ty`'s own annotations are, and anything else as it is.
+///
+/// The typing spec reads a string where a type expression goes as a string
+/// annotation, and the runtime keeps it as written in `__extra_items__`. Read
+/// as the value it is, it is the literal of its text, which admits the word
+/// and refuses what the annotation admits. A class whose extra items are its
+/// own type has this spelling alone: it cannot name itself before its
+/// statement ends. `get_type_hints` reads a class's annotations in the module
+/// that defines it first and in its namespace after, and the string is read so,
+/// as the one annotation of a namespace holding it.
+fn annotation_of<'py>(
+    ty: &Bound<'py, PyType>,
+    extra: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    if !extra.is_instance_of::<PyString>() {
+        return Ok(extra);
+    }
+    let py = ty.py();
+    let key = intern!(py, "extra_items");
+    let annotations = PyDict::new(py);
+    annotations.set_item(key, &extra)?;
+    let holder = py
+        .import(intern!(py, "types"))?
+        .getattr(intern!(py, "SimpleNamespace"))?
+        .call(
+            (),
+            Some(&[(intern!(py, "__annotations__"), annotations)].into_py_dict(py)?),
+        )?;
+    let module = ty.getattr(intern!(py, "__module__"))?;
+    let module_namespace = match loaded_modules(py)?.get_item(&module)? {
+        Some(module) => module.getattr(intern!(py, "__dict__"))?,
+        None => PyDict::new(py).into_any(),
+    };
+    let class_namespace = PyDict::new(py);
+    class_namespace.update(ty.getattr(intern!(py, "__dict__"))?.cast::<PyMapping>()?)?;
+    let options = PyDict::new(py);
+    options.set_item(intern!(py, "globalns"), class_namespace)?;
+    options.set_item(intern!(py, "localns"), module_namespace)?;
+    options.set_item(intern!(py, "include_extras"), true)?;
+    forms(py)?
+        .get_type_hints
+        .bind(py)
+        .call((holder,), Some(&options))?
+        .get_item(key)
 }
 
 /// What `ty` has for its unnamed keys: its own, or the first a `TypedDict` base

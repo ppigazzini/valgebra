@@ -92,6 +92,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet holding one complement is read as the relation it is
 - feat: a word's length bound is counted by a table built directly
 - fix: a type parameter's default written as a string is refused
+- fix: a TypedDict's extra_items given as a string is the type it names
 
 -->
 
@@ -472,6 +473,17 @@ answer of its own, or a repair to a change not yet released.
   3.10 spelled with an object of its own are gone with it.
 
 ### Fixed
+
+- **A `TypedDict`'s `extra_items` given as a string is the type it names.**
+  PEP 728 takes a type expression there, and a string where one goes is a
+  string annotation, which the runtime keeps as written. It was read as the
+  value it is: `extra_items="int"` built `{'total': int, str: Literal['int']}`,
+  admitting the word as an extra value and refusing every integer, in the
+  class statement and the functional form alike and in a subclass inheriting
+  it. It is resolved as the class's own annotations are, in the module that
+  defines the class. A class whose extra items are its own type is refused as
+  a class whose fields name it is, with the hint to write it with
+  `recursive(...)`.
 
 - **A type parameter's default written as a string is refused.** PEP 696
   makes a default a type expression, and a string there a forward reference,
