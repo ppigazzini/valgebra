@@ -41,6 +41,16 @@ pub enum Operand {
     NoneType,
     /// An instance of a pure class.
     Instance(Class),
+    /// A bound's `Fraction` or finite `Decimal`, as the integers at its floor
+    /// and at its ceiling, one integer where it is whole. Python compares an
+    /// `int` with either exactly, so a bound over the integers reads no more
+    /// of it, and nothing else reads it.
+    Rational {
+        /// The greatest integer at or below the value.
+        floor: i64,
+        /// The least integer at or above the value.
+        ceil: i64,
+    },
 }
 
 /// What a lowering needs from the pool the core does not hold.
@@ -981,9 +991,9 @@ fn label_of(operand: &Operand) -> Option<Label> {
         Operand::Boolean(value) => Some(Label::Bool(*value)),
         Operand::Integer(value) => Some(Label::Int(*value)),
         Operand::Word(word, kind) => Some(Label::Word(word.clone(), *kind)),
-        // A float is not a `Literal` the typing spec allows, and an instance is
-        // not a constant.
-        Operand::Float(_) | Operand::Instance(_) => None,
+        // A float or a rational is not a `Literal` the typing spec allows, and
+        // an instance is not a constant.
+        Operand::Float(_) | Operand::Instance(_) | Operand::Rational { .. } => None,
     }
 }
 
@@ -1146,7 +1156,8 @@ fn singleton(constant: &Operand) -> Option<Descr> {
         Operand::NoneType => Some(Descr::of_kind(Kind::NoneType)),
         // A class is a set of objects, not one value; a literal naming an
         // instance also pins *which* instance, which the descriptor cannot say.
-        Operand::Instance(_) => None,
+        // A rational is only ever a bound's operand.
+        Operand::Instance(_) | Operand::Rational { .. } => None,
     }
 }
 
@@ -1403,12 +1414,13 @@ fn straddle(value: i64, lower: bool) -> Straddle {
 
 /// The integers a comparison bound admits, for a base that is not the floats.
 ///
-/// Python compares an `int` with a `float` exactly, so a float operand is read
-/// as the integer on the near side of it, and then as an integer bound is:
-/// `n > x` is `n > floor(x)` and `n >= x` is `n >= ceil(x)`, so `n > 0.5` and
-/// `n > 0.0` are both `n >= 1`; the upper bounds mirror them. An infinite
-/// operand admits every integer or none, and `nan`, which orders nothing,
-/// declines, as does a bound past the range an integer here holds.
+/// Python compares an `int` with a `float`, a `Fraction` or a `Decimal`
+/// exactly, so such an operand is read as the integer on the near side of it,
+/// and then as an integer bound is: `n > x` is `n > floor(x)` and `n >= x` is
+/// `n >= ceil(x)`, so `n > 0.5` and `n > 0.0` are both `n >= 1`; the upper
+/// bounds mirror them. An infinite operand admits every integer or none, and
+/// `nan`, which orders nothing, declines, as does a bound past the range an
+/// integer here holds.
 fn integer_bound(constraint: &Constraint, operand: &Operand) -> Option<IntSet> {
     let lower = matches!(constraint, Constraint::Ge(_) | Constraint::Gt(_));
     let strict = matches!(constraint, Constraint::Gt(_) | Constraint::Lt(_));
@@ -1437,6 +1449,13 @@ fn integer_bound(constraint: &Constraint, operand: &Operand) -> Option<IntSet> {
             )]
             let near = near as i64;
             near
+        }
+        Operand::Rational { floor, ceil } => {
+            if lower == strict {
+                floor
+            } else {
+                ceil
+            }
         }
         _ => return None,
     };

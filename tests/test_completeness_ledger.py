@@ -29,6 +29,8 @@ the relation.
 import dataclasses
 import enum
 import itertools
+from decimal import Decimal
+from fractions import Fraction
 from typing import (
     Annotated,
     Any,
@@ -457,6 +459,26 @@ _DECIDED = [
         Annotated[int, at.Gt(0.5)],
         Annotated[int, at.Ge(1)],
         id="int>0.5==int>=1",
+    ),
+    # A `Fraction` or a `Decimal` bound is read the same way, as Python
+    # compares an int with either exactly.
+    pytest.param(
+        "equivalent",
+        Annotated[int, at.Gt(Fraction(1, 2))],
+        Annotated[int, at.Ge(1)],
+        id="int>Fraction(1,2)==int>=1",
+    ),
+    pytest.param(
+        "equivalent",
+        Annotated[int, at.Le(Decimal("2.5"))],
+        Annotated[int, at.Le(2)],
+        id="int<=Decimal(2.5)==int<=2",
+    ),
+    pytest.param(
+        "refutes",
+        intersection(complement(bool), Annotated[int, at.Gt(Fraction(-1, 3))]),
+        nothing,
+        id="~bool&int>Fraction(-1,3)-is-inhabited",
     ),
     # A recursive schema holding a class meets its complement in nothing: the
     # constructor cannot vouch for the class, and the decision reads the

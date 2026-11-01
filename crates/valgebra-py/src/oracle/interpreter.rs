@@ -200,6 +200,44 @@ fn an_operand_reports_the_kind_its_value_has() {
 }
 
 #[test]
+fn a_fraction_or_a_decimal_operand_is_read_at_its_floor_and_its_ceiling() {
+    // Python compares an `int` with either exactly, so the two integers around
+    // one are what a bound over the integers reads. Only the two classes the
+    // standard library binds, with a finite value inside the integers an `i64`
+    // holds: a subclass, an infinity, a NaN and a value past the range are not
+    // read.
+    Python::attach(|py| {
+        let values = [
+            "__import__('fractions').Fraction(-3, 2)",
+            "__import__('decimal').Decimal('2.0')",
+            "__import__('decimal').Decimal('0.25')",
+            "__import__('decimal').Decimal('Infinity')",
+            "__import__('decimal').Decimal('NaN')",
+            "__import__('decimal').Decimal('1e30')",
+            "type('Mine', (__import__('fractions').Fraction,), {})(1, 2)",
+        ]
+        .into_iter()
+        .map(|source| built(py, source).unbind())
+        .collect();
+        asking(py, values, |oracle| {
+            let read = |slot| oracle.operand(OperandIx::new(slot));
+            assert_eq!(
+                read(0),
+                Some(Operand::Rational {
+                    floor: -2,
+                    ceil: -1
+                })
+            );
+            assert_eq!(read(1), Some(Operand::Rational { floor: 2, ceil: 2 }));
+            assert_eq!(read(2), Some(Operand::Rational { floor: 0, ceil: 1 }));
+            for slot in 3..7 {
+                assert_eq!(read(slot), None, "the operand at {slot} is not read");
+            }
+        });
+    });
+}
+
+#[test]
 fn two_constants_are_disjoint_unless_they_are_the_same_value() {
     // `literals_disjoint`: do these two singletons share a value. Two `1`s do;
     // `1` and `True` do not, although `1 == True` -- the pool reads a constant

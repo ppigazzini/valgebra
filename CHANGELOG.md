@@ -85,10 +85,19 @@ answer of its own, or a repair to a change not yet released.
 - feat: a length every branch of a union leaves out refutes at any size
 - feat: records told apart by a required key share no value
 - feat: a container holds no more items than its shape can name
+- feat: a Fraction or a Decimal bound over the integers is read as a float one is
 
 -->
 
 ### Added
+
+- **A `Fraction` or a `Decimal` bound over the integers is read as a float one
+  is.** Python compares an `int` with either exactly, so the set representation
+  reads `Annotated[int, Gt(Fraction(1, 2))]` as the integers from `1`, the set
+  `Annotated[int, Ge(1)]` is, and `Annotated[int, Le(Decimal("2.5"))]` as
+  `Annotated[int, Le(2)]`, where such an operand was left unread and the pair
+  `undecided`. A subclass, an infinite or NaN `Decimal`, and a value past the
+  integers the set representation holds are not read.
 
 - **A container holds no more items than its shape can name.** A length bound
   over a sequence was read against the sequence's own lengths, and over a set

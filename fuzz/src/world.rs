@@ -509,7 +509,9 @@ mod tests {
             Operand::Float(_) => Kind::Float,
             Operand::Word(_, kind) => *kind,
             Operand::NoneType => Kind::NoneType,
-            Operand::Instance(_) => unreachable!("no constant here is a class"),
+            Operand::Instance(_) | Operand::Rational { .. } => {
+                unreachable!("no constant here is a class or a rational")
+            }
         }
     }
 

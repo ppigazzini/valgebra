@@ -338,6 +338,20 @@ const STDLIB_VALUE_TYPES: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// Whether `ty` is exactly `fractions.Fraction` or `decimal.Decimal`, asked as
+/// [`is_a_value_type`] asks: by identity, among the modules imported so far.
+fn is_exact_rational(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+    let modules = SYS_MODULES.import(ty.py(), "sys", "modules")?;
+    for (module, name) in [("fractions", "Fraction"), ("decimal", "Decimal")] {
+        if let Ok(module) = modules.get_item(module)
+            && module.getattr_opt(name)?.is_some_and(|class| class.is(ty))
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// `sys.modules`, the modules imported so far, read once.
 static SYS_MODULES: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
@@ -1321,6 +1335,34 @@ impl<'py> PoolRelations<'py, '_> {
         None
     }
 
+    /// A pooled bound operand that is exactly a `Fraction` or a `Decimal`, as
+    /// the integers at its floor and at its ceiling: Python compares an `int`
+    /// with either exactly, so a bound over the integers reads no more of it.
+    /// One with no finite value, or past the integers an `i64` holds, is not
+    /// read. The range is asked by comparison first, so a `Decimal` with a vast
+    /// exponent is never made an `int`.
+    fn rational(&self, slot: usize) -> Option<Operand> {
+        let value = self.literals.get(slot)?.bind(self.py);
+        if !self.heard(is_exact_rational(&value.get_type()))? {
+            return None;
+        }
+        if !self.heard(value.ge(i64::MIN))? {
+            return None;
+        }
+        if !self.heard(value.lt(1u64 << 63))? {
+            return None;
+        }
+        let at = |method| {
+            self.heard(value.call_method0(method))?
+                .extract::<i64>()
+                .ok()
+        };
+        Some(Operand::Rational {
+            floor: at(intern!(self.py, "__floor__"))?,
+            ceil: at(intern!(self.py, "__ceil__"))?,
+        })
+    }
+
     /// Whether a class denotes a set.
     ///
     /// A class is **pure** when its metaclass leaves both `isinstance` and
@@ -1358,6 +1400,7 @@ impl<'py> PoolRelations<'py, '_> {
 impl Constants for PoolRelations<'_, '_> {
     fn operand(&self, index: OperandIx) -> Option<Operand> {
         self.pooled(index.get())
+            .or_else(|| self.rational(index.get()))
     }
 
     fn constant(&self, index: ConstIx) -> Option<Operand> {

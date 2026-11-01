@@ -1280,6 +1280,60 @@ proptest! {
             );
         }
     }
+
+    /// A `Fraction` or `Decimal` bound over the integers is read at the floor or
+    /// the ceiling the pool reads of it: the lowered set admits an integer, and
+    /// a boolean, exactly where Python's exact comparison of it with `p / q`
+    /// holds -- `n * q` against `p`, `q` being positive -- over operands at and
+    /// between the integers drawn.
+    #[test]
+    fn a_rational_bound_over_the_integers_is_read_as_python_compares(
+        p in -16i64..16,
+        q in 1i64..5,
+        which in 0usize..4,
+        n in -6i64..6,
+    ) {
+        let at = OperandIx::new(0);
+        let constraint = [
+            Constraint::Gt(at),
+            Constraint::Ge(at),
+            Constraint::Lt(at),
+            Constraint::Le(at),
+        ]
+        .into_iter()
+        .nth(which)
+        .expect("one of four");
+        let rational = Operand::Rational {
+            floor: p.div_euclid(q),
+            ceil: -(-p).div_euclid(q),
+        };
+        let set = lower(
+            &Schema::Refine {
+                base: Arc::new(Schema::Int),
+                constraints: vec![constraint.clone()].into(),
+            },
+            &Pool(vec![rational]),
+        )
+        .expect("a rational bound over the integers lowers");
+        let holds = |n: i64| match constraint {
+            Constraint::Gt(_) => n * q > p,
+            Constraint::Ge(_) => n * q >= p,
+            Constraint::Lt(_) => n * q < p,
+            Constraint::Le(_) => n * q <= p,
+            ref other => panic!("{other:?} is no comparison"),
+        };
+        prop_assert_eq!(set.admits(Value::integer(n)), holds(n), "{} {}/{}", n, p, q);
+        for boolean in [false, true] {
+            prop_assert_eq!(
+                set.admits(Value::boolean(boolean)),
+                holds(i64::from(boolean)),
+                "{} {}/{}",
+                boolean,
+                p,
+                q
+            );
+        }
+    }
 }
 
 proptest! {
