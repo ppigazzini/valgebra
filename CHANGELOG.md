@@ -88,6 +88,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a Fraction or a Decimal bound over the integers is read as a float one is
 - feat: a table of constants is read for its kinds at any width
 - feat: a class with one instance is its literal, and a True step is the step 1
+- fix: a Decimal bound with a vast exponent is not rounded to an int
 
 -->
 
@@ -446,6 +447,14 @@ answer of its own, or a repair to a change not yet released.
   3.10 spelled with an object of its own are gone with it.
 
 ### Fixed
+
+- **A `Decimal` bound with a vast exponent is not rounded to an `int`.** The
+  rule that finds no integer between two bounds rounded each to an `int`, and
+  a `Decimal` takes time quadratic in its digits to become one:
+  `Annotated[int, Gt(Decimal("1e999999"))].is_empty()` took 26 seconds, and a
+  larger exponent did not end. Past 4,300 digits, CPython's own default for
+  converting an `int` to text, the bound is not rounded and the rule declines.
+  The answer above is read in a fraction of a millisecond.
 
 - **A quantifier `re` refuses for repeating no atom is refused.** `re`
   repeats an atom and refuses a quantifier on a quantifier, `a{2}{3}` or `a**`,

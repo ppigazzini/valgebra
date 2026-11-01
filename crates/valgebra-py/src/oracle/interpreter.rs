@@ -200,6 +200,47 @@ fn an_operand_reports_the_kind_its_value_has() {
 }
 
 #[test]
+fn a_decimal_bound_past_the_rounded_digits_is_not_rounded() {
+    // Rounding a `Decimal` to an `int` takes time quadratic in its digits, so
+    // the integer-interval rule rounds none whose leading digit sits at
+    // `ROUNDED_DIGITS` or past it: one place below, the bound is rounded and
+    // the interval it closes holds its integer; at it, the rule declines,
+    // whichever end of the interval the bound closes. A
+    // `Fraction` rounds in linear time and is rounded at any size.
+    Python::attach(|py| {
+        let values = [
+            "__import__('decimal').Decimal('2.1')",
+            "__import__('decimal').Decimal('2.9')",
+            "__import__('decimal').Decimal('1e4299')",
+            "__import__('decimal').Decimal('1e4300')",
+            "__import__('fractions').Fraction(10**5000, 3)",
+        ]
+        .into_iter()
+        .map(|source| built(py, source).unbind())
+        .collect();
+        asking(py, values, |oracle| {
+            let between = |lo, lo_strict, hi, hi_strict| {
+                oracle.no_int_between(OperandIx::new(lo), lo_strict, OperandIx::new(hi), hi_strict)
+            };
+            assert_eq!(
+                between(0, true, 1, true),
+                Some(true),
+                "no integer in (2.1, 2.9)"
+            );
+            assert_eq!(between(2, false, 2, false), Some(false), "10**4299 is one");
+            assert_eq!(between(3, false, 3, false), None, "10**4300 is not rounded");
+            assert_eq!(between(0, true, 3, false), None, "nor as the upper bound");
+            assert_eq!(between(3, true, 1, false), None, "nor as the lower one");
+            assert_eq!(
+                between(4, false, 4, false),
+                Some(true),
+                "a fraction is rounded"
+            );
+        });
+    });
+}
+
+#[test]
 fn a_fraction_or_a_decimal_operand_is_read_at_its_floor_and_its_ceiling() {
     // Python compares an `int` with either exactly, so the two integers around
     // one are what a bound over the integers reads. Only the two classes the

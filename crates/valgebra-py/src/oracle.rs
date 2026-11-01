@@ -338,18 +338,51 @@ const STDLIB_VALUE_TYPES: &[(&str, &[&str])] = &[
     ),
 ];
 
-/// Whether `ty` is exactly `fractions.Fraction` or `decimal.Decimal`, asked as
-/// [`is_a_value_type`] asks: by identity, among the modules imported so far.
+/// Whether `ty` is exactly `fractions.Fraction` or `decimal.Decimal`.
 fn is_exact_rational(ty: &Bound<'_, PyType>) -> PyResult<bool> {
-    let modules = SYS_MODULES.import(ty.py(), "sys", "modules")?;
-    for (module, name) in [("fractions", "Fraction"), ("decimal", "Decimal")] {
-        if let Ok(module) = modules.get_item(module)
-            && module.getattr_opt(name)?.is_some_and(|class| class.is(ty))
-        {
-            return Ok(true);
-        }
+    Ok(is_stdlib_class(ty, "fractions", "Fraction")? || is_stdlib_class(ty, "decimal", "Decimal")?)
+}
+
+/// Whether `ty` is exactly the class `name` the standard-library `module`
+/// binds, asked as [`is_a_value_type`] asks: by identity, among the modules
+/// imported so far.
+///
+/// The modules are read as the dict they are, whose lookup raises nothing
+/// where `module` is not imported. Asked of every bound a refinement over the
+/// integers compares, a `KeyError` made and dropped a bound was a third of
+/// the time an emptiness over the JSON value took.
+fn is_stdlib_class(ty: &Bound<'_, PyType>, module: &str, name: &str) -> PyResult<bool> {
+    let modules = SYS_MODULES
+        .import(ty.py(), "sys", "modules")?
+        .cast::<PyDict>()?;
+    let Some(module) = modules.get_item(module)? else {
+        return Ok(false);
+    };
+    Ok(module.getattr_opt(name)?.is_some_and(|class| class.is(ty)))
+}
+
+/// The digits past which a bound is not rounded to an `int`: the
+/// interpreter's own default for the conversions between an `int` and its
+/// text, whose time is quadratic in the digits
+/// (`sys.int_info.default_max_str_digits`).
+///
+/// Rounding a `Decimal` to an `int` is such a conversion. It takes 0.3 ms at
+/// this many digits, 160 ms at a hundred thousand and 13 s at a million, and a
+/// `Decimal` carries an exponent far past that, so an unbounded rounding is a
+/// relation that does not end.
+const ROUNDED_DIGITS: i64 = 4300;
+
+/// Whether rounding `value` to an `int` is a conversion past
+/// [`ROUNDED_DIGITS`]: a `Decimal` whose leading digit sits that far up. An
+/// `int`, a `float` and a `Fraction` round in time linear in what they hold.
+fn rounds_past_its_digits(value: &Bound<'_, PyAny>) -> PyResult<bool> {
+    if !is_stdlib_class(&value.get_type(), "decimal", "Decimal")? {
+        return Ok(false);
     }
-    Ok(false)
+    let leading: i64 = value
+        .call_method0(intern!(value.py(), "adjusted"))?
+        .extract()?;
+    Ok(leading >= ROUNDED_DIGITS)
 }
 
 /// `sys.modules`, the modules imported so far, read once.
@@ -1869,9 +1902,12 @@ impl LeafRelations for PoolRelations<'_, '_> {
         let lo = self.literals.get(lo.get())?.bind(self.py);
         let hi = self.literals.get(hi.get())?.bind(self.py);
         // An operand the walk orders otherwise than `floor` and `ceil` round it
-        // names no interval here.
+        // names no interval here, and nor does one rounding it would take time
+        // quadratic in more digits than CPython converts.
         if !(self.heard(orders_as_the_walk_reads(lo))?
             && self.heard(orders_as_the_walk_reads(hi))?)
+            || self.heard(rounds_past_its_digits(lo))?
+            || self.heard(rounds_past_its_digits(hi))?
         {
             return None;
         }
