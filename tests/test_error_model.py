@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import textwrap
+import traceback
 from typing import Annotated, Literal, NamedTuple, TypedDict
 
 import annotated_types as at
@@ -344,6 +345,22 @@ def test_the_error_model_is_built_when_it_is_asked_for() -> None:
     assert "errors" in vars(error)
     # A second read is the same object, not a second build.
     assert error.errors is error.errors
+
+
+def test_an_uncaught_failure_prints_as_the_line_it_carries() -> None:
+    """A traceback ends in the failure's class and its summary, once.
+
+    The interpreter prints an exception group as a tree: the group's line, then
+    each member in a box of its own. A failure raised as a group of one prints
+    its line twice, and every log a caller writes with `logging.exception`
+    prints it so. `docs/dev/05-errors.md` holds what that refuses.
+    """
+    with pytest.raises(ValidationError) as info:
+        Validator({"a": int}).validate({"a": "x"})
+    printed = traceback.format_exception(info.value)
+    line = "at a: expected int, got 'x' [int_type]"
+    assert printed[-1] == f"valgebra.ValidationError: {line}\n", printed
+    assert not any("Exception Group" in line for line in printed), printed
 
 
 def test_every_documented_attribute_answers_after_the_change() -> None:

@@ -142,6 +142,26 @@ in the meet's turn, so the report carries the elements' violations beside it.
   `tests/test_repr.py` holds each, and the pytest mutation sweep, which owns
   `render.rs`, reads them there.
 
+## Refused, and the test each one fails
+
+A proposal to change what a failure is raised as starts here. Each row says
+what it fails, not that it was turned down.
+
+**A failure raised as an exception group.** A `ValidationGroup`, both a
+`ValidationError` and an `ExceptionGroup`, holding one leaf per failure, would
+let a caller split a report with `except*` by a leaf's class, and give a
+union's refusal one sub-report per branch as a group of groups. The interpreter
+prints a group as a tree: the group's line, then each leaf boxed. So a single
+failure raised as a group of one prints its line twice, uncaught or through
+`logging.exception`, on CPython and on PyPy alike:
+`test_an_uncaught_failure_prints_as_the_line_it_carries` in
+`tests/test_error_model.py`. A raise would also build one exception object per
+failure, where today the failures stay in Rust until a caller reads one
+(`test_the_error_model_is_built_when_it_is_asked_for`). The one split a
+caller's handling turns on, a walk that stopped against a value refused, is
+in the code already: `docs/08-error-model.md` names the four codes a stopped
+walk raises.
+
 ## The limit
 
 **A summary is a summary.** `value_summary` truncates, and a long or exotic
