@@ -6,6 +6,7 @@
     "decision.rs": 91.49,
     "decision/constraints.rs": 92.0,
     "decision/emptiness.rs": 91.79,
+    "decision/lengths.rs": 91.41,
     "decision/literals.rs": 88.23,
     "decision/products.rs": 90.94,
     "decision/readings.rs": 92.0,

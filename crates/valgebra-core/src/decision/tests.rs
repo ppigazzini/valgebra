@@ -12159,3 +12159,193 @@ fn a_meet_below_nothing_is_asked_below_the_set_it_complements() {
     );
     assert_eq!(below_nothing(&meet(Schema::Str)), Relation::Fails);
 }
+
+/// A base of each kind a length bound counts over: a word, a byte string, a
+/// list and a tuple of one element type.
+fn bases_counting_lengths() -> [Schema; 4] {
+    [
+        Schema::Str,
+        Schema::Bytes,
+        Schema::list(SeqShape::homogeneous(Schema::Int)),
+        Schema::tuple(SeqShape::homogeneous(Schema::Int)),
+    ]
+}
+
+/// A Boolean term of length bounds over one base is the lengths it holds, read
+/// past the descriptor's state bound: a value of 5,000 or more is one of 4,000
+/// or more and not the other way round, the meet of the one with the other's
+/// complement holds no value, and a length between 3,000 and 9,000 is at most
+/// 5,000 or at least 4,000. The public relation and `is_empty` read it so.
+#[test]
+fn a_term_of_length_bounds_is_decided_as_the_lengths_it_holds() {
+    for base in bases_counting_lengths() {
+        let bounded = |constraints| Schema::refine(base.clone(), constraints);
+        let long = bounded(vec![Constraint::MinLen(5000)]);
+        let longer_than_four = bounded(vec![Constraint::MinLen(4000)]);
+        assert_eq!(
+            long.related_by_lengths(&longer_than_four),
+            Some(Relation::Holds)
+        );
+        assert_eq!(
+            longer_than_four.related_by_lengths(&long),
+            Some(Relation::Fails)
+        );
+        let difference = Schema::meet([long.clone(), longer_than_four.clone().complement()]);
+        assert!(
+            difference
+                .read_as_lengths()
+                .is_some_and(|read| read.holds_none())
+        );
+        assert!(difference.is_empty());
+        let other_way = Schema::meet([longer_than_four.clone(), long.clone().complement()]);
+        assert!(
+            other_way
+                .read_as_lengths()
+                .is_some_and(|read| !read.holds_none())
+        );
+        assert!(!other_way.is_empty());
+        let between = bounded(vec![Constraint::MinLen(3000), Constraint::MaxLen(9000)]);
+        let either = Schema::union([bounded(vec![Constraint::MaxLen(5000)]), longer_than_four]);
+        assert_eq!(between.related_by_lengths(&either), Some(Relation::Holds));
+        assert_eq!(
+            between.subtype_relation_under(&either, &NoLeafRelations, &[]),
+            Relation::Holds
+        );
+        assert_eq!(
+            either.subtype_relation_under(&between, &NoLeafRelations, &[]),
+            Relation::Fails
+        );
+    }
+}
+
+/// A complement holds every value outside its base, which a refinement of the
+/// base leaves out: the byte strings shorter than 9,999 or anything but a byte
+/// string hold the complement of the long ones, and the short byte strings do
+/// not, `None` being one of the complement's values. The complement of the
+/// base alone holds a value though it holds no length of the base.
+#[test]
+fn a_complement_of_length_bounds_holds_the_values_outside_its_base() {
+    let at_least = Schema::refine(Schema::Bytes, vec![Constraint::MinLen(9999)]);
+    let at_most = Schema::refine(Schema::Bytes, vec![Constraint::MaxLen(9998)]);
+    let outside = at_least.complement();
+    let short_or_other = Schema::union([at_most.clone(), Schema::Bytes.complement()]);
+    assert_eq!(
+        outside.related_by_lengths(&short_or_other),
+        Some(Relation::Holds)
+    );
+    assert_eq!(outside.related_by_lengths(&at_most), Some(Relation::Fails));
+    assert_eq!(at_most.related_by_lengths(&outside), Some(Relation::Holds));
+    assert!(
+        Schema::Bytes
+            .complement()
+            .read_as_lengths()
+            .is_some_and(|read| !read.holds_none())
+    );
+}
+
+/// A difference holding only lengths past [`REACHED`], the longest container
+/// every interpreter builds, is declined, as a length bound past it is; one at
+/// it refutes; and a length past [`LONGEST`] is no value's.
+#[test]
+fn a_difference_of_lengths_past_the_reached_length_is_declined() {
+    for base in bases_counting_lengths() {
+        let at_least = |least| Schema::refine(base.clone(), vec![Constraint::MinLen(least)]);
+        assert_eq!(
+            at_least(REACHED + 1).related_by_lengths(&Schema::Nothing),
+            Some(Relation::Unknown)
+        );
+        assert_eq!(
+            at_least(REACHED).related_by_lengths(&Schema::Nothing),
+            Some(Relation::Fails)
+        );
+        let none_longer = Schema::meet([
+            base.clone(),
+            Schema::refine(base.clone(), vec![Constraint::MaxLen(LONGEST)]).complement(),
+        ]);
+        assert!(
+            none_longer
+                .read_as_lengths()
+                .is_some_and(|read| read.holds_none())
+        );
+    }
+}
+
+/// The reading counts over one base whose values hold every length, and the
+/// universe or nothing beside it: bounds over two bases, a tuple with a
+/// prefix, and a list whose element holds no value are left to the other
+/// readings, and so is a term naming no base.
+#[test]
+fn a_term_of_length_bounds_is_read_over_one_base_holding_every_length() {
+    let word = Schema::refine(Schema::Str, vec![Constraint::MinLen(5)]);
+    let bytes = Schema::refine(Schema::Bytes, vec![Constraint::MinLen(5)]);
+    assert_eq!(word.related_by_lengths(&bytes), None);
+    assert!(
+        Schema::union([word.clone(), bytes.clone()])
+            .read_as_lengths()
+            .is_none()
+    );
+    assert!(
+        Schema::meet([word.clone(), bytes.complement()])
+            .read_as_lengths()
+            .is_none()
+    );
+    let prefixed = Schema::tuple(SeqShape {
+        prefix: vec![Schema::Int].into(),
+        tail: Some(Arc::new(Schema::Str)),
+    });
+    assert!(
+        Schema::refine(prefixed, vec![Constraint::MinLen(1)])
+            .read_as_lengths()
+            .is_none()
+    );
+    let of_no_value = Schema::list(SeqShape::homogeneous(Schema::meet([
+        Schema::Int,
+        Schema::Str,
+    ])));
+    assert!(
+        Schema::refine(of_no_value, vec![Constraint::MinLen(1)])
+            .read_as_lengths()
+            .is_none()
+    );
+    assert!(Schema::Nothing.read_as_lengths().is_none());
+    assert_eq!(Schema::ANYTHING.related_by_lengths(&Schema::Nothing), None);
+    assert_eq!(
+        Schema::ANYTHING.related_by_lengths(&word),
+        Some(Relation::Fails)
+    );
+    assert_eq!(
+        Schema::Nothing.related_by_lengths(&word),
+        Some(Relation::Holds)
+    );
+}
+
+/// A term nested past [`MAX_DECISION_DEPTH`], or holding more nodes than the
+/// lowering's allowance, is not read, and one within both is.
+#[test]
+fn a_term_read_as_lengths_is_bounded_by_its_depth_and_its_nodes() {
+    let bound = |most| Schema::refine(Schema::Str, vec![Constraint::MaxLen(most)]);
+    let nested = |levels: usize| {
+        (0..levels).fold(Schema::Str, |term, level| {
+            let members: crate::Members = vec![term, bound(level)].into();
+            if level % 2 == 0 {
+                Schema::Union(members)
+            } else {
+                Schema::Intersection(members)
+            }
+        })
+    };
+    let levels = usize::try_from(MAX_DECISION_DEPTH).expect("the depth bound is small");
+    assert!(nested(levels - 1).read_as_lengths().is_some());
+    assert!(nested(levels).read_as_lengths().is_none());
+    let wide = |members: u64| {
+        Schema::Union(
+            (0..members)
+                .map(|most| bound(usize::try_from(most).expect("a small bound")))
+                .collect::<Vec<_>>()
+                .into(),
+        )
+    };
+    let work = crate::descr::lower::WORK;
+    assert!(wide(work - 1).read_as_lengths().is_some());
+    assert!(wide(work).read_as_lengths().is_none());
+}

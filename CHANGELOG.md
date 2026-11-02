@@ -99,10 +99,22 @@ answer of its own, or a repair to a change not yet released.
 - fix: a narrowed meet's verdict is read once a query where it rests on nothing -- internal
 - fix: a refutation stands on a length every interpreter builds
 - fix: a standard-library value type is the class the interpreter's module binds
+- feat: a Boolean term of length bounds over one base is read as its lengths
 
 -->
 
 ### Added
+
+- **A Boolean term of length bounds over one base is read as the lengths it
+  holds.** A union, a meet or a complement of `MinLen`, `MaxLen` and `Len`
+  over one `str`, `bytes`, or list or tuple of one element type holds the
+  values of the base whose length lies in a union of intervals, so two such
+  terms are related as their intervals are, at any length: `Annotated[str,
+  MaxLen(1000)]` is `subset` of `Annotated[str, MaxLen(64)] | Annotated[str,
+  MinLen(65)]`, where it was undecided past the 584 code points the word
+  automaton counts to, and `Annotated[str, MinLen(4000)]` is `not_subset` of
+  `Annotated[str, MinLen(5000)]`. Such questions answer in microseconds where
+  the automaton took milliseconds.
 
 - **A sized base written bare is read as its refinement under no bound.** A
   word, a byte string, a list, a set and a mapping each have a length at least

@@ -442,13 +442,16 @@ answers `"undecided"`.
   clause with a value can take, so `set[int & str]` and `dict[str, int & str]`
   under `MinLen(1)`, `dict[bool, int]` under `MinLen(3)` and the closed
   `{"a?": int}` under `MinLen(2)` are empty. A bound a mapping's clauses reach
-  is not counted further, and declines. A bound over a list is an automaton with a
-  state per element, and the sets compare two such bounds up to about 1,340
-  elements over a list of integers before the work a relation may spend runs
-  out; past that they decline. A bound over a `str` or `bytes` is a pattern
-  counting code points or bytes, a few states a code point, and the sets read
-  one up to about 250 code points or 2,000 bytes before its table passes the
-  state bound; past 4,094 the bound is refused before it is built. A
+  is not counted further, and declines. Bounds alone over one base are read
+  as their lengths at any length (the next entry). Met with anything else --
+  a pattern, an element shape, a second base -- a bound over a list is an
+  automaton with a state per element, and the sets compare two such bounds up
+  to about 1,340 elements over a list of integers before the work a relation
+  may spend runs out; past that they decline. A bound over a `str` or `bytes`
+  is there a pattern counting code points or bytes, a few states a code point,
+  and the sets read one up to about 250 code points or 2,000 bytes before its
+  table passes the state bound; past 4,094 the bound is refused before it is
+  built. A
   refinement whose base holds a value of every length its bounds admit -- a
   word, a sequence with a repeated element, a mapping keyed by every name --
   is refuted below a bound leaving one of those lengths out, at any length
@@ -468,13 +471,22 @@ answers `"undecided"`.
   branches each leave out the same way, a branch of another kind leaving out
   every length, so `Annotated[list[int], MinLen(1)]` is `not_subset` of
   `Annotated[list[int], MaxLen(1)] | Annotated[list[int], MaxLen(3000)]`, on
-  3,001 integers. A union of bounds covering a
-  word's lengths past the state bound is not read: `Annotated[str,
-  MaxLen(1000)]` below `MaxLen(64) | MinLen(65)` over `str` declines. That decides a
+  3,001 integers. That decides a
   fixpoint every unfolding of which needs one more element -- each element is a
   value of the fixpoint, and no finite value satisfies it. A bound over a
   *fixed* position, or over a base whose values have no length at all, is not
   this shape and stays conservative.
+- **A Boolean term of length bounds over one base.** A union, a meet or a
+  complement of `MinLen`, `MaxLen` and `Len` bounds over one `str`, `bytes`,
+  or list or tuple of one element type that holds a value is the values of
+  that base whose length lies in a union of intervals, and every value outside
+  the base where a complement reaches past it. Two such terms are related as
+  their intervals are, at any length, up to 8,192 nodes nested up to 512
+  levels, and the meet of one with the other's complement is empty exactly
+  where the one is below the other: `Annotated[str, MaxLen(1000)]` is `subset`
+  of `Annotated[str, MaxLen(64)] | Annotated[str, MinLen(65)]`, and its meet
+  with that union's complement is empty. A difference holding only lengths
+  past `sys.maxsize // 128` declines, as a single bound past it does.
 - **Two schemas that share no value.** The inclusion is *refuted*, whatever
   either side holds: every value of the subject is outside the supertype. The
   disjointness read here is the one the concrete types settle -- two distinct

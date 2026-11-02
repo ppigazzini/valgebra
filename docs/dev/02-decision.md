@@ -1615,6 +1615,32 @@ fuzzer's spelling, a refinement carrying no constraint, and
 `the_complement_of_an_empty_pattern_bounds_a_complement_that_does_not_lower` in
 `laws.rs` draws the family.
 
+**A Boolean term of length bounds over one base is read as its lengths**
+(`decision/lengths.rs`). `MinLen` and `MaxLen` over a `str`, a `bytes`, or a
+list or a tuple of one element type with no prefix hold the values of the base
+whose length lies in an interval, and a union, a meet and a complement of them
+over one base hold the values whose length lies in the union, the meet or the
+complement of the intervals, a complement holding every value outside the base
+besides [FCB08, Def. 4.1]. So the set representation's two entries read such a
+term before they build anything: `denotes_no_value` answers its emptiness, and
+`descriptor_contained_in` relates two such terms over one base by the
+difference of their intervals [FCB08, §4.1], refuting on a length at most
+`REACHED` and declining a difference past it. The intervals are the integer
+component's `IntervalSet`. The descriptor counts a bound with a state per
+element and refuses one past the state bound -- `str` past 584 code points,
+`bytes` past 4,094 bytes, a list past 2,046 elements -- and every relation
+over drawn terms of `str` and `bytes` bounds two to seven deep that the build
+left undecided had met that refusal. Read as intervals, 12,000 such questions
+seven deep are each decided, in 0.56 s against the build's 28. Each node read
+spends a unit of the lowering's allowance and a term nests at most
+`MAX_DECISION_DEPTH` levels; a union's or a meet's members are joined two at a
+time in rounds, since a fold over four thousand disjoint bounds costs the square
+of the width, 127 ms. A sequence whose element holds no value, a set, a
+mapping, a prefix, a pattern and a term over two bases are not read here, and
+go to the build. `a_term_of_length_bounds_is_decided_as_the_lengths_it_holds`
+in `decision/tests.rs` holds the reading, and the law of the same name in
+`tests/test_decision_adversarial.py` holds it to the walk.
+
 **A length bound reads the lengths a sequence's shape can take.** A sequence
 is never shorter than its fixed positions and never longer where its tail
 admits nothing, so `MinLen(5)` over a list of exactly three elements is empty.

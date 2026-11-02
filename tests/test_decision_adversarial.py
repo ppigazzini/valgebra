@@ -1343,6 +1343,102 @@ def test_a_length_reading_asks_no_second_exploration_of_an_element() -> None:
     assert union(not_numbers, str).relation_to(universal) == "subset"
 
 
+#: A value of each length, by the kind a length bound counts over.
+_LENGTH_KINDS: dict[str, tuple[object, Callable[[int], object]]] = {
+    "str": (str, lambda n: "a" * n),
+    "bytes": (bytes, lambda n: b"a" * n),
+    "list": (list[int], lambda n: [0] * n),
+}
+
+#: Bounds either side of where an automaton counting them stops: 584 code
+#: points, 4,094 bytes, 2,046 elements.
+_LENGTH_BOUNDS = (0, 1, 5, 64, 584, 585, 2046, 2047, 4094, 4095, 9999)
+
+#: A length at every bound and either side of it, and one past the largest:
+#: a term of the bounds holds a length here exactly where it holds every
+#: length up to the next.
+_LENGTHS = sorted({max(b + d, 0) for b in _LENGTH_BOUNDS for d in (-1, 0, 1)})
+
+
+def _length_terms(
+    kind: object,
+) -> st.SearchStrategy[tuple[object, Callable[[int], bool]]]:
+    """Draw a Boolean term of length bounds over `kind`, with the lengths it holds."""
+
+    def atom(bounds: tuple[int, int, int]) -> tuple[object, Callable[[int], bool]]:
+        a, b, form = bounds
+        lo, hi = min(a, b), max(a, b)
+        if form == 0:
+            return Annotated[kind, at.MinLen(lo)], lambda n: n >= lo  # ty: ignore[invalid-type-form]
+        if form == 1:
+            return Annotated[kind, at.MaxLen(hi)], lambda n: n <= hi  # ty: ignore[invalid-type-form]
+        return Annotated[kind, at.Len(lo, hi)], lambda n: lo <= n <= hi  # ty: ignore[invalid-type-form]
+
+    def extend(
+        inner: st.SearchStrategy[tuple[object, Callable[[int], bool]]],
+    ) -> st.SearchStrategy[tuple[object, Callable[[int], bool]]]:
+        def either(
+            pair: tuple[tuple[object, Callable[[int], bool]], ...],
+        ) -> tuple[object, Callable[[int], bool]]:
+            (a, fa), (b, fb) = pair
+            return union(a, b), lambda n: fa(n) or fb(n)
+
+        def both(
+            pair: tuple[tuple[object, Callable[[int], bool]], ...],
+        ) -> tuple[object, Callable[[int], bool]]:
+            (a, fa), (b, fb) = pair
+            return intersection(a, b), lambda n: fa(n) and fb(n)
+
+        def outside(
+            term: tuple[object, Callable[[int], bool]],
+        ) -> tuple[object, Callable[[int], bool]]:
+            a, fa = term
+            return intersection(kind, complement(a)), lambda n: not fa(n)
+
+        return st.one_of(
+            st.tuples(inner, inner).map(either),
+            st.tuples(inner, inner).map(both),
+            inner.map(outside),
+        )
+
+    bounds = st.tuples(
+        st.sampled_from(_LENGTH_BOUNDS),
+        st.sampled_from(_LENGTH_BOUNDS),
+        st.integers(0, 2),
+    )
+    return st.recursive(bounds.map(atom), extend, max_leaves=8)
+
+
+@given(data=st.data())
+def test_a_term_of_length_bounds_is_decided_as_the_lengths_it_holds(
+    data: st.DataObject,
+) -> None:
+    """Two Boolean terms of length bounds over one kind are related exactly.
+
+    Each holds the values of its kind whose length lies in a union of
+    intervals, so the relation, the meet with the complement below `nothing`,
+    and the meet's emptiness are each `subset` exactly where every length the
+    one holds the other holds, and `not_subset` otherwise -- never undecided,
+    with bounds either side of where an automaton counting them stops. The
+    walk is the truth: each term holds a value of each length as its
+    intervals say.
+    """
+    kind, value_of = _LENGTH_KINDS[data.draw(st.sampled_from(sorted(_LENGTH_KINDS)))]
+    s, s_holds = data.draw(_length_terms(kind))
+    t, t_holds = data.draw(_length_terms(kind))
+    subject, supertype = Validator(s), Validator(t)
+    for length in _LENGTHS:
+        value = value_of(length)
+        assert subject.is_valid(value) == s_holds(length), length
+        assert supertype.is_valid(value) == t_holds(length), length
+    below = all(t_holds(length) for length in _LENGTHS if s_holds(length))
+    expected = "subset" if below else "not_subset"
+    difference = intersection(s, complement(t))
+    assert subject.relation_to(t) == expected
+    assert difference.relation_to(nothing) == expected
+    assert Validator(difference).is_empty() == below
+
+
 def test_a_complemented_union_is_read_by_de_morgan_below_any_supertype() -> None:
     """A complement of a union is the meet of its branches' complements.
 

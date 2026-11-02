@@ -12,6 +12,7 @@
 
 mod constraints;
 mod emptiness;
+mod lengths;
 mod literals;
 mod products;
 mod readings;
@@ -500,6 +501,11 @@ impl Schema {
     ) -> Relation {
         #[cfg(test)]
         goal_tests::goals::read_by_the_sets();
+        // A term of length bounds over one base is the lengths it holds, read
+        // without a build ([`lengths`]).
+        if let Some(answer) = self.related_by_lengths(other) {
+            return answer;
+        }
         // The two sides are unfolded in opposite directions, which is what makes
         // a difference over a recursive schema sound *in one direction*: the
         // left grows and the right shrinks, so a difference proved empty here

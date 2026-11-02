@@ -251,6 +251,26 @@ ROWS: dict[str, Row] = {
     "A length bound over a base that takes any length.": Decides(
         Annotated[str, at.MinLen(1)], complement(Literal[""]), "subset"
     ),
+    "A Boolean term of length bounds over one base.": Decides(
+        Annotated[str, at.MaxLen(1000)],
+        union(Annotated[str, at.MaxLen(64)], Annotated[str, at.MinLen(65)]),
+        "subset",
+        # The meet with the supertype's complement: "empty exactly where".
+        spellings=(
+            (
+                intersection(
+                    Annotated[str, at.MaxLen(1000)],
+                    complement(
+                        union(
+                            Annotated[str, at.MaxLen(64)],
+                            Annotated[str, at.MinLen(65)],
+                        )
+                    ),
+                ),
+                nothing,
+            ),
+        ),
+    ),
     "Two schemas that share no value.": Decides(
         list[int], tuple[int, int], "not_subset"
     ),

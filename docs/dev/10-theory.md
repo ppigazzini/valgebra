@@ -144,11 +144,14 @@ empty set, and by the relation's two lattice bounds alike: a meet or a
 complement read empty is below every supertype, and a subject below a complement
 is asked through its meet with the inner set. And a subject below a table of
 constants is asked as its meet with the table's complement, read as `is_empty`
-reads it.
+reads it. A Boolean term of length bounds over one base is read as the lengths
+it holds, a complement holding every value outside the base besides
+[FCB08, Def. 4.1], so two such terms are related by the difference of their
+intervals and a meet of them is empty where its intervals are.
 
 SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
 
-IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::below_by_emptiness, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::verdict_beside, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled, decision/emptiness.rs::Schema::below_the_set_it_complements, decision/emptiness.rs::Schema::complement_of_the_universe
+IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::below_by_emptiness, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::verdict_beside, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled, decision/emptiness.rs::Schema::below_the_set_it_complements, decision/emptiness.rs::Schema::complement_of_the_universe, decision/lengths.rs
 
 HELD-BY: the_two_deciders_agree_under_an_oracle, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment, a_placement_by_identity_spends_no_step, a_union_is_decided_a_part_at_a_time, a_meet_supertype_is_decided_a_member_at_a_time, test_a_meet_is_refuted_by_one_member_beside_one_no_decider_reads, a_pair_declined_as_written_is_asked_in_its_other_spellings, a_meet_disjoint_from_a_meet_is_refuted
 

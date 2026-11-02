@@ -225,6 +225,11 @@ impl Schema {
     /// is not built. A proof the label check refuses is no answer, and the
     /// reading that leaves a scalar past the depth out is asked after it.
     pub(super) fn denotes_no_value(&self, pool: &dyn Constants, defs: &[Schema]) -> bool {
+        // A term of length bounds over one base is read as its lengths, which
+        // decide it either way, so the build is not asked ([`lengths`]).
+        if let Some(lengths) = self.read_as_lengths() {
+            return lengths.holds_none();
+        }
         read_widened(
             self,
             defs,
