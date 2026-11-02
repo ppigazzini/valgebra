@@ -784,9 +784,8 @@ _DECIDED = [
     pytest.param(
         "subtype",
         # `int | str` rather than `union(int, str)`: the two build the same
-        # schema, and `Annotated` takes a *type*, which 3.10 checks as the form
-        # is built -- so a runtime validator there raises at import and takes
-        # the whole module out of collection.
+        # schema, and the typing spelling is one `ty` reads where it refuses a
+        # call in a type expression.
         Annotated[int | str, at.Ge(0)],
         union(int, str),
         id="refinement-of-a-union<=the-union",

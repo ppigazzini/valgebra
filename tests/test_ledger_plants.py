@@ -3983,21 +3983,6 @@ PLANTS = (
         trips=("test_every_maturin_fetched_past_the_lock_is_the_locks",),
     ),
     Plant(
-        # A test module subscripting a typing form with a validator, which on
-        # the floor is a collection error that takes the module with it.
-        "tests/test_suite_partition.py",
-        ("tests/test_planted_form.py",),
-        lambda tree: _write(
-            tree,
-            "tests/test_planted_form.py",
-            '"""A typing form over a validator."""\n\n'
-            "from typing import Annotated\n\n"
-            "from valgebra import union\n\n"
-            "PLANTED = Annotated[union(int, str), 0]\n",
-        ),
-        trips=("test_no_typing_form_is_subscripted_with_a_validator",),
-    ),
-    Plant(
         # A product module that starts reading a page, and is named nowhere: the
         # product suite gains a dependency on the checkout no reader can see.
         "tests/test_suite_partition.py",
@@ -5526,7 +5511,6 @@ UNPLANTED: dict[str, str] = {
         "test_a_reading_of_the_interpreter_is_read_from_the_syntax",
         "test_an_import_is_read_from_the_syntax_and_not_the_text",
         "test_the_mark_is_read_from_pytest_mark_in_the_last_assignment",
-        "test_the_validator_head_is_read_and_a_nested_one_is_not",
     ),
     **_excuse(
         "test_theory_ledger.py",
