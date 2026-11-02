@@ -12521,3 +12521,56 @@ fn a_meet_that_may_hold_no_kind_is_placed_below_any_set() {
         Relation::Holds
     );
 }
+
+/// A mapping holds no more keys than its fields and as many as each clause's
+/// key type holds apart, one count the relation and the emptiness reading both
+/// read: `dict[bool, int]` and `dict[None, int]` are below a mapping of at most
+/// two keys and of at most one, and `dict[bool, int]` under `MinLen(3)` holds no
+/// value. A key type with no end of values leaves no most, and a mapping of at
+/// most one key is not proved to hold `dict[bool, int]`, whose two keys are one
+/// past it.
+#[test]
+fn a_mapping_holds_no_more_keys_than_its_key_types_hold_apart() {
+    let keyed = |key: Schema| {
+        Schema::mapping(MapClause {
+            key,
+            value: Schema::Int,
+        })
+    };
+    let at_most = |most: usize| length_bounded(str_to_int(), &[Constraint::MaxLen(most)]);
+    let any_dict = |most: usize| {
+        length_bounded(
+            Schema::mapping(MapClause::top()),
+            &[Constraint::MaxLen(most)],
+        )
+    };
+    assert_eq!(
+        keyed(Schema::Bool).lengths_held(&NoLeafRelations),
+        Some((0, Some(2)))
+    );
+    assert_eq!(
+        keyed(Schema::NoneType).lengths_held(&NoLeafRelations),
+        Some((0, Some(1)))
+    );
+    assert_eq!(str_to_int().lengths_held(&NoLeafRelations), Some((0, None)));
+    assert_eq!(
+        under_lengths(&keyed(Schema::Bool), &any_dict(2), &NoLeafRelations),
+        Relation::Holds
+    );
+    assert_eq!(
+        under_lengths(&keyed(Schema::NoneType), &any_dict(1), &NoLeafRelations),
+        Relation::Holds
+    );
+    assert_ne!(
+        under_lengths(&keyed(Schema::Bool), &any_dict(1), &NoLeafRelations),
+        Relation::Holds
+    );
+    assert_ne!(
+        under_lengths(&str_to_int(), &at_most(5), &NoLeafRelations),
+        Relation::Holds
+    );
+    assert!(
+        length_bounded(keyed(Schema::Bool), &[Constraint::MinLen(3)])
+            .is_empty_with(&NoLeafRelations, &[])
+    );
+}

@@ -101,10 +101,18 @@ answer of its own, or a repair to a change not yet released.
 - fix: a standard-library value type is the class the interpreter's module binds
 - feat: a Boolean term of length bounds over one base is read as its lengths
 - feat: a meet that may hold no kind is below every set
+- feat: a mapping holds no more keys than its key types hold apart
 
 -->
 
 ### Added
+
+- **A mapping holds no more keys than its key types hold apart.** The
+  relation reads a mapping's most keys as the emptiness reading does: its
+  fields, and as many keys as each clause's key type holds apart, so
+  `dict[bool, int]` and `dict[Literal["a", "b"], int]` are `subset` of
+  `Annotated[dict, MaxLen(2)]`, and the meet of `dict[bool, int]` with that
+  bound's complement is empty, where each was undecided.
 
 - **A meet that may hold no kind is below every set.** A meet holds no kind
   a member cannot hold, and a complement none its inner set holds whole, so

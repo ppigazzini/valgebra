@@ -1152,6 +1152,32 @@ def test_a_meet_that_may_hold_no_kind_is_below_every_set() -> None:
     assert patterned.relation_to(Annotated[bytes, at.MinLen(3)]) == "subset"
 
 
+def test_a_mapping_holds_no_more_keys_than_its_key_type_holds() -> None:
+    """A mapping's keys are counted as its key type holds them apart.
+
+    `dict[bool, int]` holds at most two keys and `dict[Literal["a", "b"], int]`
+    two, so each is below a mapping of at most two keys, written on the
+    mapping or on `dict`, and the meet of `dict[bool, int]` with the
+    complement of such a mapping is empty -- the count the emptiness reading
+    already took, read by the relation too.
+    """
+    bool_keyed = Validator(dict[bool, int])
+    two_at_most = Validator(Annotated[dict, at.MaxLen(2)])
+    assert bool_keyed.relation_to(two_at_most) == "subset"
+    assert bool_keyed.relation_to(Annotated[dict[bool, int], at.MaxLen(2)]) == (
+        "subset"
+    )
+    assert intersection(bool_keyed, complement(two_at_most)).relation_to(nothing) == (
+        "subset"
+    )
+    assert Validator(dict[Literal["a", "b"], int]).relation_to(two_at_most) == (
+        "subset"
+    )
+    assert Validator(Annotated[dict[bool, int], at.MinLen(3)]).relation_to(nothing) == (
+        "subset"
+    )
+
+
 def test_a_meet_holding_a_complement_is_read_as_its_relation() -> None:
     """A meet with a complement is empty where the rest is below the inner set.
 

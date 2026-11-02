@@ -430,7 +430,10 @@ answers `"undecided"`.
   declines. A dict's keys are a record's fields, so a closed record's length
   runs from its required fields to all of them: `{"a": int}` is `subset` of
   `Annotated[dict[str, int], Len(1, 1)]`, and `{"a": int, "b": int}`
-  `not_subset` of `Annotated[dict[str, int], MaxLen(1)]`. A set or a dict
+  `not_subset` of `Annotated[dict[str, int], MaxLen(1)]`. A mapping holds no
+  more keys than its fields and those each clause's key type holds apart, so
+  `dict[bool, int]` and `dict[Literal["a", "b"], int]` are `subset` of
+  `Annotated[dict, MaxLen(2)]`. A set or a dict
   bounded to length zero holds the empty ones alone, and is below every set or
   dict shape of its kind holding each of them, a refinement under bounds that
   admit zero among them; below a complement it declines. A meet whose members

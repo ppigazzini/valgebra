@@ -22,7 +22,9 @@ use rustc_hash::FxHashMap;
 
 use crate::descr::classes::Reach;
 use crate::descr::lower::{Constants, an_empty_reading_stands, read_widened};
-use crate::ir::{Attribute, ClassIx, ConstIx, Constraint, Constraints, REACHED, Schema};
+use crate::ir::{
+    Attribute, ClassIx, ConstIx, Constraint, Constraints, Field, MapClause, REACHED, Schema,
+};
 use crate::kind::{Kind, Region, Regions};
 use crate::oracle::denotes_a_set_within;
 use crate::verdict::{Relation, Verdict};
@@ -1619,24 +1621,36 @@ fn lengths_miss_the_shape(base: &Schema, constraints: &Constraints, cx: &mut Cx<
             (shape.prefix.len(), (!open).then_some(shape.prefix.len()))
         }
         Schema::Coll { element, .. } => (0, read_empty(element, cx).then_some(0)),
-        Schema::KeyedMap { fields, defaults } => {
-            let required = fields.iter().filter(|field| field.required).count();
-            let mut most = Some(fields.len());
-            for clause in defaults.iter() {
-                if read_empty(&clause.value, cx) {
-                    continue;
-                }
-                let (_, keys) = value_count_bounds(&clause.key, cx.oracle);
-                most = most
-                    .filter(|_| keys != usize::MAX)
-                    .map(|held| held.saturating_add(keys));
-            }
-            (required, most)
-        }
+        Schema::KeyedMap { fields, defaults } => (
+            fields.iter().filter(|field| field.required).count(),
+            most_keys(fields, defaults, cx.oracle, |value| read_empty(value, cx)),
+        ),
         _ => return false,
     };
     longest(constraints.iter()).is_some_and(|allowed| allowed < least)
         || most.is_some_and(|most| shortest(constraints.iter()) > most)
+}
+
+/// The most keys a mapping of `fields` and the clauses `defaults` holds: its
+/// fields, and as many keys as each clause's key type holds apart under `==`
+/// ([`value_count_bounds`]), a clause whose value `holds_none` takes taking
+/// none; `None` where a clause's key holds no end of values. One count for
+/// the relation's lengths and the emptiness reading's, which asks it with the
+/// clauses it reads empty: two keys a field and a clause may share are counted
+/// twice, which bounds the most from above and proves no less than it should.
+pub(super) fn most_keys(
+    fields: &[Field],
+    defaults: &[MapClause],
+    oracle: &dyn LeafRelations,
+    holds_none: impl Fn(&Schema) -> bool,
+) -> Option<usize> {
+    defaults
+        .iter()
+        .filter(|clause| !holds_none(&clause.value))
+        .try_fold(fields.len(), |held, clause| {
+            let (_, keys) = value_count_bounds(&clause.key, oracle);
+            (keys != usize::MAX).then(|| held.saturating_add(keys))
+        })
 }
 
 /// Whether `schema` holds no value as its shape says or as the set

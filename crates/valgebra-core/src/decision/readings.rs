@@ -20,7 +20,7 @@ use crate::kind::{Kind, Region, Regions};
 use crate::verdict::{Relation, Verdict};
 
 use super::constraints::{Multiples, integer, longest, shortest};
-use super::emptiness::{holds_apart, value_count_bounds};
+use super::emptiness::{holds_apart, most_keys, value_count_bounds};
 use super::literals::literal_constants;
 use super::{Cx, LeafRelations, NoLeafRelations};
 
@@ -450,10 +450,10 @@ impl Schema {
     /// a value of its element, so it holds at most the values the element holds
     /// apart under `==` ([`value_count_bounds`]), and none at least: the empty
     /// set is one of its values. A record's keys are its fields, every value
-    /// holding the required ones, and where it is closed -- no clause to cover
-    /// an undeclared key -- nothing beyond them, so its length runs from its
-    /// required fields to all of them; an open one has no most. Each count is
-    /// the walk's: the length of a set or a dict is read from its storage,
+    /// holding the required ones, and beyond them the keys its clauses can take
+    /// ([`most_keys`]): none for a closed one, two for `dict[bool, int]`, and
+    /// no most for a clause keyed by a kind with no end of values. Each count
+    /// is the walk's: the length of a set or a dict is read from its storage,
     /// which holds the members and the keys these count.
     ///
     /// The lengths are the bounds the shape says without writing them, so they
@@ -471,7 +471,7 @@ impl Schema {
             }
             Schema::KeyedMap { fields, defaults } => Some((
                 fields.iter().filter(|field| field.required).count(),
-                defaults.is_empty().then_some(fields.len()),
+                most_keys(fields, defaults, oracle, |_| false),
             )),
             _ => None,
         }
