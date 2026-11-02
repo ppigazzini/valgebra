@@ -559,7 +559,8 @@ jobs:
       # default, so the cross-OS `rust test` lane stays Python-free. They run
       # here, where an interpreter is already installed, and against every one
       # of them -- a corpus of live objects is a corpus about a release, and the
-      # rows naming a `typing` member 3.11 added carry the release they need.
+      # rows naming a `typing` member a release after the floor added carry the
+      # release they need.
       #
       # The interpreter is the *base* one rather than the virtual environment's:
       # an embedded interpreter has no environment to live in, it reads its

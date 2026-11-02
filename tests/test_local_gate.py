@@ -593,11 +593,12 @@ def test_the_gate_builds_the_floor_interpreter_the_matrix_names() -> None:
     The matrix runs a leg per interpreter and the gate runs one: the caller's. A
     difference between two releases is therefore a difference this gate cannot
     see, and the floor is the end of that range where the difference actually
-    lands -- `typing.Self`, `LiteralString` and `Unpack` are 3.11, and each of
-    them reddened nine jobs from a green local run.
+    lands -- `typing.TypeIs` and `ReadOnly` reach `typing` in 3.13, so a module
+    naming either at import collects on the newest interpreter and fails to
+    collect below 3.13.
 
     So the gate builds the floor beside the caller's interpreter. Which release
-    that is belongs to `ci.yml`, not here: a second copy of "3.10" is a number
+    that is belongs to `ci.yml`, not here: a second copy of the floor is a number
     that goes stale the day the floor moves, silently, in the one direction
     where a stale floor tests *less* than it claims. Held by refusing the
     literal anywhere in the gate.

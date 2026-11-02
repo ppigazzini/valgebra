@@ -70,7 +70,7 @@ REACHES = (
 #: Third pass: which top-level modules this release ships.
 #:
 #: `sys.stdlib_module_names` is the release's own answer and arrives in 3.10,
-#: which is the floor, so every release the table spans can be asked. It is
+#: below the floor, so every release the table spans can be asked. It is
 #: membership rather than an import, so asking costs nothing and leaves nothing
 #: behind -- and a module that fails to import for its own reasons still counts
 #: as shipped, which is the question here.
@@ -189,7 +189,7 @@ def _stdlib(
     """Span every module this tree imports, out of each release's own list.
 
     A third-party package is in no release's list and gets no row, which is how
-    the ledger tells "this arrives in 3.11" from "this is not the standard
+    the ledger tells "this arrives in 3.13" from "this is not the standard
     library's to answer for". See [`_imported`] for why the table is the tree's
     imports rather than every name a release ships.
     """

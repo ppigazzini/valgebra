@@ -271,9 +271,9 @@ typeCheckingMode = "standard"
 
 [tool.ty.environment]
 # The newest interpreter the package supports, because the suite is what this
-# setting governs: `tests/` names `typing.Unpack`, `ReadOnly`, `TypeVarTuple`
-# and `Required` to check that the frontend reads each, and those are members
-# releases after the floor added.
+# setting governs: `tests/` names `typing.ReadOnly`, `TypeAliasType` and a
+# `TypeVar`'s `default=` to check that the frontend reads each, and those are
+# members releases after the floor added.
 #
 # The floor is checked too, and separately: `ty check python/ --python-version
 # 3.11` reads the shipped package alone at the oldest release `requires-python`

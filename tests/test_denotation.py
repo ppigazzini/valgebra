@@ -482,13 +482,13 @@ def _prefix_tail_pred(prefix: list[Pred], tail: Pred, container: type = list) ->
     return pred
 
 
-# Non-composable atoms: the lattice bounds, the gradual dynamic, an instance
-# check, and a per-attribute object schema. `object` is the top and `NoReturn`
-# the bottom -- the typing-native spelling of the empty type on every supported
-# Python (`Never` is 3.11+, so the cross-version spelling is used). `Any` is the
-# gradual dynamic, which admits every value like the top but is a distinct node.
-# `complex` is a plain class (an isinstance check), and the `_Point` dataclass is
-# checked field by field.
+# Non-composable atoms: the lattice bounds, an instance check, and a
+# per-attribute object schema. `object` and `Any` are the top in its two
+# spellings, one node whose payload records which was written, and `NoReturn` is
+# the bottom. `Never` builds the same bottom, with no payload to tell the two
+# apart, so the draw spends no atom on it; `tests/test_combinators.py` holds that
+# it is the bottom. `complex` is a plain class (an isinstance check), and the
+# `_Point` dataclass is checked field by field.
 _ATOMS: list[Spec] = [
     (object, lambda _x: True),
     (NoReturn, lambda _x: False),

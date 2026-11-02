@@ -44,7 +44,7 @@ def test_a_subscripted_validator_is_the_annotation_a_checker_reads() -> None:
     """`Validator[int]` exists at runtime, as the alias of the class it names.
 
     The stub makes the class generic, and an annotation is evaluated at runtime
-    wherever something asks for it -- at import on 3.10 to 3.13, and by
+    wherever something asks for it -- at import on 3.11 to 3.13, and by
     `get_type_hints` on every release -- so the subscript has to answer. It
     carries nothing a validator reads, and handed back as a schema it is
     refused rather than read as a constant.

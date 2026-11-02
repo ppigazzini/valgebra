@@ -135,17 +135,16 @@ def _embedded_sweeps() -> dict[str, str]:
 
 
 def test_a_sweep_starts_its_embedded_interpreter_from_the_venv() -> None:
-    """A note about what the lock installs holds only where the sweep imports it.
+    """A sweep reads the `typing_extensions` its lane's environment installs.
 
-    The walk baseline accepts the mutants of the arms for `typing_extensions`'
-    own objects, because on 3.13 that module's `Required`, `NotRequired`,
-    `Unpack`, `Any` and `Never` are `typing`'s own: the notes argue from 3.13
-    *with the module installed from the lock*. The embedded interpreter takes
-    its prefix from the first `python3` on `PATH`, and `PYO3_PYTHON` only
-    configures the build. With the venv named by `PYO3_PYTHON` alone, uv's build
-    of 3.13 starts on its bare prefix, imports no `typing_extensions`, the
-    corpus installs its stand-in, and all four mutants are caught: the nightly
-    reads four entries stale while the notes are correct.
+    The embedded interpreter takes its prefix from the first `python3` on
+    `PATH`, and `PYO3_PYTHON` only configures the build. Started from the venv,
+    it imports the module the lock installs, whose `ReadOnly` and `Unpack` are
+    `typing`'s own on 3.13. Started from uv's bare prefix of 3.13, it imports
+    none, and the corpus installs its stand-in, whose `ReadOnly` and `Unpack`
+    are objects of its own. The two reach different arms of the frontend, so a
+    sweep started outside the venv can kill a mutant the lane's sweep does not,
+    and the ratchet reads the difference as a stale entry.
 
     So every sweep that embeds its interpreter puts the venv first on `PATH`
     before it runs, as the tooling page's recipe does.
@@ -164,7 +163,7 @@ def test_a_sweep_starts_its_embedded_interpreter_from_the_venv() -> None:
         f"sweeps whose embedded interpreter starts outside the venv: {unstarted}. "
         "Export the venv's `bin` first on `PATH` before `cargo mutants`, or the "
         "interpreter imports what the runner's first `python3` has rather than "
-        "what the baseline's notes argue from."
+        "what the lane's environment installs."
     )
 
 
@@ -191,10 +190,10 @@ def test_every_embedded_interpreter_names_its_prefix() -> None:
     The prefix decides what the interpreter imports: from the venv, the module
     the lock installs; from the base installation, the standard library alone,
     where the corpus installs its stand-in for `typing_extensions`. Both are
-    readings a lane may want -- the sweeps' baseline notes argue from the first,
-    the `python` job's corpora read the second on every release -- and neither
-    is the one a step gets by naming nothing, which is whatever the runner's
-    `PATH` holds first. So each step names exactly one, before it runs the
+    readings a lane may want -- the sweeps read the first, their lane's
+    environment, and the `python` job's corpora the second on every release --
+    and neither is the one a step gets by naming nothing, which is whatever the
+    runner's `PATH` holds first. So each step names exactly one, before it runs the
     tests: the venv's `bin` first on `PATH`, or `PYTHONHOME` at the base.
     """
     steps = _interpreter_steps()

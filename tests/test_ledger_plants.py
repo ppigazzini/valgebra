@@ -2000,7 +2000,7 @@ PLANTS = (
             tree,
             "Cargo.toml",
             'pyo3 = "0.29"\n',
-            'pyo3 = { version = "0.29", features = ["abi3-py310"] }\n',
+            'pyo3 = { version = "0.29", features = ["abi3-py311"] }\n',
         ),
         trips=("test_no_build_targets_the_stable_abi",),
     ),
@@ -2876,7 +2876,7 @@ PLANTS = (
             tree,
             "tests/typing/readings/planted.py",
             '"""A fixture no row reads."""\n\n'
-            "from typing_extensions import reveal_type\n\n"
+            "from typing import reveal_type\n\n"
             "from valgebra import Validator\n\n"
             "reveal_type(Validator(int))\n",
         ),

@@ -1707,9 +1707,9 @@ def test_the_class_alone_is_isinstance_and_holds_the_declaration(value: object) 
 def test_the_class_alone_of_any_is_the_top_whatever_is_imported() -> None:
     """`instance_of(typing.Any)` is what `Validator(typing.Any)` is.
 
-    Asked only as `typing_extensions`' copy, which is `typing`'s own from
-    3.11, the answer would be the top where that module is loaded and refuse
-    every value where it is not. The suite loads it -- `annotated_types`
+    Asked only as `typing_extensions`' copy, which is `typing`'s own on every
+    supported release, the answer would be the top where that module is loaded
+    and refuse every value where it is not. The suite loads it -- `annotated_types`
     imports it -- so the bare reading is asked in a process that does not.
     """
     program = textwrap.dedent(

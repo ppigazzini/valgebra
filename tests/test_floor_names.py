@@ -1,12 +1,12 @@
 """A name a module reads at import time has to exist on the oldest interpreter.
 
-A `from typing import NotRequired` written at module scope fails every lane on
-the floor: the name reaches `typing` in 3.11, the floor is 3.10, and a name
-missing at import time is a *collection* error, so the module takes the whole
-file down rather than one test. `enum.StrEnum`, which arrives in the same
-release, does the same. Both pass on the machine they are written on, because
-that machine runs the newest interpreter in the matrix and the difference only
-exists on the oldest.
+A `from typing import TypeIs` written at module scope fails every lane below
+3.13: the name reaches `typing` in that release, and a name missing at import
+time is a *collection* error, so the module takes the whole file down rather
+than one test. `enum.EnumDict`, which arrives in the same release, does the
+same. Both pass on the machine they are written on, because that machine runs
+the newest interpreter in the matrix and the difference only exists on the
+oldest.
 
 The local gate runs the suite once, on whichever interpreter the caller has, so
 it cannot see this at all: the failure is a property of a Python the caller is
@@ -345,10 +345,10 @@ def _ships(module: str) -> tuple[tuple[int, int], tuple[int, int] | None] | None
 def test_no_module_imports_a_stdlib_module_outside_the_releases_that_ship_it() -> None:
     """The same mistake one level up, which the names half could not see.
 
-    `tomllib` arrives in 3.11 and this suite runs from 3.10, so importing it to
-    read a `.toml` file made the whole module fail to *collect* on the floor
-    leg -- and the ledger beside this one, which dates every `typing` and `enum`
-    name a source reaches, saw nothing, because a module is not a name in one.
+    `annotationlib` arrives in 3.14, so importing it at module scope fails to
+    *collect* on every lane below -- and the ledger beside this one, which dates
+    every `typing` and `enum` name a source reaches, sees nothing, because a
+    module is not a name in one.
 
     Both edges again: a module is missing below the release that adds it and
     missing again at or above one that removes it, and the standard library

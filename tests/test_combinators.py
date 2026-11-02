@@ -49,7 +49,7 @@ def test_lattice_bounds() -> None:
 
 
 def test_typing_native_bound_spellings() -> None:
-    # `object` is the top spelling; `NoReturn` (3.8+) is a bottom spelling.
+    # `object` is the top spelling; `NoReturn` is a bottom spelling.
     assert Validator(object).is_equivalent(anything)
     assert Validator(NoReturn).is_equivalent(nothing)
     assert Validator(NoReturn).is_empty()

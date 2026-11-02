@@ -334,8 +334,7 @@ nothing.
 Running them against **every** supported interpreter rather than one is what a
 corpus of live objects is for: a `typing` member arrives in a release, and the
 floor is where the tree finds out. The corpora name `typing` members and
-syntax that releases after the floor add -- 3.11's `Never`, `Required` and the
-star-unpack inside a subscript, 3.12's `type` aliases, 3.13's
+syntax that releases after the floor add -- 3.12's `type` aliases and 3.13's
 `warnings.deprecated` among them; below the release a row needs, the interpreter
 answers `AttributeError` or a `SyntaxError` the row does not expect. So a row
 states the release it needs as `Since(n)` -- the one spelling the corpora use

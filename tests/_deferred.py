@@ -56,19 +56,19 @@ class DeferredAnnotated(TypedDict):
     The resolved hint is `Annotated[NotRequired[int], ...]`, whose origin is the
     qualified type rather than the qualifier, so a search that stopped at the
     `Annotated` layer read the key from `__required_keys__` -- here, required.
-    `typing_extensions`' qualifiers, so the class is read on the floor too.
+    `ReadOnly` is `typing_extensions`', so the class is read below 3.13 too.
     """
 
     a: int
-    b: Annotated[typing_extensions.NotRequired[int], Ge(0)]
-    c: Annotated[typing_extensions.ReadOnly[typing_extensions.NotRequired[str]], "doc"]
+    b: Annotated[NotRequired[int], Ge(0)]
+    c: Annotated[typing_extensions.ReadOnly[NotRequired[str]], "doc"]
 
 
 class DeferredAnnotatedTotalFalse(TypedDict, total=False):
     """The other direction: `Annotated[Required[T], ...]` in a `total=False` class."""
 
     a: int
-    b: Annotated[typing_extensions.Required[int], Ge(0)]
+    b: Annotated[Required[int], Ge(0)]
 
 
 @dataclass

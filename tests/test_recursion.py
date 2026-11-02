@@ -281,7 +281,7 @@ def test_a_recursive_definition_is_built_in_the_normal_form() -> None:
 
 
 # PEP 695 is 3.12+ syntax, so the alias is written in a source string rather than
-# in this module: a `type` statement here would be a SyntaxError on 3.10 before
+# in this module: a `type` statement here would be a SyntaxError on 3.11 before
 # any skip could apply.
 def _alias(source: str, name: str) -> object:
     namespace: dict[str, object] = {}

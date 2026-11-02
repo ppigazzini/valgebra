@@ -141,7 +141,7 @@ reproduces; the count is the table's rather than this sentence's:
 | the terminal's own variables | yes, `runner_environment` | `FORCE_COLOR` turns `pip-audit` red against a clean dependency tree |
 | the machine's git identity | yes, `deep_clone` and `NO_IDENTITY` | a checkout configures no `user.name`, this repository has one in its own `.git/config`, and a ledger that plants a commit with `git commit-tree` passes here and fails there |
 | the interpreter the lane names | partly: `PYO3_PYTHON` and every CPython job's `uv` follow the caller's release, since the jobs share one clone, and a job on another implementation takes the interpreter its uv setup names; the gate's closing line says so | the binding's mutation lanes name CPython 3.13 in `ci.yml` and the cachegrind lane 3.15; a local sweep on 3.14 can read as survivors mutants the lane kills, a difference that is the interpreter's |
-| the *release* of the interpreter, not only the caller's | yes, at the floor: the gate builds it beside the caller's and runs the product suite and the checks marked `interpreter` on it | `typing.Self`, `LiteralString` and `Unpack` are 3.11 members; a test module naming them collects here on 3.14, fails to collect on the floor, and takes every job on it red |
+| the *release* of the interpreter, not only the caller's | yes, at the floor: the gate builds it beside the caller's and runs the product suite and the checks marked `interpreter` on it | `typing.TypeIs` and `ReadOnly` are 3.13 members; a test module naming them at import collects here on 3.14, fails to collect on a floor below 3.13, and takes every job on it red |
 | the operating system and architecture | no | a macOS or Windows leg fails where Linux does not, and nothing local sees it |
 | the pinned tool versions | no, for the tools `taiki-e/install-action` installs | `ci.yml` installs `cargo-deny`, `cargo-llvm-cov` and `cargo-mutants` at versions it names, and the gate runs whichever is on the caller's `PATH`; a `uvx` step carries its pin in its own command, so the gate runs the lane's version of it |
 | the build of the interpreter, not only its version | no: a rule answers it instead | `sys.stdlib_module_names` is the build's, not the release's -- one 3.12 build lists the Windows-only `_wmi` and a runner's does not, so a table of every name would report a difference between two builds as a moved row. The floor table records the modules this tree imports, which are portable by construction |
@@ -998,7 +998,7 @@ minute each, against the seconds an ordinary mutant takes. The lane shards it
 (`nightly-mutants-pytest` in `ci.yml`) and is scheduled only.
 
 **The walk sweep links one interpreter.** `cargo test` for the binding embeds
-the interpreter `ci.yml` names for that lane (CPython 3.12), and a survivor's
+the interpreter `ci.yml` names for that lane (CPython 3.13), and a survivor's
 note in `scripts/mutation_baseline_walk.json` is an argument about *that*
 interpreter: a mutant two spellings of `typing.Union` cannot tell apart on 3.14
 is caught where they are two objects, and the ratchet reads it as caught. The
@@ -1007,8 +1007,9 @@ imports from the lane's venv, where the lock puts `typing_extensions`, and on
 3.13 that module's `ReadOnly` and `Unpack` are `typing`'s own objects. So the
 frontend's arms for the module's own objects are killable only where it
 defines them -- an older release, or the corpus row's stand-in on an
-interpreter that cannot import it -- and the notes in
-`scripts/mutation_baseline_walk.json` that cite the module say so. A reading only
+interpreter that cannot import it -- so a sweep started outside the venv can
+kill a mutant the lane's sweep does not, and the ratchet reads the difference
+as a stale entry. A reading only
 PyPy takes is compiled for PyPy alone, `#[cfg(PyPy)]`, so the sweep's build does
 not compile it: every mutant of it builds and passes and says nothing, and
 `exclude_re` names them in `.cargo/mutants.toml` beside the PyPy lane's rows
