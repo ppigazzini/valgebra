@@ -242,9 +242,9 @@ def test_an_enumeration_is_its_members_to_a_refutation_as_to_a_proof() -> None:
     `~_HasX`, neither member carrying `x`; refuting `_Pair` below `~_HasX` on an
     instance made past the members gave the chain an end it refutes. Read as its
     members, `_Pair` is below `~_HasX` and below every join of it, and its meet
-    with `_HasX` is refuted below no spelling of a set holding it. A member is
-    read as it stands: given an `x`, it refutes the enumeration below `~_HasX`
-    as it refutes its own literal.
+    with `_HasX` is empty, the class below the complement of the member beside
+    it. A member is read as it stands: given an `x`, it refutes the enumeration
+    below `~_HasX` as it refutes its own literal, and the meet holds it.
     """
     not_x = complement(Validator(_HasX))
     pair = Validator(_Pair)
@@ -253,10 +253,12 @@ def test_an_enumeration_is_its_members_to_a_refutation_as_to_a_proof() -> None:
     for supertype in (not_x, union(not_x, int), union(not_x, str), union(not_x, None)):
         assert pair.relation_to(supertype) == "subset"
     x_pair = intersection(Validator(_HasX), pair)
-    assert x_pair.relation_to(nothing) != "not_subset"
+    assert x_pair.is_empty()
+    assert x_pair.relation_to(nothing) == "subset"
+    assert intersection(pair, _HasX, complement(None)).relation_to(nothing) == "subset"
     assert x_pair.relation_to(union(not_x, int)) == "subset"
     respelled = complement(intersection(_HasX, complement(int)))
-    assert x_pair.relation_to(respelled) != "not_subset"
+    assert x_pair.relation_to(respelled) == "subset"
 
     # The tuples holding an `int` at `x` share no value with `_Pair`, whose
     # members are no tuples, as the union of the members says.
@@ -269,6 +271,10 @@ def test_an_enumeration_is_its_members_to_a_refutation_as_to_a_proof() -> None:
         marked = Validator(_Marked)
         assert marked.relation_to(not_x) == "not_subset"
         assert Validator(Literal[_Marked.A]).relation_to(not_x) == "not_subset"
+        x_marked = intersection(_HasX, marked)
+        assert x_marked.is_valid(_Marked.A)
+        assert not x_marked.is_empty()
+        assert x_marked.relation_to(nothing) != "subset"
     finally:
         del _Marked.A.x  # ty: ignore[unresolved-attribute]
 

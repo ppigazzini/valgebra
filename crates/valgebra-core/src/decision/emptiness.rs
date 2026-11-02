@@ -17,6 +17,7 @@
 //! denotes, under the lowering's bound on what building it may cost.
 
 use std::cell::{Cell, RefCell};
+use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
@@ -715,6 +716,16 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
         // rest leaves the readings after it none to decide with.
         Verdict::Unknown => the_empty_container_in_every_member(members)
             .or_else(|| a_meet_read_by_its_constants(members, cx.oracle, cx.defs))
+            .or_else(|| {
+                if members
+                    .iter()
+                    .any(|member| matches!(member, Schema::Instance(_)))
+                {
+                    a_class_below_the_complement_beside_it(members, cx)
+                } else {
+                    Verdict::Unknown
+                }
+            })
             .or_else(|| match narrowed_by_its_members(members, cx) {
                 Some(narrowed) => narrowed.or_else(|| {
                     let budget = cx.budget;
@@ -733,6 +744,36 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
         settled => settled,
     };
     (verdict, region)
+}
+
+/// A meet holding a class, read through the complement law: `C ∧ R` holds
+/// nothing where `C ⊆ ¬R`, since `a ⊆ b` is `a ∧ ¬b = ∅` [FCB08, §4.1] and the
+/// complement of `¬R` is `R` [FCB08, Def. 4.1].
+///
+/// The class is asked against the complement of the other members' meet, and
+/// only the bindings answer: an enumeration they read as its members is asked a
+/// member at a time, so a meet whose other members refuse every member is
+/// empty, as the meet of the members' literals with them is
+/// ([`a_meet_read_by_its_constants`]). Only the proof is read. A member the walk
+/// stopped at is outside `R` and `¬R` alike, so a refused inclusion names no
+/// value the meet holds.
+#[inline(never)]
+fn a_class_below_the_complement_beside_it(members: &[Schema], cx: &Cx<'_>) -> Verdict {
+    for (at, class) in members.iter().enumerate() {
+        if !matches!(class, Schema::Instance(_)) {
+            continue;
+        }
+        let beside = members
+            .iter()
+            .enumerate()
+            .filter(|&(place, _)| place != at)
+            .map(|(_, member)| member.clone());
+        let outside = Schema::Complement(Arc::new(Schema::meet_within(beside, cx.defs)));
+        if cx.oracle.leaf_subtype(class, &outside) == Some(true) {
+            return Verdict::Empty;
+        }
+    }
+    Verdict::Unknown
 }
 
 /// Whether a member's shape keeps its lengths outside the bounds of a

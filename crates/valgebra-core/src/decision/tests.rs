@@ -8974,6 +8974,105 @@ fn a_meet_holding_a_table_is_read_by_its_constants() {
     assert!(oracle.walked.borrow().is_empty());
 }
 
+/// The bindings' reading of an enumeration, cut to what a meet asks of it.
+/// Class 0 is read as its two members, an `int` and a `float`, each walked
+/// through the set asked; class 1 is a class neither member is an instance
+/// of, and class 2 raises on every value, where the walk stops. No other class
+/// is read as its members. Every set class 0 is asked against is kept.
+struct Enumerated {
+    asked: std::cell::RefCell<Vec<Schema>>,
+}
+
+impl Enumerated {
+    fn new() -> Self {
+        Self {
+            asked: std::cell::RefCell::default(),
+        }
+    }
+
+    /// Whether the member (`float` or the `int`) is in `schema`, or `None`
+    /// where the walk stops.
+    fn walk(float: bool, schema: &Schema) -> Option<bool> {
+        match schema {
+            Schema::Anything(_) => Some(true),
+            Schema::Int => Some(!float),
+            Schema::Float => Some(float),
+            Schema::Instance(class) => match class.get() {
+                0 => Some(true),
+                2 => None,
+                _ => Some(false),
+            },
+            Schema::Union(members) => members.iter().try_fold(false, |held, member| {
+                Some(held || Self::walk(float, member)?)
+            }),
+            Schema::Intersection(members) => members.iter().try_fold(true, |held, member| {
+                Some(held && Self::walk(float, member)?)
+            }),
+            Schema::Complement(inner) => Self::walk(float, inner).map(|held| !held),
+            _ => Some(false),
+        }
+    }
+}
+
+impl Constants for Enumerated {}
+
+impl LeafRelations for Enumerated {
+    /// Class 0 is below a set where both members are in it, refuted where one
+    /// is out, and unread where the walk of either stops.
+    fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
+        if *sub != Schema::Instance(ClassIx::new(0)) {
+            return None;
+        }
+        self.asked.borrow_mut().push(sup.clone());
+        [false, true]
+            .into_iter()
+            .try_fold(true, |every, float| Some(every && Self::walk(float, sup)?))
+    }
+}
+
+// THEORY: semantic-subtyping
+/// A meet holding a class is empty where the class is below the complement of
+/// the other members' meet, `a ⊆ b` being `a ∧ ¬b = ∅` [FCB08, §4.1].
+///
+/// Only the proof is read: a class refuted below that complement may have its
+/// member outside the set by a stopped walk, and a class the bindings do not
+/// read as its members answers nothing.
+#[test]
+fn a_meet_holding_a_class_is_empty_below_the_complement_beside_it() {
+    let class = |index| Schema::Instance(ClassIx::new(index));
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    let meet = |members: Vec<Schema>| Schema::Intersection(members.into());
+    let verdict = |schema: &Schema, oracle: &Enumerated| {
+        schema.verdict_rec(&mut Cx::new(oracle, &[], &Budget::new(DECISION_BUDGET)))
+    };
+    let rows = [
+        // Neither member is an instance of class 1.
+        (meet(vec![class(0), class(1)]), Verdict::Empty),
+        (meet(vec![class(1), class(0)]), Verdict::Empty),
+        // `~int` refuses the `int` and `~float` the `float`: the meet of the
+        // two refuses both, where neither alone refuses either.
+        (
+            meet(vec![class(0), not(Schema::Int), not(Schema::Float)]),
+            Verdict::Empty,
+        ),
+        // The `int` is in the set, so the class is refuted below its
+        // complement, which is no proof the meet is inhabited.
+        (meet(vec![class(0), Schema::Int]), Verdict::Unknown),
+        // A walk that stops answers nothing.
+        (meet(vec![class(0), class(2)]), Verdict::Unknown),
+        // A class not read as its members answers nothing.
+        (meet(vec![class(1), class(3)]), Verdict::Unknown),
+    ];
+    for (schema, expected) in &rows {
+        assert_eq!(verdict(schema, &Enumerated::new()), *expected, "{schema:?}");
+    }
+
+    // The class is asked against the complement of the members beside it.
+    let oracle = Enumerated::new();
+    verdict(&rows[0].0, &oracle);
+    assert_eq!(*oracle.asked.borrow(), [not(class(1))]);
+}
+
 // THEORY: a-cut-reference-proves
 /// A meet the set representation proves empty stays proved beside a conjunct
 /// it does not read, and a reading that left one out refutes nothing.

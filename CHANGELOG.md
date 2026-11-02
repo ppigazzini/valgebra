@@ -106,10 +106,19 @@ answer of its own, or a repair to a change not yet released.
 - feat: a refinement of a union holds what its refined branches hold
 - fix: a deep walk on PyPy stops where PyPy has stack to answer
 - fix: a possessive quantifier's refusal names no Python release
+- feat: an enumeration met with sets refusing every member holds no value
 
 -->
 
 ### Added
+
+- **An enumeration met with sets refusing every member holds no value.** A
+  meet holding a class is read through the complement law: it is empty where
+  the class is below the complement of the other members' meet, which the
+  bindings ask of an enumeration a member at a time. For an enumeration `Pair`
+  whose members carry no `x` and a protocol `HasX` requiring one,
+  `intersection(Pair, HasX)` is `subset` of `nothing` and `is_empty`, as
+  `Pair <= ~HasX` already was, where the meet was undecided.
 
 - **A refinement of a union holds what its refined branches hold.** A
   refinement of a union is the union of its branches refined, so it holds a

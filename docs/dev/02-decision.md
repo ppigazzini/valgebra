@@ -795,8 +795,13 @@ as they answer a builtin's: no name of a direct instance is read, since an
 instance made past the members is no value of the set. A refutation standing
 on one would refute `Pair <= ~X` beside `Pair <= Literal[Pair.A, Pair.B]` and
 `Literal[Pair.A, Pair.B] <= ~X`, both proved, so no one set gives the three
-answers. A meet holding the class is not read a member at a time, and stays
-undecided where the class's atom leaves it.
+answers. A meet holding the class is read through the complement law, `C ∧ R`
+empty where `C ⊆ ¬R` (`a_class_below_the_complement_beside_it` in
+`decision/emptiness.rs`): the class is asked against the complement of the
+other members' meet, which the bindings answer a member at a time, so `Pair &
+X` is empty where no member carries `x`, as `Pair <= ~X` holds. Only the proof
+is read: the walk refuses a value it stopped at from a set and its complement
+alike, so a member outside `¬R` need not be in `R`.
 
 A class failing any condition is the `isinstance` atom any other class is. That
 costs completeness and nothing else: membership is unaffected, and the relations
