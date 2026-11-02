@@ -10,7 +10,9 @@ rejected cleanly; on a thread with the stack its platform gives one, it never
 overflows the native stack, and a Python `RecursionError` comes only from the
 value's own code: a `__repr__`, an `__eq__` or a predicate that recurses past
 the interpreter's limit raises one, and it propagates as every fatal signal does
-([when a comparison raises](08-error-model.md#when-a-comparison-raises)). The
+([when a comparison raises](08-error-model.md#when-a-comparison-raises)). On
+PyPy under a lowered recursion limit the explaining walk's own rendering can
+raise one too (the value-walk depth entry below). The
 bounds cap sizes, not time: [what the bounds do not
 bound](#what-the-bounds-do-not-bound) names the inputs whose cost grows inside
 them. The limits bound work driven by the *value* — the untrusted part. A
@@ -111,6 +113,20 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   macOS is one. Give a thread that validates deep values 1 MiB or more. This
   holds on both the object path and the JSON path; an over-deep JSON document is
   rejected by the parser as `json_invalid`.
+
+    On PyPy the stack is also the interpreter's to size: PyPy lets its C-API
+  calls use a stack it scales by the recursion limit, `sys.setrecursionlimit`
+  included, and a call past it fails in a way PyPy cannot report, ending the
+  process. So on PyPy a level the walk opens a step deeper than before asks
+  PyPy's own check whether 16 KiB below it are still free, and where they are
+  not the walk refuses at `recursion_limit`, as at its bounds. Under the
+  default limit the bounds come first. Under a limit lowered to a few hundred
+  or below the walk can stop short of them, at a depth its own frames decide,
+  so `is_valid` and the explaining `validate`, whose frames are larger, can
+  stop at different depths and name different reasons; there the explaining
+  walk's rendering, which is Python, can raise `RecursionError`, which
+  propagates. A limit below about 45 leaves PyPy too little stack to run the
+  walk at all.
 
     The parser has a bound of its own — a couple of hundred levels of arrays and
     objects — and it sits **between** the two: wider than the unfolding bound and

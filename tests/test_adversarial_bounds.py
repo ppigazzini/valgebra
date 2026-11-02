@@ -519,6 +519,56 @@ def test_the_deepest_walk_fits_the_documented_stack() -> None:
     ], result.stderr
 
 
+# BOUND: ROOM_RESERVE
+@pytest.mark.skipif(
+    sys.implementation.name != "pypy",
+    reason="PyPy alone sizes the stack its C-API calls may use by the recursion limit",
+)
+def test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room() -> None:
+    """On PyPy a deep walk under a lowered recursion limit answers.
+
+    PyPy sizes the stack its C-API calls may use by the recursion limit, so
+    under a lowered one a walk reaches it before its own bounds, and a call
+    past it ended the process. The walk asks PyPy's stack check once a step
+    deeper (`ROOM_STEP`), from a frame `ROOM_RESERVE` bytes below it, and
+    refuses at `recursion_limit` where there is no room. In a child
+    interpreter under limits of 200 and 60, a list nested five deep is still a
+    member, one nested 1,600 deep is not, and validating it raises an
+    exception the caller catches: the
+    walk's `ValidationError`, or the `RecursionError` the explaining walk's
+    rendering raises.
+    """
+    program = textwrap.dedent(
+        """
+        import sys
+        from valgebra import ValidationError, Validator, recursive, union
+
+        lists = Validator(recursive(lambda t: union(int, [t])))
+        value = 0
+        for _ in range(1600):
+            value = [value]
+        shallow = [[[[[0]]]]]
+        sys.setrecursionlimit(int(sys.argv[1]))
+        print(lists.is_valid(shallow), lists.is_valid(value))
+        try:
+            lists.validate(value)
+        except (ValidationError, RecursionError):
+            print("raised")
+        """
+    )
+    for limit in (200, 60):
+        result = subprocess.run(  # noqa: S603 -- fixed interpreter, in-repo program
+            [sys.executable, "-c", program, str(limit)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        why = (limit, result.stderr[-400:])
+        assert result.returncode == 0, why
+        assert result.stdout.split() == ["True", "False", "raised"], why
+
+
 # BOUND: MAX_DECISION_DEPTH
 def test_a_relation_fits_the_documented_stack() -> None:
     """A relation the trail cannot close quickly runs on a 1 MiB thread.

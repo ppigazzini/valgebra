@@ -104,6 +104,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a mapping holds no more keys than its key types hold apart
 - feat: a shape beside a length bound it misses holds no value
 - feat: a refinement of a union holds what its refined branches hold
+- fix: a deep walk on PyPy stops where PyPy has stack to answer
 
 -->
 
@@ -536,6 +537,15 @@ answer of its own, or a repair to a change not yet released.
   3.10 spelled with an object of its own are gone with it.
 
 ### Fixed
+
+- **A deep walk on PyPy stops where PyPy has stack to answer.** PyPy sizes the
+  stack its C-API calls may use by the recursion limit, and a walk that reached
+  it before its own bounds ended the process: under
+  `sys.setrecursionlimit(200)`, validating a list nested fifty deep did. The
+  walk now asks PyPy's stack check as it goes deeper, and refuses at
+  `recursion_limit` where PyPy has no room, so the value is no member and
+  `validate` raises an error the caller catches. Under the default limit the
+  answers are unchanged, and CPython is untouched.
 
 - **A standard-library value type is the class the interpreter's module
   binds.** The relations read `Decimal`, `Fraction`, the `datetime` types,

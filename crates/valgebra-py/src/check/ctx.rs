@@ -9,6 +9,8 @@ use std::cell::{Cell, RefCell};
 use std::mem::ManuallyDrop;
 
 use pyo3::prelude::*;
+#[cfg(PyPy)]
+use pyo3::sync::PyOnceLock;
 use valgebra_core::Schema;
 
 use super::index::ValidatorIndex;
@@ -168,6 +170,11 @@ pub(crate) struct WalkState {
     /// Where the walk's memo stands: the definitions entered, and whether a
     /// node has armed it ([`Memo`]). Its tables are in `rare`.
     pub(crate) memo: Memo,
+    /// The stack address at which `PyPy` last said the walk had room to go
+    /// deeper, the walk's entry until it is first asked
+    /// ([`the_interpreter_has_room`]).
+    #[cfg(PyPy)]
+    room_at: Cell<usize>,
 }
 
 /// The pointer [`WalkState`] holds what a walk rarely holds behind, released
@@ -238,6 +245,8 @@ impl WalkState {
             signals: Signals::default(),
             depth: Cell::new(0),
             memo: Memo::default(),
+            #[cfg(PyPy)]
+            room_at: Cell::new(stack_address()),
         }
     }
 
@@ -365,7 +374,7 @@ impl<'a> Ctx<'a> {
     /// container a counter pair and a guard drop, which on a shape whose whole
     /// check is a type test per element is a measurable share of it.
     pub(crate) fn room_to_descend(self) -> bool {
-        self.state.depth.get() < MAX_WALK_DEPTH
+        self.state.depth.get() < MAX_WALK_DEPTH && the_interpreter_has_room(self.state)
     }
 
     /// Open one level of descent, or refuse when the walk already holds
@@ -377,12 +386,105 @@ impl<'a> Ctx<'a> {
     pub(crate) fn descend(self) -> Option<Descent<'a>> {
         let depth = &self.state.depth;
         let level = depth.get() + 1;
-        if level > MAX_WALK_DEPTH {
+        if level > MAX_WALK_DEPTH || !the_interpreter_has_room(self.state) {
             return None;
         }
         depth.set(level);
         Some(Descent(depth))
     }
+}
+
+/// Whether `PyPy` leaves the walk the native stack one more level needs.
+///
+/// [`MAX_WALK_DEPTH`] is measured against the stack a thread has, which on
+/// `CPython` no setting moves. `PyPy` stops its C-API calls short of that: it
+/// sizes the stack `cpyext` may use by the recursion limit, and a call past
+/// that fails -- fetching or normalizing the error it raised among them, which
+/// `cpyext` takes for a fault of its own and ends the process on. Under
+/// `sys.setrecursionlimit(200)` a list nested fifty deep did so. So the walk
+/// asks `PyPy`'s own check, `__pypy__.stack_almost_full`, and asks it from a
+/// frame [`ROOM_RESERVE`] bytes deeper than the walk stands: a yes there leaves
+/// the walk that much below it, for the Python a level runs -- a predicate, an
+/// `isinstance` hook, the explaining walk's rendering -- and for raising what
+/// that Python raises. A refusal is the walk's own, a non-member at
+/// `recursion_limit`, the answer the bound gives, since it is the same fact
+/// about the value.
+///
+/// Asked once the walk is [`ROOM_STEP`] bytes deeper than where the check
+/// last answered, rather than at every level: siblings at one depth never
+/// ask, so a list of ten thousand records pays one comparison an element, and
+/// a deep value asks about once a step. The stack grows down on every
+/// platform `PyPy` ships for. A check that cannot be asked is read as no room.
+#[cfg(PyPy)]
+#[inline]
+fn the_interpreter_has_room(state: &WalkState) -> bool {
+    let here = stack_address();
+    here.saturating_add(ROOM_STEP) > state.room_at.get() || asked_for_room(state, here)
+}
+
+/// `PyPy`'s answer at `here`, kept where it is yes. Out of line: a walk asks
+/// it once a step deeper than any answer before.
+#[cfg(PyPy)]
+#[cold]
+#[inline(never)]
+fn asked_for_room(state: &WalkState, here: usize) -> bool {
+    let room = room_below_the_reserve();
+    if room {
+        state.room_at.set(here);
+    }
+    room
+}
+
+/// Whether `PyPy` has room [`ROOM_RESERVE`] bytes below the caller: the
+/// reserve is a frame of that size, never written, and the check is asked
+/// from below it.
+#[cfg(PyPy)]
+#[inline(never)]
+fn room_below_the_reserve() -> bool {
+    static ALMOST_FULL: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    let reserve = [const { std::mem::MaybeUninit::<u8>::uninit() }; ROOM_RESERVE];
+    std::hint::black_box(&reserve);
+    Python::attach(|py| {
+        ALMOST_FULL
+            .import(py, "__pypy__", "stack_almost_full")
+            .and_then(PyAnyMethods::call0)
+            .and_then(|full| full.is_truthy())
+            .is_ok_and(|full| !full)
+    })
+}
+
+/// How much deeper than `PyPy`'s last answer the walk goes before asking
+/// again: a few levels of the walk's frames, well inside [`ROOM_RESERVE`].
+#[cfg(PyPy)]
+const ROOM_STEP: usize = 2_048;
+
+/// The stack the walk keeps free below itself on `PyPy`, beside the step it
+/// may have gone since the last answer: room for the Python a level runs and
+/// for raising what it raises. Small enough that asking from below it is no
+/// overflow of its own wherever `PyPy` runs the walk at all: at 32 KiB the
+/// question took the process down under a recursion limit of 45. Measured on
+/// `PyPy` 3.11 against a list nested to 1,600: under the default limit the
+/// walk refuses at its bound as before, and under limits of 200, 60 and 45,
+/// where every walk past a few dozen levels ended the process, `is_valid`
+/// refuses at `recursion_limit` and the explaining walk's rendering raises a
+/// `RecursionError` the caller catches.
+#[cfg(PyPy)]
+const ROOM_RESERVE: usize = 16_384;
+
+/// An address on the current native stack: a local's, in the frame it is
+/// inlined into.
+#[cfg(PyPy)]
+#[inline]
+fn stack_address() -> usize {
+    let marker = 0_u8;
+    std::hint::black_box(&raw const marker).addr()
+}
+
+/// On `CPython` the stack a thread has is the whole question, and
+/// [`MAX_WALK_DEPTH`] answers it.
+#[cfg(not(PyPy))]
+const fn the_interpreter_has_room(_state: &WalkState) -> bool {
+    true
 }
 
 /// What a membership walk is being run for.

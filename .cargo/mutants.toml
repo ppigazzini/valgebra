@@ -77,6 +77,19 @@ exclude_re = [
     "check/walk/record\\.rs:.*: (replace stored(_copy)? -> .*|.* in stored(_copy)?)$",
     "check/walk\\.rs:.*: (replace (held_dict|reads_its_values) -> .*|.* in (held_dict|reads_its_values))$",
     "check/walk/sequence\\.rs:.*: (replace (reads_where_it_lies|storage_of) -> .*|.* in (reads_where_it_lies|storage_of))$",
+    # The walk's question to PyPy's stack check is the same case:
+    # `asked_for_room`, `room_below_the_reserve`, `stack_address` and the PyPy
+    # body of `the_interpreter_has_room` in `check/ctx.rs` are compiled for
+    # PyPy alone, and the CPython body, which shares the last name, is the
+    # constant `true` the walk's own bounds stand beside. The PyPy lane's
+    # product suite holds the PyPy bodies: under a lowered recursion limit
+    # `test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room`
+    # ends the process where the walk does not ask, and reads a shallow list
+    # as no member where it is never given room. The two sizes they read,
+    # `ROOM_STEP` and `ROOM_RESERVE`, are written as literals, which offer no
+    # mutant: a product spelling either is a mutant of a constant the sweep's
+    # build compiles out, and names no function an exclusion could anchor on.
+    "check/ctx\\.rs:.*: (replace (the_interpreter_has_room|asked_for_room|room_below_the_reserve|stack_address) -> .*|.* in (the_interpreter_has_room|asked_for_room|room_below_the_reserve))$",
     # `scan_held_list` and `scan_held_dict` are the same case for the
     # free-threaded build: compiled under `#[cfg(Py_GIL_DISABLED)]` alone, where
     # each scan holds its container's critical section once rather than once
