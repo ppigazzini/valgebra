@@ -475,7 +475,10 @@ answers `"undecided"`.
   branches each leave out the same way, a branch of another kind leaving out
   every length, so `Annotated[list[int], MinLen(1)]` is `not_subset` of
   `Annotated[list[int], MaxLen(1)] | Annotated[list[int], MaxLen(3000)]`, on
-  3,001 integers. That decides a
+  3,001 integers. A refinement of a union holds a value where a branch under
+  its bounds does, and is refused a branch's kind the supertype holds none of
+  on that value: `Annotated[int | str, MaxLen(1)]` is `not_subset` of `int`
+  and of `nothing`, on `""`. That decides a
   fixpoint every unfolding of which needs one more element -- each element is a
   value of the fixpoint, and no finite value satisfies it. A bound over a
   *fixed* position, or over a base whose values have no length at all, is not

@@ -272,10 +272,38 @@ impl Schema {
         if self.required_fields_refused(other, cx)
             || self.length_refused(other, cx)
             || self.the_empty_refused(other)
+            || self.a_refined_branch_refused(other, cx)
         {
             return Relation::Fails;
         }
         Relation::Unknown
+    }
+
+    /// Whether a branch of a refined union holds a value under the constraints
+    /// of a kind the supertype holds none of: that value is the subject's and
+    /// outside the supertype.
+    ///
+    /// A refinement of a union is the union of its branches refined
+    /// [FCB08, Def. 4.1], a refined base type cut down a value at a time
+    /// [JV20, §3.2]. A value of a branch the constraints keep is a value of
+    /// the subject. So `Annotated[int | str, MaxLen(1)]` is refuted below
+    /// `int` on `""`, and `Annotated[str | bytes, MaxLen(256)]` below `bytes`
+    /// on a short word. Read off the branch's verdict and the supertype's
+    /// kinds, asking no goal of the pair.
+    fn a_refined_branch_refused(&self, other: &Schema, cx: &mut Cx<'_>) -> bool {
+        let Schema::Refine { base, constraints } = self else {
+            return false;
+        };
+        let Schema::Union(branches) = &**base else {
+            return false;
+        };
+        branches.iter().any(|branch| {
+            branch
+                .type_tag()
+                .is_some_and(|kind| other.holds_no_value_of(kind, cx.oracle))
+                && Schema::refine(branch.clone(), constraints.to_vec()).verdict_rec(cx)
+                    == Verdict::Inhabited
+        })
     }
 
     /// Whether the exact empty container of the subject's kind is one of its

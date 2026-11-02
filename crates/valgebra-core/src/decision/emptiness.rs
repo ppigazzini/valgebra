@@ -1366,6 +1366,11 @@ pub(super) fn class_with_attributes(members: &[Schema]) -> Option<(ClassIx, &[At
 /// by as many copies of an element as it asks for. Which is also the reading
 /// that gives `mu t. list[t] & MinLen(1)` the answer it has: each unfolding
 /// demands one more element and the cycle has no finite value.
+///
+/// A refinement of a union is the union of its branches refined
+/// [FCB08, Def. 4.1], each cut down a value at a time [JV20, §3.2]. So it
+/// holds a value where a branch under the constraints does, and none where
+/// none does.
 fn refinement_verdict(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>) -> Verdict {
     let density = density_of([base]);
     if base.is_empty_rec(cx)
@@ -1373,6 +1378,16 @@ fn refinement_verdict(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>)
         || lengths_miss_the_shape(base, constraints, cx)
     {
         return Verdict::Empty;
+    }
+    // A union is read a branch at a time, as the doc says, a branch holding a
+    // value being the witness a refutation of it outside the supertype
+    // stands on.
+    if let Schema::Union(branches) = base {
+        return Verdict::any(
+            branches
+                .iter()
+                .map(|branch| refinement_verdict(branch, constraints, cx)),
+        );
     }
     // The integers are their own case: they are unbounded both ways and
     // discrete, so an order bound over them is met by an integer the oracle can

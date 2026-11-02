@@ -103,10 +103,19 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet that may hold no kind is below every set
 - feat: a mapping holds no more keys than its key types hold apart
 - feat: a shape beside a length bound it misses holds no value
+- feat: a refinement of a union holds what its refined branches hold
 
 -->
 
 ### Added
+
+- **A refinement of a union holds what its refined branches hold.** A
+  refinement of a union is the union of its branches refined, so it holds a
+  value where a branch under its bounds does, and a branch so refined that
+  holds a value of a kind the supertype holds none of refutes the pair on that
+  value: `Annotated[int | str, MaxLen(1)]` is `not_subset` of `int` and of
+  `nothing`, on `""`, and `Annotated[str | bytes, MaxLen(256)]` of `bytes`,
+  where each was undecided.
 
 - **A shape beside a length bound it misses holds no value.** A meet of a
   record, a sequence or a set with a refinement whose length bounds that

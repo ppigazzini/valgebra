@@ -12602,3 +12602,53 @@ fn a_member_shaped_past_the_bounds_beside_it_empties_the_meet() {
     let alone = [at_least(2), Schema::mapping(MapClause::top())];
     assert!(!super::emptiness::a_member_shaped_past_the_bounds_beside_it(&alone, &mut cx));
 }
+
+/// A refinement of a union holds a value where a branch under its constraints
+/// does, and a branch so refined that holds a value of a kind the supertype
+/// holds none of refutes the pair on that value: `Annotated[int | str,
+/// MaxLen(1)]` holds `""`, so it is no subset of `int` and not empty, and
+/// `Annotated[str | bytes, MaxLen(256)]` is no subset of `bytes`. Below `str`
+/// the short word is no witness, `str` holding it. `int` below the refined
+/// union is not refuted, its every value being an integer the
+/// union's `int` branch holds where the bound reads it. A union of a
+/// one-element tuple and a record of at most one key holds no value of two.
+#[test]
+fn a_refined_union_holds_what_its_refined_branches_hold() {
+    let refined = |branches: [Schema; 2], constraint| {
+        Schema::refine(Schema::union(branches), vec![constraint])
+    };
+    let int_or_str = refined([Schema::Int, Schema::Str], Constraint::MaxLen(1));
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    assert_eq!(int_or_str.verdict_rec(&mut cx), Verdict::Inhabited);
+    assert_eq!(
+        int_or_str.subtype_relation_under(&Schema::Int, &NoLeafRelations, &[]),
+        Relation::Fails
+    );
+    assert_eq!(
+        int_or_str.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+        Relation::Fails
+    );
+    let words = refined([Schema::Str, Schema::Bytes], Constraint::MaxLen(256));
+    assert_eq!(
+        words.subtype_relation_under(&Schema::Bytes, &NoLeafRelations, &[]),
+        Relation::Fails
+    );
+    assert_ne!(
+        Schema::Int.subtype_relation_under(&int_or_str, &NoLeafRelations, &[]),
+        Relation::Fails
+    );
+    assert_ne!(
+        int_or_str.subtype_relation_under(&Schema::Str, &NoLeafRelations, &[]),
+        Relation::Fails,
+        "a branch of a kind the supertype holds refutes nothing"
+    );
+    let short_shapes = refined(
+        [
+            Schema::tuple(SeqShape::fixed([Schema::Int])),
+            closed(vec![field("a", Schema::Int, false)]),
+        ],
+        Constraint::MinLen(2),
+    );
+    assert_eq!(short_shapes.verdict_rec(&mut cx), Verdict::Empty);
+}

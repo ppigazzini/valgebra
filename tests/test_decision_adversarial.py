@@ -1198,6 +1198,27 @@ def test_a_record_beside_a_length_bound_it_misses_holds_no_value() -> None:
     ).is_empty()
 
 
+def test_a_refined_union_holds_what_its_refined_branches_hold() -> None:
+    """A refinement of a union holds a value where a branch under its bounds does.
+
+    `Annotated[int | str, MaxLen(1)]` holds `""`, a word the bound keeps, so
+    it is not empty and no subset of `int`; `Annotated[str | bytes,
+    MaxLen(256)]` is no subset of `bytes`, and `Annotated[float | bytes,
+    Len(0, 2)]` none of `float`, each on a short value of the branch the
+    supertype holds nothing of.
+    """
+    int_or_str = Validator(Annotated[int | str, at.MaxLen(1)])
+    assert int_or_str.relation_to(int) == "not_subset"
+    assert int_or_str.relation_to(nothing) == "not_subset"
+    assert int_or_str.is_valid("")
+    assert Validator(Annotated[str | bytes, at.MaxLen(256)]).relation_to(bytes) == (
+        "not_subset"
+    )
+    assert Validator(Annotated[float | bytes, at.Len(0, 2)]).relation_to(float) == (
+        "not_subset"
+    )
+
+
 def test_a_meet_holding_a_complement_is_read_as_its_relation() -> None:
     """A meet with a complement is empty where the rest is below the inner set.
 
