@@ -37,7 +37,7 @@ use super::records::{
 use super::{
     Budget, Cx, DECISION_BUDGET, LeafRelations, NARROWING, NoLeafRelations, READINGS_HELD,
     RESPELLING, bounds_met, descending, has_complementary_pair, has_disjoint_pair,
-    pushed_complement_is_placed, spend,
+    pushed_complement_is_placed, spend, spend_at_once,
 };
 
 impl Schema {
@@ -790,51 +790,105 @@ fn the_empty_container_in_every_member(members: &[Schema]) -> Verdict {
 /// members beside it, never by itself: a branch meets its own union in itself.
 ///
 /// A query asks one narrowed meet many times over where the rules decline it,
-/// since every goal that reaches it reads it again: a record of guarded
-/// records three deep, below the complement of a record, read its narrowed
-/// fields more than a hundred times at thirty thousand steps a reading, and
-/// spent the query's million steps before the reading that answers. So the
-/// verdict is held for the query ([`NARROWED`]) where it was read with
-/// nothing assumed -- no goal on the trail, no definition being resolved, no
-/// meet open for the query's budget, no narrowed question open -- and is
-/// decided, or no reading under it stopped at a step or a depth bound
-/// ([`bounds_met`]). Read back, it is the answer a reading
-/// of the same terms gives with as many steps left and no deeper, and a
-/// reading with fewer steps or deeper gives it too or stops at a bound: the
-/// memo takes no answer away, and spares the steps. An `Unknown` a bound
-/// stopped is not held, since more steps may decide it, and nothing read under
-/// a hypothesis is, which is what a memo inside the coinductive procedure owes
-/// (`docs/dev/10-theory.md`, "A cache under coinduction is revertible or
-/// absent").
+/// since every goal that reaches it reads it again, so its verdict is read
+/// once a query ([`held_verdict`]).
 ///
 /// Out of line: asked of every meet the rules decline, it answers `None` at the
 /// first look where no member is a union.
 #[inline(never)]
 pub(super) fn narrowed_by_its_members(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdict> {
     let narrowed = narrowed_meet(members, cx)?;
+    Some(held_verdict(narrowed, ReadBack::Spared, cx))
+}
+
+/// What reading a held verdict back spends of the query's steps.
+#[derive(Clone, Copy)]
+pub(super) enum ReadBack {
+    /// No step: the steps the reading spent are spared for the readings after
+    /// it, which is what a narrowed meet asked a hundred times over needs.
+    Spared,
+    /// The steps a reading of the meet spends now, so the query spends its
+    /// steps as it would with no memo and only the reading's own work is
+    /// spared. A rule whose work between readings spends no step is bounded by
+    /// the steps its readings spend: the record split skips each branch apart
+    /// from the record for none, and with the meets it asks read back for no
+    /// step it skipped thirty times as many branches before the budget stopped
+    /// it.
+    ///
+    /// Exact where the reading's path does not turn on the steps it has left.
+    /// Two readings do: [`Schema::below_by_emptiness`] answers only at none
+    /// left, and a respelling is allowed the lesser of what is left and
+    /// [`RESPELLING`]. Where the reading held passed either, a reading now may
+    /// take the other path and spend otherwise; the verdict read back is one
+    /// the terms have either way, since a reading answers soundly or declines.
+    AsRead,
+}
+
+/// The verdict of `meet`, read once a query where it rests on nothing.
+///
+/// A query asks one meet many times over where the rules decline the goals
+/// reaching it. A record of guarded records three deep, below the complement
+/// of a record, read its narrowed fields more than a hundred times at thirty
+/// thousand steps a reading, and spent the query's million steps before the
+/// reading that answers. A union of two refined unions below a third asked
+/// forty thousand meets of a member and a branch, two thousand of them
+/// distinct: the rules filter the branches a member meets, and the parts
+/// reading filters them again. So the verdict is held for the query
+/// ([`VERDICTS`]) where it was read with nothing assumed -- no goal on the
+/// trail, no definition being resolved, no meet open for the query's budget,
+/// no narrowed question open -- and is decided, or no reading under it stopped
+/// at a step or a depth bound ([`bounds_met`]). Read back, it is the answer a
+/// reading of the same terms gives with as many steps left and no deeper, and
+/// a reading with fewer steps or deeper gives it too or stops at a bound: the
+/// memo takes no answer away. An `Unknown` a bound stopped is not held, since
+/// more steps may decide it, and nothing read under a hypothesis is, which is
+/// what a memo inside the coinductive procedure owes (`docs/dev/10-theory.md`,
+/// "A cache under coinduction is revertible or absent").
+///
+/// What the read-back spends is the caller's to say ([`ReadBack`]). Read back
+/// as read, it spends what a reading spends now: the steps the reading spent,
+/// less those of the readings under it held to be read back for none
+/// ([`SPARED`]), which a reading now reads that way. Where fewer steps are
+/// left than that, the meet is read again, as it would be with no memo.
+///
+/// Out of line: the pairs that reach it built a meet, and the hot arms that
+/// call it answer most pairs by their kinds first.
+#[inline(never)]
+pub(super) fn held_verdict(meet: Schema, read_back: ReadBack, cx: &mut Cx<'_>) -> Verdict {
     let query = cx.query();
     if !(cx.trail.is_empty()
         && cx.visiting.is_empty()
         && !OpenMeet::any_open(cx.budget)
         && NARROWING.with(Cell::get) != query)
     {
-        return Some(narrowed.empty_and_region(cx).0);
+        return meet.empty_and_region(cx).0;
     }
-    let key = (query, narrowed);
-    if let Some(known) = NARROWED.with_borrow(|held| held.get(&key).copied()) {
-        return Some(known);
+    let key = (query, meet);
+    if let Some((known, spent)) = VERDICTS.with_borrow(|held| held.get(&key).copied()) {
+        match read_back {
+            ReadBack::Spared => return known,
+            ReadBack::AsRead if spend_at_once(cx.budget, spent) => return known,
+            ReadBack::AsRead => {}
+        }
     }
     let before = bounds_met();
+    let left = cx.budget.left();
+    let spared = SPARED.with(Cell::get);
     let verdict = key.1.empty_and_region(cx).0;
     if verdict != Verdict::Unknown || bounds_met() == before {
-        NARROWED.with_borrow_mut(|held| {
+        let under = u32::try_from(SPARED.with(Cell::get) - spared).unwrap_or(u32::MAX);
+        let spent = left.saturating_sub(cx.budget.left()).saturating_sub(under);
+        if let ReadBack::Spared = read_back {
+            SPARED.with(|total| total.set(total.get() + u64::from(spent)));
+        }
+        VERDICTS.with_borrow_mut(|held| {
             if held.len() >= READINGS_HELD {
                 held.clear();
             }
-            held.insert(key, verdict);
+            held.insert(key, (verdict, spent));
         });
     }
-    Some(verdict)
+    verdict
 }
 
 /// The meet of `members` with every branch of a union member dropped that
@@ -1145,13 +1199,17 @@ fn normal_form_within(members: &[Schema], bound: usize) -> bool {
 }
 
 thread_local! {
-    /// The verdicts of the narrowed meets the queries on this thread read
-    /// resting on no open hypothesis, by query number
-    /// ([`narrowed_by_its_members`]). Held beside the query for the reason
+    /// The verdicts of the meets the queries on this thread read resting on no
+    /// open hypothesis, each with the steps its reading spent, by query number
+    /// ([`held_verdict`]). Held beside the query for the reason
     /// [`Readings`](super::Readings) is, and emptied at [`READINGS_HELD`]
     /// verdicts as that memo is.
-    pub(super) static NARROWED: RefCell<FxHashMap<(u64, Schema), Verdict>> =
+    pub(super) static VERDICTS: RefCell<FxHashMap<(u64, Schema), (Verdict, u32)>> =
         RefCell::new(FxHashMap::default());
+    /// The steps the readings held to be read back for none spent, summed over
+    /// this thread's queries: read before and after a reading, what moved is
+    /// what a reading of the same meet now spends less ([`held_verdict`]).
+    static SPARED: Cell<u64> = const { Cell::new(0) };
     /// The meets open on this thread's emptiness paths, each beside the address
     /// of the budget of the query that opened it.
     ///

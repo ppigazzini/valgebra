@@ -1093,26 +1093,40 @@ under the same sets shares the number, and the memo is emptied at
 `READINGS_HELD` answers. `a_query_keeps_its_readings_to_itself` and
 `the_readings_held_are_bounded` in `decision/tests.rs` hold the two claims.
 
-**A narrowed meet's verdict is read once a query where it rests on nothing.**
-A union in a meet narrowed by the complements beside it
-(`narrowed_by_its_members` in `decision/emptiness.rs`) is read under the
-query's steps, and a query whose rules decline the narrowed meet asks it again
-at every goal reaching it: a record of guarded records three deep, below the
-complement of a record, read its narrowed fields more than a hundred times at
-thirty thousand steps a reading, and spent its million steps before the
-reading that answers. The verdict is held under the query's number (`NARROWED`)
-where it was read with nothing assumed -- the trail and `visiting` empty, no
-meet open for the query's budget, no narrowed question open -- and is decided,
-or no reading under it stopped at a bound: `bounds_met` in `decision.rs` counts
-each stop, a step refused, a level refused, and a reading declined for want of
-a step. A verdict so read is the answer a reading of the same terms gives with
-as many steps left and no deeper, and a reading with fewer steps or deeper
-gives it too or stops at a bound, so the memo takes no answer away; an
-`Unknown` a bound stopped is not held, since more steps may decide it. The memo
-is emptied at `READINGS_HELD` verdicts as the readings are.
+**A meet's verdict is read once a query where it rests on nothing.** A query
+asks one meet many times over where its rules decline the goals reaching it, and
+`held_verdict` in `decision/emptiness.rs` reads it once. The verdict is held
+under the query's number (`VERDICTS`) where it was read with nothing assumed --
+the trail and `visiting` empty, no meet open for the query's budget, no narrowed
+question open -- and is decided, or no reading under it stopped at a bound:
+`bounds_met` in `decision.rs` counts each stop, a step refused, a level refused,
+and a reading declined for want of a step. A verdict so read is the answer a
+reading of the same terms gives with as many steps left and no deeper, and a
+reading with fewer steps or deeper gives it too or stops at a bound, so the memo
+takes no answer away; an `Unknown` a bound stopped is not held, since more steps
+may decide it. The memo is emptied at `READINGS_HELD` verdicts as the readings
+are. Two sites ask through it, and they differ in what a read-back spends. A
+union in a meet narrowed by the complements beside it
+(`narrowed_by_its_members`) is read back for no step: a record of guarded
+records three deep, below the complement of a record, read its narrowed fields
+more than a hundred times at thirty thousand steps a reading, and spent its
+million steps before the reading that answers. The meet a pair builds to ask
+whether the two share a value (`verdict_beside` in `decision.rs`) is read back
+for the steps a reading of it spends now -- its reading's, less those of the
+narrowed meets held under it -- and read again where fewer are left, so the
+query spends its steps as it would with no memo, except where a reading's path
+turns on the steps it has left (`ReadBack::AsRead` names the two): a union of
+two refined unions below a third asked forty thousand such meets, two thousand
+of them distinct, since the rules filter the branches a member meets and the
+parts reading filters them again. Read back for no step, those meets let the
+record split, whose skipping of a branch apart from the record spends none, skip
+thirty times as many before the budget stopped it, and eight fields against
+their corners took a second to decline.
 `a_narrowed_meet_is_held_where_it_rests_on_nothing`,
-`the_narrowed_meets_held_are_bounded` and `every_stop_at_a_bound_is_counted`
-in `decision/tests.rs` hold the three claims.
+`a_pairs_meet_is_held_where_it_rests_on_nothing`,
+`a_meet_read_back_spends_what_a_reading_of_it_spends_now`,
+`the_narrowed_meets_held_are_bounded` and `every_stop_at_a_bound_is_counted` in
+`decision/tests.rs` hold the claims.
 
 **One context carries a query through both recursions.** The oracle, the
 definitions, the budget and two stacks of hypotheses travel together in

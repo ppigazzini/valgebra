@@ -11566,7 +11566,7 @@ fn the_readings_held_are_bounded() {
 // THEORY: a-memo-is-revertible-or-absent
 #[test]
 fn a_narrowed_meet_is_held_where_it_rests_on_nothing() {
-    use super::emptiness::{NARROWED, narrowed_by_its_members};
+    use super::emptiness::{VERDICTS, narrowed_by_its_members};
     let object = open(Vec::new());
     let guarded = [
         object.clone(),
@@ -11582,7 +11582,10 @@ fn a_narrowed_meet_is_held_where_it_rests_on_nothing() {
     let predicate = [Schema::Int, Schema::union([Schema::Int.complement(), odd])];
     let held = |members: &[Schema], cx: &Cx<'_>| {
         let narrowed = narrowed_meet(members, cx).expect("the guard narrows");
-        NARROWED.with_borrow(|held| held.get(&(cx.query(), narrowed)).copied())
+        VERDICTS.with_borrow(|held| {
+            held.get(&(cx.query(), narrowed))
+                .map(|&(verdict, _)| verdict)
+        })
     };
     for (members, verdict) in [
         (&guarded, Verdict::Inhabited),
@@ -11636,11 +11639,14 @@ fn a_narrowed_meet_is_held_where_it_rests_on_nothing() {
 /// second verdict is held beside the first.
 #[test]
 fn the_narrowed_meets_held_are_bounded() {
-    use super::emptiness::{NARROWED, narrowed_by_its_members};
-    NARROWED.with_borrow_mut(|held| {
+    use super::emptiness::{VERDICTS, narrowed_by_its_members};
+    VERDICTS.with_borrow_mut(|held| {
         held.clear();
         for query in 0..READINGS_HELD {
-            held.insert((u64::MAX - query as u64, Schema::Int), Verdict::Unknown);
+            held.insert(
+                (u64::MAX - query as u64, Schema::Int),
+                (Verdict::Unknown, 0),
+            );
         }
     });
     let object = open(Vec::new());
@@ -11657,15 +11663,129 @@ fn the_narrowed_meets_held_are_bounded() {
     let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
     let _int = narrowed_by_its_members(&guarded(Schema::Int), &mut cx);
     assert_eq!(
-        NARROWED.with_borrow(std::collections::HashMap::len),
+        VERDICTS.with_borrow(std::collections::HashMap::len),
         1,
         "emptied"
     );
     let _str = narrowed_by_its_members(&guarded(Schema::Str), &mut cx);
     assert_eq!(
-        NARROWED.with_borrow(std::collections::HashMap::len),
+        VERDICTS.with_borrow(std::collections::HashMap::len),
         2,
         "kept below it"
+    );
+}
+
+/// The meet a pair builds to ask whether the two share a value is held for the
+/// query that read it with nothing assumed, with the steps its reading spent,
+/// and read back for those steps, which a reading of it spends now
+/// ([`emptiness::ReadBack::AsRead`]); where fewer are left, it is read again. Read under a hypothesis it
+/// is held nowhere. Two open records naming different fields share the record
+/// carrying both, a meet the kinds leave open, and an odd integer beside `int`
+/// is an `Unknown` no bound stopped.
+// THEORY: a-memo-is-revertible-or-absent
+#[test]
+fn a_pairs_meet_is_held_where_it_rests_on_nothing() {
+    use super::emptiness::VERDICTS;
+    let odd = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    let records = (
+        open(vec![field("a", Schema::Int, true)]),
+        open(vec![field("b", Schema::Str, true)]),
+    );
+    let key = |pair: &(Schema, Schema), cx: &Cx<'_>| {
+        let meet = Schema::meet_within([pair.0.clone(), pair.1.clone()], cx.defs);
+        (cx.query(), meet)
+    };
+    let held = |pair: &(Schema, Schema), cx: &Cx<'_>| {
+        VERDICTS.with_borrow(|held| held.get(&key(pair, cx)).copied())
+    };
+    for (pair, verdict) in [
+        (&records, Verdict::Inhabited),
+        (&(odd, Schema::Int), Verdict::Unknown),
+    ] {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        assert_eq!(pair.0.verdict_beside(&pair.1, &mut cx), verdict);
+        let spent = DECISION_BUDGET - budget.left();
+        assert!(spent > 0);
+        assert_eq!(
+            held(pair, &cx),
+            Some((verdict, spent)),
+            "held for the query"
+        );
+        let left = budget.left();
+        assert_eq!(pair.0.verdict_beside(&pair.1, &mut cx), verdict);
+        assert_eq!(
+            left - budget.left(),
+            spent,
+            "read back for the steps it spent"
+        );
+    }
+    // A held verdict is what is read back, for the steps held beside it, and
+    // one asking more steps than are left is read again: planted with a
+    // verdict the reading does not give, the two are told apart.
+    let plant = |steps: u32| {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        let planted = key(&records, &cx);
+        VERDICTS.with_borrow_mut(|held| held.insert(planted, (Verdict::Empty, steps)));
+        let verdict = records.0.verdict_beside(&records.1, &mut cx);
+        (verdict, DECISION_BUDGET - budget.left())
+    };
+    assert_eq!(plant(7), (Verdict::Empty, 7), "read back");
+    assert_eq!(plant(u32::MAX).0, Verdict::Inhabited, "read again");
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    cx.trail.push((Schema::Int, Schema::Str));
+    assert_eq!(
+        records.0.verdict_beside(&records.1, &mut cx),
+        Verdict::Inhabited
+    );
+    assert_eq!(held(&records, &cx), None, "a goal assumed");
+}
+
+/// A meet held to be read back as read spends what a reading of it spends
+/// now: its reading's steps less those of the narrowed meet held under it,
+/// which a reading now reads back for none. `object` beside `~object | {tag:
+/// int}` is a guarded record, whose meet is read through its narrowing.
+// THEORY: a-memo-is-revertible-or-absent
+#[test]
+fn a_meet_read_back_spends_what_a_reading_of_it_spends_now() {
+    use super::emptiness::VERDICTS;
+    let object = open(Vec::new());
+    let guard = Schema::union([
+        object.clone().complement(),
+        open(vec![field("tag", Schema::Int, true)]),
+    ]);
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    let verdict = object.verdict_beside(&guard, &mut cx);
+    let total = DECISION_BUDGET - budget.left();
+    let meet = (
+        cx.query(),
+        Schema::meet_within([object.clone(), guard.clone()], cx.defs),
+    );
+    let (held, spent) = VERDICTS
+        .with_borrow(|held| held.get(&meet).copied())
+        .expect("held for the query");
+    assert_eq!(held, verdict);
+    assert!(
+        spent < total,
+        "the narrowed meet's steps are not charged again"
+    );
+    VERDICTS.with_borrow_mut(|held| held.remove(&meet));
+    let left = budget.left();
+    assert_eq!(object.verdict_beside(&guard, &mut cx), verdict);
+    assert_eq!(left - budget.left(), spent, "what a reading spends now");
+    // Read again where the first reading spared steps before it began, it is
+    // held for what it spent: the steps spared under it are those that moved
+    // while it read, here none.
+    assert_eq!(
+        VERDICTS.with_borrow(|held| held.get(&meet).copied()),
+        Some((verdict, spent)),
+        "held again for what it spent"
     );
 }
 

@@ -33,7 +33,7 @@ use crate::verdict::{Relation, Verdict};
 
 use crate::oracle::{denotes_a_set_within, has_complementary_pair};
 use constraints::constraint_entailed;
-use emptiness::{class_with_attributes, narrowed_meet, the_rules_find_a_value};
+use emptiness::{ReadBack, class_with_attributes, narrowed_meet, the_rules_find_a_value};
 use literals::{
     a_union_spilled_past_as_a_table, finite_meet_below, finite_set, finite_set_below,
     spills_past_a_table, the_constant_speaks_for_the_literal,
@@ -356,6 +356,18 @@ pub(super) fn spend(budget: &Budget) -> bool {
     }
 }
 
+/// Spend `steps` units of `budget` at once where that many are left, and none
+/// where they are not: what a verdict read back from a memo spends
+/// ([`emptiness::ReadBack::AsRead`]). Returns whether they were spent.
+pub(super) fn spend_at_once(budget: &Budget, steps: u32) -> bool {
+    budget
+        .steps
+        .get()
+        .checked_sub(steps)
+        .map(|remaining| budget.steps.set(remaining))
+        .is_some()
+}
+
 thread_local! {
     /// How many times a reading on this thread has stopped at a step or a
     /// depth bound ([`bounds_met`]): a step refused, a level refused, and a
@@ -374,7 +386,7 @@ fn a_bound_is_met() {
 /// Read before and after a reading: where the count moved, its `Unknown` is a
 /// function of the steps and the depth it was read with as well as of its
 /// terms, and where it did not, a reading of the same terms with as many steps
-/// and no deeper declines alike (`narrowed_by_its_members`, in [`emptiness`]).
+/// and no deeper declines alike (`held_verdict`, in [`emptiness`]).
 pub(super) fn bounds_met() -> u64 {
     BOUNDS_MET.with(Cell::get)
 }
@@ -1402,8 +1414,13 @@ impl Schema {
         // `dict[str, int] & ~{"a": int}` as a raw node, the tuple and the dict
         // would never meet, so `A <= ~B` would decline for a pair whose meet
         // `is_empty` decides, and the two relations would disagree about one
-        // question asked two ways.
-        Schema::meet_within([self.clone(), other.clone()], cx.defs).verdict_rec(cx)
+        // question asked two ways. A query asks one such meet again at every
+        // goal reaching the pair, so it is read once a query.
+        emptiness::held_verdict(
+            Schema::meet_within([self.clone(), other.clone()], cx.defs),
+            ReadBack::AsRead,
+            cx,
+        )
     }
 
     /// Whether `self` shares no value with `part`, a part of the supertype: a
