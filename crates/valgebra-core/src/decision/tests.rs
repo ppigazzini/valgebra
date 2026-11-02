@@ -11883,6 +11883,42 @@ fn a_pairs_meet_is_held_where_it_rests_on_nothing() {
     assert_eq!(held(&records, &cx), None, "a goal assumed");
 }
 
+proptest! {
+    /// A meet read back from the memo is what a reading of it gives now, in
+    /// its verdict and in the steps it spends, over drawn pairs: the read-back
+    /// charges the steps a reading spends now ([`emptiness::ReadBack::AsRead`]),
+    /// and no drawn reading comes near the steps where a path turns on what is
+    /// left, so the two spend alike exactly. About four drawn pairs in ten
+    /// reach the memo; a narrowed meet held below a pair's meet,
+    /// which the charge subtracts, is
+    /// `a_meet_read_back_spends_what_a_reading_of_it_spends_now`'s to hold.
+    // THEORY: a-memo-is-revertible-or-absent
+    #[test]
+    fn a_meet_read_back_is_a_reading_of_it(
+        a in crate::laws::decidable_schema(),
+        b in crate::laws::decidable_schema(),
+    ) {
+        use super::emptiness::VERDICTS;
+        // Emptied first, so a table filled by earlier cases is not emptied
+        // between the two readings compared, which would read again what the
+        // first reading held below the meet.
+        VERDICTS.with_borrow_mut(std::collections::HashMap::clear);
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        let first = a.verdict_beside(&b, &mut cx);
+        let left = budget.left();
+        let back = a.verdict_beside(&b, &mut cx);
+        let read_back = left - budget.left();
+        let meet = (cx.query(), Schema::meet_within([a.clone(), b.clone()], cx.defs));
+        VERDICTS.with_borrow_mut(|held| held.remove(&meet));
+        let left = budget.left();
+        let again = a.verdict_beside(&b, &mut cx);
+        let read_again = left - budget.left();
+        prop_assert_eq!((first, back), (again, again));
+        prop_assert_eq!(read_back, read_again);
+    }
+}
+
 /// A meet held to be read back as read spends what a reading of it spends
 /// now: its reading's steps less those of the narrowed meet held under it,
 /// which a reading now reads back for none. `object` beside `~object | {tag:
