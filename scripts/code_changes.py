@@ -15,16 +15,14 @@ than it needs to and never less. A function is touched where a line of code is
 added inside it or one is removed from it; an edit outside every function -- a
 type, a constant -- touches none, and its effect is the nightly's.
 
-A test module is not where its mutants are. cargo-mutants mutates no
-`#[cfg(test)]` file, so a file holding only tests -- a long `tests.rs`, an
-`interpreter.rs` corpus -- has nothing to sweep, and the edit that matters is
-one that stops it killing a mutant in the code it holds: the file that
-declares it and the files beneath that module, swept whole. Only an edit that
-removes a line of code can do that, so a test module whose change adds lines
-alone -- new tests -- sweeps nothing; an added attribute that stops a test
-running is the nightly's. A suite the crate root declares holds the whole
-crate, which no push sweeps, so it names nothing, and the nightly sweep alone
-judges it.
+A test module names nothing. cargo-mutants mutates no `#[cfg(test)]` file, so
+a file holding only tests -- a long `tests.rs`, an `interpreter.rs` corpus, a
+suite the crate root declares -- has nothing of its own to sweep. An edit that
+stops a test killing a mutant reaches the code the test holds, which is an
+effect crossing into other functions, and the nightly's like every other:
+swept at the push as the code it holds, whole, a change editing a few lines of
+`decision/tests.rs` mutated the twelve hundred mutants of the decision module
+where the functions it touched held a hundred.
 
 The mutants are read from the listing `cargo mutants --list --json` prints for
 the package the sweep examines: each with its file, its line, and the span of
@@ -59,7 +57,6 @@ from _lib import (
     EXIT_CANNOT_RUN,
     EXIT_OK,
     arguments,
-    declarer,
     git_output,
     is_test_module,
 )
@@ -88,11 +85,9 @@ class Change:
 
     `lines` are the lines of the new file a change of code is at: each added
     line of code, and for a removed one the lines either side of where it was.
-    `removes` is whether any line of code was removed.
     """
 
     lines: set[int] = field(default_factory=set)
-    removes: bool = False
 
 
 def code_changes(diff: str) -> dict[str, Change]:
@@ -128,88 +123,48 @@ def code_changes(diff: str) -> dict[str, Change]:
                 found.setdefault(current, Change()).lines.add(at)
             at += 1
         elif current is not None and line[:1] == "-" and is_code(line[1:]):
-            change = found.setdefault(current, Change())
-            change.lines.update(range(span[0], span[1] + 1))
-            change.removes = True
+            found.setdefault(current, Change()).lines.update(
+                range(span[0], span[1] + 1)
+            )
     return found
 
 
-def held_code(path: Path) -> list[Path]:
-    """Name the code a test module holds, which is what a change to it can move.
+def swept(changed: dict[str, Change], checkout: Path) -> dict[str, set[int]]:
+    """Name the files whose code changed, each with the lines it changed at.
 
-    The file that declares it, and every file beneath the module that file is
-    that is not a test module itself. A suite the crate root declares holds
-    the whole crate, and none is named for it.
+    A test module names nothing: its mutants are none, and what an edit to it
+    does to the code it holds is the nightly's.
     """
-    declared_by = declarer(path)
-    if declared_by is None or (
-        declared_by.parent.name == "src" and path.parent.name == "src"
-    ):
-        return []
-    module = (
-        declared_by.parent
-        if declared_by.name == "mod.rs"
-        else declared_by.with_suffix("")
-    )
-    beneath = sorted(
-        found
-        for found in module.rglob("*.rs")
-        if found != declared_by and not is_test_module(found)
-    )
-    return [declared_by, *beneath]
-
-
-def swept(changed: dict[str, Change], checkout: Path) -> dict[str, set[int] | None]:
-    """Name what a push sweeps for the files whose code changed, in order.
-
-    Each file maps to the lines whose functions it sweeps, or to `None` where
-    it is swept whole: the code a test module holds, where the module lost a
-    line of code. A test module that only gained lines names nothing.
-    """
-    named: dict[str, set[int] | None] = {}
+    named: dict[str, set[int]] = {}
     for path, change in changed.items():
         source = checkout / path
-        if not (source.is_file() and is_test_module(source)):
-            if path not in named:
-                named[path] = set()
-            held = named[path]
-            if held is not None:
-                held.update(change.lines)
+        if source.is_file() and is_test_module(source):
             continue
-        if not change.removes:
-            continue
-        for found in held_code(source):
-            named[str(found.relative_to(checkout)).replace("\\", "/")] = None
+        named.setdefault(path, set()).update(change.lines)
     return named
 
 
-def examined(named: dict[str, set[int] | None], listing: list[dict]) -> dict[str, str]:
+def examined(named: dict[str, set[int]], listing: list[dict]) -> dict[str, str]:
     """Give each named file that holds a mutant to examine the pattern naming them.
 
-    A file swept whole is its path; a file swept by its functions is its path
-    and the lines its mutants start on, each mutant taken whose function's span
-    -- or its own, outside every function -- holds a changed line. The pattern
-    is matched against the names `cargo mutants --list` prints,
-    `<file>:<line>:<column>: <mutation>`.
+    The pattern is the file's path and the lines its mutants start on, each
+    mutant taken whose function's span -- or its own, outside every function --
+    holds a changed line. It is matched against the names `cargo mutants
+    --list` prints, `<file>:<line>:<column>: <mutation>`.
     """
     lines: dict[str, set[int]] = {}
     for mutant in listing:
         path = mutant["file"]
         if path not in named:
             continue
-        changed = named[path]
         span = (mutant.get("function") or mutant)["span"]
-        if changed is None or any(
-            span["start"]["line"] <= line <= span["end"]["line"] for line in changed
+        if any(
+            span["start"]["line"] <= line <= span["end"]["line"] for line in named[path]
         ):
             lines.setdefault(path, set()).add(mutant["span"]["start"]["line"])
     patterns: dict[str, str] = {}
-    for path, changed in named.items():
-        if path not in lines:
-            continue
-        if changed is None:
-            patterns[path] = f"^{re.escape(path)}:"
-        else:
+    for path in named:
+        if path in lines:
             at = "|".join(str(line) for line in sorted(lines[path]))
             patterns[path] = f"^{re.escape(path)}:({at}):"
     return patterns

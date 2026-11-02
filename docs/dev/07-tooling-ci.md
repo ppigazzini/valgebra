@@ -1253,15 +1253,14 @@ the package's `cargo mutants --list --json`, for both sweeps: a mutant is
 examined where its function holds a changed line of code. **A line of comment
 or blank is no change:** it compiles to what it compiled to before, so each
 mutant answers as it did. An edit outside every function -- a type, a
-constant -- touches none, and is the nightly's. **A test module gives way to the
-code it holds:** cargo-mutants mutates no `#[cfg(test)]` file, so a change to a
-long `tests.rs` or an `interpreter.rs` corpus that removes a line of code -- the
-edit that can stop it killing a mutant -- sweeps the file declaring it and the
-files beneath that module whole instead, and one that only adds lines, new
-tests, sweeps nothing; an added attribute that stops a test running is the
-nightly's. The crate-wide suites, `laws.rs`, `index_laws.rs` and
-`schema_tests.rs`, hold the whole crate, which no push sweeps: the nightly
-sweep alone judges a change to one of them. The diff is read in one shape
+constant -- touches none, and is the nightly's. **A test module names
+nothing:** cargo-mutants mutates no `#[cfg(test)]` file, so a long `tests.rs`, an
+`interpreter.rs` corpus or a crate-wide suite has no mutant of its own. An edit
+that stops a test killing a mutant reaches the code the test holds, an effect
+crossing into other functions, and the nightly's like every other: swept at the
+push as the code it holds, whole, an edit to a few lines of `decision/tests.rs`
+mutated the decision module's 1,289 mutants where the functions the change
+touched held 106. The diff is read in one shape
 whatever git is configured to print, a rename as an added file among them.
 
 **A push is measured from the tip it replaced.** The bench gate's `rev` and

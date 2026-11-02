@@ -1408,14 +1408,11 @@ jobs:
           # function is the nightly's, which sweeps every file whole.
           # `scripts/code_changes.py` names the files and, in `examined.txt`, a
           # pattern each for `--re`, read off the package's mutant listing. A
-          # test module that loses a line of code sweeps the code it holds --
-          # the file declaring it and the files beneath that module -- whole,
-          # since cargo-mutants mutates no test file; one that only gains
-          # lines sweeps nothing; a crate-wide suite (`laws.rs`,
-          # `index_laws.rs`, `schema_tests.rs`) holds the whole crate, and the
-          # nightly sweep alone judges it. A change of comments and blank lines
-          # alone compiles as it did, so its mutants answer as they did, and
-          # it touches nothing.
+          # test module names nothing: cargo-mutants mutates no test file, and
+          # what an edit to one does to the code its tests hold is the
+          # nightly's, which sweeps every file whole. A change of comments and
+          # blank lines alone compiles as it did, so its mutants answer as they
+          # did, and it touches nothing.
           # A dispatch changes nothing: it carries no `before`, and measured from
           # the default branch's tip it would sweep the whole release window at
           # the push seed, which the push that moves `main` sweeps once and the
@@ -1570,14 +1567,11 @@ jobs:
           # function is the nightly's, which sweeps every file whole.
           # `scripts/code_changes.py` names the files and, in `examined.txt`, a
           # pattern each for `--re`, read off the package's mutant listing. A
-          # test module that loses a line of code sweeps the code it holds --
-          # the file declaring it and the files beneath that module -- whole,
-          # since cargo-mutants mutates no test file; one that only gains
-          # lines sweeps nothing; a crate-wide suite (`laws.rs`,
-          # `index_laws.rs`, `schema_tests.rs`) holds the whole crate, and the
-          # nightly sweep alone judges it. A change of comments and blank lines
-          # alone compiles as it did, so its mutants answer as they did, and
-          # it touches nothing.
+          # test module names nothing: cargo-mutants mutates no test file, and
+          # what an edit to one does to the code its tests hold is the
+          # nightly's, which sweeps every file whole. A change of comments and
+          # blank lines alone compiles as it did, so its mutants answer as they
+          # did, and it touches nothing.
           # A dispatch changes nothing: it carries no `before`, and measured from
           # the default branch's tip it would sweep the whole release window at
           # the push seed, which the push that moves `main` sweeps once and the

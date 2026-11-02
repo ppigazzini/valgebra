@@ -318,62 +318,37 @@ def test_a_rewrite_sweeps_only_what_it_changed(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("changed", "named"),
     [
-        ("crates/c/src/m/tests.rs", ["crates/c/src/m.rs", "crates/c/src/m/inner.rs"]),
-        (
-            "crates/c/src/m/interpreter.rs",
-            ["crates/c/src/m.rs", "crates/c/src/m/inner.rs"],
-        ),
+        ("crates/c/src/m/tests.rs", []),
+        ("crates/c/src/m/interpreter.rs", []),
         ("crates/c/src/laws.rs", []),
         ("crates/c/src/m/inner.rs", ["crates/c/src/m/inner.rs"]),
     ],
     ids=["a test module", "a corpus", "a crate-wide suite", "code"],
 )
-def test_a_test_module_gives_way_to_the_code_it_holds(
-    tmp_path: Path, changed: str, named: list[str]
+@pytest.mark.parametrize("edit", ["loses a line", "gains a line"])
+def test_a_test_module_names_nothing(
+    tmp_path: Path, changed: str, named: list[str], edit: str
 ) -> None:
-    """A test module that loses a line is swept as the code it holds, whole.
+    """A test module names nothing, whether a change edits it or adds to it.
 
-    cargo-mutants mutates no `#[cfg(test)]` file, so a change confined to one
-    swept nothing, and an edit that stops it killing a mutant in the code it
-    holds pushed green. A suite the crate root declares holds the whole crate,
-    which no push sweeps, so it names nothing.
+    cargo-mutants mutates no `#[cfg(test)]` file, so a test module has no mutant
+    of its own, and what an edit to it does to the code its tests hold is an
+    effect crossing into other functions, which is the nightly's. The code
+    beside it, changed the same way, names its own file.
     """
     base = _laid_down(tmp_path, CRATE)
     path = tmp_path / changed
-    path.write_text(
-        path.read_text(encoding="utf-8")
-        .replace("() {}", "() { 1; }")
-        .replace("    2", "    3"),
-        encoding="utf-8",
-    )
+    text = path.read_text(encoding="utf-8")
+    if edit == "loses a line":
+        text = text.replace("() {}", "() { 1; }").replace("    2", "    3")
+    else:
+        text += "fn more() -> u8 {\n    4\n}\n"
+    path.write_text(text, encoding="utf-8")
     _git(tmp_path, "commit", "--quiet", "-am", "change")
     run = _named(tmp_path, base)
     assert run.returncode == script.EXIT_OK, run.stderr
     assert run.stdout.split() == named
-    assert _examined(tmp_path) == [
-        f"{mutant['file']}:{mutant['span']['start']['line']}"
-        for mutant in _listing(tmp_path)
-        if mutant["file"] in named
-    ]
-
-
-def test_a_test_module_that_only_gains_tests_names_nothing(tmp_path: Path) -> None:
-    """A test added kills every mutant the module killed, so it sweeps nothing.
-
-    A change that only adds lines to a test module adds tests: the ones it held
-    still run, and a mutant they killed is still killed.
-    """
-    base = _laid_down(tmp_path, CRATE)
-    for name in ("crates/c/src/m/tests.rs", "crates/c/src/m/interpreter.rs"):
-        path = tmp_path / name
-        path.write_text(
-            path.read_text(encoding="utf-8") + "fn more() {}\n", encoding="utf-8"
-        )
-    _git(tmp_path, "commit", "--quiet", "-am", "change")
-    run = _named(tmp_path, base)
-    assert run.returncode == script.EXIT_OK, run.stderr
-    assert run.stdout.split() == []
-    assert _examined(tmp_path) == []
+    assert {line.partition(":")[0] for line in _examined(tmp_path)} == set(named)
 
 
 def test_the_tree_s_test_modules_are_read_as_test_modules() -> None:
