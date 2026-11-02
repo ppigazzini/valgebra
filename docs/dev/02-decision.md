@@ -1333,6 +1333,19 @@ any caller. `DECISION_BUDGET` caps the steps one query spends, past it the
 answer is undecided, and [00-architecture.md](00-architecture.md) names that
 kind of bound.
 
+**A meet that may hold no kind is below every set, read before its members.**
+A meet holds no kind a member cannot hold, and a complement holds none its
+inner set holds whole [FCB08, Def. 4.1] (`kinds_possibly_held`), so
+`meet_below` reads the kinds of a meet holding a complement, or asked below a
+reference, before it asks a member against the supertype. The member rule asks
+each member whole, and a meet of patterns over `str` beside `~str` built every
+pattern's tables to be placed by the complement: 56 ms on a first call, where
+0.0.22 took 3.5 and the reading takes 2. The walk is asked of those two shapes
+alone: asked of every meet subject it cost the relation matrix 3.03%, and of
+these 0.60%. It decides meets no rule placed as well, the integers met with
+the complement of "anything but a `str`, or a `str` of at most one character"
+among them (`a_meet_that_may_hold_no_kind_is_placed_below_any_set`).
+
 **A placement the two terms make is never refused for want of a step.** One
 term against itself, a subject among a union's branches, a supertype among a
 meet's members: each is containment read off the terms' first level, and the

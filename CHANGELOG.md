@@ -100,10 +100,18 @@ answer of its own, or a repair to a change not yet released.
 - fix: a refutation stands on a length every interpreter builds
 - fix: a standard-library value type is the class the interpreter's module binds
 - feat: a Boolean term of length bounds over one base is read as its lengths
+- feat: a meet that may hold no kind is below every set
 
 -->
 
 ### Added
+
+- **A meet that may hold no kind is below every set.** A meet holds no kind
+  a member cannot hold, and a complement none its inner set holds whole, so
+  the integers met with the complement of `~str | Annotated[str, MaxLen(1)]`,
+  which holds `str`s alone, are `subset` of `nothing` where they were
+  undecided. A meet of patterns over `str` beside `~str` is placed at once,
+  before any pattern's tables are built.
 
 - **A Boolean term of length bounds over one base is read as the lengths it
   holds.** A union, a meet or a complement of `MinLen`, `MaxLen` and `Len`

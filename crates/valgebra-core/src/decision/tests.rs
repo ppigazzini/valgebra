@@ -12467,3 +12467,57 @@ proptest! {
         prop_assert_eq!(budget.left(), DECISION_BUDGET);
     }
 }
+
+/// A meet that may hold a value of no kind is placed below any supertype before
+/// a member is asked against it, a supertype no member is below among them:
+/// the integers met with the complement of
+/// "anything but a `str`, or a `str` of at most one character", which holds
+/// `str`s alone, and two members of kinds apart against a reference. A meet
+/// holding a complement that leaves a kind open is not placed so: the integers
+/// met with the complement of `str` are the integers, which no `str` holds.
+#[test]
+fn a_meet_that_may_hold_no_kind_is_placed_below_any_set() {
+    let budget = Budget::new(DECISION_BUDGET);
+    let integer = Schema::meet([
+        Schema::union([
+            Schema::Int,
+            Schema::refine(
+                Schema::Float,
+                vec![Constraint::MultipleOf(OperandIx::new(0))],
+            ),
+        ]),
+        Schema::Bool.complement(),
+    ]);
+    let short_words = Schema::union([
+        Schema::Str.complement(),
+        Schema::refine(Schema::Str, vec![Constraint::MaxLen(1)]),
+    ]);
+    let members: Vec<Schema> = vec![integer, short_words.complement()];
+    let meet = Schema::Intersection(members.clone().into());
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    assert_eq!(
+        meet.meet_below(&Schema::Bytes, &members, &mut cx),
+        Relation::Holds
+    );
+    assert_eq!(
+        meet.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    let apart = vec![Schema::Int, Schema::Str];
+    let defs = [Schema::Bytes];
+    let mut cx = Cx::new(&NoLeafRelations, &defs, &budget);
+    assert_eq!(
+        Schema::Intersection(apart.clone().into()).meet_below(
+            &Schema::Ref(DefIx::new(0)),
+            &apart,
+            &mut cx
+        ),
+        Relation::Holds
+    );
+    let open = vec![Schema::Int, Schema::Str.complement()];
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    assert_ne!(
+        Schema::Intersection(open.clone().into()).meet_below(&Schema::Str, &open, &mut cx),
+        Relation::Holds
+    );
+}

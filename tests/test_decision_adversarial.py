@@ -1128,6 +1128,30 @@ def test_a_narrowed_meet_left_open_is_distributed_as_written() -> None:
     assert tagged.is_empty()
 
 
+def test_a_meet_that_may_hold_no_kind_is_below_every_set() -> None:
+    """A meet holds no kind a member cannot hold, and so holds no value.
+
+    A complement holds no kind its inner set holds whole: the complement of
+    "anything but a `str`, or a `str` of at most one character" holds `str`s
+    alone, and met with the integers it holds no value at all. A meet of
+    patterns over `str` beside `~str` is placed the same way, before any
+    pattern is asked against the supertype.
+    """
+    integer = intersection(
+        union(int, Annotated[float, at.MultipleOf(1)]), complement(bool)
+    )
+    short_words = union(complement(str), Annotated[str, at.MaxLen(1)])
+    assert intersection(integer, complement(short_words)).relation_to(nothing) == (
+        "subset"
+    )
+    patterned = intersection(
+        Annotated[str, Regex(r"\w+"), at.MinLen(2)],
+        Annotated[str, Regex(r"\W*")],
+        complement(str),
+    )
+    assert patterned.relation_to(Annotated[bytes, at.MinLen(3)]) == "subset"
+
+
 def test_a_meet_holding_a_complement_is_read_as_its_relation() -> None:
     """A meet with a complement is empty where the rest is below the inner set.
 

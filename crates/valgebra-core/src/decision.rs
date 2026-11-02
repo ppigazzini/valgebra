@@ -1786,10 +1786,24 @@ impl Schema {
         if placed_by_membership(self, other) {
             return Relation::Holds;
         }
-        // A meet two of whose members share no value is empty, and below
-        // everything [BBC+26, (uninhabited)], which is read before a member is
-        // asked against a reference, whose definition is dear to walk.
-        if matches!(other, Schema::Ref(_)) && two_members_of_kinds_apart(members) {
+        // A meet that may hold a value of no kind holds no value, and is below
+        // everything [BBC+26, (uninhabited)]. It holds no kind a member cannot
+        // hold, and a complement holds none its inner set holds whole
+        // [FCB08, Def. 4.1] (`kinds_possibly_held`), so two members of kinds
+        // apart, or a kind's complement beside a member of that kind, empty
+        // it. Read before a member is asked below the supertype, which asks the
+        // member whole -- a reference's definition walked, a pattern's tables
+        // built -- where a member refuted says nothing of the meet: a meet of
+        // patterns over `str` beside `~str` built them all to be placed by the
+        // complement. Asked of a meet holding a complement, or below a
+        // reference, alone: the walk asked of every meet subject cost the
+        // relation matrix 3.03%, and of these two 0.60%.
+        if (matches!(other, Schema::Ref(_))
+            || members
+                .iter()
+                .any(|member| matches!(member, Schema::Complement(_))))
+            && self.kinds_possibly_held(cx.oracle, cx.defs) == 0
+        {
             return Relation::Holds;
         }
         // Every placement here proves and none refutes: a member that is *not*
@@ -2764,23 +2778,6 @@ impl<'a> Cx<'a> {
         self.trail.pop();
         answer
     }
-}
-
-/// Whether two members of a meet have kinds that share no value, read off
-/// each member's own kind tag: positives of two kinds meet in nothing
-/// [FCB08, (5)].
-///
-/// The cheap half of [`has_disjoint_pair`], a discriminant a member, asked of
-/// a meet subject before a member is asked against a reference. Each
-/// tag is read against the first, which is every pair it could find: only
-/// `int` and `bool` share values, so a tag sharing values with the first
-/// shares them with every tag that does.
-fn two_members_of_kinds_apart(members: &[Schema]) -> bool {
-    let mut tags = members.iter().filter_map(Schema::type_tag);
-    let Some(first) = tags.next() else {
-        return false;
-    };
-    tags.any(|tag| !first.shares_values_with(tag))
 }
 
 /// Whether some two members are provably disjoint (distinct concrete kinds,
