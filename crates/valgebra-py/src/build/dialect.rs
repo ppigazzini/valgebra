@@ -39,10 +39,9 @@
 //! names no cause. Both are refused, by what the character does here.
 //!
 //! Two quantifier spellings part them the same quiet way. A `+` after a
-//! quantifier makes it possessive to `re` from 3.11, an error before, and is a
-//! second repetition here: `a?+` refuses `"aa"` there and admits it here. And
-//! this engine reads a count with whitespace in its braces, `a{1, 3}`, as the
-//! count, where `re` reads a brace that is not exactly a count as text, in
+//! quantifier makes it possessive to `re` and is a second repetition here:
+//! `a?+` refuses `"aa"` there and admits it here. And this engine reads a count
+//! with whitespace in its braces, `a{1, 3}`, as the count, where `re` reads a brace that is not exactly a count as text, in
 //! verbose mode too -- and in verbose mode this engine skips a comment there as
 //! well. Each is refused by what it is here. The escapes that take braces --
 //! `\p{..}`, `\P{..}`, `\x{..}`, `\u{..}`, `\U{..}` -- are skipped whole, so
@@ -452,10 +451,9 @@ fn word_boundary(
 fn possessive(pattern: &str, index: usize) -> PyErr {
     PyValueError::new_err(format!(
         "`+` after a quantifier at position {index} in {pattern:?} makes it \
-         possessive to `re`, from Python 3.11, and repeats the quantified item \
-         again here, so the two read the pattern as different sets. This engine \
-         has no possessive quantifier: write `(?:...)+` around the quantified \
-         item to repeat it."
+         possessive to `re` and repeats the quantified item again here, so the \
+         two read the pattern as different sets. This engine has no possessive \
+         quantifier: write `(?:...)+` around the quantified item to repeat it."
     ))
 }
 

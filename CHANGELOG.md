@@ -105,6 +105,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a shape beside a length bound it misses holds no value
 - feat: a refinement of a union holds what its refined branches hold
 - fix: a deep walk on PyPy stops where PyPy has stack to answer
+- fix: a possessive quantifier's refusal names no Python release
 
 -->
 
@@ -534,7 +535,9 @@ answer of its own, or a repair to a change not yet released.
   `requires-python` is `>=3.11`. Every release from 3.11 to 3.15 is supported,
   the free-threaded builds of 3.14 and 3.15 among them, and 3.16 runs as a
   forgiven prerelease lane. The readings `typing_extensions` gave a form only
-  3.10 spelled with an object of its own are gone with it.
+  3.10 spelled with an object of its own are gone with it, and the refusal of
+  a `+` after a quantifier says `re` reads it as possessive without naming the
+  release that began to, since every supported `re` does.
 
 ### Fixed
 

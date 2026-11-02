@@ -143,7 +143,9 @@ A record follows the same rule, and a `TypedDict` is
 the old version admits any key it does not name, with any value.
 
 ```python
-from typing_extensions import NotRequired, TypedDict
+from typing import NotRequired
+
+from typing_extensions import TypedDict
 
 from valgebra import Validator
 
@@ -265,10 +267,10 @@ and a failure lists every entry that is wrong, with its path. A closed record
 how a misspelled setting is caught rather than ignored:
 
 ```python
-from typing import Annotated, Literal
+from typing import Annotated, Literal, NotRequired
 
 import annotated_types as at
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import TypedDict
 
 from valgebra import ValidationError, Validator
 
@@ -304,9 +306,9 @@ config = SETTINGS.load('{"web": {"host": "10.0.0.2", "port": 8080}}')
 assert config == {"web": {"host": "10.0.0.2", "port": 8080}}
 ```
 
-A TOML file is the same check on the dict `tomllib.loads` returns, on Python
-3.11 and later, and a YAML file on the dict a YAML library's safe loader
-returns: `SETTINGS.validate(data)` raises as `load` does.
+A TOML file is the same check on the dict `tomllib.loads` returns, and a YAML
+file on the dict a YAML library's safe loader returns: `SETTINGS.validate(data)`
+raises as `load` does.
 
 **It checks and does not convert.** A port written `"8080"` is refused --
 `at port: expected int, got '8080' [int_type]` -- where a parsing library would
@@ -322,9 +324,9 @@ the model as the tool's result. A closed record also refuses an argument the
 tool does not take, which a model invents as readily as a wrong value:
 
 ```python
-from typing import Literal
+from typing import Literal, NotRequired
 
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import TypedDict
 
 from valgebra import ValidationError, Validator
 
@@ -516,9 +518,9 @@ message the producer sends has a route is `is_subtype_of`:
 
 ```python
 from collections.abc import Callable
-from typing import Any
+from typing import Any, NotRequired
 
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import TypedDict
 
 from valgebra import Validator, intersection, union
 

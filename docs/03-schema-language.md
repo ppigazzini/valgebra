@@ -111,9 +111,8 @@ assert repr(Validator(Any)) == "Any"
 
 Both are the **bottom** of the lattice (`nothing`): the empty set, which no
 value belongs to. They build the schema `nothing` is, and print as `nothing`
-([lattice bounds](16-api.md#lattice-bounds)). `Never` is in `typing` from 3.11
-and in `typing_extensions` before; `NoReturn` is in `typing` on every supported
-release.
+([lattice bounds](16-api.md#lattice-bounds)). Both are in `typing` on every
+supported release.
 
 ## Collections
 
@@ -187,7 +186,7 @@ and vice versa.
 | --- | --- |
 | `[A, B, ...]` | a list: an `A`, then zero or more `B` |
 | `[T, T, ...]` | a non-empty list of `T` (at least one) |
-| `tuple[A, *tuple[B, ...]]` | a tuple: an `A`, then zero or more `B` (3.11+) |
+| `tuple[A, *tuple[B, ...]]` | a tuple: an `A`, then zero or more `B` |
 | `tuple[A, B, ...]` | the same tuple, in the shorter spelling a static checker refuses |
 
 An **unpacked** variadic tuple says the prefix-and-tail shape the way PEP 646
@@ -430,7 +429,9 @@ carries, a region that clause claims, and `close` shuts only the keys no clause
 claims (below). The closed record is `closed=True`.
 
 ```python
-from typing_extensions import NotRequired, TypedDict
+from typing import NotRequired
+
+from typing_extensions import TypedDict
 
 from valgebra import Validator
 

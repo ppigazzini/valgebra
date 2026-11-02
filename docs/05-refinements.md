@@ -441,10 +441,10 @@ naming what it asserts here. Write `<`, `>` or `\{` for what `re` reads, or `\b`
 for a word boundary in both.
 
 Two quantifier spellings part them the same way. A `+` after a quantifier
-makes it possessive to `re` from Python 3.11, and repeats the quantified item
-again here, so `a?+` refuses `"aa"` there and would admit it here. And this
-engine reads a count with whitespace in its braces as the count -- `a{1, 3}`
-would admit `"aa"` -- where `re` reads a brace that is not exactly a count as text, and
+makes it possessive to `re` and repeats the quantified item again here, so
+`a?+` refuses `"aa"` there and would admit it here. And this engine reads a
+count with whitespace in its braces as the count -- `a{1, 3}` would admit
+`"aa"` -- where `re` reads a brace that is not exactly a count as text, and
 admits `"a{1, 3}"`; in verbose mode it skips a comment there too. Each raises
 a `ValueError` naming it. This engine has no possessive quantifier: write
 `(?:a?)+` to repeat the quantified item. Write a count without whitespace, or

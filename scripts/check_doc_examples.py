@@ -206,28 +206,10 @@ EXPECTED: tuple[Expected, ...] = (
     Expected(
         "ruff",
         "docs/03-schema-language.md",
-        "UP035",
-        1,
-        "`NotRequired` comes from `typing_extensions` beside the `TypedDict` that "
-        "takes `closed=True`, which `typing` has only from 3.15; the floor's "
-        "`typing` has neither",
-    ),
-    Expected(
-        "ruff",
-        "docs/03-schema-language.md",
         "UP045",
         1,
         "`Optional[int]` is shown read beside `int | None`, as a spelling a "
         "reader's code carries",
-    ),
-    Expected(
-        "ruff",
-        "docs/19-recipes.md",
-        "UP035",
-        4,
-        "`TypedDict` and `NotRequired` come from `typing_extensions`, whose "
-        "`TypedDict` takes `closed=True` on every release the page covers; "
-        "`typing` has it only from 3.15",
     ),
     Expected(
         "ruff",

@@ -78,9 +78,8 @@ fn a_reserved_form_is_refused_by_the_operator_it_would_have_read() {
         (r"a\>", "the end of a word"),
         (r"\b{start}a", "a named word boundary"),
         (r"[a]\<", "the start of a word"),
-        // A `+` after a quantifier: possessive to `re` from 3.11 and an error
-        // before, a second repetition here. `a?+` refuses `"aa"` there and
-        // admits it here.
+        // A `+` after a quantifier: possessive to `re`, a second repetition
+        // here. `a?+` refuses `"aa"` there and admits it here.
         ("a?+", "possessive"),
         ("a*+", "possessive"),
         ("a++", "possessive"),
