@@ -461,10 +461,11 @@ mode, `a* ?` is a quantifier on a quantifier to `re`. Write a group,
 
 **A pattern Python spells and this engine does not is refused**, which is the
 loud direction and the one to prefer. A lookaround (`(?=...)`, `(?<=...)`), a
-backreference (`\1`, `(?P=name)`), an inline comment (`(?#...)`), a named
-character (`\N{BULLET}`), the ASCII flag `(?a)`, the `\Z` anchor and the
-open-ended `{,n}` repetition all raise a `ValueError` naming the parse error,
-rather than being read as something else.
+backreference (`\1`, `(?P=name)`), an atomic group (`(?>...)`), a conditional
+(`(?(1)...|...)`), an inline comment (`(?#...)`), a named character
+(`\N{BULLET}`), the ASCII flag `(?a)`, the `\Z` anchor and the open-ended
+`{,n}` repetition all raise a `ValueError` naming the parse error, rather than
+being read as something else.
 
 ### Agreement with `re` is not ASCII
 

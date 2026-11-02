@@ -329,3 +329,34 @@ def test_the_page_names_the_divergence(topic: str) -> None:
         f"docs/05-refinements.md does not mention {topic!r}; a pattern valid in "
         "both engines can denote different sets, and nothing else says so"
     )
+
+
+@pytest.mark.parametrize(
+    ("pattern", "spelled"),
+    [
+        ("(?=a)a", "(?=...)"),
+        ("(?<=a)b", "(?<=...)"),
+        (r"(a)\1", r"\1"),
+        ("(?P<n>a)(?P=n)", "(?P=name)"),
+        ("(?>a)b", "(?>...)"),
+        ("(a)?(?(1)b|c)", "(?(1)...|...)"),
+        ("a(?#c)b", "(?#...)"),
+        (r"\N{BULLET}", r"\N{BULLET}"),
+        ("(?a)a", "(?a)"),
+        (r"a\Z", r"\Z"),
+        ("a{,3}", "{,n}"),
+    ],
+)
+def test_a_form_only_re_reads_is_refused_by_the_parse(
+    pattern: str, spelled: str
+) -> None:
+    """The loud direction: `re` compiles each, and this engine's parse refuses it.
+
+    No arm of the dialect's scan reads these forms. The parse raises before
+    anything reads the pattern as another set, naming the pattern, and the page
+    lists each for a reader porting one from `re`.
+    """
+    re.compile(pattern)
+    with pytest.raises(ValueError, match="invalid regular expression"):
+        Validator(Annotated[str, Regex(pattern)])
+    assert f"`{spelled}`" in _PAGE, f"docs/05-refinements.md does not list {spelled}"

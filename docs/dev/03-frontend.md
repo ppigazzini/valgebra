@@ -883,6 +883,16 @@ row, and refusing the shape refuses `IntBoxOf`. The typing spec does not let a
 `TypedDict` subclass change a field's type, so the base's reading is the one a
 class the spec allows gets.
 
+**A refusal of its own for a form only `re` reads, such as `(?>...)`.** The
+parse's words for an atomic group, a conditional or a named backreference are
+"unrecognized flag", and a refusal naming the form would read better. What it
+would change is the wording of a refusal the caller already gets, since the
+scan in `build/dialect.rs` exists for the quiet direction, a pattern both
+engines accept and read apart, and these reach no reading:
+`test_a_form_only_re_reads_is_refused_by_the_parse` in
+`tests/test_regex_dialect.py` holds each form the refinements page lists to a
+refusal at the parse that names the pattern, and the page to listing it.
+
 ## The limit
 
 **The frontend decides meaning; nothing checks it against the typing spec
