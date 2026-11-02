@@ -1310,7 +1310,15 @@ meet asked inside another's question with that question's steps and trail,
 which `NARROWING` marks. Given an allowance and a trail of its own, one asked
 inside another re-asked a fixpoint met with the complement of its own lists
 without end; on the question's trail the goal met again is an assumption, and
-the pair is proved (`a_narrowed_meet_inside_a_fixpoint_answers`).
+the pair is proved (`a_narrowed_meet_inside_a_fixpoint_answers`). One asked
+outside another's question is asked once a query for a supertype and an
+allowance, and read back after (`ASKED_NARROWED`): it runs on a trail and steps
+of its own, charged to nothing, so its answer rests on no hypothesis of the
+query's and a read-back leaves the query's steps where asking again would. A
+pair of recursive lists, tuples and records asked 6,009 narrowed questions over
+seven distinct ones, 11.6 million steps no query counted, and declined in
+527 ms where 0.0.22 declines in 41; read back, it declines in 49
+(`a_narrowed_meet_read_back_is_a_reading_of_it`).
 
 `decision/goal_tests.rs` holds the premise: every goal the recorder sees is in
 `C`, over the product rule's widest shapes, the record rule's split, the union

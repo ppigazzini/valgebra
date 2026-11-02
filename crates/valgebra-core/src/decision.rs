@@ -449,19 +449,55 @@ fn the_dicts_top(schema: &Schema) -> bool {
 /// question's trail, the goal met again is the assumption it is, and the pair
 /// is `subset`.
 ///
+/// A narrowed meet asked outside another's question is asked once a query for
+/// a supertype and an allowance, and its answer read back after
+/// ([`ASKED_NARROWED`]). The question runs on a trail and a budget of its own
+/// and nothing it spends is charged to the query, so its answer rests on no
+/// hypothesis of the query's and a read-back leaves the query's steps where
+/// asking again would: it changes how often the question runs and no answer.
+/// Asked again, the repeats are what cost: a pair of recursive lists, tuples
+/// and records asked its narrowed meets 6,009 times over seven questions,
+/// 11.6 million steps no query counted, and declined in 527 ms where 0.0.22
+/// declines in 41.
+///
 /// Out of line, since the meet arm it is asked from is inlined into the goal
 /// recursion, and a meet with no union answers at the first look.
 #[inline(never)]
-fn narrowed_meet_below(members: &[Schema], other: &Schema, cx: &mut Cx<'_>) -> Relation {
-    narrowed_meet(members, cx).map_or(Relation::Unknown, |narrowed| {
-        let query = cx.query();
-        if NARROWING.with(Cell::get) == query {
-            return narrowed.is_subtype_rec(other, cx);
-        }
-        let allowance = Budget::new(cx.budget.left().min(RESPELLING));
+fn narrowed_meet_below(members: &Members, other: &Schema, cx: &mut Cx<'_>) -> Relation {
+    let query = cx.query();
+    if NARROWING.with(Cell::get) == query {
+        return narrowed_meet(members, cx).map_or(Relation::Unknown, |narrowed| {
+            narrowed.is_subtype_rec(other, cx)
+        });
+    }
+    let given = cx.budget.left().min(RESPELLING);
+    let key = (query, Arc::as_ptr(members).cast::<Schema>().addr(), given);
+    let asked = ASKED_NARROWED.with_borrow(|asked| {
+        asked.get(&key).and_then(|below| {
+            below
+                .iter()
+                .find(|(_, supertype, _)| supertype == other)
+                .map(|&(_, _, answer)| answer)
+        })
+    });
+    if let Some(answer) = asked {
+        return answer;
+    }
+    let answer = narrowed_meet(members, cx).map_or(Relation::Unknown, |narrowed| {
+        let allowance = Budget::new(given);
         let _open = Narrowing::open(query);
         narrowed.is_subtype_rec(other, &mut cx.within_this_query(&allowance))
-    })
+    });
+    ASKED_NARROWED.with_borrow_mut(|asked| {
+        if asked.len() >= READINGS_HELD {
+            asked.clear();
+        }
+        asked
+            .entry(key)
+            .or_default()
+            .push((Arc::clone(members), other.clone(), answer));
+    });
+    answer
 }
 
 /// The narrowed meet's question open on this thread, closed when dropped: the
@@ -2611,7 +2647,18 @@ thread_local! {
     /// kept, and the members' storage is held, so no other meet's members are
     /// at that address while the record stands.
     static HELD: RefCell<Option<Held>> = const { RefCell::new(None) };
+    /// The answers of the narrowed meets the queries on this thread asked
+    /// outside another's question ([`narrowed_meet_below`]): by the query's
+    /// number, the address of the meet's members and the allowance the
+    /// question ran under, each supertype asked beside its answer. Held beside
+    /// the query for the reason [`Readings`] is, and by number; the members'
+    /// storage is held, so no other meet's members are at that address while
+    /// the answer stands; and emptied at [`READINGS_HELD`] entries.
+    static ASKED_NARROWED: RefCell<AskedNarrowed> = RefCell::new(AskedNarrowed::default());
 }
+
+/// The table of [`ASKED_NARROWED`].
+type AskedNarrowed = FxHashMap<(u64, usize, u32), Vec<(Members, Schema, Relation)>>;
 
 impl<'a> Cx<'a> {
     /// The context a query starts with: nothing assumed and nothing resolved.

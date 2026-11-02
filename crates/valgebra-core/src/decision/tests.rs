@@ -12349,3 +12349,121 @@ fn a_term_read_as_lengths_is_bounded_by_its_depth_and_its_nodes() {
     assert!(wide(work - 1).read_as_lengths().is_some());
     assert!(wide(work).read_as_lengths().is_none());
 }
+
+/// The members of a meet the narrowing reads: `(int | str) & ~str`, which
+/// narrows to the integers.
+fn a_meet_the_narrowing_reads() -> Members {
+    vec![
+        Schema::union([Schema::Int, Schema::Str]),
+        Schema::Str.complement(),
+    ]
+    .into()
+}
+
+/// A narrowed meet asked outside another's question is asked once a query for
+/// a supertype and an allowance: an answer held for it is read back by the
+/// query that holds it, under the allowance and for the supertype it is held
+/// for, and asked again under another allowance, for another supertype, inside
+/// another narrowed question and by another query. A question spends none of
+/// the query's steps, and one inside another spends that question's.
+// THEORY: a-memo-is-revertible-or-absent
+#[test]
+fn a_narrowed_meet_is_asked_once_a_query_an_allowance() {
+    let members = a_meet_the_narrowing_reads();
+    let address = Arc::as_ptr(&members).cast::<Schema>().addr();
+    let ask = |steps: u32, held: Option<(u32, Schema)>, inside: bool| {
+        let budget = Budget::new(steps);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        let query = cx.query();
+        if let Some((given, supertype)) = held {
+            ASKED_NARROWED.with_borrow_mut(|asked| {
+                asked.entry((query, address, given)).or_default().push((
+                    Arc::clone(&members),
+                    supertype,
+                    Relation::Fails,
+                ));
+            });
+        }
+        let _open = inside.then(|| Narrowing::open(query));
+        let answer = narrowed_meet_below(&members, &Schema::Int, &mut cx);
+        assert_eq!(
+            budget.left() < steps,
+            inside,
+            "a question spends the steps of the question it is asked inside, and none of a query's"
+        );
+        answer
+    };
+    assert_eq!(ask(DECISION_BUDGET, None, false), Relation::Holds);
+    assert_eq!(
+        ask(DECISION_BUDGET, Some((RESPELLING, Schema::Int)), false),
+        Relation::Fails,
+        "read back"
+    );
+    assert_eq!(
+        ask(DECISION_BUDGET, Some((RESPELLING - 1, Schema::Int)), false),
+        Relation::Holds,
+        "another allowance"
+    );
+    assert_eq!(
+        ask(RESPELLING - 1, Some((RESPELLING - 1, Schema::Int)), false),
+        Relation::Fails,
+        "the allowance a query with fewer steps left asks under"
+    );
+    assert_eq!(
+        ask(DECISION_BUDGET, Some((RESPELLING, Schema::Str)), false),
+        Relation::Holds,
+        "another supertype"
+    );
+    assert_eq!(
+        ask(DECISION_BUDGET, Some((RESPELLING, Schema::Int)), true),
+        Relation::Holds,
+        "inside a narrowed question"
+    );
+}
+
+/// The narrowed questions held are emptied at their bound, and what is held after
+/// is the question that found the table full.
+#[test]
+fn the_narrowed_questions_held_are_bounded() {
+    let members = a_meet_the_narrowing_reads();
+    ASKED_NARROWED.with_borrow_mut(|asked| {
+        asked.clear();
+        for query in 0..READINGS_HELD {
+            asked.insert((u64::MAX - query as u64, 0, RESPELLING), Vec::new());
+        }
+    });
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    assert_eq!(
+        narrowed_meet_below(&members, &Schema::Int, &mut cx),
+        Relation::Holds
+    );
+    assert_eq!(ASKED_NARROWED.with_borrow(FxHashMap::len), 1);
+}
+
+proptest! {
+    /// A narrowed meet read back is what asking it again gives, over drawn
+    /// meets of a member, a union, and the complement of one of the union's
+    /// branches, and drawn supertypes: the question runs on a trail and steps
+    /// of its own, so its answer rests on nothing the query holds, and none of
+    /// the query's steps is spent asking it or reading it back.
+    // THEORY: a-memo-is-revertible-or-absent
+    #[test]
+    fn a_narrowed_meet_read_back_is_a_reading_of_it(
+        a in crate::laws::decidable_schema(),
+        b in crate::laws::decidable_schema(),
+        c in crate::laws::decidable_schema(),
+        d in crate::laws::decidable_schema(),
+    ) {
+        ASKED_NARROWED.with_borrow_mut(FxHashMap::clear);
+        let members: Members = vec![a, Schema::union([b.clone(), c]), b.complement()].into();
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        let first = narrowed_meet_below(&members, &d, &mut cx);
+        let back = narrowed_meet_below(&members, &d, &mut cx);
+        ASKED_NARROWED.with_borrow_mut(FxHashMap::clear);
+        let again = narrowed_meet_below(&members, &d, &mut cx);
+        prop_assert_eq!((first, back), (again, again));
+        prop_assert_eq!(budget.left(), DECISION_BUDGET);
+    }
+}
