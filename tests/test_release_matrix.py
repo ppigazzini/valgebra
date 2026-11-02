@@ -37,7 +37,6 @@ FREE_THREADED_FROM = (3, 14)
 
 #: Releases a platform does not build, by platform, each with the reason.
 GAPS: dict[tuple[str, str], str] = {
-    ("windows-11-vs2026-arm aarch64", "3.10"): "the Windows arm64 set starts at 3.12",
     ("windows-11-vs2026-arm aarch64", "3.11"): "the Windows arm64 set starts at 3.12",
     (
         "windows-11-vs2026-arm aarch64",
@@ -52,12 +51,12 @@ GAPS: dict[tuple[str, str], str] = {
 #: Rows that name no interpreters, leaving them to the build image.
 UNNAMED: dict[str, str] = {
     "ubuntu-26.04 x86_64 musllinux_1_2": (
-        "`--find-interpreter` builds for what the musllinux image carries: in "
-        "0.0.17, 3.10 through 3.14, 3.14t and PyPy 7.3"
+        "`--find-interpreter` builds for every interpreter the musllinux image "
+        "carries that `requires-python` admits"
     ),
     "ubuntu-26.04 aarch64 musllinux_1_2": (
-        "`--find-interpreter` builds for what the musllinux image carries: in "
-        "0.0.17, 3.10 through 3.14, 3.14t and PyPy 7.3"
+        "`--find-interpreter` builds for every interpreter the musllinux image "
+        "carries that `requires-python` admits"
     ),
 }
 
@@ -157,12 +156,18 @@ def test_no_platform_builds_a_release_the_classifiers_do_not_name() -> None:
 
 def test_every_gap_is_one_the_matrix_has() -> None:
     built = _built()
+    classified = _classified()
     stale = sorted(
         f"{platform}: {release}"
         for platform, release in GAPS
-        if platform not in built or release in built[platform]
+        if platform not in built
+        or release in built[platform]
+        or release not in classified
     )
-    assert not stale, f"gaps naming a platform or a release the rows build: {stale}"
+    assert not stale, (
+        "gaps naming a platform the rows lack, a release they build, or a "
+        f"release the classifiers do not name: {stale}"
+    )
 
 
 def test_every_row_names_its_interpreters_or_says_why() -> None:

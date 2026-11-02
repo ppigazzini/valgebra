@@ -101,16 +101,17 @@ class Refuses:
     checker refuses to have written at all, and because some of them do not
     exist on every interpreter this project supports.
 
-    `needs` is the release the form arrives in. A form the running interpreter
-    does not have is not a form a caller on it can write, so the row skips
-    rather than asserting a refusal of something that cannot be spelled -- and
-    it skips *by version* rather than by catching an `AttributeError`, which
-    would also swallow the form being renamed out from under the row.
+    `needs` is the release the form arrives in, and a row without one names a
+    form every supported release has. A form the running interpreter does not
+    have is not a form a caller on it can write, so the row skips rather than
+    asserting a refusal of something that cannot be spelled -- and it skips *by
+    version* rather than by catching an `AttributeError`, which would also
+    swallow the form being renamed out from under the row.
     """
 
     build: Callable[[], Any]
     says: str
-    needs: tuple[int, int] = (3, 11)
+    needs: tuple[int, int] | None = None
 
 
 #: What the frontend says of a form that stands for a type rather than being
@@ -596,7 +597,7 @@ def test_a_form_the_table_refuses_says_so_at_build(cell: str, row: Refuses) -> N
     caller holds belongs to -- a schema refusing everything and saying nothing
     about why, which is the failure the refusal table exists to describe.
     """
-    if sys.version_info < row.needs:
+    if row.needs is not None and sys.version_info < row.needs:
         spelled = ".".join(str(part) for part in row.needs)
         pytest.skip(
             f"{cell} is not a form this interpreter has; it arrives in {spelled}"
