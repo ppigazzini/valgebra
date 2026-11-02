@@ -125,12 +125,19 @@ branch it shares the value with; a meet supertype is asked a member at a
 time, since the subject is below it where it is below each member and outside
 it where it is outside one, by either decider, beside a member neither reads.
 The rules asked each member already, at the root of the query, where no
-hypothesis is open, so the members they placed are kept beside the query, by
-its number, and read back rather than asked again, for a meet supertype
-(`below_each_member_at_the_root`) and a union subject alike
-(`each_member_below_at_the_root`): asked again, a meet of records costs the
-query a second time, and a union of refined integers drawn eight deep half of
-it.
+hypothesis is open, so what they answered is kept beside the query, by its
+number, and read back rather than asked again: the members they placed, for a
+meet supertype (`below_each_member_at_the_root`) and a union subject alike
+(`each_member_below_at_the_root`), and the branches they refuted the subject
+below, for a union supertype (`each_branch_at_the_root`), whose by-branch
+reading lowers no such branch, since both deciders are sound and a containment
+the rules refuted is one the set representation never proves. Asked again, a
+meet of records costs the query a second time, and a union of refined integers
+drawn eight deep half of it; lowered again, the four branches a list of at least
+255 items is refuted below cost a list of six length bounds 20 ms, against 1.2
+ms on a reading that asked no part. The two kinds of member are kept apart, so a
+record read by a pair it does not name, as the reverse direction of an
+equivalence can, reads no member placed and no branch refuted.
 What it reaches is the descriptor's
 bounds: a union of tagged records is past the node bound as a pair and a record
 and the one branch it meets are not, and a branch holding a reference beside a
@@ -147,7 +154,8 @@ the budget on has as many parts as members and branches, and a union of four
 thousand records against another, or a tuple against its two thousand corners,
 read a part at a time cost seventy times the decline and answered nothing
 more. `a_union_is_decided_a_part_at_a_time` holds each exit,
-`a_meet_supertype_is_decided_a_member_at_a_time` the meet's, and
+`a_meet_supertype_is_decided_a_member_at_a_time` the meet's,
+`a_branch_the_rules_refute_is_not_lowered` the union supertype's record, and
 `a_spent_query_asks_no_part` the step the parts need.
 
 **The respellings** are reached last, for the query's own pair, where every

@@ -50,6 +50,20 @@ pub(crate) mod goals {
             const { RefCell::new(None) };
         /// The deepest the trail grew inside a [`counted`] call.
         static DEEPEST: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+        /// How many pairs the set representation was asked on this thread.
+        static READ_BY_THE_SETS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    }
+
+    /// Count a pair put to the set representation
+    /// ([`Schema::descriptor_contained_in`]).
+    pub(crate) fn read_by_the_sets() {
+        READ_BY_THE_SETS.with(|read| read.set(read.get() + 1));
+    }
+
+    /// How many pairs the set representation was asked on this thread so far:
+    /// read before and after a reading, what moved is how many it lowered.
+    pub(crate) fn pairs_read_by_the_sets() -> u64 {
+        READ_BY_THE_SETS.with(std::cell::Cell::get)
     }
 
     /// What one counted query asked.

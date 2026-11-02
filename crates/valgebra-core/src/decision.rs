@@ -498,6 +498,8 @@ impl Schema {
         pool: &dyn Constants,
         defs: &[Schema],
     ) -> Relation {
+        #[cfg(test)]
+        goal_tests::goals::read_by_the_sets();
         // The two sides are unfolded in opposite directions, which is what makes
         // a difference over a recursive schema sound *in one direction*: the
         // left grows and the right shrinks, so a difference proved empty here
@@ -973,11 +975,14 @@ impl Schema {
     /// lists beside a pattern is the pattern's question alone, refuted at a
     /// string the pattern refuses. Where nothing narrows, a branch the set
     /// representation places the subject in proves the pair
-    /// [BBC+26, (anyOf-r)] -- for a subject that is not a member of a union
-    /// being asked, since a union against a union would lower every member
-    /// against every branch: two hundred patterns against two hundred spend
-    /// three seconds that way, and decide nothing. A branch of one constant is
-    /// not asked: it holds the subject only where the subject is that one
+    /// [BBC+26, (anyOf-r)], and a branch the rules refuted the subject below at
+    /// the root is not lowered: both deciders are sound, so a containment the
+    /// rules refuted is one the set representation never proves
+    /// ([`Cx::refuted_at_the_root`]) -- for a subject that is not a member of a
+    /// union being asked, since a union against a union would lower every
+    /// member against every branch: two hundred patterns against two hundred
+    /// spend three seconds that way, and decide nothing. A branch of one
+    /// constant is not asked: it holds the subject only where the subject is that one
     /// value, and a subject of one value is inside every branch it shares the
     /// value with, so narrowing leaves that constant alone or beside branches
     /// that hold the subject too. Asked a constant at a time, a table lowers
@@ -1080,12 +1085,20 @@ impl Schema {
             .cloned()
             .collect();
         if met.len() == branches.len() {
+            // What the rules refuted of each branch at the root is read back
+            // ([`Schema::below_a_union`]): a containment the rules refuted is
+            // one the set representation, sound as they are, never proves.
+            let refuted = cx.refuted_at_the_root(self, branches);
             return Relation::proven(
                 by_branch
                     && branches
                         .iter()
-                        .filter(|branch| !matches!(branch, Schema::Literal(_)))
-                        .any(|branch| {
+                        .enumerate()
+                        .filter(|&(at, branch)| {
+                            !matches!(branch, Schema::Literal(_))
+                                && (at >= MEMBERS_HELD || refuted >> at & 1 == 0)
+                        })
+                        .any(|(_, branch)| {
                             self.descriptor_contained_in(branch, cx.oracle, cx.defs)
                                 .holds()
                         }),
@@ -1517,7 +1530,7 @@ impl Schema {
     /// value of the reference outside it, and that is a refutation rather than
     /// a decline. The arm for a non-union supertype already reads it that way;
     /// this reads it the same, which is the only difference a union makes.
-    fn below_a_union(&self, other: &Schema, members: &[Schema], cx: &mut Cx<'_>) -> Relation {
+    fn below_a_union(&self, other: &Schema, members: &Members, cx: &mut Cx<'_>) -> Relation {
         if members.contains(self) {
             return Relation::Holds;
         }
@@ -1527,14 +1540,22 @@ impl Schema {
         // it are gone. The second is what the narrowing below is for, and it is
         // why each answer is read in its three values rather than as `holds`
         // alone: whether any branch refuted is what decides to narrow.
-        let mut refuted = false;
-        for member in members {
-            let answer = self.is_subtype_rec(member, cx);
-            if answer.holds() {
-                return Relation::Holds;
+        let refuted = if cx.budget.depth.get() == 1 && members.len() <= MEMBERS_HELD {
+            match self.each_branch_at_the_root(members, cx) {
+                Some(refuted) => refuted,
+                None => return Relation::Holds,
             }
-            refuted |= answer == Relation::Fails;
-        }
+        } else {
+            let mut refuted = false;
+            for member in members.iter() {
+                let answer = self.is_subtype_rec(member, cx);
+                if answer.holds() {
+                    return Relation::Holds;
+                }
+                refuted |= answer == Relation::Fails;
+            }
+            refuted
+        };
         if members
             .iter()
             .filter(|member| matches!(member, Schema::Intersection(_)))
@@ -1872,10 +1893,40 @@ impl Schema {
         if keeps && answer == Relation::Unknown {
             let query = cx.query();
             HELD.with_borrow_mut(|held| {
-                *held = Some((query, self.clone(), Arc::clone(members), placed));
+                *held = Some((query, self.clone(), Arc::clone(members), placed, 0));
             });
         }
         answer
+    }
+
+    /// The branches of a union supertype asked at the root of a query, as the
+    /// union rule asks them: `None` where one holds `self`, and otherwise
+    /// whether one refuted it. A refutation stands on a value of the subject
+    /// outside the branch, whatever is assumed, so the branches refuted are
+    /// kept for the query ([`HELD`]), for the parts reading to read back rather
+    /// than lower: both deciders are sound, and a containment the rules refuted
+    /// is one the set representation never proves
+    /// ([`Cx::refuted_at_the_root`]). Out of line, so the union rule the goal
+    /// recursion inlines asks its branches as it did.
+    #[inline(never)]
+    fn each_branch_at_the_root(&self, members: &Members, cx: &mut Cx<'_>) -> Option<bool> {
+        let mut refuted = 0u64;
+        for (at, member) in members.iter().enumerate() {
+            let answer = self.is_subtype_rec(member, cx);
+            if answer.holds() {
+                return None;
+            }
+            if answer == Relation::Fails {
+                refuted |= 1 << at;
+            }
+        }
+        if refuted != 0 {
+            let query = cx.query();
+            HELD.with_borrow_mut(|held| {
+                *held = Some((query, self.clone(), Arc::clone(members), 0, refuted));
+            });
+        }
+        Some(refuted != 0)
     }
 
     /// A union below `other`, member by member, as the arm calling this states.
@@ -1969,7 +2020,7 @@ impl Schema {
         if keeps {
             let query = cx.query();
             HELD.with_borrow_mut(|held| {
-                *held = Some((query, other.clone(), Arc::clone(members), placed));
+                *held = Some((query, other.clone(), Arc::clone(members), placed, 0));
             });
         }
         Relation::Unknown
@@ -2468,6 +2519,12 @@ pub(super) struct Cx<'a> {
     query: Cell<u64>,
 }
 
+/// What [`HELD`] keeps of the rules' answers at a query's root: the query's
+/// number, the schema on the other side of the pair, the members, the members
+/// the subject was placed below and the branches it was refuted below, one bit
+/// a member each.
+type Held = (u64, Schema, Members, u64, u64);
+
 /// The widest meet whose members' answers at the root are kept ([`HELD`]), one
 /// bit a member: past it the parts reading asks the rules again.
 const MEMBERS_HELD: usize = u64::BITS as usize;
@@ -2535,13 +2592,19 @@ thread_local! {
     /// number, the subject, the members, and the members the subject was
     /// placed below, one bit each; or the union subject they last declined
     /// there ([`Schema::each_member_below_at_the_root`]): the number, the
-    /// supertype, the union's members, and the members placed below it. The
-    /// root pair is one of the two, and each is read back by the pair it
-    /// names. Held beside the query for the reason
+    /// supertype, the union's members, and the members placed below it; or
+    /// the union supertype a branch of which they refuted there
+    /// ([`Schema::each_branch_at_the_root`]): the number, the subject, the
+    /// branches, and the branches refuted, in a field of their own. The root
+    /// pair is one of the three, and each is read back by the pair it names;
+    /// read by a pair it does not name, as the reverse direction of an
+    /// equivalence can, a record names no member placed and no branch refuted,
+    /// which asks the set representation as no record would. Held beside the
+    /// query for the reason
     /// [`Readings`] is, and by number, so a query reads back only what it
     /// kept, and the members' storage is held, so no other meet's members are
     /// at that address while the record stands.
-    static HELD: RefCell<Option<(u64, Schema, Members, u64)>> = const { RefCell::new(None) };
+    static HELD: RefCell<Option<Held>> = const { RefCell::new(None) };
 }
 
 impl<'a> Cx<'a> {
@@ -2570,9 +2633,22 @@ impl<'a> Cx<'a> {
     fn held_below(&self, subject: &Schema, members: &Members) -> Option<u64> {
         let query = self.query.get();
         HELD.with_borrow_mut(Option::take)
-            .and_then(|(at, of, kept, placed)| {
+            .and_then(|(at, of, kept, placed, _)| {
                 (at == query && Arc::ptr_eq(&kept, members) && of == *subject).then_some(placed)
             })
+    }
+
+    /// The branches of `members` the rules refuted `subject` below at the root
+    /// of this query, one bit each; none where they kept no such record
+    /// ([`HELD`]). Taken as it is read, as [`held_below`](Self::held_below)
+    /// takes it.
+    fn refuted_at_the_root(&self, subject: &Schema, members: &Members) -> u64 {
+        let query = self.query.get();
+        HELD.with_borrow_mut(Option::take)
+            .filter(|(at, of, kept, _, _)| {
+                *at == query && Arc::ptr_eq(kept, members) && of == subject
+            })
+            .map_or(0, |(_, _, _, _, refuted)| refuted)
     }
 
     /// A context for a part of this query, which reads the same sets and so

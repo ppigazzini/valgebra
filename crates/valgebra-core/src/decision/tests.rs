@@ -6913,7 +6913,7 @@ fn a_kept_union_is_read_a_member_at_a_time() {
         let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
         let query = cx.query();
         HELD.with_borrow_mut(|held| {
-            *held = Some((query, other.clone(), Arc::clone(&members), placed));
+            *held = Some((query, other.clone(), Arc::clone(&members), placed, 0));
         });
         assert_eq!(
             union.decided_by_parts(&other, &mut cx, true),
@@ -6931,8 +6931,8 @@ fn a_kept_union_is_read_a_member_at_a_time() {
     );
     let kept = HELD.with_borrow_mut(Option::take);
     assert_eq!(
-        kept.map(|(at, of, _, placed)| (at, of, placed)),
-        Some((cx.query(), below, 0b10))
+        kept.map(|(at, of, _, placed, refuted)| (at, of, placed, refuted)),
+        Some((cx.query(), below, 0b10, 0))
     );
 }
 
@@ -6947,7 +6947,7 @@ fn a_kept_meet_is_read_back_by_its_own_query_and_pair() {
     let query = cx.query();
     let keep = |number: u64, subject: &Schema, members: &Members| {
         HELD.with_borrow_mut(|held| {
-            *held = Some((number, subject.clone(), Arc::clone(members), 0b10));
+            *held = Some((number, subject.clone(), Arc::clone(members), 0b10, 0));
         });
     };
     keep(query, &Schema::Bool, &members);
@@ -7769,11 +7769,20 @@ fn an_assumption_is_read_as_the_pair_it_is() {
 /// `a` is a bool, so neither drops the other, and the wider one is still not
 /// below the narrower. Beside it, the row where every branch goes: a subject
 /// outside all of them is outside the union, and refutes on any value it holds.
+///
+/// Each row is asked at a query's root and a level below it, since the root
+/// asks a union's branches out of line (`each_branch_at_the_root`) and a goal
+/// below it asks them in the rule itself.
 #[test]
 fn a_union_narrowed_to_one_branch_refutes_where_that_branch_does() {
     let relation = |sub: &Schema, sup: &Schema| {
         let budget = Budget::new(DECISION_BUDGET);
-        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+        let at_the_root = sub.subtype_relation(sup, &NoLeafRelations, &[], &budget);
+        let budget = Budget::new(DECISION_BUDGET);
+        budget.depth.set(1);
+        let below_it = sub.subtype_relation(sup, &NoLeafRelations, &[], &budget);
+        assert_eq!(at_the_root, below_it, "{sub:?} <= {sup:?} below the root");
+        at_the_root
     };
     let record = |ty: Schema| closed(vec![field("a", ty, true)]);
     let subject = record(Schema::Int);
@@ -9662,6 +9671,134 @@ fn a_spent_query_asks_no_part() {
     };
     assert_eq!(parts(DECISION_BUDGET), Relation::Holds);
     assert_eq!(parts(0), Relation::Unknown);
+}
+
+/// A branch the rules refute does not hold the subject, so where nothing
+/// narrows the parts reading lowers no branch the rules refuted at the root:
+/// a list of at least 255 items meets each of four bounds on its length, the
+/// rules refute it below each alone, and the record they keep is read back. A
+/// query whose root kept no record lowers every branch, as does one past the
+/// widest union the record holds, and the record is read as no member placed
+/// by the readings of a union subject and a meet.
+#[test]
+fn a_branch_the_rules_refute_is_not_lowered() {
+    use super::goal_tests::goals::pairs_read_by_the_sets;
+    let list = |constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(Schema::list(SeqShape::homogeneous(Schema::ANYTHING))),
+        constraints: constraints.into(),
+    };
+    let subject = list(vec![Constraint::MinLen(255)]);
+    let branches: Members = vec![
+        list(vec![Constraint::MaxLen(2048)]),
+        list(vec![Constraint::MinLen(511)]),
+        list(vec![Constraint::MinLen(64), Constraint::MaxLen(1000)]),
+        list(vec![Constraint::MinLen(257), Constraint::MaxLen(300)]),
+    ]
+    .into();
+    let union = Schema::Union(Arc::clone(&branches));
+    let lowered = |root: bool| {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        if root {
+            assert_eq!(subject.is_subtype_rec(&union, &mut cx), Relation::Unknown);
+        }
+        let before = pairs_read_by_the_sets();
+        let answer = subject.decided_by_parts(&union, &mut cx, true);
+        (answer, pairs_read_by_the_sets() - before)
+    };
+    assert_eq!(lowered(true), (Relation::Unknown, 0), "read back");
+    assert_eq!(lowered(false), (Relation::Unknown, 4), "no record kept");
+    let short = list(vec![Constraint::MinLen(5)]);
+    let wide = Schema::Union(
+        (0..=MEMBERS_HELD)
+            .map(|k| list(vec![Constraint::MaxLen(6 + k)]))
+            .collect::<Vec<_>>()
+            .into(),
+    );
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    let _root = short.is_subtype_rec(&wide, &mut cx);
+    let before = pairs_read_by_the_sets();
+    let _parts = short.decided_by_parts(&wide, &mut cx, true);
+    assert_eq!(
+        pairs_read_by_the_sets() - before,
+        MEMBERS_HELD as u64 + 1,
+        "a union wider than the record lowers every branch it meets"
+    );
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    let _root = subject.is_subtype_rec(&union, &mut cx);
+    assert_eq!(
+        cx.held_below(&subject, &branches),
+        Some(0),
+        "no member placed"
+    );
+}
+
+/// The branches the rules refuted are kept at a query's root alone, for at
+/// most [`MEMBERS_HELD`] branches, and read back by that query, for that
+/// subject and those branches alone. A list of at least 255 items is refuted
+/// below every list of at most `k` items: sixty-four such branches are kept
+/// whole and sixty-five are not, and a union asked a level below the root
+/// keeps nothing.
+#[test]
+fn the_refuted_branches_are_kept_at_the_root_alone() {
+    let list = |constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(Schema::list(SeqShape::homogeneous(Schema::ANYTHING))),
+        constraints: constraints.into(),
+    };
+    let subject = list(vec![Constraint::MinLen(255)]);
+    let shorter = |width: usize| -> Members {
+        (0..width)
+            .map(|k| list(vec![Constraint::MaxLen(k)]))
+            .collect::<Vec<_>>()
+            .into()
+    };
+    let kept = |branches: &Members, depth: u32| {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        budget.depth.set(depth);
+        let union = Schema::Union(Arc::clone(branches));
+        assert_eq!(subject.is_subtype_rec(&union, &mut cx), Relation::Fails);
+        cx.refuted_at_the_root(&subject, branches)
+    };
+    let widest = shorter(MEMBERS_HELD);
+    assert_eq!(kept(&widest, 0), u64::MAX, "every branch kept");
+    assert_eq!(kept(&shorter(MEMBERS_HELD + 1), 0), 0, "past the widest");
+    assert_eq!(kept(&widest, 1), 0, "a level below the root");
+    let budget = Budget::new(DECISION_BUDGET);
+    let cx = Cx::new(&NoLeafRelations, &[], &budget);
+    let query = cx.query();
+    let keep = |number: u64, of: &Schema, branches: &Members| {
+        HELD.with_borrow_mut(|held| {
+            *held = Some((number, of.clone(), Arc::clone(branches), 0, 0b10));
+        });
+    };
+    keep(query, &subject, &widest);
+    assert_eq!(cx.refuted_at_the_root(&subject, &widest), 0b10);
+    assert_eq!(
+        cx.refuted_at_the_root(&subject, &widest),
+        0,
+        "taken as read"
+    );
+    keep(query + 1, &subject, &widest);
+    assert_eq!(
+        cx.refuted_at_the_root(&subject, &widest),
+        0,
+        "another query's"
+    );
+    keep(query, &Schema::Int, &widest);
+    assert_eq!(
+        cx.refuted_at_the_root(&subject, &widest),
+        0,
+        "another subject's"
+    );
+    keep(query, &subject, &shorter(MEMBERS_HELD));
+    assert_eq!(
+        cx.refuted_at_the_root(&subject, &widest),
+        0,
+        "another union's"
+    );
 }
 
 // THEORY: semantic-subtyping
