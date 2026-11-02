@@ -97,7 +97,7 @@ Two more are refused, each by a test:
 | Algebra laws | every claimed equivalence, against membership | a law nobody thought to claim |
 | Completeness ledger | that the procedure *decides* an enumerated relation | a relation nobody enumerated |
 | Completeness probe | that every `False` has a value witnessing it | a gap no value in its universe can expose |
-| Metamorphic gate | every membership and every decision against a recorded build: no value moves, no answer is lost or turned | a shape its corpus does not compose |
+| Metamorphic gate | every membership and every decision against the last release: no value moves, no answer is lost, turned or raised; in the bench lane, no decision ten times slower than the release's past 50 ms | a shape its corpus does not compose |
 | Snapshots | error messages and `repr` | whether the message is *right* |
 | Fuzzing | panic-freedom, idempotence, the order laws | anything outside the budget |
 
@@ -692,13 +692,16 @@ is built to exceed.
 random has no known answer, so its `undecided` cannot be told from a gap. Three
 things are known: a relation true by construction, which the ledger asserts
 decided; a `False` with no witness in a universe, which the probe reports; and
-the answer a recorded build gave, which the metamorphic gate holds without
+the answer the last release gave, which the metamorphic gate holds without
 knowing whether it is right. The last is the one that sees an answer lost on a
 shape nobody listed as a relation -- as far as its corpus reaches. The rules that
 read a meet are where answers move, so the corpus composes the shapes a
 translation from JSON Schema writes: guarded records nested four deep, a
 recursive record met with a closed one, a meet of two unions, a literal set met
-with a complement.
+with a complement. Beside them it asks, as written, the pairs a change since a
+release regressed on: a tuple and a record against the corners that cover
+them, two discriminated unions, a list against a union of length bounds, a
+guarded record against the complement of a record.
 
 **Another language's type system is not a differential oracle.** Elixir's
 `Module.Types.Descr` decides the same algebra over BEAM values, where a boolean

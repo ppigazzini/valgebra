@@ -76,6 +76,12 @@ NEEDS_A_RUNNER = {
         "cachegrind over two PGO builds, minutes per run"
     ),
     "Smoke-run the benchmarks": "needs the optimized wheel above",
+    "Record the last release's answers and times": (
+        "installs the published wheel into an environment of its own"
+    ),
+    "Hold answers, time and memory to the last release": (
+        "needs the optimized wheel above and the release's recording"
+    ),
     "Competitive comparison gate": "needs the optimized wheel above",
     "Record the competitive ratios": (
         "needs the optimized wheel above, and records a ratio that belongs to "

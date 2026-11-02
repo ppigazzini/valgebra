@@ -637,6 +637,9 @@
     "re": {
       "since": "3.11"
     },
+    "resource": {
+      "since": "3.11"
+    },
     "shlex": {
       "since": "3.11"
     },

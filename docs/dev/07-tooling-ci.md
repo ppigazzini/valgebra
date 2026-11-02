@@ -609,6 +609,41 @@ Do not copy a recorded count into prose: `scripts/docs_lint.py` fails on it,
 because a figure that moves when the count is re-recorded is stale the next
 time it moves.
 
+### The release differential
+
+**Answers, time and memory are held to the last release, not only to the
+tip a push replaced.** A change measured against its parent alone passes a
+slowdown or a lost answer the commit before it already carried, and the next one
+passes it again. So `scripts/metamorphic_gate.py` holds two things to the
+published wheel:
+
+- **Answers, in the `metamorphic` lane.** The reference is recorded from the
+  published wheel at every cut, so no membership moves, and no decision is lost,
+  turned or raised against what a user of the release has.
+- **Time and memory, in the `bench` lane.** That lane installs this tree's
+  optimized wheel, built as the release workflow builds one. Beside it, the
+  published wheel answers the corpus in an environment of its own and records
+  each decision's time and the run's peak memory (`--record-to`), and the tree
+  is held to that recording (`--against`). A decision ten times the release's
+  and past 50 ms fails, and so does a run twice the release's peak and 64 MB
+  past it. The ratio is what a change moves. The floors keep a decision the
+  runner's noise dominates, and the allocator's rounding, out of it.
+
+A time is a property of the machine it was read on, so the reference keeps
+none, and two builds read on one runner in one job are the only pair whose
+ratio is the change's.
+
+**An intended change against the release is recorded, not excused.** A fix that
+moves an answer the release gave records the reference from the tree
+(`--record`). A reviewer reads the move in the reference's diff, and the next cut
+records it from the release again.
+
+**The instruction gate's base stays the replaced tip.** It builds its base from
+source, and the release's workloads are not this tree's: a shape added since
+has no base, and one re-recorded since computes other work, so a count against
+the release is no comparison. The release differential reads the shapes that
+moved -- the corpus's named pairs -- against the release's wheel instead.
+
 ### The competitive ratio
 
 `scripts/compare_gate.py` compares per-call time against pydantic's strict

@@ -29,29 +29,60 @@ build that answered `subset` to everything would satisfy "only widens"
 perfectly. So every new `subset` is checked against the corpus values. A claim
 `A <= B` with a corpus value in `A` and not in `B` is a false proof, and so is an
 emptiness proof for a schema a corpus value is a member of; the gate fails on
-either rather than recording the widening.
+either rather than recording the widening. A relation that raises where the
+reference answered is a failure too.
+
+**The reference is the last release.** It is recorded from the published wheel
+at every cut (`--record` run in an environment holding that wheel), so the
+answers a push is held to are the ones a user of the release has. A change
+meant to move one is carried by recording the reference from the tree, which a
+reviewer reads in the reference's diff.
+
+**Time and memory are held against the release in one job.** A time is a
+property of the machine it was read on, so the reference keeps none. Where a
+job holds both builds -- the published wheel in an environment of its own and
+this tree's optimized wheel -- the first records the corpus with its times and
+its peak memory (`--record-to`), and this build is held to that recording
+(`--against`): a decision ten times slower than the release's and past 50 ms is
+a slowdown, and so is a run whose peak memory is twice the release's and 64 MB
+past it.
+
+**The corpus holds the shapes that regressed.** Beside every ordered pair of the
+schemas below, it asks a few named pairs as written, each a shape a change since
+the release made slower or lost an answer on: a tuple and a record against the
+corners that cover them, two discriminated unions, a list against a union of
+length bounds, a guarded record against the complement of a record. A pair's two
+schemas are asked of every value too, so a proof it gains is checked as any
+other.
 
 Usage:
     python scripts/metamorphic_gate.py            # compare against the reference
     python scripts/metamorphic_gate.py --record   # write the reference from this build
+    python scripts/metamorphic_gate.py --record-to release.json  # with times, anywhere
+    python scripts/metamorphic_gate.py --against release.json    # time and memory too
 
-Three outcomes, three exit codes: **0** membership held and no decision was
-lost, **1** a value moved, a decision was lost or contradicted, or a new proof
-has a counterexample, **2** the gate **could not run** -- no built extension, no
+Three outcomes, three exit codes: **0** membership held, no decision was lost
+and nothing was slower, **1** a value moved, a decision was lost, contradicted or
+raised, a new proof has a counterexample, or a decision or the run was slower
+than the release, **2** the gate **could not run** -- no built extension, no
 readable reference, or a corpus the reference does not describe. A gate that
 could not run has proven nothing and must not read as one that passed.
 """
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import sys
-from typing import TYPE_CHECKING, Any, TypedDict
+import time
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
 
 from _lib import EXIT_CANNOT_RUN, EXIT_FAIL, EXIT_OK, ROOT, arguments, git_output
 
 if TYPE_CHECKING:
     import argparse
+    from collections.abc import Callable
 
 REFERENCE_FILE = ROOT / "scripts" / "metamorphic_reference.json"
 
@@ -65,14 +96,33 @@ class Recording(TypedDict):
     """
 
     commit: str
+    version: str
     builds: dict[str, bool]
     membership: dict[str, str]
     decisions: dict[str, str]
+    # Microseconds a decision took, and the run's peak memory in megabytes:
+    # kept by `--record-to` alone, since a time belongs to its machine.
+    times: NotRequired[dict[str, int]]
+    peak_mb: NotRequired[int]
 
 
-# A decision as the recording spells it: the three answers of `relation_to`.
+# A decision as the recording spells it: the three answers of `relation_to`,
+# and `x` for a relation that raised.
 ANSWERS = {"subset": "s", "not_subset": "n", "undecided": "u"}
+RAISED = "x"
 DECIDED = frozenset("sn")
+
+# A decision is slower than the release's where it takes ten times as long and
+# past 50 ms: the ratio is what a change moves, and the floor keeps a decision
+# the runner's noise dominates out of it.
+SLOWER_RATIO = 10
+SLOWER_FLOOR_US = 50_000
+
+# A run's memory is past the release's where its peak is twice the release's
+# and 64 MB more: the corpus runs in tens of megabytes, so a ratio alone would
+# read the allocator's rounding.
+MEMORY_RATIO = 2
+MEMORY_FLOOR_MB = 64
 
 
 # How many failing pairs to print before stopping. A refactor that moves
@@ -81,8 +131,8 @@ DECIDED = frozenset("sn")
 REPORTED = 12
 
 
-def _schemas() -> dict[str, object]:
-    """Build the schema corpus, spelled the way a caller spells it.
+def _schemas() -> tuple[dict[str, object], dict[str, tuple[object, object]]]:
+    """Build the schema corpus and the named pairs, spelled as a caller spells them.
 
     Built from the frontend's own syntax rather than from the IR, so the gate
     compares what a user can reach. A schema the frontend refuses is part of the
@@ -224,7 +274,7 @@ def _schemas() -> dict[str, object]:
             Validator({"a": int}).open(), Validator({"b": str}).open()
         ),
     }
-    return {
+    schemas = {
         **scalars,
         **lattice,
         **literals,
@@ -233,6 +283,92 @@ def _schemas() -> dict[str, object]:
         **refinements,
         **recursive_schemas,
         **composites,
+    }
+    return schemas, _pairs(json_value, guarded)
+
+
+def _pairs(
+    json_value: object, guarded: Callable[[object], object]
+) -> dict[str, tuple[object, object]]:
+    """Build the named pairs: the shapes a change since the release regressed on.
+
+    Each is asked as written, `left <= right`, rather than against every
+    schema, since the shapes are wide and the question is the one that moved.
+    """
+    from types import GenericAlias  # noqa: PLC0415
+    from typing import Annotated, Literal  # noqa: PLC0415
+
+    from valgebra import Validator, complement, intersection, union  # noqa: PLC0415
+
+    # A tuple of `int | str` at each position and the corners that cover it,
+    # which the rules split a position at a time: six decide, eight decline.
+    def tuple_corners(width: int) -> tuple[object, object]:
+        corners = union(
+            *(
+                GenericAlias(
+                    tuple, tuple(int if mask >> i & 1 else str for i in range(width))
+                )
+                for mask in range(1 << width)
+            )
+        )
+        return GenericAlias(tuple, tuple([int | str] * width)), corners
+
+    # The same over the fields of a record, split a field at a time.
+    def record_corners(width: int) -> tuple[object, object]:
+        names = [f"f{i}" for i in range(width)]
+        corners = union(
+            *(
+                {name: (int, str)[mask >> i & 1] for i, name in enumerate(names)}
+                for mask in range(1 << width)
+            )
+        )
+        return dict.fromkeys(names, int | str), corners
+
+    # Records told apart by a tag, against the same records with a wider field:
+    # read a record at a time, below one way and refuted the other. Each tag is
+    # a literal built from a value, so it is built as the interpreter builds one.
+    def tagged(width: int, field: object = int) -> object:
+        tags = (Literal.__getitem__(f"t{i}") for i in range(width))
+        return union(*({"tag": tag, "v": field} for tag in tags))
+
+    def listed(*constraints: object) -> object:
+        return Annotated[list, *constraints]
+
+    # A list of at least 255 items below six bounds on its length, which the
+    # rules refute below each alone and which hold it between them.
+    length_bounds = union(
+        complement(listed(MinLen(1))),
+        listed(MaxLen(2048)),
+        listed(MinLen(511)),
+        intersection(listed(MinLen(64)), listed(MinLen(255)), listed(MaxLen(1000))),
+        intersection(
+            union(listed(MinLen(2)), listed(MaxLen(255))), listed(MinLen(257))
+        ),
+        listed(MaxLen(254)),
+    )
+    # A record whose field is guarded three deep, below the complement of a
+    # record its field never meets: decided once its narrowed meets are read
+    # once a query, and lost while each goal read them again.
+    number = intersection(union(int, float), complement(bool))
+    count = intersection(number, union(Annotated[int, Ge(0)], Annotated[float, Ge(0)]))
+    guarded_record = Validator({"a": guarded(guarded(guarded(count)))}).close()
+    other_record = Validator(
+        {
+            "a": intersection(json_value, Literal[True, "a"]),
+            "b?": Validator({"a": json_value}).open(),
+            str: Validator({"a": GenericAlias(tuple, (json_value, ...))}).close(),
+        }
+    )
+    return {
+        "tuple-corners-6": tuple_corners(6),
+        "tuple-corners-8": tuple_corners(8),
+        "record-corners-6": record_corners(6),
+        "record-corners-8": record_corners(8),
+        "tagged-512": (tagged(512), tagged(512, union(int, str))),
+        "tagged-512-back": (tagged(512, union(int, str)), tagged(512)),
+        "tagged-2048": (tagged(2048), tagged(2048, union(int, str))),
+        "list-length-bounds": (listed(MinLen(255)), length_bounds),
+        "guarded-record": (guarded_record, complement(other_record)),
     }
 
 
@@ -318,6 +454,13 @@ class MinLen:
         self.min_length = min_length
 
 
+class MaxLen:
+    __module__ = "annotated_types"
+
+    def __init__(self, max_length: int) -> None:
+        self.max_length = max_length
+
+
 class MultipleOf:
     __module__ = "annotated_types"
 
@@ -346,7 +489,22 @@ def _membership(schemas: dict[str, Any], values: dict[str, object]) -> dict[str,
     return verdicts
 
 
-def _decisions(schemas: dict[str, Any]) -> dict[str, str]:
+def _relation(left: Any, right: Any, key: str, times: dict[str, int]) -> str:
+    """Ask `left <= right`, keeping how long it took under `key`.
+
+    A relation that raises is a verdict, `x`: the procedure answers every pair,
+    so a raise is an answer the release did not give.
+    """
+    start = time.perf_counter_ns()
+    try:
+        answer = ANSWERS[left.relation_to(right)]
+    except Exception:  # noqa: BLE001 -- any raise is the same verdict here
+        answer = RAISED
+    times[key] = (time.perf_counter_ns() - start) // 1000
+    return answer
+
+
+def _decisions(schemas: dict[str, Any], times: dict[str, int]) -> dict[str, str]:
     """Every ordered pair under subtyping, and every schema under emptiness.
 
     Each in the three answers of `relation_to`, and emptiness as the schema
@@ -359,11 +517,25 @@ def _decisions(schemas: dict[str, Any]) -> dict[str, str]:
     for name, validator in schemas.items():
         if validator is None:
             continue
-        verdicts[f"empty {name}"] = ANSWERS[validator.relation_to(nothing)]
+        key = f"empty {name}"
+        verdicts[key] = _relation(validator, nothing, key, times)
         for other_name, other in schemas.items():
             if other is None:
                 continue
-            verdicts[f"{name} <= {other_name}"] = ANSWERS[validator.relation_to(other)]
+            key = f"{name} <= {other_name}"
+            verdicts[key] = _relation(validator, other, key, times)
+    return verdicts
+
+
+def _paired(sides: dict[str, Any], times: dict[str, int]) -> dict[str, str]:
+    """Each named pair as written, `name.left <= name.right`."""
+    verdicts = {}
+    for name in sorted({side.rpartition(".")[0] for side in sides}):
+        left, right = sides[f"{name}.left"], sides[f"{name}.right"]
+        if left is None or right is None:
+            continue
+        key = f"{name}.left <= {name}.right"
+        verdicts[key] = _relation(left, right, key, times)
     return verdicts
 
 
@@ -386,25 +558,65 @@ def _build(specs: dict[str, object]) -> dict[str, Any]:
     return {name: build(spec) for name, spec in specs.items()}
 
 
-def record() -> Recording | None:
-    """Run the whole corpus through this build, or report why it could not."""
+def record(*, timed: bool) -> Recording | None:
+    """Run the whole corpus through this build, or report why it could not.
+
+    `timed` keeps each decision's time and the run's peak memory, which only a
+    recording compared in the job that made it can read.
+    """
     try:
-        specs = _schemas()
+        specs, pairs = _schemas()
     except ImportError as err:
         print(f"metamorphic_gate: no built extension to measure: {err}")
         return None
     built = _build(specs)
-    return Recording(
-        commit=_commit(),
-        builds={name: validator is not None for name, validator in built.items()},
-        membership=_membership(built, _values()),
-        decisions=_decisions(built),
+    sides = _build(
+        {
+            f"{name}.{side}": spec
+            for name, (left, right) in pairs.items()
+            for side, spec in (("left", left), ("right", right))
+        }
     )
+    times: dict[str, int] = {}
+    decisions = _decisions(built, times) | _paired(sides, times)
+    version = importlib.metadata.version("valgebra")
+    recording = Recording(
+        commit=_commit(version),
+        version=version,
+        builds={name: schema is not None for name, schema in (built | sides).items()},
+        membership=_membership(built | sides, _values()),
+        decisions=decisions,
+    )
+    if timed:
+        recording["times"] = times
+        peak = _peak_mb()
+        if peak is not None:
+            recording["peak_mb"] = peak
+    return recording
 
 
-def _commit() -> str:
-    """Name the commit this recording describes, or `unknown` outside a checkout."""
-    return git_output("rev-parse", "HEAD", cwd=ROOT) or "unknown"
+def _commit(version: str) -> str:
+    """Name the commit this recording describes, or `unknown` where none is found.
+
+    A build of this tree is the checkout's `HEAD`; an installed release is the
+    commit its version's tag names, which a clone without tags cannot say.
+    """
+    import valgebra  # noqa: PLC0415
+
+    if ROOT in Path(valgebra.__file__).resolve().parents:
+        return git_output("rev-parse", "HEAD", cwd=ROOT) or "unknown"
+    return git_output("rev-parse", f"v{version}^{{commit}}", cwd=ROOT) or "unknown"
+
+
+def _peak_mb() -> int | None:
+    """Read the most memory this process has held, in megabytes, where it can."""
+    try:
+        import resource  # noqa: PLC0415 -- not on every platform
+    except ImportError:
+        return None
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    # Linux reports kilobytes and macOS bytes.
+    return peak // (1 << 20) if sys.platform == "darwin" else peak // (1 << 10)
 
 
 def _keys_agree(name: str, reference: dict[str, str], measured: dict[str, str]) -> bool:
@@ -473,6 +685,40 @@ def contradicted_decisions(
     ]
 
 
+def raised_decisions(reference: dict[str, str], measured: dict[str, str]) -> list[str]:
+    """List the relations this build raises on where the reference answered."""
+    return [
+        f"{key}: {reference[key]} on the reference, raised on this build"
+        for key in sorted(reference)
+        if measured[key] == RAISED and reference[key] != RAISED
+    ]
+
+
+def slower_decisions(
+    reference_times: dict[str, int], measured_times: dict[str, int]
+) -> list[str]:
+    """List the decisions ten times slower than the release's and past 50 ms."""
+    return [
+        f"{key}: {measured_times[key]} us, against {reference_times[key]} us"
+        for key in sorted(reference_times)
+        if key in measured_times
+        and measured_times[key] > SLOWER_RATIO * reference_times[key]
+        and measured_times[key] > SLOWER_FLOOR_US
+    ]
+
+
+def heavier_run(reference_mb: int | None, measured_mb: int | None) -> list[str]:
+    """Name a run whose peak memory is twice the release's and 64 MB past it."""
+    if reference_mb is None or measured_mb is None:
+        return []
+    if (
+        measured_mb > MEMORY_RATIO * reference_mb
+        and measured_mb - reference_mb > MEMORY_FLOOR_MB
+    ):
+        return [f"peak memory {measured_mb} MB, against {reference_mb} MB"]
+    return []
+
+
 def _subtype_claim(key: str) -> tuple[str, str] | None:
     """Read `A <= B` back out of a decision key, or `None` for an emptiness row."""
     left, separator, right = key.partition(" <= ")
@@ -538,41 +784,55 @@ def _arguments(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--record",
         action="store_true",
-        help="write this tree's reading as the reference",
+        help="write this build's answers as the reference, from the release's wheel",
+    )
+    parser.add_argument(
+        "--record-to",
+        type=Path,
+        metavar="PATH",
+        help="write this build's answers, times and peak memory to PATH",
+    )
+    parser.add_argument(
+        "--against",
+        type=Path,
+        metavar="PATH",
+        help="hold this build's times and peak memory to the recording at PATH",
     )
     return parser.parse_args(argv)
 
 
-def main(argv: list[str]) -> int:
-    args = _arguments(argv)
-    measured = record()
-    if measured is None:
-        return EXIT_CANNOT_RUN
+def _write(args: argparse.Namespace, measured: Recording) -> bool:
+    """Write the recording a flag asks for; whether one did."""
+    if args.record_to is not None:
+        args.record_to.write_text(
+            json.dumps(measured, sort_keys=True), encoding="utf-8"
+        )
+        print(f"metamorphic_gate: valgebra {measured['version']} recorded with times")
+        return True
     if args.record:
         REFERENCE_FILE.write_text(
             json.dumps(measured, indent=1, sort_keys=True) + "\n", encoding="utf-8"
         )
         print(f"metamorphic_gate: recorded at {measured['commit']}")
-        return EXIT_OK
+        return True
+    return False
 
-    try:
-        reference = json.loads(REFERENCE_FILE.read_text(encoding="utf-8"))
-        reference_membership = reference["membership"]
-        reference_decisions = reference["decisions"]
-    except (OSError, ValueError, KeyError) as err:
-        print(f"metamorphic_gate: cannot read the reference: {err}")
-        return EXIT_CANNOT_RUN
 
+def _answers(reference: dict[str, Any], measured: Recording) -> list[str] | None:
+    """Hold the answers to the reference's; the failures, or `None` if it cannot."""
+    reference_membership = reference["membership"]
+    reference_decisions = reference["decisions"]
     membership = measured["membership"]
     decisions = measured["decisions"]
     agreed = _keys_agree("membership", reference_membership, membership)
     agreed = _keys_agree("decision", reference_decisions, decisions) and agreed
     if not agreed:
-        return EXIT_CANNOT_RUN
+        return None
 
     moved = moved_membership(reference_membership, membership)
     lost = lost_decisions(reference_decisions, decisions)
     contradicted = contradicted_decisions(reference_decisions, decisions)
+    raised = raised_decisions(reference_decisions, decisions)
     refuted = unwitnessed_widenings(
         reference_decisions, decisions, membership, _values()
     )
@@ -582,16 +842,60 @@ def main(argv: list[str]) -> int:
         if reference_decisions[key] == "u" and decisions[key] in DECIDED
     )
 
-    print(f"reference: {reference['commit']}")
+    print(f"reference: {reference['commit']} (valgebra {reference.get('version')})")
     print(f"corpus:    {len(membership)} value pairs, {len(decisions)} decisions")
     _report("membership moved", moved)
     _report("decisions lost", lost)
     _report("decisions contradicted", contradicted)
+    _report("decisions raised", raised)
     _report("widenings refuted by a value", refuted)
     print(f"widenings: {widened}")
-    if moved or lost or contradicted or refuted:
+    return moved + lost + contradicted + raised + refuted
+
+
+def _against_the_release(path: Path, measured: Recording) -> list[str] | None:
+    """Hold the times and peak memory to the release's; `None` if unreadable."""
+    try:
+        release = json.loads(path.read_text(encoding="utf-8"))
+        release_times = release["times"]
+    except (OSError, ValueError, KeyError) as err:
+        print(f"metamorphic_gate: cannot read the release's times: {err}")
+        return None
+    slower = slower_decisions(release_times, measured.get("times", {}))
+    slower += heavier_run(release.get("peak_mb"), measured.get("peak_mb"))
+    print(f"release:   valgebra {release.get('version')}, {release.get('peak_mb')} MB")
+    print(f"this:      {measured.get('peak_mb')} MB at its peak")
+    _report("slower than the release", slower)
+    return slower
+
+
+def _compare(args: argparse.Namespace, measured: Recording) -> list[str] | None:
+    """Every failure against the reference and the release; `None` if it cannot."""
+    try:
+        reference = json.loads(REFERENCE_FILE.read_text(encoding="utf-8"))
+        failures = _answers(reference, measured)
+    except (OSError, ValueError, KeyError) as err:
+        print(f"metamorphic_gate: cannot read the reference: {err}")
+        return None
+    if failures is None or args.against is None:
+        return failures
+    slower = _against_the_release(args.against, measured)
+    return None if slower is None else failures + slower
+
+
+def main(argv: list[str]) -> int:
+    args = _arguments(argv)
+    measured = record(timed=args.record_to is not None or args.against is not None)
+    if measured is None:
+        return EXIT_CANNOT_RUN
+    if _write(args, measured):
+        return EXIT_OK
+    failures = _compare(args, measured)
+    if failures is None:
+        return EXIT_CANNOT_RUN
+    if failures:
         return EXIT_FAIL
-    print("OK: membership held and no decision was lost.")
+    print("OK: membership held, no decision was lost and nothing was slower.")
     return EXIT_OK
 
 

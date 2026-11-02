@@ -1043,6 +1043,21 @@ jobs:
       # wall-clock budget could not.
       - name: Competitive comparison gate
         run: uv run --no-sync --group bench python scripts/compare_gate.py
+      # The release differential. The published wheel answers the metamorphic
+      # corpus in an environment of its own and records each decision's time
+      # and the run's peak memory; this tree's optimized wheel, installed above,
+      # is held to that recording, and to the reference's answers, which are the
+      # release's too. Both builds are read on this runner in this job, so a
+      # ratio between them is the change's rather than the machine's. A wheel
+      # and nothing else: a release with no wheel for this interpreter fails
+      # here rather than building one from its source.
+      - name: Record the last release's answers and times
+        run: |
+          uv venv .venv-release --python 3.15
+          uv pip install --python .venv-release/bin/python --no-deps --only-binary valgebra valgebra
+          .venv-release/bin/python scripts/metamorphic_gate.py --record-to release.json
+      - name: Hold answers, time and memory to the last release
+        run: uv run --no-sync python scripts/metamorphic_gate.py --against release.json
       # The ratchet beside that ceiling wants a recording, and a ratio belongs
       # to the environment it was taken in: the interpreter's minor version,
       # whether it has a global lock, and the pydantic-core on the other side.

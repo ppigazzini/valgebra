@@ -4585,6 +4585,58 @@ PLANTS = (
         trips=("test_the_generator_draws_a_reference_wider_than_its_table",),
     ),
     Plant(
+        # A raise the reference shared read as one this build introduced.
+        "tests/test_metamorphic_gate.py",
+        ("scripts/metamorphic_gate.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/metamorphic_gate.py",
+            "if measured[key] == RAISED and reference[key] != RAISED",
+            "if measured[key] == RAISED",
+        ),
+        trips=(
+            "test_a_relation_that_raises_fails_and_one_that_raised_already_does_not",
+        ),
+    ),
+    Plant(
+        # The floor dropped: a quick decision the runner's noise moves tenfold
+        # reported as a slowdown.
+        "tests/test_metamorphic_gate.py",
+        ("scripts/metamorphic_gate.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/metamorphic_gate.py",
+            "        and measured_times[key] > SLOWER_FLOOR_US\n",
+            "",
+        ),
+        trips=("test_a_decision_slower_than_the_release_past_the_floor_fails",),
+    ),
+    Plant(
+        # A decision one recording lacks read as if both carried it.
+        "tests/test_metamorphic_gate.py",
+        ("scripts/metamorphic_gate.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/metamorphic_gate.py",
+            "        if key in measured_times\n        and ",
+            "        if ",
+        ),
+        trips=("test_a_decision_only_one_recording_carries_is_not_timed",),
+    ),
+    Plant(
+        # The memory floor dropped: a run twice a small release's peak reported
+        # as heavier, which is the allocator's rounding.
+        "tests/test_metamorphic_gate.py",
+        ("scripts/metamorphic_gate.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/metamorphic_gate.py",
+            "        and measured_mb - reference_mb > MEMORY_FLOOR_MB\n",
+            "",
+        ),
+        trips=("test_a_run_heavier_than_the_release_past_the_floor_fails",),
+    ),
+    Plant(
         # The soundness direction read backwards: a gained answer reported as a
         # lost one, and a lost one passed.
         "tests/test_metamorphic_gate.py",

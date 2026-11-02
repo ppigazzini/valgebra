@@ -106,6 +106,39 @@ def test_a_contradicted_decision_fails_in_both_directions() -> None:
     ]
 
 
+def test_a_relation_that_raises_fails_and_one_that_raised_already_does_not() -> None:
+    # The procedure answers every pair, so a raise where the reference answered
+    # is an answer lost, and one the reference raised too is no change.
+    reference = {"narrow <= wide": "s", "wide <= narrow": "x"}
+    measured = {"narrow <= wide": "x", "wide <= narrow": "x"}
+    assert gate.raised_decisions(reference, measured) == [
+        "narrow <= wide: s on the reference, raised on this build"
+    ]
+
+
+def test_a_decision_slower_than_the_release_past_the_floor_fails() -> None:
+    # Ten times the release and past 50 ms: each condition alone passes, the
+    # ratio because the release's decision was quick and the floor because the
+    # change was small against it.
+    release = {"quick": 1_000, "slow": 6_000, "near": 60_000}
+    measured = {"quick": 40_000, "slow": 61_000, "near": 590_000}
+    assert gate.slower_decisions(release, measured) == [
+        "slow: 61000 us, against 6000 us"
+    ]
+
+
+def test_a_decision_only_one_recording_carries_is_not_timed() -> None:
+    assert gate.slower_decisions({"gone": 1}, {"new": 10_000_000}) == []
+
+
+def test_a_run_heavier_than_the_release_past_the_floor_fails() -> None:
+    assert gate.heavier_run(30, 59) == []
+    assert gate.heavier_run(30, 90) == []
+    assert gate.heavier_run(100, 190) == []
+    assert gate.heavier_run(30, 95) == ["peak memory 95 MB, against 30 MB"]
+    assert gate.heavier_run(None, 95) == []
+
+
 def test_a_widening_is_not_a_lost_decision() -> None:
     # The relation is one-directional by soundness: gaining an answer is what
     # a change to the procedure does on purpose.
@@ -170,6 +203,8 @@ def test_the_reference_the_gate_ships_with_describes_a_commit() -> None:
 
     reference = json.loads(gate.REFERENCE_FILE.read_text(encoding="utf-8"))
     assert len(reference["commit"]) == 40, "the reference names no commit"
+    assert reference["version"], "the reference names no release"
+    assert "times" not in reference, "a time belongs to the machine it was read on"
     assert reference["membership"], "the reference carries no membership verdicts"
     assert reference["decisions"], "the reference carries no decisions"
 
