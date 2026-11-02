@@ -229,10 +229,7 @@ pub(super) fn refuse_literal_form(arg: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     }
     let forms = forms(py)?;
-    let bottom = [&forms.never, &forms.noreturn]
-        .into_iter()
-        .flatten()
-        .any(|form| arg.is(form.bind(py)));
+    let bottom = arg.is(forms.never.bind(py)) || arg.is(forms.noreturn.bind(py));
     let form = arg.is(forms.any.bind(py))
         || bottom
         || arg.is_exact_instance_of::<Validator>()
@@ -291,16 +288,18 @@ enum Qualifier {
 fn field_qualifier(origin: &Bound<'_, PyAny>) -> PyResult<Option<Qualifier>> {
     let py = origin.py();
     let forms = forms(py)?;
-    for (marker, qualifier) in [
-        (&forms.required, Qualifier::Required),
-        (&forms.not_required, Qualifier::NotRequired),
-        (&forms.read_only, Qualifier::ReadOnly),
-    ] {
-        if let Some(marker) = marker
-            && origin.is(marker.bind(py))
-        {
-            return Ok(Some(qualifier));
-        }
+    if origin.is(forms.required.bind(py)) {
+        return Ok(Some(Qualifier::Required));
+    }
+    if origin.is(forms.not_required.bind(py)) {
+        return Ok(Some(Qualifier::NotRequired));
+    }
+    if forms
+        .read_only
+        .as_ref()
+        .is_some_and(|marker| origin.is(marker.bind(py)))
+    {
+        return Ok(Some(Qualifier::ReadOnly));
     }
     // `ReadOnly` from `typing_extensions`, which is where a release older than
     // the one that adds it to `typing` spells it. A qualifier is a form and
@@ -494,11 +493,7 @@ fn is_unpack_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = origin.py();
     Ok(!origin.is_none()
         && !origin.is_instance_of::<PyType>()
-        && (forms(py)?
-            .unpack
-            .as_ref()
-            .is_some_and(|unpack| origin.is(unpack.bind(py)))
-            || is_extension(origin, |held| &held.unpack)?))
+        && (origin.is(forms(py)?.unpack.bind(py)) || is_extension(origin, |held| &held.unpack)?))
 }
 
 /// The refusal for an unpacked argument anywhere but a tuple's arguments.

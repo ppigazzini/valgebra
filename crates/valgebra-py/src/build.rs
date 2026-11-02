@@ -705,12 +705,14 @@ impl Drop for BuildGuard {
 /// frontend compares schema descriptions against. Resolved once on first
 /// compile rather than re-fetched on every node, so a deep schema does not
 /// re-import a module and re-`getattr` the same singleton dozens of times. The
-/// handles are immutable interpreter singletons; the optional ones are absent on
-/// older Pythons (`Never`/`TypeAliasType`).
+/// handles are immutable interpreter singletons. A form a supported release
+/// may lack is an `Option`: `TypeAliasType` below 3.12, `ReadOnly` below 3.13,
+/// `frozendict` below 3.15, and the private `_get_protocol_attrs`, which a
+/// release may drop; so is `ForwardRef`, read from whichever module serves it.
 struct Forms {
     any: Py<PyAny>,
-    never: Option<Py<PyAny>>,
-    noreturn: Option<Py<PyAny>>,
+    never: Py<PyAny>,
+    noreturn: Py<PyAny>,
     type_alias_type: Option<Py<PyAny>>,
     union: Py<PyAny>,
     optional: Py<PyAny>,
@@ -735,21 +737,21 @@ struct Forms {
     get_origin: Py<PyAny>,
     get_args: Py<PyAny>,
     /// `typing.TypeVar`, the one kind of type parameter an alias's arguments
-    /// substitute, asked by exact type: `typing_extensions`' `TypeVarTuple` is
-    /// an instance of it below 3.11.
+    /// substitute, asked by exact type, which is one comparison and is what
+    /// every type variable either module builds is.
     type_var: Py<PyAny>,
     /// `typing.ForwardRef`, and the four classes a type variable or special
     /// form is an instance of, in the order they are asked.
     forward_ref: Option<Py<PyAny>>,
     type_variables: Vec<Py<PyAny>>,
     /// The `TypedDict` field qualifiers: `Required`, `NotRequired`,
-    /// `ReadOnly`. Absent where the runtime is older than the one that spells
-    /// them.
-    required: Option<Py<PyAny>>,
-    not_required: Option<Py<PyAny>>,
+    /// `ReadOnly`, the last absent below 3.13, where `typing` does not spell
+    /// it.
+    required: Py<PyAny>,
+    not_required: Py<PyAny>,
     read_only: Option<Py<PyAny>>,
     /// `typing.Unpack`, the origin of an unpacked tuple.
-    unpack: Option<Py<PyAny>>,
+    unpack: Py<PyAny>,
     /// `typing.get_type_hints`, which resolves a class's annotations.
     get_type_hints: Py<PyAny>,
     object: Py<PyAny>,
@@ -828,8 +830,8 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             };
         Ok(Forms {
             any: typing.getattr("Any")?.unbind(),
-            never: optional_form(&typing, "Never")?,
-            noreturn: optional_form(&typing, "NoReturn")?,
+            never: typing.getattr("Never")?.unbind(),
+            noreturn: typing.getattr("NoReturn")?.unbind(),
             type_alias_type: optional_form(&typing, "TypeAliasType")?,
             union: typing.getattr("Union")?.unbind(),
             optional: typing.getattr("Optional")?.unbind(),
@@ -848,18 +850,18 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             forward_ref: optional_form(annotationlib.as_ref().unwrap_or(&typing), "ForwardRef")?,
             type_variables: ["TypeVar", "ParamSpec", "TypeVarTuple", "_SpecialForm"]
                 .iter()
-                .filter_map(|name| optional_form(&typing, name).transpose())
+                .map(|name| Ok(typing.getattr(*name)?.unbind()))
                 .collect::<PyResult<_>>()?,
-            required: optional_form(&typing, "Required")?,
-            not_required: optional_form(&typing, "NotRequired")?,
+            required: typing.getattr("Required")?.unbind(),
+            not_required: typing.getattr("NotRequired")?.unbind(),
             read_only: optional_form(&typing, "ReadOnly")?,
-            unpack: optional_form(&typing, "Unpack")?,
+            unpack: typing.getattr("Unpack")?.unbind(),
             get_type_hints: typing.getattr("get_type_hints")?.unbind(),
             object: builtins.getattr("object")?.unbind(),
             frozendict: optional_form(&builtins, "frozendict")?,
             class_factories: ["TypedDict", "NamedTuple"]
                 .iter()
-                .filter_map(|name| optional_form(&typing, name).transpose())
+                .map(|name| Ok(typing.getattr(*name)?.unbind()))
                 .collect::<PyResult<_>>()?,
             enum_class: py.import("enum")?.getattr("Enum")?.unbind(),
             callable: py.import("collections.abc")?.getattr("Callable")?.unbind(),
@@ -1121,19 +1123,16 @@ fn read_annotation(
     let forms = forms(py)?;
 
     // `typing.Any` is a singleton special form: the gradual dynamic type. It is
-    // checked before the type-object dispatch below because on 3.11+ `Any` is
-    // itself a class and would otherwise be taken for an ordinary type.
+    // checked before the type-object dispatch below because `Any` is itself a
+    // class and would otherwise be taken for an ordinary type.
     if obj.is(forms.any.bind(py)) {
         return Ok(Schema::ANY);
     }
 
     // `typing.Never`/`NoReturn` are the empty type: the lattice bottom, the
     // typing-native spelling of `nothing`. (`object` maps to the top below.)
-    // `Never` is 3.11+, so it is absent (skipped) on older Pythons.
-    for form in [&forms.never, &forms.noreturn].into_iter().flatten() {
-        if obj.is(form.bind(py)) {
-            return Ok(Schema::Nothing);
-        }
+    if obj.is(forms.never.bind(py)) || obj.is(forms.noreturn.bind(py)) {
+        return Ok(Schema::Nothing);
     }
 
     // `Annotated` written bare annotates nothing. Below 3.13 it is a class,

@@ -170,7 +170,8 @@ def test_an_object_carrying_metadata_and_no_origin_is_a_value() -> None:
 def test_a_typing_extensions_form_reads_as_its_typing_spelling() -> None:
     """`typing_extensions` spells a form with an object of its own before a release.
 
-    On the floor that is `ReadOnly`, and before 3.15 `TypeAliasType`. Read
+    On the floor that is `Unpack` and `ReadOnly`, and before 3.15
+    `TypeAliasType`. Read
     against `typing` alone, the qualifier would be an unsupported form and the
     alias a literal of itself. Where a release spells the form in `typing` the
     two are one object, and this reads the same.

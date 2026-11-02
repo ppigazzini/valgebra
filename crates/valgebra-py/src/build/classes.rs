@@ -1244,11 +1244,11 @@ pub(super) fn annotates_nothing(base: &Bound<'_, PyAny>) -> bool {
     STATIC.iter().any(|class| base.is(class(base.py())))
 }
 
-/// Whether `typing._eval_type` would hand back anything other than `value`./// Whether `typing._eval_type` would hand back anything other than `value`.
+/// Whether `typing._eval_type` would hand back anything other than `value`.
 ///
 /// It resolves a forward reference, and descends only into the `__args__` of
 /// the three alias classes. A builtin `types.GenericAlias` it rebuilds as
-/// `origin[args]` from 3.11: a string argument becomes a forward reference, an
+/// `origin[args]`: a string argument becomes a forward reference, an
 /// unpacked alias becomes `Unpack[...]`, and a `collections.abc.Callable`'s
 /// argument list is re-nested. Each of those is a change, so each is `true`. A
 /// string under any other alias -- a `Literal`'s value -- is returned as it is.
@@ -1412,9 +1412,7 @@ pub(super) fn qualified_required<'py>(
         }
         let mut says = None;
         for (marker, answer) in [(&forms.required, true), (&forms.not_required, false)] {
-            if let Some(marker) = marker
-                && origin.is(marker.bind(py))
-            {
+            if origin.is(marker.bind(py)) {
                 says = Some(answer);
             }
         }

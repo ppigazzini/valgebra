@@ -235,10 +235,9 @@ inverts every verdict under it, and a suite with no `Not` row passes.
 symmetry:
 
 1. `None` — before anything, since it is the most common leaf.
-2. `typing.Any` — before the type-object branch, because on 3.11+ `Any` is
-   itself a class and would otherwise be taken for an ordinary type.
-3. `Never`/`NoReturn` — the lattice bottom, absent on older Pythons and skipped
-   there.
+2. `typing.Any` — before the type-object branch, because `Any` is itself a
+   class and would otherwise be taken for an ordinary type.
+3. `Never`/`NoReturn` — the lattice bottom.
 4. `Annotated` written bare — refused, since it annotates nothing. Below 3.13 it
    is a class, which the next step would read as an `isinstance` test no value
    passes.
@@ -493,8 +492,8 @@ last a generic `TypedDict`, dataclass or named tuple class, built as the class
 with its parameters bound to the arguments (`bound_hints` in
 `build/classes.rs`); so a form any other arm reads pays nothing for them. The runtime keeps the alias, its parameters and its body, and
 checks none of them: `Pair[int, str]` builds. So the arm refuses a parameter
-that is no `TypeVar`, asked by exact type since `typing_extensions`'
-`TypeVarTuple` is an instance of `TypeVar` below 3.11; counts the arguments
+that is no `TypeVar`, asked by exact type, which is one comparison and is
+what every type variable either module builds is; counts the arguments
 against the parameters; fills a missing one from its default, which may name
 an earlier parameter; and substitutes through the body's own `__parameters__`,
 which lists its type variables in the order the body first names them -- in
