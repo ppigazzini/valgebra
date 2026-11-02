@@ -857,16 +857,16 @@ the gate the whole listing, `cargo mutants --list` over the same files, with
 
 **Run it on the interpreter the lane names, with what it installs.** The
 verdict is the embedded interpreter's: a mutant this box's 3.14 reports as a
-survivor is one CPython 3.12 kills, so a disagreement with the lane is the
-interpreter before it is the tree. The lane pins 3.12, and its embedded
+survivor is one CPython 3.13 kills, so a disagreement with the lane is the
+interpreter before it is the tree. The lane pins 3.13, and its embedded
 interpreter imports `typing_extensions`. That interpreter takes its prefix
 from the first `python3` on `PATH`, not from `PYO3_PYTHON`, which only
-configures the build: with a bare 3.12, or a venv named by `PYO3_PYTHON` alone,
+configures the build: with a bare 3.13, or a venv named by `PYO3_PYTHON` alone,
 it starts on the base prefix, where `typing_extensions` is not installed, so
 the corpus installs its stand-in and kills the mutants of the arms the lane
 cannot reach -- a sweep that passes here and a ratchet that fails there. Both
 walk lanes put their venv's `bin` first on `PATH` for that reason, since uv's
-build of 3.12 has no `typing_extensions` of its own, and so does `binding
+build of 3.13 has no `typing_extensions` of its own, and so does `binding
 coverage`, whose figure would otherwise count the stand-in's arms.
 `tests/test_baseline_interpreters.py` holds every sweep that embeds an
 interpreter to doing so, and every other step that embeds one to naming its
@@ -876,7 +876,7 @@ lock fills, its `bin` first on `PATH`:
 
 ```bash
 export VALGEBRA_WALK_VENV="$PWD/../walk-venv"
-UV_PROJECT_ENVIRONMENT="$VALGEBRA_WALK_VENV" uv sync --locked --no-install-project --python 3.12
+UV_PROJECT_ENVIRONMENT="$VALGEBRA_WALK_VENV" uv sync --locked --no-install-project --python 3.13
 export PATH="$VALGEBRA_WALK_VENV/bin:$PATH"
 export PYO3_PYTHON="$VALGEBRA_WALK_VENV/bin/python"
 export LD_LIBRARY_PATH="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"

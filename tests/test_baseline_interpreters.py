@@ -167,6 +167,34 @@ def test_a_sweep_starts_its_embedded_interpreter_from_the_venv() -> None:
     )
 
 
+#: The `uv sync` of the tooling page's local walk sweep, and the release it asks
+#: for.
+_RECIPE_SYNC = re.compile(
+    r'^UV_PROJECT_ENVIRONMENT="\$VALGEBRA_WALK_VENV" uv sync .*--python (\S+)$',
+    re.MULTILINE,
+)
+
+
+def test_the_local_sweep_syncs_the_interpreter_the_walk_sweeps_pin() -> None:
+    """The page's local sweep runs on the release the lanes pin.
+
+    `docs/dev/07-tooling-ci.md` gives a local walk sweep as commands, and its
+    `uv sync` names a release: a second copy of the one `ci.yml` pins. A sweep
+    on another release reports as survivors mutants the lane kills, and kills
+    mutants the lane's baseline accepts, so the copy is held to the pin or it
+    stops moving when the pin does.
+    """
+    page = (ROOT / "docs/dev/07-tooling-ci.md").read_text(encoding="utf-8")
+    asked = _RECIPE_SYNC.findall(page)
+    assert len(asked) == 1, f"the page's local sweep syncs {asked}, not one release"
+    pinned = {job: _pinned(job) for job in _embedded_sweeps()}
+    assert set(pinned.values()) == set(asked), (
+        f"the page's local sweep syncs {asked[0]} and the walk sweeps pin "
+        f"{pinned}. Name the pinned release in the recipe's `uv sync`, and in "
+        "the paragraph above it."
+    )
+
+
 #: An embedded interpreter started from the base installation, as the `python`
 #: job's corpora start theirs: an interpreter with no environment to live in,
 #: reading its standard library from the prefix it is handed.
