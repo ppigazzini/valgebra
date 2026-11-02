@@ -12574,3 +12574,31 @@ fn a_mapping_holds_no_more_keys_than_its_key_types_hold_apart() {
             .is_empty_with(&NoLeafRelations, &[])
     );
 }
+
+/// A member whose shape keeps its lengths outside the bounds of a refinement
+/// beside it empties the meet: `{"a?": int}` holds at most one key, so the
+/// record met with `Annotated[dict, MinLen(2)]` holds none. Under `MinLen(1)`
+/// the record holds `{"a": 0}`, and the meet is not read empty. The
+/// refinement is no member beside itself, and a mapping of any length beside
+/// it misses no bound.
+#[test]
+fn a_member_shaped_past_the_bounds_beside_it_empties_the_meet() {
+    let optional_a = closed(vec![field("a", Schema::Int, false)]);
+    let at_least = |least| {
+        Schema::refine(
+            Schema::mapping(MapClause::top()),
+            vec![Constraint::MinLen(least)],
+        )
+    };
+    let meet = |least| Schema::Intersection(vec![optional_a.clone(), at_least(least)].into());
+    assert!(meet(2).is_empty_with(&NoLeafRelations, &[]));
+    assert!(!meet(1).is_empty_with(&NoLeafRelations, &[]));
+    assert_eq!(
+        meet(2).subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    let alone = [at_least(2), Schema::mapping(MapClause::top())];
+    assert!(!super::emptiness::a_member_shaped_past_the_bounds_beside_it(&alone, &mut cx));
+}

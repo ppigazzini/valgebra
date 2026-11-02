@@ -1178,6 +1178,26 @@ def test_a_mapping_holds_no_more_keys_than_its_key_type_holds() -> None:
     )
 
 
+def test_a_record_beside_a_length_bound_it_misses_holds_no_value() -> None:
+    """A meet holding a record and a length bound the record's shape misses is empty.
+
+    `{"a?": int}` holds at most one key, so under `MinLen(2)` it holds no
+    value, and its meet with `Annotated[dict, MinLen(2)]` -- every value a
+    value of the record that bound keeps -- holds none either. Under
+    `MinLen(1)` the record holds `{"a": 0}`, and the meet is not read empty.
+    """
+    optional_a = Validator({"a?": int})
+    assert Validator(Annotated[optional_a, at.MinLen(2)]).relation_to(  # ty: ignore[invalid-type-form]
+        nothing
+    ) == ("subset")
+    meet = intersection(optional_a, Annotated[dict, at.MinLen(2)])
+    assert meet.relation_to(nothing) == "subset"
+    assert Validator(meet).is_empty()
+    assert not Validator(
+        intersection(optional_a, Annotated[dict, at.MinLen(1)])
+    ).is_empty()
+
+
 def test_a_meet_holding_a_complement_is_read_as_its_relation() -> None:
     """A meet with a complement is empty where the rest is below the inner set.
 

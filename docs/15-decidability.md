@@ -444,8 +444,9 @@ answers `"undecided"`.
   alone, and a mapping holds no more keys than its fields and the keys each
   clause with a value can take, so `set[int & str]` and `dict[str, int & str]`
   under `MinLen(1)`, `dict[bool, int]` under `MinLen(3)` and the closed
-  `{"a?": int}` under `MinLen(2)` are empty. A bound a mapping's clauses reach
-  is not counted further, and declines. Bounds alone over one base are read
+  `{"a?": int}` under `MinLen(2)` are empty, and so is a meet of such a shape
+  with a length bound it misses, `{"a?": int} & Annotated[dict, MinLen(2)]`.
+  A bound a mapping's clauses reach is not counted further, and declines. Bounds alone over one base are read
   as their lengths at any length (the next entry). Met with anything else --
   a pattern, an element shape, a second base -- a bound over a list is an
   automaton with a state per element, and the sets compare two such bounds up

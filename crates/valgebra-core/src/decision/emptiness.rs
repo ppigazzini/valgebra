@@ -722,10 +722,39 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
                 }),
                 None => meet_through_a_reference(members, cx),
             })
-            .or_else(|| a_difference_of_sets(members, cx)),
+            .or_else(|| a_difference_of_sets(members, cx))
+            .or_else(|| {
+                if a_member_shaped_past_the_bounds_beside_it(members, cx) {
+                    Verdict::Empty
+                } else {
+                    Verdict::Unknown
+                }
+            }),
         settled => settled,
     };
     (verdict, region)
+}
+
+/// Whether a member's shape keeps its lengths outside the bounds of a
+/// refinement beside it ([`lengths_miss_the_shape`]): then the meet holds no
+/// value, since `m ∩ (b | c)` is within `m | c`, each of its values a value of
+/// `m` the bounds keep [FCB08, Def. 4.1]. `{"a?": int} & Annotated[dict,
+/// MinLen(2)]` holds none, the record holding at most one key, as
+/// `Annotated[{"a?": int}, MinLen(2)]` holds none. Read off the shapes, as the
+/// refinement's own reading is, spending no step: a verdict of each member
+/// under the bounds spent the steps the readings after it decide with.
+pub(super) fn a_member_shaped_past_the_bounds_beside_it(
+    members: &[Schema],
+    cx: &mut Cx<'_>,
+) -> bool {
+    members.iter().any(|refined| {
+        let Schema::Refine { constraints, .. } = refined else {
+            return false;
+        };
+        members.iter().any(|member| {
+            !std::ptr::eq(member, refined) && lengths_miss_the_shape(member, constraints, cx)
+        })
+    })
 }
 
 /// The verdict of a literal. The core cannot read a constant, and this asks

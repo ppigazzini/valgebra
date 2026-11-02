@@ -102,10 +102,17 @@ answer of its own, or a repair to a change not yet released.
 - feat: a Boolean term of length bounds over one base is read as its lengths
 - feat: a meet that may hold no kind is below every set
 - feat: a mapping holds no more keys than its key types hold apart
+- feat: a shape beside a length bound it misses holds no value
 
 -->
 
 ### Added
+
+- **A shape beside a length bound it misses holds no value.** A meet of a
+  record, a sequence or a set with a refinement whose length bounds that
+  shape's lengths miss is empty, read as the shape under the bounds is:
+  `{"a?": int} & Annotated[dict, MinLen(2)]` is `subset` of `nothing`, as
+  `Annotated[{"a?": int}, MinLen(2)]` is, where the meet was undecided.
 
 - **A mapping holds no more keys than its key types hold apart.** The
   relation reads a mapping's most keys as the emptiness reading does: its
