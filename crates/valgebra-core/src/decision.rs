@@ -819,16 +819,16 @@ impl Schema {
     }
 
     /// Whether every value of `self` is also a value of `other` — set inclusion,
-    /// the semantic-subtyping relation. Complete on the scalar fragment via
-    /// `self ∧ ¬other = ∅`, and decided structurally past it by recursion on
-    /// matching constructors (the lattice rules, set/frozenset element
-    /// inclusion, and sequence inclusion on the prefix-and-tail form). Every
-    /// rule is **sound** — it never reports a subtype it cannot justify — and
-    /// conservative where it cannot decide: there it returns `false` rather than
-    /// guess. A `false` is then asked again of the two *sets*, under a bound on
-    /// what building them may cost, which decides
-    /// what no rule about shapes reaches: a container meet, a complement nested
-    /// inside another, one regular language inside another, a kind against its own
+    /// the semantic-subtyping relation [Cas24, Def. 4]. Complete on the scalar
+    /// fragment via `self ∧ ¬other = ∅`, and decided structurally past it by
+    /// recursion on matching constructors (the lattice rules, set/frozenset
+    /// element inclusion, and sequence inclusion on the prefix-and-tail form).
+    /// Every rule is **sound** — it never reports a subtype it cannot justify
+    /// — and conservative where it cannot decide: there it returns `false`
+    /// rather than guess. A `false` is then asked again of the two *sets*,
+    /// under a bound on what building them may cost, which decides what no
+    /// rule about shapes reaches: a container meet, a complement nested inside
+    /// another, one regular language inside another, a kind against its own
     /// literals, one step dividing another.
     ///
     /// A complement *directly* under a complement is not on that list and cannot
@@ -1819,7 +1819,8 @@ impl Schema {
         }
     }
 
-    /// `A ⊆ X ∪ Y` where `A ∩ X = ∅`, which is `A ⊆ Y`.
+    /// `A ⊆ X ∪ Y` where `A ∩ X = ∅`, which is `A ⊆ Y`, the union and the meet
+    /// denoting the union and the intersection of the sets [FCB08, Def. 4.1].
     ///
     /// Answers `Unknown` where no branch is dropped, so a caller can ask twice
     /// -- once cheaply and once fully -- without the first answer standing in
@@ -2021,7 +2022,8 @@ impl Schema {
     }
 
     /// A subject below a meet, a member at a time: `A ⊆ (Y ∩ Z)` iff `A ⊆ Y`
-    /// and `A ⊆ Z`. At the root of a query, what the rules answer of each
+    /// and `A ⊆ Z`, a meet denoting the intersection of its members' sets
+    /// [FCB08, Def. 4.1]. At the root of a query, what the rules answer of each
     /// member is kept ([`below_each_member_at_the_root`]); below it nothing is.
     ///
     /// [`below_each_member_at_the_root`]: Self::below_each_member_at_the_root
@@ -2094,7 +2096,9 @@ impl Schema {
         Some(refuted != 0)
     }
 
-    /// A union below `other`, member by member, as the arm calling this states.
+    /// A union below `other`, member by member: a union is below a schema
+    /// exactly where each of its members is [BBC+26, (anyOf-l)], so one member
+    /// refuted refutes it.
     ///
     /// A table of constants below the complement of another is the two tables
     /// sharing no value, which the oracle answers for both at once, and a
@@ -2578,7 +2582,8 @@ impl Schema {
         }
     }
 
-    /// Whether `self` and `other` denote the same set — mutual inclusion.
+    /// Whether `self` and `other` denote the same set — mutual inclusion
+    /// [Cas24, Def. 4].
     ///
     /// Like the relations it composes, the decision is bounded; a `false` can mean
     /// "not proven equivalent within the work bound" for an adversarial schema.

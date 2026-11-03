@@ -85,7 +85,8 @@ and the folds the constructors apply are its laws. A set-theoretic
 interpretation takes a union to the union of the sets, a negation to the
 complement and the empty type to the empty set [FCB08, Def. 4.1], so every law
 of the algebra of sets -- Birkhoff's _Lattice Theory_ -- is a law of the types,
-the complement of a union the meet of the complements [FCB08, Lem. 6.2]. The
+the complement of a union the meet of the complements and the complement of a
+meet the union of them [FCB08, Lem. 6.2]. The
 relation reads a complemented union or meet as a subject with its complement
 pushed one level in, as a lazy normalization pushes a negation no further than
 the question in hand needs [BBC+26, §6.2, p. 9], and takes that reading where it
@@ -98,7 +99,7 @@ each claimed equivalence against membership rather than asserting it.
 
 SOURCE: §13.2 "**The laws hold by construction**"; §2 "every combinator builds the normal"
 
-IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend, ir.rs::Schema::union_within, ir.rs::Schema::meet_within, ir.rs::Schema::complement, kind.rs::Region::union, kind.rs::Region::intersect, kind.rs::Region::complement, oracle.rs::has_complementary_pair_within, valgebra-py/src/check/walk.rs::check_intersection, decision.rs::pushed_complement_is_placed, decision.rs::merged_split, decision/emptiness.rs::narrowed_by_its_members, decision/emptiness.rs::narrowed_meet
+IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend, ir.rs::Schema::union_within, ir.rs::Schema::meet_within, ir.rs::Schema::complement, kind.rs::Region::union, kind.rs::Region::intersect, kind.rs::Region::complement, oracle.rs::has_complementary_pair_within, valgebra-py/src/check/walk.rs::check_intersection, decision.rs::pushed_complement_is_placed, decision.rs::merged_split, decision/emptiness.rs::narrowed_by_its_members, decision/emptiness.rs::narrowed_meet, ir.rs::Schema, descr/polar.rs, descr/polar.rs::PolarUnion::union, descr/lines.rs::Line::complement, descr/sets.rs::escapes
 
 HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference, a_complement_is_below_its_complements_pushed_in, a_set_is_below_its_own_split, a_complement_the_relation_empties_is_read_empty, a_meet_of_guards_reads_as_the_meet_of_their_branches, a_reference_and_its_complement_meet_in_nothing
 
@@ -154,7 +155,7 @@ the other members' meet, the identity of [FCB08, §4.1] with `¬¬R` the set `R`
 
 SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
 
-IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision/emptiness.rs::a_class_below_the_complement_beside_it, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::below_by_emptiness, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::verdict_beside, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled, decision/emptiness.rs::Schema::below_the_set_it_complements, decision/emptiness.rs::Schema::complement_of_the_universe, decision/lengths.rs
+IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision/emptiness.rs::a_class_below_the_complement_beside_it, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::below_by_emptiness, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::verdict_beside, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled, decision/emptiness.rs::Schema::below_the_set_it_complements, decision/emptiness.rs::Schema::complement_of_the_universe, decision/lengths.rs, decision.rs::Schema::union_below, decision.rs::Schema::below_each_member, decision.rs::Schema::below_the_branches_it_can_meet, decision/lengths.rs::lengths_of, decision/lengths.rs::ByLength::relation_to
 
 HELD-BY: the_two_deciders_agree_under_an_oracle, a_meet_holding_a_class_is_empty_below_the_complement_beside_it, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment, a_placement_by_identity_spends_no_step, a_union_is_decided_a_part_at_a_time, a_meet_supertype_is_decided_a_member_at_a_time, test_a_meet_is_refuted_by_one_member_beside_one_no_decider_reads, a_pair_declined_as_written_is_asked_in_its_other_spellings, a_meet_disjoint_from_a_meet_is_refuted
 
@@ -349,7 +350,7 @@ every record.
 
 SOURCE: §13.3 "`keyed_map_splits_across_union` runs `Phi` beside the one-map rule"
 
-IMPLEMENTED-BY: decision/records.rs::keyed_map_splits_across_union, decision/records.rs::keyed_map_minus_keyed_maps, decision/records.rs::split_across, decision/records.rs::finite, decision/records.rs::Defaults, decision/records.rs::defaults_against, decision/records.rs::Slot, decision/records.rs::Slot::below, decision/records.rs::Slot::without, decision/records.rs::Labels::names_with, decision/records.rs::Labels::base_case, decision/records.rs::phi, decision/records.rs::record_of_maps, decision/records.rs::labels_met, decision/records.rs::keyed_meet_below, decision/records.rs::record_of_maps_verdict, decision/records.rs::empty_without_the_maps_unread, decision/records.rs::a_shared_field_refuted_by_the_sets
+IMPLEMENTED-BY: decision/records.rs::keyed_map_splits_across_union, decision/records.rs::keyed_map_minus_keyed_maps, decision/records.rs::split_across, decision/records.rs::finite, decision/records.rs::Defaults, decision/records.rs::defaults_against, decision/records.rs::Slot, decision/records.rs::Slot::below, decision/records.rs::Slot::without, decision/records.rs::Slot::apart, decision/records.rs::Labels::names_with, decision/records.rs::Labels::base_case, decision/records.rs::phi, decision/records.rs::record_of_maps, decision/records.rs::labels_met, decision/records.rs::keyed_meet_below, decision/records.rs::record_of_maps_verdict, decision/records.rs::empty_without_the_maps_unread, decision/records.rs::a_shared_field_refuted_by_the_sets
 
 HELD-BY: a_names_meet_is_the_meet_of_every_maps_slot, a_wide_meet_of_maps_reads_each_name_from_the_maps_that_label_it, a_record_is_refuted_a_shared_field_at_a_time_past_the_node_bound, a_record_the_partition_cannot_read_is_left_out_of_the_meet, test_a_map_the_partition_cannot_read_is_left_out_of_the_meet, a_record_below_a_union_of_records_is_the_rules_answer, a_record_split_stops_where_the_decision_budget_does, a_record_splits_across_the_records_that_fix_its_tag, a_record_splits_on_whether_a_key_is_present, a_member_apart_at_an_optional_label_is_dropped, a_member_set_aside_on_a_finite_part_keeps_only_the_proof, a_member_whose_default_the_rules_cannot_relate_is_set_aside, a_clause_the_partition_does_not_hold_declines_the_split, a_record_minus_the_records_that_cover_it_is_empty, a_record_split_agrees_with_the_set_reading, keyed_maps_met_are_one_record, a_map_minus_a_map_above_it_is_empty_beside_a_predicate, a_meet_of_records_beside_another_member_proves_or_declines, a_meet_of_records_splits_as_one_record, test_two_open_records_met_are_one_record, a_meet_of_maps_is_inhabited_where_the_record_they_meet_in_is, a_meet_of_records_holds_the_dict_of_its_required_names, test_a_meet_of_open_records_holds_the_dict_of_its_required_fields
 
@@ -808,7 +809,7 @@ most the length every container reaches. **[LOAD-BEARING: subtyping-is-inclusion
 
 SOURCE: §13.0 "**Subtyping, defined.** UIN Definition 4"
 
-IMPLEMENTED-BY: decision.rs::Schema::equivalence_relation
+IMPLEMENTED-BY: decision.rs::Schema::equivalence_relation, decision.rs::Schema::is_subtype_of, decision.rs::Schema::is_equivalent
 
 HELD-BY: a_meet_read_empty_at_the_root_bounds_the_relation, subtyping_is_sound_over_the_structural_fragment, a_refutation_is_a_value, a_refutation_stands_on_a_length_every_interpreter_builds, a_map_relation_stands_on_a_dict, a_proof_over_a_fixpoint_has_no_witness_against_it, test_no_proof_is_refuted_by_a_value, test_a_claimed_refutation_stands_on_a_value
 
@@ -962,7 +963,7 @@ lives and holds its slot. **[LOAD-BEARING: a-node-built-alike-is-one-handle]**
 
 SOURCE: §13.6 "**Hash consing.** Hosoya-Vouillon-Pierce"
 
-IMPLEMENTED-BY: ir/intern.rs::node, ir/intern.rs::members, ir.rs::Schema::union_within
+IMPLEMENTED-BY: ir/intern.rs, ir/intern.rs::node, ir/intern.rs::members, ir/intern.rs::fields, ir/intern.rs::attributes, ir/intern.rs::clauses, ir.rs::Schema::union_within
 
 HELD-BY: a_node_built_twice_is_one_node_in_every_family, sharing_a_child_shares_the_parent_over_it, a_list_built_twice_is_one_list_holding_what_was_built
 
@@ -1293,7 +1294,7 @@ soundly or declines. **[DEVIATION: a-memo-is-charged-as-read]**
 
 SOURCE: §14.3 "restricted to results that rested on no open hypothesis"; §14.2 "a memo table is both **finite and complete**"
 
-IMPLEMENTED-BY: decision/emptiness.rs::held_verdict
+IMPLEMENTED-BY: decision/emptiness.rs::held_verdict, decision/emptiness.rs::OpenMeet::reading
 
 HELD-BY: a_meet_read_back_is_a_reading_of_it, a_meet_read_back_spends_what_a_reading_of_it_spends_now, a_spent_query_reads_its_bounds_under_steps_of_its_own, a_respelled_pair_stops_at_its_allowance
 
@@ -1350,7 +1351,7 @@ would hold both alike; it is not built.
 
 SOURCE: §14.5 "`RegularSet`: a minimized DFA per word kind"
 
-IMPLEMENTED-BY: decision/lengths.rs
+IMPLEMENTED-BY: decision/lengths.rs, decision/lengths.rs::lengths_of
 
 HELD-BY: a_term_of_length_bounds_is_decided_as_the_lengths_it_holds, a_length_bound_costs_three_units_an_element
 

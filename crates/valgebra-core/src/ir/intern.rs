@@ -8,6 +8,11 @@
 //! question that reaches both walks them as two trees, because equality between
 //! separate nodes is structural and structural equality is a walk.
 //!
+//! So a second construction of a schema gets back the handle the first made,
+//! while that one lives and holds its slot, which is the physical sharing of
+//! equal types Hosoya, Vouillon and Pierce keep so that a reflexivity check is
+//! a comparison of handles [HVP05, §5.1].
+//!
 //! This is the table the four bounds name. `DECISION_BUDGET` and the
 //! descriptor's `BUDGET`, `DEPTH` and `WORK` each say in their own doc comment
 //! that a lowering repeats itself over structurally equal subtrees *because
@@ -416,7 +421,8 @@ pub(super) fn members(items: &[Schema]) -> Members {
     })
 }
 
-/// The shared handle for a field list.
+/// The shared handle for a field list, a record's fields shared as a union's
+/// members are [HVP05, §5.1].
 ///
 /// The buffer is taken by reference and drained only on a miss: a hit leaves
 /// the caller's fields where they are, and dropping them there costs the same
@@ -445,7 +451,8 @@ pub(super) fn fields(items: &mut Vec<Field>) -> Fields {
     })
 }
 
-/// The shared handle for an attribute list, by the same rule as [`fields`].
+/// The shared handle for an attribute list, by the same rule as [`fields`]
+/// [HVP05, §5.1].
 pub(super) fn attributes(items: &mut Vec<Attribute>) -> Arc<[Attribute]> {
     let mut state = FxHasher::default();
     state.write_usize(items.len());
@@ -470,7 +477,8 @@ pub(super) fn attributes(items: &mut Vec<Attribute>) -> Arc<[Attribute]> {
     })
 }
 
-/// The shared handle for a clause list, by the same rule as [`fields`].
+/// The shared handle for a clause list, by the same rule as [`fields`]
+/// [HVP05, §5.1].
 pub(super) fn clauses(items: &mut Vec<MapClause>) -> Clauses {
     let mut state = FxHasher::default();
     state.write_usize(items.len());

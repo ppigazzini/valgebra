@@ -107,9 +107,9 @@ impl Line {
 
     /// The values of the kind this line does not admit, as a union.
     ///
-    /// `¬(s ∧ o)` is `¬s ∨ ¬o`: either the structure fails, or it holds and the
-    /// object constraints do not. Two lines, which is why a complement doubles
-    /// the count rather than exploding it.
+    /// `¬(s ∧ o)` is `¬s ∨ ¬o` [FCB08, Lem. 6.2], so either the structure
+    /// fails, or it holds and the object constraints do not. Two lines, which
+    /// is why a complement doubles the count rather than exploding it.
     ///
     /// **Both halves end up within the kind**, and the fold below is what puts
     /// them there. A representation does not always say which kind it serves --

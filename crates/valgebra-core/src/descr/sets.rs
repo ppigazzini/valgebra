@@ -177,7 +177,8 @@ impl<G: Members> Line<G> {
 }
 
 /// The lines a set outside `line` belongs to: escaping `T`, or falling inside
-/// one of the `Sⱼ` after all.
+/// one of the `Sⱼ` after all, the complement of a meet being the union of the
+/// complements of its members [FCB08, Lem. 6.2].
 ///
 /// One statement of it, because the complement of a union and a meet against
 /// one both remove a line and would otherwise each carry their own reading of

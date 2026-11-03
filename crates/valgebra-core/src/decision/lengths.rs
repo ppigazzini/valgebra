@@ -95,7 +95,8 @@ impl ByLength<'_> {
     }
 
     /// How this term relates to `other`, a term over the same base or over
-    /// none.
+    /// none, read off what this holds and `other` does not, since `a ⊆ b` is
+    /// `a ∧ ¬b = ∅` [FCB08, §4.1].
     ///
     /// `Holds` where the lengths this holds and `other` does not are no
     /// length a value has, and nothing beyond the base is this term's alone.
@@ -135,6 +136,10 @@ fn lengths_up_to(most: usize) -> IntervalSet {
 /// The term `schema` read as its lengths, with `depth` levels left; `None`
 /// where a node is no term of length bounds, two count over different bases,
 /// or the allowance or the depth is spent.
+///
+/// Each connective is the set operation it denotes [FCB08, Def. 4.1], taken
+/// on the lengths: a union joins them, a meet meets them, and a complement
+/// takes the lengths its inner term leaves and every value beyond the base.
 fn lengths_of(schema: &Schema, depth: u32) -> Option<ByLength<'_>> {
     let depth = depth.checked_sub(1)?;
     if !budget::spend() {

@@ -1120,7 +1120,8 @@ impl Slot {
         }
     }
 
-    /// Whether the two slots share no value, absence included.
+    /// Whether the two slots share no value, absence included: their meet in
+    /// `T⊥` holds `⊥` where both allow it [Cas23, §4.1].
     fn apart(&self, theirs: &Slot, cx: &mut Cx<'_>) -> bool {
         if self.absent && theirs.absent {
             return false;

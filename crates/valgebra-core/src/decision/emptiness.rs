@@ -1410,7 +1410,8 @@ impl OpenMeet {
     /// What `read` answers, and whether it met again a meet open before it
     /// began: one it opened itself and met again is a hypothesis its own
     /// reading settles, and one open below it is the hypothesis its answer
-    /// rests on.
+    /// rests on, as a node met again in an unknown state is for every node
+    /// read since it was entered [LN26, §5.1].
     pub(super) fn reading<T>(read: impl FnOnce() -> T) -> (T, bool) {
         let depth = OPEN_MEETS.with_borrow(Vec::len);
         let outer = MET_AGAIN.with(|least| least.replace(usize::MAX));

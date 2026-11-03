@@ -4,10 +4,10 @@
 //! A kind's lines, the record atoms, the powerset lines and the map atoms are
 //! each a set held as a finite union of summands, and each is closed under the
 //! three operations the same way. A meet is a pairwise product. A complement is
-//! De Morgan over the summands, `¬⋁ᵢSᵢ = ⋀ᵢ¬Sᵢ`, where each `¬Sᵢ` is itself a
-//! finite union. Both multiply, so both are held to a width bound, and past it
-//! there is no sound set to substitute: one too wide is complemented into one
-//! too narrow, so the operation refuses.
+//! De Morgan over the summands, `¬⋁ᵢSᵢ = ⋀ᵢ¬Sᵢ` [FCB08, Lem. 6.2], where each
+//! `¬Sᵢ` is itself a finite union. Both multiply, so both are held to a width
+//! bound, and past it there is no sound set to substitute: one too wide is
+//! complemented into one too narrow, so the operation refuses.
 //!
 //! **The polarity is what keeps a complement total**, which the
 //! [`Guard`](super::Guard) contract asks of every component. Rebuilding a
@@ -170,10 +170,10 @@ impl<S: Summand> PolarUnion<S> {
     /// The values in either, or `None` past the bound.
     ///
     /// A negated side is joined through De Morgan rather than rebuilt: `A ∪ B`
-    /// is `¬(¬A ∩ ¬B)`, and the meet is the operation that can drop a summand
-    /// mid-way. Expanding the negation first asks the bound about a union that
-    /// is only an intermediate, and a refusal there refuses a join whose
-    /// answer fits.
+    /// is `¬(¬A ∩ ¬B)` [FCB08, Lem. 6.2], and the meet is the operation that
+    /// can drop a summand mid-way. Expanding the negation first asks the bound
+    /// about a union that is only an intermediate, and a refusal there refuses
+    /// a join whose answer fits.
     pub(super) fn union(&self, other: &Self, within: S::Within) -> Option<Self> {
         if self.negated || other.negated {
             let met = self

@@ -703,7 +703,9 @@ pub type Constraints = Arc<[Constraint]>;
 
 /// The schema intermediate representation.
 ///
-/// Each variant documents its denotation: the set of Python values it accepts.
+/// Each variant documents its denotation: the set of Python values it accepts,
+/// a union, a meet and a complement denoting the union, the intersection and
+/// the complement of their operands' sets [FCB08, Def. 4.1].
 /// The values are those of every interpreter the package supports, one domain
 /// apiece, and a relation is decided in all of them: a proof holds in each,
 /// and a refutation stands on a value each builds, so one turning on a
@@ -737,11 +739,12 @@ pub type Constraints = Arc<[Constraint]>;
 /// the two to one set.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Schema {
-    /// Top. Denotes every Python value; membership always holds. The payload
-    /// records how the top was written, and is read by `repr` to print it and
-    /// by the sharing table to keep the two apart ([`Spelling`]).
+    /// Top. Denotes every Python value [FCB08, Def. 4.1]; membership always
+    /// holds. The payload records how the top was written, and is read by
+    /// `repr` to print it and by the sharing table to keep the two apart
+    /// ([`Spelling`]).
     Anything(Spelling),
-    /// Bottom. Denotes the empty set; membership never holds.
+    /// Bottom. Denotes the empty set [FCB08, Def. 4.1]; membership never holds.
     Nothing,
     /// Denotes the singleton set `{None}`.
     NoneType,
@@ -833,7 +836,10 @@ pub enum Schema {
     /// matching value, every present optional field's value matches, and every
     /// key that is *not* a declared field name is covered by some default
     /// clause — a `(key-schema, value-schema)` pair the key and its value both
-    /// satisfy. Named fields take precedence over the defaults.
+    /// satisfy. Named fields take precedence over the defaults. That is a
+    /// dict's membership in a record type [Cas23, (21)], each clause the
+    /// default of the keys it claims, and two clauses claiming one key read as
+    /// a disjunction (`defaults`).
     ///
     /// One node subsumes the record, the homogeneous mapping, the heterogeneous
     /// mapping, and their combination: a closed record has no default clause, an
@@ -859,14 +865,14 @@ pub enum Schema {
         /// implements.
         defaults: Clauses,
     },
-    /// Denotes the union of the member sets: a value is a member iff it belongs
-    /// to at least one member schema.
+    /// Denotes the union of the member sets [FCB08, Def. 4.1], so a value is a
+    /// member iff it belongs to at least one member schema.
     Union(Members),
-    /// Denotes the intersection of the member sets: a value is a member iff it
-    /// belongs to every member schema.
+    /// Denotes the intersection of the member sets [FCB08, Def. 4.1], so a
+    /// value is a member iff it belongs to every member schema.
     Intersection(Members),
-    /// Denotes the complement of the inner set: a value is a member iff it is
-    /// not a member of the inner schema.
+    /// Denotes the complement of the inner set [FCB08, Def. 4.1], so a value
+    /// is a member iff it is not a member of the inner schema.
     Complement(Arc<Schema>),
     /// Denotes instances of a class, by `isinstance`. The class is held in the
     /// validator's object pool; the payload is its index.
@@ -900,7 +906,8 @@ pub enum Schema {
         fields: Arc<[Attribute]>,
     },
     /// Denotes the subset of the base set satisfying every constraint
-    /// (`{ x in [[base]] | all constraints hold }`). The base is checked first.
+    /// (`{ x in [[base]] | all constraints hold }`), a base type refined by
+    /// predicates [JV20, §3.2]. The base is checked first.
     Refine {
         /// The base schema; a value must belong to it before constraints apply.
         base: Arc<Schema>,
@@ -908,8 +915,9 @@ pub enum Schema {
         constraints: Constraints,
     },
     /// A reference to a recursive definition: denotes the same set as the
-    /// definition at this index in the validator's definitions table. The back
-    /// edge of a fixpoint, produced by `recursive`.
+    /// definition at this index in the validator's definitions table, so a
+    /// fixpoint and its unfolding are one set [AC93, §3.2]. The back edge of a
+    /// fixpoint, produced by `recursive`.
     Ref(DefIx),
     /// Denotes the **empty set**: the walk admits no value against one, and
     /// every decider reads it as a schema it cannot relate.
