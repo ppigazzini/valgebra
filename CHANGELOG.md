@@ -111,6 +111,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: is_empty reads the kinds a meet may hold as the relation does -- internal
 - fix: a shape read past the bounds beside it reads its tail without a step -- internal
 - fix: a supertype union is read through the unions nested in it -- internal
+- feat: a verdict read under an open meet is held where it met none again
 
 -->
 

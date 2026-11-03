@@ -971,10 +971,25 @@ pub(super) enum ReadBack {
 /// reading of the same terms gives with as many steps left and no deeper, and
 /// a reading with fewer steps or deeper gives it too or stops at a bound: the
 /// memo takes no answer away. An `Unknown` a bound stopped is not held, since
-/// more steps may decide it, and nothing read under a hypothesis is, which is
-/// what a memo inside the coinductive procedure owes [LN26, §5.1]
+/// more steps may decide it, and nothing that rests on a hypothesis is, which
+/// is what a memo inside the coinductive procedure owes [LN26, §5.1]
 /// (`docs/dev/10-theory.md`, "A cache under coinduction is revertible or
 /// absent").
+///
+/// A meet open for the query's budget lends a reading one hypothesis, that a
+/// meet met again during its own reading is empty [LN26, §5.1], and a narrowed
+/// question open lends none: its trail is its own. So a verdict read under
+/// either is held where it is decided and its reading met no meet open before
+/// it began ([`OpenMeet::reading`]), a node no traversal still has in an
+/// unknown state, which [LN26, §5.1] reads back from its table under any
+/// other. A reading under either is not the one a reading with nothing open
+/// makes -- an open meet unfolds a meet past its normal form's bound, and a
+/// narrowed meet asked inside another's question is asked on its steps -- so
+/// an `Unknown` read under either is neither held nor read back there, and a
+/// decided verdict is a fact of the terms wherever it is read back. Held
+/// nowhere, a record of guarded records three deep, below a record requiring
+/// a key it does not name, read its innermost guard seven hundred times in one
+/// asking, each under a meet the reading had opened, and declined there.
 ///
 /// What the read-back spends is the caller's to say ([`ReadBack`]). Read back
 /// as read, it spends what a reading spends now: the steps the reading spent,
@@ -987,15 +1002,14 @@ pub(super) enum ReadBack {
 #[inline(never)]
 pub(super) fn held_verdict(meet: Schema, read_back: ReadBack, cx: &mut Cx<'_>) -> Verdict {
     let query = cx.query();
-    if !(cx.trail.is_empty()
-        && cx.visiting.is_empty()
-        && !OpenMeet::any_open(cx.budget)
-        && NARROWING.with(Cell::get) != query)
-    {
+    if !(cx.trail.is_empty() && cx.visiting.is_empty()) {
         return meet.empty_and_region(cx).0;
     }
+    let open = OpenMeet::any_open(cx.budget) || NARROWING.with(Cell::get) == query;
     let key = (query, meet);
-    if let Some((known, spent)) = VERDICTS.with_borrow(|held| held.get(&key).copied()) {
+    if let Some((known, spent)) = VERDICTS.with_borrow(|held| held.get(&key).copied())
+        && !(open && known == Verdict::Unknown)
+    {
         match read_back {
             ReadBack::Spared => return known,
             ReadBack::AsRead if spend_at_once(cx.budget, spent) => return known,
@@ -1005,8 +1019,13 @@ pub(super) fn held_verdict(meet: Schema, read_back: ReadBack, cx: &mut Cx<'_>) -
     let before = bounds_met();
     let left = cx.budget.left();
     let spared = SPARED.with(Cell::get);
-    let verdict = key.1.empty_and_region(cx).0;
-    if verdict != Verdict::Unknown || bounds_met() == before {
+    let (verdict, met_again) = OpenMeet::reading(|| key.1.empty_and_region(cx).0);
+    let rests_on_nothing = if open {
+        verdict != Verdict::Unknown && !met_again
+    } else {
+        verdict != Verdict::Unknown || bounds_met() == before
+    };
+    if rests_on_nothing {
         let under = u32::try_from(SPARED.with(Cell::get) - spared).unwrap_or(u32::MAX);
         let spent = left.saturating_sub(cx.budget.left()).saturating_sub(under);
         if let ReadBack::Spared = read_back {
@@ -1354,11 +1373,14 @@ thread_local! {
     /// On the context its teardown would read 10.6% more instructions on the
     /// decision workload, whose queries take a few hundred each.
     static OPEN_MEETS: RefCell<Vec<(usize, Vec<Schema>)>> = const { RefCell::new(Vec::new()) };
+    /// The least place on [`OPEN_MEETS`] at which a meet was met again since
+    /// the reading [`OpenMeet::reading`] reads began.
+    static MET_AGAIN: Cell<usize> = const { Cell::new(usize::MAX) };
 }
 
 /// A meet held open on [`OPEN_MEETS`] while the path below decides it, and
 /// closed when that is decided, however the path ends.
-struct OpenMeet;
+pub(super) struct OpenMeet;
 
 impl OpenMeet {
     /// Whether the query `budget` belongs to holds a meet open.
@@ -1369,19 +1391,32 @@ impl OpenMeet {
 
     /// Open `goal` for the query `budget` belongs to, or `None` where that
     /// query holds it open already, a node met during its own traversal being
-    /// empty [LN26, §5.1].
-    fn open(budget: &Budget, goal: Vec<Schema>) -> Option<Self> {
+    /// empty [LN26, §5.1]; where it is met again is kept ([`MET_AGAIN`]).
+    pub(super) fn open(budget: &Budget, goal: Vec<Schema>) -> Option<Self> {
         let query = std::ptr::from_ref(budget) as usize;
         OPEN_MEETS.with_borrow_mut(|open| {
-            if open
+            if let Some(at) = open
                 .iter()
-                .any(|(owner, held)| *owner == query && *held == goal)
+                .position(|(owner, held)| *owner == query && *held == goal)
             {
+                MET_AGAIN.with(|least| least.set(least.get().min(at)));
                 return None;
             }
             open.push((query, goal));
             Some(Self)
         })
+    }
+
+    /// What `read` answers, and whether it met again a meet open before it
+    /// began: one it opened itself and met again is a hypothesis its own
+    /// reading settles, and one open below it is the hypothesis its answer
+    /// rests on.
+    pub(super) fn reading<T>(read: impl FnOnce() -> T) -> (T, bool) {
+        let depth = OPEN_MEETS.with_borrow(Vec::len);
+        let outer = MET_AGAIN.with(|least| least.replace(usize::MAX));
+        let answer = read();
+        let least = MET_AGAIN.with(|least| least.replace(outer.min(least.get())));
+        (answer, least < depth)
     }
 }
 

@@ -1148,6 +1148,28 @@ their corners took a second to decline.
 `the_narrowed_meets_held_are_bounded` and `every_stop_at_a_bound_is_counted` in
 `decision/tests.rs` hold the claims.
 
+**Under an open meet or a narrowed question, a decided verdict is held where
+its reading met no open meet again.** A meet open for the query's budget lends
+the readings under it one hypothesis, that the meet met again during its own
+reading is empty [LN26, §5.1], and a narrowed question open lends none, its
+trail being its own. So under either a verdict is held, and read back, where it
+is decided and its reading met no meet open before it began:
+`OpenMeet::reading` keeps the least place on `OPEN_MEETS` a meet was met again
+at, and a reading that met none, or only a meet it opened itself, rests on
+nothing outside it -- a node no traversal still has in an unknown state, which
+[LN26, §5.1] reads back from its table under any other. An `Unknown` read
+under either is neither held nor read back there: an open meet unfolds a meet
+past its normal form's bound, and a narrowed meet asked inside another's
+question is asked on that question's steps, so a reading with nothing open is
+another reading, and may decide. Held nowhere, a record of guarded records
+three deep, below a record requiring a key it does not name, read its
+innermost guard seven hundred times in one asking, each time under a meet the
+reading had opened, and was refuted with 2,948 of the second asking's 65,536
+steps left; held, it is refuted in a sixth of the time.
+`a_meet_read_under_an_open_one_is_held_where_it_met_none_again` in
+`decision/tests.rs` holds the rule, with the meet's own goal open before it is
+read as the case held nowhere.
+
 **One context carries a query through both recursions.** The oracle, the
 definitions, the budget and two stacks of hypotheses travel together in
 `decision::Cx`, built where a query starts and handed down by `&mut`: the trail

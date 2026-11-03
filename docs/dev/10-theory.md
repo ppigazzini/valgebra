@@ -1041,7 +1041,7 @@ an omission nobody does. **[OBLIGATION: a-memo-is-revertible-or-absent]**
 
 SOURCE: §14.3 "A cache under coinduction must be revertible"
 
-HELD-BY: test_a_memo_without_a_revert_condition_fails_placement, test_the_detector_finds_a_memo_and_reads_the_sentence, a_narrowed_meet_is_held_where_it_rests_on_nothing, a_pairs_meet_is_held_where_it_rests_on_nothing, a_meet_read_back_spends_what_a_reading_of_it_spends_now, a_meet_read_back_is_a_reading_of_it, a_narrowed_meet_is_asked_once_a_query_an_allowance, a_narrowed_meet_read_back_is_a_reading_of_it
+HELD-BY: test_a_memo_without_a_revert_condition_fails_placement, test_the_detector_finds_a_memo_and_reads_the_sentence, a_narrowed_meet_is_held_where_it_rests_on_nothing, a_meet_read_under_an_open_one_is_held_where_it_met_none_again, a_pairs_meet_is_held_where_it_rests_on_nothing, a_meet_read_back_spends_what_a_reading_of_it_spends_now, a_meet_read_back_is_a_reading_of_it, a_narrowed_meet_is_asked_once_a_query_an_allowance, a_narrowed_meet_read_back_is_a_reading_of_it
 
 **An exhaustible procedure is searched, not enumerated.** Where the decision is
 structural rather than the emptiness reduction, a missing arm is a silent

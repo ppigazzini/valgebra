@@ -11982,10 +11982,11 @@ fn the_readings_held_are_bounded() {
 
 /// A narrowed meet's verdict is held for the query that read it with nothing
 /// assumed, where it is decided or no bound stopped the reading, and read back
-/// for no step; a reading a bound stopped, or one read under a hypothesis, is
-/// held nowhere. `object & (~object | {tag: int})` narrows to an inhabited
-/// record, and `int & (~int | odd)` to the integers a predicate keeps, an
-/// `Unknown` no bound stopped.
+/// for no step; a reading a bound stopped, or one read under a goal or a
+/// definition being resolved, is held nowhere, and under a narrowed question,
+/// which lends none, a decided one is held. `object & (~object | {tag: int})`
+/// narrows to an inhabited record, and `int & (~int | odd)` to the integers a
+/// predicate keeps, an `Unknown` no bound stopped.
 // THEORY: a-memo-is-revertible-or-absent
 #[test]
 fn a_narrowed_meet_is_held_where_it_rests_on_nothing() {
@@ -12050,11 +12051,121 @@ fn a_narrowed_meet_is_held_where_it_rests_on_nothing() {
     let narrowing = Cell::new(None);
     assert_eq!(
         assuming(&|cx| narrowing.set(Some(Narrowing::open(cx.query())))),
-        decided,
+        (Some(Verdict::Inhabited), Some(Verdict::Inhabited)),
         "a narrowed question open"
     );
     drop(narrowing);
     assert_eq!(NARROWING.with(Cell::get), 0);
+}
+
+/// Under a meet open for the query's budget, a verdict is held where it is
+/// decided and its reading met no meet open before it began, and only a
+/// decided one is read back there. `chain = None | {"next": chain}` met with
+/// `{"next": {"next": None}}` holds that record, and is held beside another
+/// meet open; with its own goal open before it is read, it meets that goal
+/// again and reads it as empty, the hypothesis, and is held nowhere. Two
+/// chains written link first meet each other again inside their own reading,
+/// a hypothesis that reading settles, and their meet is held. `int & odd` is
+/// an `Unknown` no bound stopped, held with nothing open and not under the
+/// open meet. Planted, a decided verdict is read back under the open meet and
+/// an `Unknown` is read again.
+// THEORY: a-memo-is-revertible-or-absent
+#[test]
+fn a_meet_read_under_an_open_one_is_held_where_it_met_none_again() {
+    use super::emptiness::{OpenMeet, ReadBack, VERDICTS, held_verdict};
+    let chain = Schema::Ref(DefIx::new(0));
+    let defs = vec![Schema::union([
+        Schema::NoneType,
+        closed(vec![field("next", chain.clone(), true)]),
+    ])];
+    let next = |schema: Schema| closed(vec![field("next", schema, true)]);
+    let members = vec![chain, next(next(Schema::NoneType))];
+    let meet = Schema::Intersection(members.clone().into());
+    let odd = Schema::Intersection(
+        vec![
+            Schema::Int,
+            Schema::Refine {
+                base: Arc::new(Schema::Int),
+                constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+            },
+        ]
+        .into(),
+    );
+    let read_planted = |schema: &Schema, open: Option<Vec<Schema>>, planted: Option<Verdict>| {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &defs, &budget);
+        let _open = open.map(|goal| OpenMeet::open(&budget, goal).expect("opened"));
+        if let Some(planted) = planted {
+            VERDICTS.with_borrow_mut(|held| {
+                held.insert((cx.query(), schema.clone()), (planted, 0));
+            });
+        }
+        let verdict = held_verdict(schema.clone(), ReadBack::Spared, &mut cx);
+        let held = VERDICTS.with_borrow(|held| {
+            held.get(&(cx.query(), schema.clone()))
+                .map(|&(verdict, _)| verdict)
+        });
+        (verdict, held)
+    };
+    let read = |schema: &Schema, open: Option<Vec<Schema>>| read_planted(schema, open, None);
+    let inhabited = Some(Verdict::Inhabited);
+    assert_eq!(read(&meet, None), (Verdict::Inhabited, inhabited));
+    assert_eq!(
+        read(&meet, Some(vec![Schema::Int])),
+        (Verdict::Inhabited, inhabited),
+        "another meet open"
+    );
+    let mut goal = members;
+    goal.sort();
+    assert_eq!(
+        read(&meet, Some(goal)),
+        (Verdict::Empty, None),
+        "its own goal open"
+    );
+    assert_eq!(read(&odd, None), (Verdict::Unknown, Some(Verdict::Unknown)));
+    assert_eq!(
+        read(&odd, Some(vec![Schema::Int])),
+        (Verdict::Unknown, None),
+        "an Unknown under the open meet"
+    );
+    assert_eq!(
+        read_planted(&meet, Some(vec![Schema::Int]), Some(Verdict::Empty)).0,
+        Verdict::Empty,
+        "a decided verdict read back"
+    );
+    assert_eq!(
+        read_planted(&meet, Some(vec![Schema::Int]), Some(Verdict::Unknown)).0,
+        Verdict::Inhabited,
+        "an Unknown read again"
+    );
+    // `link = {"next": link} | None` and `tie = {"next": tie} | None`, each
+    // written link first: their meet unfolds `link`, meets `{"next": link}`
+    // with `tie`, unfolds `tie`, and meets the two again at the key, the goal
+    // the reading opened; the `None` branch then holds the value.
+    let (link, tie) = (Schema::Ref(DefIx::new(0)), Schema::Ref(DefIx::new(1)));
+    let chained = |at: &Schema| {
+        Schema::Union(
+            vec![
+                closed(vec![field("next", at.clone(), true)]),
+                Schema::NoneType,
+            ]
+            .into(),
+        )
+    };
+    let defs = vec![chained(&link), chained(&tie)];
+    let ties = Schema::Intersection(vec![link, tie].into());
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &defs, &budget);
+    let _open = OpenMeet::open(&budget, vec![Schema::Int]).expect("opened");
+    assert_eq!(
+        held_verdict(ties.clone(), ReadBack::Spared, &mut cx),
+        Verdict::Inhabited
+    );
+    assert_eq!(
+        VERDICTS.with_borrow(|held| held.get(&(cx.query(), ties)).map(|&(v, _)| v)),
+        Some(Verdict::Inhabited),
+        "a meet met again inside its own reading"
+    );
 }
 
 /// The narrowed meets held are emptied at the readings' bound, and what is
