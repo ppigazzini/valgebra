@@ -919,8 +919,9 @@ pub(super) enum ReadBack {
 /// a reading with fewer steps or deeper gives it too or stops at a bound: the
 /// memo takes no answer away. An `Unknown` a bound stopped is not held, since
 /// more steps may decide it, and nothing read under a hypothesis is, which is
-/// what a memo inside the coinductive procedure owes (`docs/dev/10-theory.md`,
-/// "A cache under coinduction is revertible or absent").
+/// what a memo inside the coinductive procedure owes [LN26, §5.1]
+/// (`docs/dev/10-theory.md`, "A cache under coinduction is revertible or
+/// absent").
 ///
 /// What the read-back spends is the caller's to say ([`ReadBack`]). Read back
 /// as read, it spends what a reading spends now: the steps the reading spent,

@@ -1581,6 +1581,7 @@ fn a_narrowed_meet_marks_its_question_while_it_is_asked() {
     assert_eq!(NARROWING.with(Cell::get), 0, "the question is closed");
 }
 
+// THEORY: the-decision-is-fuel, a-memo-is-charged-as-read
 /// Where the query's steps are spent, the two lattice bounds are read once more
 /// under emptiness queries of their own: an empty subject is below anything,
 /// and one meeting a set in nothing is below its complement. A query with
@@ -10904,6 +10905,7 @@ fn a_length_every_branch_leaves_out_refutes_a_union_at_any_size() {
     assert_ne!(relation(&ten, &overlapping), Relation::Fails);
 }
 
+// THEORY: the-decision-is-fuel, a-memo-is-charged-as-read
 /// A respelled pair spends no more than [`RESPELLING`] steps.
 ///
 /// Towers of `(T, list[T])` reach each level twice, so their inclusion costs
@@ -11983,6 +11985,53 @@ fn a_pairs_meet_is_held_where_it_rests_on_nothing() {
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    /// The decision is fuel, and what it decides is monotone in its steps only
+    /// where no bound stopped it. A drawn pair asked of both deciders, as the
+    /// public relation asks them, under a budget of 8 to 8,192 steps and under
+    /// twice that: a query no bound stopped, which ended with steps left, took
+    /// no path that turns on the steps, so with more it asks the same goals,
+    /// answers alike and spends alike. One a bound stopped may answer otherwise
+    /// with more steps, and both answers stand: neither proves what the other
+    /// refutes.
+    // THEORY: the-decision-is-fuel
+    #[test]
+    fn a_query_no_bound_stopped_answers_alike_with_more_steps(
+        a in crate::laws::decidable_schema(),
+        b in crate::laws::decidable_schema(),
+        scale in 3u32..=13,
+    ) {
+        let _allowance = crate::descr::budget::law();
+        let ask = |steps: u32| {
+            let budget = Budget::new(steps);
+            let met = bounds_met();
+            let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+            let answer = a
+                .is_subtype_rec(&b, &mut cx)
+                .or_else(|| a.decided_by_sets(&b, &mut cx, true));
+            (answer, steps - budget.left(), budget.left(), bounds_met() != met)
+        };
+        let steps = 1 << scale;
+        let (answer, spent, left, stopped) = ask(steps);
+        let (more, spent_more, _, _) = ask(2 * steps);
+        prop_assert!(
+            !matches!(
+                (answer, more),
+                (Relation::Holds, Relation::Fails) | (Relation::Fails, Relation::Holds)
+            ),
+            "{answer:?} at {steps} steps, {more:?} at twice that"
+        );
+        if !stopped && left > 0 {
+            prop_assert_eq!((answer, spent), (more, spent_more));
+        }
+    }
+}
+
+proptest! {
     /// A meet read back from the memo is what a reading of it gives now, in
     /// its verdict and in the steps it spends, over drawn pairs: the read-back
     /// charges the steps a reading spends now ([`emptiness::ReadBack::AsRead`]),
@@ -11991,7 +12040,7 @@ proptest! {
     /// reach the memo; a narrowed meet held below a pair's meet,
     /// which the charge subtracts, is
     /// `a_meet_read_back_spends_what_a_reading_of_it_spends_now`'s to hold.
-    // THEORY: a-memo-is-revertible-or-absent
+    // THEORY: a-memo-is-revertible-or-absent, a-memo-is-charged-as-read
     #[test]
     fn a_meet_read_back_is_a_reading_of_it(
         a in crate::laws::decidable_schema(),
@@ -12022,7 +12071,7 @@ proptest! {
 /// now: its reading's steps less those of the narrowed meet held under it,
 /// which a reading now reads back for none. `object` beside `~object | {tag:
 /// int}` is a guarded record, whose meet is read through its narrowing.
-// THEORY: a-memo-is-revertible-or-absent
+// THEORY: a-memo-is-revertible-or-absent, a-memo-is-charged-as-read
 #[test]
 fn a_meet_read_back_spends_what_a_reading_of_it_spends_now() {
     use super::emptiness::VERDICTS;

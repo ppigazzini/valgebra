@@ -1215,6 +1215,45 @@ IMPLEMENTED-BY: decision.rs::Cx::assuming
 
 HELD-BY: a_decision_leaves_an_assumption_it_did_not_make, a_decision_leaves_the_trail_it_was_given, a_query_gives_its_stacks_back_as_it_was_given_them, a_goal_reached_by_two_paths_is_derived_twice_until_the_budget_declines
 
+**The decision is fuel, and what it decides is monotone in neither its steps
+nor its rules.** A query spends one step budget, and a pair asked again in its
+other spellings an allowance inside it, each a bound no theorem derives.
+Fuel "can be quite effective in practice, it lacks semantic completeness
+guarantees" [JV20, §10.5], so which pairs are decided depends on the path a
+query takes. A sound rule added beside the others can lose an answer that sat
+within a few steps of an allowance, and a query that spends every step reads
+the two lattice bounds again under steps of their own, so it can decide a pair
+a query with steps left declines. What the procedure guarantees is narrower:
+a query no bound stopped, which ended with steps left, took no path that turns
+on its steps, so with more steps it answers alike and spends alike; and no
+two budgets answer one pair two ways, each answer standing on a proof.
+**[DEVIATION: the-decision-is-fuel]**
+
+SOURCE: §14.2 "running a work budget instead"; §13.1 "work budget rather than on finiteness of `N(A)`"
+
+IMPLEMENTED-BY: decision.rs::Budget
+
+HELD-BY: a_query_no_bound_stopped_answers_alike_with_more_steps, a_respelled_pair_stops_at_its_allowance, a_spent_query_reads_its_bounds_under_steps_of_its_own
+
+**A memo saves time, and is charged as the reading it stands for.** The
+shelf's memos serve complete procedures: an assumption set caching every
+relation verified [HVP05, §4.2], and a visited set kept "to handle recursion,
+and not as a cache" [LN26, §5.1]. Under fuel a memo is seen through the steps
+it saves, and a saved step can move an answer, so a meet's verdict held for a
+query is read back charged the steps a reading of it spends now, or for no
+step where one narrowed meet is asked a hundred times over. The read-back is
+exact where the reading's path does not turn on the steps it has left, and
+two readings do: the lattice bounds read again only at no step left, and every
+respelling's allowance, the lesser of what is left and its cap. There the
+verdict read back is one the terms have either way, since a reading answers
+soundly or declines. **[DEVIATION: a-memo-is-charged-as-read]**
+
+SOURCE: §14.3 "restricted to results that rested on no open hypothesis"; §14.2 "a memo table is both **finite and complete**"
+
+IMPLEMENTED-BY: decision/emptiness.rs::held_verdict
+
+HELD-BY: a_meet_read_back_is_a_reading_of_it, a_meet_read_back_spends_what_a_reading_of_it_spends_now, a_spent_query_reads_its_bounds_under_steps_of_its_own, a_respelled_pair_stops_at_its_allowance
+
 **The dict key partition is by kind.** `1` and `True` are one key to a dict and
 two labels to the partition, so an atom requiring both under distinct values
 holds no dict, and the descriptor reads it that way. **[DEVIATION: the-key-partition-is-by-kind]**

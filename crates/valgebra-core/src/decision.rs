@@ -133,6 +133,11 @@ pub(crate) const MAX_DECISION_DEPTH: u32 = 512;
 /// thread-local in a shared library being a call to find on every level, and
 /// one taken only through `verdict_rec` read less and left a union's members
 /// uncounted.
+///
+/// The steps are fuel [JV20, §10.5], a bound no theorem derives, so which
+/// pairs a query decides turns on the path it takes: a query no bound stopped
+/// answers alike with more steps, and one a bound stopped may not
+/// (`docs/dev/10-theory.md`, "The decision is fuel").
 pub(crate) struct Budget {
     steps: Cell<u32>,
     depth: Cell<u32>,
