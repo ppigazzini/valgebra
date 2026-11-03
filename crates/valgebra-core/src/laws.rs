@@ -3013,10 +3013,18 @@ fn a_length_mismatch_is_refuted_before_a_position_is_compared() {
     // whole budget, or comparing the positions would cost nothing to see. It
     // runs them until the budget stops them, so it asks first that a spent
     // budget refuses a step: one that did not would leave the towers' search
-    // unbounded, and the test would never return.
+    // unbounded, and the test would never return. And it asks that a verdict
+    // short of a proof proves nothing empty: one that did would have the rules
+    // hold and compare the towers' meets whole, a quarter of a million nodes
+    // apiece and none of it charged to the budget, and the premise would run
+    // for minutes rather than half a second.
     assert!(
         !crate::decision::spend(&crate::decision::Budget::new(0)),
         "a spent budget refuses the next step"
+    );
+    assert!(
+        !Verdict::Unknown.is_empty() && !Verdict::Inhabited.is_empty(),
+        "a verdict short of a proof proves nothing empty"
     );
     let premise = narrow.subtype_steps(&wide);
     assert!(
