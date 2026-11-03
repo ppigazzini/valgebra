@@ -1317,6 +1317,24 @@ IMPLEMENTED-BY: decision/emptiness.rs::normal_form_within, decision/emptiness.rs
 
 HELD-BY: a_union_holding_a_reference_is_distributed_into_the_meet, a_union_in_a_meet_is_narrowed_by_the_members_beside_it, test_a_narrowed_meet_left_open_is_distributed_as_written
 
+**The descriptor holds no cycle.** A recursive reference is cut after one
+unfolding, to the top where it is read positively and to the bottom under a
+complement, the finite approximation of a recursive type at the depth of the
+cut [AC93, §3.4]. The representation this one follows holds a recursive type
+as a node of a finite graph, its emptiness read by the nodes on the path
+[LN26, §4.1], [LN26, §5.1]; here recursion is the rules' trail, so on a
+recursive schema the fast path decides fixpoints the descriptor refuses. A
+node graph would hold the fixpoint whole, at the price of a node table a
+query, a set of visited nodes in every component's emptiness, and a memo
+kept only where it rested on no node on the path; it is not built.
+**[DEVIATION: the-descriptor-holds-no-cycle]**
+
+SOURCE: §13.4 "**The trail.** Amadio & Cardelli §1.5"
+
+IMPLEMENTED-BY: descr/lower.rs::parts_a_cut_reaches
+
+HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_only_past_the_cut, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding
+
 **The dict key partition is by kind.** `1` and `True` are one key to a dict and
 two labels to the partition, so an atom requiring both under distinct values
 holds no dict, and the descriptor reads it that way. **[DEVIATION: the-key-partition-is-by-kind]**

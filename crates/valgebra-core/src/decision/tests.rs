@@ -3062,7 +3062,7 @@ fn a_catch_all_covers_an_optional_field_and_not_a_required_one() {
     assert!(!Schema::meet([mapping, with_field(true).complement()]).is_empty());
 }
 
-// THEORY: a-cut-reference-proves
+// THEORY: a-cut-reference-proves, the-descriptor-holds-no-cycle
 /// A meet with a recursive schema is decided by unfolding it once: the body
 /// names the kinds it admits, and a kind it never admits is disjoint from it.
 ///
@@ -6577,7 +6577,7 @@ fn a_complement_names_a_witness_from_the_kinds_its_inner_schema_is_not() {
     );
 }
 
-// THEORY: a-cut-reference-proves, the-decision-has-three-answers
+// THEORY: a-cut-reference-proves, the-decision-has-three-answers, the-descriptor-holds-no-cycle
 /// A difference over a cut reference proves an inclusion, and refutes only
 /// at a kind no cut reaches.
 ///
