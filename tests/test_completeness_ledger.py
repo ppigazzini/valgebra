@@ -1929,10 +1929,6 @@ _TRANSLATED: list[object] = [
         {"a": int},
         _OUTER,
         id="json:{a:int}!<=outer-tree",
-        marks=_missed(
-            "a union supertype is refuted at a value outside every branch, and the"
-            " sets, which could name it, refute no pair holding a reference"
-        ),
     ),
     pytest.param(
         "refutes",

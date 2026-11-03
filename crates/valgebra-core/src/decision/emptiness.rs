@@ -430,7 +430,7 @@ impl Schema {
             Schema::Refine { base, constraints } => {
                 (refinement_verdict(base, constraints, cx), Regions::Unknown)
             }
-            Schema::Intersection(members) => intersection_verdict(members, cx),
+            Schema::Intersection(members) => intersection_verdict(self, members, cx),
             // A set or frozenset admits the empty collection whatever its
             // element schema is, so it is *proven* inhabited -- which two values
             // could not say apart from the opaque wildcard below, where the same
@@ -675,7 +675,11 @@ fn density_of<'a>(bases: impl IntoIterator<Item = &'a Schema>) -> Density {
 /// reference among the members unfolded into the meet
 /// ([`meet_through_a_reference`]); the last two decide it either way. Any other
 /// meet is opaque however inhabited its members are.
-fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Regions) {
+///
+/// A meet holding a complement that those leave open is read for the kinds it
+/// may hold, as the relation reads it below any set (`meet_below`), before a
+/// reading spends a step: a meet that may hold no kind holds no value.
+fn intersection_verdict(meet: &Schema, members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Regions) {
     let mut any_empty = false;
     let mut region = Regions::MEET_UNIT;
     // What the members say together, which only the shape below can read as the
@@ -730,6 +734,19 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
         // the walk is paid only by a meet the readings above left open.
         Verdict::Unknown
             if !cx.defs.is_empty() && has_complementary_pair(members, cx.oracle, cx.defs) =>
+        {
+            Verdict::Empty
+        }
+        // The kinds the relation reads below any set: a meet holds no kind a
+        // member cannot hold, and a complement none its inner set holds whole
+        // [FCB08, Def. 4.1]. Asked of a meet holding a complement, the shape
+        // `meet_below` reads them for, so that `is_empty` and the relation below
+        // `nothing` answer one set alike. The walk spends no step.
+        Verdict::Unknown
+            if members
+                .iter()
+                .any(|member| matches!(member, Schema::Complement(_)))
+                && meet.kinds_possibly_held(cx.oracle, cx.defs) == 0 =>
         {
             Verdict::Empty
         }

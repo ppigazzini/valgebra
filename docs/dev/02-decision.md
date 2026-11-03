@@ -1357,6 +1357,9 @@ alone: asked of every meet subject it cost the relation matrix 3.03%, and of
 these 0.60%. It decides meets no rule placed as well, the integers met with
 the complement of "anything but a `str`, or a `str` of at most one character"
 among them (`a_meet_that_may_hold_no_kind_is_placed_below_any_set`).
+`is_empty` reads the same kinds in `intersection_verdict`, of a meet holding a
+complement and before a reading there spends a step, so the meet is empty to
+both questions (`a_meet_that_may_hold_no_kind_is_read_empty`).
 
 **A placement the two terms make is never refused for want of a step.** One
 term against itself, a subject among a union's branches, a supertype among a

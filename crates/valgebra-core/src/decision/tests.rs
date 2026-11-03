@@ -12789,6 +12789,36 @@ fn a_meet_that_may_hold_no_kind_is_placed_below_any_set() {
     );
 }
 
+// THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures
+/// A meet that may hold a value of no kind is read empty, as it is read below
+/// `nothing`: the two questions of one set answer alike. The integers met with
+/// the complement of "anything but a `str`, or a `str` of at most one
+/// character" hold `str`s alone, and the union among the integers leaves every
+/// other emptiness reading open. The integers met with the complement of `str`
+/// keep their kind, and are not read empty.
+#[test]
+fn a_meet_that_may_hold_no_kind_is_read_empty() {
+    let integer = Schema::union([
+        Schema::Int,
+        Schema::refine(
+            Schema::Float,
+            vec![Constraint::MultipleOf(OperandIx::new(0))],
+        ),
+    ]);
+    let short_words = Schema::union([
+        Schema::Str.complement(),
+        Schema::refine(Schema::Str, vec![Constraint::MaxLen(1)]),
+    ]);
+    let meet = Schema::meet([integer, Schema::Bool.complement(), short_words.complement()]);
+    assert_eq!(
+        meet.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    assert!(meet.is_empty_with(&NoLeafRelations, &[]));
+    let open = Schema::meet([Schema::Int, Schema::Str.complement()]);
+    assert!(!open.is_empty_with(&NoLeafRelations, &[]));
+}
+
 /// A mapping holds no more keys than its fields and as many as each clause's
 /// key type holds apart, one count the relation and the emptiness reading both
 /// read: `dict[bool, int]` and `dict[None, int]` are below a mapping of at most

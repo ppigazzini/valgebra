@@ -1142,6 +1142,26 @@ SOURCE: §13.1 "`is_subtype_of` is not that reduction applied uniformly"; §13.1
 
 HELD-BY: test_decision_decides_true_relations, test_the_two_deciders_are_measured_against_each_other, the_structural_inclusion_rules_decide_without_the_descriptor
 
+**`is_empty` and the relation below `nothing` are two procedures.** The
+source asks one question: `t ≤ s` is `t ∧ ¬s = ∅` [FCB08, §4.1], so a set's
+emptiness is its relation below the empty set. Here the relation is the
+structural procedure and `is_empty` a chain of readings beside it, so a
+reading one asks and the other does not gives one set two answers. The kinds
+a meet may hold were one: a meet holds no kind a member cannot hold, and a
+complement none its inner set holds whole [FCB08, Def. 4.1], which the
+relation read below any set and `is_empty` did not. Answering `is_empty` as
+the relation below `nothing` would make the two one by construction, at the
+cost of reading every meet as its relation, which took 7 to 33 ms a call.
+So parity is kept a reading at a time, a reading the relation asks of a meet
+asked by `is_empty` of the same meet, and a law over drawn meets holds it.
+**[DEVIATION: emptiness-and-the-relation-below-nothing-are-two-procedures]**
+
+SOURCE: §14.4 "completeness is a property of **one**"; §13.1 "`is_subtype_of` is not that reduction applied uniformly"
+
+IMPLEMENTED-BY: decision/emptiness.rs::intersection_verdict
+
+HELD-BY: a_meet_is_read_empty_exactly_where_it_is_below_nothing, below_nothing_exactly_where_read_empty, a_meet_that_may_hold_no_kind_is_read_empty, test_a_meet_that_may_hold_no_kind_is_below_every_set
+
 **The term is built in a normal form short of negation normal form, and it is
 not canonical.** Construction applies associativity, commutativity,
 idempotence and the identity laws, not absorption, and pushes no complement

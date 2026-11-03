@@ -2665,14 +2665,15 @@ proptest! {
         }
     }
 
-    /// The relation below `nothing` and the emptiness reading are one
-    /// procedure, `is_empty` being the primitive the relations call into: a
-    /// schema is proved below `nothing` exactly where it is read empty, over a
-    /// drawn schema and over the union of two, which the relation reads a
-    /// member at a time. So is the universe proved below its complement, the
-    /// same question one De Morgan step away, since `a ⊆ ¬s` is `a ∧ s = ∅`
-    /// [FCB08, §4.1] and `anything ∧ s` is `s`; the respelled pair reads that
-    /// meet's emptiness as `is_empty` does.
+    // THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures
+    /// The relation below `nothing` and the emptiness reading ask one question
+    /// by two procedures, and answer it alike: a schema is proved below
+    /// `nothing` exactly where it is read empty, over a drawn schema and over
+    /// the union of two, which the relation reads a member at a time. So is the
+    /// universe proved below its complement, the same question one De Morgan
+    /// step away, since `a ⊆ ¬s` is `a ∧ s = ∅` [FCB08, §4.1] and `anything ∧
+    /// s` is `s`; the respelled pair reads that meet's emptiness as `is_empty`
+    /// does.
     #[test]
     fn below_nothing_exactly_where_read_empty(a in shaped_schema(), b in shaped_schema()) {
         let _allowance = crate::descr::budget::law();
@@ -8476,5 +8477,72 @@ proptest! {
         let bare = base.subtype_relation_under(&supertype, &NoLeafRelations, &[]);
         let refined = spelled.subtype_relation_under(&supertype, &NoLeafRelations, &[]);
         prop_assert_eq!(bare, refined, "{:?} <= {:?}", base, supertype);
+    }
+}
+
+/// A member of a meet the kinds reading reads: a scalar, a `str` or `bytes`
+/// under a length bound, an `int` or a `float` under a step, a list of
+/// integers, or a union or complement of members -- the shapes whose kinds
+/// decide whether a meet may hold a value [FCB08, Def. 4.1], among them the
+/// complement of a union that leaves a kind alone. A refined branch keeps a
+/// union out of the readings that read scalars exactly, which is where the
+/// kinds are the reading left.
+fn a_kinded_member() -> impl Strategy<Value = Schema> {
+    let stepped = prop_oneof![Just(Schema::Int), Just(Schema::Float)]
+        .prop_map(|base| Schema::refine(base, vec![Constraint::MultipleOf(OperandIx::new(0))]));
+    let bounded = (
+        prop_oneof![Just(Schema::Str), Just(Schema::Bytes)],
+        0usize..3,
+        proptest::bool::ANY,
+    )
+        .prop_map(|(base, n, upper)| {
+            let bound = if upper {
+                Constraint::MaxLen(n)
+            } else {
+                Constraint::MinLen(n)
+            };
+            Schema::refine(base, vec![bound])
+        });
+    let leaf = prop_oneof![
+        Just(Schema::Int),
+        Just(Schema::Float),
+        Just(Schema::Str),
+        Just(Schema::Bool),
+        Just(Schema::NoneType),
+        Just(Schema::Bytes),
+        Just(Schema::list(SeqShape::homogeneous(Schema::Int))),
+        bounded,
+        stepped,
+    ];
+    leaf.prop_recursive(3, 12, 3, |inner| {
+        prop_oneof![
+            proptest::collection::vec(inner.clone(), 2..4).prop_map(Schema::union),
+            inner.prop_map(Schema::complement),
+        ]
+    })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    /// `is_empty` and the relation below `nothing` ask one question
+    /// [FCB08, §4.1] by two procedures, and answer it alike over drawn meets of
+    /// scalars, length-bounded words and lists, and their unions and
+    /// complements: a meet is read empty exactly where it is proved below
+    /// `nothing`. The meets reach the complement of a union holding a bounded
+    /// word, whose kinds one procedure read and the other did not.
+    // THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures
+    #[test]
+    fn a_meet_is_read_empty_exactly_where_it_is_below_nothing(
+        members in proptest::collection::vec(a_kinded_member(), 2..4),
+    ) {
+        let _allowance = crate::descr::budget::law();
+        let meet = Schema::meet(members);
+        let empty = meet.is_empty_with(&NoLeafRelations, &[]);
+        let below = meet.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]);
+        prop_assert_eq!(below.holds(), empty, "{:?}: below nothing {:?}", meet, below);
     }
 }

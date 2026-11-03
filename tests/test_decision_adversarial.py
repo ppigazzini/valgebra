@@ -1165,22 +1165,24 @@ def test_a_question_declined_at_an_allowance_is_asked_again_with_more() -> None:
     assert Validator(anything).relation_to(everything) == "subset"
 
 
+# THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures
 def test_a_meet_that_may_hold_no_kind_is_below_every_set() -> None:
     """A meet holds no kind a member cannot hold, and so holds no value.
 
     A complement holds no kind its inner set holds whole: the complement of
     "anything but a `str`, or a `str` of at most one character" holds `str`s
-    alone, and met with the integers it holds no value at all. A meet of
-    patterns over `str` beside `~str` is placed the same way, before any
-    pattern is asked against the supertype.
+    alone, and met with the integers it holds no value at all, read so below
+    `nothing` and by `is_empty` alike. A meet of patterns over `str` beside
+    `~str` is placed the same way, before any pattern is asked against the
+    supertype.
     """
     integer = intersection(
         union(int, Annotated[float, at.MultipleOf(1)]), complement(bool)
     )
     short_words = union(complement(str), Annotated[str, at.MaxLen(1)])
-    assert intersection(integer, complement(short_words)).relation_to(nothing) == (
-        "subset"
-    )
+    words_alone = Validator(intersection(integer, complement(short_words)))
+    assert words_alone.relation_to(nothing) == "subset"
+    assert words_alone.is_empty()
     patterned = intersection(
         Annotated[str, Regex(r"\w+"), at.MinLen(2)],
         Annotated[str, Regex(r"\W*")],

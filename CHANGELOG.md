@@ -108,6 +108,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a possessive quantifier's refusal names no Python release
 - feat: an enumeration met with sets refusing every member holds no value
 - feat: a question undecided at an allowance is asked again with a larger one
+- fix: is_empty reads the kinds a meet may hold as the relation does -- internal
 
 -->
 
@@ -156,9 +157,9 @@ answer of its own, or a repair to a change not yet released.
 - **A meet that may hold no kind is below every set.** A meet holds no kind
   a member cannot hold, and a complement none its inner set holds whole, so
   the integers met with the complement of `~str | Annotated[str, MaxLen(1)]`,
-  which holds `str`s alone, are `subset` of `nothing` where they were
-  undecided. A meet of patterns over `str` beside `~str` is placed at once,
-  before any pattern's tables are built.
+  which holds `str`s alone, are `subset` of `nothing`, and empty to
+  `is_empty()`, where they were undecided. A meet of patterns over `str`
+  beside `~str` is placed at once, before any pattern's tables are built.
 
 - **A Boolean term of length bounds over one base is read as the lengths it
   holds.** A union, a meet or a complement of `MinLen`, `MaxLen` and `Len`
