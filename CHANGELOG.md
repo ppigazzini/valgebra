@@ -109,6 +109,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: an enumeration met with sets refusing every member holds no value
 - feat: a question undecided at an allowance is asked again with a larger one
 - fix: is_empty reads the kinds a meet may hold as the relation does -- internal
+- fix: a shape read past the bounds beside it reads its tail without a step -- internal
 
 -->
 

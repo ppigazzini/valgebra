@@ -12877,7 +12877,9 @@ fn a_mapping_holds_no_more_keys_than_its_key_types_hold_apart() {
 /// record met with `Annotated[dict, MinLen(2)]` holds none. Under `MinLen(1)`
 /// the record holds `{"a": 0}`, and the meet is not read empty. The
 /// refinement is no member beside itself, and a mapping of any length beside
-/// it misses no bound.
+/// it misses no bound. A sequence's tail is read without a step of the
+/// query's, whether it holds a value or not: two integers and a tail of
+/// `int & str` miss `MinLen(3)`, and a list of integers misses no bound.
 #[test]
 fn a_member_shaped_past_the_bounds_beside_it_empties_the_meet() {
     let optional_a = closed(vec![field("a", Schema::Int, false)]);
@@ -12898,6 +12900,29 @@ fn a_member_shaped_past_the_bounds_beside_it_empties_the_meet() {
     let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
     let alone = [at_least(2), Schema::mapping(MapClause::top())];
     assert!(!super::emptiness::a_member_shaped_past_the_bounds_beside_it(&alone, &mut cx));
+    let any_list = |bound| {
+        Schema::refine(
+            Schema::list(SeqShape::homogeneous(Schema::ANYTHING)),
+            vec![bound],
+        )
+    };
+    let pair = Schema::list(SeqShape::prefix_tail(
+        [Schema::Int, Schema::Int],
+        Schema::Intersection(vec![Schema::Int, Schema::Str].into()),
+    ));
+    let integers = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let left = budget.left();
+    assert!(super::emptiness::a_member_shaped_past_the_bounds_beside_it(
+        &[pair, any_list(Constraint::MinLen(3))],
+        &mut cx
+    ));
+    assert!(
+        !super::emptiness::a_member_shaped_past_the_bounds_beside_it(
+            &[integers, any_list(Constraint::MaxLen(1))],
+            &mut cx
+        )
+    );
+    assert_eq!(budget.left(), left, "the shapes are read without a step");
 }
 
 /// A refinement of a union holds a value where a branch under its constraints

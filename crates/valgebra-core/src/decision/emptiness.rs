@@ -830,9 +830,11 @@ fn a_class_below_the_complement_beside_it(members: &[Schema], cx: &Cx<'_>) -> Ve
 /// value, since `m ∩ (b | c)` is within `m | c`, each of its values a value of
 /// `m` the bounds keep [FCB08, Def. 4.1]. `{"a?": int} & Annotated[dict,
 /// MinLen(2)]` holds none, the record holding at most one key, as
-/// `Annotated[{"a?": int}, MinLen(2)]` holds none. Read off the shapes, as the
-/// refinement's own reading is, spending no step: a verdict of each member
-/// under the bounds spent the steps the readings after it decide with.
+/// `Annotated[{"a?": int}, MinLen(2)]` holds none. Read off the shapes,
+/// spending no step: a sequence's tail is read empty by [`read_empty`], as a
+/// set's element and a mapping clause's value are, where the refinement's own
+/// reading asks the rules. A verdict of each member under the bounds spent the
+/// steps the readings after it decide with.
 pub(super) fn a_member_shaped_past_the_bounds_beside_it(
     members: &[Schema],
     cx: &mut Cx<'_>,
@@ -842,7 +844,8 @@ pub(super) fn a_member_shaped_past_the_bounds_beside_it(
             return false;
         };
         members.iter().any(|member| {
-            !std::ptr::eq(member, refined) && lengths_miss_the_shape(member, constraints, cx)
+            !std::ptr::eq(member, refined)
+                && lengths_miss_the_shape(member, constraints, cx, |tail, cx| read_empty(tail, cx))
         })
     })
 }
@@ -1467,7 +1470,7 @@ fn refinement_verdict(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>)
     let density = density_of([base]);
     if base.is_empty_rec(cx)
         || bounds_unsatisfiable(constraints.iter(), cx.oracle, density)
-        || lengths_miss_the_shape(base, constraints, cx)
+        || lengths_miss_the_shape(base, constraints, cx, Schema::is_empty_rec)
     {
         return Verdict::Empty;
     }
@@ -1747,13 +1750,23 @@ pub(super) fn value_count_bounds(schema: &Schema, oracle: &dyn LeafRelations) ->
 /// `dict[str, int & str]` and `set[int & str]` under `MinLen(1)`, `dict[bool,
 /// int]` under `MinLen(3)` and the closed `{"a": int}` under `MinLen(2)` admit
 /// no value.
-fn lengths_miss_the_shape(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>) -> bool {
+///
+/// A set's element and a mapping clause's value are read empty by
+/// [`read_empty`], and a sequence's tail by `tail_holds_none`, which the
+/// caller names: the rules, for a refinement's own emptiness, or `read_empty`
+/// for a reading that spends no step.
+fn lengths_miss_the_shape(
+    base: &Schema,
+    constraints: &Constraints,
+    cx: &mut Cx<'_>,
+    tail_holds_none: impl FnOnce(&Schema, &mut Cx<'_>) -> bool,
+) -> bool {
     let (least, most) = match base {
         Schema::Seq { shape, .. } => {
             let open = shape
                 .tail
                 .as_deref()
-                .is_some_and(|tail| !tail.is_empty_rec(cx));
+                .is_some_and(|tail| !tail_holds_none(tail, cx));
             (shape.prefix.len(), (!open).then_some(shape.prefix.len()))
         }
         Schema::Coll { element, .. } => (0, read_empty(element, cx).then_some(0)),
