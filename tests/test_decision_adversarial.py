@@ -1082,6 +1082,7 @@ def test_a_subject_read_empty_is_below_every_set() -> None:
     assert subject.relation_to(supertype) == "subset"
 
 
+# THEORY: a-meet-is-distributed-four-clauses-wide
 def test_a_narrowed_meet_left_open_is_distributed_as_written() -> None:
     """A meet its guards narrow and leave undecided is read through its reference.
 

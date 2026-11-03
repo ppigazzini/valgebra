@@ -1296,6 +1296,27 @@ IMPLEMENTED-BY: decision/emptiness.rs::held_verdict
 
 HELD-BY: a_meet_read_back_is_a_reading_of_it, a_meet_read_back_spends_what_a_reading_of_it_spends_now, a_spent_query_reads_its_bounds_under_steps_of_its_own, a_respelled_pair_stops_at_its_allowance
 
+**A meet is distributed four clauses wide, and narrowed past that.** The
+sources decide a meet on its normal form, the union of the meets its union
+members' branches make with the rest [FCB08, Def. 4.1], which distributes
+every union it holds. The rules distribute a meet holding no reference only
+where its normal form spans four clauses at most, the bound ty's intersection
+builder caps its own normal form at, and past that narrow its unions by the
+complements beside them. Four is a peer's tuning and no result. The
+narrowing and the capped distribution split one budget between two readings
+that each decide answers the other cannot, so a repair that moves the split
+trades answers rather than adding them. A binary decision tree holds the
+combination as one structure, its paths the clauses [LN26, §3]; it is not
+built here, since on the narrowing family the cost is in the meets the rules
+build as they descend, each a term of its own.
+**[DEVIATION: a-meet-is-distributed-four-clauses-wide]**
+
+SOURCE: §13.1 "**product** of the sub-forms. That blow-up is why a DNF-based decision needs"
+
+IMPLEMENTED-BY: decision/emptiness.rs::normal_form_within, decision/emptiness.rs::narrowed_by_its_members
+
+HELD-BY: a_union_holding_a_reference_is_distributed_into_the_meet, a_union_in_a_meet_is_narrowed_by_the_members_beside_it, test_a_narrowed_meet_left_open_is_distributed_as_written
+
 **The dict key partition is by kind.** `1` and `True` are one key to a dict and
 two labels to the partition, so an atom requiring both under distinct values
 holds no dict, and the descriptor reads it that way. **[DEVIATION: the-key-partition-is-by-kind]**

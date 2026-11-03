@@ -1431,6 +1431,7 @@ fn a_narrowed_meet_is_read_beside_itself_once_more() {
     assert_ne!(rules_verdict(&holding_none, &[]).0, Verdict::Empty);
 }
 
+// THEORY: a-meet-is-distributed-four-clauses-wide
 /// A union in a meet is narrowed by the members beside it: `K ∩ (¬K ∪ X)` is
 /// `K ∩ X`, read with no clause distributed, so three guards over one kind --
 /// eight clauses distributed, past the bound -- decide as their branches do,
@@ -1689,6 +1690,7 @@ fn a_record_is_refuted_a_shared_field_at_a_time_past_the_node_bound() {
     );
 }
 
+// THEORY: a-meet-is-distributed-four-clauses-wide
 /// A chain spelled as a recursive record, its reference inside the key's
 /// union, decides as the chain spelled around the union does.
 ///
