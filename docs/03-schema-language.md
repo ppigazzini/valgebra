@@ -32,9 +32,11 @@ assert raised
 ```
 
 The abstract-collection generics are the ones a reader is most likely to
-reach for: `Mapping[K, V]`, `Sequence[T]`, `Set[T]`, `Iterable[T]`, and the
-subscripted concrete classes such as `deque[T]` and `OrderedDict[K, V]`. None
-of them builds, and not for one reason:
+reach for: `Mapping[K, V]`, `Sequence[T]`, `Set[T]` and `Iterable[T]`, all
+four from `collections.abc`, and the subscripted concrete classes such as
+`deque[T]` and `OrderedDict[K, V]`. `typing.Set[T]` is not among them: it is
+the builtin `set` under another name, and builds as `set[T]` does. None of the
+others builds, and not for one reason:
 
 - `Mapping[K, V]` and `Sequence[T]` are **refused**. The record and mapping
   node denotes dicts, and giving it a carrier so these build is a change the

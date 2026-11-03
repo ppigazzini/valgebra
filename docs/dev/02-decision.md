@@ -165,12 +165,12 @@ another way reaches arms the first did not. A difference that holds every value
 of some kind refutes the pair, read off the two terms with no meet built: the
 kind refutation `spills_a_kind` asks of the universe and a complement alone,
 asked here of any subject. Against a complement `¬c` the meet `a ∧ c` is asked
-below the empty set and the pair as `c ⊆ ¬a`, both goals over the query's
-signed subterms, and where both decline, the meet is read empty as `is_empty`
-reads a set (`empty_under`): a union a member at a time, each by the rules and
-by the set representation. So `anything ⊆ ¬s` is proved where `s` is read
-empty within the respelling's steps, which `below_nothing_exactly_where_read_empty`
-in `laws.rs` holds over drawn schemas, and
+below the empty set and the pair as `c ⊆ ¬a`, both goals over the query's signed
+subterms, and where both decline, the meet is read empty as `is_empty` reads a
+set (`empty_under`): a union a member at a time, each by the rules and by the
+set representation. So `anything ⊆ ¬s` is proved where `s` is read empty within
+the respelling's steps, which `below_nothing_exactly_where_read_empty` in
+`laws.rs` holds over drawn schemas, and
 `the_universe_is_below_the_complement_of_a_set_read_empty` on a union neither
 reading empties whole. Against a union holding a complement, `b ∪ ¬c`, the meet
 `a ∧ c` is asked below `b`, and where that declines, `a ∧ ¬(b ∪ ¬c)` is read
@@ -182,16 +182,17 @@ subject against a meet supertype is the one pair asked as the
 two together: their meet proved empty and the subject proved to hold a value
 refute it, since `a ⊆ b` with `a ∧ b = ∅` holds only of an empty `a`, and
 neither the member rule on the left nor the member-at-a-time rule on the right
-reads the two meets at once. The rules asked again share `RESPELLING` steps of what the query has
-left, so a pair that declined cheaply does not decline dearly;
-`a_pair_declined_as_written_is_asked_in_its_other_spellings` and
-`a_respelled_pair_stops_at_its_allowance` hold the readings and the allowance.
-A root question that ends undecided at a bound, with steps of its own left, is
-asked once more under `RESPELLING_AGAIN` (`asked_again`): answers sat a few
-steps under the first allowance, so a sound reading added beside the others
-lost them, and a larger first allowance loses answers of its own, a respelling
-charged to the query spending steps the readings after it decided with. The
-first asking's answer stands wherever it decides, so the second takes none away
+reads the two meets at once. The rules asked again share `RESPELLING` steps of
+what the query has left, so a pair that declined cheaply does not decline
+dearly; `a_pair_declined_as_written_is_asked_in_its_other_spellings` and
+`a_respelled_pair_stops_at_its_allowance` hold the readings and the allowance. A
+root question that ends undecided at a bound, with steps of its own left, is
+asked once more under `RESPELLING_AGAIN` and a `DECISION_BUDGET` of its own
+(`asked_again`), so a query spends at most two budgets: answers sat a few steps
+under the first allowance, so a sound reading added beside the others lost them,
+and a larger first allowance loses answers of its own, a respelling charged to
+the query spending steps the readings after it decided with. The first asking's
+answer stands wherever it decides, so the second takes none away
 (`a_question_declined_at_a_bound_is_asked_again_with_more`).
 
 **A refutation stands on a value.** The descriptor's is direct: it proves the
@@ -269,33 +270,39 @@ no builtin. The slot exists so that a complement means what it says; without it
 complement run slot by slot, which is the whole reason to partition first: no
 rule has to relate a list to an int, because the two never share a slot.
 
-**A slot is a union of lines.** A class and an attribute record constrain a value
-*within* its kind rather than instead of it -- a dataclass deriving from `int`
-has an integer's structure *and* a class -- so `descr/lines.rs` carries each
-slot as `⋁ᵢ (structureᵢ ∧ classesᵢ ∧ attrsᵢ)`. That is a disjunctive normal form
-*inside* one kind, over a handful of lines, rather than over all twelve slots at
-once. A literal is a line with a class: its constant met with `Class::exact`,
-the builtin's own type, which nothing derives from and every subclass of the
-builtin is laid out apart from. `descr/classes.rs` holds the class order as a
-**snapshot**, because the
-core cannot call `issubclass` and should not want to: `ABC.register` can change
-that relation after a schema is built, and a relation that moves is not a lattice
-to reason in. Beside the order the snapshot carries what a *direct* instance can
-hold (`Attributes`): the names the `__mro__` defines and whether each is a
-slot, a plain definition or a data descriptor, whether the instances carry a
-`__dict__`, and which attribute hook the class defines. `Attributes::reach`
-turns those into one answer per name, which is the only place they are read:
-the atom's emptiness asks it through the snapshot, and the rules' reading of a
-class met with a record asks it through `LeafRelations::attribute_reach`, which
-the bindings answer from the same reading, cached once per class for the query
-(`oracle.rs`). The names are one `Namespace` per class on the `__mro__`, shared
-by every class standing on it rather than copied into each. The namespaces of
-`object`, of the builtins a kind is read from and of `BaseException` are static
-types no assignment reaches, so the bindings read them once per process, and
-every other namespace once per query. Assigning to a class after the snapshot
-moves the facts as `ABC.register` moves the order. `descr/records.rs` holds the
-attributes as a union of always-open record atoms, a field's type living in `T⊥`
-so that optionality is membership rather than a flag with rules of its own.
+**A slot is a union of lines.** A class and an attribute record constrain a
+value *within* its kind rather than instead of it -- a dataclass deriving from
+`int` has an integer's structure *and* a class -- so `descr/lines.rs` carries
+each slot as `⋁ᵢ (structureᵢ ∧ classesᵢ ∧ attrsᵢ)`. That is a disjunctive normal
+form *inside* one kind, over a handful of lines, rather than over all twelve
+slots at once. A literal is a line with a class: its constant met with
+`Class::exact`, the builtin's own type, which nothing derives from and every
+subclass of the builtin is laid out apart from. `descr/classes.rs` holds the
+class order as a **snapshot**, because the core cannot call `issubclass` and
+should not want to: `ABC.register` can change that relation after a schema is
+built, and a relation that moves is not a lattice to reason in. Beside the order
+the snapshot carries what a *direct* instance can hold (`Attributes`): the names
+the `__mro__` defines and whether each is a slot, a plain definition or a data
+descriptor, whether the instances carry a `__dict__`, and which attribute hook
+the class defines. `Attributes::reach` turns those into one answer per name,
+which is the only place they are read: the atom's emptiness asks it through the
+snapshot, and the rules' reading of a class met with a record asks it through
+`LeafRelations::attribute_reach`, which the bindings answer from the same
+reading, cached once per class for the query (`oracle.rs`). The names are one
+`Namespace` per class on the `__mro__`, shared by every class standing on it
+rather than copied into each. The namespaces of `object`, of the builtins a kind
+is read from and of `BaseException` are static types no assignment reaches, so
+the bindings read them once per process, and every other namespace once per
+query. A namespace and the order are read through `type`'s own descriptors, as
+`inspect.getattr_static` reads them (`namespace_by_type` and `mro_of` in
+`oracle.rs`), and a hook where Python's special-method lookup finds it
+(`special_lookup`): Python dispatches `isinstance`, `==`, `len` and `iter`
+through the type's own namespaces and asks no `__getattribute__`, the
+metaclass's included, so a metaclass answering `getattr` hides nothing.
+Assigning to a class after the snapshot moves the facts as `ABC.register` moves
+the order. `descr/records.rs` holds the attributes as a union of always-open
+record atoms, a field's type living in `T⊥` so that optionality is membership
+rather than a flag with rules of its own.
 
 **A line's structure is one component per representation**, not one per kind, so
 two kinds that hold their values alike share one:
@@ -653,10 +660,15 @@ corpus of its own driving every question below
   one bound's and ordered against nothing -- `2 + 0j` -- passes one bound and
   raises against the other;
 - `no_int_between` — does the interval between two bounds admit no integer,
-  declining on the same operands, which `floor` and `ceil` round as the
-  builtin. Read both ways: `bounds_unsatisfiable` takes `Some(true)` as an
-  empty integer refinement, and `bounded_integer_verdict` takes `Some(false)`
-  as an integer that is a value of one;
+  declining on the same operands, which `floor` and `ceil` round as the builtin,
+  and on a `Decimal` whose leading digit sits `ROUNDED_DIGITS` places up or
+  past: rounding one to an `int` takes time quadratic in its digits, and its
+  exponent can be far past that. Read both ways: `bounds_unsatisfiable` takes
+  `Some(true)` as an empty integer refinement, and `bounded_integer_verdict`
+  takes `Some(false)` as an integer that is a value of one. The bindings keep
+  each answer for the query by the two operands and their strictness, since a
+  refinement over the integers is asked it at every verdict the rules read of
+  it, and ask a decline again (`oracle.rs`);
 - `divides` — does one pooled step divide another, which settles an inclusion
   between two `MultipleOf` refinements: every multiple of `m` is a multiple of
   `s` when `s` divides `m`, whatever the size of either. The operator is `%`,
@@ -727,30 +739,38 @@ side as a refutation states at its site what that negative means for `nan`,
 for a class this oracle does not trust, and for a question it declined.
 
 **A layout is the class that laid it down.** The snapshot a class enters the
-core with carries, beside its ancestors, the class whose instance layout it
-has: the first on its `__base__` chain that lays one down, which is one of the
-nine builtins or a class whose own `__slots__` added a slot -- `__dict__` and
-`__weakref__` add none, and neither does an empty `__slots__`. Both are read
-off what Python built rather than off attributes code assigns: `__base__`
-through `type`'s own descriptor, the chain Python lays an instance out along
-and the one a metaclass's `mro()` does not rewrite, and a slot off the member
-descriptor Python made for it when it made the class, since a `__slots__`
+core with carries, beside its ancestors, the class whose instance layout it has:
+the first on its `__base__` chain that lays one down, which is one of the nine
+builtins, a class whose own `__slots__` added a slot -- `__dict__` and
+`__weakref__` add none, and neither does an empty `__slots__` -- or a static
+type defined in C whose instance is larger than its base's, by `__basicsize__`
+or `__itemsize__`, the test CPython's `solid_base` puts to a static type
+(`lays_down_its_own` in `oracle.rs`). So `complex` lays one down and meets no
+kind, and `Exception` lays none, its instance being `BaseException`'s, so
+`ValueError` and `TypeError` meet in the class deriving from both. A heap type
+defined in C -- `collections.deque`, and `decimal.Decimal` from 3.13 -- is read
+by its own `__slots__`, as a class defined in Python is; PyPy names no size, so
+there a type defined in C is read by its slots alone. All of it is read off what
+Python built rather than off attributes code assigns: `__base__`, the flags and
+the sizes through `type`'s own descriptors, the chain Python lays an instance
+out along and the one a metaclass's `mro()` does not rewrite, and a slot off the
+member descriptor Python made for it when it made the class, since a `__slots__`
 named afterwards lays nothing down. A slot whose descriptor an assignment
-replaced is read as the value that replaced it. Python builds a
-class deriving from two others only where the layout one carries extends the
-other's, and a layout extends another when the class that laid it down derives
-from the class that laid down the other. So two classes are disjoint exactly
-when both carry a layout and neither's is among the other's ancestors, which is
-what refutes `MyInt & MyStr` and two slotted classes alike, and lets a plain
-subclass of a slotted class meet a slotted subclass of the same base in the
-class Python builds from both. PEP 800 names the rule; its
-`@typing.disjoint_base` decorator is **not read**, for the reason the PEP gives:
-"there is no runtime enforcement of this decorator on user-defined classes". A
-class deriving from two decorated classes exists if someone writes it, and a
-meet called empty on the strength of the decorator would refuse a value that
-exists. `tests/test_classes.py` holds the layout rule to the interpreter over
-drawn class orders -- a meet is empty exactly where `type("E", (C, D), {})`
-raises -- and holds the decorator to nothing.
+replaced is read as the value that replaced it. Python builds a class deriving
+from two others only where the layout one carries extends the other's, and a
+layout extends another when the class that laid it down derives from the class
+that laid down the other. So two classes are disjoint exactly when both carry a
+layout and neither's is among the other's ancestors, which is what refutes
+`MyInt & MyStr` and two slotted classes alike, and lets a plain subclass of a
+slotted class meet a slotted subclass of the same base in the class Python
+builds from both. PEP 800 names the rule; its `@typing.disjoint_base` decorator
+is **not read**, for the reason the PEP gives: "there is no runtime enforcement
+of this decorator on user-defined classes". A class deriving from two decorated
+classes exists if someone writes it, and a meet called empty on the strength of
+the decorator would refuse a value that exists. `tests/test_classes.py` holds
+the layout rule to the interpreter over drawn class orders -- a meet is empty
+exactly where `type("E", (C, D), {})` raises -- and holds the decorator to
+nothing.
 
 `NoLeafRelations` is the core's default and decides nothing: it declines every
 question, and that is the contract rather than an omission, because an answer
@@ -776,7 +796,7 @@ directions.
 
 `leaf_subtype` answers one question the class hierarchy alone cannot: whether an
 enumeration is the union of its members. It is, when **every instance of the
-class is one of the values `list(cls)` yields** — and that takes five
+class is one of the values `list(cls)` yields** — and that takes six
 conditions:
 
 | condition | the value that stands against dropping it |
@@ -786,6 +806,7 @@ conditions:
 | it has **at least one member** | a subclass's member: a memberless enum is still subclassable |
 | its members compare by identity | an `IntEnum` member *is* the integer, so two of them are not two values |
 | it makes no instance but by looking a member up: its `_missing_` is `Enum`'s, its metaclass's `__iter__` and `__call__` are `EnumMeta`'s | `E(5)`, which a `_missing_` of its own makes, and a member a metaclass's `__iter__` leaves out of `list(cls)` |
+| it has **no subclass**, as `type`'s own `__subclasses__` lists them when asked | an instance of a plain class whose `__bases__` was assigned the enumeration, which a class statement cannot derive from but `CPython` 3.15 lets an assignment do, made by that class's own constructor |
 
 The shorter reading -- "the members are fixed at class creation, a class with
 any cannot be subclassed, and every instance is one of them" -- has a true
@@ -1354,7 +1375,7 @@ of its own, charged to nothing, so its answer rests on no hypothesis of the
 query's and a read-back leaves the query's steps where asking again would. A
 pair of recursive lists, tuples and records asked 6,009 narrowed questions over
 seven distinct ones, 11.6 million steps no query counted, and declined in
-527 ms where 0.0.22 declines in 41; read back, it declines in 49
+527 ms; read back, it declines in 49
 (`a_narrowed_meet_read_back_is_a_reading_of_it`).
 
 `decision/goal_tests.rs` holds the premise: every goal the recorder sees is in
@@ -1377,7 +1398,7 @@ inner set holds whole [FCB08, Def. 4.1] (`kinds_possibly_held`), so
 reference, before it asks a member against the supertype. The member rule asks
 each member whole, and a meet of patterns over `str` beside `~str` built every
 pattern's tables to be placed by the complement: 56 ms on a first call, where
-0.0.22 took 3.5 and the reading takes 2. The walk is asked of those two shapes
+the reading takes 2. The walk is asked of those two shapes
 alone: asked of every meet subject it cost the relation matrix 3.03%, and of
 these 0.60%. It decides meets no rule placed as well, the integers met with
 the complement of "anything but a `str`, or a `str` of at most one character"
@@ -1385,6 +1406,19 @@ among them (`a_meet_that_may_hold_no_kind_is_placed_below_any_set`).
 `is_empty` reads the same kinds in `intersection_verdict`, of a meet holding a
 complement and before a reading there spends a step, so the meet is empty to
 both questions (`a_meet_that_may_hold_no_kind_is_read_empty`).
+
+**The complement of a meet holds what a complemented member's inner set
+holds.** Pushed in, `¬(A ∧ ¬S)` is `¬A ∨ S`, so it holds every value of `S`.
+Where the regions leave a complement open -- a record has no region --
+`is_empty` reads it inhabited where such an `S` has a value by its own shape
+(`a_complemented_member_holds_a_value` in `decision/emptiness.rs`, through
+`holds_a_value_shallowly`), so `¬(¬{"a": None} ∧ ¬{})` holds `{}` and is
+decided before the set representation builds the records. The inner set is
+read without descent: the fold that reached the complement read it already,
+and a second reading would spend steps a relation asking this emptiness inside
+its own query has not got to spare.
+`the_complement_of_a_meet_holds_a_complemented_member_s_values` in
+`decision/tests.rs` holds it.
 
 **A placement the two terms make is never refused for want of a step.** One
 term against itself, a subject among a union's branches, a supertype among a
@@ -1731,7 +1765,15 @@ emptiness the rules are exploring, a second exploration ran once for every
 question reaching the container, and a union of the JSON values beside a
 frozenset under `MinLen(1)` spent its steps before the proof. An element the
 set representation does not place is counted as holding a value, which leaves
-a bound unread and refutes nothing.
+a bound unread and refutes nothing. A sequence's open tail is read by the
+reader the caller names: the rules, for a refinement's own emptiness
+(`refinement_verdict`), and `read_empty`, as an element and a value are, for
+a meet holding a shape beside bounds it misses
+(`a_member_shaped_past_the_bounds_beside_it`), which reads the shapes without
+a step of the query's: a verdict of each member under the bounds spent the
+steps the readings after it decide with.
+`a_member_shaped_past_the_bounds_beside_it_empties_the_meet` holds the steps
+left unspent.
 
 **A set's and a record's lengths are read off their shapes.** The set
 representation has no part for either length, so the rules read what the shape

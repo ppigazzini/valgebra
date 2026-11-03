@@ -636,8 +636,8 @@ impl PoolRelations<'_, '_> {
     /// is one.
     ///
     /// Reading a class as the union of `list(cls)` is sound only when every
-    /// instance of the class is one of the values listed, and that takes four
-    /// things:
+    /// instance of the class is one of the values listed, and that takes each of
+    /// these:
     ///
     /// * it is an enumeration, so the members are fixed when the class is
     ///   created;
@@ -825,8 +825,9 @@ fn builtin_of(py: Python<'_>, kind: Kind) -> Option<Bound<'_, PyType>> {
 /// down extends the other's: `class C(int, str)` is "multiple bases have
 /// instance lay-out conflict", and so is `class C(A, B)` for two classes whose
 /// `__slots__` each add a slot over `object`. The class laying down a layout is
-/// the first on the `__mro__` that does -- one of the nine builtins below, or a
-/// class that lays down one of its own ([`lays_down_its_own`]) -- and a class
+/// the first on the `__base__` chain that does -- one of the nine builtins
+/// below, or a class that lays down one of its own ([`lays_down_its_own`]) --
+/// and a class
 /// built on none of them carries no layout, which conflicts with nothing and
 /// confines nothing: `class Both(Plain, MyStr)` builds, so a plain class and a
 /// `str` subclass do share instances, and those instances are strings.

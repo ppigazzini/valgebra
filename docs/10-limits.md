@@ -210,16 +210,18 @@ decision steps. None caps time, and four costs grow inside them:
   once for each, at most the product of the two bounds per definition and
   value, where a value inside them on every path is walked once.
 - **A relation's budget counts steps, not their size.** A query spends at most
-  a million decision steps, and a step whose work is linear in a leaf it reads
-  is one step whatever the leaf holds. So a relation over a large leaf costs
-  time in proportion to it inside the budget: `int` against a union of
-  thousands of literals grows with the square of their number before it
-  answers undecided. What the set representation builds is held by size as
-  well -- an automaton to 4,096 states, a pattern's table to the bytes that
-  takes -- and a length bound is refused before it is built where no table
-  of that many states could count to it, so `Annotated[str,
-  MinLen(1_000_000)]` against another bound answers at once instead of
-  unrolling a million copies of a code point.
+  a million decision steps an asking, and one that ends undecided at a smaller
+  allowance inside that budget, with steps of its own left, is asked once more
+  under a million of its own, so at most two million in all. A step whose work
+  is linear in a leaf it reads is one step whatever the leaf holds. So a
+  relation over a large leaf costs time in proportion to it inside the budget:
+  `int` against a union of thousands of literals grows with the square of their
+  number before it answers undecided. What the set representation builds is held
+  by size as well -- an automaton to 4,096 states, a pattern's table to the
+  bytes that takes -- and a length bound is refused before it is built where no
+  table of that many states could count to it, so
+  `Annotated[str, MinLen(1_000_000)]` against another bound answers at once
+  instead of unrolling a million copies of a code point.
 - **A walk does not stop for a signal.** No walk or relation asks the
   interpreter for pending signals, so a `KeyboardInterrupt` raised while one
   runs arrives when it returns. Asking would cost every element of every walk

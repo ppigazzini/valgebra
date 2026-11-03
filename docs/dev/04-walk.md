@@ -489,12 +489,16 @@ On PyPy a subclass that **inherits** `tuple.__len__` is not copied, because
 there is nothing to distrust: the overridden answer and the base's answer are
 the same function. That is every `NamedTuple`, which is the tuple subclass a
 program is most likely to hold, and the walk tells the two apart by asking the
-type whether its `__len__` *is* the base's -- not whether it is exactly a
-tuple, which would copy every `NamedTuple`. CPython's tuple walk does not ask,
-since the answer changes nothing it reads: the lookup is a quarter of walking a
-list of `NamedTuple`s, 798 instructions an element against 581 without it. A
-length bound asks it on every interpreter, because `stored_len` counts what the
-value holds rather than what an override answers.
+type whether its `__len__` *is* the base's -- not whether it is exactly a tuple,
+which would copy every `NamedTuple`. The method is found where Python's
+special-method lookup finds it, in the first namespace along the type's own
+order that holds the name (`special_lookup` in `oracle.rs`), never through
+`getattr`, which asks the metaclass first and so can report a method other than
+the one `len` and `iter` call. CPython's tuple walk does not ask, since the
+answer changes nothing it reads: the lookup is a quarter of walking a list of
+`NamedTuple`s, 798 instructions an element against 581 without it. A length
+bound asks it on every interpreter, because `stored_len` counts what the value
+holds rather than what an override answers.
 
 **On PyPy a subclass's contents come through its own methods too.** `cpyext`
 fills a tuple subclass's C-level items from its own `__iter__`, and answers a
@@ -963,16 +967,30 @@ a depth rather than a total because the level is released when the frame that
 took it returns, so a wide value pays for its widest child and not for all of
 them.
 
-**A stack probe is refused.** Levels are not bytes, so a thread started with
-less stack than its platform's default can overflow before the bound does, and
-[the limits page](../10-limits.md) says so. Reading the stack itself --
-`stacker::remaining_stack()` beside `descend` -- would turn that overflow into
-`recursion_limit`, and it is not in: it adds a crate that assembles for every
-wheel target, a call on every level of every walk, and a reading of each
-platform's thread-stack bounds that no lane measures, musl, Windows arm64 and
-PyPy among them. A proposal starts from the test it must pass: a value at the
-depth bound on a 128 KiB thread raises `recursion_limit` on every wheel
+**A stack probe of the walk's own is refused.** Levels are not bytes, so a
+thread started with less stack than its platform's default can overflow before
+the bound does, and [the limits page](../10-limits.md) says so. Reading the
+stack itself -- `stacker::remaining_stack()` beside `descend` -- would turn that
+overflow into `recursion_limit`, and it is not in: it adds a crate that
+assembles for every wheel target, a call on every level of every walk, and a
+reading of each platform's thread-stack bounds that no lane measures, musl and
+Windows arm64 among them. A proposal starts from the test it must pass: a value
+at the depth bound on a 128 KiB thread raises `recursion_limit` on every wheel
 platform, and the walk shapes stay inside the perf gate's band.
+
+**On PyPy the walk asks PyPy's own probe**, because there the stack a C-API
+call may use is the interpreter's to size: `cpyext` sizes it by the recursion
+limit, and a call past it ends the process, since fetching the error it raised
+is such a call too. So `descend` asks `__pypy__.stack_almost_full` from a frame
+`ROOM_RESERVE` bytes below the walk, once the walk stands `ROOM_STEP` bytes
+deeper than where the probe last answered that there was room
+(`the_interpreter_has_room` in `check/ctx.rs`), and refuses at
+`recursion_limit` where PyPy has none: the reserve is the room a level's own
+Python -- a predicate, an `isinstance` hook, the explaining walk's rendering
+-- runs and raises in. Siblings at one depth never ask. On CPython the probe
+compiles to nothing.
+`test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room` in
+`tests/test_adversarial_bounds.py` holds it.
 
 ## A definition is walked once at a value
 

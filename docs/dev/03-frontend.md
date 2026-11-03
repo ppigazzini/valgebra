@@ -308,42 +308,59 @@ order of the questions, and each is asked of an attribute the runtime fills in:
 4. **A `TypedDict`** declares itself by carrying `__required_keys__`, and
    becomes a keyed map. Its fields are what `get_type_hints` returns, with the
    type variables its generic bases bind put in place (`bound_hints`: the
-   arguments it is applied to, each base's arguments read off the original
-   bases depth first since a `TypedDict`'s bases are not on its `__mro__`, a
-   default where nothing binds one; a class with no `Generic` on its `__mro__`
-   binds nothing). Each class keeps a scope of its own, its parameters bound
-   to what the class deriving from it gives them, and a field is substituted in
-   the scope of the class that declares it -- here, whose annotations merge
-   its bases', the base that holds it under the same hint; for a dataclass or
-   a named tuple, the first class on the `__mro__` whose own body annotates
-   it, the one `get_type_hints` takes the hint from -- so a `TypeVar` a
-   subclass reuses for its own parameter is two parameters, as `typing` and
+   arguments it is applied to, each base's arguments read off the original bases
+   depth first since a `TypedDict`'s bases are not on its `__mro__`, a default
+   where nothing binds one; a class with no `Generic` on its `__mro__` binds
+   nothing). A default written as a string is the forward reference PEP 696
+   makes it, which the runtime keeps as written, so a field that is the
+   parameter alone refuses it as the same string written as the argument is
+   (`test_a_default_written_as_a_string_is_refused` in
+   `tests/test_generic_classes.py`). Each class keeps a scope of its own, its
+   parameters bound to what the class deriving from it gives them, and a field
+   is substituted in the scope of the class that declares it -- here, whose
+   annotations merge its bases', the base that holds it under the same hint; for
+   a dataclass or a named tuple, the first class on the `__mro__` whose own body
+   annotates it, the one `get_type_hints` takes the hint from -- so a `TypeVar`
+   a subclass reuses for its own parameter is two parameters, as `typing` and
    mypy read it. A class two bases reach under two arguments is refused. The
    fields are not the raw `__annotations__` (see the reading below): under
-   `from __future__ import annotations` those are strings, so a `NotRequired[...]` is invisible to the class's own key sets,
-   which read every such key as required. A qualifier on the resolved hint wins
-   over the key sets, and a qualifier may wrap another. `qualified_required`
-   reads on below the first presence qualifier it meets, through `Annotated`,
-   because a form the typing spec calls an error is read where it names one
-   set and refused where it names two: `Required` and `NotRequired` on one item
-   name two records and are refused, and a qualifier nested in itself,
-   `Required[Required[T]]`, names one and is read as the one. The keys it does not
-   name are what PEP 728's two attributes say, read off the class:
-   `__closed__` shuts them, `__extra_items__` types them, and neither leaves
-   the record open over string keys. The runtime writes both on every class
-   with that class's own keywords, and the spec's open default holds "except
-   when inheriting from another TypedDict that is not open", so a class that
-   gives neither reads its bases: `inherited_tail` walks `__orig_bases__`
-   depth first and takes the first base that states one. "No `extra_items` given" is written with
-   the `NoExtraItems` sentinel of the implementation that built the class, the
-   one in its metaclass's module -- `typing`'s and `typing_extensions`' are two
-   objects before 3.15. An implementation older than the sentinel writes `None`
-   for it; with one, `None` is the type the extra values have. An inheritance
-   the spec calls an error -- a child of a closed base written `closed=False`
-   or with an `extra_items`, a `closed=True` child of a base with
-   `extra_items` -- names one set under the same rule as a self-nested
-   qualifier, and is read as the child's own keywords say, as pydantic reads
-   it; the child is what the caller wrote.
+   `from __future__ import annotations` those are strings, so a
+   `NotRequired[...]` is invisible to the class's own key sets, which read every
+   such key as required. A qualifier on the resolved hint wins over the key
+   sets, and a qualifier may wrap another. `qualified_required` reads on below
+   the first presence qualifier it meets, through `Annotated`, because a form
+   the typing spec calls an error is read where it names one set and refused
+   where it names two: `Required` and `NotRequired` on one item name two records
+   and are refused, and a qualifier nested in itself, `Required[Required[T]]`,
+   names one and is read as the one. The keys it does not name are what PEP
+   728's two attributes say, read off the class: `__closed__` shuts them,
+   `__extra_items__` types them, and neither leaves the record open over string
+   keys. The runtime writes both on every class with that class's own keywords,
+   and the spec's open default holds "except when inheriting from another
+   TypedDict that is not open", so a class that gives neither reads its bases:
+   `inherited_tail` walks `__orig_bases__` depth first and takes the first base
+   that states one. "No `extra_items` given" is written with the `NoExtraItems`
+   sentinel of the implementation that built the class, the one in its
+   metaclass's module -- `typing`'s and `typing_extensions`' are two objects
+   before 3.15. An implementation older than the sentinel writes `None` for it;
+   with one, `None` is the type the extra values have. A string given as
+   `extra_items` is the string annotation the spec reads where a type expression
+   goes, which the runtime keeps as written, so `annotation_of` resolves it as
+   the class's own annotations are, in the module that defines the class first
+   and in its namespace after
+   (`test_a_string_given_as_extra_items_is_the_type_it_names` in
+   `tests/test_classes.py`). An inheritance the spec calls an error -- a child
+   of a closed base written `closed=False` or with an `extra_items`, a
+   `closed=True` child of a base with `extra_items` -- names one set under the
+   same rule as a self-nested qualifier, and is read as the child's own keywords
+   say, as pydantic reads it; the child is what the caller wrote. A qualifier
+   qualifies an item where it is declared and nowhere else (PEP 655, PEP 705):
+   given as a class's type argument or a type parameter's default, bare or under
+   `Annotated`, it would be substituted into a field and read as that item's
+   own, so it is refused there (`no_qualifier_among` and `no_qualifier_as` in
+   `build/classes.rs`), and `Required` or `NotRequired` given as `extra_items`,
+   which PEP 728 makes an error, is refused too; `ReadOnly` there is read
+   through.
 5. **An enum** is an instance check against the enumeration class.
 6. **A dataclass or a `NamedTuple`** is an instance check *plus* a deep check
    of each declared field, so a value of the right class with a field of the

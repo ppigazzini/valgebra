@@ -564,8 +564,8 @@ fn flat_members(members: &[Schema]) -> impl Iterator<Item = &Schema> {
 /// asking again would: it changes how often the question runs and no answer.
 /// Asked again, the repeats are what cost: a pair of recursive lists, tuples
 /// and records asked its narrowed meets 6,009 times over seven questions,
-/// 11.6 million steps no query counted, and declined in 527 ms where 0.0.22
-/// declines in 41.
+/// 11.6 million steps no query counted, and declined in 527 ms; read back, it
+/// declines in 49.
 ///
 /// Out of line, since the meet arm it is asked from is inlined into the goal
 /// recursion, and a meet with no union answers at the first look.
