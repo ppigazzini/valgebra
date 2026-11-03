@@ -1600,6 +1600,7 @@ fn a_length_bound_over_a_list_lowers_two_hundred_elements_deep() {
     assert!(at_most.admits(integers(200)) && !at_most.admits(integers(201)));
 }
 
+// THEORY: a-length-is-a-count-beside-the-automaton
 /// What a length bound over a list costs: three units of the build's allowance
 /// an element, for a lower bound and an upper one, and 134 at twenty elements
 /// for a lower one. So the longest lower bound the default allowance of 4,096

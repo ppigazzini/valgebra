@@ -12440,6 +12440,7 @@ fn bases_counting_lengths() -> [Schema; 4] {
     ]
 }
 
+// THEORY: a-length-is-a-count-beside-the-automaton
 /// A Boolean term of length bounds over one base is the lengths it holds, read
 /// past the descriptor's state bound: a value of 5,000 or more is one of 4,000
 /// or more and not the other way round, the meet of the one with the other's

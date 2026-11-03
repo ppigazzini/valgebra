@@ -1335,6 +1335,24 @@ IMPLEMENTED-BY: descr/lower.rs::parts_a_cut_reaches
 
 HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_only_past_the_cut, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding
 
+**A length bound is held two ways: as lengths by the decision, as states by
+the descriptor.** A Boolean term of length bounds over one base holds the
+values of that base whose length lies in a set of lengths, the connectives
+being set operations on the set [FCB08, Def. 4.1], and the decision reads it
+so at any length (`decision/lengths.rs`). The descriptor holds the same bound
+as a state for each counted element beside a pattern's automaton, and
+refuses one past 584 code points, 4,094 bytes or 2,046 list elements, so one
+set is held one way by one decider and refused by the other. A component
+pairing an automaton with an ultimately periodic set of the lengths it holds
+would hold both alike; it is not built.
+**[DEVIATION: a-length-is-a-count-beside-the-automaton]**
+
+SOURCE: §14.5 "`RegularSet`: a minimized DFA per word kind"
+
+IMPLEMENTED-BY: decision/lengths.rs
+
+HELD-BY: a_term_of_length_bounds_is_decided_as_the_lengths_it_holds, a_length_bound_costs_three_units_an_element
+
 **The dict key partition is by kind.** `1` and `True` are one key to a dict and
 two labels to the partition, so an atom requiring both under distinct values
 holds no dict, and the descriptor reads it that way. **[DEVIATION: the-key-partition-is-by-kind]**
