@@ -100,7 +100,8 @@ pub use crate::oracle::{LeafRelations, NoLeafRelations};
 /// paragraphs above measure what it would save.
 pub(crate) const DECISION_BUDGET: u32 = 1_000_000;
 
-/// The steps a pair respelled may spend, of what its query has left.
+/// The steps a pair respelled may spend, of what its query has left, in a
+/// question's first asking.
 ///
 /// **This bound is cost.** A respelled question declines as dearly as the
 /// plain one where it declines too, and drawing on the whole remainder turned a
@@ -108,6 +109,83 @@ pub(crate) const DECISION_BUDGET: u32 = 1_000_000;
 /// shapes a translation from JSON Schema writes, a quarter of this decides all
 /// but one in sixty of what this does.
 pub(crate) const RESPELLING: u32 = 4096;
+
+/// The steps a pair respelled may spend in a question's second asking
+/// ([`asked_again`]).
+///
+/// **This bound is cost.** Answers sat a few steps under [`RESPELLING`], so a
+/// sound reading added beside the others lost them, and a question that ends
+/// undecided at an allowance is asked again under this one. Raising
+/// [`RESPELLING`] itself loses answers the first asking gives: a respelling
+/// charged to the query spends steps the readings after it decided with, and
+/// at four times the figure a mapping met with a complement lost eleven of its
+/// refutations. Sixteen times it regains what four does not: two answers a
+/// step-free kinds reading moved past four times the figure.
+pub(crate) const RESPELLING_AGAIN: u32 = 65_536;
+
+thread_local! {
+    /// The respelling allowance of the asking a question on this thread is in:
+    /// [`RESPELLING`], or [`RESPELLING_AGAIN`] while [`asked_again`] asks a
+    /// second time.
+    static RESPELLING_NOW: Cell<u32> = const { Cell::new(RESPELLING) };
+}
+
+/// The steps a pair respelled may spend in the asking under way.
+pub(super) fn respelling() -> u32 {
+    RESPELLING_NOW.with(Cell::get)
+}
+
+/// Whether a root question's first asking, undecided under `budget` with
+/// `met` bounds met before it began, is asked again ([`asked_again`]): a bound
+/// was met since, the question has steps of its own left, and it is no second
+/// asking already. Read at the root entries after the first asking, so a
+/// question that decides pays one read of the bounds met and one test.
+#[inline]
+fn asks_again(met: u64, budget: &Budget) -> bool {
+    bounds_met() != met && budget.left() > 0 && respelling() == RESPELLING
+}
+
+/// A root question asked once more, under [`RESPELLING_AGAIN`] and a budget of
+/// its own, where its first asking under [`RESPELLING`] ended undecided at a
+/// bound with steps of its own left ([`asks_again`]).
+///
+/// The pattern of [BBC+26, §6]'s fast-fail strategy: the cheap check first,
+/// and the dearer one only "when the incomplete (anyOf-r) strategy is not
+/// sufficient". Here the second is the same procedure with a larger
+/// allowance, not a complete one. The first asking is the whole answer
+/// wherever it decides, so the second takes no answer away. A question that
+/// met no bound declines the same with more steps
+/// (`a_query_no_bound_stopped_answers_alike_with_more_steps`), and one that
+/// spent all of its own declines at that budget, which a second asking would
+/// spend again, so neither is asked twice. A question asked inside a second
+/// asking is asked once, under the allowance of the asking it is in.
+///
+/// Out of line and cold: the root entries ask the first time inline, as they
+/// did with one asking, since a closure around the first asking cost the
+/// decision workload 6% of its instructions.
+#[cold]
+#[inline(never)]
+fn asked_again<T>(ask: impl FnOnce(&Budget) -> T) -> T {
+    let _again = SecondAsking::open();
+    ask(&Budget::new(DECISION_BUDGET))
+}
+
+/// A question's second asking under way on this thread, closed when dropped,
+/// unwinding included.
+struct SecondAsking;
+
+impl SecondAsking {
+    fn open() -> Self {
+        RESPELLING_NOW.with(|now| now.set(RESPELLING_AGAIN));
+        Self
+    }
+}
+
+impl Drop for SecondAsking {
+    fn drop(&mut self) {
+        RESPELLING_NOW.with(|now| now.set(RESPELLING));
+    }
+}
 
 /// The most levels of its own recursion one decision query holds open.
 ///
@@ -475,7 +553,7 @@ fn narrowed_meet_below(members: &Members, other: &Schema, cx: &mut Cx<'_>) -> Re
             narrowed.is_subtype_rec(other, cx)
         });
     }
-    let given = cx.budget.left().min(RESPELLING);
+    let given = cx.budget.left().min(respelling());
     let key = (query, Arc::as_ptr(members).cast::<Schema>().addr(), given);
     let asked = ASKED_NARROWED.with_borrow(|asked| {
         asked.get(&key).and_then(|below| {
@@ -771,17 +849,32 @@ impl Schema {
     /// value of the subject -- which the rules' answer is read against, and
     /// which the set reading proves by finding the difference inhabited.
     #[must_use]
-    #[inline]
+    #[expect(
+        clippy::inline_always,
+        reason = "measured: with its second asking, left to `#[inline]` the decision \
+                  workload read 3.2% more instructions, inlined 0.96%"
+    )]
+    #[inline(always)]
     pub fn subtype_relation_under(
         &self,
         other: &Schema,
         oracle: &dyn LeafRelations,
         defs: &[Schema],
     ) -> Relation {
+        let met = bounds_met();
         let budget = Budget::new(DECISION_BUDGET);
         let mut cx = Cx::new(oracle, defs, &budget);
-        self.is_subtype_rec(other, &mut cx)
-            .or_else(|| self.decided_by_sets(other, &mut cx, true))
+        let first = self
+            .is_subtype_rec(other, &mut cx)
+            .or_else(|| self.decided_by_sets(other, &mut cx, true));
+        if first == Relation::Unknown && asks_again(met, &budget) {
+            return asked_again(|budget| {
+                let mut cx = Cx::new(oracle, defs, budget);
+                self.is_subtype_rec(other, &mut cx)
+                    .or_else(|| self.decided_by_sets(other, &mut cx, true))
+            });
+        }
+        first
     }
 
     /// The set representation of the pair, then both deciders asked of its
@@ -794,7 +887,9 @@ impl Schema {
     /// three public entries above it stay thin and are inlined into a caller's
     /// loop, which `#[inline]` on each asks for: left to the inliner they are
     /// not, and the call costs the decision workload 2% of its instructions,
-    /// twice that through a wrapper.
+    /// twice that through a wrapper. The relation's entry asks for it always:
+    /// with its second asking beside the first, `#[inline]` alone left it out
+    /// of the loop, at 3%.
     #[inline(never)]
     fn decided_by_sets(&self, other: &Schema, cx: &mut Cx<'_>, by_branch: bool) -> Relation {
         self.descriptor_contained_in(other, cx.oracle, cx.defs)
@@ -898,7 +993,7 @@ impl Schema {
                 branches.iter().map(|branch| branch.clone().complement()),
                 cx.defs,
             );
-            let allowance = Budget::new(cx.budget.left().min(RESPELLING));
+            let allowance = Budget::new(cx.budget.left().min(respelling()));
             let answer = pushed.is_subtype_rec(other, &mut cx.within_this_query(&allowance));
             if answer != Relation::Unknown {
                 return answer;
@@ -927,7 +1022,7 @@ impl Schema {
         if finite_set(other).is_some() {
             let difference =
                 Schema::meet_within([self.clone(), other.clone().complement()], cx.defs);
-            let allowance = Budget::new(cx.budget.left().min(RESPELLING));
+            let allowance = Budget::new(cx.budget.left().min(respelling()));
             let part = &mut cx.within_this_query(&allowance);
             if difference.empty_under(part)
                 || (matches!(difference, Schema::Intersection(_))
@@ -958,7 +1053,7 @@ impl Schema {
         if !meets && !negates {
             return Relation::Unknown;
         }
-        let allowance = Budget::new(cx.budget.left().min(RESPELLING));
+        let allowance = Budget::new(cx.budget.left().min(respelling()));
         let cx = &mut cx.within_this_query(&allowance);
         if let Schema::Union(members) = other {
             let (complements, rest): (Vec<&Schema>, Vec<&Schema>) =
@@ -2495,8 +2590,14 @@ impl Schema {
         // Both inclusion directions share one budget, so equivalence cannot spend
         // twice the ceiling, and its verdict does not depend on which direction
         // happened to allocate a fresh allowance first.
-        self.equivalence_relation(other, oracle, defs, &Budget::new(DECISION_BUDGET))
-            .holds()
+        let met = bounds_met();
+        let budget = Budget::new(DECISION_BUDGET);
+        let first = self.equivalence_relation(other, oracle, defs, &budget);
+        if first == Relation::Unknown && asks_again(met, &budget) {
+            return asked_again(|budget| self.equivalence_relation(other, oracle, defs, budget))
+                .holds();
+        }
+        first.holds()
     }
 
     /// The three-valued form of

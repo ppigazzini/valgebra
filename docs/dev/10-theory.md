@@ -1226,14 +1226,19 @@ the two lattice bounds again under steps of their own, so it can decide a pair
 a query with steps left declines. What the procedure guarantees is narrower:
 a query no bound stopped, which ended with steps left, took no path that turns
 on its steps, so with more steps it answers alike and spends alike; and no
-two budgets answer one pair two ways, each answer standing on a proof.
+two budgets answer one pair two ways, each answer standing on a proof. So a
+root question that ends undecided at a bound, with steps of its own left, is
+asked once more under a larger allowance, the fast-fail pattern of
+[BBC+26, §6] with the same procedure in both tiers: the first asking's answer
+stands wherever it decides, and an answer at the first allowance's edge is
+lost only where the second declines it too.
 **[DEVIATION: the-decision-is-fuel]**
 
 SOURCE: §14.2 "running a work budget instead"; §13.1 "work budget rather than on finiteness of `N(A)`"
 
-IMPLEMENTED-BY: decision.rs::Budget
+IMPLEMENTED-BY: decision.rs::Budget, decision.rs::asked_again
 
-HELD-BY: a_query_no_bound_stopped_answers_alike_with_more_steps, a_respelled_pair_stops_at_its_allowance, a_spent_query_reads_its_bounds_under_steps_of_its_own
+HELD-BY: a_query_no_bound_stopped_answers_alike_with_more_steps, a_respelled_pair_stops_at_its_allowance, a_spent_query_reads_its_bounds_under_steps_of_its_own, a_question_declined_at_a_bound_is_asked_again_with_more
 
 **A memo saves time, and is charged as the reading it stands for.** The
 shelf's memos serve complete procedures: an assumption set caching every

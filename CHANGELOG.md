@@ -107,10 +107,22 @@ answer of its own, or a repair to a change not yet released.
 - fix: a deep walk on PyPy stops where PyPy has stack to answer
 - fix: a possessive quantifier's refusal names no Python release
 - feat: an enumeration met with sets refusing every member holds no value
+- feat: a question undecided at an allowance is asked again with a larger one
 
 -->
 
 ### Added
+
+- **A question undecided at an allowance is asked again with a larger one.**
+  A relation, an emptiness or an equivalence that ends `undecided` because a
+  pair asked in its other spellings ran out of its 4,096 steps, while the
+  question had steps of its own left, is asked once more with 65,536. A
+  record a translation from JSON Schema guards to objects, its `tag` a number
+  from `2**53` or any value but a number, is `not_subset` of a tree of whole
+  numbers, on `{"tag": "x"}`, where it was `undecided`. The first asking's
+  answer stands wherever it decides. A question that stays `undecided` is
+  asked twice: the declines of a fuzzing corpus took 8% to 38% longer in
+  total, the slowest of them about twice as long.
 
 - **An enumeration met with sets refusing every member holds no value.** A
   meet holding a class is read through the complement law: it is empty where

@@ -186,6 +186,13 @@ reads the two meets at once. The rules asked again share `RESPELLING` steps of w
 left, so a pair that declined cheaply does not decline dearly;
 `a_pair_declined_as_written_is_asked_in_its_other_spellings` and
 `a_respelled_pair_stops_at_its_allowance` hold the readings and the allowance.
+A root question that ends undecided at a bound, with steps of its own left, is
+asked once more under `RESPELLING_AGAIN` (`asked_again`): answers sat a few
+steps under the first allowance, so a sound reading added beside the others
+lost them, and a larger first allowance loses answers of its own, a respelling
+charged to the query spending steps the readings after it decided with. The
+first asking's answer stands wherever it decides, so the second takes none away
+(`a_question_declined_at_a_bound_is_asked_again_with_more`).
 
 **A refutation stands on a value.** The descriptor's is direct: it proves the
 difference `a & ~b` holds one. A rule's is a mismatch of shapes -- two arities

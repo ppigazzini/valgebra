@@ -1128,6 +1128,43 @@ def test_a_narrowed_meet_left_open_is_distributed_as_written() -> None:
     assert tagged.is_empty()
 
 
+def test_a_question_declined_at_an_allowance_is_asked_again_with_more() -> None:
+    """A question that ends undecided at a respelling's allowance is asked again.
+
+    A record a translation from JSON Schema guards to objects, its tag a number
+    from 2**53 or any value but a number, is refuted below a tree of whole
+    numbers at `{"tag": "x"}`; and a union holding the complement of a meet with
+    no value holds every value. Each sat past the first asking's allowance, and
+    the second asking, under a larger one, decides it.
+    """
+    no_bool = complement(bool)
+    number = intersection(union(int, float), no_bool)
+    whole = intersection(union(int, Annotated[float, at.MultipleOf(1)]), no_bool)
+    tree = recursive(lambda t: union(whole, [t], {str: t}))
+    objects = Validator(dict[str, _JSON])  # ty: ignore[invalid-type-form]
+    big = intersection(number, Annotated[int | float, at.Ge(2**53)])
+    guarded = intersection(
+        objects,
+        union(
+            complement(objects),
+            Validator({"tag": union(complement(number), big)}).open(),
+        ),
+        union(complement(objects), Validator({"tag": _JSON}).open()),
+    )
+    assert guarded.is_valid({"tag": "x"})
+    assert not Validator(tree).is_valid({"tag": "x"})
+    assert guarded.relation_to(tree) == "not_subset"
+    empty_meet = intersection(union(_JSON, big), complement(_JSON))
+    wide = union(
+        str,
+        intersection(
+            union(None, whole), union(_JSON, intersection(number, _JSON)), _JSON
+        ),
+    )
+    everything = union(complement(empty_meet), wide)
+    assert Validator(anything).relation_to(everything) == "subset"
+
+
 def test_a_meet_that_may_hold_no_kind_is_below_every_set() -> None:
     """A meet holds no kind a member cannot hold, and so holds no value.
 

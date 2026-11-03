@@ -10905,6 +10905,125 @@ fn a_length_every_branch_leaves_out_refutes_a_union_at_any_size() {
     assert_ne!(relation(&ten, &overlapping), Relation::Fails);
 }
 
+// THEORY: the-decision-is-fuel
+/// A root question is asked again under [`RESPELLING_AGAIN`] only where its
+/// first asking ended undecided at a bound with steps of its own left: one
+/// decided, one no bound stopped, and one that spent every step of its own are
+/// asked once. A question asked inside the second asking is asked once, under
+/// its allowance, and the first allowance is the thread's again after.
+#[test]
+fn a_question_declined_at_a_bound_is_asked_again_with_more() {
+    let asked = |first: Relation, bound: bool, spends_all: bool| {
+        let allowances = core::cell::RefCell::new(Vec::new());
+        let ask = |budget: &Budget| {
+            allowances.borrow_mut().push(respelling());
+            if respelling() == RESPELLING_AGAIN {
+                return Relation::Holds;
+            }
+            if bound {
+                a_bound_is_met();
+            }
+            if spends_all {
+                budget.steps.set(0);
+            }
+            first
+        };
+        let met = bounds_met();
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut answer = ask(&budget);
+        if answer == Relation::Unknown && asks_again(met, &budget) {
+            answer = asked_again(ask);
+        }
+        (answer, allowances.into_inner())
+    };
+    assert_eq!(
+        asked(Relation::Unknown, true, false),
+        (Relation::Holds, vec![RESPELLING, RESPELLING_AGAIN])
+    );
+    assert_eq!(
+        asked(Relation::Fails, true, false),
+        (Relation::Fails, vec![RESPELLING])
+    );
+    assert_eq!(
+        asked(Relation::Unknown, false, false),
+        (Relation::Unknown, vec![RESPELLING])
+    );
+    assert_eq!(
+        asked(Relation::Unknown, true, true),
+        (Relation::Unknown, vec![RESPELLING])
+    );
+    assert_eq!(respelling(), RESPELLING, "the first allowance is back");
+    let nested = asked_again(|_| {
+        let met = bounds_met();
+        a_bound_is_met();
+        asks_again(met, &Budget::new(DECISION_BUDGET))
+    });
+    assert!(!nested, "a question inside a second asking is asked once");
+    assert_eq!(respelling(), RESPELLING);
+}
+
+/// Each root asks a question again where its first asking ends undecided at a
+/// bound, and only there: an oracle that answers whether class 0 is below
+/// class 1 (or below its double complement) only under the second allowance,
+/// and records a bound under the first, leaves the first asking undecided, and
+/// the relation, the emptiness and the equivalence each answer from the
+/// second. Answering at once while it records a bound, it leaves the first
+/// asking decided, and no root asks under the second allowance.
+#[test]
+fn every_root_asks_a_question_declined_at_a_bound_again() {
+    /// Answers only under the second allowance where `0`, at once where `1`;
+    /// counts the questions asked under the second allowance.
+    struct Tiered(bool, core::cell::Cell<u32>);
+    impl crate::descr::lower::Constants for Tiered {}
+    impl LeafRelations for Tiered {
+        fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
+            let sup = match sup {
+                Schema::Complement(inner) => match &**inner {
+                    Schema::Complement(twice) => &**twice,
+                    _ => sup,
+                },
+                _ => sup,
+            };
+            let (Schema::Instance(below), Schema::Instance(above)) = (sub, sup) else {
+                return None;
+            };
+            if (below.get(), above.get()) != (0, 1) {
+                return None;
+            }
+            if respelling() == RESPELLING_AGAIN {
+                self.1.set(self.1.get() + 1);
+                return Some(true);
+            }
+            a_bound_is_met();
+            self.0.then_some(true)
+        }
+    }
+    let class = |index| Schema::Instance(ClassIx::new(index));
+    let outside = Schema::Intersection(vec![class(0), class(1).complement()].into());
+    let both = Schema::Intersection(vec![class(0), class(1)].into());
+    let roots = |oracle: &Tiered| {
+        (
+            class(0).subtype_relation_under(&class(1), oracle, &[]),
+            outside.is_empty_with(oracle, &[]),
+            class(0).is_equivalent_under(&both, oracle, &[]),
+        )
+    };
+    for at_once in [false, true] {
+        let oracle = Tiered(at_once, core::cell::Cell::new(0));
+        assert_eq!(
+            roots(&oracle),
+            (Relation::Holds, true, true),
+            "at once: {at_once}"
+        );
+        assert_eq!(
+            oracle.1.get() == 0,
+            at_once,
+            "asked again only where the first asking declined"
+        );
+    }
+    assert_eq!(respelling(), RESPELLING);
+}
+
 // THEORY: the-decision-is-fuel, a-memo-is-charged-as-read
 /// A respelled pair spends no more than [`RESPELLING`] steps.
 ///

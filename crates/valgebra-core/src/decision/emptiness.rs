@@ -39,8 +39,8 @@ use super::records::{
 };
 use super::{
     Budget, Cx, DECISION_BUDGET, LeafRelations, NARROWING, NoLeafRelations, READINGS_HELD,
-    RESPELLING, bounds_met, descending, has_complementary_pair, has_disjoint_pair,
-    pushed_complement_is_placed, spend, spend_at_once,
+    asked_again, asks_again, bounds_met, descending, has_complementary_pair, has_disjoint_pair,
+    pushed_complement_is_placed, respelling, spend, spend_at_once,
 };
 
 impl Schema {
@@ -85,13 +85,36 @@ impl Schema {
     /// bound conjunction (a lower bound above an upper bound) is detected.
     #[must_use]
     pub fn is_empty_with(&self, oracle: &dyn LeafRelations, defs: &[Schema]) -> bool {
+        let met = bounds_met();
         let budget = Budget::new(DECISION_BUDGET);
-        let cx = &mut Cx::new(oracle, defs, &budget);
-        self.empty_under(cx)
-            || (matches!(self, Schema::Intersection(_))
-                && self.below_the_set_it_complements(cx).holds())
-            || (matches!(self, Schema::Complement(_))
-                && self.complement_of_the_universe(cx).holds())
+        let first = self.emptiness_on(oracle, defs, &budget);
+        if first == Verdict::Unknown && asks_again(met, &budget) {
+            return asked_again(|budget| self.emptiness_on(oracle, defs, budget)) == Verdict::Empty;
+        }
+        first == Verdict::Empty
+    }
+
+    /// The verdict [`is_empty_with`](Self::is_empty_with) reads, in one
+    /// asking under `budget`: the readings of the set, then a meet holding one
+    /// complement and a complement read as the relations they are.
+    fn emptiness_on(
+        &self,
+        oracle: &dyn LeafRelations,
+        defs: &[Schema],
+        budget: &Budget,
+    ) -> Verdict {
+        let cx = &mut Cx::new(oracle, defs, budget);
+        match self.emptiness_under(cx) {
+            Verdict::Unknown
+                if (matches!(self, Schema::Intersection(_))
+                    && self.below_the_set_it_complements(cx).holds())
+                    || (matches!(self, Schema::Complement(_))
+                        && self.complement_of_the_universe(cx).holds()) =>
+            {
+                Verdict::Empty
+            }
+            verdict => verdict,
+        }
     }
 
     /// A meet holding one complement, read as the relation it is, at the root
@@ -116,18 +139,18 @@ impl Schema {
     /// nothing about.
     ///
     /// Asked under the steps the question has left, as the relation of the same
-    /// pair is, so the two spellings decide alike: under [`RESPELLING`] steps
-    /// the rules declined a union of length bounds below another that the
-    /// relation proves, and the meet of the one with the other's complement was
-    /// `undecided` beside a `subset`. The steps are an allowance of its own,
-    /// charged to nothing, so they starve no reading after it; the rules it
-    /// asks never ask it again, so a query asks it a fixed number of times and
-    /// spends at most that multiple of its budget. The relation's set readings
-    /// are not asked here: they reach this reading again through the
-    /// respellings, each time under steps of its own and at no depth, and drawn
-    /// questions overflowed the stack. Out of line behind the discriminant test
-    /// its callers ask, so a question about any schema but a meet pays the one
-    /// test.
+    /// pair is, so the two spellings decide alike: under
+    /// [`RESPELLING`](super::RESPELLING) steps the rules declined a union of
+    /// length bounds below another that the relation proves, and the meet of
+    /// the one with the other's complement was `undecided` beside a `subset`.
+    /// The steps are an allowance of its own, charged to nothing, so they
+    /// starve no reading after it; the rules it asks never ask it again, so a
+    /// query asks it a fixed number of times and spends at most that multiple
+    /// of its budget. The relation's set readings are not asked here: they
+    /// reach this reading again through the respellings, each time under steps
+    /// of its own and at no depth, and drawn questions overflowed the stack.
+    /// Out of line behind the discriminant test its callers ask, so a question
+    /// about any schema but a meet pays the one test.
     #[inline(never)]
     pub(super) fn below_the_set_it_complements(&self, cx: &Cx<'_>) -> Relation {
         let Schema::Intersection(members) = self else {
@@ -161,19 +184,26 @@ impl Schema {
     /// [FCB08, §4.1], which proves `anything` below `¬¬I` where `I` is the
     /// universe; asked here, `is_empty` and the relation below `Nothing` answer
     /// alike: `¬(0 ∪ ¬(tuple[int] ∩ tuple[str]))` holds no value, its inner set
-    /// holding the complement of an empty meet. Under [`RESPELLING`] steps of
-    /// what the question has left.
+    /// holding the complement of an empty meet. Under the allowance of the
+    /// asking it is in ([`respelling`]), of what the question has left.
     pub(super) fn complement_of_the_universe(&self, cx: &Cx<'_>) -> Relation {
         let Schema::Complement(inner) = self else {
             return Relation::Unknown;
         };
-        let allowance = Budget::new(cx.budget.left().min(RESPELLING));
+        let allowance = Budget::new(cx.budget.left().min(respelling()));
         Schema::ANYTHING.is_subtype_rec(inner, &mut cx.within_this_query(&allowance))
     }
 
     /// [`Self::is_empty_with`] in one query, whose budget and readings a union's
     /// members share.
     pub(super) fn empty_under(&self, cx: &mut Cx<'_>) -> bool {
+        self.emptiness_under(cx) == Verdict::Empty
+    }
+
+    /// [`empty_under`](Self::empty_under) in three values: a proof that the
+    /// schema holds a value is kept, where the `bool` reads it as no proof of
+    /// emptiness.
+    fn emptiness_under(&self, cx: &mut Cx<'_>) -> Verdict {
         // The rules answer in three values and the descriptor is asked where
         // they reach the third -- which is what makes the pair one procedure
         // rather than a second opinion. A proof of *inhabitation* is an answer
@@ -184,22 +214,23 @@ impl Schema {
         // automata and takes products -- a third of the decision workload,
         // spent on a question already answered.
         match self.verdict_rec(cx) {
-            Verdict::Empty => true,
-            Verdict::Inhabited => false,
             // A string subject's texts last, and a union a member at a time, as
             // the relation below `Nothing` reads them, so the two answer alike:
             // a union is empty where each member is, which a reading of the
             // whole can miss where one member's emptiness is the rules' and
             // another's the descriptor's.
-            Verdict::Unknown => {
-                self.denotes_no_value(cx.oracle, cx.defs)
+            Verdict::Unknown
+                if self.denotes_no_value(cx.oracle, cx.defs)
                     || (matches!(self, Schema::Refine { .. } | Schema::Intersection(_))
                         && self
                             .decided_by_its_texts(&Schema::Nothing, cx.oracle)
                             .holds())
                     || matches!(self, Schema::Union(members)
-                        if members.iter().all(|member| member.empty_under(cx)))
+                        if members.iter().all(|member| member.empty_under(cx))) =>
+            {
+                Verdict::Empty
             }
+            verdict => verdict,
         }
     }
 
@@ -711,9 +742,10 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
         // the shape a reading decides where the narrowed one does not (a
         // fixpoint of words met with integers from 2), at the cost of the
         // branches the narrowing dropped, paid only where it decided nothing,
-        // and on at most `RESPELLING` of the query's steps: the narrowing has
-        // spent its share already, and a distribution that declines on all the
-        // rest leaves the readings after it none to decide with.
+        // and on at most the asking's allowance (`respelling()`) of the query's
+        // steps: the narrowing has spent its share already, and a distribution
+        // that declines on all the rest leaves the readings after it none to
+        // decide with.
         Verdict::Unknown => the_empty_container_in_every_member(members)
             .or_else(|| a_meet_read_by_its_constants(members, cx.oracle, cx.defs))
             .or_else(|| {
@@ -729,7 +761,7 @@ fn intersection_verdict(members: &[Schema], cx: &mut Cx<'_>) -> (Verdict, Region
             .or_else(|| match narrowed_by_its_members(members, cx) {
                 Some(narrowed) => narrowed.or_else(|| {
                     let budget = cx.budget;
-                    budget.within(RESPELLING, || meet_through_a_reference(members, cx))
+                    budget.within(respelling(), || meet_through_a_reference(members, cx))
                 }),
                 None => meet_through_a_reference(members, cx),
             })
@@ -894,10 +926,11 @@ pub(super) enum ReadBack {
     ///
     /// Exact where the reading's path does not turn on the steps it has left.
     /// Two readings do: [`Schema::below_by_emptiness`] answers only at none
-    /// left, and a respelling is allowed the lesser of what is left and
-    /// [`RESPELLING`]. Where the reading held passed either, a reading now may
-    /// take the other path and spend otherwise; the verdict read back is one
-    /// the terms have either way, since a reading answers soundly or declines.
+    /// left, and a respelling is allowed the lesser of what is left and the
+    /// asking's allowance ([`respelling`]). Where the reading held passed
+    /// either, a reading now may take the other path and spend otherwise; the
+    /// verdict read back is one the terms have either way, since a reading
+    /// answers soundly or declines.
     AsRead,
 }
 
