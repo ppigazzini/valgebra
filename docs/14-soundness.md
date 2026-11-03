@@ -149,7 +149,8 @@ reference is unfolded once and cut to a bound — the top on the side read
 widened, the bottom on the side read narrowed — so the difference it reads
 contains the real one: an empty difference proves the inclusion, and an
 inhabited one refutes only at a kind no cut reaches, a cut beneath a
-constructor changing that constructor's kind of values alone. A schema the
+constructor changing that constructor's kind of values alone and one beneath an
+attribute record changing every kind's. A schema the
 representation cannot hold, or one past its build bounds, is a decline rather
 than an answer, so a `True` from this reading is a proof too.
 

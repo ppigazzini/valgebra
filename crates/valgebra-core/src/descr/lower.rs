@@ -180,16 +180,18 @@ pub(crate) fn lower_unfolded(
 }
 
 /// The parts of the universe whose values the unfolding of `schema` cuts a
-/// reference beneath: for each cut, the kind of the constructor nearest the
-/// root it sits under, or every part for a cut beneath none.
+/// reference beneath: for each cut, what the node nearest the root that says
+/// so holds ([`parts_built_by`]), or every part for a cut beneath none.
 ///
 /// A constructor builds values of its one kind, and a union, a meet and a
 /// complement are read a kind at a time [FCB08, (4)], so a cut beneath a
 /// `list[...]` widens or narrows the lists and leaves every other kind's values
 /// as the schema denotes them: a finite approximation of a recursive type is
 /// exact up to the depth it cuts at [AC93, §3.4], and the depth starts at the
-/// constructor. A refinement, a meet's member and an attribute record are no
-/// constructor of a kind, the last holding values of every kind.
+/// constructor. A refinement and a meet's member are no constructor of a kind.
+/// An attribute record holds values of every kind, so a cut anywhere beneath
+/// one reaches every part, whatever constructor stands between the two: `x`
+/// being a list says nothing of the kind of the value carrying it.
 ///
 /// The unfolding is [`lower_unfolded`]'s and [`read_widened`]'s, [`UNFOLDS`]
 /// deep, and a reference to a definition `definitions` does not hold is cut
@@ -204,7 +206,7 @@ pub(crate) fn parts_a_cut_reaches(schema: &Schema, definitions: &[Schema]) -> Pa
             return EVERY_PART;
         };
         left = rest;
-        let cut = || under.map_or(EVERY_PART, part);
+        let cut = || under.unwrap_or(EVERY_PART);
         match node {
             Schema::Ref(index) => match definitions.get(index.get()) {
                 Some(body) if unfolds > 0 => pending.push((body, under, unfolds - 1)),
@@ -212,7 +214,7 @@ pub(crate) fn parts_a_cut_reaches(schema: &Schema, definitions: &[Schema]) -> Pa
             },
             Schema::SelfRef(_) => reached |= cut(),
             _ => {
-                let below = under.or_else(|| constructed_kind(node));
+                let below = under.or_else(|| parts_built_by(node));
                 let mut children = Vec::new();
                 node.push_children(&mut children);
                 pending.extend(children.into_iter().map(|child| (child, below, unfolds)));
@@ -231,27 +233,29 @@ pub(crate) fn parts_a_cut_reaches(schema: &Schema, definitions: &[Schema]) -> Pa
 /// walk does, and is far inside the figure.
 const CUT_WALK: u32 = 1 << 16;
 
-/// The kind of the values a constructor builds, or `None` for a node that
-/// builds none of its own.
-fn constructed_kind(schema: &Schema) -> Option<Kind> {
+/// The parts holding the values a node builds, or `None` for a node that leaves
+/// them to the nodes beside and beneath it: a constructor's one kind, and every
+/// part for an attribute record, whose denotation names no kind.
+fn parts_built_by(schema: &Schema) -> Option<Parts> {
     Some(match schema {
         Schema::Seq {
             container: SeqKind::List,
             ..
-        } => Kind::List,
+        } => part(Kind::List),
         Schema::Seq {
             container: SeqKind::Tuple,
             ..
-        } => Kind::Tuple,
+        } => part(Kind::Tuple),
         Schema::Coll {
             container: CollKind::Set,
             ..
-        } => Kind::Set,
+        } => part(Kind::Set),
         Schema::Coll {
             container: CollKind::FrozenSet,
             ..
-        } => Kind::FrozenSet,
-        Schema::KeyedMap { .. } => Kind::Dict,
+        } => part(Kind::FrozenSet),
+        Schema::KeyedMap { .. } => part(Kind::Dict),
+        Schema::AttrRecord { .. } => EVERY_PART,
         _ => return None,
     })
 }

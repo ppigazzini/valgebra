@@ -7053,6 +7053,41 @@ proptest! {
         }
     }
 
+    // THEORY: a-cut-reference-proves
+    /// A refutation beneath an attribute record stands on a value of the field.
+    ///
+    /// An attribute record holds values of every kind, and `attr{x: a}` is
+    /// below `attr{x: b}` exactly where `a` is below `b`, a value of `a` outside
+    /// `b` being what an object carries to part them. So the question of
+    /// [`a_refutation_is_a_value`] is asked of the fields, the record holding no
+    /// value this universe builds, and a cut beneath the field is one the record
+    /// spreads to every kind.
+    #[test]
+    fn a_refutation_beneath_an_attribute_record_is_a_value_of_its_field(
+        a in recursive_schema(),
+        b in recursive_schema(),
+    ) {
+        let pool = const_pool();
+        let defs = fixpoint_defs();
+        let carrying = |schema: &Schema| Schema::attr_record(vec![Attribute {
+            name: "x".into(),
+            schema: schema.clone(),
+        }]);
+        if carrying(&a).subtype_relation_under(&carrying(&b), &NoLeafRelations, &defs)
+            == Relation::Fails
+        {
+            let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+            let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+            prop_assert!(
+                boundary_values(&[&subject, &other]).iter().any(|value| {
+                    member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+                }),
+                "the record over {:?} is refuted below the record over {:?} and no value parts them",
+                a, b
+            );
+        }
+    }
+
     // THEORY: subtyping-is-inclusion, the-domain-is-one-model-per-interpreter
     /// A refutation stands on a length every interpreter builds.
     ///

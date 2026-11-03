@@ -3,7 +3,7 @@ import json
 import sys
 import threading
 from collections.abc import Callable
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Protocol
 
 import annotated_types as at
 import pytest
@@ -610,6 +610,62 @@ def test_a_body_that_never_names_the_fixpoint_is_that_body() -> None:
     assert repr(through).startswith("recursive(lambda X: recursive(")
     assert through.is_valid({"next": [{"next": None}]})
     assert not through.is_valid({"next": 1})
+
+
+_NESTED_LISTS = recursive(lambda t: [t])
+_NESTED_LISTS_SPLIT = recursive(
+    lambda t: union(
+        Annotated[list[t], at.MaxLen(3)],  # ty: ignore[invalid-type-form]
+        Annotated[list[t], at.MinLen(2)],  # ty: ignore[invalid-type-form]
+    )
+)
+
+
+class _CarriesNestedLists(Protocol):
+    x: _NESTED_LISTS  # ty: ignore[invalid-type-form]
+
+
+class _CarriesNestedListsSplit(Protocol):
+    x: _NESTED_LISTS_SPLIT  # ty: ignore[invalid-type-form]
+
+
+class _Carrier:
+    """A value of no kind the set reading names, carrying `x`."""
+
+    def __init__(self, x: object) -> None:
+        self.x = x
+
+
+class _ListCarrier(list[int]):
+    """A value of the list kind, carrying `x`: a protocol names no kind."""
+
+    def __init__(self, x: object) -> None:
+        super().__init__()
+        self.x = x
+
+
+# THEORY: a-cut-reference-proves
+def test_a_cut_beneath_an_attribute_record_refutes_no_value() -> None:
+    """A protocol holds values of every kind, so a cut beneath one reaches them all.
+
+    The two fields are one set, the second split over two length bounds, and a
+    value carrying a nested list as `x` is in both protocols or neither. The
+    list standing between the record and the cut says what `x` is and nothing
+    of the kind of the value holding it, which may be a list itself.
+    """
+    plain = Validator(_CarriesNestedLists)
+    split = Validator(_CarriesNestedListsSplit)
+    for carried in ([], [[]], [[], []], [[], [], [], []], [[[], [], [], []]]):
+        for carrier in (_Carrier(carried), _ListCarrier(carried)):
+            assert plain.is_valid(carrier), carried
+            assert split.is_valid(carrier), carried
+    for carried in (1, [1], [[], 1]):
+        for carrier in (_Carrier(carried), _ListCarrier(carried)):
+            assert not plain.is_valid(carrier), carried
+            assert not split.is_valid(carrier), carried
+    assert _NESTED_LISTS.relation_to(_NESTED_LISTS_SPLIT) != "not_subset"
+    assert plain.relation_to(split) != "not_subset"
+    assert split.relation_to(plain) != "not_subset"
 
 
 # THEORY: a-cut-reference-proves

@@ -13152,3 +13152,50 @@ fn a_refined_union_holds_what_its_refined_branches_hold() {
     );
     assert_eq!(short_shapes.verdict_rec(&mut cx), Verdict::Empty);
 }
+
+// THEORY: a-cut-reference-proves
+/// A cut beneath an attribute record changes values of every kind, whatever
+/// constructor stands between the two, so the widened difference it leaves
+/// refutes nothing: `μt. list[t]` and the same set split over two length bounds
+/// are one set, and a value carrying either as `x` is no value outside the other.
+/// A constructor above the record keeps the cut at its own kind.
+#[test]
+fn a_cut_beneath_an_attribute_record_reaches_every_part() {
+    use crate::descr::lower::parts_a_cut_reaches;
+    use crate::descr::{EVERY_PART, part};
+    let at = |index| Schema::Ref(DefIx::new(index));
+    let bounded = |constraint: Constraint, element: Schema| Schema::Refine {
+        base: Arc::new(Schema::list(SeqShape::homogeneous(element))),
+        constraints: vec![constraint].into(),
+    };
+    let defs = [
+        Schema::list(SeqShape::homogeneous(at(0))),
+        Schema::union([
+            bounded(Constraint::MaxLen(3), at(1)),
+            bounded(Constraint::MinLen(2), at(1)),
+        ]),
+    ];
+    let carrying = |schema: Schema| Schema::AttrRecord {
+        fields: Arc::from([Attribute {
+            name: Arc::from("x"),
+            schema,
+        }]),
+    };
+    let (plain, split) = (carrying(at(0)), carrying(at(1)));
+    assert_eq!(parts_a_cut_reaches(&plain, &defs), EVERY_PART);
+    assert_eq!(parts_a_cut_reaches(&split, &defs), EVERY_PART);
+    assert_eq!(
+        parts_a_cut_reaches(&Schema::list(SeqShape::homogeneous(plain.clone())), &defs),
+        part(Kind::List)
+    );
+    assert_ne!(
+        plain.descriptor_contained_in(&split, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the two carry one set, so no value refutes the pair"
+    );
+    assert_ne!(
+        plain.subtype_relation_under(&split, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the relation stands on what the set reading stands on"
+    );
+}
