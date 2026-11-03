@@ -5163,6 +5163,56 @@ fn record_of_width(fields: &Fields, defaults: &Clauses, len: usize, fuel: usize)
 /// How deep a constructed member is built before the attempt is given up.
 const MEMBER_FUEL: usize = 4;
 
+/// The record a meet of records holds where its members' fields meet: each
+/// name's field is the meet of what every member reads that name with, its
+/// field or the clause holding the name where it declares none ([`schema_at`]),
+/// and required where any member requires it. `None` where a member is no
+/// record.
+///
+/// What it holds is one record a meet's own members do not offer, since a
+/// member's record carries only that member's fields and their own values. It
+/// is a candidate, read by the oracle like the rest, so a record that is not a
+/// member of the meet after all -- a closed member refusing another's field --
+/// is dropped there.
+fn fields_met(members: &[Schema]) -> Option<Schema> {
+    let mut met: Vec<Field> = Vec::new();
+    for member in members {
+        let Schema::KeyedMap { fields, .. } = member else {
+            return None;
+        };
+        for field in fields.iter() {
+            match met.iter_mut().find(|held| held.name == field.name) {
+                Some(held) => {
+                    held.schema = Schema::Intersection(
+                        vec![held.schema.clone(), field.schema.clone()].into(),
+                    );
+                    held.required |= field.required;
+                }
+                None => met.push(field.clone()),
+            }
+        }
+    }
+    for held in &mut met {
+        let Some(name) = static_name(&held.name) else {
+            continue;
+        };
+        for member in members {
+            let Schema::KeyedMap { fields, defaults } = member else {
+                continue;
+            };
+            if fields.iter().all(|field| field.name != held.name)
+                && let Some(read) = schema_at(fields, defaults, name)
+            {
+                held.schema = Schema::Intersection(vec![held.schema.clone(), read].into());
+            }
+        }
+    }
+    Some(Schema::KeyedMap {
+        fields: met.into(),
+        defaults: Vec::new().into(),
+    })
+}
+
 /// A value of the schema, built from the schema's own denotation.
 ///
 /// The universe's other half. The kind edges and the derived boundaries are
@@ -5230,10 +5280,14 @@ fn a_member(schema: &Schema, fuel: usize) -> Option<Obj> {
         Schema::Union(members) => members.iter().find_map(|member| a_member(member, fuel - 1)),
         // A meet and a complement are asked of the candidates rather than
         // constructed: the oracle decides membership, so a value that answers
-        // is a member and one that does not is dropped.
+        // is a member and one that does not is dropped. A meet of records has
+        // one candidate more, a record whose fields meet those of every member
+        // by name: `{"b?": None}` and `{"b": Any}` each hold a record the
+        // other refuses, and their meet holds `{"b": None}` alone.
         Schema::Intersection(members) => members
             .iter()
             .filter_map(|member| a_member(member, fuel - 1))
+            .chain(fields_met(members).and_then(|record| a_member(&record, fuel - 1)))
             .chain(kind_edges())
             .find(|value| member_full(schema, value, &pool)),
         // A refinement is asked of candidates rather than constructed: the
@@ -6855,6 +6909,116 @@ fn a_refutation_on_a_str_subclass_key_has_its_witness() {
             "a value of the universe refutes {a:?} <= {b:?}"
         );
     }
+}
+
+/// A meet's record reads a name by the clause of a member that declares none.
+///
+/// The deep lane's draw: a list of `{str: bool} & {"a": int, str: Any}` and a
+/// reference is refuted below `None`. The first record reads `"a"` by its
+/// clause, so `{"a": 0}`, the second's own, is no value of the meet, and
+/// `{"a": True}`, the record both read the name in, is.
+#[test]
+fn a_meet_of_records_reads_a_name_by_the_clause_of_a_member_declaring_none() {
+    let bools = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: Schema::Bool,
+        }]
+        .into(),
+    };
+    let int_a = Schema::KeyedMap {
+        fields: vec![Field {
+            name: "a".into(),
+            schema: Schema::Int,
+            required: true,
+        }]
+        .into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: Schema::ANYTHING,
+        }]
+        .into(),
+    };
+    let meet = Schema::Intersection(vec![bools, int_a].into());
+    let pool = const_pool();
+    let member = a_member(&meet, MEMBER_FUEL).expect("the meet holds the record");
+    assert!(member_full(&meet, &member, &pool), "{member:?}");
+    let list = Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape {
+            prefix: vec![meet, Schema::Ref(DefIx::new(1))].into(),
+            tail: None,
+        },
+    };
+    let defs = fixpoint_defs();
+    assert_eq!(
+        list.subtype_relation_under(&Schema::NoneType, &NoLeafRelations, &defs),
+        Relation::Fails
+    );
+    let subject = unfold_for_oracle(&list, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &Schema::NoneType])
+            .iter()
+            .any(|value| member_full(&subject, value, &pool) && !matches!(value, Obj::None)),
+        "a value of the universe refutes the pair"
+    );
+}
+
+/// The deep lane's draw: a list of a meet of two records and a reference is
+/// refuted below `None`, and the universe holds the list that refutes it. The
+/// records `{"b?": None}` and `{"b": Any, str: Any}` each hold a record the
+/// other refuses, so neither member's own record is in the meet; the record
+/// their fields meet in, `{"b": None}`, is.
+#[test]
+fn a_meet_of_records_has_the_member_its_fields_meet_in() {
+    let optional_none = Schema::KeyedMap {
+        fields: vec![Field {
+            name: "b".into(),
+            schema: Schema::NoneType,
+            required: false,
+        }]
+        .into(),
+        defaults: Vec::new().into(),
+    };
+    let any_b = Schema::KeyedMap {
+        fields: vec![Field {
+            name: "b".into(),
+            schema: Schema::ANY,
+            required: true,
+        }]
+        .into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: Schema::ANYTHING,
+        }]
+        .into(),
+    };
+    let meet = Schema::Intersection(vec![optional_none, any_b].into());
+    assert_eq!(
+        a_member(&meet, MEMBER_FUEL),
+        Some(Obj::Map(vec![(Key::Exact("b"), Obj::None)]))
+    );
+    let list = Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape {
+            prefix: vec![meet, Schema::Ref(DefIx::new(1))].into(),
+            tail: None,
+        },
+    };
+    let defs = fixpoint_defs();
+    assert_eq!(
+        list.subtype_relation_under(&Schema::NoneType, &NoLeafRelations, &defs),
+        Relation::Fails
+    );
+    let subject = unfold_for_oracle(&list, &defs, ORACLE_UNFOLDS);
+    let pool = const_pool();
+    assert!(
+        boundary_values(&[&subject, &Schema::NoneType])
+            .iter()
+            .any(|value| member_full(&subject, value, &pool) && !matches!(value, Obj::None)),
+        "a value of the universe refutes the pair"
+    );
 }
 
 proptest! {
