@@ -354,7 +354,10 @@ impl Schema {
     /// subject holds one of each length from the larger of that least and its
     /// `MinLen` to its `MaxLen`, and to [`REACHED`] at most, the longest a
     /// container every interpreter builds: [`LONGEST`](crate::ir::LONGEST) is
-    /// where no value is longer, and a length between the two is no witness. A
+    /// where no value is longer, and a length between the two is no witness,
+    /// since the relation decided is the one every supported interpreter's
+    /// values induce, as models are compared by the subtyping they induce
+    /// [FCB08, §5.3]. A
     /// length the supertype's bounds leave out -- below its `MinLen`, or above
     /// its `MaxLen` -- is then a value outside the supertype whatever its base:
     /// `Annotated[str, MaxLen(256)]` holds a text of 65 code points, which

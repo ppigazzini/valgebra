@@ -1162,6 +1162,23 @@ IMPLEMENTED-BY: decision/emptiness.rs::intersection_verdict
 
 HELD-BY: a_meet_is_read_empty_exactly_where_it_is_below_nothing, below_nothing_exactly_where_read_empty, a_meet_that_may_hold_no_kind_is_read_empty, test_a_meet_that_may_hold_no_kind_is_below_every_set
 
+**The domain is a family of models, one per interpreter.** Models are
+compared by the subtyping they induce, and the source decides the one a
+universal model induces [FCB08, §5.3]. Here the values are a family: a list
+of `sys.maxsize // 8 + 1` items exists on no `CPython`, while a shorter one
+past `REACHED` exists for some kinds on some interpreters and not others. A
+proof holds in every supported interpreter's domain, and a refutation stands
+on a value every one of them builds, so a refutation or an emptiness turning
+on a length in `(REACHED, LONGEST]` is declined: the relation decided is the
+one the whole family induces, not one model's.
+**[DEVIATION: the-domain-is-one-model-per-interpreter]**
+
+SOURCE: §13.0 "`t1 <= t2` iff `[[t1]] subset-of"
+
+IMPLEMENTED-BY: decision/readings.rs::Schema::length_refused
+
+HELD-BY: a_refutation_stands_on_a_length_every_interpreter_builds, a_witness_length_stops_where_every_interpreter_builds
+
 **The term is built in a normal form short of negation normal form, and it is
 not canonical.** Construction applies associativity, commutativity,
 idempotence and the identity laws, not absorption, and pushes no complement

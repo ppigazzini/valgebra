@@ -704,6 +704,11 @@ pub type Constraints = Arc<[Constraint]>;
 /// The schema intermediate representation.
 ///
 /// Each variant documents its denotation: the set of Python values it accepts.
+/// The values are those of every interpreter the package supports, one domain
+/// apiece, and a relation is decided in all of them: a proof holds in each,
+/// and a refutation stands on a value each builds, so one turning on a
+/// container length in `(REACHED, LONGEST]`, which some interpreters build for
+/// some kinds and others do not, is declined (`REACHED`).
 /// `Ord`/`Eq` are structural; the constructors use them to put union and
 /// intersection members in one order and to drop a repeated one.
 ///

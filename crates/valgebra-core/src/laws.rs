@@ -6889,7 +6889,7 @@ proptest! {
         }
     }
 
-    // THEORY: subtyping-is-inclusion
+    // THEORY: subtyping-is-inclusion, the-domain-is-one-model-per-interpreter
     /// A refutation stands on a length every interpreter builds.
     ///
     /// [`a_refutation_is_a_value`] builds its witness, which a length of
@@ -8545,4 +8545,29 @@ proptest! {
         let below = meet.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]);
         prop_assert_eq!(below.holds(), empty, "{:?}: below nothing {:?}", meet, below);
     }
+}
+
+// THEORY: the-domain-is-one-model-per-interpreter
+/// The line itself, for a list of integers: refuted below a list of at most
+/// `REACHED - 1` items on one of `REACHED`, which every interpreter builds, and
+/// declined below one of at most `REACHED`, whose witness of `REACHED + 1`
+/// items some interpreter does not build. A list of at least `REACHED` items is
+/// read inhabited, and one of at least `REACHED + 1` neither inhabited nor
+/// empty.
+#[test]
+fn a_witness_length_stops_where_every_interpreter_builds() {
+    let reached = crate::ir::REACHED;
+    let list = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let at_most = |n| Schema::refine(list.clone(), vec![Constraint::MaxLen(n)]);
+    let at_least = |n| Schema::refine(list.clone(), vec![Constraint::MinLen(n)]);
+    assert_eq!(
+        list.subtype_relation_under(&at_most(reached - 1), &NoLeafRelations, &[]),
+        Relation::Fails
+    );
+    assert_eq!(
+        list.subtype_relation_under(&at_most(reached), &NoLeafRelations, &[]),
+        Relation::Unknown
+    );
+    assert_eq!(at_least(reached).verdict(), Verdict::Inhabited);
+    assert_eq!(at_least(reached + 1).verdict(), Verdict::Unknown);
 }
