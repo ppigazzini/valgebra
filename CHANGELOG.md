@@ -113,6 +113,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a supertype union is read through the unions nested in it -- internal
 - feat: a verdict read under an open meet is held where it met none again
 - fix: a cut beneath an attribute record reaches every kind -- internal
+- fix: open and close give one term however often they are applied
 
 -->
 
@@ -566,6 +567,13 @@ answer of its own, or a repair to a change not yet released.
   release that began to, since every supported `re` does.
 
 ### Fixed
+
+- **`open` and `close` give one term however often they are applied.** `{anything:
+  int, int: anything, complement(int): anything}` closes to itself, its first
+  clause claiming every key, where it closed to `dict[anything, anything]` and a
+  second `close` took that to `{}`. `{int: int, str: int, union(int, str):
+  complement(int)}` opens to `dict[anything, anything]` in one application, where
+  it took two. No first application admits another set.
 
 - **A deep walk on PyPy stops where PyPy has stack to answer.** PyPy sizes the
   stack its C-API calls may use by the recursion limit, and a walk that reached

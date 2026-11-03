@@ -254,6 +254,17 @@ subtype rule could disagree over it without any caller seeing.
 `test_an_optional_attribute_is_reached_without_a_flag` in
 `tests/test_closure_ledger.py` holds the derivation the flag fails on.
 
+**A mark telling a top clause a list joined to from the one `open` writes.**
+Refused. `{anything: anything}` with a mark would denote what it denotes without
+one, so the mark holds no set of its own and is neither a generator nor a
+representative, and what it serves is `close` reading a term, which a term
+rewrite may do unmarked. A list a join would turn into that clause stands as
+written, and neither other answer holds: two clauses over one key render as a
+dict display that reads back as the last of them
+(`a_rewritten_map_names_each_key_schema_once`), and closing the list to `{}`
+takes out values a clause claims
+(`a_clause_list_rewritten_twice_gives_the_term_once_did`).
+
 **Records keyed by a non-string.** Refused. A record's fields are named by
 strings, and arbitrary keys are a different labeling than the record model
 assumes.
@@ -439,7 +450,9 @@ in `A`, rather than a definition no reference reaches. And the clause list
 `open` and `close` rewrite names each key schema once, two clauses over one key
 being one over the join of their values (`clauses_over` in `ir.rs`); the
 constructor reads a clause list as written, and the frontend refuses a dict
-display whose two keys build one key schema.
+display whose two keys build one key schema. `close` keeps that join only where
+the list it writes closes to itself: the top clause reads as the region whatever
+it was joined from, so a list whose keys a clause claims all of stands as written.
 
 The three complement laws differ from the rest in what they need. `~~A` holds of
 anything, because a complement is evaluated by negating what is under it, so

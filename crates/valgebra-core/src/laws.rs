@@ -5908,6 +5908,67 @@ fn top_clause_key() -> impl Strategy<Value = Schema> {
     ]
 }
 
+// THEORY: open-and-close-read-the-region
+/// A key holding two regions a read would free, one after the other, loses both
+/// in one `close`: taking the outer complement out leaves the inner one the
+/// region of what stands, and a second pass would take it.
+#[test]
+fn closing_reads_what_stands_of_a_key_until_it_reads_as_itself() {
+    let kinds = Schema::union([Schema::Int, Schema::Str]);
+    let freed = Schema::union([Schema::Int, kinds.complement()]);
+    let freed_again = Schema::union([
+        freed.clone(),
+        Schema::union([freed, Schema::Str]).complement(),
+    ]);
+    let clause = |key, value| MapClause { key, value };
+    let map = Schema::keyed_map(
+        Vec::new(),
+        vec![
+            clause(freed_again, Schema::ANYTHING),
+            clause(Schema::Str, Schema::Int),
+        ],
+    );
+    let closed = Schema::keyed_map(
+        Vec::new(),
+        vec![
+            clause(Schema::Int, Schema::ANYTHING),
+            clause(Schema::Str, Schema::Int),
+        ],
+    );
+    assert_eq!(map.with_records_open(Openness::Closed), closed);
+}
+
+/// A clause list naming each key once, its keys overlapping as [`top_clause_key`]
+/// and the keys beside it allow: every key, a union of kinds and its complement,
+/// the key `open` writes beside a clause, and that key written a second time.
+fn clauses_over_overlapping_keys() -> impl Strategy<Value = Vec<MapClause>> {
+    let kinds = Schema::union([Schema::Int, Schema::Str]);
+    let freed = Schema::union([Schema::Int, kinds.clone().complement()]);
+    let freed_again = Schema::union([
+        freed.clone(),
+        Schema::union([freed.clone(), Schema::Str]).complement(),
+    ]);
+    let key = prop_oneof![
+        top_clause_key(),
+        Just(Schema::ANYTHING),
+        Just(kinds.clone()),
+        Just(kinds.complement()),
+        Just(freed),
+        Just(freed_again),
+    ];
+    let value = prop_oneof![
+        Just(Schema::ANYTHING),
+        Just(Schema::Int),
+        Just(Schema::Int.complement())
+    ];
+    prop::collection::btree_map(key, value, 1..5).prop_map(|clauses| {
+        clauses
+            .into_iter()
+            .map(|(key, value)| MapClause { key, value })
+            .collect()
+    })
+}
+
 fn positive_schema() -> impl Strategy<Value = Schema> {
     schema_fragment(Negation::Absent, Producer::Any)
 }
@@ -6527,6 +6588,48 @@ proptest! {
                 prop_assert!(
                     defaults.iter().take(at).all(|earlier| earlier.key != clause.key),
                     "{open:?} of {clauses:?} is {rewritten:?}"
+                );
+            }
+        }
+    }
+
+    // THEORY: open-and-close-read-the-region
+    /// A clause list naming each key once is rewritten once and for all, and
+    /// closing it takes nothing a clause short of every value admits.
+    ///
+    /// The draw is keyed by what makes the operators' two folds reach each
+    /// other: every key, a kind and its complement, a union, and the key `open`
+    /// writes. So a clause over every key stands beside a split of the top, the
+    /// list a join would turn into the term of the region, and a value joined to
+    /// every value stands beside the clause over the rest of the keys, which only
+    /// a further merge folds.
+    #[test]
+    fn a_clause_list_rewritten_twice_gives_the_term_once_did(
+        clauses in clauses_over_overlapping_keys(),
+    ) {
+        let pool = const_pool();
+        let map = Schema::keyed_map(Vec::new(), clauses.clone());
+        for openness in [Openness::Open, Openness::Closed] {
+            let once = map.with_records_open(openness);
+            let twice = once.with_records_open(openness);
+            prop_assert_eq!(&twice, &once, "{:?} of {:?}", openness, map);
+            let Schema::KeyedMap { defaults, .. } = &once else {
+                continue;
+            };
+            for (at, clause) in defaults.iter().enumerate() {
+                prop_assert!(
+                    defaults.iter().take(at).all(|earlier| earlier.key != clause.key),
+                    "{openness:?} of {map:?} is {once:?}"
+                );
+            }
+        }
+        let closed = map.with_records_open(Openness::Closed);
+        for clause in clauses.iter().filter(|clause| clause.value != Schema::ANYTHING) {
+            let claim = Schema::keyed_map(Vec::new(), vec![clause.clone()]);
+            for value in &boundary_values(&[&map, &claim]) {
+                prop_assert!(
+                    !member_full(&claim, value, &pool) || member_full(&closed, value, &pool),
+                    "closing {map:?} takes {value:?} out of the claim {clause:?}"
                 );
             }
         }

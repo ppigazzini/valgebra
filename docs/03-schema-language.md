@@ -597,7 +597,10 @@ anything}`, and two clauses carrying one value are one clause over the union of
 their keys, so opening `dict[str, anything]` gives a single clause over every key -- and that
 has to be so too: where the keys claimed hold a literal, the long spelling is
 keyed by the literal's complement, a shape [the set representation
-declines](15-decidability.md). Neither is recoverable, so closing afterwards
+declines](15-decidability.md). The one join `close` leaves out is the one that
+would write the top clause, which closes to `{}`: `{anything: int, int: anything,
+complement(int): anything}` claims every key in its first clause, and closes to
+itself. Neither fold is recoverable, so closing afterwards
 lands on the smaller term:
 
 ```python

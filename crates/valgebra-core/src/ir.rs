@@ -453,10 +453,16 @@ fn claimed_beside_the_region(
                 .map(|(_, kept)| kept.clone())
         };
         if **region == Schema::union(claimed().chain(others())) {
-            return Some(MapClause {
-                key: Schema::union(claimed()),
-                value: clause.value.clone(),
-            });
+            // What stands is read the same way, so the pass that takes one
+            // complement out leaves no other for a second pass to take.
+            return claimed_beside_the_region(
+                &MapClause {
+                    key: Schema::union(claimed()),
+                    value: clause.value.clone(),
+                },
+                defaults,
+                index,
+            );
         }
     }
     Some(clause.clone())
@@ -476,6 +482,18 @@ fn claimed_beside_the_region(
 /// Bool|}` keeps its `String => Bool`. The clauses admitting every value are
 /// read as the one clause they are first ([`tops_merged`]), so the region does
 /// not turn on how they are split.
+///
+/// **A list a join would write the region of stands as written.** One clause a
+/// key is what a dict display can spell ([`one_clause_a_key`]), and the join it
+/// takes can lose the clause that claims: `{anything: int, int: anything,
+/// complement(int): anything}` has every key claimed by its first clause, so
+/// closing frees none, and the join writes `{anything: anything}`, the term of
+/// the whole region, which a second `close` takes out. No shorter term says what
+/// the list says, so a join is kept only where the list it writes closes to
+/// itself, and otherwise the list stands. Either way the answer closes to itself,
+/// and a list naming each key once keeps no value the read took out by standing:
+/// the join leaves a term reading otherwise only where the clause it wrote and
+/// the others cover every key, which leaves no key to free.
 fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
     // A node with no clauses claims no key, so the unclaimed region is the
     // whole key space and the answer is the shared list either way: the top
@@ -485,7 +503,7 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
         return clauses_for(open);
     }
     let merged;
-    let defaults = if defaults
+    let read = if defaults
         .iter()
         .filter(|clause| clause.value == Schema::ANYTHING)
         .nth(1)
@@ -496,39 +514,60 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
     } else {
         defaults
     };
-    let mut kept: Vec<MapClause> = defaults
+    let mut kept: Vec<MapClause> = read
         .iter()
         .enumerate()
-        .filter_map(|(at, clause)| claimed_beside_the_region(clause, defaults, at))
+        .filter_map(|(at, clause)| claimed_beside_the_region(clause, read, at))
         .collect();
-    if open == Openness::Open {
-        let region = unclaimed_region(&kept);
-        // A clause list already claiming every key leaves nothing to free, and
-        // an empty region would be a rectangle over no key at all.
-        if region != Schema::Nothing {
-            kept.push(MapClause {
-                key: region,
-                value: Schema::ANYTHING,
-            });
+    match open {
+        Openness::Open => {
+            let region = unclaimed_region(&kept);
+            // A clause list already claiming every key leaves nothing to free, and
+            // an empty region would be a rectangle over no key at all.
+            if region != Schema::Nothing {
+                kept.push(MapClause {
+                    key: region,
+                    value: Schema::ANYTHING,
+                });
+            }
+            // Either fold can make the other's: a merge can write one key twice,
+            // and a join can write one value twice. A round that goes on folded a
+            // clause, so the clauses bound the rounds.
+            for _ in 0..kept.len() {
+                merge_by_value(&mut kept);
+                if !one_clause_a_key(&mut kept) {
+                    break;
+                }
+            }
         }
-        merge_by_value(&mut kept);
+        Openness::Closed => {
+            if one_clause_a_key(&mut kept) && clauses_over(&kept, open)[..] != kept[..] {
+                kept = defaults.to_vec();
+            }
+        }
     }
-    // In the constructor's order, since two orders of one clause list are one
-    // schema: the freed clause folds wherever its value first appears, and an
-    // opened map is equal to its own clauses written out again.
-    canonical_clauses(&mut kept);
-    // Two clauses the rewrite left over one key schema are one clause over the
-    // join of their values: a key is read by some clause, so `K x V` beside
-    // `K x W` is `K x (V | W)`. Adjacent in that order, and the join moves no
-    // key.
-    kept.dedup_by(|later, earlier| {
+    share_clauses(&mut kept)
+}
+
+/// Clauses over one key schema written as one clause over the join of their
+/// values, in the constructor's order, answering whether a clause went.
+///
+/// A key is read by some clause, so `K x V` beside `K x W` is `K x (V | W)`.
+/// The order is the constructor's since two orders of one clause list are one
+/// schema: the freed clause folds wherever its value first appears, and an
+/// opened map is equal to its own clauses written out again. It sets the two
+/// clauses side by side, and the join moves no key.
+fn one_clause_a_key(clauses: &mut Vec<MapClause>) -> bool {
+    let written = clauses.len();
+    canonical_clauses(clauses);
+    clauses.dedup_by(|later, earlier| {
         if later.key != earlier.key {
             return false;
         }
         earlier.value = Schema::union([earlier.value.clone(), later.value.clone()]);
         true
     });
-    share_clauses(&mut kept)
+    clauses.len() != written
 }
 
 /// The clauses admitting every value, read as one clause over the union of

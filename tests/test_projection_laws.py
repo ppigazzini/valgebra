@@ -223,6 +223,67 @@ def test_the_clauses_admitting_every_value_close_as_one(
     assert closed.is_equivalent(Validator({anything: anything, **others}).close()), name
 
 
+# A clause short of every value over every key, beside the top split two ways and
+# beside a further claim: closing has no region to free in any of them.
+_EVERY_KEY_CLAIMED: list[tuple[str, dict[object, object]]] = [
+    (
+        "beside the top split over a kind",
+        {anything: int, int: anything, complement(int): anything},
+    ),
+    (
+        "beside the top split over another kind",
+        {anything: complement(int), str: anything, complement(str): anything},
+    ),
+    (
+        "beside a further claim",
+        {anything: int, str: int, int: anything, complement(int): anything},
+    ),
+]
+
+
+# THEORY: open-and-close-read-the-region
+@pytest.mark.parametrize(
+    ("name", "clauses"),
+    _EVERY_KEY_CLAIMED,
+    ids=[name for name, _ in _EVERY_KEY_CLAIMED],
+)
+def test_a_list_claiming_every_key_closes_to_itself(
+    name: str, clauses: dict[object, object]
+) -> None:
+    """A clause over every key leaves closing no region, so the list stands.
+
+    The first clause claims every key, and the split top is the part over keys
+    a clause claims, which stays. One clause a key would write the top clause,
+    which is the term of the whole region and closes to `{}`, so the join is not
+    taken: closing gives the list, every time, and a dict display reads back as
+    it. The set is every dict, as the list's own is.
+    """
+    written = Validator(clauses)
+    closed = written.close()
+    assert closed == written, name
+    assert closed.close() == closed, name
+    assert closed.is_equivalent(Validator(dict[Any, Any])), name
+    for value in ({}, {1: "a"}, {"a": 1}, {"a": "b"}, {None: None}):
+        assert closed.is_valid(value), (name, value)
+    namespace = {"anything": anything, "complement": complement, "int": int, "str": str}
+    assert Validator(eval(repr(closed), namespace)) == closed, name  # noqa: S307 - the render under test
+
+
+# THEORY: open-and-close-read-the-region
+def test_opening_folds_until_neither_fold_applies() -> None:
+    """Merging keys and joining values reach each other, so one `open` runs both out.
+
+    `int: int` and `str: int` merge to one clause over `int | str`, the clause
+    beside it joins with that to every value there, and that clause merges with
+    the region freed: one clause over every key, from one `open`.
+    """
+    both = union(int, str)
+    written = Validator({int: int, str: int, both: complement(int)})
+    opened = written.open()
+    assert opened == Validator(dict[Any, Any])
+    assert opened.open() == opened
+
+
 def test_the_relations_are_functions_of_the_set() -> None:
     """The control: every other answer on this surface reads the set.
 
