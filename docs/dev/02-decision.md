@@ -1247,7 +1247,10 @@ than past them. The product rule meets a component with the complements of
 branch components, and the record rule a field with the complements of member
 fields, so what either asks is a meet of subterms and their complements.
 The union rule asks the subject against the branches it can meet, a union of
-some members of a union it was handed. And a meet or a complement folds to the
+some members of a union it was handed, at any depth: a nested union is read as
+its members or kept whole, so `X ∪ (Y ∪ ¬c)` is respelled `X ∪ Y`, which names
+members of two subterms, and a finite tree holds finitely many members. And a
+meet or a complement folds to the
 top or the bottom. So every goal is a pair drawn from a finite closure `C` --
 which stands where the `N(A)` of [FCB08, §6.9] stands, the normal forms over
 the atoms a type mentions, read over schemas, though a record narrowing builds a
@@ -1585,6 +1588,18 @@ draws the family. Three other spellings of the same pair stay declines below
 such a subject: the complement of the member's union of one, a meet of one, and
 a refinement with no constraint. Each is a spelling the fold does not read as
 its member.
+
+**The respelling reads a supertype union through the unions nested in it, as
+that reading does.** `a ⊆ X ∪ ¬c` is `a ∧ c ⊆ X`, and a complement grouped a
+union deep is a member of the union all the same, so the respelling picks the
+complements out of the members `flat_members` reads, the walk the universe bound
+takes. The fuzzer's universal union holds a complement of the top a union deep,
+`int` two unions deep, and `¬bool` under a refinement with no constraint: its
+complement is read empty, and read as written the union showed the respelling
+no complement, so the top was not placed below it. `fuzz/seeds/decision/` keeps
+the input, and `a_union_holding_a_complement_is_read_through_its_nested_members`
+in `decision/tests.rs` holds the pair and the neighbor without `int`, which
+holds no `bool` and has the top not below it.
 
 **The universe bound is read through a reference on the right even where the
 subject is a set nobody can read.** A reference past the end of the table names

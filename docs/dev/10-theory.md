@@ -1004,7 +1004,8 @@ back edges into a finite table of definitions, so the subterms reachable by
 unfolding it are finitely many, which is the regularity a type is asked
 [Cas23, Def. 2.1]. A rule asks a pair of them or a pair built out
 of them -- a meet of subterms and their complements from the product rule, a
-union of some of a union's members from the union rule, a bound from a fold --
+union of some of a union's members at any depth from the union rule, a bound
+from a fold --
 so every goal is drawn from a finite closure, which stands where the normal
 forms over the atoms a type mentions stand [FCB08, §6.9] and is finite by the
 argument of [LN26, §5.1] -- a narrowing builds a record atom no subterm is, and
@@ -1023,7 +1024,7 @@ SOURCE: §14.2 "Regularity bounds the number of distinct"
 
 IMPLEMENTED-BY: decision/emptiness.rs::meet_through_a_reference, valgebra-py/src/build.rs::refuse_a_growing_argument
 
-HELD-BY: every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms, the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks, the_goals_a_drawn_query_asks_are_pairs_of_the_subterms, a_recursive_meet_of_maps_is_decided_within_its_unfoldings
+HELD-BY: every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms, a_supertype_union_is_respelled_through_its_nested_union_inside_the_closure, the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks, the_goals_a_drawn_query_asks_are_pairs_of_the_subterms, a_recursive_meet_of_maps_is_decided_within_its_unfoldings
 
 **A cache under coinduction is revertible or absent.** A memo added to the
 coinductive procedure must be persistent, so a failed disjunct can roll it

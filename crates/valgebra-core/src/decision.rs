@@ -514,6 +514,30 @@ fn the_dicts_top(schema: &Schema) -> bool {
     }
 }
 
+/// Each member of a union as one union holds them, a union nested in it read as
+/// its members: `X ∪ (Y ∪ Z)` is `X ∪ Y ∪ Z`. The constructors flatten what
+/// they build, so the nesting arrives in a term built raw, which the fuzz target
+/// draws; a reading that picks a union's members out by shape -- a complement,
+/// the dict kind's top -- finds one nested a union deep only through this.
+///
+/// A worklist rather than a recursion: each node is taken once and the term is
+/// a finite tree, so the walk ends within its node count. The list allocates
+/// only once a nested union is met, so a flat union is read as directly as its
+/// own members are.
+fn flat_members(members: &[Schema]) -> impl Iterator<Item = &Schema> {
+    let mut nested: Vec<&Schema> = Vec::new();
+    let mut top = members.iter();
+    core::iter::from_fn(move || {
+        loop {
+            let member = nested.pop().or_else(|| top.next())?;
+            match member {
+                Schema::Union(inner) => nested.extend(inner.iter()),
+                _ => return Some(member),
+            }
+        }
+    })
+}
+
 /// A meet narrowed by the complements beside its unions ([`narrowed_meet`]),
 /// the same set, below `other`; `Unknown` where nothing narrows.
 ///
@@ -1009,8 +1033,7 @@ impl Schema {
         // cover reading already, and this one it does not read.
         let negates = match other {
             Schema::Complement(_) => true,
-            Schema::Union(members) => members
-                .iter()
+            Schema::Union(members) => flat_members(members)
                 .any(|member| matches!(member, Schema::Complement(_)) || the_dicts_top(member)),
             _ => false,
         };
@@ -1056,8 +1079,8 @@ impl Schema {
         let allowance = Budget::new(cx.budget.left().min(respelling()));
         let cx = &mut cx.within_this_query(&allowance);
         if let Schema::Union(members) = other {
-            let (complements, rest): (Vec<&Schema>, Vec<&Schema>) =
-                members.iter().partition(|member| {
+            let (complements, rest): (Vec<&Schema>, Vec<&Schema>) = flat_members(members)
+                .partition(|member| {
                     matches!(member, Schema::Complement(inner)
                         if denotes_a_set_within(inner, cx.oracle, cx.defs))
                         || the_dicts_top(member)
@@ -1518,21 +1541,7 @@ impl Schema {
         if members.iter().all(|m| m.region_set() != Regions::Unknown) {
             return false;
         }
-        // A worklist rather than a recursion: each node is taken once and the
-        // term is a finite tree, so the walk ends within its node count. The
-        // list allocates only once a nested union is met, so a flat union
-        // feeds the meet's buffer as directly as its members do.
-        let mut nested: Vec<&Schema> = Vec::new();
-        let mut top = members.iter();
-        let complements = core::iter::from_fn(|| {
-            loop {
-                let member = nested.pop().or_else(|| top.next())?;
-                match member {
-                    Schema::Union(inner) => nested.extend(inner.iter()),
-                    _ => return Some(member.clone().complement()),
-                }
-            }
-        });
+        let complements = flat_members(members).map(|member| member.clone().complement());
         let meet = Schema::meet_within(complements, cx.defs);
         meet.is_empty_rec(cx) || cx.denotes_no_value(&meet)
     }

@@ -10195,6 +10195,70 @@ proptest! {
     }
 }
 
+/// A supertype union holding a complement is read as one union holds its
+/// members, a union nested in it read as its members. The fuzzer's universal
+/// union -- `None`, a complement of the top a union deep, `int` two unions deep,
+/// `¬bool` under a refinement with no constraint, a record -- holds every value,
+/// and the top and a refinement of a union of the top are below it; without
+/// `int` it holds no `bool`, and the top is not placed below it. The oracle
+/// kinds every constant as `None`, as the fuzzer's world did.
+#[test]
+fn a_union_holding_a_complement_is_read_through_its_nested_members() {
+    struct Nones;
+    impl crate::descr::lower::Constants for Nones {}
+    impl LeafRelations for Nones {
+        fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
+            None
+        }
+        fn literal_kind(&self, _constant: ConstIx) -> Option<Kind> {
+            Some(Kind::NoneType)
+        }
+    }
+    let literal = |index| Schema::Literal(ConstIx::new(index));
+    let raw = |members: Vec<Schema>| Schema::Union(members.into());
+    let not_bool = Schema::Refine {
+        base: Arc::new(Schema::Bool.complement()),
+        constraints: Vec::new().into(),
+    };
+    let universal = |with_int: bool| {
+        let mut numbers = vec![literal(0), Schema::Nothing];
+        if with_int {
+            numbers.push(Schema::Int);
+        }
+        raw(vec![
+            Schema::NoneType,
+            raw(vec![
+                Schema::Complement(Arc::new(raw(vec![literal(2), Schema::ANYTHING]))),
+                raw(vec![
+                    Schema::list(SeqShape::homogeneous(Schema::Bytes)),
+                    raw(numbers),
+                    Schema::Bytes,
+                ]),
+                not_bool.clone(),
+            ]),
+            closed(vec![field("a", Schema::Bool, true)]),
+        ])
+    };
+    let refined = Schema::Refine {
+        base: Arc::new(raw(vec![
+            raw(vec![Schema::ANYTHING, literal(0)]),
+            Schema::Int,
+        ])),
+        constraints: vec![Constraint::MaxLen(0)].into(),
+    };
+    for subject in [Schema::ANYTHING, refined] {
+        assert_eq!(
+            subject.subtype_relation_under(&universal(true), &Nones, &[]),
+            Relation::Holds,
+            "{subject:?}"
+        );
+    }
+    assert_ne!(
+        Schema::ANYTHING.subtype_relation_under(&universal(false), &Nones, &[]),
+        Relation::Holds
+    );
+}
+
 // THEORY: semantic-subtyping
 /// A pair every decider declines as written is asked in the spellings the
 /// algebra gives it, and each pair here is one the rules alone decline.

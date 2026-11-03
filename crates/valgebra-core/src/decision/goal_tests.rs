@@ -501,11 +501,14 @@ fn distinct_against_subterm_pairs(sub: &Schema, sup: &Schema, defs: &[Schema]) -
 /// component, one conjunct per narrowing, so what it asks is a meet of
 /// subterms and of their complements. The union rule asks the subject against
 /// the branches it can meet, which is a union of some members of a union among
-/// the subterms. A pair every decider declined against a complement is asked
-/// as the meet of the subject and the inner set below the bottom, and as the
-/// inner set below the subject's complement. And a complement or a meet folds
-/// to a bound, the top or the bottom. Each of the four is a subset or a sign of
-/// the subterms, so the closure is finite because they are.
+/// the subterms, at any depth ([`members_at_every_depth`]): the rules read a
+/// nested union as its members, so `X ∪ (Y ∪ ¬c)` is respelled `X ∪ Y`, which
+/// names members of two subterms, and a rule may keep one whole. A pair every
+/// decider declined against a complement is asked as the meet of the subject
+/// and the inner set below the bottom, and as the inner set below the
+/// subject's complement. And a complement or a meet folds to a bound, the top
+/// or the bottom. Each of the four is a subset or a sign of the subterms, so
+/// the closure is finite because they are.
 fn in_closure(term: &Schema, subterms: &[Schema]) -> bool {
     let signed = |t: &Schema| {
         subterms.contains(t) || matches!(t, Schema::Complement(inner) if subterms.contains(inner))
@@ -515,11 +518,30 @@ fn in_closure(term: &Schema, subterms: &[Schema]) -> bool {
         Schema::Nothing | Schema::Anything(_) => true,
         Schema::Intersection(members) => members.iter().all(signed),
         Schema::Union(members) => subterms.iter().any(|union| match union {
-            Schema::Union(theirs) => members.iter().all(|m| theirs.contains(m)),
+            Schema::Union(theirs) => {
+                let read = members_at_every_depth(theirs);
+                members.iter().all(|m| read.contains(&m))
+            }
             _ => false,
         }),
         _ => false,
     }
+}
+
+/// A union's members at every depth: each nested union itself, which a rule
+/// asking a union of some members keeps whole, and the members the rules read
+/// through it ([`flat_members`](super::flat_members)). A finite tree holds
+/// finitely many.
+fn members_at_every_depth(members: &[Schema]) -> Vec<&Schema> {
+    let mut found = Vec::new();
+    let mut pending: Vec<&Schema> = members.iter().collect();
+    while let Some(member) = pending.pop() {
+        found.push(member);
+        if let Schema::Union(inner) = member {
+            pending.extend(inner.iter());
+        }
+    }
+    found
 }
 
 /// The goals a query asks that fall outside the closure of its subterms, and
@@ -850,6 +872,81 @@ fn a_union_stops_at_a_decline_its_budget_cannot_follow() {
         declined_first.subtype_relation(&pattern("b"), &PlainClasses, &[], &steps()),
         Relation::Fails
     );
+}
+
+// THEORY: regularity-bounds-the-goals
+/// A supertype union is respelled through the union nested in it, inside the
+/// closure.
+///
+/// The drawn pair: `dict[str, Any]` below `(¬Any ∪ {}) ∪ R`. The respelling
+/// takes the complement out of the supertype's members read through the
+/// nested union and asks the subject below `{} ∪ R`, which names a member of
+/// each of two union subterms: a union of some members of the supertype read
+/// flat, and so a goal the closure holds. It is a goal built rather than
+/// found, which keeps the row from passing on a pair that never reached the
+/// respelling.
+#[test]
+fn a_supertype_union_is_respelled_through_its_nested_union_inside_the_closure() {
+    let empty = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: Vec::new().into(),
+    };
+    let sub = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![crate::ir::MapClause {
+            key: Schema::Str,
+            value: Schema::ANYTHING,
+        }]
+        .into(),
+    };
+    let sup = Schema::Union(
+        vec![
+            Schema::Union(vec![Schema::Complement(Arc::new(Schema::ANYTHING)), empty].into()),
+            Schema::Ref(DefIx::new(0)),
+        ]
+        .into(),
+    );
+    let defs = vec![Schema::Union(
+        vec![
+            Schema::NoneType,
+            Schema::KeyedMap {
+                fields: vec![crate::ir::Field {
+                    name: "n".into(),
+                    schema: Schema::Ref(DefIx::new(0)),
+                    required: false,
+                }]
+                .into(),
+                defaults: Vec::new().into(),
+            },
+        ]
+        .into(),
+    )];
+    let (outside, built) = outside_the_closure(&sub, &sup, &defs);
+    assert!(outside.is_empty(), "asked outside the closure: {outside:?}");
+    assert!(built >= 1, "the respelling built no goal");
+    // A nested union kept whole beside a member of the union holding it, as
+    // the union rule asks it in the constructors' order: `None` below
+    // `(¬c ∪ (bool)) ∪ R` asks `None` below `(bool) ∪ ¬c`.
+    let grouped = Schema::Union(
+        vec![
+            Schema::Union(
+                vec![
+                    Schema::Complement(Arc::new(Schema::Literal(crate::ir::ConstIx::new(0)))),
+                    Schema::Union(vec![Schema::Bool].into()),
+                ]
+                .into(),
+            ),
+            Schema::Ref(DefIx::new(0)),
+        ]
+        .into(),
+    );
+    let bools = vec![
+        Schema::Union(vec![Schema::Bool, list_of(Schema::Ref(DefIx::new(0)))].into()),
+        Schema::Union(vec![Schema::ANYTHING, list_of(Schema::Ref(DefIx::new(0)))].into()),
+    ];
+    let (outside, built) = outside_the_closure(&Schema::NoneType, &grouped, &bools);
+    assert!(outside.is_empty(), "asked outside the closure: {outside:?}");
+    assert!(built >= 1, "the union rule built no goal");
 }
 
 /// The same bound, asked of drawn pairs over drawn definitions.
