@@ -3965,7 +3965,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "VIRTUAL_ENV=.pypy uv pip install maturin==1.15.0\n",
+            "VIRTUAL_ENV=.pypy uv pip install maturin==1.16.0\n",
             "VIRTUAL_ENV=.pypy uv pip install maturin\n",
         ),
         trips=("test_every_maturin_fetched_past_the_lock_is_the_locks",),
@@ -3977,7 +3977,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            '          maturin-version: "1.15.0"\n          # --find-interpreter',
+            '          maturin-version: "1.16.0"\n          # --find-interpreter',
             "          # --find-interpreter",
         ),
         trips=("test_every_maturin_fetched_past_the_lock_is_the_locks",),

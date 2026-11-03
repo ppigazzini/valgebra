@@ -258,7 +258,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-nextest,cargo-llvm-cov@0.9.1
       # Run the workspace tests under nextest and enforce the core's coverage
@@ -332,7 +332,7 @@ jobs:
           # is `.venv/bin/python` whichever build stands behind it, so a cache
           # saved on another release would link this lane against that one.
           key: python-3.13
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-llvm-cov@0.9.1
         # The version-gated reading of a list is live below 3.14, so coverage
@@ -515,7 +515,7 @@ jobs:
       # The sweeps that carry it run `-m "not repository"`, so without it here
       # no lane runs them. One leg is enough: the listing is the source's,
       # not the interpreter's. Pinned as the sweeps pin it.
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         if: ${{ matrix.os == 'ubuntu-26.04' && matrix.python-version == env.FLOOR }}
         with:
           tool: cargo-mutants@27.1.0
@@ -824,7 +824,7 @@ jobs:
         run: |
           uv venv --python pypy-3.11 .pypy
           # The maturin `uv.lock` resolves, as every build of the extension.
-          VIRTUAL_ENV=.pypy uv pip install maturin==1.15.0
+          VIRTUAL_ENV=.pypy uv pip install maturin==1.16.0
           VIRTUAL_ENV=.pypy .pypy/bin/maturin build --release --out dist-pypy \
             -i "$(uv python find pypy-3.11)"
           VIRTUAL_ENV=.pypy uv pip install --no-index dist-pypy/*.whl
@@ -1236,7 +1236,7 @@ jobs:
           # The version `uv.lock` resolves. Unnamed, the action resolves the
           # build requirement against a manifest it fetches on the day, and the
           # wheel is built by whichever maturin is newest.
-          maturin-version: "1.15.0"
+          maturin-version: "1.16.0"
           # --find-interpreter builds for every CPython in the manylinux image
           # that satisfies requires-python; without it maturin looks only for a
           # `python3` on PATH, which the manylinux container does not provide.
@@ -1386,7 +1386,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       # Pinned for the reason the nightly sweep gives: the mutant set is compared
       # against a committed baseline.
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-mutants@27.1.0
       - name: List the Rust files the diff touches
@@ -1539,7 +1539,7 @@ jobs:
           key: python-3.13
       # Pinned for the reason the nightly sweep gives: the mutant set is compared
       # against a committed baseline.
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-mutants@27.1.0
         # A mutation sweep can only kill a mutant on a branch its interpreter
@@ -1862,7 +1862,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: python-${{ env.FLOOR }}
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-llvm-cov@0.9.1
       - uses: $/.github/actions/setup-uv
@@ -1920,7 +1920,7 @@ jobs:
       # A prebuilt cargo-fuzz, pinned: the action has no cargo-fuzz of its own and
       # falls back to cargo-binstall, so the version is what makes the fetch
       # reproducible. See the fuzz-build lane for the whole argument.
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-fuzz@0.13.2
       # `--target` forces the host (gnu) triple: the prebuilt cargo-fuzz is a
@@ -2174,7 +2174,7 @@ jobs:
       # `--locked` pins only the deps of, not the tool). Pinned by version: the
       # sweep's survivors are compared against a committed baseline, so a mutant
       # set that moves with the tool moves the baseline under the ratchet.
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-mutants@27.1.0
       - name: Mutation report over the core
@@ -2382,7 +2382,7 @@ jobs:
           # is `.venv/bin/python` whichever build stands behind it, so a cache
           # saved on another release would link this lane against that one.
           key: python-3.13
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-mutants@27.1.0
       # The membership walk is the product's hottest correctness surface and the
@@ -2537,7 +2537,7 @@ jobs:
           # is `.venv/bin/python` whichever build stands behind it, so a cache
           # saved on another release would link this lane against that one.
           key: python-3.13
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-mutants@27.1.0
       # The interpreter the verdict is about, pinned as the walk sweep pins it:
@@ -2669,7 +2669,7 @@ jobs:
       # falls back to cargo-binstall, which fetches a GitHub release and says so.
       # Unpinned, that fallback installs whatever is newest, and the toolchain
       # pinned in FUZZ_NIGHTLY buys nothing while the fuzzer driving it floats.
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-fuzz@0.13.2
       - name: Test the fuzz harness
@@ -2704,7 +2704,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-deny@0.20.2
       - name: Audit the workspace dependency tree
@@ -2756,7 +2756,7 @@ jobs:
         # addition to the static ones.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uvx zizmor==1.31.1 .github/
+        run: uvx zizmor==1.32.0 .github/
 
   ci:
     name: ci
