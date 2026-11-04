@@ -116,6 +116,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: open and close give one term however often they are applied
 - feat: a value of the difference cut the other way refutes at any kind
 - fix: every key reads alike over a class, whose complement law does not fold
+- fix: a set beside its complement is every key to open and close
 
 -->
 
@@ -580,6 +581,14 @@ answer of its own, or a repair to a change not yet released.
   a `+` after a quantifier says `re` reads it as possessive without naming the
   release that began to, since every supported `re` does.
 
+- **A class key opens and closes as a kind does.** `dict[K, Any].open()` is
+  `dict[anything, anything]`, and closing that gives `{}`, as
+  `dict[int, Any].open().close()` does, where it came back as `dict[K, Any]`.
+  `dict[complement(K), Any]`, which opens to the same term, came back as the other
+  half and admitted a key `close` refuses, and it gives `{}` too, so the round trip
+  is at most closing with no exception. `{K: Any, str: int}` keeps its exact round
+  trip.
+
 ### Fixed
 
 - **`open` and `close` give one term however often they are applied.** `{anything:
@@ -593,9 +602,7 @@ answer of its own, or a repair to a change not yet released.
   `{complement(K): int, anything: anything}` opens to one term however often it is
   opened, where a second `open` wrote a longer key over the same set, and closing
   it after opening gives what closing it gives, where the round trip kept the
-  keys `open` freed. Beside `dict[complement(K), anything]`, which opens to the key
-  `dict[K, anything]` does, closing keeps `K` as it did: no term tells the two
-  apart.
+  keys `open` freed.
 
 - **A deep walk on PyPy stops where PyPy has stack to answer.** PyPy sizes the
   stack its C-API calls may use by the recursion limit, and a walk that reached

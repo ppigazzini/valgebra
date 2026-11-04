@@ -6181,7 +6181,7 @@ fn closing_reads_what_stands_of_a_key_until_it_reads_as_itself() {
 // THEORY: open-and-close-read-the-region
 /// Every key is the others' keys beside their complement over a class, as it is
 /// the top: `~K: int` beside either closes to `~K: anything`, the part of the
-/// clause over what the other claims, and opening writes the second of them.
+/// clause over what the other claims, and opening writes the top.
 #[test]
 fn a_class_key_beside_every_key_reads_as_every_key() {
     let class = Schema::Instance(ClassIx::new(0));
@@ -6206,10 +6206,60 @@ fn a_class_key_beside_every_key_reads_as_every_key() {
         beside(every_key.clone()).with_records_open(Openness::Closed),
         closed
     );
-    assert_eq!(
-        beside(Schema::ANYTHING).with_records_open(Openness::Open),
-        beside(every_key)
-    );
+    for key in [Schema::ANYTHING, every_key] {
+        assert_eq!(
+            beside(key).with_records_open(Openness::Open),
+            beside(Schema::ANYTHING)
+        );
+    }
+}
+
+// THEORY: open-and-close-read-the-region
+/// A set beside its complement is every key to `open` and `close`, whatever the
+/// constructor folds: a class, a union of classes, a predicate and a reference
+/// open and close as `int` does, each half of the pair alike, so the two maps
+/// that open to one term close to no more than their own closing. A key holding
+/// no such pair stands.
+#[test]
+fn a_set_beside_its_complement_is_every_key_to_a_rewrite() {
+    let clause = |key, value| MapClause { key, value };
+    let map = |clauses: Vec<MapClause>| Schema::keyed_map(Vec::new(), clauses);
+    let every_key = map(vec![MapClause::top()]);
+    let no_key = map(Vec::new());
+    let class = |at| Schema::Instance(ClassIx::new(at));
+    let called = Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    for atom in [
+        Schema::Int,
+        class(0),
+        Schema::union([class(0), class(1)]),
+        called,
+        Schema::Ref(DefIx::new(0)),
+    ] {
+        let other = atom.clone().complement();
+        for key in [atom.clone(), other.clone()] {
+            let opened = map(vec![clause(key, Schema::ANYTHING)]).with_records_open(Openness::Open);
+            assert_eq!(opened, every_key, "{atom:?}");
+            assert_eq!(opened.with_records_open(Openness::Closed), no_key);
+        }
+        let spelled = Schema::union([atom.clone(), other.clone()]);
+        assert_eq!(
+            map(vec![clause(spelled, Schema::ANYTHING)]).with_records_open(Openness::Closed),
+            no_key,
+            "{atom:?}"
+        );
+        let split = map(vec![clause(atom, Schema::Int), clause(other, Schema::Str)]);
+        assert_eq!(split.with_records_open(Openness::Open), split);
+    }
+    for key in [
+        Schema::union([class(0), class(1).complement()]),
+        Schema::union([class(0), Schema::union([class(0), class(1)]).complement()]),
+    ] {
+        let written = map(vec![clause(key, Schema::ANYTHING)]);
+        assert_eq!(written.with_records_open(Openness::Closed), written);
+    }
 }
 
 /// A clause list naming each key once, its keys overlapping as [`top_clause_key`]

@@ -466,7 +466,10 @@ hand -- `Schema::union_within` and `Schema::meet_within` pass `NoLeafRelations`
 **every** `Instance`, a plain class included: `intersection(C, complement(C))`
 stays a meet of the pair, and `is_empty()` decides it empty. The law holds of the
 set a plain class denotes; only the fold declines, and the decision procedures,
-which do ask the bindings, answer it.
+which do ask the bindings, answer it. `open` and `close` read that pair as every
+key without asking (`keys_joined` and `key_read` in `ir.rs`): it is every key over
+an atom answering one way for a key, and an atom answering two ways gives the list
+no set for a rewrite to move, so a class rewrites as a kind does.
 
 **Deduplication is `A & A = A` and `A | A = A` for every member, a predicate
 included.** Two equal members are one term, so `intersection(P, P)` is `P`, and

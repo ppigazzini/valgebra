@@ -1077,9 +1077,10 @@ term of a region a clause claims, the list stands as written: every key of
 `{anything: int, int: anything, complement(int): anything}` is claimed, and the
 top clause it would join to closes to `{}`. A record of the paper writes no such
 list, its keys being disjoint [Cas23, §4.4], so that answer is read off these
-statements rather than off the paper. Every key is the top where the complement
-law folds, and what the others claim beside its complement where it does not,
-over a class, and both read alike. What the laws hold of the sets is narrower than "a function of the
+statements rather than off the paper. A set and its complement join to every key
+[FCB08, Def. 4.1], and a rewrite reads them so whatever the constructor folds, a
+class among them: an atom answering one way for a key makes the pair every key,
+and one answering two ways leaves the list no set for a rewrite to move. What the laws hold of the sets is narrower than "a function of the
 set": closing commutes with absorption, applying either operator twice gives the
 term applying it once gave, a name the rewritten clauses say being dropped in
 the first pass, and a name saying what its record says of every key it does not
@@ -1087,9 +1088,9 @@ name moves no set either operator gives. **[OBLIGATION: open-and-close-read-the-
 
 SOURCE: §14.6 "Operators belong on the representation built for them"
 
-IMPLEMENTED-BY: ir/transform.rs::Schema::with_records_open, ir.rs::unclaimed_region, ir.rs::claimed_beside_the_region, ir.rs::clauses_over, ir.rs::tops_merged, ir.rs::merge_by_value
+IMPLEMENTED-BY: ir/transform.rs::Schema::with_records_open, ir.rs::unclaimed_region, ir.rs::claimed_beside_the_region, ir.rs::clauses_over, ir.rs::tops_merged, ir.rs::merge_by_value, ir.rs::keys_joined
 
-HELD-BY: test_opening_a_mapping_frees_the_keys_no_clause_claims, test_a_clause_is_read_the_same_with_or_without_a_field_beside_it, test_one_term_closes_one_way_whichever_reading_wrote_it, test_closing_commutes_with_absorption, closing_commutes_with_absorption, opening_or_closing_twice_gives_the_term_once_did, a_clause_list_rewritten_twice_gives_the_term_once_did, closing_reads_what_stands_of_a_key_until_it_reads_as_itself, a_class_key_beside_every_key_reads_as_every_key, test_a_list_claiming_every_key_closes_to_itself, test_opening_folds_until_neither_fold_applies, test_a_class_key_beside_every_key_opens_once_and_closes_as_it_did, with_records_open_reaches_the_record_a_clause_maps_to, test_opening_reaches_the_record_a_mapping_maps_to, opening_widens_closing_narrows_and_the_round_trip_is_at_most_closing, closing_an_opened_mapping_takes_out_the_region_opening_freed, test_closing_an_opened_mapping_takes_out_only_the_region_opening_freed, opening_under_a_complement_narrows_and_closing_widens, closing_an_opened_record_is_not_closing_the_record, test_closing_an_opened_schema_is_not_closing_it, a_name_the_record_already_says_moves_no_set_either_operator_gives
+HELD-BY: test_opening_a_mapping_frees_the_keys_no_clause_claims, test_a_clause_is_read_the_same_with_or_without_a_field_beside_it, test_one_term_closes_one_way_whichever_reading_wrote_it, test_closing_commutes_with_absorption, closing_commutes_with_absorption, opening_or_closing_twice_gives_the_term_once_did, a_clause_list_rewritten_twice_gives_the_term_once_did, closing_reads_what_stands_of_a_key_until_it_reads_as_itself, a_class_key_beside_every_key_reads_as_every_key, a_set_beside_its_complement_is_every_key_to_a_rewrite, test_the_round_trip_over_a_class_is_at_most_closing, test_a_list_claiming_every_key_closes_to_itself, test_opening_folds_until_neither_fold_applies, test_a_class_key_beside_every_key_opens_once_and_closes_as_it_did, with_records_open_reaches_the_record_a_clause_maps_to, test_opening_reaches_the_record_a_mapping_maps_to, opening_widens_closing_narrows_and_the_round_trip_is_at_most_closing, closing_an_opened_mapping_takes_out_the_region_opening_freed, test_closing_an_opened_mapping_takes_out_only_the_region_opening_freed, opening_under_a_complement_narrows_and_closing_widens, closing_an_opened_record_is_not_closing_the_record, test_closing_an_opened_schema_is_not_closing_it, a_name_the_record_already_says_moves_no_set_either_operator_gives
 
 **`open` and `close` are term rewrites, and the cost is a spelling.** They read
 the clauses a term *writes* rather than the set it denotes, so two terms the

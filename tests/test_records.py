@@ -192,28 +192,27 @@ def test_closing_an_opened_mapping_takes_out_only_the_region_opening_freed() -> 
     """`close` after `open` refuses again what `open` freed, and nothing more.
 
     Opening folds the freed region into a clause admitting every value, so
-    `dict[C, Any]` opens to `dict[C | complement(C), Any]`, and closing takes
-    the complement out and keeps `C`. Read as the whole clause, the round trip
-    would keep the region, and admit a `None` key that `close` refuses, over a
-    class and beside a clause carrying another value alike.
+    `{C: Any, str: int}` opens to a clause over `C` beside the complement of `C`
+    and `str`, and closing takes the complement out and keeps `C`. Read as the
+    whole clause, the round trip would keep the region, and admit a `None` key
+    that `close` refuses, over a class and a kind alike.
     """
 
     class Key:
         pass
 
-    for schema in (Validator(dict[Key, Any]), Validator({int: Any, str: int})):
+    for schema in (Validator({Key: Any, str: int}), Validator({int: Any, str: int})):
         round_trip = schema.open().close()
         assert round_trip == schema.close(), round_trip
         assert not round_trip.is_valid({None: 1})
         assert schema.open().is_valid({None: 1})
 
-    # Where the complement law folds the opened key to every key, the claim is
-    # not in the term to keep, and closing lands on a smaller term than
-    # `close` gives: never a larger one.
-    union_key = Validator(dict[int | str, Any])
-    assert repr(union_key.open()) == "dict[anything, anything]"
-    assert union_key.open().close().relation_to(union_key.close()) == "subset"
-    assert not union_key.open().close().is_valid({None: 1})
+    # Where the opened key is every key, the claim is not in the term to keep, and
+    # closing lands on a smaller term than `close` gives: never a larger one.
+    for whole in (Validator(dict[int | str, Any]), Validator(dict[Key, Any])):
+        assert repr(whole.open()) == "dict[anything, anything]"
+        assert whole.open().close().relation_to(whole.close()) == "subset"
+        assert not whole.open().close().is_valid({None: 1})
     literal_key = Validator(dict[Literal["a", "b"], Any])
     assert Validator(dict[Any, Any]).relation_to(literal_key.open()) == "subset"
 

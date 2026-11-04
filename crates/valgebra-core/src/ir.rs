@@ -33,7 +33,9 @@ use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 
 use crate::codes;
-use crate::oracle::{Connective, NoLeafRelations, has_complementary_pair_within};
+use crate::oracle::{
+    Connective, NoLeafRelations, complemented_members, has_complementary_pair_within,
+};
 
 mod intern;
 mod transform;
@@ -385,7 +387,40 @@ fn clauses_for(open: Openness) -> Clauses {
 /// its unclaimed region is the whole key space -- which is why a bare catch-all
 /// is what openness reads as there.
 fn unclaimed_region(defaults: &[MapClause]) -> Schema {
-    Schema::union(defaults.iter().map(|clause| clause.key.clone())).complement()
+    keys_joined(defaults.iter().map(|clause| clause.key.clone())).complement()
+}
+
+/// The join of keys a rewrite writes, where a set beside its complement is every
+/// key [FCB08, Def. 4.1].
+///
+/// The constructor folds that pair only over an atom known to be a set, since a
+/// term `==` and the deciders read is built on the fold, and it has no bindings
+/// to ask. A rewrite asks nothing: over an atom answering one way for a key the
+/// pair is every key, and an atom answering two ways gives the list no set for
+/// `open` to widen or `close` to narrow. So a class reads as a kind does here,
+/// and the two maps `dict[K, anything]` and `dict[complement(K), anything]`, which
+/// open to one term, each close to no more than their own closing.
+fn keys_joined(keys: impl IntoIterator<Item = Schema>) -> Schema {
+    let joined = Schema::union(keys);
+    let every_key = match &joined {
+        Schema::Union(parts) => complemented_members(parts, Connective::Join, |wanted| {
+            parts.binary_search(wanted).is_ok()
+        })
+        .next()
+        .is_some(),
+        _ => false,
+    };
+    if every_key { Schema::ANYTHING } else { joined }
+}
+
+/// A key as a rewrite reads it: each join in it read by [`keys_joined`], so what
+/// stands of a class is what stands of a kind, whose join the constructor folds.
+fn key_read(key: &Schema) -> Schema {
+    match key {
+        Schema::Union(parts) => keys_joined(parts.iter().map(key_read)),
+        Schema::Complement(inner) => key_read(inner).complement(),
+        other => other.clone(),
+    }
 }
 
 /// What of `clause` stands once the default of the unclaimed region is taken
@@ -405,11 +440,11 @@ fn unclaimed_region(defaults: &[MapClause]) -> Schema {
 /// and the claimed keys stand, which is the paper's reading of openness as the
 /// default of the key-types a record does not name [Cas23, §4.4], the named
 /// ones untouched either way. Read as the whole clause, closing an opened
-/// mapping over a class, or beside a clause with another value, would keep the
-/// freed region and admit every key. Where the complement law has folded the
-/// key to the top, the clause's own claim is not in the term to keep: what
-/// stays is the clause over the keys the other clauses claim, at which it
-/// admits every value, since closing touches no claimed region.
+/// mapping beside a clause with another value would keep the freed region and
+/// admit every key. Where the key is every key ([`keys_joined`]), the clause's
+/// own claim is not in the term to keep: what stays is the clause over the keys
+/// the other clauses claim, at which it admits every value, since closing
+/// touches no claimed region.
 fn claimed_beside_the_region(
     clause: &MapClause,
     defaults: &[MapClause],
@@ -425,20 +460,15 @@ fn claimed_beside_the_region(
             .filter(move |(at, _)| *at != index)
             .map(|(_, other)| other.key.clone())
     };
-    let claimed_by_others = Schema::union(others());
+    let claimed_by_others = keys_joined(others());
     let unclaimed = claimed_by_others.clone().complement();
     if clause.key == unclaimed {
         return None;
     }
-    // Every key: the region and what the clause claimed, folded by the
-    // complement law, so its own claim is not in the term to read back. What
-    // the other clauses claim it admits every value at too, and that stays. A
-    // class's complement is not folded without the bindings, so every key is
-    // also what the others claim written beside its complement, and `open`
-    // writes that beside `complement(K): int`, the region being `K`.
-    if clause.key == Schema::ANYTHING
-        || clause.key == Schema::union([claimed_by_others.clone(), unclaimed])
-    {
+    // Every key: the region and what the clause claimed, so its own claim is
+    // not in the term to read back. What the other clauses claim it admits every
+    // value at too, and that stays.
+    if clause.key == Schema::ANYTHING {
         return (claimed_by_others != Schema::Nothing).then(|| MapClause {
             key: claimed_by_others,
             value: clause.value.clone(),
@@ -458,12 +488,12 @@ fn claimed_beside_the_region(
                 .filter(move |(other, _)| *other != at)
                 .map(|(_, kept)| kept.clone())
         };
-        if **region == Schema::union(claimed().chain(others())) {
+        if **region == keys_joined(claimed().chain(others())) {
             // What stands is read the same way, so the pass that takes one
             // complement out leaves no other for a second pass to take.
             return claimed_beside_the_region(
                 &MapClause {
-                    key: Schema::union(claimed()),
+                    key: keys_joined(claimed()),
                     value: clause.value.clone(),
                 },
                 defaults,
@@ -508,17 +538,35 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
     if defaults.is_empty() {
         return clauses_for(open);
     }
+    // Whoever wrote a key, the rest reads it as [`key_read`] does. An atom holds
+    // nothing to read, which is most of what is rewritten.
+    let keys_read;
+    let written = if defaults
+        .iter()
+        .any(|clause| matches!(clause.key, Schema::Union(_) | Schema::Complement(_)))
+    {
+        keys_read = defaults
+            .iter()
+            .map(|clause| MapClause {
+                key: key_read(&clause.key),
+                value: clause.value.clone(),
+            })
+            .collect::<Vec<_>>();
+        &keys_read[..]
+    } else {
+        defaults
+    };
     let merged;
-    let read = if defaults
+    let read = if written
         .iter()
         .filter(|clause| clause.value == Schema::ANYTHING)
         .nth(1)
         .is_some()
     {
-        merged = tops_merged(defaults);
+        merged = tops_merged(written);
         &merged[..]
     } else {
-        defaults
+        written
     };
     let mut kept: Vec<MapClause> = read
         .iter()
@@ -600,7 +648,7 @@ fn tops_merged(defaults: &[MapClause]) -> Vec<MapClause> {
             continue;
         }
         if let Some(kept) = top.and_then(|at| merged.get_mut(at)) {
-            kept.key = Schema::union([kept.key.clone(), clause.key.clone()]);
+            kept.key = keys_joined([kept.key.clone(), clause.key.clone()]);
         } else {
             top = Some(merged.len());
             merged.push(clause.clone());
@@ -631,7 +679,7 @@ fn merge_by_value(clauses: &mut Vec<MapClause>) {
         // First occurrence keeps the position; the caller puts the list in
         // the constructor's order afterwards, as every spelling of it is.
         match folded.iter_mut().find(|kept| kept.value == clause.value) {
-            Some(kept) => kept.key = Schema::union([kept.key.clone(), clause.key]),
+            Some(kept) => kept.key = keys_joined([kept.key.clone(), clause.key]),
             None => folded.push(clause),
         }
     }

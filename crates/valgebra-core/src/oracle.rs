@@ -395,9 +395,20 @@ pub(crate) fn has_complementary_pair_within(
     definitions: &[Schema],
     holds: impl Fn(&Schema) -> bool,
 ) -> bool {
-    members.iter().any(|member| {
+    complemented_members(members, connective, holds)
+        .any(|inner| denotes_a_set_within(inner, oracle, definitions))
+}
+
+/// The sets among `members` that stand beside their complement, as
+/// [`has_complementary_pair_within`] reads the list, asked of no oracle.
+pub(crate) fn complemented_members(
+    members: &[Schema],
+    connective: Connective,
+    holds: impl Fn(&Schema) -> bool,
+) -> impl Iterator<Item = &Schema> {
+    members.iter().filter_map(move |member| {
         let Schema::Complement(inner) = member else {
-            return false;
+            return None;
         };
         let paired = holds(inner)
             || match (connective, &**inner) {
@@ -405,7 +416,7 @@ pub(crate) fn has_complementary_pair_within(
                 | (Connective::Meet, Schema::Intersection(parts)) => parts.iter().all(&holds),
                 _ => false,
             };
-        paired && denotes_a_set_within(inner, oracle, definitions)
+        paired.then_some(&**inner)
     })
 }
 

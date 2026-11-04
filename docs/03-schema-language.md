@@ -617,10 +617,6 @@ assert repr(mapping.open()) == "dict[anything, anything]"  # two clauses, folded
 assert not mapping.open().close().is_valid({"a": 1})
 ```
 
-The term has one exception to that. For a class `K`, `dict[K, anything]` and
-`dict[complement(K), anything]` open to one key, and closing that key keeps `K`,
-which is outside what closing the second gives.
-
 The name the closed record drops is the one it says of every key it does not
 name: an optional field admitting nothing is the closed record's default, so
 `{"a?": nothing}` is `{}` and opens as `{}` does, to every dict. A key that
@@ -640,18 +636,20 @@ assert refused.is_valid({"b": 1, 2: None})
 `dict[str, int]` above is the ordinary case: its clause carries a value that is
 not the top, nothing folds, and the round trip is exact.
 
-The merged clause is recoverable while the freed region still stands in it.
-`dict[C, Any]` over a class opens to `dict[complement(C) | C, Any]`: the
-complement law is not folded for a class, whose `isinstance` may run a hook,
-so the complement is the region `open` freed, and `close` takes out that and
-nothing else. A clause beside another value keeps its keys the same way. It is
-the folded key above -- every key, with the claim inside it not spelled --
-that closes to the smaller term:
+The merged clause is recoverable while the freed region still stands in it:
+`{int: Any, str: int}` opens to a clause over `int` beside the complement of `int
+| str`, and `close` takes out that complement and nothing else. It is the folded
+key above -- every key, with the claim inside it not spelled -- that closes to
+the smaller term. A class is read the same way. Construction keeps
+`complement(C) | C` as written, since `isinstance` may run a hook, but `open` and
+`close` read it as every key: it is every key wherever `isinstance` answers one way
+for a key. `dict[C, Any]` and `dict[complement(C), Any]` open to every key, and no
+term tells them apart, so each closes to `{}`, as `dict[int, Any]` does:
 
 ```python
 from typing import Any
 
-from valgebra import Validator
+from valgebra import Validator, complement
 
 
 class Key:
@@ -659,12 +657,13 @@ class Key:
 
 
 mapping = Validator(dict[Key, Any])
-assert mapping.open().is_valid({None: 1})
-assert mapping.open().close() == mapping.close()
-assert not mapping.open().close().is_valid({None: 1})
+assert repr(mapping.open()) == "dict[anything, anything]"
+assert mapping.open().close() == Validator({})
+assert Validator({complement(Key): Any}).open().close() == Validator({})
 
-mixed = Validator({int: Any, str: int})
+mixed = Validator({Key: Any, str: int})
 assert mixed.open().close() == mixed.close()
+assert not mixed.open().close().is_valid({None: 1})
 ```
 
 To free some key-types and constrain others without `open`, write the

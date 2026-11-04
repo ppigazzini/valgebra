@@ -2220,13 +2220,12 @@ fn the_complement_laws_fold_a_member_the_constructor_flattened() {
 /// and folds it into the clause that already carries every value: the key is
 /// the claimed keys beside the complement of every claimed key. `close` takes
 /// the complement out and keeps the claimed keys, so the round trip gives
-/// what `close` gives, over a class the fold cannot read and beside a clause
-/// carrying another value.
+/// what `close` gives beside a clause carrying another value, over a class as
+/// over a kind.
 #[test]
 fn closing_an_opened_mapping_takes_out_only_the_region_open_freed() {
     let clause = |key: Schema, value: Schema| MapClause { key, value };
     for clauses in [
-        vec![clause(Schema::Instance(ClassIx::new(0)), Schema::ANYTHING)],
         vec![
             clause(Schema::Int, Schema::ANYTHING),
             clause(Schema::Str, Schema::Int),
@@ -2272,21 +2271,23 @@ fn closing_an_opened_mapping_takes_out_only_the_region_open_freed() {
         )
     );
 
-    // Where the complement law folds the opened key to the top, the claimed
-    // keys are not in the term to keep, and closing lands on the smaller term.
-    let folded = Schema::mapping(clause(
+    // Where the opened key is every key, the claimed keys are not in the term to
+    // keep, and closing lands on the smaller term.
+    for key in [
         Schema::union([Schema::Int, Schema::Str]),
-        Schema::ANYTHING,
-    ));
-    let opened = folded.with_records_open(Openness::Open);
-    assert_eq!(
-        opened,
-        Schema::keyed_map(Vec::new(), vec![MapClause::top()])
-    );
-    assert_eq!(
-        opened.with_records_open(Openness::Closed),
-        Schema::keyed_map(Vec::new(), Vec::new())
-    );
+        Schema::Instance(ClassIx::new(0)),
+    ] {
+        let folded = Schema::mapping(clause(key, Schema::ANYTHING));
+        let opened = folded.with_records_open(Openness::Open);
+        assert_eq!(
+            opened,
+            Schema::keyed_map(Vec::new(), vec![MapClause::top()])
+        );
+        assert_eq!(
+            opened.with_records_open(Openness::Closed),
+            Schema::keyed_map(Vec::new(), Vec::new())
+        );
+    }
 
     // The clause is recognized by its shape, whoever wrote it.
     let written = Schema::keyed_map(

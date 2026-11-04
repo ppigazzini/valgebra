@@ -324,11 +324,9 @@ def test_a_class_key_beside_every_key_opens_once_and_closes_as_it_did(
 ) -> None:
     """Every key is the others' keys beside their complement, over a class too.
 
-    The constructor folds no complement law over a class, so `open` writes the
-    clause over every key as what the others claim beside what they leave out,
-    the region being `_Key` where they claim its complement. That key reads back
-    as every key: a second `open` gives the term the first gave, and `close`
-    takes the region out and keeps what the others claim.
+    The constructor folds no complement law over a class, and a rewrite reads the
+    pair as every key all the same: a second `open` gives the term the first gave,
+    and `close` takes the region out and keeps what the others claim.
     """
     written = Validator({others: int, anything: anything})
     opened = written.open()
@@ -338,19 +336,23 @@ def test_a_class_key_beside_every_key_opens_once_and_closes_as_it_did(
     assert written.close().close() == written.close()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="a class and its complement open to one key, and the class is what stays",
+# THEORY: open-and-close-read-the-region
+@pytest.mark.parametrize(
+    "key",
+    [_Key, complement(_Key), int, complement(int)],
+    ids=["class", "complement-of-a-class", "kind", "complement-of-a-kind"],
 )
-def test_the_round_trip_over_a_complemented_class_is_at_most_closing() -> None:
-    """The one key `open` writes for two maps is read for the first of them.
+def test_the_round_trip_over_a_class_is_at_most_closing(key: object) -> None:
+    """A map and the map over its keys' complement open to one term, every key.
 
-    `dict[_Key, Any]` and `dict[complement(_Key), Any]` both open to a clause over
-    the class and its complement, and no term tells them apart. Closing keeps the
-    class, as the first asks, which is outside what closing the second gives.
+    No term tells the two apart, so the round trip is below both closings, and
+    only the map admitting no key is. A class and its complement read as a kind and
+    its complement do, the rewrite owing no equality the constructor would.
     """
-    written = Validator({complement(_Key): anything})
+    written = Validator({key: anything})
+    assert repr(written.open()) == "dict[anything, anything]"
     round_trip = written.open().close()
+    assert round_trip == Validator({})
     assert round_trip.relation_to(written.close()) == "subset"
 
 
