@@ -115,6 +115,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a cut beneath an attribute record reaches every kind -- internal
 - fix: open and close give one term however often they are applied
 - feat: a value of the difference cut the other way refutes at any kind
+- fix: every key reads alike over a class, whose complement law does not fold
 
 -->
 
@@ -587,6 +588,14 @@ answer of its own, or a repair to a change not yet released.
   second `close` took that to `{}`. `{int: int, str: int, union(int, str):
   complement(int)}` opens to `dict[anything, anything]` in one application, where
   it took two. No first application admits another set.
+
+- **Every key reads alike over a class, whose complement law does not fold.**
+  `{complement(K): int, anything: anything}` opens to one term however often it is
+  opened, where a second `open` wrote a longer key over the same set, and closing
+  it after opening gives what closing it gives, where the round trip kept the
+  keys `open` freed. Beside `dict[complement(K), anything]`, which opens to the key
+  `dict[K, anything]` does, closing keeps `K` as it did: no term tells the two
+  apart.
 
 - **A deep walk on PyPy stops where PyPy has stack to answer.** PyPy sizes the
   stack its C-API calls may use by the recursion limit, and a walk that reached

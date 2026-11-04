@@ -275,13 +275,83 @@ def test_opening_folds_until_neither_fold_applies() -> None:
 
     `int: int` and `str: int` merge to one clause over `int | str`, the clause
     beside it joins with that to every value there, and that clause merges with
-    the region freed: one clause over every key, from one `open`.
+    the region freed: one clause over every key, from one `open`. A join can also
+    take away the clause over every key that a clause admitting every value was
+    read beside, so what it leaves is read again: the second map has one term.
     """
     both = union(int, str)
     written = Validator({int: int, str: int, both: complement(int)})
     opened = written.open()
     assert opened == Validator(dict[Any, Any])
     assert opened.open() == opened
+
+    class Key:
+        pass
+
+    beside_every_key = Validator(
+        {
+            anything: complement(int),
+            int: anything,
+            complement(int): anything,
+            union(Key, complement(union(Key, str))): None,
+            Key: int,
+        }
+    )
+    opened = beside_every_key.open()
+    assert opened.open() == opened
+    for value in ({}, {1: 1}, {"a": 1}, {Key(): None}, {None: "a"}):
+        assert beside_every_key.is_valid(value), value
+        assert opened.is_valid(value), value
+
+
+class _Key:
+    """A class key: the constructor folds no complement law over it."""
+
+
+# THEORY: open-and-close-read-the-region
+@pytest.mark.parametrize(
+    "others",
+    [
+        complement(_Key),
+        complement(union(_Key, str)),
+        union(complement(_Key), str),
+        _Key,
+    ],
+    ids=["complement", "complement-of-a-union", "union-with-a-complement", "class"],
+)
+def test_a_class_key_beside_every_key_opens_once_and_closes_as_it_did(
+    others: object,
+) -> None:
+    """Every key is the others' keys beside their complement, over a class too.
+
+    The constructor folds no complement law over a class, so `open` writes the
+    clause over every key as what the others claim beside what they leave out,
+    the region being `_Key` where they claim its complement. That key reads back
+    as every key: a second `open` gives the term the first gave, and `close`
+    takes the region out and keeps what the others claim.
+    """
+    written = Validator({others: int, anything: anything})
+    opened = written.open()
+    assert opened.open() == opened
+    assert opened.is_equivalent(written)
+    assert opened.close() == written.close()
+    assert written.close().close() == written.close()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="a class and its complement open to one key, and the class is what stays",
+)
+def test_the_round_trip_over_a_complemented_class_is_at_most_closing() -> None:
+    """The one key `open` writes for two maps is read for the first of them.
+
+    `dict[_Key, Any]` and `dict[complement(_Key), Any]` both open to a clause over
+    the class and its complement, and no term tells them apart. Closing keeps the
+    class, as the first asks, which is outside what closing the second gives.
+    """
+    written = Validator({complement(_Key): anything})
+    round_trip = written.open().close()
+    assert round_trip.relation_to(written.close()) == "subset"
 
 
 def test_the_relations_are_functions_of_the_set() -> None:

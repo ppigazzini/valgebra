@@ -617,6 +617,10 @@ assert repr(mapping.open()) == "dict[anything, anything]"  # two clauses, folded
 assert not mapping.open().close().is_valid({"a": 1})
 ```
 
+The term has one exception to that. For a class `K`, `dict[K, anything]` and
+`dict[complement(K), anything]` open to one key, and closing that key keeps `K`,
+which is outside what closing the second gives.
+
 The name the closed record drops is the one it says of every key it does not
 name: an optional field admitting nothing is the closed record's default, so
 `{"a?": nothing}` is `{}` and opens as `{}` does, to every dict. A key that

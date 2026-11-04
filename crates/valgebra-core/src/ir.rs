@@ -426,13 +426,19 @@ fn claimed_beside_the_region(
             .map(|(_, other)| other.key.clone())
     };
     let claimed_by_others = Schema::union(others());
-    if clause.key == claimed_by_others.clone().complement() {
+    let unclaimed = claimed_by_others.clone().complement();
+    if clause.key == unclaimed {
         return None;
     }
     // Every key: the region and what the clause claimed, folded by the
     // complement law, so its own claim is not in the term to read back. What
-    // the other clauses claim it admits every value at too, and that stays.
-    if clause.key == Schema::ANYTHING {
+    // the other clauses claim it admits every value at too, and that stays. A
+    // class's complement is not folded without the bindings, so every key is
+    // also what the others claim written beside its complement, and `open`
+    // writes that beside `complement(K): int`, the region being `K`.
+    if clause.key == Schema::ANYTHING
+        || clause.key == Schema::union([claimed_by_others.clone(), unclaimed])
+    {
         return (claimed_by_others != Schema::Nothing).then(|| MapClause {
             key: claimed_by_others,
             value: clause.value.clone(),
@@ -530,14 +536,14 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
                     value: Schema::ANYTHING,
                 });
             }
-            // Either fold can make the other's: a merge can write one key twice,
-            // and a join can write one value twice. A round that goes on folded a
-            // clause, so the clauses bound the rounds.
-            for _ in 0..kept.len() {
-                merge_by_value(&mut kept);
-                if !one_clause_a_key(&mut kept) {
-                    break;
-                }
+            merge_by_value(&mut kept);
+            // A merge can write one key twice, and the join that makes one
+            // clause of them can write one value twice, or lose the clause
+            // that claimed what a clause admitting every value reads as. So
+            // what a join leaves is read again, and it takes a clause short of
+            // every value each time, which bounds the reading.
+            if one_clause_a_key(&mut kept) {
+                return clauses_over(&kept, open);
             }
         }
         Openness::Closed => {

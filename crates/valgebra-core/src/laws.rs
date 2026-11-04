@@ -6141,17 +6141,21 @@ fn top_clause_key() -> impl Strategy<Value = Schema> {
         Just(Schema::Int.complement()),
         Just(Schema::Str.complement()),
         Just(Schema::Literal(ConstIx::new(0))),
+        Just(Schema::Instance(ClassIx::new(0))),
+        Just(Schema::Instance(ClassIx::new(0)).complement()),
     ]
 }
 
 // THEORY: open-and-close-read-the-region
 /// A key holding two regions a read would free, one after the other, loses both
 /// in one `close`: taking the outer complement out leaves the inner one the
-/// region of what stands, and a second pass would take it.
+/// region of what stands, and a second pass would take it. Over a class, since
+/// the complement law folds the key to one complement over two kinds.
 #[test]
 fn closing_reads_what_stands_of_a_key_until_it_reads_as_itself() {
-    let kinds = Schema::union([Schema::Int, Schema::Str]);
-    let freed = Schema::union([Schema::Int, kinds.complement()]);
+    let class = Schema::Instance(ClassIx::new(0));
+    let both = Schema::union([class.clone(), Schema::Str]);
+    let freed = Schema::union([class.clone(), both.complement()]);
     let freed_again = Schema::union([
         freed.clone(),
         Schema::union([freed, Schema::Str]).complement(),
@@ -6167,30 +6171,70 @@ fn closing_reads_what_stands_of_a_key_until_it_reads_as_itself() {
     let closed = Schema::keyed_map(
         Vec::new(),
         vec![
-            clause(Schema::Int, Schema::ANYTHING),
+            clause(class, Schema::ANYTHING),
             clause(Schema::Str, Schema::Int),
         ],
     );
     assert_eq!(map.with_records_open(Openness::Closed), closed);
 }
 
+// THEORY: open-and-close-read-the-region
+/// Every key is the others' keys beside their complement over a class, as it is
+/// the top: `~K: int` beside either closes to `~K: anything`, the part of the
+/// clause over what the other claims, and opening writes the second of them.
+#[test]
+fn a_class_key_beside_every_key_reads_as_every_key() {
+    let class = Schema::Instance(ClassIx::new(0));
+    let others = class.clone().complement();
+    let clause = |key, value| MapClause { key, value };
+    let beside = |key| {
+        Schema::keyed_map(
+            Vec::new(),
+            vec![
+                clause(others.clone(), Schema::Int),
+                clause(key, Schema::ANYTHING),
+            ],
+        )
+    };
+    let closed = Schema::keyed_map(Vec::new(), vec![clause(others.clone(), Schema::ANYTHING)]);
+    let every_key = Schema::union([others.clone(), class]);
+    assert_eq!(
+        beside(Schema::ANYTHING).with_records_open(Openness::Closed),
+        closed
+    );
+    assert_eq!(
+        beside(every_key.clone()).with_records_open(Openness::Closed),
+        closed
+    );
+    assert_eq!(
+        beside(Schema::ANYTHING).with_records_open(Openness::Open),
+        beside(every_key)
+    );
+}
+
 /// A clause list naming each key once, its keys overlapping as [`top_clause_key`]
-/// and the keys beside it allow: every key, a union of kinds and its complement,
-/// the key `open` writes beside a clause, and that key written a second time.
+/// and the keys beside it allow: every key, a union and its complement, the key
+/// `open` writes beside a clause, and that key written a second time. Each over
+/// two kinds, where the complement law folds much of it, and over a class, where
+/// the constructor reads no such law.
 fn clauses_over_overlapping_keys() -> impl Strategy<Value = Vec<MapClause>> {
-    let kinds = Schema::union([Schema::Int, Schema::Str]);
-    let freed = Schema::union([Schema::Int, kinds.clone().complement()]);
-    let freed_again = Schema::union([
-        freed.clone(),
-        Schema::union([freed.clone(), Schema::Str]).complement(),
-    ]);
+    let written_over = |first: Schema| {
+        let both = Schema::union([first.clone(), Schema::Str]);
+        let freed = Schema::union([first, both.clone().complement()]);
+        let again = Schema::union([
+            freed.clone(),
+            Schema::union([freed.clone(), Schema::Str]).complement(),
+        ]);
+        vec![both.clone(), both.complement(), freed, again]
+    };
+    let forms: Vec<Schema> = written_over(Schema::Int)
+        .into_iter()
+        .chain(written_over(Schema::Instance(ClassIx::new(0))))
+        .collect();
     let key = prop_oneof![
         top_clause_key(),
         Just(Schema::ANYTHING),
-        Just(kinds.clone()),
-        Just(kinds.complement()),
-        Just(freed),
-        Just(freed_again),
+        prop::sample::select(forms),
     ];
     let value = prop_oneof![
         Just(Schema::ANYTHING),
@@ -6843,7 +6887,6 @@ proptest! {
     fn a_clause_list_rewritten_twice_gives_the_term_once_did(
         clauses in clauses_over_overlapping_keys(),
     ) {
-        let pool = const_pool();
         let map = Schema::keyed_map(Vec::new(), clauses.clone());
         for openness in [Openness::Open, Openness::Closed] {
             let once = map.with_records_open(openness);
@@ -6862,12 +6905,13 @@ proptest! {
         let closed = map.with_records_open(Openness::Closed);
         for clause in clauses.iter().filter(|clause| clause.value != Schema::ANYTHING) {
             let claim = Schema::keyed_map(Vec::new(), vec![clause.clone()]);
-            for value in &boundary_values(&[&map, &claim]) {
-                prop_assert!(
-                    !member_full(&claim, value, &pool) || member_full(&closed, value, &pool),
-                    "closing {map:?} takes {value:?} out of the claim {clause:?}"
-                );
-            }
+            prop_assert_ne!(
+                claim.subtype_relation_under(&closed, &NoLeafRelations, &[]),
+                Relation::Fails,
+                "closing {:?} takes values out of the claim {:?}",
+                map,
+                clause
+            );
         }
     }
 
