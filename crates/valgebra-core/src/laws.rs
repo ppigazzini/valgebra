@@ -6260,22 +6260,33 @@ fn a_set_beside_its_complement_is_every_key_to_a_rewrite() {
         let written = map(vec![clause(key, Schema::ANYTHING)]);
         assert_eq!(written.with_records_open(Openness::Closed), written);
     }
+    // The pair is read however deep it stands: the complement of every key holds
+    // no key, so what stands beside it is the whole of the clause.
+    let no_key_beside = Schema::union([
+        class(1),
+        Schema::union([class(0), class(0).complement()]).complement(),
+    ]);
+    assert_eq!(
+        map(vec![clause(no_key_beside, Schema::ANYTHING)]).with_records_open(Openness::Closed),
+        map(vec![clause(class(1), Schema::ANYTHING)])
+    );
 }
 
 /// A clause list naming each key once, its keys overlapping as [`top_clause_key`]
-/// and the keys beside it allow: every key, a union and its complement, the key
-/// `open` writes beside a clause, and that key written a second time. Each over
-/// two kinds, where the complement law folds much of it, and over a class, where
-/// the constructor reads no such law.
+/// and the keys beside it allow: every key, a set beside its complement, a union
+/// and its complement, the key a rewrite reads beside a clause, and that key
+/// written a second time. Each over two kinds, where the complement law folds
+/// much of it, and over a class, where the constructor reads no such law.
 fn clauses_over_overlapping_keys() -> impl Strategy<Value = Vec<MapClause>> {
     let written_over = |first: Schema| {
         let both = Schema::union([first.clone(), Schema::Str]);
-        let freed = Schema::union([first, both.clone().complement()]);
+        let freed = Schema::union([first.clone(), both.clone().complement()]);
         let again = Schema::union([
             freed.clone(),
             Schema::union([freed.clone(), Schema::Str]).complement(),
         ]);
-        vec![both.clone(), both.complement(), freed, again]
+        let every_key = Schema::union([first.clone(), first.complement()]);
+        vec![both.clone(), both.complement(), freed, again, every_key]
     };
     let forms: Vec<Schema> = written_over(Schema::Int)
         .into_iter()
@@ -6297,6 +6308,18 @@ fn clauses_over_overlapping_keys() -> impl Strategy<Value = Vec<MapClause>> {
             .map(|(key, value)| MapClause { key, value })
             .collect()
     })
+}
+
+/// A key with the class [`clauses_over_overlapping_keys`] draws written as a kind
+/// no key there names, through the constructors, so what the complement law folds
+/// over the kind is folded.
+fn with_the_class_a_kind(key: &Schema) -> Schema {
+    match key {
+        Schema::Instance(_) => Schema::Float,
+        Schema::Union(members) => Schema::union(members.iter().map(with_the_class_a_kind)),
+        Schema::Complement(inner) => with_the_class_a_kind(inner).complement(),
+        other => other.clone(),
+    }
 }
 
 fn positive_schema() -> impl Strategy<Value = Schema> {
@@ -6925,7 +6948,9 @@ proptest! {
 
     // THEORY: open-and-close-read-the-region
     /// A clause list naming each key once is rewritten once and for all, and
-    /// closing it takes nothing a clause short of every value admits.
+    /// closing it takes nothing a clause short of every value admits: the clause
+    /// stands over its key, read off the term with a kind written for the class,
+    /// since no relation refutes a pair keyed by a class.
     ///
     /// The draw is keyed by what makes the operators' two folds reach each
     /// other: every key, a kind and its complement, a union, and the key `open`
@@ -6953,15 +6978,70 @@ proptest! {
             }
         }
         let closed = map.with_records_open(Openness::Closed);
+        let stands = |clause: &MapClause| match &closed {
+            Schema::KeyedMap { defaults, .. } => defaults.iter().any(|kept| {
+                with_the_class_a_kind(&kept.key) == with_the_class_a_kind(&clause.key)
+                    && Schema::union([kept.value.clone(), clause.value.clone()]) == kept.value
+            }),
+            _ => false,
+        };
         for clause in clauses.iter().filter(|clause| clause.value != Schema::ANYTHING) {
-            let claim = Schema::keyed_map(Vec::new(), vec![clause.clone()]);
-            prop_assert_ne!(
-                claim.subtype_relation_under(&closed, &NoLeafRelations, &[]),
-                Relation::Fails,
-                "closing {:?} takes values out of the claim {:?}",
+            prop_assert!(
+                stands(clause),
+                "closing {:?} takes the claim {:?} out of {:?}",
                 map,
-                clause
+                clause,
+                closed
             );
+        }
+    }
+
+    // THEORY: open-and-close-read-the-region
+    /// A class key rewrites as a kind does: a kind no other key names, written
+    /// for the class, gives the term the class gave with that kind written in,
+    /// two clauses over one key being one over the join of their values.
+    ///
+    /// The relations and the value oracle read no pair keyed by a class, so this
+    /// is what holds that half of the rewrite to the other, whose sets they do
+    /// read. A list two of whose keys are one key over the kind is no list a
+    /// display writes, and is left out.
+    #[test]
+    fn a_class_key_rewrites_as_a_kind_does(clauses in clauses_over_overlapping_keys()) {
+        let over_a_kind = |clauses: &[MapClause]| {
+            let mut read: Vec<MapClause> = clauses
+                .iter()
+                .map(|clause| MapClause {
+                    key: with_the_class_a_kind(&clause.key),
+                    value: clause.value.clone(),
+                })
+                .collect();
+            read.sort();
+            read.dedup_by(|later, earlier| {
+                let one_key = later.key == earlier.key;
+                if one_key {
+                    earlier.value = Schema::union([earlier.value.clone(), later.value.clone()]);
+                }
+                one_key
+            });
+            read
+        };
+        let kind_clauses = over_a_kind(&clauses);
+        if kind_clauses.len() == clauses.len() {
+            let map = Schema::keyed_map(Vec::new(), clauses);
+            let kind = Schema::keyed_map(Vec::new(), kind_clauses);
+            for openness in [Openness::Open, Openness::Closed] {
+                let (
+                    Schema::KeyedMap { defaults, .. },
+                    Schema::KeyedMap { defaults: by_kind, .. },
+                ) = (map.with_records_open(openness), kind.with_records_open(openness))
+                else {
+                    continue;
+                };
+                prop_assert_eq!(
+                    over_a_kind(&defaults), over_a_kind(&by_kind),
+                    "{:?} of {:?} and of {:?}", openness, map, kind
+                );
+            }
         }
     }
 
