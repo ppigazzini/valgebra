@@ -324,7 +324,8 @@ impl LeafRelations for NoLeafRelations {
 /// constant refuses to lower here and is decided by the rules alone.
 impl Constants for NoLeafRelations {}
 
-/// Whether the intersection contains a schema and its complement (`A ∩ ¬A = ∅`).
+/// Whether the intersection contains a schema and its complement, `A ∩ ¬A` being
+/// empty [FCB08, Def. 4.1].
 ///
 /// The law is a law **about sets**, and it is applied only where both sides are
 /// one. An atom that runs a callback is not: a predicate is arbitrary code
@@ -399,8 +400,9 @@ pub(crate) fn has_complementary_pair_within(
         .any(|inner| denotes_a_set_within(inner, oracle, definitions))
 }
 
-/// The sets among `members` that stand beside their complement, as
-/// [`has_complementary_pair_within`] reads the list, asked of no oracle.
+/// The sets among `members` that stand beside their complement, whose join is
+/// every value and whose meet is none [FCB08, Def. 4.1], as
+/// [`has_complementary_pair_within`] reads the list and asked of no oracle.
 pub(crate) fn complemented_members(
     members: &[Schema],
     connective: Connective,

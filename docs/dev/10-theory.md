@@ -99,7 +99,7 @@ each claimed equivalence against membership rather than asserting it.
 
 SOURCE: §13.2 "**The laws hold by construction**"; §2 "every combinator builds the normal"
 
-IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend, ir.rs::Schema::union_within, ir.rs::Schema::meet_within, ir.rs::Schema::complement, kind.rs::Region::union, kind.rs::Region::intersect, kind.rs::Region::complement, oracle.rs::has_complementary_pair_within, valgebra-py/src/check/walk.rs::check_intersection, decision.rs::pushed_complement_is_placed, decision.rs::merged_split, decision/emptiness.rs::narrowed_by_its_members, decision/emptiness.rs::narrowed_meet, ir.rs::Schema, descr/polar.rs, descr/polar.rs::PolarUnion::union, descr/lines.rs::Line::complement, descr/sets.rs::escapes
+IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend, ir.rs::Schema::union_within, ir.rs::Schema::meet_within, ir.rs::Schema::complement, kind.rs::Region::union, kind.rs::Region::intersect, kind.rs::Region::complement, oracle.rs::has_complementary_pair_within, oracle.rs::complemented_members, valgebra-py/src/check/walk.rs::check_intersection, decision.rs::pushed_complement_is_placed, decision.rs::merged_split, decision/emptiness.rs::narrowed_by_its_members, decision/emptiness.rs::narrowed_meet, ir.rs::Schema, descr/polar.rs, descr/polar.rs::PolarUnion::union, descr/lines.rs::Line::complement, descr/sets.rs::escapes, oracle.rs::has_complementary_pair, decision/emptiness.rs::shares_nothing_beside
 
 HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference, a_complement_is_below_its_complements_pushed_in, a_set_is_below_its_own_split, a_complement_the_relation_empties_is_read_empty, a_meet_of_guards_reads_as_the_meet_of_their_branches, a_reference_and_its_complement_meet_in_nothing
 
@@ -155,7 +155,7 @@ the other members' meet, the identity of [FCB08, §4.1] with `¬¬R` the set `R`
 
 SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
 
-IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision/emptiness.rs::a_class_below_the_complement_beside_it, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::below_by_emptiness, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::verdict_beside, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled, decision/emptiness.rs::Schema::below_the_set_it_complements, decision/emptiness.rs::Schema::complement_of_the_universe, decision/lengths.rs, decision.rs::Schema::union_below, decision.rs::Schema::below_each_member, decision.rs::Schema::below_the_branches_it_can_meet, decision/lengths.rs::lengths_of, decision/lengths.rs::ByLength::relation_to
+IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision/emptiness.rs::a_class_below_the_complement_beside_it, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::below_by_emptiness, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::verdict_beside, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled, decision/emptiness.rs::Schema::below_the_set_it_complements, decision/emptiness.rs::Schema::complement_of_the_universe, decision/lengths.rs, decision.rs::Schema::union_below, decision.rs::Schema::below_each_member, decision.rs::Schema::below_the_branches_it_can_meet, decision/lengths.rs::lengths_of, decision/lengths.rs::ByLength::relation_to, decision.rs::Schema::or_bounded
 
 HELD-BY: the_two_deciders_agree_under_an_oracle, a_meet_holding_a_class_is_empty_below_the_complement_beside_it, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment, a_placement_by_identity_spends_no_step, a_union_is_decided_a_part_at_a_time, a_meet_supertype_is_decided_a_member_at_a_time, test_a_meet_is_refuted_by_one_member_beside_one_no_decider_reads, a_pair_declined_as_written_is_asked_in_its_other_spellings, a_meet_disjoint_from_a_meet_is_refuted
 
@@ -284,7 +284,7 @@ than whether it is empty [Cas23, Rem. 4.3].
 
 SOURCE: §3 "The model behind `Schema::KeyedMap`"; §13.3 "**The representation Theorem 4.2 produces.**"
 
-IMPLEMENTED-BY: decision.rs::Schema::holds_a_value_shallowly, decision/emptiness.rs::intersection_verdict, decision/records.rs::keyed_map_meet_verdict, decision/records.rs::keyed_map_subtype, decision/records.rs::entered, decision/records.rs::Labels::of, descr/maps.rs, descr/maps.rs::Wanted, descr/maps.rs::Search::assign, descr/maps.rs::MapAtom::absorbed, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/maps.rs::MapAtom::complement, descr/maps.rs::MapLattice::record, descr/records.rs, descr/records.rs::Atom::meet, descr/records.rs::Atom::emptiness, descr/records.rs::Atom::complement, descr/records.rs::Atom::tidy, descr/records.rs::RecordLattice::attribute, descr/values.rs::Field::top, descr/values.rs::Field::meet, descr/values.rs::Field::join, descr/values.rs::Field::complement, descr/values.rs::Field::emptiness, descr/lower.rs::map, ir.rs::Schema::record, ir.rs::canonical_fields, ir.rs::already_said, valgebra-py/src/check/walk/record.rs::keyed_map_scan, valgebra-py/src/check/walk/record.rs::keyed_map_asks_for_its_keys, valgebra-py/src/check/walk/record.rs::keyed_map_matches_json, descr/values.rs::Field
+IMPLEMENTED-BY: decision.rs::Schema::holds_a_value_shallowly, decision/emptiness.rs::intersection_verdict, decision/records.rs::keyed_map_meet_verdict, decision/records.rs::keyed_map_subtype, decision/records.rs::entered, decision/records.rs::Labels::of, descr/maps.rs, descr/maps.rs::Wanted, descr/maps.rs::Search::assign, descr/maps.rs::MapAtom::absorbed, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/maps.rs::MapAtom::complement, descr/maps.rs::MapLattice::record, descr/records.rs, descr/records.rs::Atom::meet, descr/records.rs::Atom::emptiness, descr/records.rs::Atom::complement, descr/records.rs::Atom::tidy, descr/records.rs::RecordLattice::attribute, descr/values.rs::Field::top, descr/values.rs::Field::meet, descr/values.rs::Field::join, descr/values.rs::Field::complement, descr/values.rs::Field::emptiness, descr/lower.rs::map, ir.rs::Schema::record, ir.rs::canonical_fields, ir.rs::already_said, valgebra-py/src/check/walk/record.rs::keyed_map_scan, valgebra-py/src/check/walk/record.rs::keyed_map_asks_for_its_keys, valgebra-py/src/check/walk/record.rs::keyed_map_matches_json, descr/values.rs::Field, decision/readings.rs::Schema::admits_the_empty, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::tagged_unions_disjoint
 
 HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition, a_key_of_whole_kinds_opens_the_parts_it_holds
 
@@ -704,7 +704,7 @@ a pop per state; and the start block is renumbered first. The canonical
 numbering then removes the renaming, so two spellings of one word language have
 one table.
 
-IMPLEMENTED-BY: descr/automaton.rs::reaches, descr/automaton.rs::canonical_order, descr/regular.rs, descr/regular.rs::Dfa::is_empty, descr/regular.rs::Dfa::word, descr/regular.rs::Dfa::complement, descr/regular.rs::Dfa::product, descr/regular.rs::Dfa::minimal, descr/regular.rs::Dfa::merge_equivalent, descr/regular.rs::Dfa::equivalent_states, descr/regular.rs::Dfa::coarsen, descr/regular.rs::Dfa::renumber, descr/regular.rs::refine_alphabets, descr/regular.rs::Predecessors::of, descr/regular.rs::Predecessors::leading_to, descr/regular.rs::Partition::by_acceptance, descr/regular.rs::Partition::mark, descr/regular.rs::Partition::cut_marked, descr/regular.rs::RegularSet::determinize, descr/regular.rs::RegularSet::intersect, descr/symbolic.rs, descr/symbolic.rs::Guard, descr/symbolic.rs::SymbolicDfa, descr/symbolic.rs::SymbolicDfa::chain, descr/symbolic.rs::SymbolicDfa::emptiness, descr/symbolic.rs::SymbolicDfa::accepts_under, descr/symbolic.rs::SymbolicDfa::complement, descr/symbolic.rs::SymbolicDfa::intersect, descr/symbolic.rs::SymbolicDfa::product, descr/symbolic.rs::SymbolicDfa::merge_targets, descr/symbolic.rs::SymbolicDfa::sorted, descr/symbolic.rs::partition, descr/symbolic.rs::rest_of, descr/regular.rs::Dfa::wtf8, descr/regular.rs::RegularSet
+IMPLEMENTED-BY: descr/automaton.rs::reaches, descr/automaton.rs::canonical_order, descr/regular.rs, descr/regular.rs::Dfa::is_empty, descr/regular.rs::Dfa::word, descr/regular.rs::Dfa::complement, descr/regular.rs::Dfa::product, descr/regular.rs::Dfa::minimal, descr/regular.rs::Dfa::merge_equivalent, descr/regular.rs::Dfa::equivalent_states, descr/regular.rs::Dfa::coarsen, descr/regular.rs::Dfa::renumber, descr/regular.rs::refine_alphabets, descr/regular.rs::Predecessors::of, descr/regular.rs::Predecessors::leading_to, descr/regular.rs::Partition::by_acceptance, descr/regular.rs::Partition::mark, descr/regular.rs::Partition::cut_marked, descr/regular.rs::RegularSet::determinize, descr/regular.rs::RegularSet::intersect, descr/symbolic.rs, descr/symbolic.rs::Guard, descr/symbolic.rs::SymbolicDfa, descr/symbolic.rs::SymbolicDfa::chain, descr/symbolic.rs::SymbolicDfa::emptiness, descr/symbolic.rs::SymbolicDfa::accepts_under, descr/symbolic.rs::SymbolicDfa::complement, descr/symbolic.rs::SymbolicDfa::intersect, descr/symbolic.rs::SymbolicDfa::product, descr/symbolic.rs::SymbolicDfa::merge_targets, descr/symbolic.rs::SymbolicDfa::sorted, descr/symbolic.rs::partition, descr/symbolic.rs::rest_of, descr/regular.rs::Dfa::wtf8, descr/regular.rs::RegularSet, descr/regular.rs::Dfa::dead_state
 
 HELD-BY: the_halves_cut_where_the_rounds_do, a_cut_moves_the_smaller_part, a_cut_of_a_queued_block_queues_both_parts, two_spellings_of_one_language_are_one_set, being_equal_is_holding_the_same_language, a_complement_is_already_minimal
 
@@ -833,14 +833,14 @@ whatever constructor stands between the two, the record holding values of every
 kind. Read the other way round, with the subject cut to the bottom and the
 supertype to the top, a recursive type lies below the type it cuts [AC93, §3.4],
 so that difference lies inside the real one: a value it holds refutes at every
-kind, and its emptiness proves nothing. A conjunct at the top that the lowering refuses -- a meet's member, a
-refinement's constraint -- is left out the same way, a meet being below each of
-its members [FCB08, Def. 4.1], so emptiness is monotone in a meet's members.
-**[LOAD-BEARING: a-cut-reference-proves]**
+kind, and its emptiness proves nothing. A conjunct at the top that the lowering
+refuses -- a meet's member, a refinement's constraint -- is left out the same
+way, a meet being below each of its members [FCB08, Def. 4.1], so emptiness is
+monotone in a meet's members. **[LOAD-BEARING: a-cut-reference-proves]**
 
 SOURCE: §13.1 "**The polarity cut is one-directional.**"
 
-IMPLEMENTED-BY: decision.rs::Schema::descriptor_contained_in, decision.rs::Schema::refuted_narrowed, ir/transform.rs::Polarity::flipped, ir/transform.rs::Schema::unfolded, descr/lower.rs::read_widened, descr/lower.rs::parts_a_cut_reaches, descr/mod.rs::Descr::holds_a_value_outside
+IMPLEMENTED-BY: decision.rs::Schema::descriptor_contained_in, decision.rs::Schema::refuted_narrowed, ir/transform.rs::Polarity::flipped, ir/transform.rs::Schema::unfolded, descr/lower.rs::read_widened, descr/lower.rs::parts_a_cut_reaches, descr/mod.rs::Descr::holds_a_value_outside, ir/transform.rs::Polarity
 
 HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_only_past_the_cut, a_cut_reaches_the_kind_of_the_constructor_above_it, a_cut_beneath_an_attribute_record_reaches_every_part, a_refutation_beneath_an_attribute_record_is_a_value_of_its_field, test_a_cut_beneath_an_attribute_record_refutes_no_value, a_narrowed_difference_lies_inside_the_real_one, a_refutation_by_the_narrowed_reading_is_a_value, a_value_no_cut_reaches_refutes_without_a_second_reading, a_value_of_the_narrowed_difference_refutes_at_a_kind_a_cut_reaches, test_a_value_below_every_cut_refutes_at_any_kind, a_value_of_no_kind_refutes_past_a_cut, test_a_value_of_a_kind_no_cut_reaches_refutes_a_fixpoint, a_cut_reference_widens_the_subject_and_narrows_the_other, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding, a_meet_is_proved_empty_beside_a_conjunct_the_lowering_refuses, a_reference_above_is_unfolded_for_the_sets, a_meet_stays_empty_beside_a_member_no_lowering_reads, test_a_meet_stays_empty_beside_a_member_no_lowering_reads, test_a_meet_of_patterns_is_empty_beside_a_predicate, a_member_past_the_depth_is_left_out_whatever_it_holds, a_member_whose_key_is_its_deepest_node_is_kept, a_thinned_reading_that_can_only_be_inhabited_is_built_where_it_answers, a_thinned_reading_the_rules_find_a_value_of_is_not_built, a_meet_holding_a_deep_scalar_is_read_first_without_it, a_deep_scalar_is_built_whole_where_the_caller_can_read_it
 
@@ -1071,12 +1071,12 @@ each region carrying a default of its own [Cas23, Def. 4.6]. A clause short of
 every value claims its keys; the clauses admitting every value are one clause
 over the union of their keys, the wildcard of [Cas23, §4.4] written as the union
 [Cas23, fn. 15] reads one as, sugar for the key types no clause names
-[Cas23, fn. 13], of which the part over keys another clause claims stays and the
-rest is the region. So a mapping opened keeps what a `str` key maps to and
-admits an `int` key with any value, one clause is read the same whether or not a
-field is declared beside it, and the top split over `str` and `complement(str)`
-closes as the top does. Every record is rewritten, the one a clause maps a key
-to included. A rewrite names each key once, and where that join would write the
+[Cas23, fn. 13], of which the part over keys another clause claims stays and the rest is
+the region. So a mapping opened keeps what a `str` key maps to and admits an
+`int` key with any value, one clause is read the same whether or not a field is
+declared beside it, and the top split over `str` and `complement(str)` closes as
+the top does. Every record is rewritten, the one a clause maps a key to
+included. A rewrite names each key once, and where that join would write the
 term of a region a clause claims, the list stands as written: every key of
 `{anything: int, int: anything, complement(int): anything}` is claimed, and the
 top clause it would join to closes to `{}`. A record of the paper writes no such
@@ -1084,15 +1084,16 @@ list, its keys being disjoint [Cas23, §4.4], so that answer is read off these
 statements rather than off the paper. A set and its complement join to every key
 [FCB08, Def. 4.1], and a rewrite reads them so whatever the constructor folds, a
 class among them: an atom answering one way for a key makes the pair every key,
-and one answering two ways leaves the list no set for a rewrite to move. What the laws hold of the sets is narrower than "a function of the
-set": closing commutes with absorption, applying either operator twice gives the
-term applying it once gave, a name the rewritten clauses say being dropped in
-the first pass, and a name saying what its record says of every key it does not
-name moves no set either operator gives. **[OBLIGATION: open-and-close-read-the-region]**
+and one answering two ways leaves the list no set for a rewrite to move. What
+the laws hold of the sets is narrower than "a function of the set": closing
+commutes with absorption, applying either operator twice gives the term applying
+it once gave, a name the rewritten clauses say being dropped in the first pass,
+and a name saying what its record says of every key it does not name moves no
+set either operator gives. **[OBLIGATION: open-and-close-read-the-region]**
 
 SOURCE: §14.6 "Operators belong on the representation built for them"
 
-IMPLEMENTED-BY: ir/transform.rs::Schema::with_records_open, ir.rs::unclaimed_region, ir.rs::claimed_beside_the_region, ir.rs::clauses_over, ir.rs::tops_merged, ir.rs::merge_by_value, ir.rs::keys_joined
+IMPLEMENTED-BY: ir/transform.rs::Schema::with_records_open, ir.rs::unclaimed_region, ir.rs::claimed_beside_the_region, ir.rs::clauses_over, ir.rs::tops_merged, ir.rs::merge_by_value, ir.rs::keys_joined, ir.rs::key_read
 
 HELD-BY: test_opening_a_mapping_frees_the_keys_no_clause_claims, test_a_clause_is_read_the_same_with_or_without_a_field_beside_it, test_one_term_closes_one_way_whichever_reading_wrote_it, test_closing_commutes_with_absorption, closing_commutes_with_absorption, opening_or_closing_twice_gives_the_term_once_did, a_clause_list_rewritten_twice_gives_the_term_once_did, closing_reads_what_stands_of_a_key_until_it_reads_as_itself, a_class_key_beside_every_key_reads_as_every_key, a_set_beside_its_complement_is_every_key_to_a_rewrite, a_class_key_rewrites_as_a_kind_does, test_the_round_trip_over_a_class_is_at_most_closing, test_a_list_claiming_every_key_closes_to_itself, test_opening_folds_until_neither_fold_applies, test_a_class_key_beside_every_key_opens_once_and_closes_as_it_did, with_records_open_reaches_the_record_a_clause_maps_to, test_opening_reaches_the_record_a_mapping_maps_to, opening_widens_closing_narrows_and_the_round_trip_is_at_most_closing, closing_an_opened_mapping_takes_out_the_region_opening_freed, test_closing_an_opened_mapping_takes_out_only_the_region_opening_freed, opening_under_a_complement_narrows_and_closing_widens, closing_an_opened_record_is_not_closing_the_record, test_closing_an_opened_schema_is_not_closing_it, a_name_the_record_already_says_moves_no_set_either_operator_gives
 

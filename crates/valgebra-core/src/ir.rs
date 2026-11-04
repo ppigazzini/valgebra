@@ -413,7 +413,8 @@ fn keys_joined(keys: impl IntoIterator<Item = Schema>) -> Schema {
     if every_key { Schema::ANYTHING } else { joined }
 }
 
-/// A key as a rewrite reads it: each join in it read by [`keys_joined`], so what
+/// A key as a rewrite reads it: each join in it read by [`keys_joined`], and the
+/// complement of what stands, every key's being none [FCB08, Def. 4.1], so what
 /// stands of a class is what stands of a kind, whose join the constructor folds.
 fn key_read(key: &Schema) -> Schema {
     match key {
@@ -526,7 +527,9 @@ fn claimed_beside_the_region(
 /// closing frees none, and the join writes `{anything: anything}`, the term of
 /// the whole region, which a second `close` takes out. No shorter term says what
 /// the list says, so a join is kept only where the list it writes closes to
-/// itself, and otherwise the list stands. Either way the answer closes to itself,
+/// itself, and otherwise the list stands. A record of the paper writes no such
+/// list, its keys being disjoint [Cas23, §4.4], so this departs from it only where
+/// it says nothing. Either way the answer closes to itself,
 /// and a list naming each key once keeps no value the read took out by standing:
 /// the join leaves a term reading otherwise only where the clause it wrote and
 /// the others cover every key, which leaves no key to free.

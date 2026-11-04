@@ -245,9 +245,10 @@ impl SeqShape {
 /// Which side of an inclusion a schema is read on.
 ///
 /// An unfolding cuts the reference no finite representation holds, and which
-/// lattice bound it cuts to depends on the side. Named rather than spelled as a
-/// `bool`, because the two members are what the soundness of a difference turns
-/// on and a call site reading `true` says nothing about which side that is.
+/// lattice bound it cuts to depends on the side [AC93, §3.4]. Named rather than
+/// spelled as a `bool`, because the two members are what the soundness of a
+/// difference turns on and a call site reading `true` says nothing about which
+/// side that is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Polarity {
     /// A cut reference becomes the top, so the lowered set is at least the one

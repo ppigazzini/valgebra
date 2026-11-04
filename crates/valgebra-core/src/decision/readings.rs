@@ -38,10 +38,11 @@ impl Schema {
     /// [FCB08, (5)] (distinct builtin scalars, distinct container kinds, a
     /// refinement's base versus another, a union whose every member is, a meet
     /// one of whose members with a kind of its own is against a schema with a
-    /// kind, two homogeneous sequences or sets of one
-    /// container whose elements share no value where a length bound rules out
-    /// the empty one), and false (conservatively) where it cannot decide:
-    /// `Any`, a reference and a complement.
+    /// kind, two homogeneous sequences or sets of one container whose elements
+    /// share no value where a length bound rules out the empty one, two records
+    /// requiring a key whose schemas share none [Cas23, (11)]), and false
+    /// (conservatively) where it cannot decide: `Any`, a reference and a
+    /// complement.
     ///
     /// A `Literal` and an `Instance` are read through the `oracle`, which holds
     /// the constants and the classes the core cannot: it kinds a literal,
@@ -98,10 +99,12 @@ impl Schema {
             }
             // Two records requiring one key share no value where the key's two
             // schemas share none: a dict in both holds the key, and its value
-            // there is in both schemas. A discriminated union is two sets of
-            // such records, told apart by a constant under one key, and the
-            // union arms above read it a record pair at a time, so its meet is
-            // empty without the distribution of every pair into a record.
+            // there is in both schemas, two record atoms meeting pointwise
+            // [Cas23, (12)] and empty where a required label is [Cas23, (11)].
+            // A discriminated union is two sets of such records, told apart by
+            // a constant under one key, and the union arms above read it a
+            // record pair at a time, so its meet is empty without the
+            // distribution of every pair into a record.
             (Schema::KeyedMap { fields: mine, .. }, Schema::KeyedMap { fields: theirs, .. }) => {
                 return mine.iter().filter(|field| field.required).any(|field| {
                     theirs.iter().any(|other| {
@@ -538,13 +541,13 @@ impl Schema {
     ///
     /// A sequence shape with no prefix admits the empty sequence of its kind, a
     /// set shape the empty set of its kind whatever its element admits, and a
-    /// mapping the empty dict where it requires no field -- no key is missing,
-    /// and none is left for a clause to cover. A subclass's empty instance
-    /// is admitted with the rest, since each node reads its container by the
-    /// storage. A refinement of one keeps it under length bounds that admit
-    /// zero; a predicate says nothing. The other supertypes never reach this:
-    /// the rules settle the universe before any reading, and split a union and
-    /// a meet into the members this reads.
+    /// mapping the empty dict where it requires no field [Cas23, fn. 11] -- no
+    /// key is missing, and none is left for a clause to cover. A subclass's
+    /// empty instance is admitted with the rest, since each node reads its
+    /// container by the storage. A refinement of one keeps it under length
+    /// bounds that admit zero; a predicate says nothing. The other supertypes
+    /// never reach this: the rules settle the universe before any reading, and
+    /// split a union and a meet into the members this reads.
     #[inline(never)]
     pub(super) fn admits_the_empty(&self, kind: Kind) -> bool {
         match self {
@@ -1363,11 +1366,11 @@ impl Schema {
 /// unions or the oracle declines to pair their constants ([`tag_pairs`]).
 ///
 /// Two records requiring one key share no value where its two schemas share
-/// none (the record pair arm of [`Schema::disjoint_with`]), and two constants
-/// apart are two such schemas, so a pair of records pinned to constants apart
-/// is disjoint by its tag. The pairs the oracle names are read whole, and
-/// every other pair is answered by the tags: the answer the pairwise arms
-/// give, for one pass over the tags in place of a question a pair.
+/// none [Cas23, (11)], the record pair arm of [`Schema::disjoint_with`], and
+/// two constants apart are two such schemas, so a pair of records pinned to
+/// constants apart is disjoint by its tag. The pairs the oracle names are read
+/// whole, and every other pair is answered by the tags: the answer the pairwise
+/// arms give, for one pass over the tags in place of a question a pair.
 ///
 /// Out of line, asked where the first member is a record.
 #[inline(never)]

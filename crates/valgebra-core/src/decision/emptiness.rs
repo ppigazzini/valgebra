@@ -1090,11 +1090,12 @@ pub(super) fn narrowed_meet(members: &[Schema], cx: &Cx<'_>) -> Option<Schema> {
 }
 
 /// Whether `branch` shares no value with the members of a meet other than the
-/// one at `at`, by a complement and nothing else: it is the complement of one of
-/// them, of a meet whose conjuncts are among them, or of a union holding one of
-/// them; or one of them is its complement, or the complement of a union holding
-/// it, which a guard's own union flattens `¬¬(a ∪ b)` into. Each of those must
-/// be a set. The kinds are left to the rules the narrowed meet reaches: a branch
+/// one at `at`, a set sharing none with its complement [FCB08, Def. 4.1]. That
+/// is all it reads: `branch` is the complement of one of them, of a meet whose
+/// conjuncts are among them, or of a union holding one of them; or one of them
+/// is its complement, or the complement of a union holding it, which a guard's
+/// own union flattens `¬¬(a ∪ b)` into. Each of those must be a set. The kinds
+/// are left to the rules the narrowed meet reaches: a branch
 /// dropped for its kind can take with it the half of a complementary pair the
 /// meet's constructor would fold.
 fn shares_nothing_beside(branch: &Schema, members: &[Schema], at: usize, cx: &Cx<'_>) -> bool {

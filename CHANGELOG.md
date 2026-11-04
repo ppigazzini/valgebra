@@ -316,16 +316,17 @@ answer of its own, or a repair to a change not yet released.
   `not_subset` of `Annotated[dict[str, int], MinLen(2)]` and holds a value at
   all, which a bound over a mapping's clauses did not say.
 
-- **A union holding a complement is asked as its difference.** `a <= b | ~c`
-  is `(a & c) & ~b` empty, which is `a & c <= b`, both ways, and a pair every
-  decider declines is asked so where `c` denotes a set. `anything` below
-  `~dict | x` is the dicts below `x`: `dict | ~dict | x`, which construction
-  folds to `anything`, is refuted below `~dict | x` where `dict` is below
-  `x` alone, as it was before `{"a?": object}.open()` came to spell
-  `dict[anything, anything]`. The dict kind's top, a member of such a union,
-  is `~~dict`, so `a <= b | dict` is `a & ~dict <= b`: `X | dict` is proved
-  to hold everything where `X` holds every value that is not a dict. A union
-  of a predicate and its complement is not the top and is not read so.
+- **A union holding a complement is asked as its difference.** `a <= b | ~c` is
+  `(a & c) & ~b` empty, which is `a & c <= b`, both ways, and a pair every
+  decider declines is asked so where `c` denotes a set, then as that difference
+  read empty the way `is_empty` reads it. `anything` below `~dict | x` is the
+  dicts below `x`: `dict | ~dict | x`, which construction folds to `anything`,
+  is refuted below `~dict | x` where `dict` is below `x` alone, as it was before
+  `{"a?": object}.open()` came to spell `dict[anything, anything]`. The dict
+  kind's top, a member of such a union, is `~~dict`, so `a <= b | dict` is `a &
+  ~dict <= b`: `X | dict` is proved to hold everything where `X` holds every
+  value that is not a dict. A union of a predicate and its complement is not the
+  top and is not read so.
 
 - **A set's and a record's lengths are read off their shapes.** A set holds
   each member once, so it is no longer than the values its element holds

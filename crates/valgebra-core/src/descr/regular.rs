@@ -231,8 +231,8 @@ impl Dfa {
     /// The state no word leads from to acceptance, where the table has one.
     ///
     /// A minimal table has one at most: every state that accepts nothing is
-    /// equivalent to every other such state, so they merge, and the one left
-    /// leads only to states that accept nothing -- to itself.
+    /// equivalent to every other such state [DV14, Def. 3], so they merge, and
+    /// the one left leads only to states that accept nothing -- to itself.
     fn dead_state(&self) -> Option<u32> {
         (0..self.state_count()).find_map(|state| {
             let state = u32::try_from(state).ok()?;

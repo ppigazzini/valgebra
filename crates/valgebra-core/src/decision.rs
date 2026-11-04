@@ -1166,10 +1166,10 @@ impl Schema {
             let narrowed =
                 Schema::meet_within(core::iter::once(self.clone()).chain(inners), cx.defs);
             let rest = Schema::union_within(rest.into_iter().cloned(), cx.defs);
-            // Then as the difference itself, read as `is_empty` reads it, which
-            // empties a member of the subject where the rules decline the meet
-            // below the rest. That reading folds no predicate's complement, so a
-            // predicate in the union is no excluded middle here either.
+            // Then as the difference itself [FCB08, §4.1], read as `is_empty` reads
+            // it, which empties a member of the subject where the rules decline the
+            // meet below the rest. That reading folds no predicate's complement, so
+            // a predicate in the union is no excluded middle here either.
             return narrowed.is_subtype_rec(&rest, cx).or_else(|| {
                 let difference =
                     Schema::meet_within([self.clone(), other.clone().complement()], cx.defs);
@@ -2526,7 +2526,8 @@ impl Schema {
         }
     }
 
-    /// `∅ ⊆ B`, asked where the rules declined.
+    /// An empty subject below `B` [BBC+26, (uninhabited)], asked where the rules
+    /// declined.
     ///
     /// The remaining lattice bound, and the one that costs a walk: whether the
     /// *subject* is empty. It is asked last rather than first because a proof
