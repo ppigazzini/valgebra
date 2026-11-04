@@ -1139,6 +1139,10 @@ nothing behind them; `--binding-relation` relates two dataclasses through
   or the same value in every field -- so a caller cannot observe which handle
   it got; and the table is what makes two equal schemas cheap for a relation to
   compare.
+- **A record opened pays one test.** `clauses_over` answers a node with no
+  clauses in its caller and reads a clause list out of line (`clauses_over_a_list`
+  in `ir.rs`): with the whole function a call, opening the core workload's records
+  reads 1.9% dearer.
 - **Lists are assembled in per-thread buffers** and moved into the node, and
   the lists every record shares -- an open record's catch-all, a closed one's
   empty one -- are allocated once for the process.

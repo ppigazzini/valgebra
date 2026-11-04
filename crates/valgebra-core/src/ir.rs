@@ -533,6 +533,7 @@ fn claimed_beside_the_region(
 /// and a list naming each key once keeps no value the read took out by standing:
 /// the join leaves a term reading otherwise only where the clause it wrote and
 /// the others cover every key, which leaves no key to free.
+#[inline]
 fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
     // A node with no clauses claims no key, so the unclaimed region is the
     // whole key space and the answer is the shared list either way: the top
@@ -541,6 +542,14 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
     if defaults.is_empty() {
         return clauses_for(open);
     }
+    clauses_over_a_list(defaults, open)
+}
+
+/// [`clauses_over`] where the node carries clauses, each region with a default
+/// of its own [Cas23, Def. 4.6]. Out of line, so a record opened pays the one
+/// test.
+#[inline(never)]
+fn clauses_over_a_list(defaults: &[MapClause], open: Openness) -> Clauses {
     // Whoever wrote a key, the rest reads it as [`key_read`] does. An atom holds
     // nothing to read, which is most of what is rewritten.
     let keys_read;
