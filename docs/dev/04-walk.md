@@ -839,7 +839,11 @@ wheels, and moves no shape that reads neither by more than 0.02%. A record's own
 check is a call from `member`'s arm (`check_keyed_map_apart`), so a change to it
 leaves the walk laid out as it was: inlined there, it took the list nested
 twenty-five deep 10% more cycles than behind the call in the profiled 3.14
-wheel, and 16% more in the 3.12 one. A record the walk reaches alone pays the
+wheel, and 16% more in the 3.12 one. A literal's check is a call for the same
+reason (`check_literal`): a relation walks a literal's constant, so a profile
+reads it as hot, and inlined there its explaining half puts 300 instructions and
+48 bytes of frame in every node, which reads that list 1.2% dearer in
+instructions and 4.2% in cycles. A record the walk reaches alone pays the
 call, and the buffers its deciding pass borrows pay it back: a three-field
 record reads one instruction more than with the check inlined. The reader of a list of records, out of line itself, inlines the check, which
 called would cost the list 6.5% to 7% of its instructions. Even the

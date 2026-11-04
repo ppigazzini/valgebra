@@ -245,6 +245,14 @@ fn record_mismatch(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_,
         .push(mismatch(schema, value, frame.path, frame.ctx));
 }
 
+/// Whether `value` is a member of the literal at `index`, the model's singleton
+/// [FCB08, §4.2] widened to the values `==` joins to its constant.
+///
+/// Out of line: a relation walks a literal's constant, so a profile reads this
+/// as hot, and inlined into [`member`] its explaining half puts 300 instructions
+/// and 48 bytes of frame in every node of every walk, which reads a list nested
+/// twenty-five deep 4% dearer in cycles.
+#[inline(never)]
 pub(super) fn check_literal(
     index: ConstIx,
     value: &Value<'_, '_>,

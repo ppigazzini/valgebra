@@ -663,6 +663,12 @@ program that builds validators per request, and to no validation call.
   `{str: int, int: bool}` costs 41% to 42% fewer instructions than the scan
   on the profiled 3.12 and 3.14 wheels. A Rust test holds the direct reading
   to the walk's verdict for every scalar schema against every kind of value.
+- **A literal's check stays out of the walk's every node.** A relation walks a
+  literal's constant, so a profile reads `check_literal` as hot, and inlined into
+  `member` its explaining half puts 300 instructions and 48 bytes of frame in
+  every node of every walk: a list nested twenty-five deep reads 1.2% more
+  instructions and 4.2% more cycles. It is out of line, so the profile a relation
+  trains cannot bring it back.
 - **An instance of the class itself is read off its type pointer.**
   `type(obj) is C` answers `isinstance(obj, C)` before `C.__instancecheck__` is
   asked, which is the test CPython's `PyObject_IsInstance` makes first
@@ -1217,6 +1223,10 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   functions aligned to 64 bytes 2.0%, for a library 1.5% larger; every other
   shape moves about 1% either way under either, inside its own shape's spread.
   Read with `perf_inspect.py cycles`, thirty rounds.
+
+- **A tagged union's test at the first branch walked**, rather than before the
+  scan: a union of scalars reads 0.37% cheaper, and a recursive schema 0.83%
+  dearer and a union of literals 0.18% dearer, for the same two tests.
 
 ## Regression gate
 
