@@ -981,17 +981,16 @@ impl Schema {
 }
 
 /// [`Schema::spills_a_kind`] past its shape test: the kinds the subject holds
-/// whole, less those the supertype may hold any value of. Asked of any subject
-/// by the respelling of a pair the rules declined, where it is the kinds the
-/// difference holds whole.
+/// whole, less those the supertype may hold any value of, each kind a question
+/// of its own [FCB08, (4)]. Asked of any subject by the respelling of a pair the
+/// rules declined, where it is the kinds the difference holds whole.
 ///
-/// The supertype is read first: a refutation needs a kind it holds none of,
-/// and a supertype that may hold every kind -- a complement, a schema the
-/// reading cannot open -- ends the question before the subject is walked.
+/// The subject is read first: most subjects hold no kind whole, which ends the
+/// question before the supertype is walked.
 #[inline(never)]
 pub(super) fn spills_a_kind_into(subject: &Schema, other: &Schema, cx: &Cx<'_>) -> bool {
-    let held = other.kinds_possibly_held(cx.oracle, cx.defs);
-    held != EVERY_KIND && subject.kinds_held_whole(cx.oracle, cx.defs) & !held != 0
+    let whole = subject.kinds_held_whole(cx.oracle, cx.defs);
+    whole != 0 && whole & !other.kinds_possibly_held(cx.oracle, cx.defs) != 0
 }
 
 /// A set of kinds, one bit per place in [`Kind::ALL`].

@@ -988,7 +988,9 @@ as a list against a length-bounded list of the same element.
   first looked for among the union's branches, which keeps widening a literal
   union linear in its members; and the readings that refute a pair no rule
   places are asked in the order they cost, the walk of both subtrees last
-  (`crates/valgebra-core/src/decision.rs`).
+  (`crates/valgebra-core/src/decision.rs`). A kind refutation reads the subject's
+  whole kinds first, since most subjects hold none and the supertype then goes
+  unwalked (`spills_a_kind_into`).
 - **The set representation is asked only where the rules are silent.** Both
   deciders answer in three values, so the descriptor is asked where the rules
   answer *unknown*, never where they proved the answer.
@@ -1231,6 +1233,9 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   shape moves about 1% either way under either, inside its own shape's spread.
   Read with `perf_inspect.py cycles`, thirty rounds.
 
+- **Forcing the emptiness entry into its callers**: `#[inline]` on `verdict_rec`
+  or `empty_and_region` changes no count, and `#[inline(always)]` moves the call
+  one frame down and reads the relation matrix 0.06% dearer.
 - **A tagged union's test at the first branch walked**, rather than before the
   scan: a union of scalars reads 0.37% cheaper, and a recursive schema 0.83%
   dearer and a union of literals 0.18% dearer, for the same two tests.
