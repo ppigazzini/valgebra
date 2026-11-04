@@ -79,8 +79,8 @@ assert Validator(int).is_valid(7)
 PyPy 3.11 is a target on Linux. Wheels are published for PyPy 7.3 and
 for PyPy 8.0 on manylinux x86_64 and aarch64 — two, because PyPy 8.0 changed
 the ABI tag and an installer matches it exactly, so a wheel for one does not
-install on the other — and for the PyPy the musl build image carries on
-musllinux. Every push builds the extension against PyPy, imports it, and runs
+install on the other — and on musllinux for what the musl build image carries,
+PyPy 3.11 on 7.3 and PyPy 3.12 on 8.0. Every push builds the extension against PyPy, imports it, and runs
 the product suite there, with the repository checks whose answer is the
 interpreter's. Both halves
 are needed, because the C API PyPy offers is not CPython's: an extension there
@@ -97,8 +97,8 @@ free-threaded interpreters, and imports and checks the releases between -- the
 `smoke` and `smoke-musl` matrices in `.github/workflows/release.yml` name them --
 and each PyPy wheel on the PyPy it is built for, not only on the one the push
 lane builds. The musllinux sets run in Alpine containers, which carry no
-free-threaded CPython and no PyPy, so those two musllinux wheels are built and
-not loaded (`docs/dev/09-releasing.md` in the repository). There is
+free-threaded CPython and no PyPy, so those musllinux wheels are built and not
+loaded (`docs/dev/09-releasing.md` in the repository). There is
 no PyPy wheel for macOS or Windows, where the source distribution is the
 install.
 

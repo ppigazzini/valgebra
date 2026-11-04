@@ -64,7 +64,9 @@ NOT_SMOKED: dict[str, str] = {}
 #: is neither loaded nor here fails it.
 UNLOADABLE = {
     "cp314t": "no Alpine image carries a free-threaded CPython",
+    "cp315t": "no Alpine image carries a free-threaded CPython",
     "pypy311_pp73": "no Alpine image carries a PyPy",
+    "pypy312_pp80": "no Alpine image carries a PyPy",
 }
 
 
@@ -267,16 +269,33 @@ def test_a_set_its_image_chooses_is_read_off_its_artifact() -> None:
 
 
 def _wheel(tag: str) -> str:
-    python = tag.removesuffix("t") if tag.startswith("cp") else "pp311"
+    python = (
+        tag.removesuffix("t")
+        if tag.startswith("cp")
+        else tag.split("_", maxsplit=1)[0].replace("pypy", "pp")
+    )
     return f"valgebra-0.0.18-{python}-{tag}-musllinux_1_2_x86_64.whl"
 
 
 @pytest.mark.parametrize(
     ("tags", "ends"),
     [
-        (["cp311", "cp312", "cp313", "cp314", "cp314t", "pypy311_pp73"], 0),
-        (["cp311", "cp314", "cp315"], 1),
-        (["cp310", "cp311", "cp314"], 1),
+        (
+            [
+                "cp311",
+                "cp312",
+                "cp313",
+                "cp314",
+                "cp314t",
+                "cp315",
+                "cp315t",
+                "pypy311_pp73",
+                "pypy312_pp80",
+            ],
+            0,
+        ),
+        (["cp311", "cp315", "cp316"], 1),
+        (["cp310", "cp311", "cp315"], 1),
         ([], 1),
     ],
     ids=[

@@ -390,17 +390,17 @@ jobs:
     # the product suite on the floor and the newest release, an import, the one
     # check and the bounds file on the releases between, as the glibc rows do.
     # The aarch64 set, cross-built on an x86_64 runner, runs on an arm64 one. No
-    # Alpine image carries a free-threaded CPython or a PyPy, so the cp314t and
-    # pp311 musllinux wheels are built and not loaded. The build row names no
-    # interpreter -- the image builds every one it carries -- so the set is read
-    # off the artifact, and a wheel no container loaded and no reason names
-    # fails the smoke; `tests/test_release_smoke.py` holds the reasons.
+    # Alpine image carries a free-threaded CPython or a PyPy, so the cp314t,
+    # cp315t, pp311 and pp312 musllinux wheels are built and not loaded. The build
+    # row names no interpreter -- the image builds every one it carries -- so the
+    # set is read off the artifact, and a wheel no container loaded and no reason
+    # names fails the smoke; `tests/test_release_smoke.py` holds the reasons.
     strategy:
       fail-fast: false
       matrix:
         wheel:
-          - { name: linux-x86_64-musl, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-musllinux_1_2, pythons: "3.11 3.14", imports: "3.12 3.13" }
-          - { name: linux-aarch64-musl, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-aarch64-musllinux_1_2, pythons: "3.11 3.14", imports: "3.12 3.13" }
+          - { name: linux-x86_64-musl, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-musllinux_1_2, pythons: "3.11 3.15", imports: "3.12 3.13 3.14" }
+          - { name: linux-aarch64-musl, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-aarch64-musllinux_1_2, pythons: "3.11 3.15", imports: "3.12 3.13 3.14" }
     runs-on: ${{ matrix.wheel.runner }}
     timeout-minutes: 45
     steps:
@@ -446,7 +446,7 @@ jobs:
         env:
           LOADED: ${{ matrix.wheel.pythons }} ${{ matrix.wheel.imports }}
           # No Alpine image carries a free-threaded CPython or a PyPy.
-          UNLOADABLE: cp314t pypy311_pp73
+          UNLOADABLE: cp314t cp315t pypy311_pp73 pypy312_pp80
         run: |
           status=0
           for wheel in dist/*.whl; do

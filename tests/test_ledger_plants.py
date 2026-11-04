@@ -4783,8 +4783,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/release.yml",
-            "UNLOADABLE: cp314t pypy311_pp73",
-            "UNLOADABLE: cp314t cp315 pypy311_pp73",
+            "UNLOADABLE: cp314t cp315t pypy311_pp73 pypy312_pp80",
+            "UNLOADABLE: cp314t cp315 cp315t pypy311_pp73 pypy312_pp80",
         ),
         trips=("test_a_set_its_image_chooses_is_read_off_its_artifact",),
     ),

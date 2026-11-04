@@ -1165,8 +1165,8 @@ with every warning an error; the PyPy wheel the image also builds is the
 wheel that builds and does not load would otherwise wait for the release smoke.
 
 **PyPy builds, links, and runs the suite.** The release matrix publishes PyPy
-3.11 wheels for each ABI on manylinux and for the one the musllinux image
-carries (`release.yml` owns the rows), and a push that does not link against
+3.11 wheels for each ABI on manylinux, and on musllinux a wheel for each PyPy
+the image carries (`release.yml` owns the rows), and a push that does not link against
 PyPy cannot see what
 breaks there: `cpyext` carries the limited API and not every static type object
 CPython exports, so an extension naming one links on CPython and fails at

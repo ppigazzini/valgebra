@@ -296,9 +296,9 @@ and a row that leaves its interpreters to the build image named too.
   Linux x86_64 build. Every other wheel is a build of its own, for another
   platform, architecture or implementation, and no count reads it against the
   release before.
-- **The wheels no smoke can load.** The musllinux cp314t and pp311 wheels are
-  built and not imported: no Alpine image carries a free-threaded CPython or a
-  PyPy, so the first install of either is a user's.
+- **The wheels no smoke can load.** The musllinux cp314t, cp315t, pp311 and pp312
+  wheels are built and not imported: no Alpine image carries a free-threaded
+  CPython or a PyPy, so the first install of any of them is a user's.
 - **A source install off Linux.** `uv pip install` takes the wheel; the sdist
   path is compiled and tested once by the workflow, on Linux, and
   `--no-binary valgebra` locally is the only way to reach it on another
