@@ -447,6 +447,8 @@ impl Schema {
     /// whose key holds every value of a kind with no end of them -- a name,
     /// a byte string, an integer -- and whose value holds one, from empty.
     pub(super) fn every_length_from(&self, cx: &mut Cx<'_>) -> Option<usize> {
+        #[cfg(test)]
+        let _crossing = super::goal_tests::goals::crossing();
         match self {
             Schema::Str | Schema::Bytes => Some(0),
             Schema::Seq { shape, .. } => {

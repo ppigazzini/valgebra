@@ -52,6 +52,84 @@ pub(crate) mod goals {
         static DEEPEST: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
         /// How many pairs the set representation was asked on this thread.
         static READ_BY_THE_SETS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+        /// How many constructors stand on the path to the frame running.
+        static CROSSED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+        /// The goals the path holds open, each with [`CROSSED`] as it was opened.
+        static OPENED: RefCell<Vec<(Schema, Schema, usize)>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// A constructor on the path for as long as this is held: what is asked below
+    /// it is about a value strictly inside the one above it.
+    pub(crate) struct Crossing;
+
+    /// Enter a rule whose goals are of a position, a key, a value or an attribute.
+    pub(crate) fn crossing() -> Crossing {
+        CROSSED.with(|crossed| crossed.set(crossed.get() + 1));
+        Crossing
+    }
+
+    /// The crossing `schema` is, where a reading of it asks of its positions.
+    pub(crate) fn crossing_of(schema: &Schema) -> Option<Crossing> {
+        matches!(
+            schema,
+            Schema::Seq { .. } | Schema::KeyedMap { .. } | Schema::AttrRecord { .. }
+        )
+        .then(crossing)
+    }
+
+    impl Drop for Crossing {
+        fn drop(&mut self) {
+            CROSSED.with(|crossed| crossed.set(crossed.get() - 1));
+        }
+    }
+
+    /// A goal opened on the path: the trail's, or `(s, nothing)` for the emptiness
+    /// of `s` [LN26, §5.1], which the lists beside it hold.
+    pub(crate) fn opened(sub: &Schema, sup: &Schema) {
+        let at = CROSSED.with(std::cell::Cell::get);
+        OPENED.with_borrow_mut(|open| open.push((sub.clone(), sup.clone(), at)));
+    }
+
+    /// The goal opened last, closed.
+    pub(crate) fn closed() {
+        OPENED.with_borrow_mut(|open| {
+            open.pop();
+        });
+    }
+
+    /// A goal open on the path for as long as this is held.
+    pub(crate) struct HeldOpen;
+
+    /// Open a goal until what this gives back is dropped.
+    pub(crate) fn held_open(sub: &Schema, sup: &Schema) -> HeldOpen {
+        opened(sub, sup);
+        HeldOpen
+    }
+
+    impl Drop for HeldOpen {
+        fn drop(&mut self) {
+            closed();
+        }
+    }
+
+    /// A goal met again, which reads as its assumption [AC93, §1.5]. That stands
+    /// only where a constructor lies between the two: a hypothesis read at a smaller
+    /// value is an induction on the value, and one read at the same value proves
+    /// anything. Contractive definitions are what is held to give it, and this is
+    /// where every query under test is held to it. A goal the path did not open is
+    /// one a test wrote on the list.
+    pub(crate) fn met_again(sub: &Schema, sup: &Schema) {
+        let now = CROSSED.with(std::cell::Cell::get);
+        let at = OPENED.with_borrow(|open| {
+            open.iter()
+                .rev()
+                .find(|(a, b, _)| a == sub && b == sup)
+                .map(|(_, _, at)| *at)
+        });
+        assert!(
+            at.is_none_or(|at| at < now),
+            "{sub:?} below {sup:?} is met again under no constructor"
+        );
     }
 
     /// Count a pair put to the set representation
@@ -995,4 +1073,58 @@ mod drawn {
             );
         }
     }
+}
+
+// THEORY: recursive-subtyping
+/// A goal met again under no constructor is refused by the recorder, on each of
+/// the three lists a goal is held open on. Each table is one the build refuses, a
+/// reference standing unguarded in its own definition, since no contractive one
+/// reaches this: the rows say the recorder is wired to the hit.
+#[should_panic(expected = "under no constructor")]
+#[test]
+fn a_goal_met_again_on_the_trail_stands_under_a_constructor() {
+    let this = Schema::Ref(DefIx::new(0));
+    let defs = [Schema::union([this.clone(), Schema::Int])];
+    let budget = Budget::new(DECISION_BUDGET);
+    let _ = this.subtype_relation(&Schema::Str, &super::NoLeafRelations, &defs, &budget);
+}
+
+// THEORY: recursive-subtyping
+/// See [`a_goal_met_again_on_the_trail_stands_under_a_constructor`].
+#[should_panic(expected = "under no constructor")]
+#[test]
+fn a_reference_met_again_stands_under_a_constructor() {
+    let this = Schema::Ref(DefIx::new(0));
+    let defs = [Schema::union([this.clone(), Schema::Int])];
+    let budget = Budget::new(DECISION_BUDGET);
+    let _ = this.verdict_rec(&mut super::Cx::new(&super::NoLeafRelations, &defs, &budget));
+}
+
+// THEORY: recursive-subtyping
+/// See [`a_goal_met_again_on_the_trail_stands_under_a_constructor`].
+#[should_panic(expected = "under no constructor")]
+#[test]
+fn a_meet_met_again_stands_under_a_constructor() {
+    let budget = Budget::new(DECISION_BUDGET);
+    let goal = vec![Schema::Int, Schema::Str];
+    let _open = super::emptiness::OpenMeet::open(&budget, goal.clone());
+    let _again = super::emptiness::OpenMeet::open(&budget, goal);
+}
+
+// THEORY: recursive-subtyping
+/// A recursive pair meets its goal again under the constructor its definition
+/// guards it with, and the recorder passes it: `μt. list[t]` below itself spelled
+/// apart holds, and the emptiness of a list of itself is read through the tail.
+#[test]
+fn a_goal_met_again_under_a_constructor_passes() {
+    let at = |index| Schema::Ref(DefIx::new(index));
+    let defs = [
+        Schema::list(SeqShape::homogeneous(at(0))),
+        Schema::list(SeqShape::homogeneous(at(1))),
+    ];
+    let budget = Budget::new(DECISION_BUDGET);
+    assert_eq!(
+        at(0).subtype_relation(&at(1), &super::NoLeafRelations, &defs, &budget),
+        Relation::Holds
+    );
 }

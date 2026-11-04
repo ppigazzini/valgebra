@@ -12107,6 +12107,8 @@ fn a_meet_read_under_an_open_one_is_held_where_it_met_none_again() {
         let budget = Budget::new(DECISION_BUDGET);
         let mut cx = Cx::new(&NoLeafRelations, &defs, &budget);
         let _open = open.map(|goal| OpenMeet::open(&budget, goal).expect("opened"));
+        // The meet stands open above a constructor, as a path below it reads it.
+        let _crossing = super::goal_tests::goals::crossing();
         if let Some(planted) = planted {
             VERDICTS.with_borrow_mut(|held| {
                 held.insert((cx.query(), schema.clone()), (planted, 0));

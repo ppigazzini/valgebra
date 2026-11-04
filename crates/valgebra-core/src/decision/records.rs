@@ -72,6 +72,8 @@ use super::{Cx, descending, spend};
 /// A fresh list there unfolds the reference again: a recursive meet of two maps
 /// reaches this rule once per unfolding, with nothing to stop it but the stack.
 pub(super) fn keyed_map_meet_verdict(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
     let maps: Vec<(&[Field], bool)> = members
         .iter()
         .filter_map(|member| match member {
@@ -124,6 +126,8 @@ pub(super) fn keyed_map_meet_verdict(members: &[Schema], cx: &mut Cx<'_>) -> Ver
 /// as the key meets above are.
 #[inline(never)]
 fn record_of_maps_verdict(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
     let Some(met) = record_of_maps(members, cx) else {
         return Verdict::Unknown;
     };
@@ -171,6 +175,8 @@ pub(super) fn keyed_map_subtype(
     db: &[MapClause],
     cx: &mut Cx<'_>,
 ) -> Relation {
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
     // A cursor over each field list, so finding every name of one list in the
     // other is one forward walk of each rather than a scan per field.
     let order = Cell::new(None);
@@ -551,6 +557,8 @@ fn entered<'b>(
     values_asked: &mut Vec<(&'b Schema, Relation)>,
     cx: &mut Cx<'_>,
 ) -> Relation {
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
     match reader {
         None => *inhabited.get_or_insert_with(|| Relation::of_mismatch(mine.value.verdict_rec(cx))),
         Some(value) => {
@@ -580,6 +588,8 @@ fn entered<'b>(
 /// case is the rare one.
 #[inline(never)]
 fn spelled_by(clause: &MapClause, field: &Field, cx: &mut Cx<'_>) -> Relation {
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
     let spelled = key_cover(&clause.key, cx.oracle)
         .filter(|(_, parts)| !parts.contains(&Some(Kind::Str)))
         .map(|(labels, _)| labels.contains(&Label::str(&field.name)));
@@ -1063,6 +1073,8 @@ fn defaults_against(
     theirs: &[Option<&Schema>; PARTS],
     cx: &mut Cx<'_>,
 ) -> Defaults {
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
     let mut exceeds: Option<bool> = None;
     let mut declined = false;
     for (part, (mine, theirs)) in mine.iter().zip(theirs).enumerate() {
@@ -1104,6 +1116,8 @@ impl Slot {
     /// the other slot does not allow is a value outside it [Cas23, §3.2.1],
     /// whatever the types say of each other.
     fn below(&self, theirs: &Slot, cx: &mut Cx<'_>) -> Relation {
+        #[cfg(test)]
+        let _crossing = super::goal_tests::goals::crossing();
         if self.absent && !theirs.absent {
             return Relation::Fails;
         }
@@ -1218,6 +1232,8 @@ impl<'s> Labels<'s> {
     /// [Cas23, (17)] folded in: refuted where every key the map requires holds
     /// a value, proved where one holds none [Cas23, (11)].
     fn base_case(&self, cx: &mut Cx<'_>) -> Relation {
+        #[cfg(test)]
+        let _crossing = super::goal_tests::goals::crossing();
         let mut verdict = Verdict::Inhabited;
         for (_, slot) in &self.named {
             if slot.absent {
@@ -1249,6 +1265,8 @@ struct Branch<'s> {
 /// first conjunct that does not hold is the answer. Each branch narrowed by is
 /// a level of the query's depth, as in the product rule.
 fn phi(subject: &Labels<'_>, branches: &[Branch<'_>], cx: &mut Cx<'_>) -> Relation {
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
     if !spend(cx.budget) {
         return Relation::Unknown;
     }
@@ -1318,6 +1336,8 @@ fn phi(subject: &Labels<'_>, branches: &[Branch<'_>], cx: &mut Cx<'_>) -> Relati
 /// every value of the subtype exactly when the subtype names it too, at least
 /// as narrowly.
 pub(super) fn attr_record_subtype(fa: &[Attribute], fb: &[Attribute], cx: &mut Cx<'_>) -> Relation {
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
     let order = Cell::new(None);
     let mut a_by_name = FieldCursor::over(fa, fb, &order);
     Relation::all(fb.iter().map(|b| {

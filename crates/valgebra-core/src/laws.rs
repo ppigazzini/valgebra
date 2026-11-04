@@ -3197,7 +3197,7 @@ fn the_shared_budget_decides_real_emptiness_and_equivalence() {
     assert!(!Schema::Int.is_equivalent(&Schema::Str));
     // An uninhabited recursive reference is empty, decided through the
     // subtype-into-bottom crossing under the shared budget.
-    let defs = vec![Schema::Ref(DefIx::new(0))];
+    let defs = vec![Schema::tuple(SeqShape::fixed([Schema::Ref(DefIx::new(0))]))];
     assert!(Schema::Ref(DefIx::new(0)).is_subtype_of_under(
         &Schema::Nothing,
         &NoLeafRelations,
@@ -3451,8 +3451,8 @@ fn attribute_records_subtype_by_width_and_depth() {
 /// not the public no-context check, which would miss it.
 #[test]
 fn a_tail_empty_under_defs_reduces_to_the_prefix() {
-    // def 0 references only itself: an uninhabited recursive schema.
-    let defs = vec![Schema::Ref(DefIx::new(0))];
+    // def 0 is a tuple of itself: an uninhabited recursive schema.
+    let defs = vec![Schema::tuple(SeqShape::fixed([Schema::Ref(DefIx::new(0))]))];
     let with_phantom_tail = Schema::Seq {
         container: SeqKind::List,
         shape: SeqShape::prefix_tail([Schema::Int], Schema::Ref(DefIx::new(0))),

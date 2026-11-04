@@ -1516,6 +1516,8 @@ impl Schema {
         // one side, so the structural compare rejects a mismatched goal on the
         // discriminant before walking either subtree.
         if cx.trail.iter().any(|(a, b)| a == self && b == other) {
+            #[cfg(test)]
+            goal_tests::goals::met_again(self, other);
             return Relation::Holds;
         }
         // A level of the recursion, held while the rules descend: a pair
@@ -2411,7 +2413,11 @@ impl Schema {
                     container: b_kind,
                     element: b,
                 },
-            ) if a_kind == b_kind => a.is_subtype_rec(b, cx),
+            ) if a_kind == b_kind => {
+                #[cfg(test)]
+                let _crossing = goal_tests::goals::crossing();
+                a.is_subtype_rec(b, cx)
+            }
             // Same-kind sequence inclusion is language inclusion on the shapes.
             (
                 Schema::Seq {
@@ -2962,6 +2968,8 @@ impl<'a> Cx<'a> {
         goal: (Schema, Schema),
         decide: impl FnOnce(&mut Self) -> Relation,
     ) -> Relation {
+        #[cfg(test)]
+        let _open = goal_tests::goals::held_open(&goal.0, &goal.1);
         self.trail.push(goal);
         #[cfg(test)]
         goal_tests::goals::trail(self.trail.len());

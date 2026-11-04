@@ -471,7 +471,11 @@ assume the goal, unfold, and a pair already on the trail is a local success
 ([AC93, §1.5], with the algorithm at [AC93, §4.4]).
 **[LOAD-BEARING: recursive-subtyping]** — the assumption stack in
 `crates/valgebra-core/src/decision.rs` is that idea, with terms where the paper
-has addresses.
+has addresses. A pair met again reads as its assumption only where a constructor
+lies between the two, which makes the hypothesis one about a smaller value and the
+reading an induction on it: contractive definitions are held to give that, and
+under test every hit on the trail, on the references being resolved and on the
+meets held open is asserted to (`goal_tests::goals::met_again`).
 
 SOURCE: §13.4 "for the trail idea, not arm for arm"
 
@@ -480,7 +484,7 @@ The arms are not the paper's: it decides an ordering over
 
 IMPLEMENTED-BY: decision.rs::Schema::subtype_by_rules, decision.rs::Schema::left_reduces_below, decision.rs::Schema::below_a_reference, decision.rs::Cx::assuming
 
-HELD-BY: decides_recursive_subtyping_coinductively,
+HELD-BY: a_goal_met_again_on_the_trail_stands_under_a_constructor, a_reference_met_again_stands_under_a_constructor, a_meet_met_again_stands_under_a_constructor, a_goal_met_again_under_a_constructor_passes, decides_recursive_subtyping_coinductively,
 test_recursive_subtyping_is_coinductive,
 a_decision_leaves_the_trail_it_was_given,
 a_decision_leaves_an_assumption_it_did_not_make,

@@ -384,6 +384,8 @@ impl Schema {
             let regions = Regions::Known(region);
             return (regions.verdict(), regions);
         }
+        #[cfg(test)]
+        let _crossing = super::goal_tests::goals::crossing_of(self);
         match self {
             // The lattice bounds carry a known region, which settles them the
             // same way.
@@ -395,10 +397,14 @@ impl Schema {
                 // has no finite inhabitant [LN26, §5.1]. A union base case or
                 // an optional or starred position escapes before reaching here.
                 if cx.visiting.contains(id) {
+                    #[cfg(test)]
+                    super::goal_tests::goals::met_again(self, &Schema::Nothing);
                     return (Verdict::Empty, Regions::Unknown);
                 }
                 match cx.defs.get(id.get()) {
                     Some(def) => {
+                        #[cfg(test)]
+                        let _open = super::goal_tests::goals::held_open(self, &Schema::Nothing);
                         cx.visiting.push(*id);
                         let verdict = def.verdict_rec(cx);
                         cx.visiting.pop();
@@ -1399,9 +1405,19 @@ impl OpenMeet {
                 .iter()
                 .position(|(owner, held)| *owner == query && *held == goal)
             {
+                #[cfg(test)]
+                super::goal_tests::goals::met_again(
+                    &Schema::Intersection(goal.into()),
+                    &Schema::Nothing,
+                );
                 MET_AGAIN.with(|least| least.set(least.get().min(at)));
                 return None;
             }
+            #[cfg(test)]
+            super::goal_tests::goals::opened(
+                &Schema::Intersection(goal.clone().into()),
+                &Schema::Nothing,
+            );
             open.push((query, goal));
             Some(Self)
         })
@@ -1423,6 +1439,8 @@ impl OpenMeet {
 
 impl Drop for OpenMeet {
     fn drop(&mut self) {
+        #[cfg(test)]
+        super::goal_tests::goals::closed();
         OPEN_MEETS.with_borrow_mut(|open| {
             open.pop();
         });
@@ -1549,7 +1567,11 @@ fn refinement_verdict(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>)
     let least = shortest(constraints.iter());
     let verdict = match repeated_element(base) {
         Some(_) if least == 0 => Verdict::Inhabited,
-        Some(element) if repeats_a_member(base) => element.verdict_rec(cx),
+        Some(element) if repeats_a_member(base) => {
+            #[cfg(test)]
+            let _crossing = super::goal_tests::goals::crossing();
+            element.verdict_rec(cx)
+        }
         Some(element) => distinct_members(element, least, cx.oracle),
         None if base.every_length_from(cx).is_some() => Verdict::Inhabited,
         None => Verdict::Unknown,
@@ -1797,6 +1819,8 @@ fn lengths_miss_the_shape(
     cx: &mut Cx<'_>,
     tail_holds_none: impl FnOnce(&Schema, &mut Cx<'_>) -> bool,
 ) -> bool {
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
     let (least, most) = match base {
         Schema::Seq { shape, .. } => {
             let open = shape

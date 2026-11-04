@@ -86,6 +86,8 @@ pub(super) fn product_subtype(
     if !spend(cx.budget) {
         return Relation::Unknown;
     }
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
     let verdicts: Vec<Verdict> = components.iter().map(|c| c.verdict_rec(cx)).collect();
     if verdicts.iter().any(|verdict| verdict.is_empty()) {
         return Relation::Holds;
@@ -215,6 +217,8 @@ pub(super) fn linear_subtype(
     tb: Option<&Schema>,
     cx: &mut Cx<'_>,
 ) -> Relation {
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
     // A repeated tail with an empty element language never repeats, so the left
     // side is then just its fixed prefix. Emptiness is decided with the same
     // oracle and definitions as the rest of the decision, so a tail empty only
