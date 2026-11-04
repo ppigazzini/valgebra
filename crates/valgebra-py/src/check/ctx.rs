@@ -401,7 +401,7 @@ impl<'a> Ctx<'a> {
 /// sizes the stack `cpyext` may use by the recursion limit, and a call past
 /// that fails -- fetching or normalizing the error it raised among them, which
 /// `cpyext` takes for a fault of its own and ends the process on. Under
-/// `sys.setrecursionlimit(200)` a list nested fifty deep did so. So the walk
+/// `sys.setrecursionlimit(60)` a list nested fifty deep did so. So the walk
 /// asks `PyPy`'s own check, `__pypy__.stack_almost_full`, and asks it from a
 /// frame [`ROOM_RESERVE`] bytes deeper than the walk stands: a yes there leaves
 /// the walk that much below it, for the Python a level runs -- a predicate, an
