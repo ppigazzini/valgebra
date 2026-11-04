@@ -11,7 +11,7 @@ A run is three stages, and `--stage` runs one alone:
 
 - **build** unpacks the tree into one directory, makes an environment of the
   bench group for each interpreter, and builds each a profile-guided wheel from
-  that directory, the training's hash seed fixed. CPython 3.14 also gets a
+  that directory, the training's hash seed fixed. CPython 3.15 also gets a
   plain wheel and a profile-guided one with PyO3's reference pool compiled in,
   for the two pairs the page states. Every build reads the same source path,
   since a build path moves the profiled layout.
@@ -20,7 +20,8 @@ A run is three stages, and `--stage` runs one alone:
   run while it does.
 - **report** prints every figure from the readings.
 
-    uv run --no-sync python scripts/page_figures.py --python-314 /path/to/python
+    uv run --no-sync python scripts/page_figures.py \
+      --python-315 /path/to/python3.15 --python-314 /path/to/python3.14
 
 The work directory keeps the environments, the wheels and the readings, so a
 report can be printed again from one set of readings.
@@ -56,19 +57,28 @@ if TYPE_CHECKING:
 #: Where a run builds and reads, unless `--work` names another place.
 WORK = ROOT / "target" / "page-figures"
 
-#: The interpreters the pages are measured on, by the label each file carries.
-#: CPython 3.14 is the one the performance page's baseline names; the other two
-#: are the builds `uv` installs, as the page's interpreter table says.
-LABELS = ("3.14", "3.12", "3.14t")
+#: The interpreters the pages are measured on, by the label each file carries,
+#: in the order of the performance page's interpreter table. CPython 3.15 is the
+#: one its baseline names, and 3.14 a source build of the same recipe; the others
+#: are the builds `uv` installs, as that table says.
+LABELS = ("3.12", "3.14", "3.15", "3.14t", "3.15t")
+
+#: The interpreter every figure stating one version is read on.
+BASELINE = "3.15"
+
+#: The interpreters the techniques section states a cost of this tree on.
+TECHNIQUES = ("3.15", "3.14", "3.12")
 
 #: How many readings each figure is taken over, as the performance page's
-#: Method section states them. The comparison gate on CPython 3.14, the
+#: Method section states them. The comparison gate on the baseline, the
 #: benchmarks and the floor are each read in two sets, apart in the run, so a
 #: run whose second half reads apart from its first shows it.
 MEASURE = {
-    "gate-3.14": 9,
+    "gate-3.15": 9,
+    "gate-3.14": 12,
     "gate-3.12": 12,
     "gate-3.14t": 7,
+    "gate-3.15t": 7,
     "benchmarks": 5,
     "floor": 3,
     "techniques": 2,
@@ -77,9 +87,11 @@ MEASURE = {
 
 #: The readings each label's comparison gate holds once a run is whole.
 GATE_RUNS = {
-    "3.14": 2 * MEASURE["gate-3.14"],
+    "3.15": 2 * MEASURE["gate-3.15"],
+    "3.14": MEASURE["gate-3.14"],
     "3.12": MEASURE["gate-3.12"],
     "3.14t": MEASURE["gate-3.14t"],
+    "3.15t": MEASURE["gate-3.15t"],
 }
 
 #: The criterion benchmarks the core micro-benchmark table names.
@@ -370,8 +382,8 @@ def build(work: Path, tree: str, pythons: dict[str, Path]) -> None:
         _run([*sync, "--python", str(python)], source, log, env)
         build_wheel(work, label, "pgo")
     for kind in ("plain", "pool"):
-        _step(f"{kind} wheel, 3.14")
-        build_wheel(work, "3.14", kind)
+        _step(f"{kind} wheel, {BASELINE}")
+        build_wheel(work, BASELINE, kind)
     _step("jiter probe and criterion")
     probe = work / "jiter-probe"
     (probe / "src").mkdir(parents=True, exist_ok=True)
@@ -433,7 +445,7 @@ class Session:
                 out = self.results / f"{bench}-{which}-{run}.json"
                 pytest = ["-m", "pytest", "-q", "-p", "no:cacheprovider"]
                 self.run(
-                    "3.14",
+                    BASELINE,
                     [*pytest, f"benches/bench_{bench}.py", f"--benchmark-json={out}"],
                 )
 
@@ -441,9 +453,9 @@ class Session:
         """Read two wheels in turn, each reading after one it discards."""
         for _ in range(MEASURE["pairs"]):
             for kind in kinds:
-                self.install("3.14", kind)
-                self.reading("3.14", "gate")
-                self.keep(f"{name}-{kind}", "3.14", "gate", 1)
+                self.install(BASELINE, kind)
+                self.reading(BASELINE, "gate")
+                self.keep(f"{name}-{kind}", BASELINE, "gate", 1)
 
     def outside(
         self, argv: Sequence[str], file: str, env: dict[str, str] | None = None
@@ -463,38 +475,39 @@ def measure(work: Path) -> None:
     for label in LABELS:
         run.install(label, "pgo")
         run.reading(label, "gate")
-    _step("comparison gate on 3.14, first set")
-    run.keep("gate-3.14", "3.14", "gate", MEASURE["gate-3.14"])
+    baseline = f"gate-{BASELINE}"
+    _step(f"comparison gate on {BASELINE}, first set")
+    run.keep(baseline, BASELINE, "gate", MEASURE[baseline])
     _step("benchmarks, first set")
     run.benches("first")
-    _step("comparison gate on 3.12 and 3.14t")
-    run.keep("gate-3.12", "3.12", "gate", MEASURE["gate-3.12"])
-    run.keep("gate-3.14t", "3.14t", "gate", MEASURE["gate-3.14t"])
+    _step("comparison gate on the other interpreters")
+    for label in (label for label in LABELS if label != BASELINE):
+        run.keep(f"gate-{label}", label, "gate", MEASURE[f"gate-{label}"])
     _step("floor, first set")
-    run.keep("floor", "3.14", "floor", MEASURE["floor"])
+    run.keep("floor", BASELINE, "floor", MEASURE["floor"])
     _step("the JSON document's parts, jiter alone and criterion")
     document = run.results / "document.json"
-    split = run.reading("3.14", "json-split", "--document", str(document))
+    split = run.reading(BASELINE, "json-split", "--document", str(document))
     (run.results / "json-split.json").write_text(split + "\n", encoding="utf-8")
     probe = work / "target-probe" / "release" / "jiter-probe"
     run.outside([str(probe), str(document)], "jiter.json")
     cargo = build_environment() | {"CARGO_TARGET_DIR": str(work / "target-criterion")}
     criterion = ["cargo", "bench", "-q", "--bench", "core", "--", "|".join(CRITERION)]
     run.outside(criterion, "criterion.txt", cargo)
-    _step("technique figures on 3.14 and 3.12")
-    for label in ("3.14", "3.12"):
+    _step("technique figures")
+    for label in TECHNIQUES:
         run.keep(f"techniques-{label}", label, "techniques", MEASURE["techniques"])
     _step("benchmarks, second set")
     run.benches("second")
-    _step("comparison gate on 3.14, second set")
-    run.keep("gate-3.14", "3.14", "gate", MEASURE["gate-3.14"])
+    _step(f"comparison gate on {BASELINE}, second set")
+    run.keep(baseline, BASELINE, "gate", MEASURE[baseline])
     _step("plain and profiled wheels in turn")
     run.pairs("pgo-pair", ("plain", "pgo"))
     _step("pool and profiled wheels in turn")
     run.pairs("pool-pair", ("pool", "pgo"))
-    run.install("3.14", "pgo")
+    run.install(BASELINE, "pgo")
     _step("floor, second set")
-    run.keep("floor", "3.14", "floor", MEASURE["floor"])
+    run.keep("floor", BASELINE, "floor", MEASURE["floor"])
 
 
 # --- the report ---
@@ -602,7 +615,7 @@ def report_results(results: Path, gate: dict[str, list[dict[str, Any]]]) -> list
     for shape in COMPARED:
         sides = [compared[shape, s] for s in ("valgebra", "pydantic", "jsonschema")]
         ours = statistics.median(sides[0])
-        minimums = 1 / statistics.median(r[shape]["ratio"] for r in gate["3.14"])
+        minimums = 1 / statistics.median(r[shape]["ratio"] for r in gate[BASELINE])
         out += [
             f"  {shape:14} " + " | ".join(cell(runs) for runs in sides),
             (
@@ -630,21 +643,22 @@ def report_interpreters(gate: dict[str, list[dict[str, Any]]]) -> list[str]:
 
 
 def report_races(gate: dict[str, list[dict[str, Any]]]) -> list[str]:
-    out = _section(PERFORMANCE, "The closest races, on 3.12: each run's ratio")
-    for shape in gate["3.12"][0]:
+    readings = gate[BASELINE]
+    out = _section(PERFORMANCE, f"The closest races, on {BASELINE}: each run's ratio")
+    for shape in readings[0]:
         if shape == "python":
             continue
-        ratios = sorted(r[shape]["ratio"] for r in gate["3.12"])
+        ratios = sorted(r[shape]["ratio"] for r in readings)
         each = " ".join(f"{x:.3f}" for x in ratios)
         spread = ratios[-1] - ratios[0]
         out.append(
             f"  {shape:14} median {statistics.median(ratios):.3f}"
             f" spread {spread:.4f} ({each})"
         )
-    scalar = [r["scalar"]["vg"] for r in gate["3.14"]]
-    margin = 1 / statistics.median(r["scalar"]["ratio"] for r in gate["3.14"])
+    scalar = [r["scalar"]["vg"] for r in readings]
+    margin = 1 / statistics.median(r["scalar"]["ratio"] for r in readings)
     out.append(
-        f"  the scalar on 3.14: {statistics.median(scalar):.1f} ns median,"
+        f"  the scalar on {BASELINE}: {statistics.median(scalar):.1f} ns median,"
         f" {min(scalar):.1f} to {max(scalar):.1f}, {margin:.2f}x"
     )
     return out
@@ -667,7 +681,7 @@ def report_techniques(results: Path) -> list[str]:
     out += _section(
         PERFORMANCE, "Building a validator, and Reporting a failure: the best reading"
     )
-    for label in ("3.14", "3.12"):
+    for label in TECHNIQUES:
         found = read_lines(results / f"techniques-{label}.jsonl")
         build = min(r["build_50_refined_us"] for r in found)
         deep = min(r["deep_report_us"] for r in found)
@@ -739,10 +753,15 @@ def _found(version: str) -> Path | None:
 def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     parser = arguments(__doc__)
     parser.add_argument(
+        "--python-315",
+        type=Path,
+        help="the CPython 3.15 the performance page's baseline names; "
+        "required to build",
+    )
+    parser.add_argument(
         "--python-314",
         type=Path,
-        help="the CPython 3.14 the performance page's baseline names; "
-        "required to build",
+        help="the CPython 3.14 of the same recipe; required to build",
     )
     parser.add_argument(
         "--python-312", type=Path, help="CPython 3.12 (default: the one uv installs)"
@@ -751,6 +770,11 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
         "--python-314t",
         type=Path,
         help="the free-threaded CPython 3.14 (default: the one uv installs)",
+    )
+    parser.add_argument(
+        "--python-315t",
+        type=Path,
+        help="the free-threaded CPython 3.15 (default: the one uv installs)",
     )
     parser.add_argument(
         "--rev", help="the commit to read (default: the checkout as it stands)"
@@ -784,12 +808,14 @@ def main(argv: Sequence[str]) -> int:
         return take_reading(args.reading, args.document)
     work = args.work.resolve()
     if args.stage in {"all", "build"}:
-        if args.python_314 is None:
-            _cannot_run("--python-314 names the interpreter the baseline is read on")
+        if args.python_315 is None or args.python_314 is None:
+            _cannot_run("--python-315 and --python-314 name the source builds read")
         pythons = {
+            "3.15": args.python_315,
             "3.14": args.python_314,
             "3.12": args.python_312 or _found("3.12"),
             "3.14t": args.python_314t or _found("3.14t"),
+            "3.15t": args.python_315t or _found("3.15t"),
         }
         found = {label: path for label, path in pythons.items() if path is not None}
         if len(found) != len(LABELS):

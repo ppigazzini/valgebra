@@ -209,15 +209,15 @@ against a Python object — a literal, a refinement predicate, or an instance or
 attribute check — is the documented step back into Python (detailed below). The
 same walk runs over either input source — a Python object or a JSON value — so
 the two paths stay equivalent. On the benchmark machine (AMD Ryzen 7 PRO 7840U,
-WSL2, CPython 3.14.10 built as the [performance page](11-performance.md)
+WSL2, CPython 3.15.2 built as the [performance page](11-performance.md)
 records, the jiter the lockfile pins, the PGO release wheel — the same profile the release
 ships), per-call median on a passing document:
 
 | Shape | `is_valid_json` | `json.loads` + `is_valid` | speedup |
 | --- | --- | --- | --- |
-| Record, 50 int fields | 1.35 us | 5.92 us | ~4.4x |
-| List of 200 small mappings | 21.0 us | 34.0 us | ~1.6x |
-| `list[int]`, 10,000 elements | 73 us | 460 us | ~6.3x |
+| Record, 50 int fields | 1.36 us | 5.93 us | ~4.4x |
+| List of 200 small mappings | 21.3 us | 31.1 us | ~1.5x |
+| `list[int]`, 10,000 elements | 75 us | 454 us | ~6.0x |
 
 `benches/bench_json.py` times both columns, and a strict
 `TypeAdapter.validate_json` over the same three shapes beside them; that third
@@ -235,20 +235,20 @@ method](11-performance.md#method) says how to run it.
 Avoiding materialization helps where the document is large or scalar-heavy: the
 10,000-element array is six times faster than parse-then-validate, and
 the wide record a little over four. The middle row is the shape where it pays least,
-by about three fifths -- two hundred small mappings are two hundred container walks either
+by a little under half -- two hundred small mappings are two hundred container walks either
 way. Measure your own documents rather than reading a rule off these three.
 
 Where the middle shape's time goes is measured, because it is the shape where
 valgebra is closest to pydantic-core. On the competitive gate's document -- two
 hundred records of five fields, one of them a list and one a mapping, 17 KB --
-`is_valid_json` reads about 61 us on the machine above in the PGO wheel, and
+`is_valid_json` reads about 64 us on the machine above in the PGO wheel, and
 the parts are:
 
 | part | per call | how it was measured |
 | --- | --- | --- |
-| the parse into the tree the walk reads, and the call | 49 us | `Validator(anything).is_valid_json`, which parses and admits without a walk |
+| the parse into the tree the walk reads, and the call | 51 us | `Validator(anything).is_valid_json`, which parses and admits without a walk |
 | the walk over that tree | 13 us | `is_valid_json` less the row above |
-| `jiter::JsonValue::parse` alone | 62 us | in Rust, release, no profile |
+| `jiter::JsonValue::parse` alone | 64 us | in Rust, release, no profile |
 | jiter's pull parser over the same bytes, building nothing | 17 us | in Rust, release, no profile |
 
 The first two rows are one process. The parse moves with the heap a process

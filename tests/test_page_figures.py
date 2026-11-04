@@ -50,7 +50,7 @@ with_records_open_depth32
 
 def _gate(vg: float = 10.0, ratio: float = 0.2) -> dict[str, Any]:
     shapes = {shape: {"vg": vg, "pyd": vg / ratio, "ratio": ratio} for shape in SHAPES}
-    return {"python": "3.14.7", **shapes}
+    return {"python": "3.15.2", **shapes}
 
 
 def _jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -80,7 +80,7 @@ def _write_run(results: Path) -> None:
         _jsonl(results / f"{name}-{second}.jsonl", [_gate(vg=80.0)] * pairs)
     floor = {"in": 16.0, "is_valid": 21.0, "anything": 19.0, "isinstance": 12.0}
     _jsonl(results / "floor.jsonl", [{**floor, "empty_call": 15.0}] * 6)
-    for label in ("3.14", "3.12"):
+    for label in figures.TECHNIQUES:
         reading = {"build_50_refined_us": 16.0, "deep_report_us": 60.0}
         _jsonl(results / f"techniques-{label}.jsonl", [reading] * 2)
     runs = [(which, n) for which in ("first", "second") for n in range(1, 6)]
@@ -205,11 +205,13 @@ def test_the_page_states_the_repeats_the_script_takes() -> None:
     page = (ROOT / "docs" / "11-performance.md").read_text(encoding="utf-8")
     words = {6: "six", 7: "seven", 10: "ten", 12: "twelve", 18: "eighteen"}
     gate = figures.GATE_RUNS
+    assert gate["3.12"] == gate["3.14"]
+    assert gate["3.14t"] == gate["3.15t"]
     stated = (
         (
-            f"median over {words[gate['3.12']]} runs on 3.12,"
-            f" {words[gate['3.14']]} on 3.14 and {words[gate['3.14t']]} on"
-            " the free-threaded build"
+            f"median over {words[gate['3.12']]} runs on 3.12 and 3.14,"
+            f" {words[gate['3.15']]} on 3.15 and {words[gate['3.15t']]} on"
+            " each free-threaded build"
         ),
         f"**median of {words[2 * figures.MEASURE['benchmarks']]} independent runs**",
         f"{words[figures.MEASURE['pairs']]} readings of each build interleaved",
