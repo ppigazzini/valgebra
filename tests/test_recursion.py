@@ -16,6 +16,7 @@ from valgebra import (
     Validator,
     anything,
     complement,
+    instance_of,
     intersection,
     recursive,
     union,
@@ -639,8 +640,8 @@ class _Carrier:
 class _ListCarrier(list[int]):
     """A value of the list kind, carrying `x`: a protocol names no kind."""
 
-    def __init__(self, x: object) -> None:
-        super().__init__()
+    def __init__(self, x: object, items: list[int] | None = None) -> None:
+        super().__init__(items or [])
         self.x = x
 
 
@@ -689,8 +690,20 @@ _LISTS_NOT_NONE = recursive(
             Validator([]),
             [1],
         ),
+        (
+            intersection(_CarriesNestedLists, instance_of(_ListCarrier)),
+            list[_CarriesNestedLists],
+            _ListCarrier([], [1]),
+        ),
     ],
-    ids=["protocol-int", "protocol-list", "anything-protocol", "meet", "complement"],
+    ids=[
+        "protocol-int",
+        "protocol-list",
+        "anything-protocol",
+        "meet",
+        "complement",
+        "list-subclass",
+    ],
 )
 def test_a_value_below_every_cut_refutes_at_any_kind(
     subject: object, other: object, witness: object
@@ -700,7 +713,9 @@ def test_a_value_below_every_cut_refutes_at_any_kind(
     Each subject holds a value with its reference taken as nothing, at a kind the
     cut reaches, and each supertype read with its reference taken as everything
     leaves that value out. So the value is a value of the real difference, and the
-    relation refutes on it where the widened difference names nothing real.
+    relation refutes on it where the widened difference names nothing real. A list
+    subclass carrying the attribute is a list of the meet whichever items it holds,
+    so an item carrying none is what a list of carriers refuses.
     """
     held, outside = Validator(subject), Validator(other)
     assert held.is_valid(witness)
