@@ -13,112 +13,47 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: a placement the two terms make is never refused for want of a step
-- feat: a complemented union is read as the meet of the complements
-- feat: a subject holding a whole kind the supertype lacks is refuted
-- feat: a union is decided a part at a time where the pair declines whole
-- feat: an integer step is refuted by a multiple the other step does not divide
-- feat: a word boundary at a pattern's end is read as the character it asks about
-- fix: a required key ending in ? renders with a mark that does not parse
-- feat: a pair every decider declines is asked in its other spellings
-- fix: a Len whose minimum is below zero is refused as MinLen is
-- feat: a type defined in C lays down the layout its instance size says
-- feat: two branches splitting a set by another are read as the set they split
-- fix: is_empty reads a complemented union as the relation reads it below nothing
-- feat: a union in a meet is narrowed by the complements beside it
-- feat: a meet is refuted below a meet it shares no value with
-- feat: a float bound over the integers is read at its floor or its ceiling
-- fix: emptiness reads a reference in the complement law as construction does
-- fix: the part of a pattern between its word boundaries is built from its tree -- internal
-- fix: a reading that cannot decide a meet hands it to the next
-- fix: a definition being resolved drops no part of a supertype
-- fix: a length or a bound equal to a whole number is read as that number
-- fix: one depth bound raises one type, and a class reached again is refused there
-- fix: a counted Unicode class written as an ordinary bound builds
-- feat: a refinement of a union is the union of its refined branches
-- feat: a sequence's length is read at both ends of a relation
-- feat: the set representation reads scalars nested past its depth
-- feat: a meet of sequences each holding the empty one holds it
-- feat: a pattern too large to build is read by its texts
-- fix: a table of constants below a complemented table is one question
-- feat: the complement of a meet holds a complemented member's values
-- fix: a constant proves its literal only where the values equal to it read alike
-- fix: two bounds are compared only where each operand orders as the walk reads it
-- fix: two bounds over lists or tuples are not compared
-- fix: an enumeration making an instance past its members is not their union
-- fix: a class's layout is the one Python laid down
-- feat: a finite set of constants misses a value of every kind with infinitely many
-- feat: None's kind is the literal of its one value
-- feat: a sentinel compares by identity
-- feat: a set reading's difference refutes at a kind no cut reaches
-- feat: a meet supertype is decided a member at a time
-- feat: a meet subject is asked narrowed by the complements beside its unions
-- feat: a record the key partition cannot hold is left out of a meet of records
-- feat: a record is refuted a shared field at a time past the node bound
-- feat: an order bound over str or bytes is decided as the words it admits
-- feat: a schema meeting a complement's inner set is refuted below the complement
-- fix: a meet two of whose members share no value is below anything at once
-- fix: a string a type alias substitutes is refused as a forward reference
-- fix: annotated-types' documentation marker is ignored under its new name
-- fix: opening or closing a schema twice gives the schema once did
-- fix: a bound whose operand orders on its own renders marked
-- feat: a set's and a record's lengths are read off their shapes
-- fix: a constant the walk stopped on proves and refutes nothing
-- fix: a class is read where Python dispatches its hooks
-- fix: an enumeration with a subclass is read as its class
-- fix: a length bound no automaton could count to is refused before it is built
-- feat: a union holding a complement is asked as its difference
-- fix: a member deep by a clause's key alone is left out of the last reading
-- feat: a length the supertype's bounds leave out refutes at any size
-- fix: a type variable is its own class's parameter
-- fix: a frozen dict literal's refusal names the schemas that admit one
-- fix: a class over a list of types or a signature is refused applied
-- fix: a TypedDict qualifier given as a type argument is refused
-- fix: an enumeration is its members to a refutation as to a proof
-- fix: a class prints as its name only where its name builds the meet
-- fix: a signaling Decimal NaN is refused as a bound or a step, as nan is
-- fix: no value is longer than sys.maxsize
-- fix: a quantifier re refuses for repeating no atom is refused
-- feat: Python 3.11 is the floor, and 3.10 leaves the matrix
-- feat: a literal holds its constant where its own walk admits it
-- feat: a meet holds the exact empty container its members each hold
-- feat: a length every branch of a union leaves out refutes at any size
-- feat: records told apart by a required key share no value
-- feat: a container holds no more items than its shape can name
-- feat: a Fraction or a Decimal bound over the integers is read as a float one is
-- feat: a table of constants is read for its kinds at any width
-- feat: a class with one instance is its literal, and a True step is the step 1
-- fix: a Decimal bound with a vast exponent is not rounded to an int
-- feat: a meet holding one complement is read as the relation it is
-- feat: a word's length bound is counted by a table built directly
-- fix: a type parameter's default written as a string is refused
-- fix: a TypedDict's extra_items given as a string is the type it names
-- fix: a TypedDict qualifier given as a default or as extra_items is refused
-- fix: a field wrapped past the qualifiers read is refused as too deep
-- feat: a sized base written bare is read as its refinement under no bound
-- fix: a narrowed meet's verdict is read once a query where it rests on nothing -- internal
-- fix: a refutation stands on a length every interpreter builds
-- fix: a standard-library value type is the class the interpreter's module binds
-- feat: a Boolean term of length bounds over one base is read as its lengths
-- feat: a meet that may hold no kind is below every set
-- feat: a mapping holds no more keys than its key types hold apart
-- feat: a shape beside a length bound it misses holds no value
-- feat: a refinement of a union holds what its refined branches hold
-- fix: a deep walk on PyPy stops where PyPy has stack to answer
-- fix: a possessive quantifier's refusal names no Python release
-- feat: an enumeration met with sets refusing every member holds no value
-- feat: a question undecided at an allowance is asked again with a larger one
-- fix: is_empty reads the kinds a meet may hold as the relation does -- internal
-- fix: a shape read past the bounds beside it reads its tail without a step -- internal
-- fix: a supertype union is read through the unions nested in it -- internal
-- feat: a verdict read under an open meet is held where it met none again
-- fix: a cut beneath an attribute record reaches every kind -- internal
-- fix: open and close give one term however often they are applied
-- feat: a value of the difference cut the other way refutes at any kind
-- fix: every key reads alike over a class, whose complement law does not fold
-- fix: a set beside its complement is every key to open and close
-
 -->
+
+## [0.0.23] - 2026-11-04
+
+A release of decisions, with thirteen security fixes and a new floor: fifty
+additions, two changes, thirty-two fixes and thirteen security fixes. The
+relations answer where they answered `undecided`. A pair every decider declines
+is asked in its other spellings, and again under a larger allowance; a meet
+holding a complement is read as the relation it is; a union is narrowed by the
+complements beside it and decided a part at a time; lengths and kinds are read
+off the shapes that hold them; and a recursive reference refutes at any kind. Of
+784,000 questions a drawn corpus asks, 33,995 ended `undecided` on 0.0.22 and
+8,882 do here, and on 154,000 drawn seeds no answer 0.0.22 gave is lost or
+flipped.
+
+Seven of the security fixes are proofs a value refutes: a literal of a class with
+an `==` of its own, two bounds compared where the walk reads an operand otherwise
+or over lists, a class whose metaclass hid its hooks, a class given `__slots__`
+after it was made, and an enumeration with an instance past its members. Five are
+acceptances, a generic class reading a qualifier, a default or a list of types as
+a value and admitting what the class refuses. The last is a walk under a lowered
+recursion limit that ended the process on PyPy. Each names the releases it
+reached. Python 3.11 is the floor, and 3.10 leaves the matrix.
+
+Against 0.0.22 built here from its tag, the relations asked of the sets count
+48.66% fewer instructions, the length bounds asked of them 13.75% fewer and the
+core workload 0.75% fewer. On the profiled wheels of CPython 3.11 through 3.15 a
+scalar, a record, a list of records and a list nested twenty-five deep count what
+0.0.22 counts, to the instruction, but where an allocator moves a shape that
+allocates. A union counts 0.34% to 0.60% more and a union of literals 0.17% to
+0.61%, for the two tests that read a tagged union at its tag, where a thousand
+records read in 0.14 us against 48; a recursive schema counts 0.44% to 0.87% more
+and a list of refined integers 0.43% to 0.55%. A relation between two validators
+counts 4.2% to 4.4% more at its root, for the class scope a root build holds and
+the two maps a query keeps its readings in, and the decision workloads 0.25% to
+1.97% more, the relation matrix the most, for the readings a pair the rules
+decline is asked. A question every decider declines can take longer to decline:
+a few drawn answers went from under 5 ms to as much as 65 ms, each unchanged,
+while five of the six drawn corpora take 8% to 63% less time in all. On the
+free-threaded 3.14 and 3.15 a mapping counts 23% to 27% fewer and a list of records
+8%, and a list nested twenty-five deep about 1% more.
 
 ### Added
 
@@ -570,6 +505,13 @@ answer of its own, or a repair to a change not yet released.
   `list[list[int]]`, and the complement of a union is `subset` of the meet of
   the complements however its members nest, where both were `undecided`.
 
+- **A musllinux wheel for CPython 3.15, its free-threaded build and PyPy 3.12.**
+  The musl build image carries all three, and the release builds a wheel for
+  every interpreter it carries, so an Alpine install of 3.15 takes a wheel where
+  it compiled the source distribution. The release runs the product suite on the
+  3.15 wheel in `python:3.15-alpine`. No Alpine image carries a free-threaded
+  CPython or a PyPy, so the other two are built and not loaded.
+
 ### Changed
 
 - **The floor is Python 3.11.** CPython 3.10 reached the end of its security
@@ -599,20 +541,13 @@ answer of its own, or a repair to a change not yet released.
   complement(int)}` opens to `dict[anything, anything]` in one application, where
   it took two. No first application admits another set.
 
+
 - **Every key reads alike over a class, whose complement law does not fold.**
   `{complement(K): int, anything: anything}` opens to one term however often it is
   opened, where a second `open` wrote a longer key over the same set, and closing
   it after opening gives what closing it gives, where the round trip kept the
   keys `open` freed.
 
-- **A deep walk on PyPy stops where PyPy has stack to answer.** PyPy sizes the
-  stack its C-API calls may use by the recursion limit, and a walk that reached
-  it before its own bounds ended the process: under
-  `sys.setrecursionlimit(200)`, validating a list nested fifty deep did. The
-  walk now asks PyPy's stack check as it goes deeper, and refuses at
-  `recursion_limit` where PyPy has no room, so the value is no member and
-  `validate` raises an error the caller catches. Under the default limit the
-  answers are unchanged, and CPython is untouched.
 
 - **A standard-library value type is the class the interpreter's module
   binds.** The relations read `Decimal`, `Fraction`, the `datetime` types,
@@ -629,6 +564,7 @@ answer of its own, or a repair to a change not yet released.
   `Annotated[int, Gt(Fraction(1))]` is `undecided`, `2` being in the one and
   not the other.
 
+
 - **A refutation stands on a length every interpreter builds.** A container
   holds its items in one allocation, which the allocator refuses past
   `sys.maxsize` bytes, so CPython builds no list longer than `sys.maxsize //
@@ -639,6 +575,7 @@ answer of its own, or a repair to a change not yet released.
   128`, which every kind reaches on every supported interpreter, and a pair
   whose witness is longer is `undecided`.
 
+
 - **A field wrapped past the qualifiers read is refused as too deep.** A dict
   literal refuses `Required` and `NotRequired` on a field, read through
   `Annotated` and `ReadOnly` up to eight layers. Past them the field was
@@ -647,37 +584,6 @@ answer of its own, or a repair to a change not yet released.
   `"a?"` over `Required[int]` the other way. The field is refused there as
   nesting too deep, as a wrapper naming itself already was.
 
-- **A `TypedDict` qualifier given as a default or as `extra_items` is
-  refused.** A class left unapplied takes each parameter's default, which
-  reaches its fields as an argument does, and `NotRequired[int]` as the
-  default read as the item's own: the key turned optional, `{}` admitted and
-  the class proved equal to one declaring `a: NotRequired[int]`, though the
-  runtime keeps `a` required; a `Required` default turned an optional key
-  required, and a dataclass's field dropped the qualifier. A qualifier as a
-  parameter's default is refused as the same qualifier written as the
-  argument is, bare or under `Annotated`. `Required` and `NotRequired` as
-  `extra_items`, which PEP 728 calls an error, are refused there too, where
-  they built as the type they wrap; `ReadOnly` is read through.
-
-- **A `TypedDict`'s `extra_items` given as a string is the type it names.**
-  PEP 728 takes a type expression there, and a string where one goes is a
-  string annotation, which the runtime keeps as written. It was read as the
-  value it is: `extra_items="int"` built `{'total': int, str: Literal['int']}`,
-  admitting the word as an extra value and refusing every integer, in the
-  class statement and the functional form alike and in a subclass inheriting
-  it. It is resolved as the class's own annotations are, in the module that
-  defines the class. A class whose extra items are its own type is refused as
-  a class whose fields name it is, with the hint to write it with
-  `recursive(...)`.
-
-- **A type parameter's default written as a string is refused.** PEP 696
-  makes a default a type expression, and a string there a forward reference,
-  which the runtime keeps as written. A field that is the parameter alone read
-  it as the value it is: under `W = TypeVar("W", default="int")`, `a: W` was the
-  literal `'int'`, admitting the word and refusing every integer, in a
-  `TypedDict`, a dataclass and a `NamedTuple` left unapplied. It is refused as
-  a forward reference, as the same string written as the argument is and as
-  `list[W]` already was.
 
 - **A `Decimal` bound with a vast exponent is not rounded to an `int`.** The
   rule that finds no integer between two bounds rounded each to an `int`, and
@@ -687,6 +593,7 @@ answer of its own, or a repair to a change not yet released.
   converting an `int` to text, the bound is not rounded and the rule declines.
   The answer above is read in a fraction of a millisecond.
 
+
 - **A quantifier `re` refuses for repeating no atom is refused.** `re`
   repeats an atom and refuses a quantifier on a quantifier, `a{2}{3}` or `a**`,
   as a "multiple repeat", and one on an assertion, `^*` or `\b+`, as "nothing
@@ -694,6 +601,7 @@ answer of its own, or a repair to a change not yet released.
   admitting `"aaaaaa"`, which no `re` call could check. Each now raises a
   `ValueError` in `re`'s words. A lazy quantifier, `a*?`, is read as before,
   and `(?:a{2}){3}` repeats a repetition in both.
+
 
 - **No value is longer than `sys.maxsize`.** CPython counts a length in a
   `Py_ssize_t` and `len()` raises past `sys.maxsize`, while a length bound was
@@ -704,6 +612,7 @@ answer of its own, or a repair to a change not yet released.
   refused at build as one no value has, and a bound at it refutes nothing for
   being exceeded.
 
+
 - **A signaling `Decimal` NaN is refused as a bound or a step, as `nan` is.**
   `Annotated[int, Ge(Decimal("sNaN"))]` and `MultipleOf(Decimal("sNaN"))`
   were built and admitted no value. The conversion to a float that reads `nan`
@@ -712,6 +621,7 @@ answer of its own, or a repair to a change not yet released.
   reads as a refusal. Both are refused at construction with the `ValueError`
   `nan` gets, read by `Decimal.is_nan`, a subclass overriding that method
   included.
+
 
 - **A class prints as its name only where its name builds the meet.** A class
   met with a shape or a record it does not declare printed as the class, which
@@ -727,6 +637,7 @@ answer of its own, or a repair to a change not yet released.
   `intersection(instance_of(Box), object(item=int))`. A union's branch label
   names such a meet by its members, `list and Plain`.
 
+
 - **An enumeration is its members to a refutation as to a proof.** `Pair`, an
   `Enum` whose members carry no `x`, was proved below `Literal[Pair.A,
   Pair.B]` and that union below `~X` for a protocol `X` declaring `x`, and
@@ -737,25 +648,6 @@ answer of its own, or a repair to a change not yet released.
   members are not. A member is read as it stands, so one given an `x` refutes
   the class below `~X` as it refutes its own literal.
 
-- **A `TypedDict` qualifier given as a type argument is refused.** `Required`,
-  `NotRequired` and `ReadOnly` qualify an item where it is declared, and the
-  typing spec admits them nowhere else. `Holds[NotRequired[int]]`, for a
-  generic `TypedDict` declaring `a: X`, read the qualifier as the item's own:
-  `a` turned optional and the class equaled one declaring `a:
-  NotRequired[int]`, where the runtime keeps `a` required; a dataclass applied
-  to one dropped it. A class applied to a qualifier, bare or under
-  `Annotated`, or a base written applied to one, is refused, naming the class
-  the field is declared in.
-
-- **A class over a list of types or a signature is refused applied.** A
-  `TypeVarTuple` stands for a list of types, and `Row[int, str]` binds it to
-  `(int, str)`, so a field `tuple[*Ts]` is `tuple[int, str]`; the parameter
-  was bound to the argument at its position, so `Row[int, str]` held
-  `{"a": (1,)}`, refused `{"a": (1, "a")}`, and equaled `Row[int]`. A
-  generic class whose parameters are not all `TypeVar`s is refused where it is
-  applied, takes a default for one, or is a base written applied, as an alias
-  declaring one already is; written bare, it is read where no field names the
-  parameter. A `ParamSpec` alike.
 
 - **A frozen dict literal's refusal names the schemas that admit one.** On
   3.15, `frozendict(a=int)` was refused with a pointer to the dict literal
@@ -763,6 +655,7 @@ answer of its own, or a repair to a change not yet released.
   no node reads a frozen dict's keys. The refusal names
   `collections.abc.Mapping` and `instance_of(frozendict)`, which admit one
   whole.
+
 
 - **A type variable is its own class's parameter.** `class IntBoxOf(Box[int],
   Generic[T])` reuses the `T` its base declares a field with, and `typing`
@@ -779,6 +672,7 @@ answer of its own, or a repair to a change not yet released.
   application: with `U` defaulting to `list[T]`, `Pairs[int]` reads `U` as
   `list[int]`, applied directly or as a base applied short.
 
+
 - **A member deep by a clause's key alone is left out of the last thinned
   reading.** A meet the set representation cannot read whole is read without
   the members it cannot hold, a superset whose emptiness proves the meet's. A
@@ -789,6 +683,7 @@ answer of its own, or a repair to a change not yet released.
   `{}` alone, outside `dict[Literal[True], None]`'s complement. A last reading
   counts a key as a level and leaves such a member out, after the two that
   keep it.
+
 
 - **A length bound no automaton could count to is refused before it is
   built.** A `str` or `bytes` length bound is read as a pattern counting code
@@ -801,29 +696,6 @@ answer of its own, or a repair to a change not yet released.
   as a sequence's bound already was, and the compiler is held to the size the
   table build is held to, for every pattern. Both relations answer at once.
 
-- **An enumeration with a subclass is read as its class.** An enumeration
-  with members is read as the union of them because the class makes no other
-  instance. No class statement derives from one, but on CPython 3.15
-  `__bases__` assigned to a plain class does, and that class's own
-  constructor makes an instance of the enumeration that is no member:
-  `Hue` was decided `subset` of `Literal[Hue.RED, Hue.GREEN]` with such an
-  instance in the first and not the second. An enumeration `type.__subclasses__`
-  lists a subclass of, as it stands when asked, is read as the class it is.
-
-- **A class is read where Python dispatches its hooks, not through its
-  metaclass.** Whether a class overrides `isinstance`, `issubclass` or `==`,
-  whether a builtin subclass's `__len__` and `__iter__` are the base's own,
-  which slots and descriptors its namespace holds and in what order its bases
-  stand were read through `getattr` on the class, which asks the metaclass
-  first. Python dispatches each through what the type's own namespaces hold
-  along the order it laid down, and asks no `__getattribute__`, so a metaclass
-  answering with the plain one hid the class's own: a class whose
-  `__subclasscheck__` answers `True` was decided above a class `isinstance`
-  says it is not above, two instances of a class with an equality of its own
-  were two disjoint literals, a `str` subclass whose `__len__` answers `0` met
-  `MaxLen(1)` with `"abc"`, and an order the metaclass reported decided a meet
-  empty that held an instance. Each is read as `inspect.getattr_static` reads
-  it now, at no cost to a class whose metaclass is `type`.
 
 - **A constant the walk stopped on proves and refutes nothing.** A literal is
   decided by walking its constant through the supertype, and a predicate that
@@ -838,6 +710,7 @@ answer of its own, or a repair to a change not yet released.
   The same for an enumeration's members, `None`, and the texts a pattern too
   large to build is read by.
 
+
 - **A bound whose operand orders on its own renders marked.** A bound of a
   subclass of `int`, `float`, `str` or `bytes` printed as the builtin's bound,
   but where the subclass writes a comparison or a remainder of its own the walk
@@ -846,6 +719,7 @@ answer of its own, or a repair to a change not yet released.
   `complement(Annotated[int, Ge(5)])` printed as one that reads back empty. The
   operand prints as a literal of it does, `Ge(<RevInt: 5>)`, a syntax error
   where it is read; a subclass keeping the builtin's methods prints as before.
+
 
 - **Opening or closing a schema twice gives the schema once did.**
   `Validator({"a": int, "b?": anything}).open()` kept `b`, which the closed
@@ -857,12 +731,14 @@ answer of its own, or a repair to a change not yet released.
   complement of a union: where every decider declines, `~(~x | y)` is asked
   as `x & ~y`, so it is `subset` of `dict` where `x` is a set of dicts.
 
+
 - **`annotated_types.doc()` is ignored under annotated-types 0.8.0.** Where
   `typing_extensions` has no `Doc` to lend, the release makes a class of its
   own named `Doc`, which earlier releases named `DocInfo`, and
   `Annotated[int, doc("a count")]` was refused as a constraint valgebra does not
   check. It documents an annotation and excludes no value, and is ignored as
   `DocInfo` is.
+
 
 - **A string a `type` alias substitutes is refused as a forward reference.**
   `type Keyed[T] = dict[str, T]` applied to `""` raised `SyntaxError` from
@@ -871,62 +747,13 @@ answer of its own, or a repair to a change not yet released.
   forward reference it is. Both raise `NotImplementedError`; a string for a
   parameter the alias's value does not name is never read.
 
+
 - **A meet two of whose members share no value is below anything at once.** A
   meet subject asked each member against the supertype before reading its own
   emptiness, so `intersection(complement(bool), float, dict[str, X])` against a
   large recursive schema walked that schema for seconds before the meet's
   empty `float & dict` pair answered it. The pair is read first.
 
-- **A class's layout is the one Python laid down.** A class given `__slots__`
-  after it was made -- by a decorator, say -- lays down no slot, yet was read
-  as laid out: its meet with any slotted class, and its relation to the
-  complement of `int`, were decided empty, beside instances Python builds of
-  both. A class whose metaclass's `mro()` leaves out the builtin it derives
-  from was read as laid out on nothing, though every instance is laid out on
-  that builtin, and a slot whose descriptor an assignment replaced was read as
-  unset rather than as the value every instance reads. The layout is read off
-  `__base__` and off the member descriptors Python makes with a class.
-
-- **An enumeration making an instance past its members is not their union.**
-  An `Enum` whose `_missing_` returns a new instance for any value was decided
-  equivalent to the `Literal` of its members, though `E(5)` is an instance of
-  it and of no member's literal; an enumeration whose metaclass leaves a member
-  out of its iteration was decided below the members it lists. An enumeration
-  is read as the union of its members only where its `_missing_` is `Enum`'s
-  and its metaclass's `__iter__` and `__call__` are `EnumMeta`'s.
-
-- **Two bounds over lists or tuples are not compared.**
-  `Annotated[list[object], Ge([2])]` holds `[2 + 0j]`, whose one item equals
-  `2`, and `Annotated[list[object], Ge([1])]` does not, since ordering `2 + 0j`
-  against `1` raises; the first was `subset` of the second. A sequence orders
-  item by item, so no order between two list or tuple bounds is an order of
-  the values; two set bounds compare by inclusion and stay decided.
-
-- **Two bounds are compared only where each operand orders as the walk reads
-  it.** `Annotated[int, Ge(Mod7(1))]`, with `Mod7` an `int` subclass equal to
-  every integer congruent to it modulo 7, admits `1`, since `1 >= Mod7(1)`
-  reads the stored `1`; it was equivalent to `Annotated[int, Ge(8)]`, because
-  `Mod7(1) == 8`. A `str` or `int` subclass ordering by its own methods was
-  read the same way, so a tighter bound was proved below a looser one that a
-  value refutes, and an empty interval was reported inhabited. A bound whose
-  operand is a builtin subclass with an `==`, an order or a rounding of its
-  own is compared with no other bound, and so is one whose operand is of a
-  class of no builtin, unless that class is exactly one of the standard
-  library's value types (`Decimal`, `Fraction`, the dates): Python implies no
-  relationship among a class's comparison operators.
-
-- **A constant proves its literal only where the values equal to it read
-  alike.** `Literal[CI("a")]`, with `CI` a `str` subclass whose `==` ignores
-  case, holds `CI("A")`, which `Regex("a")` refuses; the literal was `subset`
-  of that pattern, and its meet with the pattern's complement `is_empty()`.
-  The same held of `int`, `float` and `bytes` subclasses with an `==` of their
-  own against bounds, lengths and steps, and of a literal against another
-  literal of a class whose `==` is not transitive. A proof by the constant
-  stands where the values `==` joins to it read alike to the supertype's
-  atoms: an exact builtin, a builtin subclass keeping the builtin's `==` (an
-  `IntEnum`), a standard-library value type (`Decimal`), or identity. A class
-  is a standard-library type by identity with the class its module binds,
-  never by the `__module__` it states.
 
 - **A table of constants below a complemented table is one question.**
   `Literal[0, ..., 3999]` against `complement(Literal[-1, ..., -4000])` is the
@@ -935,6 +762,7 @@ answer of its own, or a repair to a change not yet released.
   other table and the relation took 1.2 s, quadratic in the width. The meet's
   emptiness, `intersection(A, B)` below `nothing`, read the tables whole
   already.
+
 
 - **A counted Unicode class written as an ordinary bound builds.** The walk's
   pattern compiles under a size limit of 32 MiB, three times the `regex`
@@ -947,6 +775,7 @@ answer of its own, or a repair to a change not yet released.
   refused there, where a hundred held a gigabyte and aborted the interpreter
   at the first value.
 
+
 - **One depth bound raises one type.** An annotation nested past
   `MAX_SCHEMA_DEPTH` raises the `ValueError` a schema built past it raises, at
   the bound and past it, where 129 levels and more raised
@@ -955,6 +784,7 @@ answer of its own, or a repair to a change not yet released.
   are being built, under the type arguments it is applied to, rather than after
   descending to the bound: `Chain[int]` naming `Chain[int]` is refused, and
   `Box[Box[int]]` builds.
+
 
 - **A length bound equal to a whole number is that length, and a truth value
   bounding a number is the integer it is.** `len` is an `int`, so
@@ -967,6 +797,7 @@ answer of its own, or a repair to a change not yet released.
   `Annotated[float, Le(True)]` is `not_subset` of `nothing`, where it was
   `undecided`.
 
+
 - **A recursive definition being resolved is read as empty at positive
   positions only.** The emptiness decision reads a definition it is resolving
   as empty, the least fixpoint, and a relation it asks on the way could drop a
@@ -975,6 +806,7 @@ answer of its own, or a repair to a change not yet released.
   definition is being resolved, such a part is told apart from the subject by
   the kinds each may hold, a reference read through its definition. No
   released answer is known to have been refuted this way.
+
 
 - **A reading that cannot decide a meet hands it to the next.** A meet's
   readings are each sound alone, so one that ends undecided passes the meet on
@@ -985,6 +817,7 @@ answer of its own, or a repair to a change not yet released.
   answers 0.0.21 gives on 60,000 drawn record schemas, 0.0.22 left 136
   `undecided` three combinators deep and 153 four deep.
 
+
 - **The emptiness decision reads a reference in the complement law as
   construction does.** A recursive schema is a set where its definition is
   one, and the decision reads it through its definitions, so a meet of a
@@ -992,12 +825,14 @@ answer of its own, or a repair to a change not yet released.
   `x & ~x` with `x = intersection(json, list[complex])` is `is_empty()`, where
   it was `False`.
 
+
 - **`is_empty` reads a complemented union as a relation below `nothing` does.**
   A complemented union is empty where its complements, pushed one level in,
   meet in nothing as they are built, which is how the relation reads it below
   `nothing`, so `complement(union(complement(str),
   complement(intersection(json, complement(str))))).is_empty()` is `True`,
   where it was `False` beside `relation_to(nothing) == "subset"`.
+
 
 - **A relation the two schemas settle as written is never undecided for want
   of a step.** A schema against a union that holds it, a meet against one of
@@ -1008,10 +843,12 @@ answer of its own, or a repair to a change not yet released.
   record, where 0.0.21 and 0.0.22 spent the budget on the meet's members and
   answered `undecided`.
 
+
 - **A `Len` whose minimum is below zero is refused.** `annotated_types` unpacks
   `Len(-1)` to no lower bound, so `Annotated[str, Len(-1)]` built the bare
   `str` while `MinLen(-1)` was refused for naming no length a value can have.
   Both raise that `ValueError`.
+
 
 - **A required key whose name ends in `?` renders marked.** No dict display
   requires such a key, since the display reads a trailing `?` as optional, and
@@ -1019,6 +856,152 @@ answer of its own, or a repair to a change not yet released.
   the display of a record whose `a` is optional. It prints
   `{<required: 'a?'>: int, str: anything}`, a syntax error where it is read, as
   a constant whose `repr` would read back as another value does.
+
+### Security
+
+- **A constant proves its literal only where the values equal to it read
+  alike.** `Literal[CI("a")]`, with `CI` a `str` subclass whose `==` ignores
+  case, holds `CI("A")`, which `Regex("a")` refuses; the literal was `subset`
+  of that pattern, and its meet with the pattern's complement `is_empty()`. The
+  same held of `int`, `float` and `bytes` subclasses with an `==` of their own
+  against bounds, lengths and steps, and of a literal against another literal
+  of a class whose `==` is not transitive. The answers were wrong in 0.0.1
+  through 0.0.22. A proof by the constant stands where the values `==` joins to
+  it read alike to the supertype's atoms: an exact builtin, a builtin subclass
+  keeping the builtin's `==` (an `IntEnum`), a standard-library value type
+  (`Decimal`), or identity. A class is a standard-library type by identity with
+  the class its module binds, never by the `__module__` it states.
+
+- **Two bounds over lists or tuples are not compared.**
+  `Annotated[list[object], Ge([2])]` holds `[2 + 0j]`, whose one item equals
+  `2`, and `Annotated[list[object], Ge([1])]` does not, since ordering `2 + 0j`
+  against `1` raises; the first was `subset` of the second. The answer was
+  wrong in 0.0.1 through 0.0.22. A sequence orders item by item, so no order
+  between two list or tuple bounds is an order of the values; two set bounds
+  compare by inclusion and stay decided.
+
+- **Two bounds are compared only where each operand orders as the walk reads
+  it.** `Annotated[int, Ge(Mod7(1))]`, with `Mod7` an `int` subclass equal to
+  every integer congruent to it modulo 7, admits `1`, since `1 >= Mod7(1)`
+  reads the stored `1`; it was equivalent to `Annotated[int, Ge(8)]`, because
+  `Mod7(1) == 8`. That answer was wrong in 0.0.1 through 0.0.22. A `str` or
+  `int` subclass ordering by its own methods was read the same way, so a
+  tighter bound was proved below a looser one that a value refutes, and an
+  empty interval was reported inhabited. A bound whose operand is a builtin
+  subclass with an `==`, an order or a rounding of its own is compared with no
+  other bound, and so is one whose operand is of a class of no builtin, unless
+  that class is exactly one of the standard library's value types (`Decimal`,
+  `Fraction`, the dates): Python implies no relationship among a class's
+  comparison operators.
+
+- **A class is read where Python dispatches its hooks, not through its
+  metaclass.** Whether a class overrides `isinstance`, `issubclass` or `==`,
+  whether a builtin subclass's `__len__` and `__iter__` are the base's own,
+  which slots and descriptors its namespace holds and in what order its bases
+  stand were read through `getattr` on the class, which asks the metaclass
+  first. Python dispatches each through what the type's own namespaces hold
+  along the order it laid down, and asks no `__getattribute__`, so a metaclass
+  answering with the plain one hid the class's own: a class whose
+  `__subclasscheck__` answers `True` was decided above a class `isinstance`
+  says it is not above, two instances of a class with an equality of its own
+  were two disjoint literals, a `str` subclass whose `__len__` answers `0` met
+  `MaxLen(1)` with `"abc"`, and an order the metaclass reported decided a meet
+  empty that held an instance. A hidden `__subclasscheck__` was read wrong in
+  0.0.1 through 0.0.22, and a hidden `__eq__` in 0.0.10 through 0.0.22. Each is
+  read as `inspect.getattr_static` reads it now, at no cost to a class whose
+  metaclass is `type`.
+
+- **A class's layout is the one Python laid down.** A class given `__slots__`
+  after it was made -- by a decorator, say -- lays down no slot, yet was read
+  as laid out: its meet with any slotted class, and its relation to the
+  complement of `int`, were decided empty, beside instances Python builds of
+  both. Such a meet was answered empty in 0.0.14 through 0.0.22. A class whose
+  metaclass's `mro()` leaves out the builtin it derives from was read as laid
+  out on nothing, though every instance is laid out on that builtin, and a slot
+  whose descriptor an assignment replaced was read as unset rather than as the
+  value every instance reads. The layout is read off `__base__` and off the
+  member descriptors Python makes with a class.
+
+- **An enumeration making an instance past its members is not their union.** An
+  `Enum` whose `_missing_` returns a new instance for any value was decided
+  equivalent to the `Literal` of its members, though `E(5)` is an instance of
+  it and of no member's literal; an enumeration whose metaclass leaves a member
+  out of its iteration was decided below the members it lists. The answers were
+  wrong in 0.0.10 through 0.0.22. An enumeration is read as the union of its
+  members only where its `_missing_` is `Enum`'s and its metaclass's `__iter__`
+  and `__call__` are `EnumMeta`'s.
+
+- **An enumeration with a subclass is read as its class.** An enumeration with
+  members is read as the union of them because the class makes no other
+  instance. No class statement derives from one, but on CPython 3.15
+  `__bases__` assigned to a plain class does, and that class's own constructor
+  makes an instance of the enumeration that is no member: `Hue` was decided
+  `subset` of `Literal[Hue.RED, Hue.GREEN]` with such an instance in the first
+  and not the second. The answer was wrong in 0.0.10 through 0.0.22. An
+  enumeration `type.__subclasses__` lists a subclass of, as it stands when
+  asked, is read as the class it is.
+
+- **A `TypedDict` qualifier given as a default or as `extra_items` is
+  refused.** A class left unapplied takes each parameter's default, which
+  reaches its fields as an argument does, and `NotRequired[int]` as the default
+  read as the item's own: the key turned optional, `{}` admitted and the class
+  proved equal to one declaring `a: NotRequired[int]`, though the runtime keeps
+  `a` required; a `Required` default turned an optional key required, and a
+  dataclass's field dropped the qualifier. The reading was wrong in 0.0.21 and
+  0.0.22. A qualifier as a parameter's default is refused as the same qualifier
+  written as the argument is, bare or under `Annotated`. `Required` and
+  `NotRequired` as `extra_items`, which PEP 728 calls an error, are refused
+  there too, where they built as the type they wrap; `ReadOnly` is read
+  through.
+
+- **A `TypedDict` qualifier given as a type argument is refused.** `Required`,
+  `NotRequired` and `ReadOnly` qualify an item where it is declared, and the
+  typing spec admits them nowhere else. `Holds[NotRequired[int]]`, for a
+  generic `TypedDict` declaring `a: X`, read the qualifier as the item's own:
+  `a` turned optional and the class equaled one declaring `a:
+  NotRequired[int]`, where the runtime keeps `a` required; a dataclass applied
+  to one dropped it. The reading was wrong in 0.0.21 and 0.0.22. A class
+  applied to a qualifier, bare or under `Annotated`, or a base written applied
+  to one, is refused, naming the class the field is declared in.
+
+- **A class over a list of types or a signature is refused applied.** A
+  `TypeVarTuple` stands for a list of types, and `Row[int, str]` binds it to
+  `(int, str)`, so a field `tuple[*Ts]` is `tuple[int, str]`; the parameter was
+  bound to the argument at its position, so `Row[int, str]` held `{"a": (1,)}`,
+  refused `{"a": (1, "a")}`, and equaled `Row[int]`. The reading was wrong in
+  0.0.21 and 0.0.22. A generic class whose parameters are not all `TypeVar`s is
+  refused where it is applied, takes a default for one, or is a base written
+  applied, as an alias declaring one already is; written bare, it is read where
+  no field names the parameter. A `ParamSpec` alike.
+
+- **A type parameter's default written as a string is refused.** PEP 696 makes
+  a default a type expression, and a string there a forward reference, which
+  the runtime keeps as written. A field that is the parameter alone read it as
+  the value it is: under `W = TypeVar("W", default="int")`, `a: W` was the
+  literal `'int'`, admitting the word and refusing every integer, in a
+  `TypedDict`, a dataclass and a `NamedTuple` left unapplied. The reading was
+  wrong in 0.0.21 and 0.0.22. It is refused as a forward reference, as the same
+  string written as the argument is and as `list[W]` already was.
+
+- **A `TypedDict`'s `extra_items` given as a string is the type it names.** PEP
+  728 takes a type expression there, and a string where one goes is a string
+  annotation, which the runtime keeps as written. It was read as the value it
+  is: `extra_items="int"` built `{'total': int, str: Literal['int']}`,
+  admitting the word as an extra value and refusing every integer, in the class
+  statement and the functional form alike and in a subclass inheriting it. The
+  reading was wrong in 0.0.10 through 0.0.22. It is resolved as the class's own
+  annotations are, in the module that defines the class. A class whose extra
+  items are its own type is refused as a class whose fields name it is, with
+  the hint to write it with `recursive(...)`.
+
+- **A deep walk on PyPy stops where PyPy has stack to answer.** PyPy sizes the
+  stack its C-API calls may use by the recursion limit, and a walk that reached
+  it before its own bounds ended the process: under
+  `sys.setrecursionlimit(60)`, validating a list nested fifty deep did, on
+  every PyPy wheel, 0.0.14 through 0.0.22. The walk now asks PyPy's stack check
+  as it goes deeper, and refuses at `recursion_limit` where PyPy has no room,
+  so the value is no member and `validate` raises an error the caller catches.
+  Under the default limit the answers are unchanged, and CPython is untouched.
 
 ## [0.0.22] - 2026-10-27
 
@@ -4317,7 +4300,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.22...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.23...HEAD
+[0.0.23]: https://github.com/ppigazzini/valgebra/compare/v0.0.22...v0.0.23
 [0.0.22]: https://github.com/ppigazzini/valgebra/compare/v0.0.21...v0.0.22
 [0.0.21]: https://github.com/ppigazzini/valgebra/compare/v0.0.20...v0.0.21
 [0.0.20]: https://github.com/ppigazzini/valgebra/compare/v0.0.19...v0.0.20
