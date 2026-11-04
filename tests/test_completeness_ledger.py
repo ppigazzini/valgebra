@@ -41,6 +41,7 @@ from typing import (
     NamedTuple,
     NoReturn,
     Optional,
+    Protocol,
     TypedDict,
     TypeVar,
     Union,
@@ -91,6 +92,11 @@ _COUNTED_CLASS = Annotated[str, Regex(r"(?:\w{3,4})+")]
 
 # The integers and the lists of them, nested to any depth.
 _NESTED_INTS = recursive(lambda t: union(int, [t]))
+_NESTED_LISTS_OR_EMPTY = recursive(lambda t: union(Validator([]), [t]))
+
+
+class _CarriesNestedLists(Protocol):
+    x: _NESTED_LISTS_OR_EMPTY  # ty: ignore[invalid-type-form]
 
 
 class _Color(enum.Enum):
@@ -315,6 +321,15 @@ def _guarded_fields(width: int, first: object) -> dict[object, object]:
 
 
 _DECIDED = [
+    # A reference beneath an attribute record is cut at every kind, and one
+    # unfolding with the reference taken as nothing holds an object whose `x` is
+    # `[]`, which is no `int`.
+    pytest.param(
+        "refutes",
+        _CarriesNestedLists,
+        int,
+        id="protocol-of-a-fixpoint<=int-is-refuted",
+    ),
     pytest.param("subtype", bool, int, id="bool<=int"),
     # Thirteen guarded fields are past the set representation's node bound as a
     # pair, and each field is a few nodes: a field refuted refutes the record,
@@ -1741,6 +1756,16 @@ def _missed(why: str) -> pytest.MarkDecorator:
 
 
 _LEDGERED: list[object] = [
+    # One unfolding reads the supertype's reference as everything, so a list of
+    # anything is inside it there, and the value that parts the pair is one
+    # level down.
+    pytest.param(
+        "refutes",
+        list[str],
+        _NESTED_LISTS_OR_EMPTY,
+        id="list[str]<=nested-lists-needs-a-second-unfolding",
+        marks=_missed("a value a second unfolding would place is not named"),
+    ),
     # Past the depth a build descends, a scalar is read by its kind's regions,
     # intervals over the reals that round no integer bound: the open range is
     # the closed one over `int`, and six lists deep it is not seen to be.

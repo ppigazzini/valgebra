@@ -2807,9 +2807,10 @@ proptest! {
     // THEORY: semantic-subtyping
     /// A meet is refuted below a meet it shares no value with, where it holds a
     /// value: `a ⊆ b` with `a ∩ b = ∅` holds only of an empty `a`. Over objects
-    /// guarded to their kind, `OBJ ∩ (¬OBJ ∪ R)`, each `R` a recursive record
-    /// tagged by a drawn kind -- a pair no rule reads together, which the set
-    /// representation cannot lower -- the relation refutes every pair whose
+    /// guarded to their kind, `OBJ ∩ (¬OBJ ∪ R)`, each `R` a record tagged by a
+    /// drawn kind and requiring a recursive field -- a pair no rule reads
+    /// together, whose subject the sets find no value of, the cut of that field
+    /// emptying what they narrow it to -- the relation refutes every pair whose
     /// tags share no value and holds every pair whose tags are one.
     #[test]
     fn a_meet_disjoint_from_a_meet_is_refuted(
@@ -2826,19 +2827,19 @@ proptest! {
             fields: fields.into(),
             defaults: vec![MapClause { key: Schema::Str, value: Schema::ANYTHING }].into(),
         };
+        let nested = Schema::Ref(DefIx::new(2));
         let defs: Vec<Schema> = [&first, &second]
             .into_iter()
-            .enumerate()
-            .map(|(at, tag)| {
+            .map(|tag| {
                 open(vec![
                     Field { name: "tag".into(), schema: tag.clone(), required: true },
-                    Field {
-                        name: "kids".into(),
-                        schema: Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(at)))),
-                        required: false,
-                    },
+                    Field { name: "kid".into(), schema: nested.clone(), required: true },
                 ])
             })
+            .chain([Schema::union([
+                Schema::Int,
+                Schema::list(SeqShape::homogeneous(nested.clone())),
+            ])])
             .collect();
         let object = open(Vec::new());
         let guarded = |at: usize| {
@@ -5213,6 +5214,48 @@ fn fields_met(members: &[Schema]) -> Option<Schema> {
     })
 }
 
+/// The sequence a meet of sequences holds where its members' positions meet:
+/// each position is the meet of what every member reads there, its prefix or its
+/// tail, out to the widest prefix. `None` where a member is no sequence or the
+/// members are of two containers.
+///
+/// What it holds is one sequence a meet's own members do not offer, as
+/// [`fields_met`] does of a record: `tuple[bool, Any]` and `tuple[bool, ...]` each
+/// hold a tuple the other refuses, and their meet holds `(True, True)`. It is a
+/// candidate, so a sequence a member refuses for its length is dropped by the
+/// oracle.
+fn positions_met(members: &[Schema]) -> Option<Schema> {
+    let shapes = members
+        .iter()
+        .map(|member| match member {
+            Schema::Seq { container, shape } => Some((*container, shape)),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let (container, _) = *shapes.first()?;
+    if shapes.iter().any(|(held, _)| *held != container) {
+        return None;
+    }
+    let width = shapes.iter().map(|(_, shape)| shape.prefix.len()).max()?;
+    let prefix: Vec<Schema> = (0..width)
+        .map(|at| {
+            let read: Vec<Schema> = shapes
+                .iter()
+                .filter_map(|(_, shape)| shape.prefix.get(at).or(shape.tail.as_deref()))
+                .cloned()
+                .collect();
+            Schema::Intersection(read.into())
+        })
+        .collect();
+    Some(Schema::Seq {
+        container,
+        shape: SeqShape {
+            prefix: prefix.into(),
+            tail: None,
+        },
+    })
+}
+
 /// A value of the schema, built from the schema's own denotation.
 ///
 /// The universe's other half. The kind edges and the derived boundaries are
@@ -5283,12 +5326,14 @@ fn a_member(schema: &Schema, fuel: usize) -> Option<Obj> {
         // is a member and one that does not is dropped. A meet of records has
         // one candidate more, a record whose fields meet those of every member
         // by name: `{"b?": None}` and `{"b": Any}` each hold a record the
-        // other refuses, and their meet holds `{"b": None}` alone.
+        // other refuses, and their meet holds `{"b": None}` alone. A meet of
+        // sequences has one too, read last so a meet that held a member keeps it.
         Schema::Intersection(members) => members
             .iter()
             .filter_map(|member| a_member(member, fuel - 1))
             .chain(fields_met(members).and_then(|record| a_member(&record, fuel - 1)))
             .chain(kind_edges())
+            .chain(positions_met(members).and_then(|sequence| a_member(&sequence, fuel - 1)))
             .find(|value| member_full(schema, value, &pool)),
         // A refinement is asked of candidates rather than constructed: the
         // base's own member, that member grown to each length a constraint
@@ -5305,8 +5350,14 @@ fn a_member(schema: &Schema, fuel: usize) -> Option<Obj> {
                 .into_iter()
                 .find(|value| member_full(schema, value, &pool))
         }
-        Schema::Complement(_) => kind_edges()
+        // A complement of a complement has the members of the set inside it,
+        // read last for the reason a meet's sequence is.
+        Schema::Complement(inner) => kind_edges()
             .into_iter()
+            .chain(match &**inner {
+                Schema::Complement(kept) => a_member(kept, fuel - 1),
+                _ => None,
+            })
             .find(|value| member_full(schema, value, &pool)),
         // The empty set has no member, and a leaf this does not model is one
         // no member can be built for. A law reads either as "no witness here".
@@ -5316,6 +5367,191 @@ fn a_member(schema: &Schema, fuel: usize) -> Option<Obj> {
         | Schema::Instance(_)
         | Schema::AttrRecord { .. } => None,
     }
+}
+
+/// How many pairs of subterms one walk of [`parted`] reads.
+const PARTED_PAIRS: usize = 256;
+
+/// Values of `subject` outside `other`, built by walking the two together.
+///
+/// A refutation parts two schemas wherever they differ, and they can differ
+/// positions deep: `list[frozenset[tuple[str, bytes]], R]` below
+/// `list[frozenset[tuple["a", bytes]], R]` is parted by a word other than `"a"`
+/// three levels down, which a universe built a node at a time and capped at each
+/// one does not reach. Here no place is spent on what the other schema agrees
+/// with: a shape the two share is descended a position at a time, and what comes
+/// back is set in a member of the subject. Each value is read by the oracle, so
+/// one built wrongly is dropped rather than counted.
+fn parted(subject: &Schema, other: &Schema, left: &mut usize) -> Vec<Obj> {
+    if *left == 0 {
+        return Vec::new();
+    }
+    *left -= 1;
+    let (subject, other) = (
+        kept_by_two_complements(subject),
+        kept_by_two_complements(other),
+    );
+    let mut found = Vec::new();
+    match (subject, other) {
+        (Schema::Union(members), _) => {
+            for member in members.iter() {
+                found.extend(parted(member, other, left));
+            }
+        }
+        (Schema::Intersection(members), _) => {
+            for member in members.iter() {
+                found.extend(parted(member, other, left));
+            }
+            if let Some(met) = positions_met(members).or_else(|| fields_met(members)) {
+                found.extend(parted(&met, other, left));
+            }
+        }
+        (_, Schema::Union(members) | Schema::Intersection(members)) => {
+            for member in members.iter() {
+                found.extend(parted(subject, member, left));
+            }
+        }
+        (_, Schema::Complement(inner)) => {
+            let both = vec![subject.clone(), (**inner).clone()];
+            found.extend(a_member(&Schema::Intersection(both.into()), MEMBER_FUEL));
+        }
+        (
+            Schema::Seq { container, shape },
+            Schema::Seq {
+                container: beside,
+                shape: theirs,
+            },
+        ) if container == beside => found = parted_positions(*container, shape, theirs, left),
+        (
+            Schema::Coll { container, element },
+            Schema::Coll {
+                container: beside,
+                element: theirs,
+            },
+        ) if container == beside => {
+            for value in parted(element, theirs, left) {
+                found.push(gather(*container, vec![value]));
+            }
+        }
+        (
+            Schema::KeyedMap { fields, defaults },
+            Schema::KeyedMap {
+                fields: their_fields,
+                defaults: their_defaults,
+            },
+        ) => {
+            found = parted_fields(
+                subject,
+                (fields, defaults),
+                (their_fields, their_defaults),
+                left,
+            );
+        }
+        _ => {}
+    }
+    let pool = const_pool();
+    let parts =
+        |value: &Obj| member_full(subject, value, &pool) && !member_full(other, value, &pool);
+    found.retain(parts);
+    if found.is_empty() {
+        // Past what the two share: the values each puts a boundary at.
+        let mut seen = kind_edges();
+        found = edges_of(subject, &mut seen);
+        found.extend(edges_of(other, &mut seen));
+        found.extend(seen);
+        found.retain(parts);
+    }
+    deduplicated(found, CAP_PER_NODE)
+}
+
+/// The set inside a complement of a complement, and any other schema as it stands.
+fn kept_by_two_complements(schema: &Schema) -> &Schema {
+    match schema {
+        Schema::Complement(inner) => match &**inner {
+            Schema::Complement(kept) => kept_by_two_complements(kept),
+            _ => schema,
+        },
+        _ => schema,
+    }
+}
+
+/// A member of the shape with one position parted from what the other shape reads
+/// there: each position of its prefix, and one past it where it has a tail.
+fn parted_positions(
+    container: SeqKind,
+    shape: &SeqShape,
+    theirs: &SeqShape,
+    left: &mut usize,
+) -> Vec<Obj> {
+    let base: Option<Vec<Obj>> = shape
+        .prefix
+        .iter()
+        .map(|element| a_member(element, MEMBER_FUEL))
+        .collect();
+    let Some(base) = base else {
+        return Vec::new();
+    };
+    let read_at = |at: usize| theirs.prefix.get(at).or(theirs.tail.as_deref());
+    let mut found = Vec::new();
+    for (at, element) in shape.prefix.iter().enumerate() {
+        let Some(read) = read_at(at) else { continue };
+        for value in parted(element, read, left) {
+            let mut items = base.clone();
+            items[at] = value;
+            found.push(hold(container, items));
+        }
+    }
+    if let (Some(tail), Some(read)) = (shape.tail.as_deref(), read_at(base.len())) {
+        for value in parted(tail, read, left) {
+            let mut items = base.clone();
+            items.push(value);
+            found.push(hold(container, items));
+        }
+    }
+    found
+}
+
+/// A member of the record with one name's value parted from what the other record
+/// reads that name with, or holding a name it reads nothing with. A name is read
+/// by a field or by a clause, so two records can differ at a key neither declares:
+/// `{"b": list, str: Any}` and `{"b?": Any, str: ~float}` part at a float under
+/// another key.
+fn parted_fields(
+    subject: &Schema,
+    (fields, defaults): (&Fields, &Clauses),
+    (their_fields, their_defaults): (&Fields, &Clauses),
+    left: &mut usize,
+) -> Vec<Obj> {
+    let Some(Obj::Map(base)) = a_member(subject, MEMBER_FUEL) else {
+        return Vec::new();
+    };
+    let mut found = Vec::new();
+    for name in NAMES {
+        let Some(mine) = schema_at(fields, defaults, name) else {
+            continue;
+        };
+        let values = match schema_at(their_fields, their_defaults, name) {
+            Some(read) => parted(&mine, &read, left),
+            None => a_member(&mine, MEMBER_FUEL).into_iter().collect(),
+        };
+        for value in values {
+            let mut entries = base.clone();
+            entries.retain(|(key, _)| key.name() != name);
+            entries.push((Key::Exact(name), value));
+            found.push(Obj::Map(entries));
+        }
+    }
+    found
+}
+
+/// Whether a value parts the two: one of the universe, or one [`parted`] builds
+/// where the universe holds none.
+fn a_value_parts(subject: &Schema, other: &Schema) -> bool {
+    let pool = const_pool();
+    boundary_values(&[subject, other])
+        .iter()
+        .any(|value| member_full(subject, value, &pool) && !member_full(other, value, &pool))
+        || !parted(subject, other, &mut PARTED_PAIRS.clone()).is_empty()
 }
 
 /// The values every container arm is probed with, whatever its element says.
@@ -7124,6 +7360,152 @@ fn a_meet_of_records_has_the_member_its_fields_meet_in() {
     );
 }
 
+/// A value is built where two shapes differ positions deep. A list holding a
+/// frozenset of a word beside bytes is parted from one holding the constant `"a"`
+/// there by a word other than `"a"`, three levels down. Nothing parts a schema
+/// from itself or from a schema it is below. Two records can differ at a key
+/// neither declares, and a list holding a complement of a complement holds a
+/// member of the set inside it.
+#[test]
+fn a_value_is_built_where_two_shapes_differ_deep_inside() {
+    let holding = |word: Schema| Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape {
+            prefix: vec![
+                Schema::Coll {
+                    container: CollKind::FrozenSet,
+                    element: Arc::new(Schema::tuple(SeqShape {
+                        prefix: vec![word, Schema::Bytes].into(),
+                        tail: None,
+                    })),
+                },
+                Schema::Ref(DefIx::new(1)),
+            ]
+            .into(),
+            tail: None,
+        },
+    };
+    let defs = fixpoint_defs();
+    let unfolded = |schema: &Schema| unfold_for_oracle(schema, &defs, ORACLE_UNFOLDS);
+    let words = unfolded(&holding(Schema::Str));
+    let constant = unfolded(&holding(Schema::Literal(ConstIx::new(3))));
+    let walked =
+        |subject: &Schema, other: &Schema| parted(subject, other, &mut PARTED_PAIRS.clone());
+    assert_ne!(walked(&words, &constant), Vec::new());
+    assert!(a_value_parts(&words, &constant));
+    assert_eq!(walked(&words, &words), Vec::new());
+    assert_eq!(walked(&constant, &words), Vec::new());
+
+    let every_value = Schema::KeyedMap {
+        fields: vec![Field {
+            name: "a".into(),
+            schema: Schema::Int,
+            required: true,
+        }]
+        .into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: Schema::ANYTHING,
+        }]
+        .into(),
+    };
+    let no_bytes = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: not(Schema::Bytes),
+        }]
+        .into(),
+    };
+    assert_ne!(walked(&every_value, &no_bytes), Vec::new());
+    assert_eq!(walked(&no_bytes, &no_bytes), Vec::new());
+
+    let pair = Schema::tuple(SeqShape {
+        prefix: vec![Schema::Bool, Schema::NoneType].into(),
+        tail: None,
+    });
+    let twice = not(not(pair));
+    assert_eq!(
+        a_member(&twice, MEMBER_FUEL),
+        Some(Obj::Tuple(vec![Obj::Bool(true), Obj::None]))
+    );
+    let held = unfolded(&Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape {
+            prefix: vec![twice, Schema::Ref(DefIx::new(1))].into(),
+            tail: None,
+        },
+    });
+    assert!(a_value_parts(&held, &Schema::Bytes));
+}
+
+/// A meet of sequences has the member its positions meet in, and a sequence
+/// holding that meet is built around it. `tuple[bool, Any]` and
+/// `tuple[bool, ...]` each hold a tuple the other refuses, so neither member's
+/// own tuple is in the meet; the tuple their positions meet in, `(True, True)`,
+/// is. A list holding the meet is refuted below a record by a value of that
+/// shape, which the universe holds. Members of two lengths or of two containers
+/// meet in no such sequence.
+#[test]
+fn a_meet_of_sequences_has_the_member_its_positions_meet_in() {
+    let tuple = |prefix: Vec<Schema>, tail: Option<Schema>| {
+        Schema::tuple(SeqShape {
+            prefix: prefix.into(),
+            tail: tail.map(Arc::new),
+        })
+    };
+    let pair = tuple(vec![Schema::Bool, Schema::ANYTHING], None);
+    let meet = Schema::Intersection(vec![pair, tuple(Vec::new(), Some(Schema::Bool))].into());
+    assert_eq!(
+        a_member(&meet, MEMBER_FUEL),
+        Some(Obj::Tuple(vec![Obj::Bool(true), Obj::Bool(true)]))
+    );
+    let list = Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape {
+            prefix: vec![meet, Schema::Ref(DefIx::new(1))].into(),
+            tail: None,
+        },
+    };
+    let record = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: Schema::ANYTHING,
+        }]
+        .into(),
+    };
+    let defs = fixpoint_defs();
+    assert_eq!(
+        list.subtype_relation_under(&record, &NoLeafRelations, &defs),
+        Relation::Fails
+    );
+    let subject = unfold_for_oracle(&list, &defs, ORACLE_UNFOLDS);
+    let pool = const_pool();
+    assert!(
+        boundary_values(&[&subject, &record]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&record, value, &pool)
+        }),
+        "a value of the universe refutes the pair"
+    );
+    let two_lengths = Schema::Intersection(
+        vec![
+            tuple(vec![Schema::Bool], None),
+            tuple(vec![Schema::Bool, Schema::Bool], None),
+        ]
+        .into(),
+    );
+    assert_eq!(a_member(&two_lengths, MEMBER_FUEL), None);
+    let two_containers = Schema::Intersection(
+        vec![
+            tuple(Vec::new(), Some(Schema::Bool)),
+            Schema::list(SeqShape::homogeneous(Schema::Bool)),
+        ]
+        .into(),
+    );
+    assert_eq!(a_member(&two_containers, MEMBER_FUEL), None);
+}
+
 proptest! {
     // THEORY: subtyping-is-inclusion
     /// A refutation stands on a value, and the universe names it.
@@ -7136,21 +7518,43 @@ proptest! {
     ///
     /// The universe is the schemas' own: each subterm contributes a member of
     /// itself and each bound its two neighbors, so a shape no fixed corpus
-    /// spells still has a value here. A failure is either a refutation with
-    /// nothing under it or a universe too thin to hold the witness, and the
-    /// message carries the pair so the two are told apart by reading it.
+    /// spells still has a value here, and [`parted`] builds one where the two
+    /// differ too deep for it. A failure is either a refutation with nothing
+    /// under it or a search too thin to find the witness, and the message
+    /// carries the pair so the two are told apart by reading it.
     #[test]
     fn a_refutation_is_a_value(a in recursive_schema(), b in recursive_schema()) {
-        let pool = const_pool();
         let defs = fixpoint_defs();
         if a.subtype_relation_under(&b, &NoLeafRelations, &defs) == Relation::Fails {
             let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
             let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
             prop_assert!(
-                boundary_values(&[&subject, &other]).iter().any(|value| {
-                    member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
-                }),
-                "{:?} <= {:?} is refuted and no value of the universe refutes it",
+                a_value_parts(&subject, &other),
+                "{:?} <= {:?} is refuted and no value refutes it",
+                a, b
+            );
+        }
+    }
+
+    // THEORY: a-cut-reference-proves
+    /// A refutation by the difference cut the other way stands on a value.
+    ///
+    /// Asked of the reading itself rather than through the relation, whose rules
+    /// and widened reading answer most of the pairs a wrong cut would refute: a
+    /// pair that holds is what such a cut parts, and the rules prove it first.
+    #[test]
+    fn a_refutation_by_the_narrowed_reading_is_a_value(
+        a in recursive_schema(),
+        b in recursive_schema(),
+    ) {
+        let defs = fixpoint_defs();
+        let (read, side) = b.read_as_a_supertype();
+        if a.refuted_narrowed(read, side, &defs, &NoLeafRelations) == Relation::Fails {
+            let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+            let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+            prop_assert!(
+                a_value_parts(&subject, &other),
+                "{:?} <= {:?} is refuted cut the other way and no value refutes it",
                 a, b
             );
         }
@@ -7170,7 +7574,6 @@ proptest! {
         a in recursive_schema(),
         b in recursive_schema(),
     ) {
-        let pool = const_pool();
         let defs = fixpoint_defs();
         let carrying = |schema: &Schema| Schema::attr_record(vec![Attribute {
             name: "x".into(),
@@ -7182,9 +7585,7 @@ proptest! {
             let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
             let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
             prop_assert!(
-                boundary_values(&[&subject, &other]).iter().any(|value| {
-                    member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
-                }),
+                a_value_parts(&subject, &other),
                 "the record over {:?} is refuted below the record over {:?} and no value parts them",
                 a, b
             );
@@ -7999,6 +8400,34 @@ proptest! {
                 prop_assert!(
                     member_full(&real_b, value, &pool),
                     "{value:?} is in the narrowing of {b:?} and outside it"
+                );
+            }
+        }
+    }
+
+    // THEORY: a-cut-reference-proves
+    /// The difference cut the other way lies inside the real one.
+    ///
+    /// The subject narrowed is below the subject and the supertype widened is
+    /// above the supertype, so a value of the one outside the other is a value of
+    /// the real difference, which is what lets the reading refute at a kind a
+    /// cut reaches. Held on values for the reason the law above is.
+    #[test]
+    fn a_narrowed_difference_lies_inside_the_real_one(
+        a in recursive_schema(),
+        b in recursive_schema(),
+    ) {
+        let pool = const_pool();
+        let defs = fixpoint_defs();
+        let real_a = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+        let real_b = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+        let narrow = a.unfolded(&defs, crate::descr::lower::UNFOLDS, Polarity::Narrow);
+        let wide = b.unfolded(&defs, crate::descr::lower::UNFOLDS, Polarity::Widen);
+        for value in &boundary_values(&[&real_a, &real_b, &narrow]) {
+            if member_full(&narrow, value, &pool) && !member_full(&wide, value, &pool) {
+                prop_assert!(
+                    member_full(&real_a, value, &pool) && !member_full(&real_b, value, &pool),
+                    "{value:?} is in the difference of {a:?} and {b:?} cut the other way and outside the real one"
                 );
             }
         }

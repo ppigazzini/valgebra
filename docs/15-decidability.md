@@ -581,7 +581,12 @@ answers `"undecided"`.
   in both directions. A value outside a fixpoint is named where its kind is
   none of the containers its reference sits beneath: `str` is not below
   `recursive(lambda t: union(Annotated[str, Regex("a")], [t]))`, which `"b"`
-  is outside.
+  is outside. Where the reference does sit beneath its kind, a value is named if
+  one unfolding holds it with the subject's reference taken as nothing and the
+  supertype's as everything: a protocol whose `x` is `recursive(lambda t: [t])`
+  is not below `int`, which an object whose `x` is `[]` is outside. A value a
+  second unfolding would place is not named: `list[str]` is `undecided` against
+  `recursive(lambda t: union(Validator([]), [t]))`, which `["a"]` is outside.
 - **A meet with a recursive reference.** A reference denotes its definition,
   so a meet with one is the definition met with the rest, and a definition that
   is a union is the union of its branches each met with the rest. The meet of

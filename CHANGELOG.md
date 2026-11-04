@@ -114,10 +114,23 @@ answer of its own, or a repair to a change not yet released.
 - feat: a verdict read under an open meet is held where it met none again
 - fix: a cut beneath an attribute record reaches every kind -- internal
 - fix: open and close give one term however often they are applied
+- feat: a value of the difference cut the other way refutes at any kind
 
 -->
 
 ### Added
+
+- **A value of the difference cut the other way refutes at any kind.** A
+  recursive reference is cut once to read a relation, and the difference that
+  proves an inclusion holds values the real one does not, so where it held one at a
+  kind the cut reaches the answer was `undecided`. The pair is read again with the
+  subject cut to nothing and the supertype to everything, a difference inside the
+  real one, and a value of it refutes. A protocol whose `x` is `recursive(lambda
+  t: [t])` is `not_subset` of `int`, as `recursive(lambda t: intersection(union(
+  Validator([]), list[t]), complement(None)))` is of `str`, on `[]`, where each was
+  `undecided`. The relations over no fixpoint read no more instructions; a
+  corpus of purely recursive schemas read 8% more, and answered a quarter of what
+  it left `undecided`.
 
 - **A question undecided at an allowance is asked again with a larger one.**
   A relation, an emptiness or an equivalence that ends `undecided` because a

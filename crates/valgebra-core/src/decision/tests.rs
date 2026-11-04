@@ -6982,11 +6982,13 @@ fn a_kept_meet_is_read_back_by_its_own_query_and_pair() {
 }
 
 // THEORY: a-cut-reference-proves
-/// A value of no kind refutes a pair past a cut as a value of a kind does: a
-/// direct instance of a plain class is outside a fixpoint holding every kind
-/// whole but the lists its cut sits under.
+/// A value of no kind refutes a pair past a cut as a value of a kind does, read
+/// from the difference already built: a direct instance of a plain class is
+/// outside a fixpoint holding every kind whole but the lists its cut sits under,
+/// in one reading of the sets.
 #[test]
 fn a_value_of_no_kind_refutes_past_a_cut() {
+    use super::goal_tests::goals::pairs_read_by_the_sets;
     struct Plain;
     impl Constants for Plain {
         fn class(&self, _index: ClassIx) -> Option<Class> {
@@ -7024,10 +7026,12 @@ fn a_value_of_no_kind_refutes_past_a_cut() {
         Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
     ])];
     let instance = Schema::Instance(ClassIx::new(0));
+    let before = pairs_read_by_the_sets();
     assert_eq!(
         instance.descriptor_contained_in(&Schema::Ref(DefIx::new(0)), &Plain, &defs),
         Relation::Fails
     );
+    assert_eq!(pairs_read_by_the_sets() - before, 1);
 }
 
 /// A meet two of whose members share no value is below anything, read before
@@ -11243,26 +11247,29 @@ fn two_branches_splitting_a_set_are_the_set() {
 
 /// A meet subject is refuted against a meet supertype it shares no value with,
 /// where it holds a value: `a ⊆ b` with `a ∩ b = ∅` holds only of an empty `a`.
-/// Two objects guarded to their kind, `OBJ ∩ (¬OBJ ∪ R)`, each `R` a recursive
-/// record requiring a tag of its own kind, are that pair: no rule reads the two
-/// meets together, and the set representation cannot lower a reference. A
-/// subject with no value is below everything, and a pair whose meet holds a
-/// value is no such pair.
+/// Two objects guarded to their kind, `OBJ ∩ (¬OBJ ∪ R)`, each `R` a record
+/// requiring a tag of its own kind and a recursive field, are that pair: no rule
+/// reads the two meets together, and the sets find no value of the subject, the
+/// cut of the required field emptying what they narrow it to. A subject with no
+/// value is below everything, and a pair whose meet holds a value is no such
+/// pair.
 #[test]
 fn a_meet_disjoint_from_a_meet_it_holds_a_value_of_is_refuted() {
     let object = open(Vec::new());
     let tags = [Schema::Int, Schema::Str, Schema::Bytes];
-    let defs: Vec<Schema> = (0..tags.len())
-        .map(|at| {
+    let nested = Schema::Ref(DefIx::new(tags.len()));
+    let defs: Vec<Schema> = tags
+        .iter()
+        .map(|tag| {
             open(vec![
-                field("tag", tags[at].clone(), true),
-                field(
-                    "kids",
-                    Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(at)))),
-                    false,
-                ),
+                field("tag", tag.clone(), true),
+                field("kid", nested.clone(), true),
             ])
         })
+        .chain([Schema::union([
+            Schema::Int,
+            Schema::list(SeqShape::homogeneous(nested.clone())),
+        ])])
         .collect();
     let guarded = |at: usize| {
         Schema::meet([
@@ -11272,6 +11279,11 @@ fn a_meet_disjoint_from_a_meet_it_holds_a_value_of_is_refuted() {
     };
     let relation =
         |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &NoLeafRelations, &defs);
+    assert_eq!(
+        guarded(0).descriptor_contained_in(&guarded(1), &NoLeafRelations, &defs),
+        Relation::Unknown,
+        "the sets leave the pair to this reading"
+    );
     assert_eq!(relation(&guarded(0), &guarded(1)), Relation::Fails);
     assert_eq!(relation(&guarded(1), &guarded(0)), Relation::Fails);
     let empty = Schema::meet([guarded(0), guarded(1)]);
@@ -13198,4 +13210,70 @@ fn a_cut_beneath_an_attribute_record_reaches_every_part() {
         Relation::Fails,
         "the relation stands on what the set reading stands on"
     );
+}
+
+// THEORY: a-cut-reference-proves
+/// A value of the difference cut the other way refutes at a kind a cut reaches,
+/// and a supertype read through its complement is read cut the other way too.
+///
+/// A record carrying `μt. list[t]` is below no list, on an object whose `x` is
+/// `[]`: the cut reaches every kind, so the widened difference refutes nothing,
+/// and the subject cut to nothing still holds that object. Below the complement
+/// of a record it shares that value with, the same. And `{"a": t}` over a chain
+/// ending in an integer is below the complement of `{"a": {"a": str}}`: the widened
+/// meet holds a value, the narrowed one holds none, and the pair is no refutation.
+#[test]
+fn a_value_of_the_narrowed_difference_refutes_at_a_kind_a_cut_reaches() {
+    let at = |index| Schema::Ref(DefIx::new(index));
+    let list = |element| Schema::list(SeqShape::homogeneous(element));
+    let carrying = |schema: Schema| Schema::AttrRecord {
+        fields: Arc::from([Attribute {
+            name: Arc::from("x"),
+            schema,
+        }]),
+    };
+    let record = |schema: Schema| {
+        Schema::record(
+            vec![Field {
+                name: "a".into(),
+                schema,
+                required: true,
+            }],
+            Openness::Closed,
+        )
+    };
+    let defs = [list(at(0)), Schema::union([Schema::Int, record(at(1))])];
+    let nested = carrying(at(0));
+    let answer = |a: &Schema, b: &Schema| a.descriptor_contained_in(b, &NoLeafRelations, &defs);
+    assert_eq!(answer(&nested, &Schema::Int), Relation::Fails);
+    assert_eq!(answer(&nested, &list(Schema::Int)), Relation::Fails);
+    assert_eq!(answer(&Schema::ANYTHING, &nested), Relation::Fails);
+    assert_eq!(
+        answer(&nested, &carrying(list(Schema::Int)).complement()),
+        Relation::Fails
+    );
+    assert_eq!(
+        answer(&record(at(1)), &record(record(Schema::Str)).complement()),
+        Relation::Unknown,
+        "the two share no value, so the difference holds none"
+    );
+}
+
+// THEORY: a-cut-reference-proves
+/// A value at a kind no cut reaches is read from the difference already built,
+/// and the pair is not read a second time: `str` below a fixpoint of integers
+/// and lists, the cut beneath the lists, is one reading of the sets.
+#[test]
+fn a_value_no_cut_reaches_refutes_without_a_second_reading() {
+    use super::goal_tests::goals::pairs_read_by_the_sets;
+    let defs = [Schema::union([
+        Schema::Int,
+        Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+    ])];
+    let before = pairs_read_by_the_sets();
+    assert_eq!(
+        Schema::Str.descriptor_contained_in(&Schema::Ref(DefIx::new(0)), &NoLeafRelations, &defs),
+        Relation::Fails
+    );
+    assert_eq!(pairs_read_by_the_sets() - before, 1);
 }

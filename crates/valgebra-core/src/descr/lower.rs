@@ -156,7 +156,8 @@ pub(crate) const UNFOLDS: u32 = 1;
 /// `polarity` is the side the schema is read on, and it is the caller's to
 /// know: unfolding grows the set on one side and shrinks it on the other, so a
 /// difference stays sound only when the two sides are unfolded in opposite
-/// directions -- and only in the direction that proves it empty.
+/// directions, and each pairing answers in one direction: the subject widened
+/// proves the difference empty, and the subject narrowed finds a value of it.
 ///
 /// # Errors
 ///

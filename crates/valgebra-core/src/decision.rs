@@ -663,7 +663,9 @@ impl Schema {
         // but at a kind no cut reaches: a cut beneath a constructor changes that
         // constructor's kind of values alone, the difference being read a kind
         // at a time [FCB08, (4)], so a value it holds at another kind is a
-        // value of the real difference (`parts_a_cut_reaches`).
+        // value of the real difference (`parts_a_cut_reaches`). An inhabited
+        // reading refuting nothing there hands the pair to the reading the
+        // other way round ([`Self::refuted_narrowed`]).
         //
         // A side this reading cannot lower, and a difference it cannot build,
         // are declines rather than refutations: nothing about the inclusion is
@@ -722,6 +724,7 @@ impl Schema {
         let cut = || {
             *cut.get_or_init(|| parts_a_cut_reaches(self, defs) | parts_a_cut_reaches(read, defs))
         };
+        let mut inhabited = false;
         read_widened(
             self,
             defs,
@@ -765,6 +768,7 @@ impl Schema {
                         (emptiness, refuted)
                     })
                 })?;
+                inhabited |= emptiness == Verdict::Inhabited;
                 let stands = || match (kept, negate) {
                     (None, true) => an_empty_reading_stands(&[self], &[read], defs, pool),
                     (None, false) => an_empty_reading_stands(&[self, read], &[], defs, pool),
@@ -789,13 +793,80 @@ impl Schema {
                 (relation != Relation::Unknown).then_some(relation)
             },
         )
-        .unwrap_or(Relation::Unknown)
+        .unwrap_or_else(|| {
+            if inhabited {
+                self.refuted_narrowed(read, side, defs, pool)
+            } else {
+                Relation::Unknown
+            }
+        })
+    }
+
+    /// `Fails` where a value of the subject outside the supertype is found in
+    /// the reading that holds no other: the subject narrowed, the supertype
+    /// widened.
+    ///
+    /// The finite approximation runs in both directions. Cut to the bottom where
+    /// a schema is used positively and to the top under a complement, a
+    /// recursive type lies below the type it cuts [AC93, §3.4], so `self⁻ ⊆
+    /// self`, and the dual cut gives `other ⊆ other⁺`, so `¬other⁺ ⊆ ¬other`.
+    /// Their meet lies inside the real difference, and a value of it refutes at
+    /// any kind, a kind a cut reaches included. An empty reading proves nothing,
+    /// which is the half the widened reading has. `read` and `side` are what
+    /// [`Self::read_as_a_supertype`] answered, and `side` flips with the cut:
+    /// `other` narrowed is read as `¬read⁺`, and a complement's inner set
+    /// widened as `read⁻`.
+    ///
+    /// **Asked only of a pair the widened reading held a value of.** A pair with
+    /// no reference is refuted or proved before it gets here, so the relations
+    /// over no fixpoint pay for one comparison. Asked of every undecided pair
+    /// holding a reference, it read 5% more instructions over drawn JSON-Schema
+    /// translations, for 13 more answers in 22,500 draws. A value at a kind no
+    /// cut reaches is in this reading too, the two sides reading alike there,
+    /// and the difference already built names it: asking this reading for those
+    /// as well read 1% to 3% more over recursive schemas, for the same answers.
+    ///
+    /// **One unfolding, as the widened reading.** A required field cut to the
+    /// bottom empties its record, so a deeper unfolding could find a value this
+    /// one does not, but the wider term spends [`BUDGET`](crate::descr::lower)
+    /// first: two unfoldings left 17% more of a corpus of recursive lists and
+    /// maps undecided.
+    #[inline(never)]
+    pub(crate) fn refuted_narrowed(
+        &self,
+        read: &Schema,
+        side: Polarity,
+        defs: &[Schema],
+        pool: &dyn Constants,
+    ) -> Relation {
+        #[cfg(test)]
+        goal_tests::goals::read_by_the_sets();
+        let refuted = || {
+            let mine = lower_unfolded(self, defs, Polarity::Narrow, pool)?;
+            let theirs = lower_unfolded(read, defs, side.flipped(), pool)?;
+            budget::under(WORK, || {
+                let complemented;
+                let outside = if side == Polarity::Narrow {
+                    complemented = theirs.complement();
+                    &complemented
+                } else {
+                    &theirs
+                };
+                mine.intersect(outside)
+                    .map(|difference| difference.emptiness() == Verdict::Inhabited)
+            })
+        };
+        if refuted() == Some(true) {
+            Relation::Fails
+        } else {
+            Relation::Unknown
+        }
     }
 
     /// What the set representation lowers of this schema as a supertype, and on
     /// which side: a complement's inner set on the widened side, since `a ⊆
     /// ¬inner` asks `a ∧ inner = ∅`, and the schema itself on the narrowed side.
-    fn read_as_a_supertype(&self) -> (&Schema, Polarity) {
+    pub(crate) fn read_as_a_supertype(&self) -> (&Schema, Polarity) {
         match self {
             Schema::Complement(inner) => (inner, Polarity::Widen),
             _ => (self, Polarity::Narrow),

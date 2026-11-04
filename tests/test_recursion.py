@@ -668,6 +668,46 @@ def test_a_cut_beneath_an_attribute_record_refutes_no_value() -> None:
     assert split.relation_to(plain) != "not_subset"
 
 
+_LISTS_NOT_NONE = recursive(
+    lambda t: intersection(
+        union(Validator([]), Validator(list[t])),  # ty: ignore[invalid-type-form]
+        complement(None),
+    )
+)
+
+
+# THEORY: a-cut-reference-proves
+@pytest.mark.parametrize(
+    ("subject", "other", "witness"),
+    [
+        (_CarriesNestedLists, int, _Carrier([])),
+        (_CarriesNestedLists, list[int], _Carrier([])),
+        (anything, _CarriesNestedLists, 1),
+        (_LISTS_NOT_NONE, str, []),
+        (
+            Validator(list[complement(_NESTED_LISTS)]),  # ty: ignore[invalid-type-form]
+            Validator([]),
+            [1],
+        ),
+    ],
+    ids=["protocol-int", "protocol-list", "anything-protocol", "meet", "complement"],
+)
+def test_a_value_below_every_cut_refutes_at_any_kind(
+    subject: object, other: object, witness: object
+) -> None:
+    """The difference cut the other way lies inside the real one.
+
+    Each subject holds a value with its reference taken as nothing, at a kind the
+    cut reaches, and each supertype read with its reference taken as everything
+    leaves that value out. So the value is a value of the real difference, and the
+    relation refutes on it where the widened difference names nothing real.
+    """
+    held, outside = Validator(subject), Validator(other)
+    assert held.is_valid(witness)
+    assert not outside.is_valid(witness)
+    assert held.relation_to(outside) == "not_subset"
+
+
 # THEORY: a-cut-reference-proves
 def test_a_value_of_a_kind_no_cut_reaches_refutes_a_fixpoint() -> None:
     """A refinement's outside is named beside a fixpoint of containers.

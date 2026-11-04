@@ -878,8 +878,10 @@ fn a_union_stops_at_a_decline_its_budget_cannot_follow() {
 /// A supertype union is respelled through the union nested in it, inside the
 /// closure.
 ///
-/// The drawn pair: `dict[str, Any]` below `(¬Any ∪ {}) ∪ R`. The respelling
-/// takes the complement out of the supertype's members read through the
+/// The pair: `{"n?": Any}` below `(¬Any ∪ {}) ∪ R`, `R` a chain of `n`. One
+/// unfolding of `R` holds the subject whole, so no reading of one unfolding
+/// names a value outside it and the pair reaches the respelling, which takes
+/// the complement out of the supertype's members read through the
 /// nested union and asks the subject below `{} ∪ R`, which names a member of
 /// each of two union subterms: a union of some members of the supertype read
 /// flat, and so a goal the closure holds. It is a goal built rather than
@@ -892,12 +894,13 @@ fn a_supertype_union_is_respelled_through_its_nested_union_inside_the_closure() 
         defaults: Vec::new().into(),
     };
     let sub = Schema::KeyedMap {
-        fields: Vec::new().into(),
-        defaults: vec![crate::ir::MapClause {
-            key: Schema::Str,
-            value: Schema::ANYTHING,
+        fields: vec![crate::ir::Field {
+            name: "n".into(),
+            schema: Schema::ANYTHING,
+            required: false,
         }]
         .into(),
+        defaults: Vec::new().into(),
     };
     let sup = Schema::Union(
         vec![

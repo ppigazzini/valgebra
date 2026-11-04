@@ -88,7 +88,10 @@ the kinds the cut reaches. A cut beneath a constructor reaches that
 constructor's kind alone (`parts_a_cut_reaches`), the difference being read a
 kind at a time, so a value it holds at another kind refutes. A cut beneath an
 attribute record reaches every kind, whatever constructor stands between the
-two, since the record holds values of them all. A
+two, since the record holds values of them all. An inhabited reading that
+refutes nothing hands the pair to the same difference cut the other way, the
+subject narrowed and the supertype widened (`refuted_narrowed`), which lies
+inside the real one: a value it holds refutes at any kind. A
 conjunct at the top of the subject no lowering reads -- a refinement's
 predicate, a meet member holding one, a meet member nested past the depth
 bound, and last a member nested past it by a clause's key alone, which the

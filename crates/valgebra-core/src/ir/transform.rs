@@ -250,11 +250,13 @@ impl SeqShape {
 /// on and a call site reading `true` says nothing about which side that is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Polarity {
-    /// The subject's side: a cut reference becomes the top, so the lowered set
-    /// is at least the one the schema denotes.
+    /// A cut reference becomes the top, so the lowered set is at least the one
+    /// the schema denotes: the subject's side of a difference read for its
+    /// emptiness, and the supertype's of one read for a value.
     Widen,
-    /// The supertype's side: a cut reference becomes the bottom, so the lowered
-    /// set is at most the one the schema denotes.
+    /// A cut reference becomes the bottom, so the lowered set is at most the
+    /// one the schema denotes: the supertype's side of a difference read for
+    /// its emptiness, and the subject's of one read for a value.
     Narrow,
 }
 
@@ -291,10 +293,11 @@ impl Schema {
     /// map clause included, since widening a clause only makes more dicts
     /// covered by it.
     ///
-    /// **A cut widens the difference, so only an empty one proves anything.**
-    /// An inhabited reading of a cut difference names a value of the widened set
-    /// rather than of the real one, and refutes nothing; the caller that reads
-    /// the difference is where that condition is held.
+    /// **A difference cut one way answers one way.** With the subject widened,
+    /// an inhabited reading names a value of the widened set rather than of the
+    /// real one, and refutes nothing; with the subject narrowed, an empty
+    /// reading proves nothing. The caller that reads the difference is where
+    /// that condition is held.
     ///
     /// A schema with no reference is returned as it stands, so the caller pays
     /// nothing for the common case.
