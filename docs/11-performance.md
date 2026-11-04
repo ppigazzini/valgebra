@@ -1040,7 +1040,10 @@ as a list against a length-bounded list of the same element.
   constant: 1,024 strings against the alternation of the same words took 1.4 s
   on a release build. The query keeps each pattern it compiled under its text
   and drops them when it is answered (`matches_unindexed` in
-  `check/index.rs`), and the pair takes 2 ms.
+  `check/index.rs`), and the pair takes 2 ms. An oracle that walked nothing, which
+  is most relations, drops with no thread-local read (`walked` in `oracle.rs`), and
+  a relation reads its answer off the oracle by reference, its size being past
+  what a move does inline.
 - **A length bound costs a state an element and little else.** A bound over a
   list is an automaton of one letter repeated, so the letter is held by one
   handle and asked whether it takes every value once (`chain` in

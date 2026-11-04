@@ -328,7 +328,8 @@ attached would never reach. Once built, the read is the same load either way.
 falls back to building the map, scanning the branches, or compiling the
 pattern -- which only the relation oracle's walk meets, over schemas no
 validator built an index for, and which it compiles once a query under the
-pattern's text (`matches_unindexed`). The literal-union plan answers only for
+pattern's text (`matches_unindexed`). An oracle that walked nothing touches no
+thread-local when it goes (`walked`). The literal-union plan answers only for
 an exact int or str. The tagged plan answers only for an exact dict whose tag
 is an exact int or str: the tag names the one record the dict can belong to,
 or none, and the deciding walk walks that record alone where the scan reads the

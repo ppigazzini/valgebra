@@ -14,7 +14,7 @@
 //! sit where nothing it governs lives. The `Validator` holds the pool these
 //! answers read; it is not the thing the contract is about.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::sync::Arc;
 
 use pyo3::PyTypeInfo;
@@ -85,6 +85,10 @@ pub(crate) struct PoolRelations<'py, 'pool> {
     /// signal itself is carried to [`Self::answer`], which hands it back in
     /// place of whatever the core decided without it.
     fatal: RefCell<Option<PyErr>>,
+    /// Whether a walk ran for this query, which is what can compile a pattern
+    /// outside an index: most relations walk nothing, and an oracle dropped
+    /// then touches no thread-local.
+    walked: Cell<bool>,
 }
 
 impl<'py, 'pool> PoolRelations<'py, 'pool> {
@@ -108,6 +112,7 @@ impl<'py, 'pool> PoolRelations<'py, 'pool> {
             identity: RefCell::default(),
             intervals: RefCell::default(),
             fatal: RefCell::default(),
+            walked: Cell::new(false),
         }
     }
 
@@ -125,8 +130,10 @@ impl<'py, 'pool> PoolRelations<'py, 'pool> {
     }
 
     /// The query's answer, or the fatal signal a probe raised while it was
-    /// decided. The one way a relation leaves the bindings.
-    pub(crate) fn answer<T>(self, decided: T) -> PyResult<T> {
+    /// decided. The one way a relation leaves the bindings. By reference: the
+    /// oracle's size is past what a move does inline, and it drops at its
+    /// caller's end either way.
+    pub(crate) fn answer<T>(&self, decided: T) -> PyResult<T> {
         self.fatal.take().map_or(Ok(decided), Err)
     }
 
@@ -149,7 +156,9 @@ impl Drop for PoolRelations<'_, '_> {
     /// The patterns this query's walks compiled outside an index are its own,
     /// and go with it.
     fn drop(&mut self) {
-        forget_unindexed();
+        if self.walked.get() {
+            forget_unindexed();
+        }
     }
 }
 
@@ -744,6 +753,7 @@ impl PoolRelations<'_, '_> {
         if self.fatal.borrow().is_some() {
             return None;
         }
+        self.walked.set(true);
         let state = WalkState::new();
         let ctx = Ctx {
             pool: self.literals,
