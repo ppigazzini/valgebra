@@ -302,8 +302,7 @@ reaches, exact on membership and opaque to relations.
 `tests/test_universe.py` holds both halves.
 
 **A node for an array's elements, so `Annotated[NDArray[float64], Ge(0)]` reads every
-element.** Refused for now, on the demand it has not shown and the cost it has not
-paid. The set passes the admission test, since "every element belongs to `E`" is no
+element.** Refused on the demand it has not shown and the cost it has not paid. The set passes the admission test, since "every element belongs to `E`" is no
 attribute a record reaches and a predicate counts for nothing. Its form would be a
 quantifier as `Seq`'s tail is, over a kind holding dtype, shape and element as a
 product, and the kind is what the instruction gate read +2% to +7% on when a frozen

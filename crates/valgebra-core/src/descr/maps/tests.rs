@@ -1481,7 +1481,7 @@ fn a_label_meets_a_constraint_only_where_its_language_holds_it() {
     assert_eq!(unmet.emptiness(), Verdict::Empty);
 }
 
-/// A key a constraint excludes does not meet it, whether or not the atom still names
+/// A key a constraint excludes does not meet it, whether or not the atom names
 /// it: a label at the default's own field is absorbed, and the exclusion stays. So a
 /// region holding no key but those holds no key for the constraint, and it is read by
 /// counting them out rather than as having room.

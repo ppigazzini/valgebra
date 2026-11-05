@@ -25,7 +25,7 @@
 //!
 //! **A step reads only the whole floats.** `x % n == 0` holds of a whole float
 //! and of no fractional one, and of neither infinity, since `inf % n` is `nan`.
-//! So a step splits the line into parts a bound still cuts: the floats no step
+//! So a step splits the line into parts a bound cuts alike: the floats no step
 //! holds, and the whole floats of each residue class. A set a step has touched
 //! is one list of spans per part, and the three operations stay pointwise, part
 //! by part, as they are residue by residue over the integers ([`IntSet`]). What

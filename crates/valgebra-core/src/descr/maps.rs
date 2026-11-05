@@ -1044,7 +1044,7 @@ impl<G: Guard> MapLattice<G> {
     ///
     /// `narrowed` holds the clauses over part of the `str` keys, and a cell of the
     /// split maps to the join of the clauses that hold it, the `str` part's default
-    /// among them: two clauses overlap and the atom still reads one function, a step
+    /// among them: two clauses overlap and the atom reads one function, a step
     /// function on the common refinement of their keys.
     #[must_use]
     pub(crate) fn narrowed_record(
